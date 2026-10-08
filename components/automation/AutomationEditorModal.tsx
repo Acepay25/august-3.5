@@ -262,9 +262,9 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
             >
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-900/60">
-                    <h3 className="text-sm font-bold text-white tracking-tight">{initial ? 'Edit automation' : 'New automation'}</h3>
+                    <h3 className="text-ui-base font-bold text-white tracking-tight">{initial ? 'Edit automation' : 'New automation'}</h3>
                     <button onClick={onClose} className="rounded-lg p-1 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors" aria-label="Close">
-                        <X className="h-4 w-4" />
+                        <X className="h-4 w-4" aria-hidden="true" />
                     </button>
                 </div>
 
@@ -278,7 +278,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             placeholder="e.g. BTCUSDT hourly check"
-                            className="w-full bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/50"
+                            className="w-full bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-ui-base text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/50"
                         />
                     </div>
 
@@ -309,7 +309,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                         max={frequencyMode === 'minutes' ? 59 : 24}
                                         value={frequencyEvery}
                                         onChange={(e) => setFrequencyEvery(Math.max(1, Math.min(frequencyMode === 'minutes' ? 59 : 24, parseInt(e.target.value, 10) || 1)))}
-                                        className="w-14 bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50"
+                                        className="w-14 bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-ui-sm font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50"
                                         aria-label={frequencyMode === 'minutes' ? 'Minutes between runs' : 'Hours between runs'}
                                     />
                                     <span className="text-ui-xs text-zinc-500">{frequencyMode === 'minutes' ? 'min' : 'h'}</span>
@@ -358,25 +358,25 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                     <select
                                         value={scheduleTime.h}
                                         onChange={(e) => setScheduleTime(prev => ({ ...prev, h: parseInt(e.target.value, 10) }))}
-                                        className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                                        className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-ui-sm font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
                                         aria-label="Hour"
                                     >
                                         {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
                                     </select>
-                                    <span className="text-zinc-600 text-xs">:</span>
+                                    <span className="text-zinc-600 text-ui-sm">:</span>
                                     <select
                                         value={scheduleTime.m}
                                         onChange={(e) => setScheduleTime(prev => ({ ...prev, m: parseInt(e.target.value, 10) }))}
-                                        className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                                        className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-ui-sm font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
                                         aria-label="Minute"
                                     >
                                         {Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
                                     </select>
-                                    <span className="text-zinc-600 text-xs">:</span>
+                                    <span className="text-zinc-600 text-ui-sm">:</span>
                                     <select
                                         value={scheduleTime.s}
                                         onChange={(e) => setScheduleTime(prev => ({ ...prev, s: parseInt(e.target.value, 10) }))}
-                                        className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                                        className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-ui-sm font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
                                         aria-label="Second"
                                     >
                                         {Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
@@ -407,7 +407,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                 onChange={(e) => setAdvancedCron(e.target.value)}
                                 placeholder="Leave empty to use the day/time schedule above"
                                 spellCheck={false}
-                                className={`w-full mt-1.5 bg-zinc-950 border rounded px-2.5 py-1.5 text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 ${cronValid ? 'border-white/10' : 'border-rose-500/50'}`}
+                                className={`w-full mt-1.5 bg-zinc-950 border rounded px-2.5 py-1.5 text-ui-sm font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 ${cronValid ? 'border-white/10' : 'border-rose-500/50'}`}
                             />
                         </details>
 
@@ -444,7 +444,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                 placeholder="Analyze BTCUSDT on the 1h chart for a long setup with entry, stop loss, targets and invalidation."
                                 spellCheck={false}
                                 rows={3}
-                                className="w-full mt-2 bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/50 resize-y"
+                                className="w-full mt-2 bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-ui-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/50 resize-y"
                             />
                         )}
                     </div>
@@ -500,7 +500,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                     {/* Lenses toggle */}
                     <div className="flex items-center justify-between bg-zinc-900 border border-white/10 rounded-lg px-3 py-2.5">
                         <div>
-                            <p className="text-xs font-bold text-zinc-300">Analyst Lenses</p>
+                            <p className="text-ui-sm font-bold text-zinc-300">Analyst Lenses</p>
                             <p className="text-ui-xs text-zinc-500 mt-0.5">Macro / Technical / Risk personas (needs 3 distinct models)</p>
                         </div>
                         <ToggleSwitch checked={useLenses} onChange={() => setUseLenses(!useLenses)} label="Toggle lenses" />

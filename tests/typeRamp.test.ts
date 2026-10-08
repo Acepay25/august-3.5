@@ -107,3 +107,39 @@ describe('the type ramp owns 9–13px', () => {
         expect(used.size).toBeGreaterThan(2);
     });
 });
+
+/**
+ * `text-xs` / `text-sm` / `text-base` are Tailwind's OWN sizes, pinned in rem.
+ * A UI built on them ignores the accessibility dial entirely, because the dial
+ * scales `--ui-font-size` and every `text-ui-*` role is defined against it — so
+ * 438 occurrences across 73 files meant the dial resized maybe two thirds of a
+ * screen and left the rest. They are now mapped onto a role of the SAME
+ * rendered size (xs 12 → ui-sm, sm 14 → ui-base, base 16 → ui-lg), which moved
+ * no pixels and put the whole interface under one control.
+ */
+describe('the ramp owns every UI size, not just 9-13px', () => {
+    const BARE = [
+        /(?<![\w-])text-xs(?![\w-])/g,
+        /(?<![\w-])text-sm(?![\w-])/g,
+        /(?<![\w-])text-base(?![\w-])/g,
+    ];
+    const offenders = SOURCES
+        .flatMap(path => {
+            const src = readFileSync(path, 'utf8');
+            return BARE
+                .map(re => (src.match(re) || []).length)
+                .filter(count => count > 0)
+                .map(count => ({ path, count }));
+        });
+
+    it('has no Tailwind default size left in the UI', () => {
+        expect(offenders.map(o => `${o.path} x${o.count}`)).toEqual([]);
+    });
+
+    it('the scan still sees a bare size when one is there', () => {
+        // Guard the guard: a regex that matched nothing anywhere would pass this
+        // file forever, which is the failure mode of every "no new X" gate.
+        expect('class="text-ui-sm text-xs sm:text-base'.match(BARE[0])?.length).toBe(1);
+        expect('class="text-ui-sm text-xs sm:text-base'.match(BARE[2])?.length).toBe(1);
+    });
+});

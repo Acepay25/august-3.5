@@ -862,7 +862,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                                     : 'border-white/10 bg-zinc-800/60 text-zinc-400 hover:border-white/20 hover:text-zinc-100'
                             }`}
                         >
-                            <PanelRight className="h-3.5 w-3.5" />
+                            <PanelRight className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                     )}
                     <SymbolPicker symbols={symbols} value={symbol} onChange={changeSymbol} />
@@ -885,7 +885,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                             data-testid="trade-pinned-trigger"
                             className="relative shrink-0 hit-target rounded-control border border-white/10 bg-zinc-800 px-2 py-1 text-ui-dense font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
                         >
-                            <PinIcon className="h-3 w-3" />
+                            <PinIcon className="h-3 w-3" aria-hidden="true" />
                             {watchOpenCount > 0 && (
                                 <span className="absolute -right-1.5 -top-1.5 min-w-[1rem] rounded-full bg-zinc-200 px-1 text-center text-ui-2xs font-mono font-bold leading-4 text-zinc-900">
                                     {watchOpenR || (watchOpenCount > 99 ? '99+' : watchOpenCount)}

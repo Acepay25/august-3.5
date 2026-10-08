@@ -163,16 +163,16 @@ const UpdateOverlay: React.FC = () => {
                             <h2 className="mt-6 text-lg font-semibold text-zinc-100">
                                 Updating to v{version}
                             </h2>
-                            <p className="mb-6 mt-1 text-sm text-zinc-500">Downloading the latest version…</p>
+                            <p className="mb-6 mt-1 text-ui-base text-zinc-500">Downloading the latest version…</p>
                             <div className="w-full">
                                 <div className="update-track" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
                                     <div className="update-bar" style={{ width: `${Math.min(Math.max(progress, 0), 100)}%` }} />
                                 </div>
                                 <div className="mt-3 flex items-center justify-between">
-                                    <span className="text-xs text-zinc-500">Don't close the app</span>
-                                    <span className="font-mono text-sm font-semibold text-zinc-200">
+                                    <span className="text-ui-sm text-zinc-500">Don't close the app</span>
+                                    <span className="font-mono text-ui-base font-semibold text-zinc-200">
                                         {progress}%
-                                        {etaLine && <span className="ml-2 text-xs font-normal text-zinc-500">{etaLine}</span>}
+                                        {etaLine && <span className="ml-2 text-ui-sm font-normal text-zinc-500">{etaLine}</span>}
                                     </span>
                                 </div>
                             </div>
@@ -182,10 +182,10 @@ const UpdateOverlay: React.FC = () => {
                     {status === 'downloaded' && (
                         <>
                             <div className="update-check-pop my-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10">
-                                <CheckCircle className="h-8 w-8 text-emerald-400" />
+                                <CheckCircle className="h-8 w-8 text-emerald-400" aria-hidden="true" />
                             </div>
                             <h2 className="text-lg font-semibold text-zinc-100">Update downloaded</h2>
-                            <p className="mb-6 mt-1 text-sm text-zinc-500">
+                            <p className="mb-6 mt-1 text-ui-base text-zinc-500">
                                 v{version} is ready. The app will restart to complete the update.
                             </p>
                             {notes.length > 0 && (
@@ -195,7 +195,7 @@ const UpdateOverlay: React.FC = () => {
                                     open={notesOpen}
                                     onToggle={onNotesToggle}
                                 >
-                                    <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-zinc-500 transition-colors hover:text-zinc-300">
+                                    <summary className="cursor-pointer text-ui-sm font-semibold uppercase tracking-wider text-zinc-500 transition-colors hover:text-zinc-300">
                                         What's new in v{version}
                                     </summary>
                                     <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-white/[0.06] bg-zinc-950/60 p-3 text-ui-dense leading-5 text-zinc-400 custom-scrollbar">
@@ -205,10 +205,10 @@ const UpdateOverlay: React.FC = () => {
                             )}
                             <button
                                 onClick={installUpdate}
-                                className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition-[background-color,box-shadow,transform] duration-[150ms] ease-[var(--ease-snappy)] hover:bg-emerald-500 hover:shadow-emerald-500/25 active:scale-95"
+                                className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-ui-base font-semibold text-white shadow-lg transition-[background-color,box-shadow,transform] duration-[150ms] ease-[var(--ease-snappy)] hover:bg-emerald-500 hover:shadow-emerald-500/25 active:scale-95"
                                 aria-label={`Install update version ${version}`}
                             >
-                                <Zap className="h-4 w-4" />
+                                <Zap className="h-4 w-4" aria-hidden="true" />
                                 Install &amp; Restart
                             </button>
                         </>
@@ -225,7 +225,7 @@ const UpdateOverlay: React.FC = () => {
                                 <span>Preparing your session…</span>
                                 <span>Relaunching August Trading…</span>
                             </div>
-                            <p className="mt-4 text-xs text-zinc-600">This takes a moment — see you right after.</p>
+                            <p className="mt-4 text-ui-sm text-zinc-600">This takes a moment — see you right after.</p>
                         </>
                     )}
                 </div>

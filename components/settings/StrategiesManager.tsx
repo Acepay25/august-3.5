@@ -229,7 +229,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
             <div className="px-6 py-4 border-b border-zinc-800/80 shrink-0 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                     <div>
-                        <h3 className="text-sm font-bold text-white tracking-tight">Strategies</h3>
+                        <h3 className="text-ui-base font-bold text-white tracking-tight">Strategies</h3>
                         <p className="text-ui-dense text-zinc-500 mt-0.5">
                             Upload trading books (PDF) — a model summarizes them into strategies every analyst and the moderator follow.
                         </p>
@@ -251,7 +251,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                         disabled={isProcessing}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white text-ui-xs font-bold uppercase tracking-widest transition-colors"
                     >
-                        <UploadIcon className="w-3.5 h-3.5" />
+                        <UploadIcon className="w-3.5 h-3.5" aria-hidden="true" />
                         {isProcessing ? 'Working…' : 'Upload PDF book'}
                     </button>
                     <input
@@ -264,7 +264,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                     />
                     {isProcessing && (
                         <span className="inline-flex items-center gap-1.5 text-ui-xs text-zinc-400">
-                            <LoadingIcon className="w-3.5 h-3.5 animate-spin" />
+                            <LoadingIcon className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
                             {processingLabel}
                         </span>
                     )}
@@ -277,11 +277,11 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
             {/* Docs list */}
             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 sm:p-5 space-y-2.5">
                 {isLoading ? (
-                    <div className="flex justify-center py-10"><LoadingIcon className="w-6 h-6 text-zinc-500" /></div>
+                    <div className="flex justify-center py-10"><LoadingIcon className="w-6 h-6 text-zinc-500" aria-hidden="true" /></div>
                 ) : docs.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/40 px-6 py-12 text-center">
-                        <BookmarkIcon className="w-8 h-8 text-zinc-500 mx-auto mb-3" />
-                        <p className="text-xs font-bold text-zinc-400">No strategy books yet</p>
+                        <BookmarkIcon className="w-8 h-8 text-zinc-500 mx-auto mb-3" aria-hidden="true" />
+                        <p className="text-ui-sm font-bold text-zinc-400">No strategy books yet</p>
                         <p className="text-ui-dense text-zinc-600 mt-1 max-w-sm mx-auto leading-relaxed">
                             Upload a trading PDF and it will be summarized into strategies here. Enable it and the ensemble
                             (analysts + moderator) will follow it like a human trader following the book.
@@ -299,7 +299,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                             >
                                 <div className="min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors">{doc.sourceName}</span>
+                                        <span className="text-ui-sm font-bold text-zinc-200 group-hover:text-white transition-colors">{doc.sourceName}</span>
                                         <StatusPill tone={doc.enabled ? 'up' : 'neutral'} kicker>
                                             {doc.enabled ? 'Enabled' : 'Disabled'}
                                         </StatusPill>
@@ -344,7 +344,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                                 disabled={isProcessing}
                                                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 disabled:opacity-50 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                                             >
-                                                <RefreshIcon className="w-3 h-3" />
+                                                <RefreshIcon className="w-3 h-3" aria-hidden="true" />
                                                 Re-summarize
                                             </button>
                                         </div>
@@ -353,7 +353,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                             onClick={() => handleDelete(doc)}
                                             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                                         >
-                                            <TrashIcon className="w-3 h-3" />
+                                            <TrashIcon className="w-3 h-3" aria-hidden="true" />
                                             Delete
                                         </button>
                                     </div>

@@ -149,7 +149,7 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                     ) : e.notice ? (
                         <p className="flex items-center gap-1.5 text-ui-xs font-semibold uppercase tracking-wider text-amber-400" data-testid="chat-notice">
                             <span className="sr-only">⚡ </span>
-                            <Zap className="h-3 w-3 shrink-0" />
+                            <Zap className="h-3 w-3 shrink-0" aria-hidden="true" />
                             <span>{e.tools[0] ?? 'Harness event'}</span>
                         </p>
                     ) : (

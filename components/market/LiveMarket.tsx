@@ -64,9 +64,9 @@ const ANALYSIS_TIMEFRAMES: ChartInterval[] = ['5m', '15m', '1h', '4h'];
  *  (see the sanctioned .tick-up/.tick-down pattern); the VALUE animating is
  *  data, not chrome. Swapped imperatively by the price effect below so a
  *  1 Hz mark-price stream never re-renders this panel's tree. */
-const PRICE_BASE_CLASS = "font-mono tabular-nums text-sm sm:text-base font-bold text-zinc-600 transition-colors duration-300 ease-[var(--ease-snappy)]";
-const PRICE_UP_CLASS = "font-mono tabular-nums text-sm sm:text-base font-bold transition-colors duration-300 ease-[var(--ease-snappy)] text-emerald-400";
-const PRICE_DOWN_CLASS = "font-mono tabular-nums text-sm sm:text-base font-bold transition-colors duration-300 ease-[var(--ease-snappy)] text-rose-400";
+const PRICE_BASE_CLASS = "font-mono tabular-nums text-ui-base sm:text-ui-lg font-bold text-zinc-600 transition-colors duration-300 ease-[var(--ease-snappy)]";
+const PRICE_UP_CLASS = "font-mono tabular-nums text-ui-base sm:text-ui-lg font-bold transition-colors duration-300 ease-[var(--ease-snappy)] text-emerald-400";
+const PRICE_DOWN_CLASS = "font-mono tabular-nums text-ui-base sm:text-ui-lg font-bold transition-colors duration-300 ease-[var(--ease-snappy)] text-rose-400";
 
 const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, isEmbedded = false }) => {
     // Esc closes the overlay (was a navigation dead-end).
@@ -283,8 +283,8 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                 <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/5">
                     <div className="flex items-center gap-2 sm:gap-3">
                         <div className="flex items-center gap-1.5 sm:gap-2 text-cyan-400">
-                            <ActivityIcon className="w-5 h-5 sm:w-6 sm:h-6" />
-                            <h2 className="font-bold text-base sm:text-lg tracking-tight">Live Market</h2>
+                            <ActivityIcon className="w-5 h-5 sm:w-6 sm:h-6" aria-hidden="true" />
+                            <h2 className="font-bold text-ui-lg sm:text-lg tracking-tight">Live Market</h2>
                         </div>
 
                         {/* Connection status — one StatusPill instead of the
@@ -322,7 +322,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                             className="p-3 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors active:scale-95"
                             aria-label="Close"
                         >
-                            <CloseIcon className="w-5 h-5" />
+                            <CloseIcon className="w-5 h-5" aria-hidden="true" />
                         </button>
                         )}
                     </div>
@@ -338,12 +338,12 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                                 value={symbol}
                                 onChange={(e) => setSymbol(e.target.value)}
                                 aria-label="Market symbol"
-                                className="appearance-none bg-zinc-800 text-white text-sm font-bold h-12 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[112px]"
+                                className="appearance-none bg-zinc-800 text-white text-ui-base font-bold h-12 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[112px]"
                             >
                                 {ASSETS.map(a => <option key={a} value={a}>{a.replace('USDT', '')}</option>)}
                             </select>
                             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
-                                <ChevronDownIcon className="w-4 h-4" />
+                                <ChevronDownIcon className="w-4 h-4" aria-hidden="true" />
                             </div>
                         </div>
 
@@ -355,12 +355,12 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                                 value={chartInterval}
                                 onChange={(e) => setChartInterval(e.target.value as ChartInterval)}
                                 aria-label="Chart interval"
-                                className="appearance-none bg-zinc-800 text-white text-sm font-bold h-12 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[78px]"
+                                className="appearance-none bg-zinc-800 text-white text-ui-base font-bold h-12 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[78px]"
                             >
                                 {INTERVALS.map(i => <option key={i} value={i}>{i}</option>)}
                             </select>
                             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
-                                <ChevronDownIcon className="w-4 h-4" />
+                                <ChevronDownIcon className="w-4 h-4" aria-hidden="true" />
                             </div>
                         </div>
                     </div>
@@ -370,9 +370,9 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                         <button
                             onClick={() => { void handleExtractAndAnalyze(); }}
                             disabled={!!analysisProgress}
-                            className="flex items-center justify-center gap-2 h-12 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white text-sm font-bold px-6 rounded-xl shadow-lg shadow-cyan-900/30 transition-[--tw-gradient-from,--tw-gradient-to,transform] duration-[150ms] ease-[var(--ease-snappy)] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95"
+                            className="flex items-center justify-center gap-2 h-12 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white text-ui-base font-bold px-6 rounded-xl shadow-lg shadow-cyan-900/30 transition-[--tw-gradient-from,--tw-gradient-to,transform] duration-[150ms] ease-[var(--ease-snappy)] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95"
                         >
-                            {analysisProgress ? <LoadingIcon className="w-4 h-4" /> : <CameraIcon className="w-4 h-4" />}
+                            {analysisProgress ? <LoadingIcon className="w-4 h-4" aria-hidden="true" /> : <CameraIcon className="w-4 h-4" aria-hidden="true" />}
                             <span>{analysisProgress || 'Analyze'}</span>
                         </button>
                     </div>
@@ -403,7 +403,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                                 {isAIAnalyzing && (
                                     <div className="flex items-center gap-2 bg-cyan-400/10 border border-cyan-400/20 rounded-control px-3 py-1.5">
                                         <Spinner size="w-3 h-3" color="border-cyan-400" />
-                                        <span className="text-cyan-400 font-bold text-xs">AI Analyzing...</span>
+                                        <span className="text-cyan-400 font-bold text-ui-sm">AI Analyzing...</span>
                                     </div>
                                 )}
 
@@ -413,7 +413,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                                         ? 'bg-emerald-500/10 border border-emerald-500/20'
                                         : 'bg-rose-500/10 border border-rose-500/20'
                                         }`}>
-                                        <span className={`font-bold text-xs ${marketBias === 'bullish' ? 'text-emerald-400' : 'text-rose-400'
+                                        <span className={`font-bold text-ui-sm ${marketBias === 'bullish' ? 'text-emerald-400' : 'text-rose-400'
                                             }`}>
                                             {marketBias === 'bullish' ? '▲ BULLISH' : '▼ BEARISH'}
                                         </span>
@@ -426,7 +426,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                                         <span className="text-ui-xs font-bold text-zinc-500 uppercase tracking-wider">Key Levels</span>
                                         <div className="flex flex-col gap-1 mt-1">
                                             {keyLevels.slice(0, 4).map((level, i) => (
-                                                <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                                                <div key={i} className="flex items-center justify-between gap-2 text-ui-sm">
                                                     <span className={level.type === 'resistance' ? 'text-rose-400' : 'text-emerald-400'}>
                                                         {level.type === 'resistance' ? 'R' : 'S'}
                                                     </span>
@@ -449,7 +449,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                                                 const lo = Math.min(from.value, to.value);
                                                 const hi = Math.max(from.value, to.value);
                                                 return (
-                                                    <div key={`${line.startTime}-${i}`} className="flex items-baseline justify-between gap-2 text-xs">
+                                                    <div key={`${line.startTime}-${i}`} className="flex items-baseline justify-between gap-2 text-ui-sm">
                                                         <span className="text-zinc-300 truncate">{line.label || line.type}</span>
                                                         <span className="font-mono text-white shrink-0">
                                                             ${lo.toLocaleString()}–${hi.toLocaleString()}
@@ -484,8 +484,8 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                         className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800 transition-colors"
                     >
                         <div className="flex items-center gap-2">
-                            <BrainIcon className="w-5 h-5 text-cyan-400" />
-                            <span className="font-bold text-sm text-cyan-400">AI Market Insights</span>
+                            <BrainIcon className="w-5 h-5 text-cyan-400" aria-hidden="true" />
+                            <span className="font-bold text-ui-base text-cyan-400">AI Market Insights</span>
                             {isAIAnalyzing && (
                                 <Spinner size="w-3 h-3" color="border-cyan-400" className="ml-2" />
                             )}
@@ -507,21 +507,21 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                             {/* Current Situation */}
                             <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <ActivityIcon className="w-4 h-4 text-cyan-400" />
-                                    <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Current Situation</span>
+                                    <ActivityIcon className="w-4 h-4 text-cyan-400" aria-hidden="true" />
+                                    <span className="text-ui-sm font-bold text-zinc-400 uppercase tracking-wider">Current Situation</span>
                                 </div>
-                                <p className="text-sm text-zinc-200 leading-relaxed">{marketInsights.situation}</p>
+                                <p className="text-ui-base text-zinc-200 leading-relaxed">{marketInsights.situation}</p>
                             </div>
 
                             {/* Key Observations */}
                             {marketInsights.observations.length > 0 && (
                                 <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Key Observations</span>
+                                        <span className="text-ui-sm font-bold text-zinc-400 uppercase tracking-wider">Key Observations</span>
                                     </div>
                                     <ul className="space-y-1.5">
                                         {marketInsights.observations.map((obs, i) => (
-                                            <li key={i} className="flex items-start gap-2 text-sm text-zinc-300">
+                                            <li key={i} className="flex items-start gap-2 text-ui-base text-zinc-300">
                                                 <span className="text-cyan-400 mt-1">•</span>
                                                 <span>{obs}</span>
                                             </li>
@@ -535,19 +535,19 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                                 {/* Bullish Scenario */}
                                 <div className="bg-emerald-500/5 rounded-xl p-3 border border-emerald-500/20">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <TrendUpIcon className="w-4 h-4 text-emerald-400" />
-                                        <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Bullish</span>
+                                        <TrendUpIcon className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+                                        <span className="text-ui-sm font-bold text-emerald-400 uppercase tracking-wider">Bullish</span>
                                     </div>
-                                    <p className="text-sm text-zinc-300 leading-relaxed">{marketInsights.potentialMoves.bullish}</p>
+                                    <p className="text-ui-base text-zinc-300 leading-relaxed">{marketInsights.potentialMoves.bullish}</p>
                                 </div>
 
                                 {/* Bearish Scenario */}
                                 <div className="bg-rose-500/5 rounded-xl p-3 border border-rose-500/20">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <TrendDownIcon className="w-4 h-4 text-rose-400" />
-                                        <span className="text-xs font-bold text-rose-400 uppercase tracking-wider">Bearish</span>
+                                        <TrendDownIcon className="w-4 h-4 text-rose-400" aria-hidden="true" />
+                                        <span className="text-ui-sm font-bold text-rose-400 uppercase tracking-wider">Bearish</span>
                                     </div>
-                                    <p className="text-sm text-zinc-300 leading-relaxed">{marketInsights.potentialMoves.bearish}</p>
+                                    <p className="text-ui-base text-zinc-300 leading-relaxed">{marketInsights.potentialMoves.bearish}</p>
                                 </div>
                             </div>
 
@@ -555,12 +555,12 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                             {marketInsights.riskFactors.length > 0 && (
                                 <div className="bg-amber-500/5 rounded-xl p-3 border border-amber-500/20">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <AlertTriangleIcon className="w-4 h-4 text-amber-400" />
-                                        <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">Watch Out</span>
+                                        <AlertTriangleIcon className="w-4 h-4 text-amber-400" aria-hidden="true" />
+                                        <span className="text-ui-sm font-bold text-amber-400 uppercase tracking-wider">Watch Out</span>
                                     </div>
                                     <ul className="space-y-1.5">
                                         {marketInsights.riskFactors.map((risk, i) => (
-                                            <li key={i} className="flex items-start gap-2 text-sm text-zinc-300">
+                                            <li key={i} className="flex items-start gap-2 text-ui-base text-zinc-300">
                                                 <span>{risk}</span>
                                             </li>
                                         ))}
@@ -577,7 +577,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                         <div className="px-4 sm:px-6 pb-6">
                             <div className="bg-zinc-800 rounded-xl p-6 border border-white/5 flex flex-col items-center justify-center gap-3">
                                 <Spinner size="w-8 h-8" color="border-cyan-400" />
-                                <span className="text-sm text-zinc-400">Analyzing market conditions...</span>
+                                <span className="text-ui-base text-zinc-400">Analyzing market conditions...</span>
                             </div>
                         </div>
                     )}
@@ -587,8 +587,8 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
             {/* Notification Toast */}
             {notification && (
                 <div className="absolute top-28 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 bg-emerald-500/90 text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-fade-in">
-                    <CheckIcon className="w-5 h-5 shrink-0" />
-                    <span className="font-medium text-sm">{notification}</span>
+                    <CheckIcon className="w-5 h-5 shrink-0" aria-hidden="true" />
+                    <span className="font-medium text-ui-base">{notification}</span>
                 </div>
             )}
         </div>

@@ -130,7 +130,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
                                     aria-label={`Close ${dock.label}`}
                                     className="rounded p-1 text-zinc-600 transition-colors hover:bg-white/[0.06] hover:text-zinc-200"
                                 >
-                                    <X className="h-3 w-3" />
+                                    <X className="h-3 w-3" aria-hidden="true" />
                                 </button>
                             </span>
                         );

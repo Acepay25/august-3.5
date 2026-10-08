@@ -47,11 +47,11 @@ const SavedAnalysisRowImpl: React.FC<{
         <div className="flex-1 min-w-0 ml-4">
           <div className="flex items-center gap-3">
             <span className={`font-bold ${safeDirection === 'Long' ? 'text-emerald-400' : safeDirection === 'Short' ? 'text-rose-400' : 'text-zinc-400'}`}>{safeDirection}</span>
-            <span className="font-mono text-sm font-bold text-zinc-300">{coinName}</span>
+            <span className="font-mono text-ui-base font-bold text-zinc-300">{coinName}</span>
             <span className="text-zinc-300 truncate hidden sm:block">{(activeStrategies || []).join(', ')}</span>
           </div>
-          <p className="text-sm text-zinc-300 mt-1 truncate">Prompt: "{userPrompt}"</p>
-          <p className="text-xs text-zinc-500 mt-1">{new Date(timestamp).toLocaleString()}</p>
+          <p className="text-ui-base text-zinc-300 mt-1 truncate">Prompt: "{userPrompt}"</p>
+          <p className="text-ui-sm text-zinc-500 mt-1">{new Date(timestamp).toLocaleString()}</p>
         </div>
         {onLocate && (
           <button
@@ -67,7 +67,7 @@ const SavedAnalysisRowImpl: React.FC<{
       </div>
       {isExpanded && (
         <div className="px-4 pb-4 border-t border-white/10 animate-fade-in">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm pt-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-ui-base pt-3">
             <div>
               <strong className="text-zinc-400 block mb-1">Entry:</strong>
               <p className="font-mono text-cyan-300">{(entryPoints || [])[0]?.price}</p>
@@ -82,7 +82,7 @@ const SavedAnalysisRowImpl: React.FC<{
                 {(takeProfit || []).map((tp, i) => (
                   <div key={i} className="flex items-center justify-between font-mono text-emerald-400 bg-zinc-900 p-2 rounded-md border border-white/5">
                     <span>{tp.price}</span>
-                    <div className="flex items-center gap-2 text-xs">
+                    <div className="flex items-center gap-2 text-ui-sm">
                       {tp.percentage && <span className="text-cyan-300 bg-cyan-900/50 px-2 py-0.5 rounded-md">{tp.percentage}</span>}
                     </div>
                   </div>
@@ -93,7 +93,7 @@ const SavedAnalysisRowImpl: React.FC<{
               <h4 className="font-semibold text-cyan-400 mb-2">Original User Prompt</h4>
               <p className="italic text-zinc-300">"{userPrompt}"</p>
             </div>
-            <div className="md:col-span-2 mt-2 pt-3 border-t border-white/5 text-xs text-zinc-500 flex flex-col sm:flex-row sm:items-center sm:flex-wrap sm:gap-x-4 sm:gap-y-1">
+            <div className="md:col-span-2 mt-2 pt-3 border-t border-white/5 text-ui-sm text-zinc-500 flex flex-col sm:flex-row sm:items-center sm:flex-wrap sm:gap-x-4 sm:gap-y-1">
               {modelsUsed && Object.keys(modelsUsed).length > 0 ? (
                 Object.entries(modelsUsed).map(([providerId, modelId]) => (
                   <span key={providerId} className="mt-1 sm:mt-0"><strong className="font-semibold">{providerId}:</strong> {modelIdToName[modelId] || modelId}</span>
@@ -168,7 +168,7 @@ const SavedAnalyses: React.FC<SavedAnalysesProps> = ({ analyses, onDelete, onCle
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 flex-1 sm:max-w-xs">
-          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" aria-hidden="true" />
           <input
             type="text"
             value={query}
@@ -220,7 +220,7 @@ const SavedAnalyses: React.FC<SavedAnalysesProps> = ({ analyses, onDelete, onCle
       <div className="min-h-0">
         {(filtered || []).length === 0 ? (
           <EmptyState
-            icon={<Bookmark className="w-8 h-8" />}
+            icon={<Bookmark className="w-8 h-8" aria-hidden="true" />}
             title={query || direction !== 'All' ? 'No saved analyses match' : 'No saved analyses'}
             description={query || direction !== 'All' ? 'Loosen the search or filter.' : 'Bookmark analyses you want to revisit later.'}
           />

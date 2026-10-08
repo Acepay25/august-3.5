@@ -28,7 +28,7 @@ interface EmptyStateProps {
  *
  * Usage:
  *   <EmptyState
- *     icon={<BookmarkIcon className="w-8 h-8" />}
+ *     icon={<BookmarkIcon className="w-8 h-8" aria-hidden="true" />}
  *     title="No saved analyses"
  *     description="Analyses you bookmark will appear here."
  *     action={<button>Run an Analysis</button>}
@@ -75,7 +75,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       <h3
         className={[
           'font-semibold text-zinc-300',
-          compact ? 'text-ui-caption mb-1' : 'text-sm mb-1.5',
+          compact ? 'text-ui-caption mb-1' : 'text-ui-base mb-1.5',
         ].join(' ')}
       >
         {title}
@@ -84,7 +84,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         <p
           className={[
             'text-zinc-600 leading-relaxed',
-            compact ? 'text-ui-dense max-w-[28ch]' : 'text-xs max-w-xs',
+            compact ? 'text-ui-dense max-w-[28ch]' : 'text-ui-sm max-w-xs',
           ].join(' ')}
         >
           {description}

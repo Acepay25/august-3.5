@@ -48,12 +48,12 @@ const InstructionCard: React.FC<{
                                 type="text"
                                 value={instruction.title}
                                 onChange={(e) => onUpdate(instruction.id, { title: e.target.value })}
-                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-white font-bold focus:border-cyan-500/50 outline-none"
+                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-ui-sm text-white font-bold focus:border-cyan-500/50 outline-none"
                                 placeholder="Instruction Title"
                             />
                         ) : (
                             <div className="flex items-center gap-2">
-                                <span className={`text-xs font-bold truncate ${instruction.isActive ? 'text-cyan-100' : 'text-zinc-400'}`}>{instruction.title || 'Untitled'}</span>
+                                <span className={`text-ui-sm font-bold truncate ${instruction.isActive ? 'text-cyan-100' : 'text-zinc-400'}`}>{instruction.title || 'Untitled'}</span>
                                 {instruction.isActive && <StatusPill tone="info" kicker>Active</StatusPill>}
                             </div>
                         )}
@@ -75,7 +75,7 @@ const InstructionCard: React.FC<{
                         className="p-1.5 text-zinc-600 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"
                         title="Delete"
                     >
-                        <TrashIcon className="w-4 h-4" />
+                        <TrashIcon className="w-4 h-4" aria-hidden="true" />
                     </button>
                 </div>
             </div>
@@ -87,7 +87,7 @@ const InstructionCard: React.FC<{
                         value={instruction.content}
                         onChange={(e) => onUpdate(instruction.id, { content: e.target.value })}
                         placeholder="Enter instruction content..."
-                        className="w-full h-32 bg-zinc-950 border border-white/10 rounded-lg p-3 text-xs text-zinc-300 focus:outline-none focus:border-cyan-500/30 resize-none leading-relaxed custom-scrollbar font-mono"
+                        className="w-full h-32 bg-zinc-950 border border-white/10 rounded-lg p-3 text-ui-sm text-zinc-300 focus:outline-none focus:border-cyan-500/30 resize-none leading-relaxed custom-scrollbar font-mono"
                     />
                     <div className="flex justify-end mt-2">
                         <span className="text-ui-xs text-zinc-500">
@@ -155,7 +155,7 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
 
     return (
         <div className="flex-1 overflow-y-auto px-5 pb-6 space-y-4 custom-scrollbar">
-            <p className="text-xs text-zinc-500 leading-relaxed">
+            <p className="text-ui-sm text-zinc-500 leading-relaxed">
                 Define multiple custom instruction sets for how the AI should reason, behave, or filter trades.
                 <strong className="text-zinc-400"> Select the mode below to manage its instructions.</strong>
             </p>
@@ -205,7 +205,7 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
                 {currentInstructions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-10 text-center border border-dashed border-white/10 rounded-2xl">
                         <span className="text-3xl mb-3"></span>
-                        <p className="text-xs text-zinc-600 italic">No custom instructions for this mode yet.</p>
+                        <p className="text-ui-sm text-zinc-600 italic">No custom instructions for this mode yet.</p>
                     </div>
                 ) : (
                     currentInstructions.map(inst => (
@@ -223,7 +223,7 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
             <button
                 onClick={handleAddInstruction}
                 disabled={currentInstructions.length >= MAX_ITEMS}
-                className="w-full py-3 rounded-2xl border border-white/10 bg-zinc-800 hover:bg-zinc-700 text-xs font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-2xl border border-white/10 bg-zinc-800 hover:bg-zinc-700 text-ui-sm font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
                 + Add New Instruction ({currentInstructions.length}/{MAX_ITEMS})
             </button>

@@ -37,14 +37,14 @@ const AutomationView: React.FC<{
             <div className="px-4 py-2.5 border-b border-white/5 bg-zinc-900 shrink-0 flex items-center justify-between gap-3 flex-wrap">
                 <button
                     onClick={onBack}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-ui-sm font-bold text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
                     aria-label="Back to automations"
                 >
-                    <ChevronLeftIcon className="w-3.5 h-3.5" /> Back
+                    <ChevronLeftIcon className="w-3.5 h-3.5" aria-hidden="true" /> Back
                 </button>
                 <div className="flex items-center gap-2.5 min-w-0">
                     <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_6px_#22d3ee66]" />
-                    <h3 className="text-sm font-bold text-white truncate">{config.name}</h3>
+                    <h3 className="text-ui-base font-bold text-white truncate">{config.name}</h3>
                     <span className="text-ui-xs font-mono text-zinc-500 hidden sm:inline">{humanizeCron(config.schedule.cron)}</span>
                     {config.enabled && (() => {
                         const next = getNextRunAt(config);
@@ -80,7 +80,7 @@ const AutomationView: React.FC<{
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-ui-xs font-bold uppercase tracking-widest transition-colors"
                         title={config.enabled ? 'Run this automation now' : 'Enable the automation first'}
                     >
-                        {isRunning ? <LoadingIcon className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                        {isRunning ? <LoadingIcon className="w-3 h-3 animate-spin" aria-hidden="true" /> : <Play className="w-3 h-3" aria-hidden="true" />}
                         {isRunning ? 'Running…' : 'Run now'}
                     </button>
                     {onPauseUntil && (
@@ -98,19 +98,19 @@ const AutomationView: React.FC<{
                         title="Refresh runs"
                         aria-label="Refresh runs"
                     >
-                        <RefreshIcon className="w-3 h-3" /> Refresh
+                        <RefreshIcon className="w-3 h-3" aria-hidden="true" /> Refresh
                     </button>
                     <button
                         onClick={onEdit}
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                     >
-                        <EditIcon className="w-3 h-3" /> Edit
+                        <EditIcon className="w-3 h-3" aria-hidden="true" /> Edit
                     </button>
                     <button
                         onClick={onDelete}
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                     >
-                        <TrashIcon className="w-3 h-3" /> Delete
+                        <TrashIcon className="w-3 h-3" aria-hidden="true" /> Delete
                     </button>
                     <div className="flex items-center gap-2 pl-2 border-l border-white/10">
                         <span className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-500">Scheduled</span>
@@ -122,10 +122,10 @@ const AutomationView: React.FC<{
             {/* Card feed */}
             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 sm:p-5 space-y-3">
                 {isLoadingRuns ? (
-                    <div className="flex justify-center py-10"><LoadingIcon className="w-6 h-6 text-zinc-500 animate-spin" /></div>
+                    <div className="flex justify-center py-10"><LoadingIcon className="w-6 h-6 text-zinc-500 animate-spin" aria-hidden="true" /></div>
                 ) : runs.length === 0 ? (
                     <EmptyState
-                        icon={<Bookmark className="w-8 h-8" />}
+                        icon={<Bookmark className="w-8 h-8" aria-hidden="true" />}
                         title={config.enabled ? 'No runs yet' : 'Automation is off'}
                         description={config.enabled
                             ? `Scheduled ${config.schedule.cron} — the first run's card will appear here. Click "Run now" to trigger one immediately.`

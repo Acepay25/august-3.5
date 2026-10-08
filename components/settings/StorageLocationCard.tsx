@@ -49,7 +49,7 @@ export const StorageLocationCard: React.FC = () => {
         return (
             <div className="rounded-xl border border-white/5 bg-zinc-900/60 px-4 py-3" data-testid="storage-location-card">
                 <p className="text-ui-xs uppercase tracking-widest text-zinc-500">Storage</p>
-                <p className="text-sm text-zinc-300 mt-1" data-testid="storage-location-unknown">
+                <p className="text-ui-base text-zinc-300 mt-1" data-testid="storage-location-unknown">
                     Storage location unavailable — export a backup before assuming this journal is safe.
                 </p>
             </div>
@@ -59,7 +59,7 @@ export const StorageLocationCard: React.FC = () => {
         return (
             <div className="rounded-xl border border-white/5 bg-zinc-900/60 px-4 py-3" data-testid="storage-location-card">
                 <p className="text-ui-xs uppercase tracking-widest text-zinc-500">Storage</p>
-                <p className="text-sm text-zinc-500 mt-1">Checking…</p>
+                <p className="text-ui-base text-zinc-500 mt-1">Checking…</p>
             </div>
         );
     }
@@ -71,7 +71,7 @@ export const StorageLocationCard: React.FC = () => {
     return (
         <div className="rounded-xl border border-white/5 bg-zinc-900/60 px-4 py-3" data-testid="storage-location-card">
             <p className="text-ui-xs uppercase tracking-widest text-zinc-500">Storage</p>
-            <p className="text-sm text-zinc-200 mt-1" data-testid="storage-location-value">
+            <p className="text-ui-base text-zinc-200 mt-1" data-testid="storage-location-value">
                 {where}
                 <span className="text-zinc-500"> · {info.platform} · {info.userCount} {info.userCount === 1 ? 'profile' : 'profiles'}</span>
             </p>

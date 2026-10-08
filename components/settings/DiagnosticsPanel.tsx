@@ -47,14 +47,14 @@ export const DiagnosticsPanel: React.FC = () => {
     const renderError = (error: ErrorLog, label: string): React.ReactNode => (
         <div className="p-3 rounded-xl bg-rose-950/30 border border-rose-500/20 space-y-1">
             <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-rose-400">{label}</span>
+                <span className="text-ui-sm font-semibold text-rose-400">{label}</span>
                 <span className="text-ui-xs text-zinc-500">
                     {new Date(error.timestamp).toLocaleString()}
                 </span>
             </div>
-            <p className="text-xs text-zinc-300 break-all">{error.message}</p>
+            <p className="text-ui-sm text-zinc-300 break-all">{error.message}</p>
             {error.message === 'Cannot redefine property: onmessage' && (
-                <p className="text-xs text-zinc-400">
+                <p className="text-ui-sm text-zinc-400">
                     The origin of this error is unknown. It may involve instrumentation; the message alone does not establish the cause or impact.
                 </p>
             )}
@@ -84,11 +84,11 @@ export const DiagnosticsPanel: React.FC = () => {
     return (
         <div className="space-y-3">
             <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-zinc-300">Diagnostics</h3>
+                <h3 className="text-ui-base font-semibold text-zinc-300">Diagnostics</h3>
                 {hasErrors && (
                     <button
                         onClick={clearErrors}
-                        className="text-xs text-zinc-400 hover:text-rose-400 transition-colors"
+                        className="text-ui-sm text-zinc-400 hover:text-rose-400 transition-colors"
                     >
                         Clear Errors
                     </button>
@@ -101,14 +101,14 @@ export const DiagnosticsPanel: React.FC = () => {
                     {globalError && renderError(globalError, 'Uncaught Error')}
                 </div>
             ) : (
-                <p className="text-xs text-zinc-500 flex items-center gap-1.5">
-                    <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
+                <p className="text-ui-sm text-zinc-500 flex items-center gap-1.5">
+                    <CheckCircle className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
                     <span>No runtime errors recorded.</span>
                 </p>
             )}
 
             <div className="flex items-center justify-between pt-2">
-                <h4 className="text-xs font-semibold text-zinc-400">Thinking leak bin</h4>
+                <h4 className="text-ui-sm font-semibold text-zinc-400">Thinking leak bin</h4>
                 {leaks.length > 0 && (
                     <button
                         type="button"
@@ -116,7 +116,7 @@ export const DiagnosticsPanel: React.FC = () => {
                             clearThinkingLeakBin();
                             setLeaks([]);
                         }}
-                        className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                        className="text-ui-sm text-zinc-400 hover:text-zinc-200 transition-colors"
                     >
                         Clear leaks
                     </button>
@@ -129,12 +129,12 @@ export const DiagnosticsPanel: React.FC = () => {
                             <p className="text-ui-xs text-zinc-600">
                                 {entry.at ? new Date(entry.at).toLocaleString() : 'Unknown time'}
                             </p>
-                            <p className="mt-1 text-xs text-zinc-400 break-words">{entry.snippet}</p>
+                            <p className="mt-1 text-ui-sm text-zinc-400 break-words">{entry.snippet}</p>
                         </li>
                     ))}
                 </ul>
             ) : (
-                <p className="text-xs text-zinc-500">No thinking leaks recorded. The splitter logs leftovers here when CoT still appears in Final output.</p>
+                <p className="text-ui-sm text-zinc-500">No thinking leaks recorded. The splitter logs leftovers here when CoT still appears in Final output.</p>
             )}
         </div>
     );

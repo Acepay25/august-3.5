@@ -11,7 +11,7 @@ export const CalibrationBar: React.FC<{ label: string; actual: number; expected:
 
     return (
         <div className="space-y-1">
-            <div className="flex justify-between text-xs">
+            <div className="flex justify-between text-ui-sm">
                 <span className="text-zinc-400">{label}</span>
                 <span className="text-zinc-500">n={count}</span>
             </div>

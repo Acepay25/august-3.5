@@ -74,7 +74,7 @@ const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog,
  *  transcript so it can never be clicked twice. */
 export const TradeProposalLoggedRow: React.FC = () => (
     <p className="mt-1 flex items-center gap-1.5 text-ui-xs font-semibold uppercase tracking-wider text-emerald-400">
-        <CheckCircle className="h-3 w-3 shrink-0" />
+        <CheckCircle className="h-3 w-3 shrink-0" aria-hidden="true" />
         <span>✓ Logged as an open trade — the harness will score it against the outcome.</span>
     </p>
 );

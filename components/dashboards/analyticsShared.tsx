@@ -108,11 +108,11 @@ export const SectionCard: React.FC<{
         <div className={`group relative rounded-2xl bg-gradient-to-b ${accentStyles[accentColor]} border transition-colors duration-[150ms] ease-[var(--ease-snappy)]`}>
             {/* Header */}
             <div className="flex items-center gap-3 p-4 pb-3">
-                <div className={`w-9 h-9 rounded-xl ${iconBgStyles[accentColor]} flex items-center justify-center text-base transition-transform duration-[150ms] ease-[var(--ease-snappy)] group-hover:scale-110`}>
+                <div className={`w-9 h-9 rounded-xl ${iconBgStyles[accentColor]} flex items-center justify-center text-ui-lg transition-transform duration-[150ms] ease-[var(--ease-snappy)] group-hover:scale-110`}>
                     {icon}
                 </div>
                 <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-semibold text-white/90 tracking-tight">{title}</h4>
+                    <h4 className="text-ui-base font-semibold text-white/90 tracking-tight">{title}</h4>
                     {subtitle && (
                         <p className="text-ui-dense text-zinc-500 mt-0.5">{subtitle}</p>
                     )}
@@ -152,7 +152,7 @@ export const StatPill: React.FC<{
     };
 
     const sizeStyles = {
-        sm: 'text-sm',
+        sm: 'text-ui-base',
         md: 'text-lg',
         lg: 'text-2xl',
     };

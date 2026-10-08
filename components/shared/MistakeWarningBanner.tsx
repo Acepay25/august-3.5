@@ -8,15 +8,11 @@ import { getTradingWeaknesses } from '../../services/learning/MistakePatternServ
 
 interface MistakeWarningBannerProps {
     tradeLog: LoggedTrade[];
-    currentCoin?: string;
-    currentDirection?: 'Long' | 'Short' | 'Neutral';
     onDismiss?: () => void;
 }
 
 const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
     tradeLog,
-    currentCoin,
-    currentDirection,
     onDismiss
 }) => {
     const [isVisible, setIsVisible] = useState(true);
@@ -30,14 +26,6 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
         if (!isVisible || !tradeLog || tradeLog.length === 0) return null;
         return getTradingWeaknesses(tradeLog);
     }, [isVisible, tradeLog]);
-
-    // Memoize derived values
-    const matchingSetup = useMemo(() => {
-        if (!weaknesses || !currentCoin || currentDirection === 'Neutral') return null;
-        return weaknesses.worstPerformingSetups.find(
-            s => s.setup.toLowerCase().includes(currentCoin.toLowerCase())
-        ) ?? null;
-    }, [weaknesses, currentCoin, currentDirection]);
 
     const topMistakes = useMemo(() => {
         if (!weaknesses) return [];
@@ -55,7 +43,7 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
     }
 
     // Nothing relevant to show
-    if (!matchingSetup && topMistakes.length === 0) {
+    if (topMistakes.length === 0) {
         return null;
     }
 
@@ -72,33 +60,16 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
                 className="absolute top-2 right-2 p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
                 aria-label="Dismiss warning"
             >
-                <CloseIcon className="h-4 w-4" />
+                <CloseIcon className="h-4 w-4" aria-hidden="true" />
             </button>
 
             {/* Header */}
             <div className="flex items-center gap-2 mb-3">
 
-                <span className="text-sm font-bold text-amber-400 uppercase tracking-wide">
+                <span className="text-ui-base font-bold text-amber-400 uppercase tracking-wide">
                     Personal Trading Alert
                 </span>
             </div>
-
-            {/* Setup Warning */}
-            {matchingSetup && (
-                <div className="mb-3 p-2 rounded-lg bg-zinc-800 border border-rose-500/20">
-                    <div className="flex items-center gap-2">
-                        <span className="text-rose-400 font-bold text-sm">
-                             {matchingSetup.setup}
-                        </span>
-                        <span className="text-xs text-zinc-400">
-                            only {matchingSetup.winRate}% win rate ({matchingSetup.count} trades)
-                        </span>
-                    </div>
-                    <p className="text-ui-xs text-zinc-500 mt-1">
-                        Consider extra confirmation or skip this setup type.
-                    </p>
-                </div>
-            )}
 
             {/* Recurring Mistakes */}
             {topMistakes.length > 0 && (
@@ -109,7 +80,7 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
                     {topMistakes.map((mistake, i) => (
                         <div
                             key={i}
-                            className={`flex items-center gap-2 text-xs ${mistake.severity === 'high' ? 'text-rose-400' : 'text-amber-400'
+                            className={`flex items-center gap-2 text-ui-sm ${mistake.severity === 'high' ? 'text-rose-400' : 'text-amber-400'
                                 }`}
                         >
                             

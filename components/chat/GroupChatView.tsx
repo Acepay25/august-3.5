@@ -68,10 +68,10 @@ const relTime = (iso: string | number): string => {
 };
 
 const ACTIVITY_ICON: Record<GroupActivityEntry['kind'], React.ReactNode> = {
-    sent: <MessageSquare className="h-3 w-3" />,
-    working: <Loader2 className="h-3 w-3 animate-spin" />,
-    replied: <Check className="h-3 w-3 text-emerald-400" />,
-    passed: <Minus className="h-3 w-3 text-zinc-500" />,
+    sent: <MessageSquare className="h-3 w-3" aria-hidden="true" />,
+    working: <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />,
+    replied: <Check className="h-3 w-3 text-emerald-400" aria-hidden="true" />,
+    passed: <Minus className="h-3 w-3 text-zinc-500" aria-hidden="true" />,
 };
 
 const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
@@ -175,7 +175,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                                 : 'border-white/10 text-zinc-500 hover:text-zinc-300'
                         }`}
                     >
-                        <ActivityIcon className="h-3 w-3" />
+                        <ActivityIcon className="h-3 w-3" aria-hidden="true" />
                         Hybrid
                         <span className={`inline-block h-1.5 w-1.5 rounded-full ${hybridEnabled ? 'bg-zinc-200' : 'bg-zinc-600'}`} />
                     </button>
@@ -189,7 +189,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                         data-testid="group-edit"
                         className="shrink-0 rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
                     >
-                        <Settings className="h-3.5 w-3.5" />
+                        <Settings className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                 )}
                 {onDeleteGroup && (
@@ -200,7 +200,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                         data-testid="group-delete"
                         className="shrink-0 rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-rose-300"
                     >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                 )}
             </div>
@@ -371,7 +371,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                                                         data-testid={`group-copy-${reply.id}`}
                                                         className="absolute right-0 top-0 rounded p-1 text-zinc-600 opacity-0 transition-opacity hover:bg-zinc-800 hover:text-zinc-300 focus:opacity-100 group-hover:opacity-100"
                                                     >
-                                                        {copiedId === reply.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                                                        {copiedId === reply.id ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
                                                     </button>
                                                 )}
                                             </div>
@@ -392,7 +392,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                                                     data-testid="group-cancel"
                                                     className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1 text-ui-dense font-semibold text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-100"
                                                 >
-                                                    <Square className="h-3 w-3" />
+                                                    <Square className="h-3 w-3" aria-hidden="true" />
                                                     Stop
                                                 </button>
                                             )}

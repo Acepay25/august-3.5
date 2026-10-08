@@ -126,7 +126,7 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                         />
                     )}
                     <span className="relative shrink-0">
-                        <Icon className="h-4 w-4 text-zinc-500" />
+                        <Icon className="h-4 w-4 text-zinc-500" aria-hidden="true" />
                         {/* In the rail a badge dot has no row beside it to sit in,
                            so it rides the glyph. Decorative either way — the
                            count is spoken through the row's accessible name. */}
@@ -165,7 +165,7 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                 }`}
             >
                 <span className="relative shrink-0">
-                    <Inbox className="h-4 w-4 text-zinc-500" />
+                    <Inbox className="h-4 w-4 text-zinc-500" aria-hidden="true" />
                     {collapsed && !!approvalsCount && (
                         <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-400" />
                     )}

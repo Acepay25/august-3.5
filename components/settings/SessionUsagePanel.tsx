@@ -42,7 +42,7 @@ const SessionUsagePanel: React.FC = () => {
         return (
             <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
                 <p className="text-ui-dense text-zinc-500">{label}</p>
-                <p className="mt-1 text-sm text-zinc-100">{s.runs} runs · {Math.round(s.durationMs / 1000)}s</p>
+                <p className="mt-1 text-ui-base text-zinc-100">{s.runs} runs · {Math.round(s.durationMs / 1000)}s</p>
                 <p className="mt-1 text-ui-dense text-zinc-500">
                     {s.tokensExact ? '' : '~'}{formatChars(tokens)} tok
                     {s.costUsd > 0 ? ` · $${s.costUsd.toFixed(3)}` : ''}
@@ -54,8 +54,8 @@ const SessionUsagePanel: React.FC = () => {
     return (
         <div className="space-y-3">
             <div>
-                <h4 className="text-sm font-bold text-white">Usage</h4>
-                <p className="text-xs text-zinc-500 mt-0.5">Tokens from provider responses when available; otherwise estimated from output size.</p>
+                <h4 className="text-ui-base font-bold text-white">Usage</h4>
+                <p className="text-ui-sm text-zinc-500 mt-0.5">Tokens from provider responses when available; otherwise estimated from output size.</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
                 {renderSummary('Today', today)}
@@ -83,7 +83,7 @@ const SessionUsagePanel: React.FC = () => {
                             <circle cx="40" cy="40" r="18" fill="#141412" />
                         </svg>
                         <div className="min-w-0 flex-1">
-                            <p className="text-sm text-zinc-100">{today.tokensExact ? '' : '~'}{formatChars(todayTokens)} tok today</p>
+                            <p className="text-ui-base text-zinc-100">{today.tokensExact ? '' : '~'}{formatChars(todayTokens)} tok today</p>
                             {topModel && (
                                 <p className="mt-1 text-ui-dense text-zinc-400">
                                     Top model · {formatModelDisplayName(topModel.modelId)} · {Math.round(topModel.share * 100)}%

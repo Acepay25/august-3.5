@@ -93,7 +93,7 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
         return (
             <div className={`flex items-center gap-1.5 ${className}`}>
                 <span className="flex items-center gap-1.5 text-ui-dense text-cyan-400" role="status" aria-live="polite">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                     Checking…
                 </span>
             </div>
@@ -108,7 +108,7 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
                     className="flex items-center gap-1.5 rounded-md px-2 py-1 text-ui-dense font-medium text-emerald-300"
                     title={`Version ${version} is available`}
                 >
-                    <Download className="h-3.5 w-3.5" />
+                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
                     v{version}
                 </span>
                 <button
@@ -116,7 +116,7 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
                     className={`${baseClasses} bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg hover:shadow-emerald-500/25 active:scale-95`}
                     aria-label={`Download update version ${version}`}
                 >
-                    <Download className="h-3.5 w-3.5" />
+                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
                     Update
                 </button>
             </div>
@@ -130,7 +130,7 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
                 <StatusPill
                     tone="info"
                     className="font-mono tabular-nums"
-                    icon={<Loader2 className="h-3 w-3 animate-spin" />}
+                    icon={<Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
                 >
                     {Number.isFinite(progress) && progress > 0 ? `${progress}%` : 'Downloading…'}
                 </StatusPill>
@@ -147,7 +147,7 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
                     className={`${baseClasses} bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg hover:shadow-emerald-500/25 active:scale-95`}
                     aria-label={`Restart to apply version ${version ?? ''}`}
                 >
-                    <Download className="h-3.5 w-3.5" />
+                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
                     Restart
                 </button>
             </div>
@@ -163,7 +163,7 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
                     className={`flex items-center gap-1.5 text-ui-dense text-rose-400 ${verboseError ? 'max-w-[260px]' : ''}`}
                     title={error || ''}
                 >
-                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     {verboseError && error ? <span className="truncate">{error}</span> : 'Update error'}
                 </span>
                 <button
@@ -171,7 +171,7 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
                     className={`${baseClasses} bg-zinc-800 hover:bg-zinc-700 text-zinc-300`}
                     aria-label="Retry update check"
                 >
-                    <RefreshCw className="h-3.5 w-3.5" />
+                    <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
                     Retry
                 </button>
             </div>
@@ -195,7 +195,7 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
                 aria-label="Check for updates"
                 title="Check for updates"
             >
-                <RefreshCw className="h-3.5 w-3.5" />
+                <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
         </div>
     );

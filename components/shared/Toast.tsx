@@ -130,14 +130,14 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
     const renderIcon = (type: ToastType) => {
         switch (type) {
             case 'success':
-                return <CheckCircle className="h-5 w-5 text-emerald-300 shrink-0 mt-0.5" />;
+                return <CheckCircle className="h-5 w-5 text-emerald-300 shrink-0 mt-0.5" aria-hidden="true" />;
             case 'error':
-                return <AlertCircle className="h-5 w-5 text-rose-300 shrink-0 mt-0.5" />;
+                return <AlertCircle className="h-5 w-5 text-rose-300 shrink-0 mt-0.5" aria-hidden="true" />;
             case 'warning':
-                return <AlertTriangle className="h-5 w-5 text-amber-300 shrink-0 mt-0.5" />;
+                return <AlertTriangle className="h-5 w-5 text-amber-300 shrink-0 mt-0.5" aria-hidden="true" />;
             case 'info':
             default:
-                return <Info className="h-5 w-5 text-cyan-300 shrink-0 mt-0.5" />;
+                return <Info className="h-5 w-5 text-cyan-300 shrink-0 mt-0.5" aria-hidden="true" />;
         }
     };
 
@@ -152,9 +152,9 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
             <div className="flex items-start gap-3">
                 {renderIcon(toast.type)}
                 <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm">{toast.title}</p>
+                    <p className="font-bold text-ui-base">{toast.title}</p>
                     {toast.message && (
-                        <p className="text-xs opacity-80 mt-0.5">{toast.message}</p>
+                        <p className="text-ui-sm opacity-80 mt-0.5">{toast.message}</p>
                     )}
                     {toast.action && (
                         <button
@@ -162,7 +162,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
                                 toast.action!.onClick();
                                 onDismiss();
                             }}
-                            className="mt-2 text-xs font-bold px-3 py-1 rounded-lg bg-zinc-700 hover:bg-zinc-600 transition-colors"
+                            className="mt-2 text-ui-sm font-bold px-3 py-1 rounded-lg bg-zinc-700 hover:bg-zinc-600 transition-colors"
                         >
                             {toast.action.label}
                         </button>
@@ -173,7 +173,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
                     className="p-1 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors flex-shrink-0"
                     aria-label="Dismiss"
                 >
-                    <X className="h-4 w-4" />
+                    <X className="h-4 w-4" aria-hidden="true" />
                 </button>
             </div>
         </div>

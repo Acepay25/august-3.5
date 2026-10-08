@@ -240,7 +240,7 @@ const SelectMenuInner: React.FC<SelectMenuProps> = ({
                                         {opt.meta && (
                                             <span className="shrink-0 text-ui-dense text-zinc-500">{opt.meta}</span>
                                         )}
-                                        {isCurrent && <CheckIcon className="h-3 w-3 shrink-0 text-zinc-200" />}
+                                        {isCurrent && <CheckIcon className="h-3 w-3 shrink-0 text-zinc-200" aria-hidden="true" />}
                                     </button>
                                 );
                             })}

@@ -184,7 +184,7 @@ export const PixelSeat: React.FC<PixelSeatProps> = ({
                 aria-hidden="true"
                 className={`absolute right-0 top-0 z-10 flex h-4 w-4 items-center justify-center rounded-full border border-zinc-900 ${pipColor} ${speaking || thinking ? 'animate-pulse' : ''}`}
             >
-                <PipIcon className="h-2.5 w-2.5 text-zinc-900" />
+                <PipIcon className="h-2.5 w-2.5 text-zinc-900" aria-hidden="true" />
             </span>
 
             {/* Pixel-art avatar (16×20 grid). */}

@@ -42,7 +42,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ imageUrl, onClose }
                 className="absolute top-4 right-4 p-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full transition-colors z-10"
                 aria-label="Close image"
             >
-                <X className="h-5 w-5" />
+                <X className="h-5 w-5" aria-hidden="true" />
             </button>
 
             {/* Image container */}
@@ -56,7 +56,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ imageUrl, onClose }
             </div>
 
             {/* Hint text */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-zinc-500 text-sm">
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-zinc-500 text-ui-base">
                 Tap outside or × to close
             </div>
         </div>

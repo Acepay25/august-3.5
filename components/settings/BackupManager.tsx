@@ -177,8 +177,8 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h4 className="text-sm font-bold text-white">Backups</h4>
-          <p className="text-xs text-zinc-500 mt-0.5">
+          <h4 className="text-ui-base font-bold text-white">Backups</h4>
+          <p className="text-ui-sm text-zinc-500 mt-0.5">
             Auto-backups run every 30 minutes — stored per profile, newest 5 kept.
           </p>
         </div>
@@ -187,7 +187,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
             onClick={() => fileInputRef.current?.click()}
             disabled={isImporting}
             data-testid="backup-import-button"
-            className="px-3 py-2 rounded-xl border border-white/10 text-zinc-200 hover:bg-zinc-800 text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-2 rounded-xl border border-white/10 text-zinc-200 hover:bg-zinc-800 text-ui-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isImporting ? 'Reading…' : 'Import from file'}
           </button>
@@ -205,9 +205,9 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
           <button
             onClick={handleCreate}
             disabled={isCreating}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-ui-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isCreating ? <LoadingIcon className="w-4 h-4" /> : <PlusIcon className="w-4 h-4" />}
+            {isCreating ? <LoadingIcon className="w-4 h-4" aria-hidden="true" /> : <PlusIcon className="w-4 h-4" aria-hidden="true" />}
             {isCreating ? 'Backing up…' : 'Back up now'}
           </button>
         </div>
@@ -216,7 +216,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
       {status && (
         <div
           data-testid="backup-status"
-          className={`text-xs px-3 py-2 rounded-lg border ${status.kind === 'success'
+          className={`text-ui-sm px-3 py-2 rounded-lg border ${status.kind === 'success'
           ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
           : status.kind === 'warn'
             ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
@@ -226,21 +226,21 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
       )}
 
       {isLoading ? (
-        <div className="flex items-center gap-2 py-4 text-zinc-500 text-xs">
-          <LoadingIcon className="w-4 h-4" />
+        <div className="flex items-center gap-2 py-4 text-zinc-500 text-ui-sm">
+          <LoadingIcon className="w-4 h-4" aria-hidden="true" />
           Loading backups…
         </div>
       ) : backups.length === 0 ? (
         <div className="py-4 text-center">
-          <p className="text-sm text-zinc-500">No backups yet</p>
-          <p className="text-xs text-zinc-600 mt-1">The next auto-backup (or "Back up now") will appear here.</p>
+          <p className="text-ui-base text-zinc-500">No backups yet</p>
+          <p className="text-ui-sm text-zinc-600 mt-1">The next auto-backup (or "Back up now") will appear here.</p>
         </div>
       ) : (
         <div className="divide-y divide-white/5 border border-white/5 rounded-xl overflow-hidden">
           {backups.map(backup => (
             <div key={backup.id} className="flex items-center gap-3 px-4 py-3 bg-zinc-900/60 hover:bg-zinc-900 transition-colors">
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-zinc-200">
+                <p className="text-ui-sm font-medium text-zinc-200">
                   {new Date(backup.timestamp).toLocaleString()}
                 </p>
                 <p className="text-ui-xs text-zinc-500 mt-0.5">
@@ -255,7 +255,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
                   aria-label="Export backup as JSON"
                   title="Export"
                 >
-                  <ExportIcon className="w-4 h-4" />
+                  <ExportIcon className="w-4 h-4" aria-hidden="true" />
                 </button>
                 <button
                   onClick={() => handleRestore(backup.id, backup.username)}
@@ -264,7 +264,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
                   aria-label="Restore this backup"
                   title="Restore"
                 >
-                  <RefreshIcon className="w-4 h-4" />
+                  <RefreshIcon className="w-4 h-4" aria-hidden="true" />
                 </button>
                 <button
                   onClick={() => handleDelete(backup.id)}
@@ -273,7 +273,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
                   aria-label="Delete this backup"
                   title="Delete"
                 >
-                  <TrashIcon className="w-4 h-4" />
+                  <TrashIcon className="w-4 h-4" aria-hidden="true" />
                 </button>
               </div>
             </div>

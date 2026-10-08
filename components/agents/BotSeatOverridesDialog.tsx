@@ -85,7 +85,7 @@ const BotSeatOverridesDialog: React.FC<{ open: boolean; bot: AgentBot | null; on
                     </div>
                     <button type="button" onClick={onClose} aria-label="Close debate overrides"
                         className="shrink-0 rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200">
-                        <X className="h-4 w-4" />
+                        <X className="h-4 w-4" aria-hidden="true" />
                     </button>
                 </div>
 

@@ -105,7 +105,7 @@ export const ModelFallbackBanner: React.FC<{
 }> = ({ modelIssue, provider }) => (
     modelIssue && provider ? (
         <div className="mb-1.5 flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-ui-dense leading-4 text-amber-300" data-testid="model-fallback-warning" role="status">
-            <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="min-w-0 flex-1">
                 {modelIssue} Answering with <strong className="font-semibold">{provider.name} · {formatModelDisplayName(provider.selectedModel)}</strong> — re-pick a model in the dropdown.
             </span>
@@ -167,7 +167,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                     <button type="button" onClick={() => setShowAttachMenu(v => !v)} disabled={!ready}
                         title="Attach to this message" aria-label="Attach to this message" aria-expanded={showAttachMenu}
                         className="rounded-full p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 disabled:opacity-40">
-                        <Plus className="h-4 w-4" />
+                        <Plus className="h-4 w-4" aria-hidden="true" />
                     </button>
                     {showAttachMenu && (
                         <>
@@ -175,12 +175,12 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                             <div className="absolute bottom-9 left-0 z-30 w-48 rounded-xl border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="attach-menu">
                                 <button type="button" onClick={() => { setShowAttachMenu(false); fileInputRef.current?.click(); }}
                                     className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
-                                    <FileText className="h-3.5 w-3.5 text-zinc-500" /> Upload files &amp; images
+                                    <FileText className="h-3.5 w-3.5 text-zinc-500" aria-hidden="true" /> Upload files &amp; images
                                 </button>
                                 <button type="button" onClick={() => { setShowAttachMenu(false); captureChart(); }}
                                     disabled={!onCaptureChart} title={onCaptureChart ? undefined : 'Chart not ready'}
                                     className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 transition-colors hover:bg-white/[0.06] disabled:opacity-40">
-                                    <Camera className="h-3.5 w-3.5 text-zinc-500" /> Screenshot chart
+                                    <Camera className="h-3.5 w-3.5 text-zinc-500" aria-hidden="true" /> Screenshot chart
                                 </button>
                             </div>
                         </>
@@ -211,7 +211,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                         aria-expanded={showEffortMenu} aria-haspopup="menu"
                         title={`Thinking effort: ${effortChoiceOf(effort).label}`}
                         className="flex items-center gap-1.5 rounded-full border border-white/[0.07] px-2 py-1 text-ui-xs font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100">
-                        <Brain className="h-3.5 w-3.5" />
+                        <Brain className="h-3.5 w-3.5" aria-hidden="true" />
                         {effortChoiceOf(effort).label}
                         <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-150 ease-[var(--ease-snappy)] ${showEffortMenu ? 'rotate-180' : ''}`} />
                     </button>
@@ -254,7 +254,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                     aria-label={busy ? 'Stop' : 'Send'}
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-zinc-900 transition-colors hover:bg-white disabled:opacity-40"
                 >
-                    {busy ? <StopIcon className="h-3 w-3" fill="currentColor" /> : <SendIcon className="h-4 w-4" />}
+                    {busy ? <StopIcon className="h-3 w-3" fill="currentColor" /> : <SendIcon className="h-4 w-4" aria-hidden="true" />}
                 </button>
             </div>
         </div>

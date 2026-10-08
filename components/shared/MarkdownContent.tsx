@@ -21,7 +21,7 @@ interface MarkdownContentProps {
 const MarkdownRenderer = lazy(() => import('./MarkdownRenderer'));
 
 const MarkdownFallback: React.FC<MarkdownContentProps> = ({ content, className }) => (
-  <div className={`text-sm leading-relaxed text-zinc-300 whitespace-pre-wrap ${className ?? ''}`}>
+  <div className={`text-ui-base leading-relaxed text-zinc-300 whitespace-pre-wrap ${className ?? ''}`}>
     {content || ''}
   </div>
 );

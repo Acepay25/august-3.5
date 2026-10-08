@@ -116,7 +116,7 @@ export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, 
         <div className="space-y-3 sm:space-y-4">
             {/* Time-window control — stale early data must not masquerade as current */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
-                <h4 className="text-ui-xs sm:text-xs font-bold text-zinc-500 uppercase tracking-wider">Harness Accuracy — the similar-setup pool</h4>
+                <h4 className="text-ui-xs sm:text-ui-sm font-bold text-zinc-500 uppercase tracking-wider">Harness Accuracy — the similar-setup pool</h4>
                 <div className="flex items-center gap-1">
                     {([0, 30, 90] as const).map(d => (
                         <button
@@ -171,7 +171,7 @@ export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, 
                     {evidenceQuality.map(bucket => (
                         <div key={bucket.coverage} className="rounded-lg border border-white/5 bg-zinc-950/50 p-2">
                             <p className="text-ui-xs uppercase tracking-widest text-zinc-500">{bucket.coverage}</p>
-                            <p className="text-sm font-semibold text-zinc-100">{bucket.winRate !== null ? `${bucket.winRate}% WR` : '—'}</p>
+                            <p className="text-ui-base font-semibold text-zinc-100">{bucket.winRate !== null ? `${bucket.winRate}% WR` : '—'}</p>
                             <p className="text-ui-xs text-zinc-600">n={bucket.n}{bucket.avgProbability !== null ? ` · avg p ${bucket.avgProbability}` : ''}</p>
                         </div>
                     ))}
@@ -180,9 +180,9 @@ export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, 
 
             {/* Per-model × regime leaderboard */}
             <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
-                <h4 className="text-ui-xs sm:text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 sm:mb-3">Per-model track record by regime</h4>
+                <h4 className="text-ui-xs sm:text-ui-sm font-bold text-zinc-500 uppercase tracking-wider mb-2 sm:mb-3">Per-model track record by regime</h4>
                 {leaderboard.length === 0 ? (
-                    <p className="text-xs text-zinc-600 italic">Log ≥3 trades per model to see the leaderboard.</p>
+                    <p className="text-ui-sm text-zinc-600 italic">Log ≥3 trades per model to see the leaderboard.</p>
                 ) : (
                     <div className="overflow-x-auto custom-scrollbar">
                         <table className="w-full text-left text-ui-xs font-mono tabular-nums">

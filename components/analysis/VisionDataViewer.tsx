@@ -34,9 +34,9 @@ const VisionDataViewer: React.FC<VisionDataViewerProps> = ({ isVisible, onClose,
           ) : (
             (visionData || []).map((data, index) => (
               <div key={index} className="animate-fade-in">
-                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2 pl-1">Chart {index + 1} Extraction</h3>
+                <h3 className="text-ui-sm font-bold text-zinc-500 uppercase tracking-widest mb-2 pl-1">Chart {index + 1} Extraction</h3>
                 <div className="bg-zinc-900 p-4 rounded-xl border border-white/10 overflow-x-auto shadow-inner">
-                    <pre className="whitespace-pre-wrap text-xs text-emerald-300/90 font-mono leading-relaxed">{data}</pre>
+                    <pre className="whitespace-pre-wrap text-ui-sm text-emerald-300/90 font-mono leading-relaxed">{data}</pre>
                 </div>
               </div>
             ))

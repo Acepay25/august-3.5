@@ -156,7 +156,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                             aria-controls="nav-rail-panel"
                             className="relative -ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
                         >
-                            <PanelLeftOpen className="h-4 w-4" />
+                            <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
                             {navUpdateDot && (
                                 <span data-testid="nav-update-dot-header" className="absolute -right-0.5 -top-0.5">
                                     {navUpdateDot}
@@ -231,7 +231,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                 <div className="text-ui-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Sessions</div>
                                                 <div className="space-y-2">
                                                     {allSessions.map(session => (
-                                                        <div key={session.id} className="flex items-center justify-between text-xs py-0.5">
+                                                        <div key={session.id} className="flex items-center justify-between text-ui-sm py-0.5">
                                                             <div className="flex items-center gap-2 min-w-0">
                                                                 <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${session.isOpen ? 'bg-emerald-500 shadow-[0_0_8px_rgba(7,181,106,0.6)]' : 'bg-zinc-700'}`} />
                                                                 <span className={session.isOpen ? 'text-white font-medium truncate' : 'text-zinc-500 truncate'}>{session.name.replace(' Session', '')}</span>
@@ -261,7 +261,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                 {sessionContext.warnings.length > 0 && (
                                                     <div className="mt-3 pt-2 border-t border-white/5">
                                                         <div className="flex items-center gap-1.5 text-amber-400 mb-1">
-                                                            <ActivityIcon className="w-3 h-3" />
+                                                            <ActivityIcon className="w-3 h-3" aria-hidden="true" />
                                                             <span className="text-ui-xs font-bold">Market Condition</span>
                                                         </div>
                                                         <div className="text-ui-xs text-zinc-400 leading-tight">
@@ -299,22 +299,22 @@ export const Header: React.FC<HeaderProps> = memo(({
                 <div className=" flex items-center gap-2">
                     {saveStatus === 'SAVING' && (
                         <span role="status" aria-label="Saving">
-                            <LoadingIcon className="h-4 w-4 text-zinc-500" />
+                            <LoadingIcon className="h-4 w-4 text-zinc-500" aria-hidden="true" />
                         </span>
                     )}
                     {saveStatus === 'SAVED' && (
                         <span role="status" aria-label="Saved">
-                            <CheckIcon className="h-4 w-4 text-emerald-500" />
+                            <CheckIcon className="h-4 w-4 text-emerald-500" aria-hidden="true" />
                         </span>
                     )}
                     {!isOnline && (
                         <span role="status" aria-label="Offline">
-                            <CloudOffIcon className="h-4 w-4 text-amber-500" />
+                            <CloudOffIcon className="h-4 w-4 text-amber-500" aria-hidden="true" />
                         </span>
                     )}
                     {saveStatus === 'ERROR' && (
                         <span role="status" aria-label="Save failed">
-                            <AlertTriangleIcon className="h-4 w-4 text-rose-500" />
+                            <AlertTriangleIcon className="h-4 w-4 text-rose-500" aria-hidden="true" />
                         </span>
                     )}
 

@@ -171,7 +171,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                 {lessonsSection}
                 {reviewActionsSection}
                 <EmptyState
-                    icon={<BrainCircuit className="w-8 h-8" />}
+                    icon={<BrainCircuit className="w-8 h-8" aria-hidden="true" />}
                     title="Building Your Profile"
                     description={`Log at least 3 trades (WIN or LOSS) to start seeing personalized AI learnings. Current: ${profile.totalAnalyzedTrades} / 3 trades.`}
                     className="h-64"

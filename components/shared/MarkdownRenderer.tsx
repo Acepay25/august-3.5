@@ -97,7 +97,7 @@ interface MarkdownRendererProps {
  */
 const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className }) => {
   return (
-    <div className={`text-sm leading-relaxed text-zinc-300 prose prose-invert prose-sm max-w-none ${className ?? ''}`}>
+    <div className={`text-ui-base leading-relaxed text-zinc-300 prose prose-invert prose-sm max-w-none ${className ?? ''}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[[rehypeKatex, KATEX_OPTIONS]]}
@@ -139,7 +139,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
                   OVERFLOWS the wrapper (scrollable, with the always-visible
                   custom-scrollbar thumb) instead of shrinking cells until the
                   extra columns vanish — the "many columns don't display" bug. */}
-              <table className="w-max min-w-full text-left text-xs border-collapse tabular-nums">{children}</table>
+              <table className="w-max min-w-full text-left text-ui-sm border-collapse tabular-nums">{children}</table>
             </div>
           ),
           th: ({ children }) => (
@@ -152,8 +152,8 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             <blockquote className="border-l-2 border-white/20 pl-3.5 text-zinc-400 italic">{children}</blockquote>
           ),
           h1: ({ children }) => <h1 className="mt-5 mb-2.5 text-lg font-semibold text-zinc-100">{children}</h1>,
-          h2: ({ children }) => <h2 className="mt-5 mb-2.5 text-base font-semibold text-zinc-100">{children}</h2>,
-          h3: ({ children }) => <h3 className="mt-4 mb-2 text-sm font-semibold text-zinc-100">{children}</h3>,
+          h2: ({ children }) => <h2 className="mt-5 mb-2.5 text-ui-lg font-semibold text-zinc-100">{children}</h2>,
+          h3: ({ children }) => <h3 className="mt-4 mb-2 text-ui-base font-semibold text-zinc-100">{children}</h3>,
           hr: () => <hr className="my-4 border-white/10" />,
           p: ({ children }) => <p className="my-3 leading-[1.65] text-zinc-300">{children}</p>,
           ul: ({ children }) => <ul className="my-3 list-disc space-y-1.5 pl-5 text-zinc-300 marker:text-zinc-600">{children}</ul>,

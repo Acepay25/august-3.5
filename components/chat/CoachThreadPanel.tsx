@@ -253,7 +253,7 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
                 muted subtitle. */}
             <div className="flex items-center gap-3 pb-2">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-zinc-800 text-zinc-300">
-                    <GraduationCap className="h-5 w-5" />
+                    <GraduationCap className="h-5 w-5" aria-hidden="true" />
                 </span>
                 <div className="min-w-0">
                     <p className="text-ui-lede font-semibold leading-tight text-zinc-100">Coach</p>
@@ -267,7 +267,7 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
                 <CardShell>
                     <EmptyState
                         compact
-                        icon={<Inbox className="h-5 w-5" />}
+                        icon={<Inbox className="h-5 w-5" aria-hidden="true" />}
                         title="Nothing needs your decision right now"
                         description="When the loop learns something worth installing — a repeated setup worth drafting, a skill that should displace another at the cap, a retired twin worth reviving — it lands here as a card. You approve or dismiss; the harness never mutates its own beliefs silently."
                     />

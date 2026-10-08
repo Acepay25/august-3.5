@@ -35,10 +35,10 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({ images, onRemoveImage }) =>
           
           {/* Summary container */}
           <div className="w-full">
-              <h4 className="text-xs font-semibold text-zinc-400 mb-1 hidden sm:block">Chart Summary</h4>
-              <div className="text-ui-xs sm:text-xs font-mono text-zinc-300 min-h-[1.5rem] sm:min-h-[2rem] flex items-center justify-center">
+              <h4 className="text-ui-sm font-semibold text-zinc-400 mb-1 hidden sm:block">Chart Summary</h4>
+              <div className="text-ui-xs sm:text-ui-sm font-mono text-zinc-300 min-h-[1.5rem] sm:min-h-[2rem] flex items-center justify-center">
                 {meta.isLoading ? (
-                  <LoadingIcon className="w-3 h-3 sm:w-5 sm:h-5 text-white" />
+                  <LoadingIcon className="w-3 h-3 sm:w-5 sm:h-5 text-white" aria-hidden="true" />
                 ) : (
                   <span className="truncate max-w-full" title={meta.summary}>{meta.summary}</span>
                 )}

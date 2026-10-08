@@ -146,13 +146,13 @@ export function useConfirmDialog() {
                             <div className="flex items-start gap-4">
                                 {state.destructive && (
                                     <div className="flex-shrink-0 w-10 h-10 rounded-full bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
-                                        <TrashIcon className="h-5 w-5" />
+                                        <TrashIcon className="h-5 w-5" aria-hidden="true" />
                                     </div>
                                 )}
                                 <div className="flex-1 min-w-0">
                                      <h3 id="confirm-dialog-title" className="text-lg font-semibold text-zinc-100">{state.title}</h3>
                                     {state.message && (
-                                        <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed">{state.message}</p>
+                                        <p className="mt-1.5 text-ui-base text-zinc-400 leading-relaxed">{state.message}</p>
                                     )}
                                     {state.typedConfirm && (
                                         <div className="mt-4">
@@ -176,7 +176,7 @@ export function useConfirmDialog() {
                                                 autoComplete="off"
                                                 spellCheck={false}
                                                 autoFocus
-                                                className="mt-1.5 w-full rounded-md border border-white/15 bg-zinc-950 px-2.5 py-1.5 font-mono text-sm text-zinc-100 placeholder-zinc-600 focus:border-rose-400/50 focus:outline-none"
+                                                className="mt-1.5 w-full rounded-md border border-white/15 bg-zinc-950 px-2.5 py-1.5 font-mono text-ui-base text-zinc-100 placeholder-zinc-600 focus:border-rose-400/50 focus:outline-none"
                                                 placeholder={state.typedConfirm}
                                             />
                                         </div>
@@ -187,14 +187,14 @@ export function useConfirmDialog() {
                                     className="flex-shrink-0 p-1.5 text-zinc-500 hover:text-zinc-300 rounded-lg hover:bg-zinc-800 transition-colors"
                                     aria-label="Close"
                                 >
-                                    <CloseIcon className="h-4 w-4" />
+                                    <CloseIcon className="h-4 w-4" aria-hidden="true" />
                                 </button>
                             </div>
                         </div>
                         <div className="px-6 py-4 bg-zinc-900 border-t border-white/5 flex items-center justify-end gap-3">
                             <button
                                 onClick={handleCancel}
-                                className="px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+                                className="px-4 py-2 text-ui-base font-medium text-zinc-300 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
                             >
                                 {state.cancelLabel}
                             </button>
@@ -202,7 +202,7 @@ export function useConfirmDialog() {
                                 onClick={handleConfirm}
                                 disabled={state.typedConfirm !== undefined && typedInput !== state.typedConfirm}
                                 data-testid="confirm-dialog-confirm"
-                                className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${state.destructive
+                                className={`px-4 py-2 text-ui-base font-semibold rounded-lg transition-colors ${state.destructive
                                     ? 'bg-rose-500 enabled:hover:bg-rose-600 text-white disabled:bg-zinc-700 disabled:text-zinc-500'
                                     : 'bg-cyan-500 enabled:hover:bg-cyan-600 text-white disabled:bg-zinc-700 disabled:text-zinc-500'
                                     }`}
@@ -219,11 +219,11 @@ export function useConfirmDialog() {
             {undoVisible && (
                 <div role="status" className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[101] animate-fade-in">
                     <div className="flex items-center gap-4 px-4 py-3 bg-zinc-800 border border-white/10 rounded-xl shadow-2xl">
-                        <span className="text-sm text-zinc-200">Action completed</span>
+                        <span className="text-ui-base text-zinc-200">Action completed</span>
                         <button
                             type="button"
                             onClick={handleUndo}
-                            className="text-sm font-semibold text-cyan-400 hover:text-cyan-300 transition-colors"
+                            className="text-ui-base font-semibold text-cyan-400 hover:text-cyan-300 transition-colors"
                         >
                             Undo
                         </button>

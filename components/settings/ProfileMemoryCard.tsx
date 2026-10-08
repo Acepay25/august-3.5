@@ -92,7 +92,7 @@ const ProfileMemoryCard: React.FC = () => {
                                 <button type="button" onClick={() => { forgetProfileMemory(e.slug); refresh(); }}
                                     aria-label={`Forget memory ${e.slug}`} title="Forget"
                                     className="shrink-0 rounded-md border border-zinc-800 p-1.5 text-zinc-500 transition-colors hover:border-rose-500/40 hover:text-rose-300">
-                                    <Trash2 className="h-3.5 w-3.5" />
+                                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                                 </button>
                             </div>
                         </li>

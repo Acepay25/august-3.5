@@ -63,8 +63,8 @@ export const AutoJournalRulesCard: React.FC<AutoJournalRulesCardProps> = ({ user
                             }`}
                         >
                             {rule.policy === 'always'
-                                ? <Check className="h-4 w-4" />
-                                : <Ban className="h-4 w-4" />}
+                                ? <Check className="h-4 w-4" aria-hidden="true" />
+                                : <Ban className="h-4 w-4" aria-hidden="true" />}
                         </span>
                         <div className="min-w-0 flex-1">
                             <div className="text-ui-caption font-semibold leading-5 text-zinc-200">{rule.coin}</div>

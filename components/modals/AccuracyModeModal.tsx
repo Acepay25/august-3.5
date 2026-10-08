@@ -29,20 +29,20 @@ export const AccuracyModeModal: React.FC<AccuracyModeModalProps> = ({ isOpen, on
                 <BotIcon />
               </div>
               <h2 className="text-xl font-bold text-zinc-100 tracking-tight mb-2">Enable Accuracy Mode?</h2>
-              <p className="text-zinc-400 text-xs mb-6 leading-relaxed">
+              <p className="text-zinc-400 text-ui-sm mb-6 leading-relaxed">
                 This will activate the <strong>10-Layer Accuracy Protocol</strong>.
               </p>
-              <ul className="text-left text-xs text-zinc-300 space-y-2.5 bg-zinc-900/80 p-4 rounded-xl border border-white/10 mb-6">
+              <ul className="text-left text-ui-sm text-zinc-300 space-y-2.5 bg-zinc-900/80 p-4 rounded-xl border border-white/10 mb-6">
                 <li className="flex items-center gap-2.5">
-                  <ShieldCheck className="h-4 w-4 text-cyan-400 shrink-0" />
+                  <ShieldCheck className="h-4 w-4 text-cyan-400 shrink-0" aria-hidden="true" />
                   <span><strong>Strict Logic:</strong> Lazy analysis is forbidden.</span>
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <Lock className="h-4 w-4 text-cyan-400 shrink-0" />
+                  <Lock className="h-4 w-4 text-cyan-400 shrink-0" aria-hidden="true" />
                   <span><strong>Model Lockdown:</strong> Dropdowns will disappear.</span>
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <Users className="h-4 w-4 text-cyan-400 shrink-0" />
+                  <Users className="h-4 w-4 text-cyan-400 shrink-0" aria-hidden="true" />
                   <span><strong>Ensemble:</strong> Forced debate &amp; cross-validation.</span>
                 </li>
               </ul>
@@ -50,10 +50,10 @@ export const AccuracyModeModal: React.FC<AccuracyModeModalProps> = ({ isOpen, on
           ) : (
             <>
               <div className="w-14 h-14 bg-zinc-900 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-zinc-800 text-zinc-400">
-                <CloseIcon className="w-6 h-6 text-zinc-400" />
+                <CloseIcon className="w-6 h-6 text-zinc-400" aria-hidden="true" />
               </div>
               <h2 className="text-xl font-bold text-zinc-100 mb-2">Disable Accuracy Mode?</h2>
-              <p className="text-zinc-400 text-xs mb-6">
+              <p className="text-zinc-400 text-ui-sm mb-6">
                 Analysis will return to normal speed. Dropdowns will be restored.
               </p>
             </>

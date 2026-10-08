@@ -124,7 +124,7 @@ export const ChartToolRail: React.FC<ChartToolRailProps> = ({
             className="absolute left-0 top-0 z-20 flex h-full w-10 flex-col items-center gap-0.5 border-r border-white/[0.06] bg-zinc-900/90 py-1.5"
         >
             <RailButton title="Cursor — pan & zoom the chart" active={tool === 'cursor'} onClick={() => onSelectTool('cursor')}>
-                <MousePointer2 className="h-4 w-4" />
+                <MousePointer2 className="h-4 w-4" aria-hidden="true" />
             </RailButton>
             <RailSep />
             {/* Trend group: one button for the last-used line tool, a flyout
@@ -135,7 +135,7 @@ export const ChartToolRail: React.FC<ChartToolRailProps> = ({
                     active={tool === 'trend' || tool === 'ray'}
                     onClick={() => pick(tool === 'trend' || tool === 'ray' ? 'cursor' : 'trend')}
                 >
-                    {tool === 'ray' ? <RayIcon className="h-4 w-4" /> : <TrendIcon className="h-4 w-4" />}
+                    {tool === 'ray' ? <RayIcon className="h-4 w-4" aria-hidden="true" /> : <TrendIcon className="h-4 w-4" aria-hidden="true" />}
                 </RailButton>
                 <button
                     type="button"
@@ -157,33 +157,33 @@ export const ChartToolRail: React.FC<ChartToolRailProps> = ({
                         <div className="fixed inset-0 z-30" aria-hidden onClick={() => setTrendFlyout(false)} />
                         <div className="absolute left-9 top-0 z-40 flex flex-col gap-0.5 rounded-xl border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="trend-flyout">
                             <RailButton title="Trendline — click start, click end" active={tool === 'trend'} onClick={() => pick('trend')}>
-                                <TrendIcon className="h-4 w-4" />
+                                <TrendIcon className="h-4 w-4" aria-hidden="true" />
                             </RailButton>
                             <RailButton title="Ray — click start, click direction (extends right)" active={tool === 'ray'} onClick={() => pick('ray')}>
-                                <RayIcon className="h-4 w-4" />
+                                <RayIcon className="h-4 w-4" aria-hidden="true" />
                             </RailButton>
                         </div>
                     </>
                 )}
             </div>
             <RailButton title="Horizontal line — click a price" active={tool === 'hline'} onClick={() => pick('hline')}>
-                <Minus className="h-4 w-4" />
+                <Minus className="h-4 w-4" aria-hidden="true" />
             </RailButton>
             <RailButton title="Zone — click corner to corner" active={tool === 'rect'} onClick={() => pick('rect')}>
-                <Square className="h-4 w-4" />
+                <Square className="h-4 w-4" aria-hidden="true" />
             </RailButton>
             <RailButton title="Fib retracement — click swing low, click swing high" active={tool === 'fib'} onClick={() => pick('fib')}>
-                <FibIcon className="h-4 w-4" />
+                <FibIcon className="h-4 w-4" aria-hidden="true" />
             </RailButton>
             <RailButton title="Text note — click a spot, type the note" active={tool === 'text'} onClick={() => pick('text')}>
-                <Type className="h-4 w-4" />
+                <Type className="h-4 w-4" aria-hidden="true" />
             </RailButton>
             <RailButton title="Freehand — drag to draw" active={tool === 'brush'} onClick={() => pick('brush')}>
-                <Pencil className="h-4 w-4" />
+                <Pencil className="h-4 w-4" aria-hidden="true" />
             </RailButton>
             <RailSep />
             <RailButton title="Eraser — click a shape to remove it" active={tool === 'erase'} onClick={() => pick('erase')}>
-                <Eraser className="h-4 w-4" />
+                <Eraser className="h-4 w-4" aria-hidden="true" />
             </RailButton>
             <span className="flex-1" aria-hidden />
             <RailButton
@@ -191,17 +191,17 @@ export const ChartToolRail: React.FC<ChartToolRailProps> = ({
                 active={hidden}
                 onClick={onToggleHidden}
             >
-                {hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {hidden ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
             </RailButton>
             <RailButton title="Undo last drawing" disabled={!canUndo} onClick={onUndo}>
-                <Undo2 className="h-4 w-4" />
+                <Undo2 className="h-4 w-4" aria-hidden="true" />
             </RailButton>
             <RailButton title="Clear all drawings" disabled={!canUndo} onClick={onClear}>
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
             </RailButton>
             <div className="relative">
                 <RailButton title="Drawing color" active={paletteOpen} onClick={() => setPaletteOpen(v => !v)}>
-                    <Palette className="h-4 w-4" />
+                    <Palette className="h-4 w-4" aria-hidden="true" />
                 </RailButton>
                 {paletteOpen && (
                     <>
