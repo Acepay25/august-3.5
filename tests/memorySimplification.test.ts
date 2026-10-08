@@ -106,7 +106,8 @@ describe('recall tool (pull-over-push)', () => {
         await initMemoryFiles('recall-user');
         await seedConfirmedSkill('recall-user');
         const out = handleRecallTool({ topic: 'BTC short' });
-        expect(out).toContain('SKILL CONFIRMED');
+        expect(out).toMatch(/SKILL \S+ CONFIRMED/);
+        expect(out).toContain('btc-short-avoid');
         expect(out.toLowerCase()).toContain('reclaim');
     });
 

@@ -96,6 +96,32 @@ describe('the recall card is projected from the sections', () => {
     it('a legacy body with no headings at all still yields a usable card', () => {
         const legacy = '**When:** skip BTC shorts when funding is positive\n\n**My rule:** when funding positive, I skip shorts';
         const card = projectSkillCard(legacy, { ifCondition: 'funding positive', thenAction: 'skip the short' });
-        expect(card.text).toBe('IF funding positive THEN skip the short');
+        // Served whole. The card's job is deciding what to DROP once the budget
+        // bites; re-shaping a body that fits would trade the trader's own words
+        // for labels this module invented.
+        expect(card.text).toBe(legacy);
+        expect(card.clipped).toBe(false);
+        expect(card.droppedChars).toBe(0);
+    });
+
+    it('a legacy body over budget is projected and keeps its rule, trigger and procedure', () => {
+        // The projection path, driven by a file written before this module: no
+        // `##` headings, and a procedure under a bold label the parser reserves
+        // only as a fallback. Nothing may vanish for using an unfamiliar label.
+        const filler = 'x'.repeat(900);
+        const legacy = [
+            '**When:** skip BTC shorts when funding is positive',
+            `**My plan:** ${filler}`,
+            '**Procedure:** wait for the funding print to flip before re-arming',
+            '**My rule:** when funding positive, I skip shorts',
+        ].join('\n');
+        const card = projectSkillCard(legacy, {
+            ifCondition: 'funding positive', thenAction: 'skip the short', budget: 300,
+        });
+        expect(card.clipped).toBe(true);
+        expect(card.chars).toBeLessThanOrEqual(300);
+        expect(card.text.startsWith('IF funding positive THEN skip the short')).toBe(true);
+        expect(card.text).toContain('When: skip BTC shorts');
+        expect(card.text).toContain('wait for the funding print to flip');
     });
 });

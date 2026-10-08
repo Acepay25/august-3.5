@@ -21,6 +21,11 @@
 
 export interface SkillSections {
     whenToUse: string[];
+    /** The ticket fields a strategy skill carries: entry / stop / target /
+     *  size / invalidation / requires. Projected into the card, because the
+     *  body slice that used to be clipped sometimes showed these and a card
+     *  that never does would be a quieter regression. */
+    plan: string[];
     /** That the TRIGGER still holds — not the same claim as `verification`,
      *  which is that the procedure worked. Collapsing them would let the card
      *  answer "Verify:" with a statement about the setup. */
@@ -46,6 +51,8 @@ export interface SkillCard {
 const HEADINGS: Record<string, keyof Omit<SkillSections, 'other'>> = {
     'when to use': 'whenToUse',
     'how i know it still holds': 'validate',
+    'the plan': 'plan',
+    'my plan': 'plan',
     'when not to use': 'whenNot',
     'required inputs': 'inputs',
     'inputs': 'inputs',
@@ -55,7 +62,7 @@ const HEADINGS: Record<string, keyof Omit<SkillSections, 'other'>> = {
 };
 
 const list = (): Record<keyof Omit<SkillSections, 'other'>, string[]> => ({
-    whenToUse: [], validate: [], whenNot: [], inputs: [], steps: [], pitfalls: [], verification: [],
+    whenToUse: [], validate: [], whenNot: [], inputs: [], steps: [], pitfalls: [], verification: [], plan: [],
 });
 
 /**
@@ -73,7 +80,17 @@ const BOLD_LABELS: Array<[RegExp, keyof Omit<SkillSections, 'other'>]> = [
     [/^\*\*When:\*\*\s*/i, 'whenToUse'],
     [/^\*\*What I look at:\*\*\s*/i, 'inputs'],
     [/^\*\*How I know it still holds:\*\*\s*/i, 'validate'],
+    [/^\*\*My plan:\*\*\s*/i, 'plan'],
 ];
+
+/** Labels that OPEN the procedure block. `**What I do:**` is the one the craft
+ *  writes (it is shared vocabulary with `syncSkillRuleLine` and the enforcement
+ *  reader); `**Procedure:**` / `**Steps:**` are the ones a hand-edited or
+ *  imported skill uses. A body whose procedure line is not recognised here does
+ *  not lose its heading status — it falls through to `whenToUse` and the card
+ *  projects the trigger instead of the steps, which is a silent mis-shape
+ *  rather than a parse error. */
+const STEPS_LABELS: RegExp[] = [/^\*\*What I do:\*\*\s*/i, /^\*\*Procedure:\*\*\s*/i, /^\*\*Steps:\*\*\s*/i];
 
 const isRuleLine = (line: string): boolean => /^\*\*My rule:\*\*/i.test(line);
 
@@ -99,16 +116,20 @@ export const parseSkillBody = (body: string): SkillSections => {
 
         // A bold label re-anchors the parse, because the numbered steps follow
         // `**What I do:**` with no heading of their own.
-        if (/^\*\*What I do:\*\*/i.test(line)) {
+        const steps = STEPS_LABELS.find(re => re.test(line));
+        if (steps) {
             inStepsBlock = true; current = 'steps';
-            const rest = line.replace(/^\*\*What I do:\*\*\s*/i, '').trim();
+            const rest = line.replace(steps, '').trim();
             if (rest) out.steps.push(rest);
             continue;
         }
         const bold = BOLD_LABELS.find(([re]) => re.test(line));
         if (bold) {
             inStepsBlock = false; current = bold[1];
-            out[bold[1]].push(line.replace(bold[0], '').trim());
+            const rest = line.replace(bold[0], '').trim();
+            // A label on its own line (`**My plan:**`) opens the section; pushing
+            // the empty remainder would put a blank line in the card.
+            if (rest) out[bold[1]].push(rest);
             continue;
         }
         if (isRuleLine(line)) { inStepsBlock = false; current = null; continue; }
@@ -129,44 +150,93 @@ const stripBullet = (line: string): string => line.replace(/^[-*]\s*/, '').repla
  * The fixed-shape summary a seat is actually given.
  *
  * Order is deliberate: the rule first (it is what the enforcement code checks),
- * then the two fields that stop a seat applying the skill to the wrong setup —
- * when-NOT and the first pitfall — then verification. Budget is spent in that
+ * then the trigger as the file writes it (the substituted `${SYMBOL}`/
+ * `${REGIME}` text lives there and nowhere else), then the two fields that stop
+ * a seat applying the skill to the wrong setup — when-NOT and the first
+ * pitfall — then verification, the ticket fields, the numbered procedure, and
+ * finally everything the parser could not classify. Budget is spent in that
  * priority, so a clipped card loses the tail, never the trigger.
+ *
+ * A body that already fits is served UNCHANGED. The card exists to decide what
+ * to drop when the budget bites; re-shaping a skill that needs no trimming
+ * would trade text the trader wrote for labels this module invented, and any
+ * section it fails to recognise would vanish. Small skills are the common case,
+ * so that guard is the difference between a projector and a filter.
  */
 export const projectSkillCard = (
     body: string,
     opts: { ifCondition?: string; thenAction?: string; budget?: number } = {},
 ): SkillCard => {
     const budget = opts.budget ?? 700;
-    const s = parseSkillBody(body);
+    const whole = (body || '').trim();
+    if (whole.length <= budget) {
+        return { text: whole, chars: whole.length, clipped: false, droppedChars: 0 };
+    }
+
+    const s = parseSkillBody(whole);
     const lines: string[] = [];
 
     if (opts.ifCondition && opts.thenAction) lines.push(`IF ${opts.ifCondition} THEN ${opts.thenAction}`);
+    const when = s.whenToUse.map(stripBullet)[0];
+    if (when) lines.push(`When: ${when}`);
     const not = s.whenNot.map(stripBullet)[0];
     if (not) lines.push(`NOT when: ${not}`);
     const pit = s.pitfalls.map(stripBullet)[0];
     if (pit) lines.push(`Watch: ${pit}`);
     const verify = s.verification.map(stripBullet)[0] ?? s.validate.map(stripBullet)[0];
     if (verify) lines.push(`Verify: ${verify}`);
-    const step = s.steps.map(stripBullet)[0];
-    if (step) lines.push(`First: ${step}`);
+    // The procedure itself, last-but-one: it is the longest part and the one a
+    // seat can ask again for, whereas the trigger and the exclusions are what
+    // it cannot reconstruct. Whole steps only — a half-line step is worse than
+    // none, because "wait for the 1h close" truncated to "wait for the" reads
+    // as an instruction rather than as a loss.
+    // The ticket fields, when the skill is a strategy rather than a rule.
+    s.plan.forEach(line => lines.push(stripBullet(line)));
+    if (s.steps.length) {
+        lines.push('Procedure:');
+        s.steps.forEach((st, i) => lines.push(`${i + 1}. ${stripBullet(st)}`));
+    }
+    // The rest of the file, in document order. Nothing the trader wrote is
+    // dropped for the crime of using an unrecognised heading.
+    s.inputs.forEach(line => lines.push(stripBullet(line)));
+    s.other.forEach(sec => {
+        if (!sec.lines.length) return;
+        lines.push(`${sec.title}:`);
+        sec.lines.forEach(line => lines.push(stripBullet(line)));
+    });
 
     const full = lines.join('\n');
     if (full.length <= budget) {
         return { text: full, chars: full.length, clipped: false, droppedChars: 0 };
     }
-    // Keep whole lines while they fit; the caller marks the omission.
+    // Keep whole lines while they fit. A line too long for what is left is
+    // skipped, not fatal: one over-long prose paragraph in the middle of a
+    // document must not hide the numbered procedure below it, which is the part
+    // a seat cannot reconstruct. The clip note counts it as dropped.
+    //
+    // The rule line is the exception — it leads, and if even it cannot fit the
+    // budget is spent on its longest prefix and nothing else is attempted.
+    // "Clipped" must never mean "the trigger is missing".
     let kept = '';
-    for (const line of lines) {
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
         const next = kept ? `${kept}\n${line}` : line;
-        if (next.length > budget) break;
+        if (next.length > budget) {
+            if (kept) continue;
+            return {
+                text: line.slice(0, Math.max(0, budget)),
+                chars: Math.min(line.length, Math.max(0, budget)),
+                clipped: true,
+                droppedChars: full.length - Math.min(line.length, Math.max(0, budget)),
+            };
+        }
         kept = next;
     }
-    // A budget too small for even the rule line must not return nothing: the
-    // trigger is the one part a seat cannot guess. Fall back to the longest
-    // prefix of it that fits, so "clipped" means "shorter than I wanted" and
-    // never "the card is empty".
-    if (!kept && lines.length) kept = lines[0].slice(0, Math.max(0, budget));
+    // A `Procedure:` label whose every step was skipped would read as an
+    // instruction that was never given.
+    if (s.steps.length && !/\d+\.\s/.test(kept)) {
+        kept = kept.split('\n').filter(l => l !== 'Procedure:').join('\n');
+    }
     return {
         text: kept,
         chars: kept.length,
