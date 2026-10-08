@@ -207,6 +207,7 @@ export {
   Upload,
   User,
   Users,
+  Volume2,
   Wrench,
   X,
   Zap,

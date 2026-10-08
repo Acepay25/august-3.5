@@ -20,7 +20,7 @@
  */
 import React from 'react';
 import ChatWorkTimeline, { type ChatWorkView } from '../trade/panels/ChatWorkTimeline';
-import { CopyChip, FadingText, PinChip, RetryChip } from './chatChips';
+import { CopyChip, FadingText, PinChip, RetryChip, SpeakChip } from './chatChips';
 import KeyLevelsCard from '../trade/KeyLevelsCard';
 import { parseKeyLevels, type ModelKeyLevel } from '../../services/trade/keyLevels';
 import type { TradeAnalysis } from '../../types';
@@ -156,9 +156,18 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                 </div>
             )}
 
-            <div className="mt-1 flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 focus-within:opacity-100">
+            {/* The action row is ALWAYS VISIBLE on the reference, not
+                hover-released. Hover-reveal hid copy/read-aloud from anyone who
+                did not know to hunt for them, and a control you have to discover
+                by accident is half a control. The row drops its hover-only
+                opacity; the chips inside keep their own hover affordances.
+
+                Thumbs up/down are DELIBERATELY absent — cut this pass as a
+                product decision, not finished and disabled. */}
+            <div className="mt-1 flex items-center gap-1">
                 {isUser && onRetry && <RetryChip onRetry={onRetry} />}
                 <CopyChip text={row.text} />
+                {!isUser && <SpeakChip text={row.text} />}
                 {!isUser && onTogglePin && (
                     <PinChip pinned={!!pinned} onToggle={onTogglePin} />
                 )}
@@ -167,6 +176,13 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                         className="rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
                         Log this trade
                     </button>
+                )}
+                {/* The reference's trailing "5 minutes ago". Callers already
+                    format this once (`ChatRowView.timeLabel`, the same helper the
+                    history palette uses), so the row renders that label rather
+                    than deriving a second opinion of what "2 days ago" means. */}
+                {row.timeLabel && (
+                    <span className="ml-auto shrink-0 text-ui-2xs tabular-nums text-zinc-600">{row.timeLabel}</span>
                 )}
             </div>
         </div>
