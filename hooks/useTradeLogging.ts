@@ -9,13 +9,14 @@ import { ProviderConfig } from '../types/provider';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 import { parsePrice } from '../utils/analysisUtils';
-import { trackTradeOutcome, mapRegimeToKey, getTradeProviders, creditedWinForAnalyst, recordProviderConfidenceCalibration } from '../services/backtesting/ModelPerformanceService';
+import { trackTradeOutcome, getTradeProviders, creditedWinForAnalyst, recordProviderConfidenceCalibration } from '../services/backtesting/ModelPerformanceService';
 import { computeRMultiple } from '../utils/disciplineAnalytics';
 import { CaptureJournalTags } from '../types/trade';
 import { trackConfluenceOutcome, calculateConfluenceScore } from '../services/analysis/TimeframeConfluenceService';
 import { SLOptimizationData } from '../services/backtesting/StopLossOptimizerService';
 import { ConfidenceLevel } from '../services/validation/calibrationStore';
 import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
+import { resolveTradeRegime } from '../services/learning/regimeLedger';
 import { botOriginForMessage } from '../services/agents/botLearning';
 import { appendWatchEpisode } from '../utils/watchList';
 import { getActiveUsername } from '../utils/activeUser';
@@ -247,12 +248,23 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
 
     // Helper function to log trade (called by all capture handlers)
     const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount?: number; pnlPercent?: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; slOptimizationData?: SLOptimizationData; journalTags?: CaptureJournalTags; benchmark?: BenchmarkAlpha; outcomeResolvedAt?: string; excursions?: { maePercent: number; mfePercent: number }; realizedR?: number; }) => {
-        // Persist the market regime captured at analysis time (7-value
-        // hybrid regime normalized to the 4-key trade regime). Falls back to
-        // undefined when no snapshot exists.
-        const marketRegime = (message.analysis?.marketSnapshot as any)?.regime?.regime
-            ? mapRegimeToKey((message.analysis?.marketSnapshot as any).regime.regime as any)
-            : undefined;
+        // The regime this trade was settled in, resolved once in the agreed
+        // order: the live hybrid packet, else the regime ledger's observation
+        // for this coin on this day (or the nearest earlier one), else the
+        // analysis's own pattern text. `mapRegimeToKey` used to answer this and
+        // DEFAULTS TO 'ranging', so an unreadable label became a ranging trade
+        // and the family × regime matrix counted a regime nobody observed. Here
+        // an unresolvable regime stays undefined, and the row says how it was
+        // learned so a reader can weigh a three-day-old ledger row apart from a
+        // packet reading.
+        const regimeCoin = message.analysis?.coinName
+            || (message.text?.match(/\b([A-Z]{2,10}USDT?)\b/)?.[1]);
+        const resolvedRegime = resolveTradeRegime({
+            coin: regimeCoin,
+            timestamp: message.createdAt || new Date().toISOString(),
+            analysis: message.analysis,
+        });
+        const marketRegime = resolvedRegime.regime ?? undefined;
 
         const leverageUsed = activeConversationLeverage || DEFAULT_LEVERAGE;
         // Excursions arrive as RAW price percent from whichever engine measured
@@ -286,6 +298,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             triggeredEntryIndices: feedback.selectedEntryIndices, // Store which entries were triggered
             marketSnapshot: message.analysis?.marketSnapshot, // Persist for Algo Mode
             marketRegime,
+            ...(resolvedRegime.regime ? { marketRegimeSource: resolvedRegime.source } : {}),
             slOptimizationData: feedback.slOptimizationData, // Autopilot-observed SL behavior
             // Spread-conditional: an unmeasured excursion stays a gap. Writing 0
             // would claim the position never moved against the trader.

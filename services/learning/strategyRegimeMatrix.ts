@@ -28,7 +28,7 @@ import { getPreferenceObject, setPreferenceObject } from '../infrastructure/Pref
 import { withSerializedPref } from '../infrastructure/serializedPrefs';
 import { STRATEGY_FAMILIES, StrategyFamily } from '../../types/strategy';
 import { classifyStrategyFamily } from '../../utils/strategyFamily';
-import { LedgerRegime } from './regimeLedger';
+import { LedgerRegime, resolveTradeRegime, type ResolvedRegime } from './regimeLedger';
 import type { LoggedTrade } from '../../types';
 import { TradeOutcome } from '../../types';
 export interface MatrixCell {
@@ -107,6 +107,16 @@ export const familyForTrade = (trade: LoggedTrade): StrategyFamily | undefined =
     return classifyStrategyFamily(trade.analysis?.strategy);
 };
 
+/** One trade's regime, asked one way. Live settles and the boot rebuild must
+ *  not disagree about what a trade's regime was, or the tally and the journal
+ *  drift and nobody can tell which one is wrong. */
+const regimeOfTrade = (trade: LoggedTrade): ResolvedRegime => resolveTradeRegime({
+    coin: trade.analysis?.coinName,
+    timestamp: trade.outcomeResolvedAt || trade.timestamp,
+    marketRegime: trade.marketRegime,
+    analysis: trade.analysis,
+});
+
 /**
  * Accumulate one settled WIN/LOSS trade into the matrix. Called from the
  * closed-trade notebook sync (same path as skill evidence). Pending /
@@ -119,7 +129,7 @@ export const recordSettledTradeForMatrix = async (
     try {
         if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
         const family = familyForTrade(trade);
-        const regime = trade.marketRegime;
+        const regime = regimeOfTrade(trade).regime;
         if (!family || !isRegime(regime)) return;
         // P0-2: the read-modify-write runs inside the per-key serialized queue.
         // This call is fire-and-forget from the settle path, so two settles
@@ -145,6 +155,72 @@ export const recordSettledTradeForMatrix = async (
             if (cacheUser === username) cache = updated;
         });
     } catch { /* best-effort telemetry */ }
+};
+
+/**
+ * Recompute the whole matrix from the journal, in one write.
+ *
+ * Two reasons this exists and the per-settle accumulator cannot do the job:
+ *  - Most historical closes carry no `marketRegime` (it was only written when a
+ *    live hybrid packet existed), so `recordSettledTradeForMatrix` early-returns
+ *    on them and the matrix — the thing that makes the regime gate a claim
+ *    rather than a wish — has almost no rows to rank against. Each trade is
+ *    resolved here through `resolveTradeRegime`, which reads the ledger.
+ *  - The tally is REBUILT, not merged. Rebuilding from the journal cannot
+ *    double-count a settle (the reason the id-guard exists at all), and it
+ *    self-corrects when a trade is deleted or its outcome changes.
+ *
+ * Trades with no resolvable regime are skipped, not defaulted: 'ranging' is a
+ * claim about the market, and an unobserved one is a gap.
+ */
+export interface MatrixRebuildResult {
+    cells: number;
+    samples: number;
+    /** Settled trades that gained a regime only from the ledger or the text. */
+    resolvedFromHistory: number;
+    /** Settled trades still with no regime — the gap that remains. */
+    unresolved: number;
+}
+
+export const rebuildMatrixFromJournal = async (
+    trades: LoggedTrade[],
+    username: string,
+): Promise<MatrixRebuildResult> => {
+    const empty: MatrixRebuildResult = { cells: 0, samples: 0, resolvedFromHistory: 0, unresolved: 0 };
+    try {
+        return await withSerializedPref(keyFor(username), async () => {
+            const rebuilt: StrategyRegimeMatrix = {};
+            const result: MatrixRebuildResult = { ...empty };
+            for (const trade of trades || []) {
+                if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) continue;
+                const family = familyForTrade(trade);
+                const resolved = regimeOfTrade(trade);
+                if (!family || !resolved.regime) {
+                    result.unresolved += 1;
+                    continue;
+                }
+                if (resolved.source !== 'snapshot') result.resolvedFromHistory += 1;
+                const cell = rebuilt[family]?.[resolved.regime] ?? { w: 0, l: 0, tradeIds: [] as string[] };
+                const ids = [...(cell.tradeIds ?? []), trade.id].slice(-40);
+                const next: MatrixCell = trade.outcome === TradeOutcome.WIN
+                    ? { w: cell.w + 1, l: cell.l, tradeIds: ids }
+                    : { w: cell.w, l: cell.l + 1, tradeIds: ids };
+                rebuilt[family] = { ...rebuilt[family], [resolved.regime]: next };
+            }
+            for (const fam of Object.values(rebuilt)) {
+                for (const cell of Object.values(fam ?? {})) {
+                    if (!cell) continue;
+                    result.cells += 1;
+                    result.samples += cell.w + cell.l;
+                }
+            }
+            await setPreferenceObject(keyFor(username), rebuilt);
+            if (cacheUser === username) cache = rebuilt;
+            return result;
+        });
+    } catch {
+        return empty;
+    }
 };
 
 /** Tally for one family × regime from the sync cache. Null = no evidence. */

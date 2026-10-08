@@ -20,7 +20,7 @@ import {
     syncRecurringMistakes,
 } from '../services/learning/MemoryFilesService';
 import { hydrateRegimeLedger } from '../services/learning/regimeLedger';
-import { hydrateStrategyRegimeMatrix } from '../services/learning/strategyRegimeMatrix';
+import { hydrateStrategyRegimeMatrix, rebuildMatrixFromJournal } from '../services/learning/strategyRegimeMatrix';
 import { ensureSeedSkills } from '../services/learning/seedStrategies';
 import { runApprovalMigration } from '../services/learning/approvalMigration';
 import { ensureBookSkillDrafts } from '../services/learning/bookSkillDrafts';
@@ -365,7 +365,10 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
             await initMemoryFiles(username);
             if (isStale()) return;
 
-            void hydrateRegimeLedger(username).catch(() => { /* ledger is best-effort */ });
+            // Captured, not fired: the regime matrix rebuild below reads the
+            // ledger's cache, so it must not run against an un-hydrated ledger.
+            const ledgerHydrated = hydrateRegimeLedger(username)
+                .catch(() => { /* ledger is best-effort */ });
             void hydrateStrategyRegimeMatrix(username).catch(() => { /* matrix is best-effort */ });
             // Book-prior seed corpus (Kakushadze & Serur): create any missing
             // seed skills once per boot. Idempotent by slug — user edits,
@@ -458,6 +461,23 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 const loadedTrades = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || DEFAULT_LEVERAGE }));
                 setLoggedTrades(loadedTrades);
                 syncConfluenceFromTradeLog(loadedTrades);
+
+                // Regime backfill. `marketRegime` was only ever written when a
+                // live hybrid packet existed at log time, so most historical
+                // closes carry none — and every regime-conditional reader skips
+                // them, including the family × regime matrix the retrieval rank
+                // and the moderator's scoreboard read. Recompute it from the
+                // journal, resolving each trade through the regime ledger first.
+                void ledgerHydrated
+                    .then(() => rebuildMatrixFromJournal(loadedTrades, username))
+                    .then(r => {
+                        console.info(`[RegimeMatrix] ${loadedTrades.length} rows -> ${r.cells} cells, `
+                            + `${r.samples} samples, ${r.resolvedFromHistory} recovered from the ledger, `
+                            + `${r.unresolved} still with no observed regime`);
+                    })
+                    .catch(e => {
+                        console.warn('[RegimeMatrix] rebuild deferred:', e instanceof Error ? e.message : e);
+                    });
 
                 void runWeeklyReviewIfDue(username, loadedTrades).then(res => {
                     if (res) console.log('[WeeklyReview] digest generated:', res.impulse.slice(0, 80));
