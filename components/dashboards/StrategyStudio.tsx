@@ -454,54 +454,42 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                         {rows.length === skills.length
                             ? `${skills.length} playbooks`
                             : `${rows.length} of ${skills.length} playbooks`}
-                        {' · '}browse, filter, prove, and try them in chat
                     </p>
                 </div>
-                {onClose && (
-                    <button type="button" onClick={onClose} className="rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700">
-                        Back to Trade
-                    </button>
-                )}
-            </div>
-
-            {/* Toolbar row 1: search + import + strategies. The filters and
-                the sort live in the chip row below it — a closed <select>
-                hides the active filter, and a list that is mysteriously short
-                is exactly the defect a chip row cannot hide. */}
-            <div className="flex flex-wrap items-center gap-2 border-b border-white/5 px-5 py-2.5">
-                <input
-                    value={query}
-                    onChange={e => setQuery(e.target.value)}
-                    placeholder="Search playbooks, coins, families…"
-                    className="min-w-[180px] flex-1 rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-ui-sm text-zinc-200 placeholder:text-zinc-600 focus:border-white/20 focus:outline-none"
-                />
-                <label
-                    className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
-                    title="Import skill .md files — they must carry valid skill frontmatter"
-                >
-                    {isImporting
-                        ? 'Importing…'
-                        : <><Upload className="h-3 w-3" aria-hidden="true" />Import</>}
-                    <input
-                        type="file"
-                        accept=".md,text/markdown,text/plain"
-                        multiple
-                        data-testid="skills-import-input"
-                        className="hidden"
-                        onChange={e => { const picked = e.target.files; e.target.value = ''; void onImportFiles(picked); }}
-                    />
-                </label>
-                {onOpenStrategySearch && (
-                    <button
-                        type="button"
-                        data-testid="studio-open-strategy-search"
-                        onClick={onOpenStrategySearch}
-                        className="inline-flex shrink-0 items-center rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
-                        title="Search the playbook strategy library and apply frameworks"
+                <div className="flex shrink-0 items-center gap-2">
+                    <label
+                        className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-control border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
+                        title="Import skill .md files — they must carry valid skill frontmatter"
                     >
-                        Strategies
-                    </button>
-                )}
+                        {isImporting
+                            ? 'Importing…'
+                            : <><Upload className="h-3 w-3" aria-hidden="true" />Import</>}
+                        <input
+                            type="file"
+                            accept=".md,text/markdown,text/plain"
+                            multiple
+                            data-testid="skills-import-input"
+                            className="hidden"
+                            onChange={e => { const picked = e.target.files; e.target.value = ''; void onImportFiles(picked); }}
+                        />
+                    </label>
+                    {onOpenStrategySearch && (
+                        <button
+                            type="button"
+                            data-testid="studio-open-strategy-search"
+                            onClick={onOpenStrategySearch}
+                            className="inline-flex shrink-0 items-center rounded-control border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
+                            title="Search the playbook strategy library and apply frameworks"
+                        >
+                            Strategies
+                        </button>
+                    )}
+                    {onClose && (
+                        <button type="button" onClick={onClose} className="rounded-control border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700">
+                            Back to Trade
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Filters + sort. The status chips are the whole lifecycle; the
@@ -509,6 +497,13 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                 is the standing order (status, then settled-trade count);
                 "Newest" reads approvedAt. */}
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-white/5 px-5 py-2">
+                <input
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    placeholder="Search playbooks, coins, families…"
+                    aria-label="Search playbooks"
+                    className="min-w-[180px] w-full shrink basis-[180px] rounded-control border border-white/10 bg-zinc-900 px-3 py-1.5 text-ui-sm text-zinc-200 placeholder:text-zinc-600 focus:border-white/20 focus:outline-none"
+                />
                 <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Filter by status">
                     <span className="text-ui-2xs font-bold uppercase tracking-wider text-zinc-600">Status</span>
                     {STATUS_CHIPS.map(([value, label]) => (
