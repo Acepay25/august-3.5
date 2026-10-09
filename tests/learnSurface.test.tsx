@@ -266,6 +266,21 @@ describe('Focus rests the telemetry without deleting it', () => {
         expect(getHarnessSettings().viewDensity).toBe('detail');
     });
 
+    it('and the surface owns the way back — Rest these writes focus again', async () => {
+        // The bottom bar used to be the only control that could close these
+        // again. Deleting the bar must not leave Detail a one-way door: the
+        // surface that opens the panels has to be able to rest them.
+        saveHarnessSettings({ viewDensity: 'focus' });
+        mount();
+        fireEvent.click(screen.getByTestId('learn-tab-health'));
+        fireEvent.click(await screen.findByTestId('learn-show-detail'));
+        await waitFor(() => expect(screen.getByTestId('learn-system')).toBeTruthy());
+        fireEvent.click(screen.getByTestId('learn-rest-telemetry'));
+        await waitFor(() => expect(screen.getByTestId('learn-resting')).toBeTruthy());
+        expect(screen.queryByTestId('learn-system')).toBeNull();
+        expect(getHarnessSettings().viewDensity).toBe('focus');
+    });
+
     it('the notebook health never rests — it is the one panel with a press on it', async () => {
         saveHarnessSettings({ viewDensity: 'focus' });
         mount();

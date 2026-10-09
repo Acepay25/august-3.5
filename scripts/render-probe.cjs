@@ -1008,9 +1008,9 @@ async function main() {
             await dismissOverlays();
         }
 
-        // The status bar is the shell's always-on region, so the gate checks it
-        // does what it advertises: one press on its density pair changes what a
-        // DIFFERENT surface renders. A bar that repaints only itself would pass
+        // The density setting has no bar to live in any more, so the gate checks
+        // it where it is used: one press on Health opens the loop telemetry, the
+        // next rests it. A control that repaints only its own panel would pass
         // every existing check and still be a lie about the view.
         {
             await openMenu(); await sleep(300);
@@ -1018,21 +1018,18 @@ async function main() {
             const coachTab = page.locator('[data-testid="learn-tab-health"]');
             if (await coachTab.count() === 1) await coachTab.click();
             await sleep(1200);
-            const mounted = await page.locator('[data-testid="status-bar"]').count();
-            check('the status bar is mounted under every surface', mounted === 1, `${mounted}`);
             const resting = await page.locator('[data-testid="learn-resting"]').count();
             check('Focus rests the loop telemetry on Health', resting === 1, `${resting} resting notice`);
-            await page.click('[data-testid="status-density-detail"]');
+            await page.click('[data-testid="learn-show-detail"]');
             const shown = await page.waitForSelector('[data-testid="learn-system"]', { timeout: 12000 })
                 .then(() => 1).catch(() => 0);
-            check('Detail opens it again, from the bar', shown === 1, `${shown} telemetry block(s)`);
-            const pressed = await page.getAttribute('[data-testid="status-density-detail"]', 'aria-pressed');
-            check('the bar reports the view it is actually giving', pressed === 'true', `aria-pressed=${pressed}`);
-            // Leave the machine in the shipped default for whatever runs next.
-            await page.click('[data-testid="status-density-focus"]');
+            check('Detail opens it again, from the surface', shown === 1, `${shown} telemetry block(s)`);
+            // And the reverse must exist: a one-way Detail is a setting nobody
+            // can put back. This press used to be a bar button.
+            await page.click('[data-testid="learn-rest-telemetry"]');
             await sleep(600);
             const back = await page.locator('[data-testid="learn-resting"]').count();
-            check('and Focus closes it again — one setting, not two', back === 1, `${back}`);
+            check('and Rest these closes it again — one setting, not two', back === 1, `${back}`);
         }
 
         /** Poll a predicate instead of sleeping a fixed time. Every fixed sleep
@@ -1800,8 +1797,7 @@ async function main() {
             await navTo(surface.label);
             await sleep(900);
             const bad = await page.evaluate(({ floor }) => {
-                const scopes = ['main', 'aside[data-testid="nav-rail"]', 'header',
-                    'footer[data-testid="status-bar"]'];
+                const scopes = ['main', 'aside[data-testid="nav-rail"]', 'header'];
                 const seen = new Set();
                 const out = [];
                 for (const scope of scopes) {

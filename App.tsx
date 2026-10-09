@@ -129,9 +129,6 @@ import type { AppSurface } from './hooks/useSurface';
 import type { TradeMode } from './components/trade/TradeView';
 import type { NavBadge } from './components/shell/SurfaceMenuList';
 import NavRail, { NAV_RAIL_AUTO_COLLAPSE_PX } from './components/shell/NavRail';
-import StatusBar from './components/shell/StatusBar';
-import * as supervisorStore from './services/learning/supervisorStore';
-import { tokensForChars, DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from './utils/tokenEstimate';
 import { getHarnessSettings, saveHarnessSettings } from './utils/harnessSettings';
 // The Journal pulls recharts + react-virtuoso into its chunk — statically
 // importing it put both on the startup path for a surface most users open
@@ -2278,28 +2275,6 @@ const App: React.FC = () => {
         },
     }), [activeUsername, loggedTrades, handleConfirmAutopilot, handleDismissAutopilot, toast]);
 
-    // The status bar's readouts. A thread that has never been opened reports
-    // null, not 0% — 0% would claim an empty window the app never filled, and a
-    // trader who sees "0%" while the notebook is loaded correctly stops trusting
-    // the number.
-    const chatModelLabel = useMemo(() => {
-        const id = moderatorConfig?.selectedModel;
-        if (!id) return null;
-        const named = (modelIdToName as Record<string, string>)[id];
-        return named || id;
-    }, [moderatorConfig, modelIdToName]);
-    const chatWindowTokens = moderatorConfig?.contextWindowTokens ?? DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS;
-    const contextPercent = useMemo(() => {
-        if (messages.length === 0) return null;
-        const chars = messages.reduce((n, m) => n + (m.text?.length ?? 0), 0);
-        if (chars <= 0) return null;
-        return Math.min(100, Math.round((tokensForChars(chars) / chatWindowTokens) * 100));
-    }, [messages, chatWindowTokens]);
-    const [supervisorAuto, setSupervisorAuto] = useState(() => supervisorStore.isAutoEnabled());
-    useEffect(() => supervisorStore.subscribe(
-        () => setSupervisorAuto(supervisorStore.isAutoEnabled()),
-    ), []);
-
     const renderActionApprovals = useCallback(() => (
         <React.Suspense fallback={null}>
             <ActionApprovalsPanel
@@ -3020,21 +2995,6 @@ const App: React.FC = () => {
                     <BotSeatOverridesDialog open bot={seatOverridesBot} onClose={() => setSeatOverridesBot(null)} />
                 </React.Suspense>
             )}
-
-            {/* Always-visible, 28px, OUTSIDE every surface: what answers, how
-                full the window is, whether the supervisor decides alone, and how
-                much of the screen is showing. The telemetry this carries used to
-                be six panels deep in Learn. */}
-            <StatusBar
-                modelLabel={chatModelLabel}
-                contextPercent={contextPercent}
-                contextWindowTokens={chatWindowTokens}
-                supervisorAuto={supervisorAuto}
-                pendingApprovals={approvalsWaiting}
-                onOpenApprovals={openApprovalsInLearn}
-                onOpenModels={() => setIsSettingsMenuVisible(true)}
-                onOpenHealth={() => { setLearnTab('health'); setSurface('learn'); }}
-            />
         </div>
         </React.Suspense>
     );

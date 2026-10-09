@@ -45,7 +45,7 @@ import { LevelAccuracyBadge } from './LevelAccuracyBadge';
 import OrderBookPanel from './OrderBookPanel';
 import TradeChatPanel, { ChartAiDockRail } from './TradeChatPanel';
 import RightPanel from '../shell/RightPanel';
-import { useViewDensity } from '../shell/StatusBar';
+import { useViewDensity } from '../../hooks/useViewDensity';
 import { useRightPanel } from '../../hooks/useRightPanel';
 import type { PanelTurnContext } from './TradeChatPanel';
 import SymbolPicker from './SymbolPicker';

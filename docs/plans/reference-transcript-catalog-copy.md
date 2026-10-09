@@ -544,8 +544,11 @@ the same commit. Without that, the stage's central rule is ungated.
 
 1. Leading `+` exists as the attach menu (`:167`) — keep its two real items and match
    the reference's pill geometry (`rounded-bubble` 12px, hairline border, no shadow).
-2. Footer line under the input: disclaimer left, model chip right. `StatusBar` already
-   resolves the label — do not compute a second one.
+2. Footer line under the input: disclaimer left, model chip right. The composer
+   already resolves its own label (`ChatComposer.tsx:110`, `provider.name ·
+   formatModelDisplayName(provider.selectedModel)`) — do not compute a second
+   one. The shell's bottom `StatusBar` was deleted (2026-10-10, the readouts were
+   telemetry the user called noise), so nothing there can be reused.
 3. Interrupted/failed run becomes an **in-flow** notice row — the reference's
    "Claude's response was interrupted." with `Edit prompt` / `Try again` — reusing the
    `retryOf` re-dispatch (`chatTurnRunner.ts:808-824`; the plan's old `:759-771`

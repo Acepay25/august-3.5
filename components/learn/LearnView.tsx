@@ -24,7 +24,7 @@ import type { LoggedTrade } from '../../types';
 import type { ProviderConfig } from '../../types/provider';
 import SupervisorStream from './SupervisorStream';
 import AmendmentsInbox from './AmendmentsInbox';
-import { useViewDensity } from '../shell/StatusBar';
+import { useViewDensity } from '../../hooks/useViewDensity';
 import MemoryHealthCard from './MemoryHealthCard';
 import PatternMemoryCard from './PatternMemoryCard';
 import SkillsCatalog from './SkillsCatalog';
@@ -226,6 +226,19 @@ const LearnView: React.FC<LearnViewProps> = ({
                                 <Suspense fallback={<Fallback />}>
                                     <DiagnosticsPanel />
                                 </Suspense>
+                                {/* The way back. This control used to live in
+                                    the bottom bar; the surface that shows the
+                                    panels is the surface that rests them. */}
+                                <div className="flex justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={() => setDensity('focus')}
+                                        data-testid="learn-rest-telemetry"
+                                        className="inline-flex min-h-6 items-center rounded px-2 text-ui-dense text-zinc-500 transition-colors hover:text-zinc-200"
+                                    >
+                                        Rest these
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <div className="flex flex-wrap items-center gap-2 rounded-control border border-zinc-800/80 bg-zinc-900 px-3 py-2.5" data-testid="learn-resting">
