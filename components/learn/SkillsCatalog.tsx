@@ -44,6 +44,35 @@ interface CatalogSkill {
  *  empty tab strip. */
 const collectionOf = (meta: SkillMeta): string => meta.family?.trim() || (meta.kind === 'avoid' ? 'Avoid' : 'Repeat');
 
+/**
+ * What one manual re-read found, said in the trader's words.
+ *
+ * The Refresh press used to be invisible: `reload()` genuinely re-reads the
+ * store, but when nothing on disk changed the screen was byte-identical after
+ * it, so a working button and a dead one looked the same. That is what the
+ * render-probe's inert-control gate measures, and the gate was right — the fix
+ * is to report the outcome, not to exempt the control.
+ */
+const describeRosterSync = (prev: CatalogSkill[] | null, next: CatalogSkill[]): string => {
+    if (prev === null) return 'Skill list read';
+    const sig = (s: CatalogSkill): string =>
+        `${s.name}|${s.description}|${s.enabled}|${s.status}|${s.wins}|${s.losses}|${s.family}`;
+    const before = new Map(prev.map(s => [s.id, sig(s)]));
+    let added = 0;
+    let changed = 0;
+    for (const s of next) {
+        const old = before.get(s.id);
+        if (old === undefined) added += 1;
+        else if (old !== sig(s)) changed += 1;
+        before.delete(s.id);
+    }
+    const parts: string[] = [];
+    if (added) parts.push(`${added} new`);
+    if (changed) parts.push(`${changed} updated`);
+    if (before.size) parts.push(`${before.size} removed`);
+    return parts.length ? `Refreshed — ${parts.join(', ')}` : 'Refreshed — nothing changed';
+};
+
 /** A deterministic tint per collection, from the theme's own ramp. The reference
  *  gives each skill a distinct vivid gradient; August has no per-skill colour
  *  data and inventing six gradients would be decoration with no meaning. The
@@ -67,10 +96,12 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onAddSkil
     const [skills, setSkills] = useState<CatalogSkill[] | null>(null);
     const [query, setQuery] = useState('');
     const [collection, setCollection] = useState<string>('all');
+    /** The last manual re-read, in words. null until the user presses Refresh. */
+    const [syncNote, setSyncNote] = useState<string | null>(null);
 
-    const reload = (): void => {
+    const reload = (manual = false): void => {
         try {
-            setSkills(listSkills().map(({ file, meta }) => ({
+            const next = listSkills().map(({ file, meta }) => ({
                 id: file.id,
                 name: file.name,
                 description: meta.description ?? '',
@@ -79,12 +110,15 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onAddSkil
                 wins: meta.wins,
                 losses: meta.losses,
                 family: collectionOf(meta),
-            })));
+            }));
+            if (manual) setSyncNote(describeRosterSync(skills, next));
+            setSkills(next);
         } catch {
             // A store read failure is not a reason to draw an empty grid that
             // reads as "you have no skills" — leave it null so the empty state
             // says it could not load instead.
             setSkills(null);
+            if (manual) setSyncNote('Could not read the skill files');
         }
     };
 
@@ -122,8 +156,8 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onAddSkil
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                     <h3 className="font-serif text-ui-xl text-zinc-100">Skills</h3>
-                    <p className="mt-0.5 text-ui-dense text-zinc-500">
-                        What the desk has learned to do, and what it has learned to avoid.
+                    <p className="mt-0.5 text-ui-dense text-zinc-500" role="status" data-testid="skills-status">
+                        {syncNote ?? 'What the desk has learned to do, and what it has learned to avoid.'}
                     </p>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -138,7 +172,7 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onAddSkil
                             className="w-40 bg-transparent text-ui-dense text-zinc-200 outline-none placeholder:text-zinc-600"
                         />
                     </div>
-                    <button type="button" onClick={reload} aria-label="Refresh the skill list" title="Refresh"
+                    <button type="button" onClick={() => reload(true)} aria-label="Refresh the skill list" title="Refresh"
                         className="flex h-8 w-8 hit-target items-center justify-center rounded-control text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
                         <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
@@ -200,7 +234,13 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onAddSkil
                     {shown.map(s => (
                         <li key={s.id} className="flex items-center gap-3 py-1.5" data-testid="skills-catalog-card">
                             <span className={tileClass(s.enabled, s.status === 'retired' ? 'avoid' : 'repeat')} aria-hidden="true">
-                                <Lightbulb className="h-4 w-4" />
+                                {/* aria-hidden on the glyph itself as well as its
+                                    tile: the tile's hidden is enough for assistive
+                                    tech, and the icon-semantics scan reads JSX, not
+                                    the rendered tree — a glyph that is hidden in the
+                                    DOM but unsaid in the source is a regression the
+                                    guard cannot see coming back. */}
+                                <Lightbulb className="h-4 w-4" aria-hidden="true" />
                             </span>
                             <span className="min-w-0 flex-1">
                                 <span className="block truncate text-ui-dense font-semibold text-zinc-100" title={s.name}>
