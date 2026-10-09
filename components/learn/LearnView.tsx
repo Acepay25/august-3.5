@@ -27,6 +27,7 @@ import AmendmentsInbox from './AmendmentsInbox';
 import { useViewDensity } from '../shell/StatusBar';
 import MemoryHealthCard from './MemoryHealthCard';
 import PatternMemoryCard from './PatternMemoryCard';
+import SkillsCatalog from './SkillsCatalog';
 
 const MemoryFilesManager = lazy(() => import('./MemoryFilesManager'));
 const HarnessLessonsBrowser = lazy(() =>
@@ -88,12 +89,20 @@ interface LearnViewProps {
     reviewSummary?: string | null;
     reviewLoading?: boolean;
     onRegenerateReview?: () => void;
+    /** Opens the skill-DRAFT path in the Approvals inbox. Routed rather than
+     *  reimplemented: a second approval surface is the exact IA defect the
+     *  2026-10-07 audit named, and `probe-skill-approval.cjs` drives the
+     *  existing one byte-for-byte. */
+    onAddSkill?: () => void;
+    /** Settings → Skills, for the catalog's gear. */
+    onOpenSkillsSettings?: () => void;
 }
 
 const LearnView: React.FC<LearnViewProps> = ({
     username, trades, memoryConfig = null, initialTab, onInitialTabConsumed,
     renderCoach, renderActionApprovals, coachCount = 0,
     reviewSummary = null, reviewLoading = false, onRegenerateReview,
+    onAddSkill, onOpenSkillsSettings,
 }) => {
     const { density, setDensity } = useViewDensity();
     const [tab, setTab] = useState<LearnTab>(() => {
@@ -170,6 +179,7 @@ const LearnView: React.FC<LearnViewProps> = ({
                                 isLoading={reviewLoading}
                                 onRegenerate={onRegenerateReview}
                             />
+                            <SkillsCatalog onAddSkill={onAddSkill} onOpenSettings={onOpenSkillsSettings} />
                             <MemoryFilesManager username={username} memoryConfig={memoryConfig} />
                         </div>
                     </Suspense>
