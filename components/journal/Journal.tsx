@@ -16,7 +16,7 @@ import { RECENT_TRADES_WINDOW, buildTradeLogBrief } from '../../utils/recentTrad
 import { phtClock, phtDayKey } from '../../utils/timezone';
 import { getActiveUsername } from '../../utils/activeUser';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
-import { useViewDensity } from '../shell/StatusBar';
+import { useViewDensity } from '../../hooks/useViewDensity';
 
 interface JournalProps {
     isVisible: boolean;
@@ -222,6 +222,20 @@ const JournalInner: React.FC<JournalProps> = ({
                             <LastTwentyCard trades={trades} />
                             <EquityCurveDashboard trades={trades} />
                             <WinRateDashboard trades={trades} />
+                            {/* The way back. This control used to live in the
+                                bottom bar, which said the same thing six ways
+                                at once; the surface that shows the panels is
+                                the surface that should be able to rest them. */}
+                            <div className="flex justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => setDensity('focus')}
+                                    data-testid="journal-rest-telemetry"
+                                    className="inline-flex min-h-6 items-center rounded px-2 text-ui-dense text-zinc-500 transition-colors hover:text-zinc-200"
+                                >
+                                    Rest these
+                                </button>
+                            </div>
                         </>
                     ) : (
                         <div className="flex flex-wrap items-center gap-2 rounded-control border border-white/5 bg-zinc-900/60 px-3 py-2.5" data-testid="journal-analytics-resting">
