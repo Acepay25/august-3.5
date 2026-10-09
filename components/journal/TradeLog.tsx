@@ -174,7 +174,7 @@ const TradeDetailView: React.FC<{
                         </summary>
                         <div className={`mt-6 rounded-xl overflow-hidden ${containerClass}`}>
                         <div className="px-5 py-6 space-y-5">
-                            <SetupLifecycleCard analysis={analysis} outcome={outcome} triggeredEntryIndices={trade.triggeredEntryIndices} compact />
+                            <SetupLifecycleCard analysis={analysis} outcome={outcome} triggeredEntryIndices={trade.triggeredEntryIndices} compact embedded />
                             <div className="grid grid-cols-2 gap-4 text-ui-base pt-2 font-mono tabular-nums">
 
                                 {/* Trade Settings Row */}

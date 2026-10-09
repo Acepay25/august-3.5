@@ -1073,7 +1073,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 {entries.length === 0 && !panelPickerFor && (
                     <div className="flex h-full flex-col items-center justify-center gap-3 px-2 text-center">
                         <p className="text-ui-dense leading-5 text-zinc-500">
-                            The model sees this chart live — a fresh code-calculated packet rides every message, it can pull the book, the full hybrid data or the exact screen state (including your drawings), take chart screenshots you attach, and grow itself: memory notes, skill proposals and new tools from this chat.
+                            It can see this chart, the book and your drawings.
                         </p>
                         <div className="flex flex-wrap justify-center gap-1.5">
                             {QUICK_PROMPTS.map(({ text, Icon }) => (

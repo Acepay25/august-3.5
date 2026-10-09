@@ -265,7 +265,7 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, providers, onChan
           color: rgba(255, 255, 255, 0.6);
           font-size: 13px;
           cursor: pointer;
-          transition: all 0.2s ease;
+          transition: background-color 0.15s var(--ease-snappy), border-color 0.15s var(--ease-snappy), color 0.15s var(--ease-snappy);
         }
 
         .style-button:hover {

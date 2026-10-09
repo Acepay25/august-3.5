@@ -828,7 +828,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-3 custom-scrollbar">
                     <section data-testid="rail-pinned">
-                        <h4 className="px-1 pb-1 text-ui-xs font-bold uppercase tracking-wider text-zinc-600">Pinned</h4>
+                        <h4 className="px-1 pb-1 text-ui-sm font-semibold text-zinc-500">Pinned</h4>
                         {/* WS-6: the desk's own conversation is a first-class row,
                             not only the pane you fall back into. */}
                         <Row active={isChartPane} title="Chart AI" testId="chart-ai-row"
@@ -847,7 +847,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
                     <section>
                         <div className="flex items-center gap-1 px-1 pb-1">
-                            <h4 className="text-ui-xs font-bold uppercase tracking-wider text-zinc-600">
+                            <h4 className="text-ui-sm font-semibold text-zinc-500">
                                 Chats and tasks
                             </h4>
                             {(activeBots.length > 1 || listedGroups.length > 1) && (
@@ -907,7 +907,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
                     {onLoadConversation && (
                         <section data-testid="rail-conversations">
-                            <h4 className="px-1 pb-1 text-ui-xs font-bold uppercase tracking-wider text-zinc-600">
+                            <h4 className="px-1 pb-1 text-ui-sm font-semibold text-zinc-500">
                                 Conversations
                             </h4>
                             {visibleConversationRows.length === 0 ? (
@@ -1159,7 +1159,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     </button>
                                 </div>
                             </div>
-                            <div className="mx-auto mt-2 flex max-w-3xl items-center justify-between px-2 text-ui-2xs text-zinc-600">
+                            <div className="mx-auto mt-2 flex max-w-3xl items-center justify-between px-2 text-ui-xs text-zinc-600">
                                 <span>{activeBot ? `@${activeBot.name} answers here` : 'No agent selected — the full analysis runs'}</span>
                                 <span className="hidden sm:inline">{DISCLAIMER_SHORT}</span>
                             </div>

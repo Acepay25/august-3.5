@@ -604,11 +604,16 @@ body {
 
 /* Shared chrome: one kicker, one panel, one control radius. */
 .ui-kicker {
-  font-size: var(--text-ui-xs);
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #8c8c86;
+  /* Panel titles, not eyebrows: every user of this class IS the heading of its
+     panel ("Order Book", "Setup lifecycle", "Family edge by regime"). It used to
+     render 10px uppercase while the sibling panel title "Screener" rendered
+     13px bold — one role, two treatments, side by side in the same dock.
+     Matches that title now; 6092d1c made the same call for the table header. */
+  font-size: var(--text-ui-caption);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-zinc-100);
 }
 .ui-panel {
   overflow: hidden;
