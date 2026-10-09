@@ -9,10 +9,12 @@ import React from 'react';
 import ProfileMemoryCard from '../ProfileMemoryCard';
 import type { SettingsTabProps } from './types';
 
-export interface MemoryTabProps extends SettingsTabProps {
-    /** Pre-bound `onOpenLearn('queue')` — bound once in SettingsMenu so the
-     *  narrowing survives into the callback the child gets. */
-}
+/** `SettingsTabProps`, narrowed to what this tab reads. An alias rather than an
+ *  empty `interface extends` — that form is equivalent to its supertype and the
+ *  lint rule flags it, and there is nothing to add here. The `onOpenLearn`
+ *  binding is pre-narrowed in `SettingsMenu` so the child's callback stays
+ *  typed. */
+export type MemoryTabProps = SettingsTabProps;
 
 const MemoryTab: React.FC<{ tab: MemoryTabProps }> = ({ tab: props }) => {
     const {
