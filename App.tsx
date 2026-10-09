@@ -2736,6 +2736,12 @@ const App: React.FC = () => {
                                     reviewSummary={finalTradeSummary}
                                     reviewLoading={isLoading}
                                     onRegenerateReview={handleRegenerateFinalSummary}
+                                    // The catalog's Add hands off to the Coach inbox, which owns
+                                    // the draft path. `onOpenSkillsSettings` stays unwired on
+                                    // purpose: Settings → Skills is "Tool approvals", so a gear
+                                    // labelled "Skill settings" there would be an affordance lie,
+                                    // and SkillsCatalog hides a control it has no handler for.
+                                    onAddSkill={openApprovalsInLearn}
                                 />
                             </React.Suspense>
                         )}

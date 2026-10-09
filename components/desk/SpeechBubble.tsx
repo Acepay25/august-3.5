@@ -75,7 +75,7 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
             data-testid={testId}
             data-side={side}
             data-emphasis={emphasis}
-            className={`absolute z-20 ${sideClass} bottom-full mb-2 w-44 max-w-[12rem] animate-[bubble-pop_220ms_ease-out]`}
+            className={`absolute z-20 ${sideClass} bottom-full mb-2 w-44 max-w-[12rem] animate-[bubble-pop_150ms_var(--ease-snappy)]`}
         >
             <div
                 className={`relative rounded-md border bg-zinc-900/95 px-2 py-1.5 shadow-lg shadow-black/40 backdrop-blur-sm ${
