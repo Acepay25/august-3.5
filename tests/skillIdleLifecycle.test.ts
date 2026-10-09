@@ -15,6 +15,96 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const DAY = 86_400_000;
 
+/**
+ * THE ONE LIFECYCLE PREDICATE.
+ *
+ * The sweep used to own the branch order privately, so anything outside it had
+ * to guess — and a Health tooltip that computed a different "90 days" than the
+ * sweep would act on is worse than no tooltip. `evaluateSkillLifecycle` is now
+ * the single answer, and the sweep reads it.
+ *
+ * The revival case is the one worth pinning: `stage === 'live'` covers BOTH
+ * "never suspended" and "suspended but its clock moved", so a caller testing the
+ * stage alone un-suspends everything. The predicate's own stage can't
+ * disambiguate; the sweep pairs it with the clock comparison, and this test is
+ * what says so out loud.
+ */
+describe('evaluateSkillLifecycle (the one predicate)', () => {
+    const file = { createdAt: 1, updatedAt: 1 };
+    const NOW = 1_000 * DAY;
+
+    const meta = (over: Record<string, unknown> = {}) => ({
+        status: 'confirmed', kind: 'repeat', wins: 3, losses: 1,
+        consecutiveLosses: 0, tradeIds: [], body: 'x',
+        lastEvidenceAt: new Date(NOW - 200 * DAY).toISOString(),
+        ...over,
+    }) as never;
+
+    it('reports live for a fresh skill', () => {
+        const out = evaluateSkillLifecycle(meta({ lastEvidenceAt: new Date(NOW - 10 * DAY).toISOString() }), file, NOW);
+        expect(out.stage).toBe('live');
+        expect(out.idleDays).toBe(10);
+        expect(out.suspendedAtMs).toBe(0);
+    });
+
+    it('reports suspended once idle passes the window', () => {
+        const out = evaluateSkillLifecycle(meta({ lastEvidenceAt: new Date(NOW - 91 * DAY).toISOString() }), file, NOW);
+        expect(out.stage).toBe('suspended');
+        expect(out.idleDays).toBe(91);
+    });
+
+    it('does NOT call a never-suspended skill live-and-revivable', () => {
+        // THE GUARD. A suspended skill whose clock moved is 'live'; so is a
+        // skill that was never suspended but is fresh. Only the clock comparison
+        // tells them apart, which is why the sweep pairs the two rather than
+        // branching on the stage alone.
+        const fresh = evaluateSkillLifecycle(
+            meta({ lastEvidenceAt: new Date(NOW - 10 * DAY).toISOString() }), file, NOW,
+        );
+        const stale = evaluateSkillLifecycle(
+            meta({ lastEvidenceAt: new Date(NOW - 200 * DAY).toISOString() }), file, NOW,
+        );
+        const revived = evaluateSkillLifecycle(
+            meta({ suspendedAt: new Date(NOW - 5 * DAY).toISOString(), lastEvidenceAt: new Date(NOW - 1 * DAY).toISOString() }),
+            file, NOW,
+        );
+        // All three report 'live' or 'suspended' from their clocks…
+        expect(fresh.stage).toBe('live');
+        expect(stale.stage).toBe('suspended');
+        expect(revived.stage).toBe('live');
+        // …and only `suspendedAtMs` distinguishes "was suspended, clock moved"
+        // from "never suspended". That field is what the revival write needs.
+        expect(fresh.suspendedAtMs).toBe(0);
+        expect(stale.suspendedAtMs).toBe(0);
+        expect(revived.suspendedAtMs).toBeGreaterThan(0);
+    });
+
+    it('reports archived only after the long window', () => {
+        const recent = evaluateSkillLifecycle(meta({ suspendedAt: new Date(NOW - 30 * DAY).toISOString() }), file, NOW);
+        const long = evaluateSkillLifecycle(meta({ suspendedAt: new Date(NOW - 181 * DAY).toISOString() }), file, NOW);
+        expect(recent.stage).toBe('live');
+        expect(long.stage).toBe('archived');
+    });
+
+    it('honours custom windows rather than hardcoding 90/180', () => {
+        const out = evaluateSkillLifecycle(
+            meta({ lastEvidenceAt: new Date(NOW - 15 * DAY).toISOString() }),
+            file, NOW, { suspendDays: 14, archiveDays: 28 },
+        );
+        expect(out.stage).toBe('suspended');
+    });
+
+    it('reports a retired skill by its clocks — retirement is a verdict, not a stage', () => {
+        const out = evaluateSkillLifecycle(meta({ status: 'retired' }), file, NOW);
+        expect(out.stage).toBe('suspended');
+    });
+
+    it('carries the exemption reason so a caller can say why a skill was left alone', () => {
+        const out = evaluateSkillLifecycle(meta({ prior: 'book' }), file, NOW, { slug: 'some-book-rule' });
+        expect(out.exempt).not.toBeNull();
+    });
+});
+
 let store: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
     getPreferenceObject: vi.fn(async (key: string) => store[key] ?? null),
@@ -65,6 +155,7 @@ import {
     idleStageOf,
     idleWindowsInvalid,
     runSkillIdleSweep,
+    evaluateSkillLifecycle,
 } from '../services/learning/skillIdleLifecycle';
 import { listTombstones } from '../services/learning/skillGraveyard';
 import { runMemoryHygiene } from '../services/learning/memoryHygiene';

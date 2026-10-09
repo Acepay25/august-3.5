@@ -90,6 +90,70 @@ export const idleWindowsInvalid = (
 
 export type IdleStage = 'live' | 'suspended' | 'archived';
 
+/**
+ * THE ONE LIFECYCLE PREDICATE — the current stage of a skill, and why.
+ *
+ * The handoff asked for `evaluateSkillLifecycle(meta, now)` to fold this module's
+ * branch order into one answer, so that every caller (the sweep, the Health tab,
+ * a tooltip) asks the SAME question instead of re-deriving it. Before this the
+ * order lived only inside the sweep's imperative loop, so anything outside it
+ * had to guess, and the guesses disagreed.
+ *
+ * The branch order is load-bearing and must not be reordered:
+ *   1. suspended AND its clock moved past the suspension ⇒ revived. Only the two
+ *      EARNED clocks prove this — they are the ones this module never writes, so
+ *      a sweep write cannot fake a revival.
+ *   2. suspended past the long window ⇒ archived.
+ *   3. idle past the short window ⇒ suspend.
+ *   4. otherwise ⇒ live.
+ *
+ * `status: 'retired'` is NOT an idle stage: retirement is a verdict about
+ * whether the rule is right, and this module reads a clock and never judges. A
+ * retired skill reports its stage from the clocks like any other, because the
+ * question "would it be suspended for silence" stays meaningful for a rule the
+ * human still wants on file.
+ *
+ * Returns the stage plus the actual numbers behind it, so a caller rendering
+ * "idle for 90 days" cannot compute a different 90 than the sweep would act on.
+ */
+export interface SkillLifecycle {
+    stage: IdleStage;
+    /** Days since the trusted clock moved last. */
+    idleDays: number;
+    /** Epoch ms the trusted clock last moved. */
+    clockMs: number;
+    /** Epoch ms the skill was suspended, or 0 when not suspended. */
+    suspendedAtMs: number;
+    /** Why the skill is exempt from the sweep, or null when it is fair game. */
+    exempt: string | null;
+}
+
+export const evaluateSkillLifecycle = (
+    meta: SkillMeta,
+    file: { createdAt: number; updatedAt: number },
+    now: number = Date.now(),
+    opts: { suspendDays?: number; archiveDays?: number; blockedSlugs?: ReadonlySet<string>; slug?: string } = {},
+): SkillLifecycle => {
+    const suspendDays = opts.suspendDays ?? SKILL_IDLE_SUSPEND_DAYS;
+    const archiveDays = opts.archiveDays ?? SKILL_IDLE_ARCHIVE_DAYS;
+    const clockMs = idleClockMs(meta, file);
+    const suspendedAtMs = isoMs(meta.suspendedAt);
+    const idleDays = Math.floor((now - clockMs) / DAY_MS);
+    const exempt = idleExemptionFor(meta, opts.slug ?? '', opts.blockedSlugs ?? new Set());
+
+    const stage: IdleStage = (() => {
+        // 1. Revival — something happened after the suspension.
+        if (suspendedAtMs && clockMs > suspendedAtMs) return 'live' as const;
+        // 2. Archive — it stayed suspended past the long window.
+        if (suspendedAtMs && now - suspendedAtMs >= archiveDays * DAY_MS) return 'archived' as const;
+        // 3. Suspend — idle past the short window, not already suspended.
+        if (!suspendedAtMs && idleDays >= suspendDays) return 'suspended' as const;
+        return 'live' as const;
+    })();
+
+    return { stage, idleDays, clockMs, suspendedAtMs, exempt };
+};
+
 const isoMs = (raw: string | undefined): number => {
     const ms = raw ? Date.parse(raw) : NaN;
     return Number.isFinite(ms) ? ms : 0;
@@ -226,13 +290,22 @@ export const runSkillIdleSweep = (
 
         const suspendedAt = isoMs(meta.suspendedAt);
         const clock = idleClockMs(meta, file);
+        // The stage comes from the ONE predicate, not from a second copy of the
+        // branch order. The sweep below still owns the WRITES — this decides what
+        // is true, that performs it — but the two can no longer disagree about
+        // which stage a skill is in.
+        const lifecycle = evaluateSkillLifecycle(meta, file, now, { suspendDays, archiveDays, blockedSlugs: blocked, slug });
 
         // 1. Revival. Something happened AFTER the suspension — the trigger
         //    matched a trade that has since closed — so the rule is still
         //    describing this market and there is nothing to decide. Only the
         //    two earned clocks can prove this: they are the ones this module
         //    never writes.
-        if (suspendedAt && clock > suspendedAt) {
+        // Kept as the clock comparison rather than `stage === 'live'`: 'live' is
+        // also the stage of a skill that was never suspended, and testing the
+        // stage alone revived every suspended row on every sweep — a second pass
+        // at the same instant un-suspended what the first one had just suspended.
+        if (lifecycle.stage === 'live' && suspendedAt && clock > suspendedAt) {
             meta.suspendedAt = undefined;
             await updateMemoryFileUnlocked(file.id, {
                 content: serializeSkill(meta, titleFromMeta(meta)),
@@ -244,7 +317,7 @@ export const runSkillIdleSweep = (
 
         // 2. Archive: it stayed suspended past the long window. Keyed on the
         //    suspension, so a first-ever sweep can never reach this branch.
-        if (suspendedAt && now - suspendedAt >= archiveDays * DAY_MS) {
+        if (lifecycle.stage === 'archived') {
             if (!archive) archive = await ensureSkillsArchiveFolderUnlocked(username);
             await updateMemoryFileUnlocked(file.id, {
                 content: serializeSkill(meta, titleFromMeta(meta)),
@@ -262,7 +335,7 @@ export const runSkillIdleSweep = (
         }
 
         // 3. Suspend: idle past the short window and not already suspended.
-        if (!suspendedAt && idleDaysFor(meta, file, now) >= suspendDays) {
+        if (lifecycle.stage === 'suspended') {
             meta.suspendedAt = new Date(now).toISOString();
             await updateMemoryFileUnlocked(file.id, {
                 content: serializeSkill(meta, titleFromMeta(meta)),
