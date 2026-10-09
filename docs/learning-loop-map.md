@@ -65,11 +65,16 @@ weekly, at boot, due-checked per user
   · one health line each → memory_hygiene_v1_ → the Health tab (memoryHealth)
 bots (WS-3)
   read  → buildBotSharedMemoryContext → same retrieval, smallest slice
-  write → lessonFromBotTurn → bots-<id>/memory.md
+  write → lessonFromBotTurn (a LESSON token, else a labelled line)
+        → bots-<id>/memory.md
         → closed bot-authored trades fold into syncClosedTradeToNotebook
   turns that earn this: the 1:1 mailbox (hooks/useBotMailbox.ts), scheduled
   routines (services/agents/botRoutine.ts) and ROOM replies
-  (hooks/useAgentGroups.ts — one write-back per speaker, markers stripped)
+  (hooks/useAgentGroups.ts — one write-back per PARTICIPANT per run, flushed
+  at settlement; a bot that takes three rounds earns one lesson line, from
+  the reply that declared it, and every room reply carries the runId + the
+  injection record its own notes earned, so a trade logged from a room turn
+  can be attributed like any other)
 ```
 
 ### The cold-start contract (fixed 2026-09-19)

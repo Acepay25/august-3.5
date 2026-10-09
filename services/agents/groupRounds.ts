@@ -10,6 +10,7 @@
 import type { AgentBot } from './agentRoster';
 import { botHandle, resolveRosterHandle } from './botMailbox';
 import { seatHasPersona, seatPersonaPrompt } from './seatPersonas';
+import { lessonTokenInstruction } from '../../utils/lessonToken';
 
 /** Max rounds per send. */
 export const ROOM_ROUND_CAP = 3;
@@ -76,6 +77,7 @@ export const buildRoomProtocolSection = (bot: AgentBot, members: AgentBot[]): st
         '- Speak only when you have something to add. If not, reply with exactly (pass) — silence is a valid, useful answer.',
         '- To hand work to a teammate, @mention them in your reply; they speak in the next round.',
         '- Never use [[dm:@…]] markers here — @mentions are how this room routes.',
+        `- ${lessonTokenInstruction}`,
         '- Keep it short: this is a trading-room chat, not a report.',
     ].join('\n');
 };

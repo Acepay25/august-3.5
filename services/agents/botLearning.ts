@@ -46,6 +46,7 @@ import { TradeOutcome } from '../../types/enums';
 import type { ProviderConfig } from '../../types/provider';
 import { getBots } from './agentRoster';
 import { mineCoinFromPrompt, mineDirectionFromPrompt, minePatternFromPrompt } from '../../utils/patternMining';
+import { hasLessonLabel, parseLessonToken, stripLessonLabel } from '../../utils/lessonToken';
 import type { BotMemoryScope } from '../../types/bot';
 
 /** Bots get the smallest honest slice — their persona/notes already ride the
@@ -156,13 +157,22 @@ const foldedTrades = new Map<string, Set<string>>();
  * lesson. A chat reply carries no such guarantee, so using it directly
  * memorialized refusals, disclaimers and "I have no price data here" into the
  * bot's memory.md — where retrieval feeds it back into every future turn of
- * that bot. So: require the reply to label a lesson before extracting one.
+ * that bot. So: require the reply to declare a lesson before extracting one.
+ *
+ * Two declarations are honored, in order. An explicit LESSON token
+ * (utils/lessonToken) is what the bot MEANT — it names its own boundaries, so
+ * it wins over any longer "Lesson:" line elsewhere in the same reply, and a
+ * token too short to keep does not fall back to the prose around it. Failing
+ * that, a reply that labels a lesson in prose earns the post-mortem miner.
  */
-const BOT_LESSON_LABEL = /(?:key\s+)?(?:lesson|takeaway|learning|correction|next\s+time)\s*[:\-–]/i;
-
 export const lessonFromBotTurn = (reply: string): string => {
-    if (!reply || !BOT_LESSON_LABEL.test(reply)) return '';
-    const lesson = extractLessonFromPostMortem(reply);
+    if (!reply || !hasLessonLabel(reply)) return '';
+    const declared = parseLessonToken(reply);
+    const mined = declared ?? extractLessonFromPostMortem(reply);
+    // The label comes off either way: `extractLessonFromPostMortem` captures
+    // the body only for the spellings its own pattern knows, so a "Lessons
+    // learned:" reply would otherwise be stored WITH its label attached.
+    const lesson = stripLessonLabel(mined);
     return lesson.length >= BOT_LESSON_MIN_CHARS ? lesson : '';
 };
 
