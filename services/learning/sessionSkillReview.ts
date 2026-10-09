@@ -30,6 +30,7 @@ import { sendChatRequest, type ChatMessage } from '../providers/GenericProviderS
 import { TASK_BUDGETS } from '../providers/taskBudgets';
 import { effortForTask } from '../providers/reasoningControls';
 import { extractAndParseJson } from '../../utils/jsonUtils';
+import { getHarnessSettings } from '../../utils/harnessSettings';
 import { listSkillDrafts } from '../../utils/skillDrafts';
 import { fetchKlines } from '../analysis/KlineService';
 import type { CraftedSkill } from '../../schemas/learning';
@@ -209,6 +210,10 @@ export const runSessionSkillReview = async (
     config: ProviderConfig,
     allTrades: LoggedTrade[] = [],
 ): Promise<number> => {
+    // Same switch, same reason: enforced here, so the after-the-turn path is not
+    // the only place that remembers it exists. 0 = nothing queued, which is what
+    // every caller already reports.
+    if (!getHarnessSettings().autoDraftingEnabled) return 0;
     let queued = 0;
     const already = draftedKeys(username);
     const existingDraftIds = new Set(listSkillDrafts(username).map(d => d.tradeId));

@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { saveHarnessSettings } from '../utils/harnessSettings';
 
 vi.mock('../services/providers/GenericProviderService', () => ({
     sendChatRequest: vi.fn(),
@@ -32,6 +33,10 @@ const candle = (high: number, low: number) => ({ high, low });
 
 beforeEach(() => {
     localStorage.clear();
+    // Drafting is opt-in now (utils/harnessSettings.autoDraftingEnabled ships
+    // false). These suites test the drafter itself, so they turn it on rather
+    // than silently assert the old always-on default.
+    saveHarnessSettings({ autoDraftingEnabled: true });
     vi.mocked(sendChatRequest).mockReset();
     vi.mocked(fetchKlines).mockReset();
     // Default: the worth gate cannot parse a verdict out of undefined → the

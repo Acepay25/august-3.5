@@ -25,6 +25,7 @@ import type { CraftedSkill } from '../../schemas/learning';
 import { parseCraftedSkill } from '../../schemas/learning';
 import { getQuickResponse } from '../providers/GenericProviderService';
 import { extractAndParseJson } from '../../utils/jsonUtils';
+import { getHarnessSettings } from '../../utils/harnessSettings';
 import { dataUnavailable } from '../../utils/harnessMarks';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
 import { fetchKlines } from '../analysis/KlineService';
@@ -246,6 +247,21 @@ const parseCandidates = (raw: string, maxSkills: number): CraftedSkill[] => {
 };
 
 export async function scanChartForSkills(input: ChartScanInput): Promise<ChartScanResult> {
+    // The trader's own switch, enforced AT THE ENTRY rather than only at the one
+    // caller — so no future caller, and no seat that decides to call the desk
+    // tool on its own, can draft without it. It returns before a single candle
+    // is fetched: an off switch must cost nothing, not merely queue nothing.
+    if (!getHarnessSettings().autoDraftingEnabled) {
+        return {
+            symbol: input.symbol, interval: input.interval, bars: 0,
+            candidates: 0, queued: 0, outcomes: [],
+            receipt: 'DRAFTING IS SWITCHED OFF. "Draft playbooks on its own" '
+                + '(Settings -> Session & limits) is not enabled, so no candles were read, '
+                + 'no skill was drafted and no model call was made. Say where the switch is; '
+                + 'do not call this tool again in this run.',
+            error: 'auto-drafting is switched off',
+        };
+    }
     const username = input.username ?? getActiveUsername();
     const maxSkills = Math.min(Math.max(input.maxSkills ?? 3, 1), 5);
     const base = baseOf(input.symbol).toUpperCase();

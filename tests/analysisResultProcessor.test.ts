@@ -69,6 +69,8 @@ const mocks = vi.hoisted(() => ({
         skillEnforcementEnabled: true,
         // Focus is the shipped density; this suite does not render a surface.
         viewDensity: 'focus' as const,
+        // Off, the shipped default: this suite must not gain unasked drafting.
+        autoDraftingEnabled: false,
     })),
     getSessionGuardConfig: vi.fn(() => ({
         dailyLossLimitPct: 0.02,

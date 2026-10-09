@@ -183,6 +183,28 @@ export const HarnessControls: React.FC = () => {
                 </span>
             </label>
             <label className="block text-ui-dense text-zinc-400">
+                Draft playbooks on its own
+                <span className="mt-0.5 block text-ui-2xs leading-4 text-zinc-500">
+                    Studies each finished conversation and the whole chart, then writes
+                    drafts into the Approvals inbox. Costs a model call each time, so it
+                    is off until you turn it on. Skills you save yourself, post-mortems
+                    and imports are unaffected — this switch is only about the app
+                    drafting things it was not asked for.
+                </span>
+                <span className="mt-1 flex items-center gap-2">
+                    <input
+                        type="checkbox"
+                        checked={settings.autoDraftingEnabled === true}
+                        onChange={e => persist({ autoDraftingEnabled: e.target.checked })}
+                        data-testid="harness-auto-drafting"
+                        className="h-3.5 w-3.5 accent-cyan-400"
+                    />
+                    <span className="text-ui-dense text-zinc-300">
+                        {settings.autoDraftingEnabled === true ? 'On — the loop drafts unasked' : 'Off — only what you ask for'}
+                    </span>
+                </span>
+            </label>
+            <label className="block text-ui-dense text-zinc-400">
                 Skill enforcement
                 <span className="mt-0.5 block text-ui-2xs leading-4 text-zinc-500">
                     The off-switch over code-side enforcement: the confidence caps and

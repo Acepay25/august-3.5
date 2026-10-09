@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { saveHarnessSettings } from '../utils/harnessSettings';
 
 vi.mock('../services/learning/chartScanSkills', () => ({
     scanChartForSkills: vi.fn(),
@@ -24,6 +25,10 @@ const RESULT = {
 
 beforeEach(() => {
     localStorage.clear();
+    // Drafting is opt-in now (utils/harnessSettings.autoDraftingEnabled ships
+    // false). These suites test the drafter itself, so they turn it on rather
+    // than silently assert the old always-on default.
+    saveHarnessSettings({ autoDraftingEnabled: true });
     clearDeskToolCache();
     vi.mocked(scanChartForSkills).mockReset();
     vi.mocked(scanChartForSkills).mockResolvedValue(RESULT as never);
