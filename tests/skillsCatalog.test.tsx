@@ -148,3 +148,50 @@ describe('SkillsCatalog', () => {
     });
 });
 
+/**
+ * The Refresh press must be OBSERVABLE. `reload()` always re-read the store,
+ * but with nothing on disk changed the screen came back byte-identical, so a
+ * working button and a dead one were indistinguishable — exactly what
+ * render-probe's inert-control gate measures. These pin the REPORT; the
+ * re-read was never the bug.
+ */
+describe('SkillsCatalog — a refresh says what it found', () => {
+    // This block sits outside the file's main describe, so it must seed its own
+    // roster — without it every press hits a throwing mock and the "failed to
+    // read" case passes for the wrong reason.
+    beforeEach(() => { roster(ROSTER); });
+
+    const statusOf = (container: HTMLElement): string =>
+        container.querySelector('[data-testid="skills-status"]')?.textContent ?? '';
+
+    it('reports "nothing changed" instead of leaving the press invisible', () => {
+        const { container } = render(<SkillsCatalog />);
+        // Before any press the slot carries the screen's descriptive line.
+        expect(statusOf(container)).toMatch(/learned to do/);
+        fireEvent.click(screen.getByLabelText('Refresh the skill list'));
+        expect(statusOf(container)).toBe('Refreshed — nothing changed');
+    });
+
+    it('names a file the re-read picked up', () => {
+        const { container } = render(<SkillsCatalog />);
+        roster([...ROSTER, { name: 'scale-out-early.md', description: 'Take first profit at 1R', family: 'risk' }]);
+        fireEvent.click(screen.getByLabelText('Refresh the skill list'));
+        expect(statusOf(container)).toBe('Refreshed — 1 new');
+    });
+
+    it('names a row whose record moved', () => {
+        const { container } = render(<SkillsCatalog />);
+        roster([{ ...ROSTER[0], wins: 7 }, ROSTER[1], ROSTER[2]]);
+        fireEvent.click(screen.getByLabelText('Refresh the skill list'));
+        expect(statusOf(container)).toBe('Refreshed — 1 updated');
+    });
+
+    it('says so when the store read fails on a press', () => {
+        const { container } = render(<SkillsCatalog />);
+        listSkillsMock.mockImplementationOnce(() => { throw new Error('store unavailable'); });
+        fireEvent.click(screen.getByLabelText('Refresh the skill list'));
+        expect(statusOf(container)).toBe('Could not read the skill files');
+    });
+});
+
+
