@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { setSkillStatus, skillExpectancyR, EXPECTANCY_MIN_R_SAMPLE } from '../../services/learning/SkillMemoryService';
+import { setSkillStatus, skillExpectancyR, skillEnabledFlag, EXPECTANCY_MIN_R_SAMPLE } from '../../services/learning/SkillMemoryService';
 import { deleteMemoryFile } from '../../services/learning/MemoryFilesService';
 import type { SkillMeta } from '../../services/learning/SkillMemoryService';
 import type { SkillProofResult } from '../../services/learning/skillProof';
@@ -109,6 +109,40 @@ const SkillDetail: React.FC<{
     const [armed, setArmed] = useState(false);
     const [undoArmed, setUndoArmed] = useState(false);
     const retired = meta?.status === 'retired';
+    /** WHY this skill is or is not reaching a model right now.
+     *
+     *  The label above used to read `retired ? 'Retired' : 'Active'` — a STATUS
+     *  test — while the injectors gate on `skillEnabledFlag(meta)`. Three states
+     *  fall in that gap and all three were labelled "Active" while contributing
+     *  nothing: suspended by the idle sweep (`suspendedAt`, at 90 days of
+     *  silence), switched off by the trader (`disabledByUser`), and superseded by
+     *  a generalized skill. So the pane said a skill was live for a rule the
+     *  desk had quietly stopped using.
+     *
+     *  Derived from the canonical flag rather than re-testing the fields, because
+     *  `skillEnabledFlag` is the ONE place `enabled` may be derived — a second
+     *  implementation here is exactly how the label and the injectors drift
+     *  apart again. */
+    const live = meta ? skillEnabledFlag(meta) : false;
+    /** Reaching the desk right now. `skillEnabledFlag` deliberately does NOT
+     *  test `supersededBy` — it owns the `enabled` FILE field, and a superseded
+     *  skill keeps its file enabled so its evidence stays queryable as the
+     *  control group. But a superseded skill is retired from MATCHING
+     *  (`SkillMeta.supersededBy`), so it is not live either. Layered on top of
+     *  the canonical flag rather than folded into it, because changing that flag
+     *  would start writing `enabled:false` on a file whose bytes are still read. */
+    const reaching = live && !meta?.supersededBy;
+    const liveReason = retired
+        ? undefined
+        : reaching
+            ? undefined
+            : meta?.suspendedAt
+                ? 'Suspended — no evidence for 90 days. Still matched, so it can revive on its own.'
+                : meta?.disabledByUser
+                    ? 'You switched this off in the notebook.'
+                    : meta?.supersededBy
+                        ? `Absorbed into ${meta.supersededBy}. Its evidence is kept as the control group.`
+                        : 'Not reaching the desk.';
     const wins = Math.round(meta?.wins ?? 0);
     const losses = Math.round(meta?.losses ?? 0);
     const refined = Boolean(meta?.previousVersion && meta?.refinedAt);
@@ -216,8 +250,9 @@ const SkillDetail: React.FC<{
                     </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3 pt-1">
-                    <span className="text-ui-xs font-medium uppercase tracking-widest text-zinc-500">
-                        {retired ? 'Retired' : 'Active'}
+                    <span className="text-ui-xs font-medium uppercase tracking-widest text-zinc-500"
+                        title={liveReason ?? undefined}>
+                        {retired ? 'Retired' : reaching ? 'Active' : (meta?.suspendedAt ? 'Suspended' : 'Inactive')}
                     </span>
                     <ToggleSwitch checked={!retired} onChange={onToggleRetire} label={`Toggle ${skill.name} active`} />
                     {/* WS-5.2's "auto-approved by the supervisor — undo", on the
