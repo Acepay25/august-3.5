@@ -645,7 +645,17 @@ export async function conductPostMortem(
             direction: previousMessage.analysis?.direction,
             family: previousMessage.analysis?.detectedPatternFamily,
             pattern: previousMessage.analysis?.marketConditions?.pattern,
-        }, undefined, 'analyst', 'verdict', { contextWindowTokens: config.contextWindowTokens });
+        }, undefined, 'analyst', 'verdict', {
+            contextWindowTokens: config.contextWindowTokens,
+            // A post-mortem is a LOOK-BACK, not a decision: it reads the same
+            // memory the entry call already retrieved, for a trade that is
+            // already closed. Recording that retrieval would credit the skills
+            // it re-read for an outcome they did not influence, and the 400-ring
+            // that gates holdout decisions would fill with replays instead of
+            // fresh injections. Same flag the A/B eval arm uses for the same
+            // reason (`MemoryContextOptions.recordInjections`).
+            recordInjections: false,
+        });
         return ctx ? `\n${ctx}\n` : '';
     })();
 
