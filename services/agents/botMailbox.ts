@@ -27,6 +27,7 @@
 import type { AgentBot } from './agentRoster';
 import type { Message } from '../../types';
 import { MessageRole } from '../../types/enums';
+import { lessonTokenInstruction } from '../../utils/lessonToken';
 
 /** An envelope this old is refused at drain time. */
 export const DM_ENVELOPE_TTL_MS = 15 * 60_000;
@@ -154,6 +155,7 @@ const rulesFor = (me: AgentBot, rosterLines: string): string => [
     '- Only DM for work you genuinely need from them (a second opinion, a risk check, data you cannot compute). One DM per teammate per reply, at most two teammates — a reply may hand work to at most two.',
     '- Say what you want back ([[expecting:…]]); a handoff without an expected answer tends to come back as prose nobody asked for.',
     '- If a teammate DMs YOU, answer it in your reply; add your own [[dm:@…]] marker only if the chain truly needs another hop.',
+    `- ${lessonTokenInstruction}`,
 ].join('\n');
 
 /**

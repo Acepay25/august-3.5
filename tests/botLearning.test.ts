@@ -35,7 +35,7 @@ vi.mock('../services/learning/SkillMemoryService', async importOriginal => {
     return { ...mod, syncClosedTradeToNotebook: syncSpy };
 });
 
-import { recordBotTurnOutcome, botLessonCount } from '../services/agents/botLearning';
+import { recordBotTurnOutcome, botLessonCount, lessonFromBotTurn } from '../services/agents/botLearning';
 import { initMemoryFiles, getMemoryFiles } from '../services/learning/MemoryFilesService';
 import { readBotMemoryMarkdown, botMemoryFolderName } from '../services/bots/BotMemoryService';
 import { TradeOutcome } from '../types';
@@ -105,5 +105,51 @@ describe('recordBotTurnOutcome', () => {
     it('gives a refusal no lesson line', async () => {
         await recordBotTurnOutcome(BOT, 'hi', 'I can’t help with that.', { username: USER, trades: [] });
         expect(botLessonCount(BOT.id)).toBe(0);
+    });
+});
+
+describe('lessonFromBotTurn — the declaration and the widened gate', () => {
+    it('mines an explicit LESSON token, and only the token', () => {
+        const reply = 'Verdict: avoid the short.\nLesson: the sweep had no follow-through at all here.\n'
+            + 'LESSON: wait for the 15m reclaim <-- LEARN';
+        // The declaration wins over the longer prose line: the bot said which
+        // one it means, and a parser that preferred the prose would make the
+        // declaration decorative.
+        expect(lessonFromBotTurn(reply)).toBe('wait for the 15m reclaim');
+    });
+
+    it('writes the declared lesson into the bot notes, minus the protocol bytes', async () => {
+        await recordBotTurnOutcome(BOT, 'btc?', 'Funding is hot.\nLESSON: wait for the 15m reclaim <-- LEARN', {
+            username: USER, trades: [],
+        });
+        expect(readBotMemoryMarkdown(BOT.id)).toContain('wait for the 15m reclaim');
+        // The sentinel is a parser boundary, not part of the lesson.
+        expect(readBotMemoryMarkdown(BOT.id)).not.toContain('LEARN');
+        expect(botLessonCount(BOT.id)).toBe(1);
+    });
+
+    it('accepts the label spellings the old gate refused', () => {
+        // "Lessons learned:" needs the plural+learned form; the previous
+        // pattern only matched a bare "lesson:" and so silently dropped a
+        // labelled lesson from a reply that had one.
+        expect(lessonFromBotTurn('Lessons learned: wait for the reclaim close before adding.')).toBe(
+            'wait for the reclaim close before adding.');
+        expect(lessonFromBotTurn('What I learned: do not front-run a failed sweep here.')).toBe(
+            'do not front-run a failed sweep here.');
+    });
+
+    it('gives a declaration too short to be a lesson nothing at all', () => {
+        // Not the prose around it either: the declaration is the permission,
+        // and a thin one is not an invitation to mine the rest of the reply.
+        expect(lessonFromBotTurn('LESSON: ok <-- LEARN\nOtherwise this is a fine answer.')).toBe('');
+    });
+
+    it('gives a refusal, a disclaimer and an unladen reply no lesson', () => {
+        for (const reply of [
+            'I can’t help with that.',
+            'I have no price data here.',
+            'BTC is ranging and nothing resolves today.',
+            'I learned nothing from this trade',
+        ]) expect(lessonFromBotTurn(reply)).toBe('');
     });
 });

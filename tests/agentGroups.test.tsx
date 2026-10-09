@@ -13,10 +13,19 @@ vi.mock('../services/providers/GenericAnalysisService', () => ({
 }));
 
 vi.mock('../services/agents/botLearning', () => ({
+    // A faithful stand-in for the real guard: a reply earns a lesson when it
+    // labels one with enough substance. The real predicate is pinned in
+    // tests/lessonToken.test.ts and tests/botLearning.test.ts.
+    lessonFromBotTurn: vi.fn((reply: string) => {
+        const m = reply.match(/lesson\s*[:\-–]\s*(.+)/i);
+        const body = m ? m[1].replace(/\s*<--\s*learn\s*$/i, '').trim() : '';
+        return body.length >= 20 ? body : '';
+    }),
+    recordBotTurnInjection: vi.fn(),
     recordBotTurnOutcome: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { recordBotTurnOutcome } from '../services/agents/botLearning';
+import { recordBotTurnOutcome, recordBotTurnInjection } from '../services/agents/botLearning';
 
 const streamMock = vi.mocked(streamQuickResponse);
 
@@ -59,6 +68,7 @@ const makeStore = () => {
 beforeEach(() => {
     streamMock.mockReset();
     vi.mocked(recordBotTurnOutcome).mockClear();
+    vi.mocked(recordBotTurnInjection).mockClear();
 });
 
 describe('useAgentGroups', () => {
@@ -493,5 +503,111 @@ describe('useAgentGroups marker hygiene', () => {
         expect(first[0]).toMatchObject({ id: 'b1', name: 'Scout', providerId: 'p1' });
         expect(first[2]).toContain('reclaimed sweep');
         expect(first[3]).toMatchObject({ username: 'room-user' });
+    });
+});
+
+// ── the room recorder: one lesson per participant, attributed ──────────
+describe('useAgentGroups room recorder', () => {
+    const twoBots = [
+        bot({ id: 'b1', name: 'Macro', modelId: 'model-a' }),
+        bot({ id: 'b2', name: 'Risk', modelId: 'model-b' }),
+    ];
+    /** Both members @mentioned, so both speak in round 1; the stream's shape
+     *  per test decides how many rounds follow. */
+    const runRoom = async (username: string | null = 'room-user') => {
+        const store = makeStore();
+        const { result } = renderHook(() => useAgentGroups({
+            providerConfigs: [provider()],
+            appendMessage: store.appendMessage,
+            patchMessage: store.patchMessage,
+            username,
+        }));
+        await act(async () => {
+            await result.current.runGroupThread({ id: 'g1', memberIds: ['b1', 'b2'] }, '@macro @risk go', twoBots);
+        });
+        return { store, result };
+    };
+
+    it('stamps the reply with the runId a trade logged from it will carry', async () => {
+        streamMock.mockResolvedValue('Long, with size.');
+        const { store } = await runRoom();
+        const reply = store.messages.find(m => m.role === MessageRole.AI);
+        // Without runStats.runId, applySkillEvidence's join
+        // (trade.sourceRunId === injection record.runId) can never fire for a
+        // room turn — the reply exists, the attribution does not.
+        expect(reply?.runStats?.runId).toBe(reply?.id);
+        expect(reply?.runStats?.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('records the injection for the notes that rode the turn system prompt', async () => {
+        streamMock.mockResolvedValue('Long, with size.');
+        await runRoom();
+        expect(vi.mocked(recordBotTurnInjection)).toHaveBeenCalledTimes(2);
+        expect(vi.mocked(recordBotTurnInjection).mock.calls[0][0]).toMatchObject({
+            botId: 'b1', username: 'room-user',
+        });
+        // The record's key is the reply's own id — the same join key above.
+        expect(vi.mocked(recordBotTurnInjection).mock.calls[0][0].runId)
+            .toMatch(/^grp-/);
+    });
+
+    it('earns a three-round participant ONE lesson, from the reply that carried it', async () => {
+        // Ping-pong until the round cap: Macro speaks first and declares the
+        // lesson; everything after it is conversation that mentions Risk back.
+        let macroTurns = 0;
+        streamMock.mockImplementation(async (_c, _p, _h, system) => {
+            if (!String(system).includes('You are Macro')) return '@macro your call';
+            macroTurns += 1;
+            return macroTurns === 1
+                ? 'Lesson: the reclaim failed a second time — do not front-run it.'
+                : '@risk anything else to add?';
+        });
+        const { store } = await runRoom();
+        // Macro really did speak three times (the round cap bounds it)…
+        expect(macroTurns).toBeGreaterThan(1);
+        expect(store.messages.filter(m => m.role === MessageRole.AI).length).toBe(macroTurns * 2);
+        // …and earned exactly one write-back, carrying the declaring reply.
+        const macroCalls = vi.mocked(recordBotTurnOutcome).mock.calls.filter(c => c[0].id === 'b1');
+        expect(vi.mocked(recordBotTurnOutcome)).toHaveBeenCalledTimes(2);
+        expect(macroCalls).toHaveLength(1);
+        expect(macroCalls[0][2]).toContain('do not front-run it');
+        // The lesson-free participant still earns its trade fold — the
+        // recorder must not gate the evidence leg on the lesson leg.
+        expect(vi.mocked(recordBotTurnOutcome).mock.calls.some(c => c[0].id === 'b2')).toBe(true);
+    });
+
+    it('declares its lesson with the LESSON token and keeps it out of the bubble', async () => {
+        streamMock.mockResolvedValue(
+            'Funding looks hot.\nLESSON: wait for the 15m reclaim before adding <-- LEARN');
+        const { store } = await runRoom();
+        const reply = store.messages.find(m => m.role === MessageRole.AI);
+        // The bubble shows no protocol bytes…
+        expect(reply?.text).toBe('Funding looks hot.');
+        expect(reply?.text).not.toContain('LESSON');
+        // …and the learner still receives the declaration that was stripped.
+        expect(vi.mocked(recordBotTurnOutcome).mock.calls[0][2])
+            .toContain('LESSON: wait for the 15m reclaim');
+    });
+
+    it('a reply that is ONLY the declaration keeps its line (no empty bubble)', async () => {
+        streamMock.mockResolvedValue('LESSON: wait for the reclaim before adding <-- LEARN');
+        const { store } = await runRoom();
+        const reply = store.messages.find(m => m.role === MessageRole.AI);
+        expect(reply?.text).toContain('LESSON: wait for the reclaim');
+        expect(reply?.hidden).toBeFalsy();
+    });
+
+    it('teaches the token in the room protocol so a bot knows how to declare', async () => {
+        const { buildRoomProtocolSection } = await import('../services/agents/groupRounds');
+        const section = buildRoomProtocolSection(twoBots[0], twoBots);
+        expect(section).toContain('LESSON:');
+        expect(section).toContain('<-- LEARN');
+    });
+
+    it('an anonymous room (no profile) records nothing', async () => {
+        streamMock.mockResolvedValue('Lesson: four sessions of chop and no follow-through.');
+        await runRoom(null);
+        expect(vi.mocked(recordBotTurnOutcome)).not.toHaveBeenCalled();
+        expect(vi.mocked(recordBotTurnInjection)).not.toHaveBeenCalled();
     });
 });
