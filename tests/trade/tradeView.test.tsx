@@ -114,6 +114,50 @@ const LIVE = {
 const POLLING = { markIndex: null, ticker: null, depth: null, kline: null, status: 'polling' };
 
 describe('TradeView', () => {
+    // The line density may not cross: it owns what the APP pushes, never what
+    // the user PULLED. The book has its own persisted open/close, so hiding it
+    // on a global preset would be the app overruling a choice someone already
+    // made. Pinned in both directions, because the tempting refactor is exactly
+    // to fold this column into the density rule.
+    it('Focus keeps the order book the user opened, and rests only pushed stats', async () => {
+        const realMatchMedia = window.matchMedia;
+        // Tailwind's lg is 1024px; jsdom's default stub answers false, which
+        // reads as a phone and hides the case under test.
+        window.matchMedia = ((query: string) => ({
+            matches: /min-width:\s*1024px/.test(query),
+            media: query, onchange: null,
+            addEventListener: () => {}, removeEventListener: () => {},
+            addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+        })) as unknown as typeof window.matchMedia;
+        try {
+            saveHarnessSettings({ viewDensity: 'focus' });
+            const first = render(
+                <TradeView
+                    providers={providers} selectedChatModel="" onSelectChatModel={() => {}}
+                    sidebarOpen
+                />,
+            );
+            await screen.findByTestId('trade-chat-panel');
+            expect(screen.getByTestId('trade-sidebar')).toBeTruthy();
+            expect(screen.queryByText('Oracle')).toBeNull();
+            first.unmount();
+
+            // And with the user's own toggle off, the book stays off in DETAIL
+            // too: density does not get to open what they closed.
+            saveHarnessSettings({ viewDensity: 'detail' });
+            render(
+                <TradeView
+                    providers={providers} selectedChatModel="" onSelectChatModel={() => {}}
+                    sidebarOpen={false}
+                />,
+            );
+            await screen.findByTestId('trade-chat-panel');
+            expect(screen.queryByTestId('trade-sidebar')).toBeNull();
+        } finally {
+            window.matchMedia = realMatchMedia;
+        }
+    });
+
     it('Focus rests the read-only market stats and keeps the funding countdown', async () => {
         saveHarnessSettings({ viewDensity: 'focus' });
         render(<TradeView providers={providers} selectedChatModel="" onSelectChatModel={() => {}} />);

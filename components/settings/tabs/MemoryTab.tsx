@@ -1,24 +1,23 @@
 // TAB: Memory — the switches Settings still owns (the notebook itself, the
 // amendment inbox and the supervisor stream moved to the Learn surface).
 //
-// Moved verbatim from the inline body in SettingsMenu.tsx. `openLearnQueue` is
+// Moved verbatim from the inline body in SettingsMenu.tsx. The supervisor's
+// own card used to sit here; it duplicated the auto-toggle and the pending count
+// that Learn -> Health already shows, so the Settings copy is gone.
 // the parent's pre-bound Learn queue opener.
 import React from 'react';
-import SupervisorCard from '../SupervisorCard';
 import ProfileMemoryCard from '../ProfileMemoryCard';
 import type { SettingsTabProps } from './types';
 
 export interface MemoryTabProps extends SettingsTabProps {
     /** Pre-bound `onOpenLearn('queue')` — bound once in SettingsMenu so the
      *  narrowing survives into the callback the child gets. */
-    openLearnQueue?: () => void;
 }
 
 const MemoryTab: React.FC<{ tab: MemoryTabProps }> = ({ tab: props }) => {
     const {
         memoryConfig,
         onOpenLearn,
-        openLearnQueue,
     } = props;
 
     return (
@@ -56,7 +55,6 @@ const MemoryTab: React.FC<{ tab: MemoryTabProps }> = ({ tab: props }) => {
                     )}
                 </div>
             </div>
-            <SupervisorCard onOpenLearn={openLearnQueue} />
             <ProfileMemoryCard />
         </div>
     );

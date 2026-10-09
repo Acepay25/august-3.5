@@ -234,10 +234,11 @@ const SupervisorStream: React.FC<SupervisorStreamProps> = ({ onClose }) => {
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3 custom-scrollbar" data-testid="supervisor-log">
                 {newestFirst.length === 0 ? (
                     <p className="px-1 py-6 text-center text-ui-dense leading-5 text-zinc-600">
-                        The supervisor reviews new skill drafts, tool candidates, memory amendments and
-                        ladder proposals automatically — verifying them against your catalog, graveyard and
-                        memory, enhancing the salvageable, and approving the solid ones as candidates.
-                        Everything it does lands here, and every decision is yours to undo.
+                        The supervisor triages new skill drafts, tool candidates, memory amendments and
+                        ladder proposals — verifying each against your catalog, graveyard and memory and
+                        enhancing the salvageable. It RECOMMENDS; it does not approve. Nothing becomes a
+                        belief in this app without a press from you, and everything it sorted lands here
+                        for you to undo.
                     </p>
                 ) : newestFirst.map(ev => <EventRow key={ev.id} ev={ev} />)}
             </div>

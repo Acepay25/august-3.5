@@ -256,10 +256,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         const hasReadyProvider = (providerConfigs ?? []).some(c => c.isEnabled && c.apiKey.trim().length > 0);
         return hasReadyProvider ? 'general' : 'models';
     });
-    // Bound once so the narrowing survives into the callback the children get.
-    // The supervisor's running log moved to Learn -> Health when the queue tab
-    // was deleted, so this deep link lands there.
-    const openLearnQueue = onOpenLearn ? () => onOpenLearn('health') : undefined;
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
     const [deskToolsEnabled, setDeskToolsEnabled] = useState(() => getHarnessSettings().deskToolsEnabled);
     // Idle motion (breath / fidget / blink / sway). Default ON. The
@@ -596,7 +592,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     <MemoryTab tab={{
                                         memoryConfig: props.memoryConfig,
                                         onOpenLearn,
-                                        openLearnQueue,
                                     }} />
                                 </Suspense>
                             )}

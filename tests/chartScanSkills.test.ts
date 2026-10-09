@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { saveHarnessSettings } from '../utils/harnessSettings';
 
 vi.mock('../services/analysis/KlineService', () => ({
     fetchKlines: vi.fn(),
@@ -89,6 +90,10 @@ const pinCraft = (name = 'BTC 15m: buy the pin-bar reclaim') => ({
 
 beforeEach(() => {
     localStorage.clear();
+    // Drafting is opt-in now (utils/harnessSettings.autoDraftingEnabled ships
+    // false). These suites test the drafter itself, so they turn it on rather
+    // than silently assert the old always-on default.
+    saveHarnessSettings({ autoDraftingEnabled: true });
     vi.mocked(fetchKlines).mockReset();
     vi.mocked(getQuickResponse).mockReset();
     vi.mocked(evaluateSkillWorth).mockReset();

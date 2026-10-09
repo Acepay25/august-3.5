@@ -54,6 +54,20 @@ export interface HarnessSettings {
      * presets and transcript modes rather than shipping one forced density.)
      */
     viewDensity: 'focus' | 'detail';
+    /**
+     * Whether the loop may DRAFT playbooks on its own — the after-the-turn
+     * session review and the whole-chart scan, both of which spend a provider
+     * call and put rows in your inbox without being asked.
+     *
+     * OFF by default. This is the one capability in the app that shipped
+     * switched on: the loop studied every conversation and every chart whether
+     * the trader wanted it to, and the drafts landed in the inbox as a surprise.
+     * Both reference clients ship new agent capability disabled until the user
+     * turns it on ("it's off until you turn it on"), and that is the honest
+     * default for something that costs money to run. Nothing about the approval
+     * gate changes — this only decides whether drafts are produced at all.
+     */
+    autoDraftingEnabled: boolean;
 }
 
 const KEY = 'harness_settings_v1';
@@ -103,6 +117,9 @@ export const getHarnessSettings = (): HarnessSettings => {
         // Focus is the shipped default, and only an explicit 'detail' opens the
         // telemetry — an absent key must not resurrect the always-on screen.
         viewDensity: stored.viewDensity === 'detail' ? 'detail' : 'focus',
+        // Opt-IN, deliberately: an absent key means the loop does not draft on
+        // its own. The old behaviour (always drafting) is what this turns off.
+        autoDraftingEnabled: stored.autoDraftingEnabled === true,
     };
 };
 

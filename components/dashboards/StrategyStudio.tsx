@@ -731,16 +731,19 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                                 ? <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
                                                 : <PowerOff className="h-3.5 w-3.5" aria-hidden="true" />}
                                         </button>
-                                        <button
-                                            type="button"
-                                            aria-label={`Open ${s.name}`}
-                                            title="Open details"
-                                            data-testid={`studio-open-${slug}`}
-                                            onClick={e => { e.stopPropagation(); setSelectedId(s.fileId); }}
-                                            className={`${ACTION_BTN} text-zinc-500 hover:text-zinc-200`}
+                                        {/* A cue, not a second button. The whole card
+                                            already opens on click and on Enter, and a
+                                            control whose press does exactly what its
+                                            container's press does is furniture — worse,
+                                            it is a 20px target a user aims at for nothing.
+                                            The chevron stays as the hint that the card
+                                            opens, and takes no click. */}
+                                        <span
+                                            aria-hidden="true"
+                                            className={`${ACTION_BTN} pointer-events-none text-zinc-600 group-hover:text-zinc-400`}
                                         >
                                             <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                                        </button>
+                                        </span>
                                         <button
                                             type="button"
                                             aria-label={armed ? `Confirm delete ${s.name}` : `Delete ${s.name}`}
