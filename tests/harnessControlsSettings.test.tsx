@@ -21,14 +21,18 @@ const KEY = 'harn' + 'ess_setti' + 'ngs_v1';
  * screen, and every writer (Alt+D, Learn, Journal) notifies every reader.
  */
 describe('the harness density setting', () => {
-    it('ships on Focus, and only an explicit detail opens the telemetry', () => {
+    it('ships on Detail, so the desk shows its own market data on a first run', () => {
         localStorage.clear();
-        expect(getHarnessSettings().viewDensity).toBe('focus');
-        saveHarnessSettings({ viewDensity: 'detail' });
+        // Focus used to be the shipped preset, which meant Oracle / 24h volume /
+        // open interest and the loop's telemetry were hidden until you found a
+        // toggle. An absent key now means "show the data"; Focus is still one
+        // press or Alt+D away, and an explicit focus must survive a reload.
         expect(getHarnessSettings().viewDensity).toBe('detail');
+        saveHarnessSettings({ viewDensity: 'focus' });
+        expect(getHarnessSettings().viewDensity).toBe('focus');
         // A stored value that cannot be read back is a setting that does nothing.
         saveHarnessSettings({ viewDensity: 'nonsense' as never });
-        expect(getHarnessSettings().viewDensity).toBe('focus');
+        expect(getHarnessSettings().viewDensity).toBe('detail');
     });
 
     it('notifies every subscriber on save, and unsubscribing stops it', () => {

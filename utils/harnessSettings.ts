@@ -114,9 +114,12 @@ export const getHarnessSettings = (): HarnessSettings => {
         // read as the app losing its rules.
         starterLibraryEnabled: stored.starterLibraryEnabled !== false,
         skillEnforcementEnabled: stored.skillEnforcementEnabled !== false,
-        // Focus is the shipped default, and only an explicit 'detail' opens the
-        // telemetry — an absent key must not resurrect the always-on screen.
-        viewDensity: stored.viewDensity === 'detail' ? 'detail' : 'focus',
+        // Detail is the shipped view (owner's call, 2026-10-10): the desk's own
+        // market data — Oracle, 24h volume, open interest — was resting behind a
+        // preset that defaulted to hiding it, so a first run showed funding only.
+        // Focus stays one press (or Alt+D) away for anyone who wants the chart
+        // and the conversation alone; an absent key no longer means "hide data".
+        viewDensity: stored.viewDensity === 'focus' ? 'focus' : 'detail',
         // Opt-IN, deliberately: an absent key means the loop does not draft on
         // its own. The old behaviour (always drafting) is what this turns off.
         autoDraftingEnabled: stored.autoDraftingEnabled === true,

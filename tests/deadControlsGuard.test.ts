@@ -132,14 +132,19 @@ describe('the surfaces live in the persistent nav rail', () => {
         expect(railSrc).toMatch(/<SurfaceMenuList/);
     });
 
-    it('the rail keeps the orphaned entry points the old rail had', () => {
-        // Approvals stays a nav row; Switch profile moved onto the account
-        // row (stage 3) — profile actions belong on the profile row, but the
-        // rail must still carry both affordances somewhere.
-        expect(railSrc).toMatch(/data-testid="nav-approvals"|data-testid="nav-switch-user"/);
+    it('the rail carries Approvals, and profile switching has one home in Settings', () => {
+        // Approvals stays a nav row. Switch profile is deliberately NOT on the
+        // account row any more: clicking your own name threw you back to the
+        // workspace picker, which is the opposite of what a readout is for.
+        // The capability keeps exactly one home — Settings → Profile — and this
+        // pins that removing the rail entry did not remove the feature.
+        // Approvals is a nav row — it lives in the list the rail mounts, not in
+        // the rail file, which the old assertion's alternation quietly hid.
+        expect(railSrc).not.toMatch(/nav-switch-user/);
         const menuSrc = read('components/shell/SurfaceMenuList.tsx');
         expect(menuSrc).toMatch(/data-testid="nav-approvals"/);
-        expect(railSrc).toMatch(/data-testid="nav-switch-user"/);
+        const profileSrc = read('components/settings/tabs/ProfileTab.tsx');
+        expect(profileSrc).toMatch(/onSwitchUser/);
         expect(appSrc).toMatch(/onSwitchUser=\{handleSwitchUser\}/);
     });
 

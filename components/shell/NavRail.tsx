@@ -60,7 +60,6 @@ interface NavRailProps {
     badges?: Partial<Record<AppSurface, NavBadge>>;
     onOpenApprovals?: () => void;
     approvalsCount?: number;
-    onSwitchUser?: () => void;
     onOpenSettings: () => void;
 }
 
@@ -68,14 +67,14 @@ interface NavRailProps {
  *  doing. Update status belongs on a quiet persistent surface rather than only
  *  in the full-screen overlay — the overlay is for downloading and ready, and
  *  nothing currently tells you that a check finished and found nothing.
- *  Clicking the identity opens Switch profile — profile actions belong on the
- *  profile row, not as a sixth nav entry. */
+ *  The identity is a READOUT, not a control: it used to open Switch profile,
+ *  which meant a click on your own name threw you back to the workspace picker.
+ *  Profile actions live in Settings → Profile, their one home. */
 const AccountRow: React.FC<{
     expanded: boolean;
     activeUsername: string | null;
     onOpenSettings: () => void;
-    onSwitchUser?: () => void;
-}> = ({ expanded, activeUsername, onOpenSettings, onSwitchUser }) => {
+}> = ({ expanded, activeUsername, onOpenSettings }) => {
     const { isElectron } = useAutoUpdate();
     const updateDot = useUpdateStatusDot();
 
@@ -103,14 +102,9 @@ const AccountRow: React.FC<{
             data-testid="nav-account"
             className="flex shrink-0 items-center gap-2 border-t border-white/[0.06] px-3 py-2.5"
         >
-            <button
-                type="button"
-                data-testid="nav-switch-user"
-                onClick={onSwitchUser}
-                aria-label="Switch profile"
-                aria-disabled={!onSwitchUser || undefined}
-                className="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left transition-colors hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:cursor-default disabled:hover:bg-transparent"
-                disabled={!onSwitchUser}
+            <div
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-0.5"
+                title={activeUsername ? `Signed in as ${activeUsername}` : 'No profile'}
             >
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-ui-sm font-bold uppercase text-zinc-300">
                     {/* The person's initial, not a bot glyph — this row is the one
@@ -119,10 +113,10 @@ const AccountRow: React.FC<{
                     {activeUsername ? activeUsername.charAt(0) : <BotIcon className="h-4 w-4 text-zinc-500" aria-hidden="true" />}
                 </span>
                 <span className="min-w-0 flex-1">
-                    <span className="block truncate text-ui-caption text-zinc-300">{activeUsername || 'No profile'}</span>
+                    <span className="block truncate text-ui-caption text-zinc-300" data-testid="nav-account-name">{activeUsername || 'No profile'}</span>
                     <span className="block truncate text-ui-2xs text-zinc-600">Signed in</span>
                 </span>
-            </button>
+            </div>
             <Tip label="Settings" shortcut="Ctrl+,">
                 <button
                     type="button"
@@ -149,7 +143,6 @@ const NavRail: React.FC<NavRailProps> = ({
     badges,
     onOpenApprovals,
     approvalsCount,
-    onSwitchUser,
     onOpenSettings,
 }) => {
     const width = expanded ? NAV_RAIL_EXPANDED_PX : NAV_RAIL_COLLAPSED_PX;
@@ -164,7 +157,6 @@ const NavRail: React.FC<NavRailProps> = ({
     const chooseSurface = (next: AppSurface): void => { onSelectSurface(next); if (isOverlay) onCloseOverlay?.(); };
     const openApprovals = (): void => { onOpenApprovals?.(); if (isOverlay) onCloseOverlay?.(); };
     const openSettings = (): void => { onOpenSettings(); if (isOverlay) onCloseOverlay?.(); };
-    const switchUser = (): void => { onSwitchUser?.(); if (isOverlay) onCloseOverlay?.(); };
 
     return (
         <>
@@ -235,7 +227,6 @@ const NavRail: React.FC<NavRailProps> = ({
                     expanded={expanded}
                     activeUsername={activeUsername}
                     onOpenSettings={openSettings}
-                    onSwitchUser={onSwitchUser ? switchUser : undefined}
                 />
             </div>
         </aside>
