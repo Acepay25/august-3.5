@@ -155,8 +155,11 @@ approvedBy: grandfathered
         await initMemoryFiles('topk-recall');
         await seedPair('topk-recall');
         const out = handleRecallTool({ topic: 'BTC short' }, undefined);
-        // Top match: full body. Runner-up: one-line index entry.
-        expect(out).toContain('# Avoid BTC short');
+        // Top match: full body. The slug names it in the header line, so the
+        // `# Title` heading is NOT repeated inside the body — that
+        // duplication is exactly what the portable/ledger split removed.
+        expect(out).toContain('SKILL btc-short-avoid');
+        expect(out).not.toContain('# Avoid BTC short');
         expect(out).toContain('SKILL (also matches)');
         expect(out).toContain('REPEAT [candidate');
         expect(out).toContain('size down');

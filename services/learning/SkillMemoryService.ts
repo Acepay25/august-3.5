@@ -408,9 +408,38 @@ export const isSkillFile = (file: MemoryFile): boolean =>
 export const listSkillSlugs = (): string[] =>
     getMemoryFiles().files.filter(isSkillFile).map(f => f.name.replace(/\.md$/i, ''));
 
-/** Instruction body of a skill file — the markdown minus its frontmatter. */
+/**
+ * The one marker that splits a skill file into its two faces.
+ *
+ * The Agent Skills spec's required frontmatter is exactly `name` +
+ * `description`, and it has NO lifecycle or outcome fields at all. August's
+ * SkillMeta carries ~35 of them. Keeping both in one undivided block is why
+ * a skill file cannot be shared, imported, or read as a procedure — it is a
+ * database row wearing markdown.
+ *
+ * So the file is written as two explicit sections behind this marker: a
+ * PORTABLE face above it (spec-shaped: name, description, and the keys that
+ * describe the procedure's behaviour — kind/coin/direction/family/regime/
+ * ifCondition/thenAction/predicate/timeframe/source/audience/lensScope), and
+ * a LEDGER face below it (every outcome and lifecycle key). The parser reads
+ * straight through the marker, so NOTHING is rewritten and no migration is
+ * needed: existing files parse exactly as before, and a spec-only file with
+ * just the two required fields loads as an unproven candidate.
+ *
+ * `name` is derived from the title at write time, never parsed — a title can
+ * be renamed without the identity key drifting.
+ */
+const LEDGER_MARKER = '<!-- august:skill-ledger -->';
+
+/** Instruction body of a skill file — the markdown minus its frontmatter AND
+ *  its `# Title` line. The title is identity, carried in the `name` key; a
+ *  body that repeats it makes every injected procedure start with a heading
+ *  the seat already saw in the skill's own header line. */
 export const skillBody = (content: string): string =>
-    content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trim();
+    content
+        .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '')
+        .replace(/^#\s+.*$/m, '')
+        .trim();
 
 // ─── Invoked skills (/slug → system section) ────────────────────────────────
 // The composer parses `/slug` out of the message, but a name alone is dead
@@ -994,25 +1023,20 @@ export const listSkills = (): Array<{ file: MemoryFile; meta: SkillMeta }> =>
     }).filter((row): row is { file: MemoryFile; meta: SkillMeta } => Boolean(row));
 
 export const serializeSkill = (meta: SkillMeta, title: string): string => {
-    const lines = [
-        '---',
-        `status: ${meta.status}`,
+    // The two spec-required fields lead the portable face. `name` is derived
+    // from the title so a rename moves the identity with it, and it is capped
+    // at the spec's 64 chars.
+    const name = title.replace(/\s+/g, ' ').trim().slice(0, 64);
+    const portable: string[] = [
+        `name: ${name}`,
+        ...(meta.description ? [`description: ${meta.description.replace(/\n/g, ' ').slice(0, 1024)}`] : []),
         `kind: ${meta.kind}`,
         ...(meta.coin ? [`coin: ${meta.coin}`] : []),
         ...(meta.timeframe ? [`timeframe: ${meta.timeframe}`] : []),
         ...(meta.source ? [`source: ${meta.source}`] : []),
-        ...(meta.whyAccepted ? [`whyAccepted: ${meta.whyAccepted.replace(/\n/g, ' ')}`] : []),
-        ...(meta.approvedBy ? [`approvedBy: ${meta.approvedBy}`] : []),
-        ...(meta.approvedAt ? [`approvedAt: ${meta.approvedAt}`] : []),
-        ...(meta.originBotId ? [`originBotId: ${meta.originBotId}`] : []),
-        ...(meta.originBotName ? [`originBotName: ${meta.originBotName.replace(/\n/g, ' ')}`] : []),
         ...(meta.direction ? [`direction: ${meta.direction}`] : []),
         ...(meta.family ? [`family: ${meta.family}`] : []),
         ...(meta.regime ? [`regime: ${meta.regime}`] : []),
-        `wins: ${meta.wins}`,
-        `losses: ${meta.losses}`,
-        `sample: ${meta.wins + meta.losses}`,
-        ...(meta.consecutiveLosses > 0 ? [`consecutiveLosses: ${meta.consecutiveLosses}`] : []),
         ...(meta.ifCondition ? [`ifCondition: ${meta.ifCondition.replace(/\n/g, ' ')}`] : []),
         ...(meta.predicate ? [`predicate: ${meta.predicate.replace(/\n/g, ' ')}`] : []),
         ...(meta.thenAction ? [`thenAction: ${meta.thenAction.replace(/\n/g, ' ')}`] : []),
@@ -1022,20 +1046,39 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.horizon ? [`horizon: ${meta.horizon}`] : []),
         ...(meta.sizing ? [`sizing: ${meta.sizing.replace(/\n/g, ' ')}`] : []),
         ...(meta.prior ? [`prior: ${meta.prior}`] : []),
+        ...(meta.audience && meta.audience !== 'all' ? [`audience: ${meta.audience}`] : []),
+        ...(meta.lensScope && meta.lensScope !== 'all' ? [`lensScope: ${meta.lensScope}`] : []),
+        // ── provenance of the procedure's acceptance (portable: WHO said yes) ──
+        ...(meta.approvedBy ? [`approvedBy: ${meta.approvedBy}`] : []),
+        ...(meta.approvedAt ? [`approvedAt: ${meta.approvedAt}`] : []),
+        ...(meta.whyAccepted ? [`whyAccepted: ${meta.whyAccepted.replace(/\n/g, ' ')}`] : []),
+        ...(meta.originBotId ? [`originBotId: ${meta.originBotId}`] : []),
+        ...(meta.originBotName ? [`originBotName: ${meta.originBotName.replace(/\n/g, ' ')}`] : []),
+        ...(meta.originMessageId ? [`originMessageId: ${meta.originMessageId}`] : []),
+    ];
+
+    // ── LEDGER FACE: every outcome and lifecycle key, below the marker. The
+    // parser reads straight through it, so nothing here is rewritten and no
+    // migration is needed — it is a comment to a reader and a boundary to one.
+    const ledger: string[] = [
+        `status: ${meta.status}`,
+        `wins: ${meta.wins}`,
+        `losses: ${meta.losses}`,
+        `sample: ${meta.wins + meta.losses}`,
+        ...(meta.consecutiveLosses > 0 ? [`consecutiveLosses: ${meta.consecutiveLosses}`] : []),
         ...(meta.recentOutcomes ? [`recentOutcomes: ${meta.recentOutcomes}`] : []),
-        ...(meta.refinedAt ? [`refinedAt: ${meta.refinedAt}`] : []),
-        ...(meta.lastEvidenceAt ? [`lastEvidenceAt: ${meta.lastEvidenceAt}`] : []),
-        ...(meta.lastMatchedAt ? [`lastMatchedAt: ${meta.lastMatchedAt}`] : []),
+        ...(meta.netR !== undefined && meta.rSampled && meta.rSampled > 0
+            ? [`netR: ${meta.netR.toFixed(2)}`, `rSampled: ${meta.rSampled}`]
+            : []),
         ...(meta.suspendedAt ? [`suspendedAt: ${meta.suspendedAt}`] : []),
         ...(meta.disabledByUser ? ['disabledByUser: true'] : []),
         ...(meta.manualOnly ? ['manualOnly: true'] : []),
         `modified: ${meta.modifiedAt ?? new Date().toISOString()}`,
-        ...(meta.audience && meta.audience !== 'all' ? [`audience: ${meta.audience}`] : []),
-        ...(meta.lensScope && meta.lensScope !== 'all' ? [`lensScope: ${meta.lensScope}`] : []),
         ...(meta.evalVerdict ? [`evalVerdict: ${meta.evalVerdict}${meta.evalDetail ? ` (${meta.evalDetail})` : ''}`] : []),
         ...(meta.lastEvalAt ? [`lastEvalAt: ${meta.lastEvalAt}`] : []),
-        ...(meta.description ? [`description: ${meta.description.replace(/\n/g, ' ').slice(0, 300)}`] : []),
-        ...(meta.originMessageId ? [`originMessageId: ${meta.originMessageId}`] : []),
+        ...(meta.refinedAt ? [`refinedAt: ${meta.refinedAt}`] : []),
+        ...(meta.lastEvidenceAt ? [`lastEvidenceAt: ${meta.lastEvidenceAt}`] : []),
+        ...(meta.lastMatchedAt ? [`lastMatchedAt: ${meta.lastMatchedAt}`] : []),
         ...(meta.supersededBy ? [`supersededBy: ${meta.supersededBy}`] : []),
         ...(meta.evalStreak ? [`evalStreak: ${meta.evalStreak}`] : []),
         ...(meta.controlIds && meta.controlIds.length > 0 ? [`controlIds: ${meta.controlIds.slice(-CONTROL_ID_TAIL).join(',')}`] : []),
@@ -1053,6 +1096,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.shadow ? [`shadow: ${JSON.stringify(meta.shadow)}`] : []),
         ...(meta.history && meta.history.length > 0 ? [`history: ${JSON.stringify(meta.history)}`] : []),
         ...(meta.previousVersion ? [`previousVersion: ${JSON.stringify(meta.previousVersion)}`] : []),
+        ...(meta.birthEvidence ? [`birthEvidence: ${JSON.stringify(meta.birthEvidence)}`] : []),
         `tradeIds: ${meta.tradeIds.slice(-20).join(',')}`,
         // Monotonic evidence counter — the TRUE cumulative count, maintained
         // by countTradeOutcome on every counting path. The max() against the
@@ -1064,23 +1108,24 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         // feeds the "learned from N logged trades" provenance line and the
         // generalization evidence sum, both of which must be honest.
         `evidenceCount: ${Math.max(meta.evidenceCount ?? 0, meta.tradeIds.length)}`,
-        // The birth cluster, kept separate so promotion can exclude it. JSON
-        // because it is a small struct, matching the shadow/regimeStats shape.
-        ...(meta.birthEvidence ? [`birthEvidence: ${JSON.stringify(meta.birthEvidence)}`] : []),
-        // Expectancy is written only when at least one outcome carried a
-        // measured R. Omitting the pair (rather than emitting `netR: 0`) is
-        // what keeps an unmeasured skill from reading as break-even.
-        ...(meta.rSampled && meta.rSampled > 0
-            ? [`netR: ${(meta.netR ?? 0).toFixed(2)}`, `rSampled: ${meta.rSampled}`]
-            : []),
+    ];
+
+    // One frontmatter block, two faces. The parser reads straight through the
+    // marker (it is an HTML comment, invisible to a YAML reader and to a human
+    // skimming the file), so a legacy file and a freshly-split file parse
+    // identically — no migration, no rewrite, nothing lost.
+    return [
+        '---',
+        ...portable,
+        LEDGER_MARKER,
+        ...ledger,
         '---',
         '',
         `# ${title}`,
         '',
         meta.body.trim(),
         '',
-    ];
-    return lines.join('\n');
+    ].join('\n');
 };
 
 export const skillMatchesSetup = (
