@@ -261,6 +261,18 @@ export interface SkillMeta {
      *  recomputed it to true — silently re-injecting a vetoed skill within
      *  days. This is the meta half of that intent. */
     disabledByUser?: boolean;
+    /** Human-invoked ONLY — Claude's `disable-model-invocation` port.
+     *  When true the skill NEVER auto-injects into a seat's prompt no matter
+     *  how well it matches; it is served only when the trader names it with
+     *  `/slug` in the composer. Distinct from `disabledByUser` (off entirely)
+     *  and from `audience` (which seat may see it): this one is background
+     *  knowledge the model may read on demand but must not be handed.
+     *
+     *  Absent = false, so every skill written before this field injects
+     *  exactly as before — the gate fails OPEN for legacy rows on purpose,
+     *  because a missing fact must never silently change what a live skill
+     *  does. A new opt-out is one explicit line. */
+    manualOnly?: boolean;
     /** Timeframe the skill was proven/drafted on (e.g. '15m', '4h'). Optional
      *  so legacy and chat-authored skills stay valid; the chart scan stamps it
      *  so a reader knows which tape a pattern was earned on. */
@@ -684,6 +696,7 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         lastMatchedAt: pick('lastMatchedAt'),
         suspendedAt: pick('suspendedAt'),
         disabledByUser: pick('disabledByUser') === 'true' || undefined,
+        manualOnly: pick('manualOnly') === 'true' || undefined,
         previousVersion,
         // Temporal ledger: JSON array in frontmatter.
         history: (() => {
@@ -1015,6 +1028,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.lastMatchedAt ? [`lastMatchedAt: ${meta.lastMatchedAt}`] : []),
         ...(meta.suspendedAt ? [`suspendedAt: ${meta.suspendedAt}`] : []),
         ...(meta.disabledByUser ? ['disabledByUser: true'] : []),
+        ...(meta.manualOnly ? ['manualOnly: true'] : []),
         `modified: ${meta.modifiedAt ?? new Date().toISOString()}`,
         ...(meta.audience && meta.audience !== 'all' ? [`audience: ${meta.audience}`] : []),
         ...(meta.lensScope && meta.lensScope !== 'all' ? [`lensScope: ${meta.lensScope}`] : []),

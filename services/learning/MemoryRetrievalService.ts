@@ -103,6 +103,11 @@ const DOCTRINE_SLOT_CHARS = 800;
  *  measures an intervention production never applies
  *  (SkillEvalScheduler imports this constant). */
 export const SKILL_BLOCK_MAX = 400;
+/** Minimum content-word overlap between a skill's description and the live
+ *  setup for the description to act as a retrieval trigger on its own. High
+ *  enough that a coincidental shared noun cannot surface a skill whose
+ *  structured fields say it belongs to a different setup. */
+const DESCRIPTION_MATCH_MIN = 0.2;
 const RISK_RULES_MAX = 300;
 const MISTAKE_LINE_MAX = 200;
 /** Extra matched skills surfaced as index lines at verdict depth (on top of #1). */
@@ -199,10 +204,28 @@ const rankedMatchedSkills = (
         // wrote. Without asOf this is exactly the old retired-check.
         const status = statusAtTime(meta, file, asOfMs);
         if (status === null || status === 'retired') continue;
-        if (!skillMatchesSetup(meta, setup)) continue;
+        // CANDIDACY: structured fields OR the description naming the setup.
+        // `skillMatchesSetup` alone made every general lesson unretrievable
+        // the instant its coin/direction/family/regime did not line up — and
+        // the description, which is the field that says what a skill does and
+        // when it applies, was never consulted. The description gate has a
+        // floor so a single shared content word ('reclaim' in a 40-word
+        // description) cannot qualify a skill: it takes genuine topical
+        // overlap with the live setup. A skill that qualifies on neither
+        // signal stays invisible, exactly as before.
+        const descScore = descriptionOverlap(meta, query);
+        const descHit = descScore >= DESCRIPTION_MATCH_MIN;
+        if (!descHit && !skillMatchesSetup(meta, setup)) continue;
         // Audience filtering happens BEFORE ranking (#4 invocation control): a
         // blocked best-match must surface the second-best skill, not an empty slot.
         if (audience && !skillAllowedFor(meta, audience)) continue;
+        // HUMAN-INVOKED ONLY (#6, Claude's `disable-model-invocation`): a
+        // `manualOnly` skill is background knowledge the trader can read with
+        // `/slug`, and is never handed to a seat on its own — no matter how
+        // perfectly it matches. Absent = injects normally, so every skill
+        // written before the field is byte-identical. `resolveInvokedSkills`
+        // does NOT read this gate: that path IS the human asking.
+        if (meta.manualOnly) continue;
         // Lens-scope filtering (prompt side of the lensScope contract): a
         // risk-scoped skill must not occupy the macro seat's prompt budget.
         // Like the audience filter it runs BEFORE ranking so a blocked
@@ -236,7 +259,15 @@ const rankedMatchedSkills = (
         // trading a family that has proven edge (or decay) in the CURRENT
         // regime moves accordingly — the book's regime-gating as evidence.
         const score = statusWeight * overlap * evidenceDecay(meta, asOfMs) * regimeRankFactor(meta, query?.coin)
-            * familyEdgeFactor(skillStrategyFamily(meta), typeof query?.regime === 'string' ? query.regime : undefined);
+            * familyEdgeFactor(skillStrategyFamily(meta), typeof query?.regime === 'string' ? query.regime : undefined)
+            // A skill whose description names THIS setup outranks one that
+            // merely shares a field. Multiplied in rather than added because
+            // every other term is a multiplier too — an additive bonus would
+            // let a weak-evidence skill leapfrog a strong one on vocabulary
+            // alone. The boost is bounded so it can reorder, not dominate:
+            // a 1.6x lift on a confirmed skill beats a candidate, but never
+            // outweighs the status weight of a confirmed over a candidate.
+            * (1 + descScore * 1.5);
         candidates.push({ file, meta, score, status });
     }
     candidates.sort((a, b) => b.score - a.score || (b.meta.wins + b.meta.losses) - (a.meta.wins + a.meta.losses));
@@ -256,6 +287,64 @@ const dimsOverlap = (meta: SkillMeta, query: MemoryRetrievalQuery): number => {
     if ((query.family || query.pattern) && meta.family && (query.family === meta.family)) n += 1;
     if (query.regime && meta.regime && String(query.regime) === meta.regime) n += 1;
     return Math.max(n, 0.5); // a bare trigger match still scores, just low
+};
+
+/** Stop-words a setup phrase and a skill description both carry regardless of
+ *  topic. Excluded so shared vocabulary cannot manufacture a match. */
+const DESCRIPTIVE_STOPWORDS = new Set([
+    'the', 'a', 'an', 'and', 'or', 'but', 'if', 'then', 'when', 'while', 'until', 'before', 'after',
+    'is', 'are', 'was', 'were', 'be', 'been', 'being', 'it', 'its', 'this', 'that', 'these', 'those',
+    'to', 'of', 'in', 'on', 'at', 'by', 'for', 'with', 'from', 'as', 'into', 'over', 'under',
+    'not', 'no', 'do', 'does', 'did', 'take', 'trade', 'setup', 'avoid', 'repeat', 'skill',
+    'short', 'long', 'entry', 'enter', 'exit', 'target', 'stop', 'loss', 'level', 'levels',
+    'learned', 'cluster', 'losing', 'winning', 'trades', 'pattern', 'price', 'market',
+]);
+
+/** Lowercased content words of a text, minus stop-words. */
+const contentWords = (text: string): Set<string> => {
+    const words = (text || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 3 && !DESCRIPTIVE_STOPWORDS.has(w));
+    return new Set(words);
+};
+
+/**
+ * Semantic overlap between a skill's DESCRIPTION and the live setup.
+ *
+ * The research plan's #1: in both reference products the description is the
+ * trigger — it is what says what a skill does and when it applies. Here it
+ * was render-only (see `skillIndexLine`), so a skill whose prose names
+ * exactly the situation in front of the trader was invisible the moment its
+ * structured fields (coin/direction/family/regime) did not line up, which is
+ * every general lesson.
+ *
+ * Returns a 0..1 Jaccard overlap of content words. Deliberately a BOOST on
+ * the existing structured matcher, never a replacement: `skillMatchesSetup`
+ * still gates candidacy for field-scoped skills, and this lifts the rank of
+ * the skill that actually describes this setup among the ones that already
+ * qualify. Keeping it additive means no behavior is silently withdrawn from
+ * a seat that was previously receiving a skill.
+ */
+const descriptionOverlap = (
+    meta: SkillMeta,
+    query: MemoryRetrievalQuery,
+): number => {
+    const setupText = [
+        query.coin,
+        query.direction,
+        query.family,
+        query.pattern,
+        query.regime,
+    ].filter(Boolean).join(' ');
+    const a = contentWords(meta.description || '');
+    const b = contentWords(setupText);
+    if (a.size === 0 || b.size === 0) return 0;
+    let intersection = 0;
+    for (const w of a) if (b.has(w)) intersection += 1;
+    const union = a.size + b.size - intersection;
+    return union === 0 ? 0 : intersection / union;
 };
 
 /** Evidence-age decay for scoring — same 120-day constant as MemoryGraph.
@@ -391,7 +480,35 @@ const matchedSkillBlock = (
     // and the actual PROCEDURE was truncated away. skillBody() makes the
     // budget buy procedure text — which is all the model can act on.
     const body = substituteSkillContext(skillBody(match.file.content), query);
-    const capped = body.length > SKILL_BLOCK_MAX ? `${body.slice(0, SKILL_BLOCK_MAX).trimEnd()}\n…` : body;
+    // THE BINDING STAGE GETS THE PROJECTED CARD, not the first 400 chars.
+    //
+    // slice(0, SKILL_BLOCK_MAX) spends the verdict's whole budget on whatever
+    // prose arrived first — and the craft writes the verbose trigger ("When:")
+    // first, so a long skill handed the deciding seat 400 chars of situation
+    // description and never reached a single step. The recall tool, which the
+    // model must ASK for, already did this correctly via projectSkillCard
+    // (rule → trigger → when-NOT → pitfall → verification → ticket → numbered
+    // procedure). The stage that produces the binding decision must not be
+    // served worse than the on-demand one, so it uses the same projector.
+    //
+    // A body that already fits is served UNCHANGED — the projector's own
+    // guard — so short skills keep their exact text, and the clip is named in
+    // the app's ONE marker voice (harnessMarks) rather than a bare "…" the
+    // model would read as the procedure simply ending.
+    const card = projectSkillCard(body, {
+        ifCondition: match.meta.ifCondition,
+        thenAction: match.meta.thenAction,
+        budget: SKILL_BLOCK_MAX,
+    });
+    const slug = normalizeSkillSlug(match.file.name);
+    const capped = card.clipped
+        ? `${card.text}\n${clipNote({
+            source: 'skill procedure',
+            kept: card.chars,
+            total: card.chars + card.droppedChars,
+            guidance: `the rest is in skills/${slug}.md — call recall for it if a step you need is missing`,
+        })}`
+        : card.text;
     // Provenance: how many logged trades
     // shaped this rule — from the monotonic evidence counter, not the
     // tail-20 tradeIds list.

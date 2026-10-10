@@ -147,6 +147,11 @@ export const buildEvidenceSkillLines = (
         if (!file.enabled || !isSkillFile(file)) continue;
         const meta = parseSkillMarkdown(file.content);
         if (!meta || meta.status === 'retired') continue;
+        // Human-invoked only: this block is injected into the verdict prompt
+        // unprompted, so it must honour `manualOnly` exactly as the retrieval
+        // path does — otherwise the gate is bypassed by the one other place
+        // skills reach a seat. `/slug` invocation is unaffected.
+        if (meta.manualOnly) continue;
         if (!skillMatchesSetup(meta, setup)) continue;
         const rule = meta.ifCondition
             ? `IF ${meta.ifCondition} THEN ${meta.thenAction}`
