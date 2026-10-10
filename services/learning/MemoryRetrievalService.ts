@@ -39,7 +39,7 @@ import { normalizeStrategyFamily } from '../../types/strategy';
 import { familyEdgeFactor, matrixSummaryBlock } from './strategyRegimeMatrix';
 import { getMemoryFiles, searchNotebookNotes } from './MemoryFilesService';
 import { readDoctrineForInjection } from './DoctrineConsolidationService';
-import { settledBeliefsBlock } from './settledBeliefs';
+import { settledBeliefsBlock, SETTLED_BELIEFS_BLOCK_MAX } from './settledBeliefs';
 import { findRelevantTrades } from './PatternMemorySynthesisService';
 import {
     isSkillFile,
@@ -359,13 +359,22 @@ const evidenceDecay = (meta: SkillMeta, asOfMs?: number): number => {
 
 /**
  * Rough per-run token cost of memory injection (Zed's "may increase token
- * costs" disclosure, made concrete). Worst case = doctrine slot + skill body
- * + risk rules + mistake line + verdict extras; typical opening ≈ half that.
- * ~4 chars/token for English prose. Display-only.
+ * costs" disclosure, made concrete). Worst case = doctrine slot + settled
+ * beliefs + skill body + risk rules + mistake line + verdict extras; typical
+ * opening ≈ half that. ~4 chars/token for English prose. Display-only.
+ *
+ * BOTH always-on slots are counted. The settled-beliefs slot rides ABOVE the
+ * doctrine and is injected on every stage just like it — an estimate that
+ * named the doctrine and omitted the beliefs was not a worst case, it was an
+ * optimistic one, and it is the figure the Health tab shows the trader as
+ * their per-run prompt cost. The two always-on layers are the ONE part of
+ * memory injection that does not shrink with a smaller stage budget, so they
+ * are also the part most likely to be under-reported.
  */
 export function estimateMemoryTokensPerRun(): { worstCase: number; typical: number } {
     const chars =
         DOCTRINE_SLOT_CHARS +
+        SETTLED_BELIEFS_BLOCK_MAX +
         SKILL_BLOCK_MAX +
         RISK_RULES_MAX +
         MISTAKE_LINE_MAX +
