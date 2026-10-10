@@ -2615,7 +2615,6 @@ const App: React.FC = () => {
                     badges={navBadges}
                     onOpenApprovals={openApprovalsInLearn}
                     approvalsCount={approvalsWaiting}
-                    onSwitchUser={handleSwitchUser}
                     onOpenSettings={() => setIsSettingsMenuVisible(true)}
                 />
                 {/* Surfaces: pages, not modals. The Chat surface is gone — the

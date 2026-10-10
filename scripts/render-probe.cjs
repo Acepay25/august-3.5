@@ -859,19 +859,22 @@ async function main() {
                     // Five surfaces + Trade approvals (named for what the drawer holds — skill
                     // drafts wait on Learn, and two rows called "Approvals" made
                     // the list a person wanted unfindable). Rail is nav-only:
-                    // Switch profile lives on the account row (nav-switch-user),
-                    // conversations on the Chat surface's rail, automations in
-                    // the Activity drawer.
+                    // the account row is a READOUT (it used to open Switch
+                    // profile, which threw you back to the workspace picker),
+                    // profile actions live in Settings → Profile, conversations
+                    // on the Chat surface's rail, automations in the Activity drawer.
                     rows: el.querySelectorAll('[data-testid="surface-menu"] button').length,
-                    switchUser: !!el.querySelector('[data-testid="nav-switch-user"]'),
+                    accountName: !!el.querySelector('[data-testid="nav-account-name"]'),
+                    switchUserButton: !!el.querySelector('[data-testid="nav-switch-user"]'),
                 };
             });
             check('the nav rail is mounted without opening any menu', rail !== null,
                 rail ? `width ${rail.width}` : 'no [data-testid="nav-rail"]');
             check('the rail carries every surface row plus Approvals',
                 rail !== null && rail.rows === 6, rail ? `${rail.rows} rows` : 'no rail');
-            check('Switch profile lives on the account row',
-                rail !== null && rail.switchUser, 'nav-switch-user');
+            check('the account row says who is signed in and is not a control',
+                rail !== null && rail.accountName && !rail.switchUserButton,
+                rail ? `name=${rail.accountName} switchButton=${rail.switchUserButton}` : 'no rail');
 
             // Ctrl/Cmd+B must collapse and restore it — the documented binding.
             // D2 amendment: collapsing HIDES the rail (0px); the expand
@@ -1009,27 +1012,31 @@ async function main() {
         }
 
         // The density setting has no bar to live in any more, so the gate checks
-        // it where it is used: one press on Health opens the loop telemetry, the
-        // next rests it. A control that repaints only its own panel would pass
-        // every existing check and still be a lie about the view.
+        // it where it is used — and Detail is the shipped view, so it opens by
+        // proving the data is THERE on a first run, then that one press rests it
+        // and one press brings it back. A control that repaints only its own
+        // panel would pass every existing check and still be a lie about the view.
         {
             await openMenu(); await sleep(300);
             await navTo('Learn'); await sleep(900);
             const coachTab = page.locator('[data-testid="learn-tab-health"]');
             if (await coachTab.count() === 1) await coachTab.click();
             await sleep(1200);
-            const resting = await page.locator('[data-testid="learn-resting"]').count();
-            check('Focus rests the loop telemetry on Health', resting === 1, `${resting} resting notice`);
-            await page.click('[data-testid="learn-show-detail"]');
-            const shown = await page.waitForSelector('[data-testid="learn-system"]', { timeout: 12000 })
-                .then(() => 1).catch(() => 0);
-            check('Detail opens it again, from the surface', shown === 1, `${shown} telemetry block(s)`);
-            // And the reverse must exist: a one-way Detail is a setting nobody
-            // can put back. This press used to be a bar button.
+            const shownFirst = await page.locator('[data-testid="learn-system"]').count();
+            const restingFirst = await page.locator('[data-testid="learn-resting"]').count();
+            check('Detail shows the loop telemetry by default', shownFirst === 1 && restingFirst === 0,
+                `blocks=${shownFirst} resting=${restingFirst}`);
             await page.click('[data-testid="learn-rest-telemetry"]');
-            await sleep(600);
-            const back = await page.locator('[data-testid="learn-resting"]').count();
-            check('and Rest these closes it again — one setting, not two', back === 1, `${back}`);
+            const resting = await page.waitForSelector('[data-testid="learn-resting"]', { timeout: 12000 })
+                .then(() => 1).catch(() => 0);
+            check('one press rests it, and says what is resting', resting === 1, `${resting} resting notice`);
+            const dropped = await page.locator('[data-testid="learn-system"]').count();
+            check('the resting surface really dropped the blocks', dropped === 0, `${dropped} block(s) still mounted`);
+            // Back to the shipped default for whatever runs next.
+            await page.click('[data-testid="learn-show-detail"]');
+            const back = await page.waitForSelector('[data-testid="learn-system"]', { timeout: 12000 })
+                .then(() => 1).catch(() => 0);
+            check('and the surface opens it again — one setting, not two', back === 1, `${back}`);
         }
 
         /** Poll a predicate instead of sleeping a fixed time. Every fixed sleep
