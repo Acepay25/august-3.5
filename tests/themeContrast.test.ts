@@ -202,7 +202,9 @@ describe('motion lockout (WS-5.4)', () => {
  */
 describe('clipped text names its fallback', () => {
     const CLIPPED = /truncate|line-clamp/;
-    const FALLBACK = /title=|aria-label=|aria-labelledby=/;
+    // Attribute-name boundary: `data-title=` must NOT count as a title
+    // fallback (the substring form did).
+    const FALLBACK = /\s(?:title|aria-label|aria-labelledby)=/;
     const BASELINE = 105;
 
     const offenders: string[] = [];

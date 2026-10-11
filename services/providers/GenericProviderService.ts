@@ -899,14 +899,14 @@ async function messagesCall(
 
     if (!response.ok) {
         const status = response.status;
-        const friendlyMessage =
-            status === 401 ? 'Invalid API key. Check your provider settings.' :
-            status === 403 ? 'Access denied. Your API key may lack permissions.' :
-            status === 429 ? 'Rate limit reached. Please wait and try again.' :
-            status >= 500 ? `${config.name || 'Provider'} server error. Try again later.` :
-            `${config.name || 'Provider'} request failed (${status}).`;
-        const err = new Error(friendlyMessage);
+        // The trader gets the provider's OWN denial reason, not a paraphrase —
+        // "access denied" without the reason is undiagnosable.
+        const providerMessage = sanitizeProviderText(extractProviderErrorMessage(await response.text()));
+        const err = new Error(providerMessage
+            ? `${config.name || 'Provider'} (${status}): ${providerMessage}`
+            : `${config.name || 'Provider'} request failed (${status}).`);
         (err as any).status = status; // Preserve for retry/quota classification
+        (err as any).providerMessage = providerMessage;
         throw err;
     }
 
@@ -978,13 +978,12 @@ async function responsesCall(
     if (!response.ok) {
         const errorText = await response.text();
         const status = response.status;
-        const friendlyMessage =
-            status === 401 ? 'Invalid API key. Check your provider settings.' :
-            status === 429 ? 'Rate limit reached. Please wait and try again.' :
-            status >= 500 ? `${config.name || 'Provider'} server error. Try again later.` :
-            `${config.name || 'Provider'} request failed (${status}).`;
-        const err = new Error(friendlyMessage);
+        const providerMessage = sanitizeProviderText(extractProviderErrorMessage(errorText));
+        const err = new Error(providerMessage
+            ? `${config.name || 'Provider'} (${status}): ${providerMessage}`
+            : `${config.name || 'Provider'} request failed (${status}).`);
         (err as any).status = status; // Preserve for retry/quota classification
+        (err as any).providerMessage = providerMessage;
         throw err;
     }
 
@@ -1072,13 +1071,12 @@ async function googleCall(
     });
     if (!response.ok) {
         const status = response.status;
-        const friendlyMessage =
-            status === 401 || status === 403 ? 'Invalid API key. Check your provider settings.' :
-            status === 429 ? 'Rate limit reached. Please wait and try again.' :
-            status >= 500 ? `${config.name || 'Provider'} server error. Try again later.` :
-            `${config.name || 'Provider'} request failed (${status}).`;
-        const err = new Error(friendlyMessage);
+        const providerMessage = sanitizeProviderText(extractProviderErrorMessage(await response.text()));
+        const err = new Error(providerMessage
+            ? `${config.name || 'Provider'} (${status}): ${providerMessage}`
+            : `${config.name || 'Provider'} request failed (${status}).`);
         (err as { status?: number }).status = status;
+        (err as { providerMessage?: string }).providerMessage = providerMessage;
         throw err;
     }
     const data = await response.json();
@@ -1104,6 +1102,40 @@ function assertHasKey(config: ProviderConfig): void {
  * preserved so callers can still detect rate limits / quota errors, and abort
  * errors pass through untouched so cancellation keeps working.
  */
+/** The provider's own error message from a response body — the REAL reason a
+ *  request failed ("insufficient credits for model X", not a paraphrased
+ *  "access denied"). The body is provider-generated and never contains our
+ *  key; request headers are never echoed. Best-effort: JSON error-envelope
+ *  shapes first (OpenAI / Anthropic / OpenCode / Gemini), then raw text. */
+function extractProviderErrorMessage(bodyText: string): string {
+    const text = (bodyText || '').trim();
+    if (!text) return '';
+    try {
+        const data = JSON.parse(text) as Record<string, unknown>;
+        const errObj: unknown = data.error;
+        const candidates: unknown[] = [
+            errObj && typeof errObj === 'object' ? (errObj as Record<string, unknown>).message : errObj,
+            data.message,
+            data.detail,
+            data.error,
+        ];
+        for (const c of candidates) {
+            if (typeof c === 'string' && c.trim()) return c.trim().slice(0, 400);
+        }
+    } catch { /* not JSON — the raw body itself is the message */ }
+    return text.slice(0, 300);
+}
+
+/** Strip URLs, key-like tokens, and key prefixes before surfacing any
+ *  provider text. */
+function sanitizeProviderText(text: string): string {
+    return (text || '')
+        .replace(/https?:\/\/\S+/g, '[url]')
+        .replace(/\b(?:sk|pk|rk)-[A-Za-z0-9_-]{6,}/g, '***')
+        .replace(/\b[A-Za-z0-9_-]{24,}\b/g, '***')
+        .slice(0, 300);
+}
+
 function toFriendlyProviderError(error: unknown, providerName: string): unknown {
     const err = error as { name?: string; code?: string; status?: number; message?: string };
 
@@ -1115,19 +1147,49 @@ function toFriendlyProviderError(error: unknown, providerName: string): unknown 
     const name = providerName || 'Provider';
     const status = typeof err?.status === 'number' ? err.status : undefined;
 
+    // The transport attached the provider's OWN message (sanitized at the
+    // boundary) — that is the real error and it LEADS. The canned sentences
+    // below are only the fallback for a body we could not read.
+    const real = typeof (err as { providerMessage?: unknown }).providerMessage === 'string'
+        ? ((err as { providerMessage?: string }).providerMessage || '').trim()
+        : '';
+    if (real) {
+        const wrapped = new Error(`${name} (HTTP ${status ?? '—'}): ${real}`);
+        if (status !== undefined) (wrapped as any).status = status;
+        return wrapped;
+    }
+
+    // On the desktop bridge, the dev proxy and the OpenAI-SDK path the
+    // provider's own text arrives in err.message (parseProviderErrorBody put
+    // it there on the bridge) with no providerMessage field — the REAL error
+    // leads there too; the canned sentence is only for a generic/empty one.
+    const fromMessage = sanitizeProviderText((err?.message || '').trim());
+    // "HTTP 400" is the status echoing itself, not a reason.
+    const statusEcho = status !== undefined
+        && new RegExp(`^https?\\s*${status}$`, 'i').test(fromMessage);
+    const messageIsGeneric = !fromMessage
+        || statusEcho
+        || /request failed/i.test(fromMessage);
+
     let friendly: string;
     if (status === 401) {
-        friendly = `${name}: invalid API key. Check your provider settings.`;
+        friendly = messageIsGeneric ? `${name}: invalid API key. Check your provider settings.`
+            : `${name} (HTTP 401): ${fromMessage}`;
     } else if (status === 403) {
-        friendly = `${name}: access denied. Your API key may lack permissions or credits.`;
+        friendly = messageIsGeneric ? `${name}: access denied. Your API key may lack permissions or credits.`
+            : `${name} (HTTP 403): ${fromMessage}`;
     } else if (status === 429) {
-        friendly = `${name}: rate limit or quota reached. Please wait and try again.`;
+        friendly = messageIsGeneric ? `${name}: rate limit or quota reached. Please wait and try again.`
+            : `${name} (HTTP 429): ${fromMessage}`;
     } else if (status === 404) {
-        friendly = `${name}: model or endpoint not found. Check the base URL and model id.`;
+        friendly = messageIsGeneric ? `${name}: model or endpoint not found. Check the base URL and model id.`
+            : `${name} (HTTP 404): ${fromMessage}`;
     } else if (status && status >= 500) {
-        friendly = `${name}: server error (${status}). Try again later.`;
+        friendly = messageIsGeneric ? `${name}: server error (${status}). Try again later.`
+            : `${name} (HTTP ${status}): ${fromMessage}`;
     } else if (status) {
-        friendly = `${name}: request failed (${status}).`;
+        friendly = messageIsGeneric ? `${name}: request failed (${status}).`
+            : `${name} (HTTP ${status}): ${fromMessage}`;
     } else {
         const rawMessage = (err?.message || '').trim();
         const raw = rawMessage.toLowerCase();
@@ -1143,11 +1205,8 @@ function toFriendlyProviderError(error: unknown, providerName: string): unknown 
         } else if (rawMessage && rawMessage.toLowerCase() !== 'provider request failed.') {
             // Sanitize the raw SDK text before surfacing it: it can embed the
             // provider base URL and response-body excerpts (which may echo the
-            // user's prompt). Strip URLs and key-like tokens, then cap length.
-            const sanitized = rawMessage
-                .replace(/https?:\/\/\S+/g, '[url]')
-                .replace(/\b[A-Za-z0-9_-]{24,}\b/g, '***')
-                .slice(0, 300);
+            // user's prompt). Same rules as sanitizeProviderText.
+            const sanitized = sanitizeProviderText(rawMessage);
             friendly = `${name}: ${sanitized}`;
         } else {
             friendly = `${name}: request failed.`;

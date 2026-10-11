@@ -355,32 +355,29 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                             <div className="flex items-center gap-2 mt-3 flex-wrap">
                                 <span className="text-ui-xs font-bold uppercase tracking-widest text-zinc-500">Time</span>
                                 <div className="flex items-center gap-1">
-                                    <select
-                                        value={scheduleTime.h}
-                                        onChange={(e) => setScheduleTime(prev => ({ ...prev, h: parseInt(e.target.value, 10) }))}
-                                        className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-ui-sm font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                                    <SelectMenu
+                                        value={String(scheduleTime.h)}
+                                        onChange={(v) => setScheduleTime(prev => ({ ...prev, h: parseInt(v, 10) }))}
+                                        options={Array.from({ length: 24 }, (_, i) => ({ value: String(i), label: String(i).padStart(2, '0') }))}
                                         aria-label="Hour"
-                                    >
-                                        {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
-                                    </select>
+                                        triggerClassName="min-w-[3rem] justify-center rounded border border-white/10 bg-zinc-950 px-1.5 py-1 text-ui-sm font-mono hover:border-cyan-500/50 focus:border-cyan-500/50"
+                                    />
                                     <span className="text-zinc-600 text-ui-sm">:</span>
-                                    <select
-                                        value={scheduleTime.m}
-                                        onChange={(e) => setScheduleTime(prev => ({ ...prev, m: parseInt(e.target.value, 10) }))}
-                                        className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-ui-sm font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                                    <SelectMenu
+                                        value={String(scheduleTime.m)}
+                                        onChange={(v) => setScheduleTime(prev => ({ ...prev, m: parseInt(v, 10) }))}
+                                        options={Array.from({ length: 60 }, (_, i) => ({ value: String(i), label: String(i).padStart(2, '0') }))}
                                         aria-label="Minute"
-                                    >
-                                        {Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
-                                    </select>
+                                        triggerClassName="min-w-[3rem] justify-center rounded border border-white/10 bg-zinc-950 px-1.5 py-1 text-ui-sm font-mono hover:border-cyan-500/50 focus:border-cyan-500/50"
+                                    />
                                     <span className="text-zinc-600 text-ui-sm">:</span>
-                                    <select
-                                        value={scheduleTime.s}
-                                        onChange={(e) => setScheduleTime(prev => ({ ...prev, s: parseInt(e.target.value, 10) }))}
-                                        className="bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-ui-sm font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                                    <SelectMenu
+                                        value={String(scheduleTime.s)}
+                                        onChange={(v) => setScheduleTime(prev => ({ ...prev, s: parseInt(v, 10) }))}
+                                        options={Array.from({ length: 60 }, (_, i) => ({ value: String(i), label: String(i).padStart(2, '0') }))}
                                         aria-label="Second"
-                                    >
-                                        {Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
-                                    </select>
+                                        triggerClassName="min-w-[3rem] justify-center rounded border border-white/10 bg-zinc-950 px-1.5 py-1 text-ui-sm font-mono hover:border-cyan-500/50 focus:border-cyan-500/50"
+                                    />
                                 </div>
                             </div>
                         )}

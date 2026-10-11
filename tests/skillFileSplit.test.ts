@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { createRequire } from 'node:module';
+
+const loadYaml = createRequire(import.meta.url)('js-yaml').load as (source: string) => unknown;
 import {
     serializeSkill,
     parseSkillMarkdown,
@@ -109,9 +112,22 @@ describe('skill file splits into a portable face and a ledger face', () => {
         expect(nameLine.slice('name:'.length).trim().length).toBeLessThanOrEqual(64);
     });
 
+    it('writes valid YAML when strings contain punctuation and YAML-reserved words', () => {
+        const meta = richMeta();
+        meta.description = 'Avoid: IF price says "go" THEN wait: first.';
+        const content = serializeSkill(meta, 'Avoid: BTC "Short"');
+        const frontmatter = content.match(/^---\n([\s\S]*?)\n---/m)?.[1];
+        expect(frontmatter).toBeTruthy();
+        const parsed = loadYaml(frontmatter!) as Record<string, unknown>;
+        expect(parsed.name).toBe('Avoid: BTC "Short"');
+        expect(parsed.description).toBe(meta.description);
+        expect(parsed.status).toBe('confirmed');
+        expect(parsed.wins).toBe(4);
+    });
+
     it('keeps outcome/lifecycle state OUT of the portable face', () => {
         const content = serializeSkill(richMeta(), 'Avoid BTC Short');
-        const markerIdx = content.indexOf('<!-- august:skill-ledger -->');
+        const markerIdx = content.indexOf('# august:skill-ledger');
         expect(markerIdx).toBeGreaterThan(-1);
         const portable = content.slice(0, markerIdx);
         const ledger = content.slice(markerIdx);
@@ -151,6 +167,27 @@ describe('skill file splits into a portable face and a ledger face', () => {
         expect(skillBody(specOnly)).toContain('enter on the reclaim close');
     });
 
+    it('preserves a real leading H1 section in imported skill content', () => {
+        const imported = [
+            '---',
+            'name: "reclaim-continuation"',
+            'description: "How to trade a reclaim"',
+            '---',
+            '',
+            '# Entry Criteria',
+            '',
+            'Wait for the close above resistance.',
+        ].join('\n');
+        expect(skillBody(imported)).toContain('# Entry Criteria');
+        expect(skillBody(imported)).toContain('Wait for the close above resistance.');
+    });
+
+    it('strips the generated heading only when it matches the portable name', () => {
+        const content = serializeSkill(richMeta(), 'Avoid BTC Short');
+        expect(skillBody(content)).not.toContain('# Avoid BTC Short');
+        expect(skillBody(content)).toContain('**When:**');
+    });
+
     it('a hand-edited ledger edit is preserved by a re-serialize', () => {
         // The MemoryFilesManager toggles parse → mutate → serialize. Any field
         // the round-trip drops silently un-disables or un-suspends a skill.
@@ -179,7 +216,7 @@ describe('skill file splits into a portable face and a ledger face', () => {
 describe('ledger keys never leak into the portable face', () => {
     it('the portable face carries no outcome counters above the ledger marker', () => {
         const content = serializeSkill(richMeta(), 'Avoid BTC Short');
-        const markerIdx = content.indexOf('<!-- august:skill-ledger -->');
+        const markerIdx = content.indexOf('# august:skill-ledger');
         expect(markerIdx).toBeGreaterThan(-1);
         const portable = content.slice(0, markerIdx);
         // Behavior keys stay in the portable face — they describe the procedure.

@@ -32,6 +32,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { CloseIcon, ActivityIcon, LoadingIcon, CameraIcon, CheckIcon, ChevronDownIcon, BrainIcon, TrendUpIcon, TrendDownIcon, AlertTriangleIcon } from '../shared/Icons';
 import { Spinner } from '../ui/Spinner';
 import StatusPill from '../ui/StatusPill';
+import { SelectMenu } from '../shared/SelectMenu';
 import { ChartCandle } from '../../types/chart';
 import { analyzeWithAI, convertToLineData, MarketInsights, TrendlineResult } from '../../services/analysis/AITrendlineService';
 import { buildTimeframeSnapshot, formatLiveMarketPrompt, type LiveMarketSnapshot } from '../../services/analysis/marketSnapshot';
@@ -276,7 +277,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
     const feedPolling = feed.status === 'polling';
 
     return (
-        <div role="dialog" aria-modal={isEmbedded ? undefined : 'true'} aria-label="Live Market" className={` flex flex-col ${isEmbedded ? 'h-full' : 'fixed inset-0 bg-zinc-950 z-50 animate-fade-in pb-[env(safe-area-inset-bottom)]'}`}>
+        <div role="dialog" aria-modal={isEmbedded ? undefined : 'true'} aria-label="Live Market" className={` flex flex-col ${isEmbedded ? 'h-full' : 'fixed inset-0 bg-zinc-950 z-modal animate-fade-in pb-[env(safe-area-inset-bottom)]'}`}>
             {/* Header - 2 rows on mobile for spacious feel */}
             <div className="bg-zinc-900 border-b border-white/10 flex-shrink-0 shadow-lg shadow-black/20">
                 {/* Top Row - Title, Price & Close */}
@@ -333,36 +334,28 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                     {/* Selectors Group */}
                     <div className="flex items-center gap-2 flex-1 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
                         {/* Symbol Selector */}
-                        <div className="relative shrink-0">
-                            <select
-                                value={symbol}
-                                onChange={(e) => setSymbol(e.target.value)}
-                                aria-label="Market symbol"
-                                className="appearance-none bg-zinc-800 text-white text-ui-base font-bold h-12 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[112px]"
-                            >
-                                {ASSETS.map(a => <option key={a} value={a}>{a.replace('USDT', '')}</option>)}
-                            </select>
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
-                                <ChevronDownIcon className="w-4 h-4" aria-hidden="true" />
-                            </div>
-                        </div>
+                        <SelectMenu
+                            value={symbol}
+                            onChange={setSymbol}
+                            options={ASSETS.map(a => ({ value: a, label: a.replace('USDT', '') }))}
+                            aria-label="Market symbol"
+                            className="shrink-0"
+                            drop="up"
+                            triggerClassName="h-12 min-w-[112px] rounded-xl border border-white/10 bg-zinc-800 px-4 text-ui-base font-bold hover:bg-zinc-700 focus:border-cyan-500"
+                        />
 
                         {/* Interval Selector — bound to the SAME state the chart's
                             own timeframe bar drives, so neither control can go
                             stale relative to the other. */}
-                        <div className="relative shrink-0">
-                            <select
-                                value={chartInterval}
-                                onChange={(e) => setChartInterval(e.target.value as ChartInterval)}
-                                aria-label="Chart interval"
-                                className="appearance-none bg-zinc-800 text-white text-ui-base font-bold h-12 pl-4 pr-10 rounded-xl border border-white/10 focus:outline-none focus:border-cyan-500 cursor-pointer hover:bg-zinc-700 transition-colors min-w-[78px]"
-                            >
-                                {INTERVALS.map(i => <option key={i} value={i}>{i}</option>)}
-                            </select>
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
-                                <ChevronDownIcon className="w-4 h-4" aria-hidden="true" />
-                            </div>
-                        </div>
+                        <SelectMenu
+                            value={chartInterval}
+                            onChange={(v) => setChartInterval(v as ChartInterval)}
+                            options={INTERVALS.map(i => ({ value: i, label: i }))}
+                            aria-label="Chart interval"
+                            className="shrink-0"
+                            drop="up"
+                            triggerClassName="h-12 min-w-[78px] rounded-xl border border-white/10 bg-zinc-800 px-4 text-ui-base font-bold hover:bg-zinc-700 focus:border-cyan-500"
+                        />
                     </div>
 
                     {/* Action Buttons */}
@@ -586,7 +579,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
 
             {/* Notification Toast */}
             {notification && (
-                <div className="absolute top-28 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 bg-emerald-500/90 text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-fade-in">
+                <div className="absolute top-28 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-confirm bg-emerald-500/90 text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-fade-in">
                     <CheckIcon className="w-5 h-5 shrink-0" aria-hidden="true" />
                     <span className="font-medium text-ui-base">{notification}</span>
                 </div>

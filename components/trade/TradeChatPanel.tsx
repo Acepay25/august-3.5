@@ -838,7 +838,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     yields: at 370px a squeezed "Chart AI" wrapped into two
                     lines while the controls kept their width. The session
                     title is the flexible element — it truncates. */}
-                <span className="shrink-0 whitespace-nowrap text-ui-caption font-semibold text-zinc-100">Chart AI</span>
+                <h2 className="shrink-0 whitespace-nowrap text-ui-caption font-semibold text-zinc-100">Chart AI</h2>
                 <span className="min-w-0 flex-1 truncate text-ui-dense text-zinc-500" title={activeSession.title}>{activeSession.title}</span>
                 {(() => {
                     // The prototype's "Analyzed 2m ago" meta, told honestly:

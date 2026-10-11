@@ -16,7 +16,6 @@ import { RECENT_TRADES_WINDOW, buildTradeLogBrief } from '../../utils/recentTrad
 import { phtClock, phtDayKey } from '../../utils/timezone';
 import { getActiveUsername } from '../../utils/activeUser';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
-import { useViewDensity } from '../../hooks/useViewDensity';
 
 interface JournalProps {
     isVisible: boolean;
@@ -128,10 +127,6 @@ const JournalInner: React.FC<JournalProps> = ({
 }) => {
     const [activeTab, setActiveTab] = useState<TabId>(resolveTab(initialTab));
     const [documentOpen, setDocumentOpen] = useState(false);
-    // One density setting for the whole app (utils/harnessSettings), read
-    // here so the Stats tab can rest its dashboards the same way Learn
-    // rests its telemetry.
-    const { density, setDensity } = useViewDensity();
 
     useEffect(() => {
         if (activeTab !== 'log') setDocumentOpen(false);
@@ -213,45 +208,10 @@ const JournalInner: React.FC<JournalProps> = ({
                     <MonthlyReportCard username={activeUsername} />
                     <JournalAnalyticsSummary trades={trades} />
                     {/* The three dashboards answer the same question at three
-                        resolutions — recent form, the curve, the win-rate table.
-                        Focus keeps the summary and the two cards you can
-                        actually generate and export from; Detail opens the rest.
-                        Same one setting as Learn, not a second toggle. */}
-                    {density === 'detail' ? (
-                        <>
-                            <LastTwentyCard trades={trades} />
-                            <EquityCurveDashboard trades={trades} />
-                            <WinRateDashboard trades={trades} />
-                            {/* The way back. This control used to live in the
-                                bottom bar, which said the same thing six ways
-                                at once; the surface that shows the panels is
-                                the surface that should be able to rest them. */}
-                            <div className="flex justify-end">
-                                <button
-                                    type="button"
-                                    onClick={() => setDensity('focus')}
-                                    data-testid="journal-rest-telemetry"
-                                    className="inline-flex min-h-6 items-center rounded px-2 text-ui-dense text-zinc-500 transition-colors hover:text-zinc-200"
-                                >
-                                    Rest these
-                                </button>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="flex flex-wrap items-center gap-2 rounded-control border border-white/5 bg-zinc-900/60 px-3 py-2.5" data-testid="journal-analytics-resting">
-                            <p className="text-ui-dense text-zinc-500">
-                                Recent form, the equity curve and the win-rate table are resting.
-                            </p>
-                            <button
-                                type="button"
-                                onClick={() => setDensity('detail')}
-                                data-testid="journal-show-detail"
-                                className="ml-auto inline-flex min-h-6 items-center rounded-control border border-white/10 px-2.5 py-1 text-ui-dense font-semibold text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
-                            >
-                                Show Detail
-                            </button>
-                        </div>
-                    )}
+                        resolutions — recent form, the curve, the win-rate table. */}
+                    <LastTwentyCard trades={trades} />
+                    <EquityCurveDashboard trades={trades} />
+                    <WinRateDashboard trades={trades} />
                 </div>
             </div>
         ) : activeTab === 'saved' ? (
@@ -283,7 +243,7 @@ const JournalInner: React.FC<JournalProps> = ({
     // App's ONLY <Journal> render is the embedded surface, so that chrome
     // could never mount. This branch carries the export tray and tab strip.
     return (
-        <div className="flex flex-col h-full bg-zinc-950 overflow-hidden animate-fade-in">
+        <div className="flex flex-col h-full bg-surface-page overflow-hidden animate-fade-in" data-testid="journal-view">
             <div className="shrink-0 px-8 pt-10 pb-2 flex items-start justify-between gap-4">
                 <div className="min-w-0">
                     <h2 className="font-serif text-3xl tracking-tight text-zinc-100">Journal</h2>

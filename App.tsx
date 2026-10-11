@@ -129,7 +129,6 @@ import type { AppSurface } from './hooks/useSurface';
 import type { TradeMode } from './components/trade/TradeView';
 import type { NavBadge } from './components/shell/SurfaceMenuList';
 import NavRail, { NAV_RAIL_AUTO_COLLAPSE_PX } from './components/shell/NavRail';
-import { getHarnessSettings, saveHarnessSettings } from './utils/harnessSettings';
 // The Journal pulls recharts + react-virtuoso into its chunk — statically
 // importing it put both on the startup path for a surface most users open
 // after days of logging. Lazy-once like the other surfaces; the deep-link
@@ -1450,14 +1449,6 @@ const App: React.FC = () => {
                 e.preventDefault();
                 handleSurfaceSelect(SURFACE_KEYS[e.key]);
             }
-            // Alt+D flips the whole-view density. One key for one contract: the
-            // shortcut, the status bar and Settings all write the same stored
-            // value, so no reader can show a panel the setting says is resting.
-            if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'd') {
-                e.preventDefault();
-                const next = getHarnessSettings().viewDensity === 'detail' ? 'focus' : 'detail';
-                saveHarnessSettings({ viewDensity: next });
-            }
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
@@ -2467,7 +2458,7 @@ const App: React.FC = () => {
                 const config = automations.configs.find(c => c.id === automations.viewAutomationId);
                 if (!config) return null;
                 return (
-                    <div className="fixed inset-0 z-[75] bg-zinc-950 animate-fade-in">
+                    <div className="fixed inset-0 z-automation bg-zinc-950 animate-fade-in">
                         <React.Suspense fallback={<SurfaceSkeleton />}>
                         <AutomationView
                             config={config}
@@ -2727,6 +2718,8 @@ const App: React.FC = () => {
                                     username={activeUsername || 'default'}
                                     trades={loggedTrades}
                                     memoryConfig={memoryConfig}
+                                    isGlobalMemoryEnabled={isGlobalMemoryEnabled}
+                                    setIsGlobalMemoryEnabled={setIsGlobalMemoryEnabled}
                                     initialTab={learnTab}
                                     onInitialTabConsumed={learnTabConsumed}
                                     renderCoach={renderCoachInbox}

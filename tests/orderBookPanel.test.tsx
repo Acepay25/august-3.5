@@ -115,9 +115,16 @@ describe('OrderBookPanel cumulative ladder', () => {
         expect(within(screen.getByTestId('orderbook-spread')).getByText('—')).toBeTruthy();
     });
 
-    it('shows the empty state before the first book arrives', () => {
-        render(<OrderBookPanel symbol="BTCUSDT" live liveDepth={{ asks: [], bids: [] }} />);
+    it('shows the skeleton before the first book arrives, and an honest empty state for a live-but-empty book', () => {
+        // Cold (REST poll not yet resolved): the skeleton ladder.
+        const cold = render(<OrderBookPanel symbol="BTCUSDT" />);
         expect(screen.getByTestId('orderbook-empty')).toBeTruthy();
+        expect(screen.queryAllByTestId('orderbook-row')).toHaveLength(0);
+        cold.unmount();
+        // A live stream reporting NO depth says so — a skeleton there would
+        // never clear.
+        render(<OrderBookPanel symbol="BTCUSDT" live liveDepth={{ asks: [], bids: [] }} />);
+        expect(screen.getByTestId('orderbook-empty-book')).toBeTruthy();
         expect(screen.queryAllByTestId('orderbook-row')).toHaveLength(0);
     });
 

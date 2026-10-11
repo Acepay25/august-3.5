@@ -1169,6 +1169,24 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                         }}
                     />
                 )}
+                {status === 'loading' && (
+                    /* Cold-start frame: the axes and grid exist before the
+                        candles do, so the first paint reads "loading" instead
+                        of "broken". Decoration only — pointer-events-none,
+                        aria-hidden, gone the moment data lands. */
+                    <div
+                        data-testid="chart-skeleton"
+                        aria-hidden
+                        className="pointer-events-none absolute inset-y-0 right-0 animate-pulse"
+                        style={{ left: CHART_RAIL_WIDTH }}
+                    >
+                        <div className="absolute inset-y-0 right-0 w-14 border-l border-white/[0.06]" />
+                        <div className="absolute inset-x-0 bottom-0 h-6 border-t border-white/[0.06]" />
+                        <div className="absolute inset-x-0 top-1/4 border-t border-white/[0.04]" />
+                        <div className="absolute inset-x-0 top-2/4 border-t border-white/[0.04]" />
+                        <div className="absolute inset-x-0 top-3/4 border-t border-white/[0.04]" />
+                    </div>
+                )}
                 {status === 'unavailable' && (
                     <div className="absolute inset-0 flex items-center justify-center">
                         <p className="text-ui-dense text-zinc-600">Candles unavailable — Binance fetch failed; retrying in 4s.</p>

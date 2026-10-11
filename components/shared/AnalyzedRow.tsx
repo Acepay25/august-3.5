@@ -69,7 +69,20 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
     const seconds = running
         ? liveSeconds
         : settledSeconds ?? (typeof persistedMs === 'number' ? Math.max(0, Math.round(persistedMs / 1000)) : null);
-    const label = running ? 'Analyzing' : 'Analyzed';
+    // The reference's two states: running = the "••• verb-ing · 25s" status
+    // line; settled with tools = "Ran 4 commands, read a file". Duration only
+    // stands alone when there is no action count to lead with.
+    const ranTools = toolsCount !== undefined && toolsCount > 0;
+    const label = running
+        ? 'Analyzing'
+        : ranTools
+            ? `Ran ${toolsCount} ${toolsCount === 1 ? 'command' : 'commands'}`
+            : 'Analyzed';
+    const detail = running
+        ? (seconds !== null ? ` for ${seconds}s` : '')
+        : ranTools
+            ? (title ? `, ${title.charAt(0).toLowerCase()}${title.slice(1)}` : '') + (seconds !== null ? ` · ${seconds}s` : '')
+            : (seconds !== null ? ` for ${seconds}s` : '') + (title ? ` · ${title.charAt(0).toLowerCase()}${title.slice(1)}` : '');
 
     return (
         <details
@@ -79,16 +92,17 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
             open={open}
             onToggle={e => setOpen((e.target as HTMLDetailsElement).open)}
         >
-            <summary className="reasoning-row-summary" aria-label={`${label} — ${open ? 'collapse' : 'expand'}`}>
-                <Brain className="reasoning-row-glyph" aria-hidden="true" />
+            <summary className="reasoning-row-summary" aria-label={`${label}${detail} — ${open ? 'collapse' : 'expand'}`}>
+                {running && (
+                    <span className="flex shrink-0 items-center gap-0.5" aria-hidden="true">
+                        {[0, 1, 2].map(i => (
+                            <span key={i} className="h-1 w-1 animate-pulse rounded-full bg-zinc-500 motion-reduce:animate-none" style={{ animationDelay: `${i * 150}ms` }} />
+                        ))}
+                    </span>
+                )}
+                {!running && <Brain className="reasoning-row-glyph" aria-hidden="true" />}
                 <span className="reasoning-row-label">
-                    {label}{seconds !== null ? ` for ${seconds}s` : ''}
-                    {title && <span className="font-normal opacity-75">{' · '}{title}</span>}
-                    {toolsCount !== undefined && toolsCount > 0 && (
-                        <span className="font-normal opacity-75">
-                            {' · '}{toolsCount} {toolsCount === 1 ? 'tool' : 'tools'}
-                        </span>
-                    )}
+                    {label}{detail}
                 </span>
             </summary>
             <div className="reasoning-row-body analyzed-row-body">

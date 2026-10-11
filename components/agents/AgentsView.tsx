@@ -1151,7 +1151,6 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                         className="rounded-control border border-zinc-800/80 p-1 text-zinc-400 transition-colors hover:bg-white/[0.05] hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-zinc-400">
                                         <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
                                     </button>
-                                    {modelPicker}
                                     <button type="button" onClick={() => void send()} disabled={!text.trim() || busy}
                                         aria-label="Send" data-testid="composer-send"
                                         className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-zinc-100 text-zinc-900 transition-opacity hover:opacity-90 disabled:opacity-30">
@@ -1159,8 +1158,16 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     </button>
                                 </div>
                             </div>
-                            <div className="mx-auto mt-2 flex max-w-3xl items-center justify-between px-2 text-ui-xs text-zinc-600">
-                                <span>{activeBot ? `@${activeBot.name} answers here` : 'No agent selected — the full analysis runs'}</span>
+                            {/* Reference footer, two rows: the context note
+                                and the model chip share the first (chip owns
+                                the bottom-right), the disclaimer gets its own
+                                line below — August's disclaimer is longer than
+                                Claude's and three items on one row collide. */}
+                            <div className="mx-auto mt-2 flex w-full max-w-[55rem] items-center justify-between gap-3 px-2 text-ui-xs text-zinc-600">
+                                <span className="min-w-0 whitespace-nowrap">{activeBot ? `@${activeBot.name} answers here` : 'No agent selected — the full analysis runs'}</span>
+                                {modelPicker}
+                            </div>
+                            <div className="mx-auto mt-1 w-full max-w-[55rem] px-2 text-ui-xs text-zinc-600">
                                 <span className="hidden sm:inline">{DISCLAIMER_SHORT}</span>
                             </div>
                         </div>

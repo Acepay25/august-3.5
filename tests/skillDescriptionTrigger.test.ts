@@ -92,6 +92,31 @@ describe('description as a retrieval trigger (plan #1)', () => {
         expect(out).not.toContain('btc-reclaim-repeat.md');
     });
 
+    it('a description hit cannot override explicit scope conflicts', async () => {
+        const scoped: SkillMeta = {
+            status: 'confirmed',
+            kind: 'avoid',
+            description: 'Avoid: IF an ETH long follows a liquidity sweep in a trending regime THEN enter after displacement.',
+            coin: 'BTCUSDT',
+            direction: 'Short',
+            family: 'bearish engulfing',
+            regime: 'ranging',
+            wins: 3,
+            losses: 1,
+            consecutiveLosses: 0,
+            tradeIds: ['a', 'b', 'c', 'd'],
+            evidenceCount: 4,
+            approvedBy: 'grandfathered',
+            body: '**When:** bearish engulfing on BTC in a ranging regime.\n**What I do:** avoid the short.',
+        };
+        await seed(CURRENT_USER, scoped, scoped.body);
+        const out = getMemoryFilesContext(
+            { coin: 'ETHUSDT', direction: 'Long', family: 'liquidity sweep', regime: 'trending' },
+            undefined, 'analyst', 'verdict',
+        );
+        expect(out).not.toContain('btc-reclaim-repeat.md');
+    });
+
     it('a description hit OUTRANKS a field-only hit when both are otherwise eligible', async () => {
         // Field-only skill: shares coin+direction but its description is about
         // an unrelated situation.

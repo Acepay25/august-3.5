@@ -910,9 +910,14 @@ async function main() {
                     width: el ? Math.round(el.getBoundingClientRect().width) : -1,
                 };
             });
+            // The rail's expanded width is a source constant — read it instead
+            // of pinning a number that drifts when the shell is tuned.
+            const navRailSrc = require('fs').readFileSync(
+                path.join(ROOT, 'components', 'shell', 'NavRail.tsx'), 'utf8');
+            const navRailExpandedPx = Number((navRailSrc.match(/NAV_RAIL_EXPANDED_PX = (\d+)/) || [])[1]) || 240;
             check('the header toggle revives the full panel',
-                revived && revivedState.expanded === 'true' && revivedState.width === 280,
-                revivedState ? `${revivedState.width}px, expanded=${revivedState.expanded}` : 'no rail');
+                revived && revivedState.expanded === 'true' && revivedState.width === navRailExpandedPx,
+                revivedState ? `${revivedState.width}px, expanded=${revivedState.expanded} (want ${navRailExpandedPx})` : 'no rail');
             // And Ctrl+B still works in the other direction.
             await page.keyboard.press('Control+b');
             await sleep(500);
@@ -1011,32 +1016,22 @@ async function main() {
             await dismissOverlays();
         }
 
-        // The density setting has no bar to live in any more, so the gate checks
-        // it where it is used — and Detail is the shipped view, so it opens by
-        // proving the data is THERE on a first run, then that one press rests it
-        // and one press brings it back. A control that repaints only its own
-        // panel would pass every existing check and still be a lie about the view.
+        // The Health tab's telemetry used to rest behind a whole-view density
+        // preset. That setting is gone (owner's call, 2026-10-10): the loop
+        // telemetry, the market stats and the dashboards render on a first run
+        // with nothing to toggle. The gate now proves the data is simply THERE
+        // — a surface that only shows its panels after a press is a surface a
+        // first run never meets.
         {
             await openMenu(); await sleep(300);
             await navTo('Learn'); await sleep(900);
             const coachTab = page.locator('[data-testid="learn-tab-health"]');
             if (await coachTab.count() === 1) await coachTab.click();
             await sleep(1200);
-            const shownFirst = await page.locator('[data-testid="learn-system"]').count();
-            const restingFirst = await page.locator('[data-testid="learn-resting"]').count();
-            check('Detail shows the loop telemetry by default', shownFirst === 1 && restingFirst === 0,
-                `blocks=${shownFirst} resting=${restingFirst}`);
-            await page.click('[data-testid="learn-rest-telemetry"]');
-            const resting = await page.waitForSelector('[data-testid="learn-resting"]', { timeout: 12000 })
-                .then(() => 1).catch(() => 0);
-            check('one press rests it, and says what is resting', resting === 1, `${resting} resting notice`);
-            const dropped = await page.locator('[data-testid="learn-system"]').count();
-            check('the resting surface really dropped the blocks', dropped === 0, `${dropped} block(s) still mounted`);
-            // Back to the shipped default for whatever runs next.
-            await page.click('[data-testid="learn-show-detail"]');
-            const back = await page.waitForSelector('[data-testid="learn-system"]', { timeout: 12000 })
-                .then(() => 1).catch(() => 0);
-            check('and the surface opens it again — one setting, not two', back === 1, `${back}`);
+            const shown = await page.locator('[data-testid="learn-system"]').count();
+            const resting = await page.locator('[data-testid="learn-resting"]').count();
+            check('the loop telemetry shows with no preset behind it', shown === 1 && resting === 0,
+                `blocks=${shown} resting=${resting}`);
         }
 
         /** Poll a predicate instead of sleeping a fixed time. Every fixed sleep

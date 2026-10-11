@@ -101,7 +101,7 @@ export const SymbolPicker: React.FC<SymbolPickerProps> = ({ symbols, value, onCh
                     <div className="fixed inset-0 z-40" aria-hidden="true" onClick={() => setOpen(false)} />
                     <div
                         data-testid="symbol-picker"
-                        className="fixed z-50 w-80 overflow-hidden rounded-xl border border-white/10 bg-zinc-900 shadow-2xl"
+                        className="fixed z-drawer w-80 overflow-hidden rounded-xl border border-white/10 bg-zinc-900 shadow-2xl"
                         style={{ left: anchor.left, top: anchor.top }}
                     >
                         <div className="flex items-center gap-2 border-b border-white/[0.06] px-3 py-2">

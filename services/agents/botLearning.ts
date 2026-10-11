@@ -48,6 +48,7 @@ import { getBots } from './agentRoster';
 import { mineCoinFromPrompt, mineDirectionFromPrompt, minePatternFromPrompt } from '../../utils/patternMining';
 import { hasLessonLabel, parseLessonToken, stripLessonLabel } from '../../utils/lessonToken';
 import type { BotMemoryScope } from '../../types/bot';
+import { getHarnessSettings } from '../../utils/harnessSettings';
 
 /** Bots get the smallest honest slice — their persona/notes already ride the
  *  system prompt; the shared slice is evidence, not a second personality. */
@@ -297,7 +298,13 @@ export const recordBotTurnOutcome = async (
             else await createMemoryFile(folder.id, 'memory.md', next, opts.username, true);
         }
 
-        // 2. Closed bot-authored trades fold into the shared evidence path.
+        // 2. Bot turns may draft playbooks automatically. Honor the same
+        // trader-controlled opt-in as session review and chart scanning.
+        // Leave trades unmarked while disabled so enabling the setting later
+        // can still fold them on a subsequent bot turn.
+        if (!getHarnessSettings().autoDraftingEnabled) return;
+
+        // 3. Closed bot-authored trades fold into the shared evidence path.
         //    Snapshot the skill set first: provenance belongs only on files
         //    THIS fold created, never on a chart-AI skill that happened to
         //    count the same trade.
@@ -305,7 +312,9 @@ export const recordBotTurnOutcome = async (
         const seen = foldedTrades.get(bot.id) ?? new Set<string>();
         const botTrades = opts.trades.filter(t => {
             const keys = Object.keys(t.modelsUsed ?? {});
-            return keys.length === 1 && keys[0] === bot.providerId
+            return Boolean(bot.modelId)
+                && keys.length === 1 && keys[0] === bot.providerId
+                && t.modelsUsed?.[bot.providerId] === bot.modelId
                 && (t.outcome === 'WIN' || t.outcome === 'LOSS')
                 && !seen.has(t.id);
         });
@@ -366,4 +375,3 @@ export const loadBotLearningStats = (): BotLearningStat[] => {
         };
     });
 };
-

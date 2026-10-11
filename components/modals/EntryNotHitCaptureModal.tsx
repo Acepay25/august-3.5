@@ -30,7 +30,7 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
     const coinName = message.analysis?.coinName || 'this trade';
 
     return (
-        <div ref={dialogRef} className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Entry not hit capture">
+        <div ref={dialogRef} className="fixed inset-0 bg-black/70 z-modal flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Entry not hit capture">
             <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg border border-cyan-500/30 animate-fade-in max-h-[90vh] overflow-y-auto">
                 {/* Header */}
                 <div className="p-5 border-b border-white/5 bg-cyan-950/30">

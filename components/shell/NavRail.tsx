@@ -9,7 +9,7 @@
  * state shows NOTHING on the left, not a column of icons. So collapse now
  * takes the column to 0px, and the expand affordance moves to the header
  * (the DSH pattern: the hidden sidebar's expand button carries the update
- * dot). Expanding brings back the full 280px panel. Ctrl/Cmd+B toggles either
+ * dot). Expanding brings back the full 240px panel. Ctrl/Cmd+B toggles either
  * way; below 1024px the rail is hidden whatever the user last chose.
  *
  * Stage 3 made the rail nav-only: conversation history lives in the Chat
@@ -33,7 +33,9 @@ import type { AppSurface } from '../../hooks/useSurface';
 /** The collapsed column is 0px: the rail leaves the layout entirely and its
  *  expand affordance lives in the header (nav-rail-toggle-header). */
 export const NAV_RAIL_COLLAPSED_PX = 0;
-export const NAV_RAIL_EXPANDED_PX = 280;
+/** 240px (was 280): the redesign plan §2.1 — the reference rail is dense with
+ *  value; 280px of mostly-empty column cost the chart 19% of a 1440 viewport. */
+export const NAV_RAIL_EXPANDED_PX = 240;
 /** Below this the rail is hidden whatever the user last chose — there is no
  *  room for a 280px panel beside a trade chart, and Electron's floor is
  *  minWidth 800. The choice is applied at render time, not written back, so

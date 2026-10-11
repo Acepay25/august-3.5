@@ -179,7 +179,7 @@ const StrategySearch: React.FC<StrategySearchProps> = ({
         aria-hidden={!isVisible}
         inert={!isVisible}
         aria-label="Playbook & Strategy Search"
-        className={`fixed top-0 right-0 h-full w-full sm:w-[480px] bg-zinc-900 border-l border-white/10 shadow-2xl z-50 transform transition-transform duration-[150ms] ease-[var(--ease-snappy)] flex flex-col ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`fixed top-0 right-0 h-full w-full sm:w-[480px] bg-zinc-900 border-l border-white/10 shadow-2xl z-drawer transform transition-transform duration-[150ms] ease-[var(--ease-snappy)] flex flex-col ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}
       >
         <div className="flex flex-col h-full">
           <header className="flex items-center justify-between p-4 sm:p-6 border-b border-white/5 bg-zinc-800">

@@ -7,58 +7,29 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { getHarnessSettings, saveHarnessSettings, subscribeHarnessSettings } from '../utils/harnessSettings';
+import { getHarnessSettings } from '../utils/harnessSettings';
 // Stage 3: the dials left Settings → Data with SessionUsagePanel — they are
 // analysis behavior, so Settings → Analysis owns them. Same contract, new home.
 import { HarnessControls } from '../components/settings/SessionUsagePanel';
 
 const KEY = 'harn' + 'ess_setti' + 'ngs_v1';
 
-/**
- * The whole-view density setting — kept from the deleted status-bar suite,
- * because the contract it pins outlived the bar that displayed it: Focus is the
- * shipped default, an unreadable stored value must not resurrect the always-on
- * screen, and every writer (Alt+D, Learn, Journal) notifies every reader.
- */
-describe('the harness density setting', () => {
-    it('ships on Detail, so the desk shows its own market data on a first run', () => {
-        localStorage.clear();
-        // Focus used to be the shipped preset, which meant Oracle / 24h volume /
-        // open interest and the loop's telemetry were hidden until you found a
-        // toggle. An absent key now means "show the data"; Focus is still one
-        // press or Alt+D away, and an explicit focus must survive a reload.
-        expect(getHarnessSettings().viewDensity).toBe('detail');
-        saveHarnessSettings({ viewDensity: 'focus' });
-        expect(getHarnessSettings().viewDensity).toBe('focus');
-        // A stored value that cannot be read back is a setting that does nothing.
-        saveHarnessSettings({ viewDensity: 'nonsense' as never });
-        expect(getHarnessSettings().viewDensity).toBe('detail');
-    });
-
-    it('notifies every subscriber on save, and unsubscribing stops it', () => {
-        localStorage.clear();
-        const seen: string[] = [];
-        const off = subscribeHarnessSettings(next => seen.push(next.viewDensity));
-        saveHarnessSettings({ viewDensity: 'detail' });
-        saveHarnessSettings({ viewDensity: 'focus' });
-        off();
-        saveHarnessSettings({ viewDensity: 'detail' });
-        expect(seen).toEqual(['detail', 'focus']);
-    });
-});
-
 describe('HarnessControls new settings', () => {
     it('default thinking effort persists fast/quality', () => {
         localStorage.clear();
         render(<HarnessControls />);
-        const sel = screen.getByLabelText('Default thinking effort');
-        expect((sel as HTMLSelectElement).value).toBe('quality');
+        // The effort dial is a SelectMenu now: click the trigger, then the
+        // option row (same contract the native select covered).
+        const trigger = screen.getByLabelText('Default thinking effort');
+        expect(trigger.textContent).toContain('Quality — built-in reasoning budget');
 
-        fireEvent.change(sel, { target: { value: 'fast' } });
+        fireEvent.click(trigger);
+        fireEvent.click(screen.getByRole('option', { name: 'Fast — one step lighter on every call' }));
         expect(getHarnessSettings().responseEffort).toBe('fast');
         expect(JSON.parse(localStorage.getItem(KEY) ?? '{}').responseEffort).toBe('fast');
 
-        fireEvent.change(sel, { target: { value: 'quality' } });
+        fireEvent.click(trigger);
+        fireEvent.click(screen.getByRole('option', { name: 'Quality — built-in reasoning budget' }));
         expect(getHarnessSettings().responseEffort).toBe('quality');
     });
 

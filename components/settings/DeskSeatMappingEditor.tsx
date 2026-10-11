@@ -18,6 +18,7 @@ import {
     getOverridesUser,
 } from '../../services/desk/roleOverrides';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
+import { SelectMenu } from '../shared/SelectMenu';
 import { roleForName, type RolePreset } from '../../components/desk/pixelAvatars';
 
 const ROLES: RolePreset[] = [
@@ -179,16 +180,13 @@ export const DeskSeatMappingEditor: React.FC = () => {
                     placeholder="Seat name (e.g. Satoshi)"
                     className="min-w-0 flex-1 rounded-md border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-ui-sm text-zinc-100 placeholder-zinc-600 focus:border-amber-400/40 focus:outline-none"
                 />
-                <select
+                <SelectMenu
                     value={draftRole}
-                    onChange={e => setDraftRole(e.target.value as RolePreset)}
+                    onChange={v => setDraftRole(v as RolePreset)}
+                    options={ROLES.map(r => ({ value: r, label: ROLE_LABEL[r] }))}
                     aria-label="Role"
-                    className="rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-ui-sm text-zinc-100 focus:outline-none"
-                >
-                    {ROLES.map(r => (
-                        <option key={r} value={r}>{ROLE_LABEL[r]}</option>
-                    ))}
-                </select>
+                    triggerClassName="rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-ui-sm hover:bg-zinc-800"
+                />
                 <button
                     type="button"
                     onClick={handleAdd}

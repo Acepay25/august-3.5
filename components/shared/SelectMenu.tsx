@@ -103,22 +103,47 @@ const SelectMenuInner: React.FC<SelectMenuProps> = ({
         close();
     };
 
-    // Outside click + Escape.
+    // While open this flyout owns Escape GLOBALLY: the marker makes
+    // useEscapeClose stand down (its document-capture listener otherwise
+    // closed the whole host modal under a dropdown dismiss). Cleanup clears
+    // it so the next Escape reaches the host.
     useEffect(() => {
         if (!open) return;
-        const onDown = (e: MouseEvent): void => {
-            const t = e.target as Node;
-            if (triggerRef.current?.contains(t) || listRef.current?.contains(t)) return;
+        document.body.setAttribute('data-menu-open', '1');
+        return () => { document.body.removeAttribute('data-menu-open'); };
+    }, [open]);
+
+    // Outside click + Escape + focusout + scroll/resize — native selects
+    // close on all of these; a portaled list that stays open either blocks
+    // the screen (outside-click only) or detaches from its trigger (scroll).
+    useEffect(() => {
+        if (!open) return;
+        const owns = (t: Node | null): boolean =>
+            !!t && !!(triggerRef.current?.contains(t) || listRef.current?.contains(t));
+        const onDown = (e: MouseEvent): void => { if (!owns(e.target as Node)) close(); };
+        const onKey = (e: KeyboardEvent): void => {
+            if (e.key !== 'Escape') return;
+            e.stopPropagation();
             close();
         };
-        const onKey = (e: KeyboardEvent): void => {
-            if (e.key === 'Escape') close();
+        const onFocusOut = (e: FocusEvent): void => {
+            // Tab moves focus out of trigger+list: close, or the portaled
+            // list strands over whatever scrolled beneath it.
+            if (!owns(e.relatedTarget as Node)) close();
         };
+        const onScroll = (e: Event): void => { if (!owns(e.target as Node)) close(); };
+        const onResize = (): void => close();
         document.addEventListener('mousedown', onDown);
-        document.addEventListener('keydown', onKey);
+        document.addEventListener('keydown', onKey, true);
+        document.addEventListener('focusout', onFocusOut);
+        window.addEventListener('scroll', onScroll, true);
+        window.addEventListener('resize', onResize);
         return () => {
             document.removeEventListener('mousedown', onDown);
-            document.removeEventListener('keydown', onKey);
+            document.removeEventListener('keydown', onKey, true);
+            document.removeEventListener('focusout', onFocusOut);
+            window.removeEventListener('scroll', onScroll, true);
+            window.removeEventListener('resize', onResize);
         };
     }, [open, close]);
 
@@ -197,12 +222,15 @@ const SelectMenuInner: React.FC<SelectMenuProps> = ({
             </button>
 
             {open && pos && createPortal(
+                // z-flyout, not z-confirm: this list portals to <body>, so
+                // against an un-trapped z-modal overlay (Settings) the confirm
+                // rung paints it UNDER the modal. See index.css --z-flyout.
                 <div
                     ref={listRef}
                     role="listbox"
                     onMouseDownCapture={e => e.stopPropagation()}
                     onPointerDownCapture={e => e.stopPropagation()}
-                    className="fixed z-confirm min-w-[220px] max-w-[340px] overflow-y-auto overscroll-contain rounded-xl border border-white/10 bg-zinc-900 py-1 shadow-2xl animate-fade-in custom-scrollbar"
+                    className="fixed z-flyout min-w-[220px] max-w-[340px] overflow-y-auto overscroll-contain rounded-xl border border-white/10 bg-zinc-900 py-1 shadow-2xl animate-fade-in custom-scrollbar"
                     style={{ left: Math.min(anchor?.left ?? 0, window.innerWidth - 348), ...pos }}
                 >
                     {sections.map((section, si) => (

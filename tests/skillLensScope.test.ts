@@ -81,7 +81,7 @@ describe('SkillMeta.lensScope — round-trip', () => {
     it('serializeSkill writes lensScope only when it is not "all"', () => {
         const meta = parseSkillMarkdown(buildSkill({ lensScope: 'technical' }))!;
         const out = serializeSkill(meta, 'BTC Long Family A');
-        expect(out).toContain('lensScope: technical');
+        expect(out).toContain('lensScope: "technical"');
 
         const metaAll = parseSkillMarkdown(buildSkill({}))!;
         const outAll = serializeSkill(metaAll, 'BTC Long Family A');

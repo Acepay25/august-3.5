@@ -45,6 +45,7 @@ import { LAST_ACTIVE_USER_KEY } from '../utils/activeUser';
 import { VetoLedgerService } from '../services/ui/VetoLedgerService';
 import type { LoggedTrade, TradeAnalysis } from '../types';
 import { TradeOutcome } from '../types';
+import { saveHarnessSettings } from '../utils/harnessSettings';
 
 const USER = 'health-user';
 
@@ -309,6 +310,7 @@ tradeIds:
 
 describe('WS-3.3 provenance', () => {
     it('labels a skill a bot created, and only that one', async () => {
+        saveHarnessSettings({ autoDraftingEnabled: true });
         saveBot({
             id: 'bot-9', name: 'Sweep', providerId: 'prov-bot', modelId: 'm',
             avatar: { kind: 'auto' }, createdAt: new Date().toISOString(),
@@ -319,7 +321,7 @@ describe('WS-3.3 provenance', () => {
 
         const trade = botTrade('bt-9');
         await recordBotTurnOutcome(
-            { id: 'bot-9', name: 'Sweep', providerId: 'prov-bot' },
+            { id: 'bot-9', name: 'Sweep', providerId: 'prov-bot', modelId: 'm' },
             'BTC short?',
             'Lesson: BTC shorting a failed sweep has no edge — wait for the reclaim close.',
             { username: USER, trades: [trade] },

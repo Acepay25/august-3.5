@@ -45,7 +45,6 @@ import { LevelAccuracyBadge } from './LevelAccuracyBadge';
 import OrderBookPanel from './OrderBookPanel';
 import TradeChatPanel, { ChartAiDockRail } from './TradeChatPanel';
 import RightPanel from '../shell/RightPanel';
-import { useViewDensity } from '../../hooks/useViewDensity';
 import { useRightPanel } from '../../hooks/useRightPanel';
 import type { PanelTurnContext } from './TradeChatPanel';
 import SymbolPicker from './SymbolPicker';
@@ -324,10 +323,6 @@ export const useTickFlash = (price: number | undefined): { cls: string; seq: num
 
 
 const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, coachCount, botThreadRows, onBotTurnCommit, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, surfaceEnterFrom, onOpenChat, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, onOpenWatchList, watchOpenCount = 0, watchOpenR, pinnedMessageIds }) => {
-    // Focus = the chart, the conversation and the numbers with a countdown on
-    // them. The three context stats below are read-only market background; under
-    // Detail they return.
-    const { density } = useViewDensity();
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     // Applies `.surface-enter-left` / `.surface-enter-right` to the surface
@@ -934,13 +929,9 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
             <div className="flex shrink-0 items-center divide-x divide-white/[0.06] overflow-x-auto border-b border-white/[0.06] bg-zinc-900/40 py-1.5 pr-3">
                 {/* Mark and 24h Change live once — in the hero price above.
                     The strip keeps only numbers the hero does not show. */}
-                {density === 'detail' ? (
-                    <>
-                        <Stat label="Oracle" value={Number.isFinite(indexPrice) ? fmtPrice(indexPrice!) : '—'} />
-                        <Stat label="24h Volume" value={Number.isFinite(quoteVolume) ? fmtUsd(quoteVolume!) : '—'} />
-                        <Stat label="Open Interest" value={strip ? fmtUsd(strip.oiValue) : '—'} />
-                    </>
-                ) : null}
+                <Stat label="Oracle" value={Number.isFinite(indexPrice) ? fmtPrice(indexPrice!) : '—'} />
+                <Stat label="24h Volume" value={Number.isFinite(quoteVolume) ? fmtUsd(quoteVolume!) : '—'} />
+                <Stat label="Open Interest" value={strip ? fmtUsd(strip.oiValue) : '—'} />
                 <div className="flex w-[210px] shrink-0 flex-col px-3.5">
                     <span className="text-ui-2xs uppercase tracking-wider text-zinc-500">Funding · next in</span>
                     {Number.isFinite(fundingRate) ? (() => {
@@ -1059,13 +1050,9 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                  *  chart + dock, and re-adding a fixed 300px column is what made the
                  *  total exceed the row and clip the transcript. */}
                 {/* The book is DETAIL THE USER PULLS: `sidebarOpen` is their own
-                    persisted choice (Ctrl/Cmd+B and the activity bar own it), so a
-                    global density preset must not override it — hiding a thing
-                    someone explicitly opened is not minimalism, it is the app
-                    deciding their screen is wrong. The row already gives way when
-                    the dock is expanded, which is the crowding fix that belongs
-                    here. Density owns what the APP pushes: the read-only market
-                    stats, the dashboards, the telemetry. */}
+                    persisted choice (Ctrl/Cmd+B and the activity bar own it).
+                    The row already gives way when the dock is expanded, which is
+                    the crowding fix that belongs here. */}
                 {((sidebarOpen && !dockExpanded) || isBelowLg) && (
                     <div
                         data-testid="trade-sidebar"

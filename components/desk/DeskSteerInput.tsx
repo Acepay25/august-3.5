@@ -8,6 +8,7 @@
  */
 
 import React from 'react';
+import { SelectMenu } from '../shared/SelectMenu';
 
 export interface DeskSteerInputProps {
     /** Seats that are currently live (the trader can only steer these). */
@@ -41,19 +42,16 @@ export const DeskSteerInput: React.FC<DeskSteerInputProps> = ({ liveSeats, onSub
             <span className="shrink-0 text-ui-xs font-semibold uppercase tracking-widest text-zinc-500">
                 Steer
             </span>
-            <select
+            <SelectMenu
                 value={target}
-                onChange={e => setTarget(e.target.value)}
+                onChange={setTarget}
+                options={liveSeats.map(s => ({ value: s, label: s }))}
                 disabled={disabled}
                 aria-label="Seat to steer"
-                className="shrink-0 rounded border border-white/10 bg-zinc-900 px-1.5 py-0.5 text-ui-dense text-zinc-200 focus:outline-none"
-            >
-                {liveSeats.map(s => (
-                    <option key={s} value={s}>
-                        {s}
-                    </option>
-                ))}
-            </select>
+                className="shrink-0"
+                drop="up"
+                triggerClassName="rounded border border-white/10 bg-zinc-900 px-1.5 py-0.5 text-ui-dense hover:bg-zinc-800"
+            />
             <input
                 type="text"
                 value={draft}
