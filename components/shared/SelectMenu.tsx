@@ -147,7 +147,22 @@ const SelectMenuInner: React.FC<SelectMenuProps> = ({
         };
     }, [open, close]);
 
-    // Keyboard navigation while open.
+    // Keyboard navigation while open. Typeahead mirrors the native select:
+    // printable characters accumulate for 500ms and jump to the first
+    // non-disabled option whose label starts with the buffer.
+    const typeaheadRef = useRef<{ buffer: string; at: number }>({ buffer: '', at: 0 });
+    const typeaheadMove = (ch: string): void => {
+        const now = Date.now();
+        const buffer = (now - typeaheadRef.current.at < 500 ? typeaheadRef.current.buffer : '') + ch.toLowerCase();
+        typeaheadRef.current = { buffer, at: now };
+        const start = flat.findIndex(o => o.value === value) + 1;
+        const ordered = [...flat.slice(start), ...flat.slice(0, start)];
+        const hit = ordered.find(o => !o.disabled && o.label.toLowerCase().startsWith(buffer));
+        if (hit) {
+            const idx = flat.indexOf(hit);
+            setActiveIndex(idx);
+        }
+    };
     const onKeyDown = (e: React.KeyboardEvent): void => {
         if (!open) {
             if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
@@ -166,10 +181,15 @@ const SelectMenuInner: React.FC<SelectMenuProps> = ({
         };
         if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
         else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+        else if (e.key === 'Home') { e.preventDefault(); setActiveIndex(flat.findIndex(o => !o.disabled)); }
+        else if (e.key === 'End') { e.preventDefault(); setActiveIndex(flat.map(o => !o.disabled).lastIndexOf(true)); }
         else if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             const opt = flat[activeIndex];
             if (opt) choose(opt);
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.stopPropagation();
+            typeaheadMove(e.key);
         }
     };
 
