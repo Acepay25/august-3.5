@@ -9,6 +9,7 @@ import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {Check, X, CloseIcon} from '../shared/Icons';
+import { SelectMenu } from '../shared/SelectMenu';
 import { Message, LoggedTrade, TradeOutcome } from '../../types';
 
 import {
@@ -377,15 +378,14 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                 <label className="block text-ui-xs uppercase font-bold text-amber-400 tracking-wider mb-1.5">
                                                     Leverage
                                                 </label>
-                                                <select
-                                                    value={scenarioLeverage}
-                                                    onChange={(e) => setScenarioLeverage(parseInt(e.target.value))}
-                                                    className="w-full bg-zinc-800 border border-amber-500/30 rounded-lg px-4 py-3 text-lg font-mono text-center text-amber-200 focus:outline-none focus:border-amber-500/60 appearance-none"
-                                                >
-                                                    {[1, 2, 3, 5, 10, 20, 25, 50, 75, 100, 125].map((lev) => (
-                                                        <option key={lev} value={lev}>{lev}x</option>
-                                                    ))}
-                                                </select>
+                                                <SelectMenu
+                                                    value={String(scenarioLeverage)}
+                                                    onChange={(v) => setScenarioLeverage(parseInt(v, 10))}
+                                                    options={[1, 2, 3, 5, 10, 20, 25, 50, 75, 100, 125].map((lev) => ({ value: String(lev), label: `${lev}x` }))}
+                                                    aria-label="Leverage"
+                                                    className="w-full"
+                                                    triggerClassName="w-full rounded-lg border border-amber-500/30 bg-zinc-800 px-4 py-3 text-lg font-mono hover:bg-zinc-700 focus:border-amber-500/60"
+                                                />
                                             </div>
                                             <div>
                                                 <label className="block text-ui-xs uppercase font-bold text-zinc-400 tracking-wider mb-1.5">

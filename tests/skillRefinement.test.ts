@@ -180,7 +180,7 @@ describe('skill refinement evidence (previousVersion round-trip)', () => {
             },
         });
         const content = serializeSkill(meta, 'Avoid BTC Long');
-        expect(content).toContain('refinedAt: 2026-08-18T10:00:00.000Z');
+        expect(content).toContain('refinedAt: "2026-08-18T10:00:00.000Z"');
         expect(content).toContain('previousVersion:');
 
         const parsed = parseSkillMarkdown(content);

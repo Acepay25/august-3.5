@@ -118,7 +118,7 @@ const TradeDetailView: React.FC<{
     }
 
     return (
-        <div className="flex flex-col h-full bg-zinc-950">
+        <div className="flex flex-col h-full bg-surface-page">
             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                 <div className="px-8 pt-2 pb-16 w-full max-w-4xl mx-auto">
                     <button

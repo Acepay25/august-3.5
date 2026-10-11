@@ -76,6 +76,7 @@ import { initMemoryFiles } from '../services/learning/MemoryFilesService';
 import { LAST_ACTIVE_USER_KEY } from '../utils/activeUser';
 import { TradeOutcome } from '../types';
 import type { LoggedTrade, TradeAnalysis } from '../types';
+import { saveHarnessSettings } from '../utils/harnessSettings';
 
 const USER = 'craft-leg-user';
 const BOT = { id: 'bot-3', name: 'Sweep', providerId: 'prov-bot', modelId: 'gpt-x' };
@@ -105,6 +106,7 @@ beforeEach(async () => {
     for (const k of Object.keys(botMemory)) delete botMemory[k];
     syncSpy.mockClear();
     localStorage.clear();
+    saveHarnessSettings({ autoDraftingEnabled: true });
     localStorage.setItem(LAST_ACTIVE_USER_KEY, USER);
     await initMemoryFiles(USER);
 });

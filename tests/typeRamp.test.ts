@@ -5,8 +5,11 @@ import { join } from 'path';
 /**
  * The `text-ui-*` ramp owns every pixel literal below the default base: it
  * replaced 9px/10px first (base − 5 / − 4), then 11px/12px/13px (base − 3 /
- * − 2 / − 1) — exact at the default `--ui-font-size: 14px`, so every migration
- * moved no pixels. Those five sizes were hundreds of occurrences across most
+ * − 2 / − 1) — exact at the pre-redesign default `--ui-font-size: 14px`, so every
+ * migration moved no pixels at that dial. The 2026-10-10 redesign moved the
+ * default to 16px (docs/plans/redesign-plan-claude-chatgpt-haze-2026-10-10.md);
+ * the ramp's shape is unchanged — every role is still dial-relative, which is
+ * what this suite actually guards. Those five sizes were hundreds of occurrences across most
  * of the tree, which is exactly why the ramp could not scale while they
  * existed: moving `--ui-font-size` moves the roles and leaves a hard-coded
  * `text-[11px]` exactly where it was.
@@ -90,7 +93,7 @@ describe('the type ramp owns 9–13px', () => {
         expect(css).toContain('--text-ui-sm: calc(var(--ui-font-size) - 2px)');
         expect(css).toContain('--text-ui-caption: calc(var(--ui-font-size) - 1px)');
         // One dial, and it is the default the interface was laid out against.
-        expect(css).toContain('--ui-font-size: 14px');
+        expect(css).toContain('--ui-font-size: 16px');
     });
 
     // Tailwind only emits a utility for a role that exists. A typo'd or

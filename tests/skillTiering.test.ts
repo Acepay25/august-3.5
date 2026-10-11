@@ -16,6 +16,7 @@ import { serializeSkill, type SkillMeta } from '../services/learning/SkillMemory
 const seedSkill = async (username: string, extra = ''): Promise<string> => {
     const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
     const file = await createMemoryFile(skills.id, 'btc-short-avoid.md', `---
+name: Avoid BTC short
 status: confirmed
 kind: avoid
 coin: BTCUSDT

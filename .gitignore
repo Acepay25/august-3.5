@@ -133,3 +133,6 @@ hybrid-payload-dump.md
 # enough to be read. Never committed — the whole point is that it is throwaway
 # evidence from a machine under load.
 .flake-hunt/
+
+# AI tool state debris
+.workbuddy-ai/

@@ -175,21 +175,17 @@ describe('App journal routing (source contract)', () => {
     });
 
     // Source contract, same style as the rest of this file: the Stats tab's
-    // three dashboards are gated on the ONE density setting Learn and Alt+D
-    // write, so a second screen cannot quietly keep them always on.
-    it('the Stats tab rests its dashboards on the shared density setting', () => {
+    // three dashboards are always mounted — there is no density setting that
+    // can rest them, so the tab a user opens is the tab they get.
+    it('the Stats tab always shows its dashboards', () => {
         const src = readFileSync('components/journal/Journal.tsx', 'utf8');
-        expect(src).toMatch(/useViewDensity/);
-        expect(src).toMatch(/density === 'detail' \? \(\s*<>\s*<LastTwentyCard/);
-        expect(src).toContain('journal-analytics-resting');
-        expect(src).toContain('journal-show-detail');
-        // Detail must not be a one-way door: with the bottom bar gone, this
-        // surface holds both directions of its own setting.
-        expect(src).toContain("setDensity('focus')");
-        expect(src).toContain('journal-rest-telemetry');
-        // The resting notice names what is resting — a shorter screen that
-        // explains nothing reads as a broken one.
-        expect(src).toMatch(/equity curve and the win-rate table are resting/);
+        expect(src).not.toMatch(/useViewDensity/);
+        expect(src).toMatch(/<LastTwentyCard trades=\{trades\} \/>/);
+        expect(src).toMatch(/<EquityCurveDashboard trades=\{trades\} \/>/);
+        expect(src).toMatch(/<WinRateDashboard trades=\{trades\} \/>/);
+        // The rest/show-detail controls are gone with the setting they wrote.
+        expect(src).not.toContain('journal-show-detail');
+        expect(src).not.toContain('journal-rest-telemetry');
     });
 
     it('the surface menu + Alt-shortcuts enter the journal through openJournal', () => {

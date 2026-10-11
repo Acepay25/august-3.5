@@ -316,6 +316,7 @@ const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
     'supervisor_last_run_v1',
     'trader_learning_v1',
     'trader_learner_counter_v1',
+    'august_starred_models_v1',
     'book_drafts_seeded_v1',
     // Nav-rail width preference (Stage 2 Phase 2). A layout preference, not
     // trading data — but it is read straight from localStorage, so on NATIVE
@@ -687,6 +688,7 @@ const RESTORABLE_PREFERENCE_KEY_PREFIXES: readonly string[] = [
     'global_learning_state_',
     'rl_signals_data',
     'profile_memory_v1',
+    'august_starred_models_v1',
     'belief_challenge_v1_',
     'monthly_report_v1_',
     'meta_calibration_v1_',

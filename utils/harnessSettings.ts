@@ -42,22 +42,9 @@ export interface HarnessSettings {
      *  by the approval gate, not by this. */
     skillEnforcementEnabled: boolean;
     /**
-     * HOW MUCH of the app is on screen. A whole-view preset, not a per-pane
-     * toggle: 'focus' (the default) shows the chart, the conversation and the
-     * decisions; 'detail' additionally shows the telemetry the loop keeps —
-     * version history, session usage, diagnostics, the lesson browser, the
-     * market stats beside the chart.
-     *
-     * Nothing is deleted by this. A trader who wants the diagnosis opens it;
-     * a trader who wants a screen with one job on it does not have to ignore
-     * six panels to find it. (The reference apps do the same with layout
-     * presets and transcript modes rather than shipping one forced density.)
-     */
-    viewDensity: 'focus' | 'detail';
-    /**
-     * Whether the loop may DRAFT playbooks on its own — the after-the-turn
-     * session review and the whole-chart scan, both of which spend a provider
-     * call and put rows in your inbox without being asked.
+     * Whether the loop may DRAFT playbooks on its own — after-turn session
+     * review, bot closed-trade learning, and whole-chart scans. These paths
+     * can spend provider calls and put rows in the inbox without being asked.
      *
      * OFF by default. This is the one capability in the app that shipped
      * switched on: the loop studied every conversation and every chart whether
@@ -114,12 +101,6 @@ export const getHarnessSettings = (): HarnessSettings => {
         // read as the app losing its rules.
         starterLibraryEnabled: stored.starterLibraryEnabled !== false,
         skillEnforcementEnabled: stored.skillEnforcementEnabled !== false,
-        // Detail is the shipped view (owner's call, 2026-10-10): the desk's own
-        // market data — Oracle, 24h volume, open interest — was resting behind a
-        // preset that defaulted to hiding it, so a first run showed funding only.
-        // Focus stays one press (or Alt+D) away for anyone who wants the chart
-        // and the conversation alone; an absent key no longer means "hide data".
-        viewDensity: stored.viewDensity === 'focus' ? 'focus' : 'detail',
         // Opt-IN, deliberately: an absent key means the loop does not draft on
         // its own. The old behaviour (always drafting) is what this turns off.
         autoDraftingEnabled: stored.autoDraftingEnabled === true,
@@ -136,10 +117,10 @@ export const saveHarnessSettings = (next: Partial<HarnessSettings>): HarnessSett
 };
 
 /**
- * The settings barometer. The status bar and every surface that rests or shows
- * a panel on `viewDensity` read the same store, so the toggle in one place is
- * honest in the other — a second copy of the density flag is how a UI ends up
- * showing a panel the setting says is closed.
+ * The settings barometer. Every surface that reads or writes a harness
+ * setting goes through this store, so a value written in one place is the
+ * value every reader sees — a second copy of a setting is how a UI ends up
+ * disagreeing with itself.
  */
 type SettingsListener = (next: HarnessSettings) => void;
 const listeners = new Set<SettingsListener>();
@@ -187,4 +168,3 @@ export const getSkillLibraryCap = (): number => {
     if (typeof n !== 'number' || !Number.isFinite(n)) return DEFAULT_SKILL_LIBRARY_CAP;
     return Math.min(200, Math.max(5, Math.round(n)));
 };
-

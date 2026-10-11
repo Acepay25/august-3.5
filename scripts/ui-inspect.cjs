@@ -212,7 +212,7 @@ async function main() {
                     m.main.width >= width * 0.55,
                     `${m.main.width}px of ${width}px`);
             }
-            check('all seven nav rows render', m.rows.length === 7, `${m.rows.length} rows`);
+            check('all six nav rows render', m.rows.length === 6, `${m.rows.length} rows`);
             const current = m.rows.filter(r => r.current === 'page');
             check('exactly one row is marked current', current.length === 1,
                 current.map(r => r.label).join(',') || 'none');

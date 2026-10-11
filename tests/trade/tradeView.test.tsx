@@ -96,7 +96,6 @@ import * as chatStore from '../../services/trade/chatStore';
 import { getActiveUsername } from '../../utils/activeUser';
 import { streamChatWithDeskTools } from '../../services/analysis/DeskToolsService';
 import type { ProviderConfig } from '../../types/provider';
-import { saveHarnessSettings } from '../../utils/harnessSettings';
 
 const providers = [] as never[];
 
@@ -114,12 +113,10 @@ const LIVE = {
 const POLLING = { markIndex: null, ticker: null, depth: null, kline: null, status: 'polling' };
 
 describe('TradeView', () => {
-    // The line density may not cross: it owns what the APP pushes, never what
-    // the user PULLED. The book has its own persisted open/close, so hiding it
-    // on a global preset would be the app overruling a choice someone already
-    // made. Pinned in both directions, because the tempting refactor is exactly
-    // to fold this column into the density rule.
-    it('Focus keeps the order book the user opened, and rests only pushed stats', async () => {
+    // The book owns its own persisted open/close: `sidebarOpen` is the user's
+    // choice, so nothing global may hide what they pulled. Pinned in both
+    // directions — open stays open, closed stays closed.
+    it('the order book follows the user, not any preset', async () => {
         const realMatchMedia = window.matchMedia;
         // Tailwind's lg is 1024px; jsdom's default stub answers false, which
         // reads as a phone and hides the case under test.
@@ -130,7 +127,6 @@ describe('TradeView', () => {
             addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
         })) as unknown as typeof window.matchMedia;
         try {
-            saveHarnessSettings({ viewDensity: 'focus' });
             const first = render(
                 <TradeView
                     providers={providers} selectedChatModel="" onSelectChatModel={() => {}}
@@ -139,12 +135,10 @@ describe('TradeView', () => {
             );
             await screen.findByTestId('trade-chat-panel');
             expect(screen.getByTestId('trade-sidebar')).toBeTruthy();
-            expect(screen.queryByText('Oracle')).toBeNull();
             first.unmount();
 
-            // And with the user's own toggle off, the book stays off in DETAIL
-            // too: density does not get to open what they closed.
-            saveHarnessSettings({ viewDensity: 'detail' });
+            // And with the user's own toggle off, the book stays off: the chart
+            // surface does not get to open what they closed.
             render(
                 <TradeView
                     providers={providers} selectedChatModel="" onSelectChatModel={() => {}}
@@ -158,21 +152,18 @@ describe('TradeView', () => {
         }
     });
 
-    it('Focus rests the read-only market stats and keeps the funding countdown', async () => {
-        saveHarnessSettings({ viewDensity: 'focus' });
+    it('shows the read-only market stats and the funding countdown together', async () => {
         render(<TradeView providers={providers} selectedChatModel="" onSelectChatModel={() => {}} />);
         await screen.findByTestId('trade-chat-panel');
-        expect(screen.queryByText('Oracle')).toBeNull();
-        expect(screen.queryByText('Open Interest')).toBeNull();
-        // Funding is not decor: it carries a countdown and a depleting-window
-        // bar, so the one number with a deadline stays on screen in Focus.
+        // The desk's own numbers are never behind a preset: Oracle, 24h volume
+        // and open interest sit beside Funding on a first run.
+        expect(screen.getByText('Oracle')).toBeTruthy();
+        expect(screen.getByText('Open Interest')).toBeTruthy();
+        // Funding is not decor either: it carries a countdown and a
+        // depleting-window bar.
         expect(screen.getByText(/Funding · next in/)).toBeTruthy();
     });
     it('mounts the stats strip, chart shell, book and chat dock', async () => {
-        // Detail, named rather than inherited: the read-only market context
-        // belongs to that preset now, and a test that reads a label must say
-        // which view it is asserting under.
-        saveHarnessSettings({ viewDensity: 'detail' });
         render(<TradeView providers={providers} selectedChatModel="" onSelectChatModel={() => {}} />);
         expect(await screen.findByTestId('trade-view')).toBeTruthy();
         expect(screen.getByLabelText('Trade symbol')).toBeTruthy();

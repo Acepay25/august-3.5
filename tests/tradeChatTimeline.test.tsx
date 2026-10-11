@@ -96,7 +96,9 @@ describe('work timeline in the Chart AI transcript', () => {
         const row = document.querySelector('[data-testid="analyzed-row"]') as HTMLDetailsElement;
         expect(row).toBeTruthy();
         expect(row.open).toBe(false);
-        expect(row.textContent).toMatch(/Analyzed/);
+        // With tool rounds the summary leads with the action count (the
+        // reference's "Ran 4 commands, read a file"), not "Analyzed".
+        expect(row.textContent).toMatch(/Ran \d+ commands/);
 
         // …which holds TWO Thought rows (before + after the tool round)…
         expect(screen.getAllByText('Thought')).toHaveLength(2);

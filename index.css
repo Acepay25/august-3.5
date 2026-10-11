@@ -293,15 +293,15 @@
   color-scheme: light;
 }
 
-/* The single dial every `text-ui-*` role is measured from. Minara's UI runs on
-   14px sans, and that is what the rest of this app was laid out against, so
-   the default must reproduce the current pixels exactly — the scale is a
-   source of truth first and a user control second. Override it here (or per
-   subtree) and every labelled role moves together; the ~1000 hard-coded
-   `text-[Npx]` sites will not, which is the argument for moving new UI onto
-   the roles. */
+/* The single dial every `text-ui-*` role is measured from. The 2026-10-10
+   redesign (docs/plans/redesign-plan-claude-chatgpt-haze-2026-10-10.md) moved
+   the default from Minara's 14px to 16px: 703 of ~1,500 type sites sat on the
+   two smallest steps, and the ramp is offset-based off this one var. Override
+   it here (or per subtree) and every labelled role moves together; the
+   hard-coded `text-[Npx]` sites will not, which is the argument for keeping
+   new UI on the roles. */
 :root {
-  --ui-font-size: 14px;
+  --ui-font-size: 16px;
 
   /* ── The z-ladder ─────────────────────────────────────────────────────────
      Overlays used to stack by ad-hoc `z-[200]` / `z-[120]` literals typed at
@@ -320,6 +320,12 @@
   --z-splash: 9999;      /* cold-start splash, painted outside #root */
   --z-update: 200;       /* UpdateOverlay */
   --z-modal: 120;        /* full-screen modals, Settings */
+  --z-flyout: 130;       /* portaled dropdown lists (SelectMenu) — must clear a
+                            root-level z-modal overlay: the list portals to
+                            <body>, so against an un-trapped Settings overlay
+                            (120) the old z-confirm rung (100) painted it
+                            UNDER the modal and buried every trigger inside
+                            Settings. One rung above modal, below UpdateOverlay. */
   --z-confirm: 100;      /* ConfirmDialog, Toast */
   --z-automation: 75;    /* AutomationView */
   --z-drawer: 50;        /* portaled drawers */
@@ -335,6 +341,7 @@
 @utility z-splash { z-index: var(--z-splash); }
 @utility z-update { z-index: var(--z-update); }
 @utility z-modal { z-index: var(--z-modal); }
+@utility z-flyout { z-index: var(--z-flyout); }
 @utility z-confirm { z-index: var(--z-confirm); }
 @utility z-automation { z-index: var(--z-automation); }
 @utility z-drawer { z-index: var(--z-drawer); }

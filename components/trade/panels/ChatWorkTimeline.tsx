@@ -143,7 +143,10 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
                 : 'Some tool output was not kept — a tool result could not be saved.'
         : null;
     return (
-        <div className="border-l border-white/[0.08] pl-3 ml-1 my-1.5 space-y-1.5">
+        /* The Claude-pattern work card: one bordered rounded container for the
+           turn's reasoning + tool rows (was a bare left-rail border). The
+           AnalyzedRow inside still does the folding to "Analyzed for Ns". */
+        <div className="my-1.5 space-y-1.5 rounded-xl border border-white/[0.06] bg-zinc-900/40 px-2.5 py-2">
             {hasWork && (
                 <AnalyzedRow
                     running={running}

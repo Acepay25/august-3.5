@@ -177,7 +177,12 @@ export const Header: React.FC<HeaderProps> = memo(({
 
                     <div className="flex flex-col justify-center">
                         <div className="flex items-center gap-3">
-                            <h1 className="bg-gradient-to-r from-brand-start via-brand-mid to-brand-end bg-clip-text font-serif text-lg leading-none tracking-tight text-transparent sm:text-xl">August Trading</h1>
+                            {/* Demoted per the redesign (§2.1): the surface
+                                label reads first; the wordmark is a quiet
+                                brand mark, not the header's headline. The
+                                gradient stays — doctrine reserves it FOR the
+                                wordmark and the active-nav bar. */}
+                            <h1 className="bg-gradient-to-r from-brand-start via-brand-mid to-brand-end bg-clip-text font-serif text-ui-sm leading-none tracking-tight text-transparent">August Trading</h1>
 
                             {/* Session Display */}
                             {sessionContext && (
@@ -201,7 +206,7 @@ export const Header: React.FC<HeaderProps> = memo(({
 
                                     {/* Session Details Modal */}
                                     {isSessionModalOpen && (
-                                             <div role="dialog" aria-label="Session details" className="absolute top-full left-0 sm:left-auto sm:right-0 mt-4 sm:mt-2 w-80 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-fade-in">
+                                             <div role="dialog" aria-label="Session details" className="absolute top-full left-0 sm:left-auto sm:right-0 mt-4 sm:mt-2 w-80 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-drawer animate-fade-in">
                                             <div className="p-3 bg-zinc-900">
                                                 {/* Live Market Conditions Section */}
                                                 {liveMarketConditions && (

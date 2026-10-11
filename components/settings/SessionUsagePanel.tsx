@@ -4,6 +4,7 @@ import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSett
 import { loadChecklistConfig, saveChecklistConfig } from '../../utils/checklist';
 import { formatChars } from '../../utils/runUsage';
 import { formatModelDisplayName } from '../../utils/providerUtils';
+import { SelectMenu } from '../shared/SelectMenu';
 
 const SLICE_COLORS = ['#42a1ff', '#b7b7b1', '#399ef7', '#6e6e68', '#d6d6d0', '#1d64a8', '#8c8c86'];
 
@@ -185,11 +186,11 @@ export const HarnessControls: React.FC = () => {
             <label className="block text-ui-dense text-zinc-400">
                 Draft playbooks on its own
                 <span className="mt-0.5 block text-ui-2xs leading-4 text-zinc-500">
-                    Studies each finished conversation and the whole chart, then writes
-                    drafts into the Approvals inbox. Costs a model call each time, so it
-                    is off until you turn it on. Skills you save yourself, post-mortems
-                    and imports are unaffected — this switch is only about the app
-                    drafting things it was not asked for.
+                    Studies finished conversations, bot closed trades, and the whole
+                    chart, then writes drafts into the Approvals inbox. These paths can
+                    cost provider calls, so they are off until you turn them on. Skills
+                    you save yourself, manually requested post-mortems, and imports are
+                    unaffected — this switch only stops drafts the app was not asked for.
                 </span>
                 <span className="mt-1 flex items-center gap-2">
                     <input
@@ -226,26 +227,32 @@ export const HarnessControls: React.FC = () => {
             </label>
             <label className="block text-ui-dense text-zinc-400">
                 Prompt A/B (control lane)
-                <select
+                <SelectMenu
                     value={String(settings.promptAbRate)}
-                    onChange={e => persist({ promptAbRate: Number(e.target.value) as 0 | 0.1 | 0.5 })}
-                    className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
-                >
-                    <option value="0">Off</option>
-                    <option value="0.1">10%</option>
-                    <option value="0.5">50%</option>
-                </select>
+                    onChange={v => persist({ promptAbRate: Number(v) as 0 | 0.1 | 0.5 })}
+                    options={[
+                        { value: '0', label: 'Off' },
+                        { value: '0.1', label: '10%' },
+                        { value: '0.5', label: '50%' },
+                    ]}
+                    aria-label="Prompt A/B (control lane)"
+                    className="mt-1 w-full"
+                    triggerClassName="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-ui-sm hover:bg-zinc-800"
+                />
             </label>
             <label className="block text-ui-dense text-zinc-400">
                 Default thinking effort
-                <select
+                <SelectMenu
                     value={settings.responseEffort}
-                    onChange={e => persist({ responseEffort: e.target.value === 'fast' ? 'fast' : 'quality' })}
-                    className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
-                >
-                    <option value="quality">Quality — built-in reasoning budget</option>
-                    <option value="fast">Fast — one step lighter on every call</option>
-                </select>
+                    onChange={v => persist({ responseEffort: v === 'fast' ? 'fast' : 'quality' })}
+                    options={[
+                        { value: 'quality', label: 'Quality — built-in reasoning budget' },
+                        { value: 'fast', label: 'Fast — one step lighter on every call' },
+                    ]}
+                    aria-label="Default thinking effort"
+                    className="mt-1 w-full"
+                    triggerClassName="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-ui-sm hover:bg-zinc-800"
+                />
             </label>
             <label className="block text-ui-dense text-zinc-400">
                 Skill library cap
@@ -265,14 +272,17 @@ export const HarnessControls: React.FC = () => {
                 rule (typed confirm) applies to the banner, not this panel. */}
             <label className="block text-ui-dense text-zinc-400">
                 Session guard preset
-                <select
+                <SelectMenu
                     value={settings.guardPreset ?? 'default'}
-                    onChange={e => persist({ guardPreset: e.target.value as 'default' | 'ftmo' })}
-                    className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
-                >
-                    <option value="default">Tight — 2% day / 2 trades / 4h cooldown</option>
-                    <option value="ftmo">FTMO — 3% day / 3 trades / 4h cooldown</option>
-                </select>
+                    onChange={v => persist({ guardPreset: v as 'default' | 'ftmo' })}
+                    options={[
+                        { value: 'default', label: 'Tight — 2% day / 2 trades / 4h cooldown' },
+                        { value: 'ftmo', label: 'FTMO — 3% day / 3 trades / 4h cooldown' },
+                    ]}
+                    aria-label="Session guard preset"
+                    className="mt-1 w-full"
+                    triggerClassName="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-ui-sm hover:bg-zinc-800"
+                />
             </label>
             <div className="grid grid-cols-2 gap-2">
                 <label className="block text-ui-dense text-zinc-400">

@@ -93,7 +93,13 @@ const ToastContainer: React.FC = () => {
     const hiddenCount = toasts.length - visibleToasts.length;
 
     return (
-        <div className="fixed top-4 right-4 z-confirm flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+        /* Centered below the app header, not top-right: the Chart AI dock owns
+           the top-right corner (its New chat / history cluster), and a toast
+           there physically covered those controls (ui-1440.png, redesign plan
+           §2.1). A toast may never overlap a panel's own header controls.
+           top clears the measured header AND the device safe-area (notched
+           phones put ~44px of chrome on top of a bare top-16). */
+        <div className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top,0px)+3.25rem)] z-confirm flex w-full max-w-sm -translate-x-1/2 flex-col gap-2 px-4">
             {hiddenCount > 0 && !expanded && (
                 <button
                     type="button"

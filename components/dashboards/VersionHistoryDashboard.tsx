@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import {ThumbsDown, ThumbsUp, Brain, Server, Target, AreaChart as AreaChartIcon} from '../shared/Icons';
 import { Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { SelectMenu } from '../shared/SelectMenu';
 import { APP_VERSION } from '../../constants/version';
 
 // Import services
@@ -216,17 +217,17 @@ export const VersionHistoryDashboard: React.FC = () => {
                             {rules.length > 0 ? (
                                 <div className="flex flex-col h-full">
                                     <div className="pb-2">
-                                        <select
-                                            value={selectedRuleIndex}
-                                            onChange={(e) => setSelectedRuleIndex(Number(e.target.value))}
-                                            className="hit-target w-full bg-transparent text-ui-sm text-zinc-300 focus:outline-none cursor-pointer"
-                                        >
-                                            {rules.map((s, idx) => (
-                                                <option key={idx} value={idx} className="bg-zinc-900 text-zinc-300">
-                                                    Skill #{idx + 1}: {s.file.name.replace(/\.md$/i, '').substring(0, 24)}
-                                                </option>
-                                            ))}
-                                        </select>
+                                        <SelectMenu
+                                            value={String(selectedRuleIndex)}
+                                            onChange={(v) => setSelectedRuleIndex(Number(v))}
+                                            options={rules.map((s, idx) => ({
+                                                value: String(idx),
+                                                label: `Skill #${idx + 1}: ${s.file.name.replace(/\.md$/i, '').substring(0, 24)}`,
+                                            }))}
+                                            aria-label="Select skill"
+                                            className="w-full"
+                                            triggerClassName="w-full rounded-md border border-white/10 bg-zinc-900 px-2.5 py-1.5 text-ui-sm hover:bg-zinc-800"
+                                        />
                                     </div>
                                     <div className="border-t border-zinc-800/80 py-2 overflow-y-auto max-h-[100px] custom-scrollbar">
                                         <p className="text-ui-xs text-zinc-300 font-mono leading-relaxed">
@@ -263,17 +264,17 @@ export const VersionHistoryDashboard: React.FC = () => {
                             {insights.length > 0 ? (
                                 <div className="flex flex-col h-full">
                                     <div className="pb-2">
-                                        <select
-                                            value={selectedInsightIndex}
-                                            onChange={(e) => setSelectedInsightIndex(Number(e.target.value))}
-                                            className="w-full bg-transparent text-ui-sm text-amber-300 focus:outline-none cursor-pointer"
-                                        >
-                                            {insights.map((insight, idx) => (
-                                                <option key={idx} value={idx} className="bg-zinc-900 text-zinc-300">
-                                                    Insight #{idx + 1} ({insight.category})
-                                                </option>
-                                            ))}
-                                        </select>
+                                        <SelectMenu
+                                            value={String(selectedInsightIndex)}
+                                            onChange={(v) => setSelectedInsightIndex(Number(v))}
+                                            options={insights.map((insight, idx) => ({
+                                                value: String(idx),
+                                                label: `Insight #${idx + 1} (${insight.category})`,
+                                            }))}
+                                            aria-label="Select insight"
+                                            className="w-full"
+                                            triggerClassName="w-full rounded-md border border-white/10 bg-zinc-900 px-2.5 py-1.5 text-ui-sm hover:bg-zinc-800"
+                                        />
                                     </div>
                                     <div className="border-t border-zinc-800/80 py-2 overflow-y-auto max-h-[100px] custom-scrollbar">
                                         <p className="text-ui-xs text-amber-200/80 font-mono leading-relaxed">

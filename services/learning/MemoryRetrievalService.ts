@@ -215,6 +215,20 @@ const rankedMatchedSkills = (
         // signal stays invisible, exactly as before.
         const descScore = descriptionOverlap(meta, query);
         const descHit = descScore >= DESCRIPTION_MATCH_MIN;
+        // A prose match may broaden retrieval for an unscoped/general skill,
+        // but it must never overrule explicit scope written on the skill.
+        // Otherwise a BTC-short rule whose wording happens to share words
+        // with an ETH-long setup can cross the structured safety boundary.
+        const scopeCoin = setup.coin?.toUpperCase().replace(/USDT?$/, '');
+        const skillCoin = meta.coin?.toUpperCase().replace(/USDT?$/, '');
+        const familyQuery = setup.family || setup.pattern;
+        const explicitScopeConflict = Boolean(
+            (scopeCoin && skillCoin && scopeCoin !== skillCoin)
+            || (setup.direction && meta.direction && setup.direction !== meta.direction)
+            || (setup.regime && meta.regime && setup.regime !== meta.regime)
+            || (familyQuery && meta.family && !skillMatchesSetup(meta, { family: familyQuery }))
+        );
+        if (descHit && explicitScopeConflict) continue;
         if (!descHit && !skillMatchesSetup(meta, setup)) continue;
         // Audience filtering happens BEFORE ranking (#4 invocation control): a
         // blocked best-match must surface the second-best skill, not an empty slot.
@@ -320,12 +334,9 @@ const contentWords = (text: string): Set<string> => {
  * structured fields (coin/direction/family/regime) did not line up, which is
  * every general lesson.
  *
- * Returns a 0..1 Jaccard overlap of content words. Deliberately a BOOST on
- * the existing structured matcher, never a replacement: `skillMatchesSetup`
- * still gates candidacy for field-scoped skills, and this lifts the rank of
- * the skill that actually describes this setup among the ones that already
- * qualify. Keeping it additive means no behavior is silently withdrawn from
- * a seat that was previously receiving a skill.
+ * Returns a 0..1 Jaccard overlap of content words. This can admit general
+ * lessons whose prose describes the setup, but explicit structured scope is
+ * checked separately before a description hit is accepted.
  */
 const descriptionOverlap = (
     meta: SkillMeta,

@@ -18,6 +18,7 @@ import { probeAndLearn } from '../../services/learning/harnessLessons';
 import { validateProviderUrl } from '../../utils/providerUrlValidation';
 import { findProviderById, mergeDiscoveredModels, sortModelsFreeFirst } from '../../utils/providerUtils';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
+import { SelectMenu } from '../shared/SelectMenu';
 import { useToastActions } from '../shared/Toast';
 
 import StatusPill from '../ui/StatusPill';
@@ -57,11 +58,13 @@ const inputBase =
     // transition-colors: only the border recolours on focus; nothing geometry does.
     'transition-colors duration-[150ms] ease-[var(--ease-snappy)]';
 
-const selectBase =
+// Trigger classes for the SelectMenu dropdowns below (endpoint format,
+// extended thinking). SelectMenu draws its own chevron, so unlike the old
+// native-select base there is no appearance-none / bg-image arrow here.
+const selectTriggerBase =
     'w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-ui-base text-zinc-100 ' +
     'focus:outline-none focus:border-zinc-600 transition-colors duration-[150ms] ease-[var(--ease-snappy)] ' +
-    'appearance-none cursor-pointer bg-no-repeat bg-[right_0.9rem_center] ' +
-    "bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2371717a%22%20stroke-width%3D%222.5%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E')]";
+    'cursor-pointer hover:bg-zinc-900';
 
 function getContextBadge(modelId: string): string {
     const m = modelId.toLowerCase();
@@ -610,15 +613,11 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                             </div>
                             <div>
                                 <FieldLabel>Endpoint</FieldLabel>
-                                <select value={newFormat} onChange={(e) => {
-                                    const next = e.target.value as ApiFormat;
+                                <SelectMenu value={newFormat} onChange={(v) => {
+                                    const next = v as ApiFormat;
                                     setNewFormat(next);
                                     if (next === 'google' && !newUrl.trim()) setNewUrl(GOOGLE_GEMINI_DEFAULT_BASE);
-                                }} className={selectBase}>
-                                    {(Object.entries(API_FORMAT_LABELS) as [ApiFormat, string][]).map(([val, label]) => (
-                                        <option key={val} value={val}>{label}</option>
-                                    ))}
-                                </select>
+                                }} options={(Object.entries(API_FORMAT_LABELS) as [ApiFormat, string][]).map(([val, label]) => ({ value: val, label }))} aria-label="Endpoint format" triggerClassName={selectTriggerBase} />
                             </div>
                             <div>
                                 <FieldLabel>API key</FieldLabel>
@@ -702,15 +701,11 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                             </div>
                             <div>
                                 <FieldLabel>Endpoint</FieldLabel>
-                                <select value={draftFormat} onChange={(e) => {
-                                    const next = e.target.value as ApiFormat;
+                                <SelectMenu value={draftFormat} onChange={(v) => {
+                                    const next = v as ApiFormat;
                                     setDraftFormat(next);
                                     if (next === 'google' && !draftUrl.trim()) setDraftUrl(GOOGLE_GEMINI_DEFAULT_BASE);
-                                }} className={selectBase}>
-                                    {(Object.entries(API_FORMAT_LABELS) as [ApiFormat, string][]).map(([val, label]) => (
-                                        <option key={val} value={val}>{label}</option>
-                                    ))}
-                                </select>
+                                }} options={(Object.entries(API_FORMAT_LABELS) as [ApiFormat, string][]).map(([val, label]) => ({ value: val, label }))} aria-label="Endpoint format" triggerClassName={selectTriggerBase} />
                             </div>
                             <div>
                                 <FieldLabel>API key</FieldLabel>
@@ -724,15 +719,17 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                             {draftFormat === 'messages' && (
                                 <div>
                                     <FieldLabel>Extended thinking</FieldLabel>
-                                    <select
+                                    <SelectMenu
                                         value={draftThinking}
-                                        onChange={(e) => setDraftThinking(e.target.value as 'auto' | 'on' | 'off')}
-                                        className={selectBase}
-                                    >
-                                        <option value="auto">Auto-detect from model id</option>
-                                        <option value="on">Always request thinking budget</option>
-                                        <option value="off">Never request thinking</option>
-                                    </select>
+                                        onChange={(v) => setDraftThinking(v as 'auto' | 'on' | 'off')}
+                                        options={[
+                                            { value: 'auto', label: 'Auto-detect from model id' },
+                                            { value: 'on', label: 'Always request thinking budget' },
+                                            { value: 'off', label: 'Never request thinking' },
+                                        ]}
+                                        aria-label="Extended thinking"
+                                        triggerClassName={selectTriggerBase}
+                                    />
                                     <p className="mt-1 text-ui-dense leading-relaxed text-zinc-500">
                                         Auto-detect matches known Claude thinking models; force it on if your endpoint
                                         supports thinking on a model the detection misses, or off if the extra

@@ -56,7 +56,6 @@ import { recordMemoryInjection, skillAdherenceForRun } from './MemoryInjectionSe
 import { sanitizePredicate } from '../analysis/skillPredicate';
 import { resolveMemoryConfig } from './MemoryModelService';
 import {
-    serializePrediction,
     parsePredictionLine,
     defaultPrediction,
     evaluateClaim,
@@ -429,17 +428,49 @@ export const listSkillSlugs = (): string[] =>
  * `name` is derived from the title at write time, never parsed — a title can
  * be renamed without the identity key drifting.
  */
-const LEDGER_MARKER = '<!-- august:skill-ledger -->';
+const LEDGER_MARKER = '# august:skill-ledger';
+
+/** JSON strings are also valid YAML 1.2 double-quoted scalars. This keeps
+ * arbitrary titles, descriptions, timestamps, and prose safe when they
+ * contain colons, quotes, or YAML-reserved words. */
+const yamlString = (value: string): string => JSON.stringify(value);
+
+const decodeFrontmatterScalar = (value: string | undefined): string | undefined => {
+    const trimmed = value?.trim();
+    if (!trimmed) return undefined;
+    if (trimmed.startsWith('"')) {
+        try {
+            const parsed: unknown = JSON.parse(trimmed);
+            if (typeof parsed === 'string') return parsed;
+        } catch { /* Keep legacy or hand-edited values readable below. */ }
+    }
+    if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+        return trimmed.slice(1, -1).replace(/''/g, "'");
+    }
+    return trimmed;
+};
 
 /** Instruction body of a skill file — the markdown minus its frontmatter AND
  *  its `# Title` line. The title is identity, carried in the `name` key; a
  *  body that repeats it makes every injected procedure start with a heading
  *  the seat already saw in the skill's own header line. */
-export const skillBody = (content: string): string =>
-    content
-        .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '')
-        .replace(/^#\s+.*$/m, '')
-        .trim();
+export const skillBody = (content: string): string => {
+    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+    if (!match) return content.trim();
+    const nameLine = match[1].match(/^name:[ \t]*(.+)$/mi)?.[1];
+    const name = decodeFrontmatterScalar(nameLine);
+    let body = (match[2] || '').trim();
+    // Only remove the generated identity heading when it is the first body
+    // line and matches the portable name. Imported skill section headings,
+    // including a leading H1, are real instructions and must survive.
+    if (name) {
+        const firstLine = body.match(/^#\s+([^\r\n]+)/)?.[1]?.trim();
+        if (firstLine && firstLine.toLocaleLowerCase() === name.toLocaleLowerCase()) {
+            body = body.replace(/^#\s+.*(?:\r?\n|$)/, '').trim();
+        }
+    }
+    return body;
+};
 
 // ─── Invoked skills (/slug → system section) ────────────────────────────────
 // The composer parses `/slug` out of the message, but a name alone is dead
@@ -518,7 +549,7 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         // pass against a phantom id. Horizontal-only keeps the match on
         // its own line.
         const line = fm.match(new RegExp(`^${key}:[ \\t]*(.+)$`, 'mi'));
-        const v = line?.[1]?.trim();
+        const v = decodeFrontmatterScalar(line?.[1]);
         return v && v !== 'undefined' && v !== '' ? v : undefined;
     };
     const num = (key: string): number => {
@@ -1027,34 +1058,38 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
     // from the title so a rename moves the identity with it, and it is capped
     // at the spec's 64 chars.
     const name = title.replace(/\s+/g, ' ').trim().slice(0, 64);
+    const description = (meta.description?.trim()
+        || [meta.ifCondition, meta.thenAction].filter(Boolean).join(' → ')
+        || meta.body.trim().split(/\s+/).slice(0, 24).join(' ')
+        || title.trim()).replace(/\s+/g, ' ').slice(0, 1024);
     const portable: string[] = [
-        `name: ${name}`,
-        ...(meta.description ? [`description: ${meta.description.replace(/\n/g, ' ').slice(0, 1024)}`] : []),
-        `kind: ${meta.kind}`,
-        ...(meta.coin ? [`coin: ${meta.coin}`] : []),
-        ...(meta.timeframe ? [`timeframe: ${meta.timeframe}`] : []),
-        ...(meta.source ? [`source: ${meta.source}`] : []),
-        ...(meta.direction ? [`direction: ${meta.direction}`] : []),
-        ...(meta.family ? [`family: ${meta.family}`] : []),
-        ...(meta.regime ? [`regime: ${meta.regime}`] : []),
-        ...(meta.ifCondition ? [`ifCondition: ${meta.ifCondition.replace(/\n/g, ' ')}`] : []),
-        ...(meta.predicate ? [`predicate: ${meta.predicate.replace(/\n/g, ' ')}`] : []),
-        ...(meta.thenAction ? [`thenAction: ${meta.thenAction.replace(/\n/g, ' ')}`] : []),
-        ...(meta.strategyFamily ? [`strategyFamily: ${meta.strategyFamily}`] : []),
-        ...(meta.signals ? [`signals: ${meta.signals.replace(/\n/g, ' ')}`] : []),
-        ...(meta.invalidation ? [`invalidation: ${meta.invalidation.replace(/\n/g, ' ')}`] : []),
-        ...(meta.horizon ? [`horizon: ${meta.horizon}`] : []),
-        ...(meta.sizing ? [`sizing: ${meta.sizing.replace(/\n/g, ' ')}`] : []),
-        ...(meta.prior ? [`prior: ${meta.prior}`] : []),
-        ...(meta.audience && meta.audience !== 'all' ? [`audience: ${meta.audience}`] : []),
-        ...(meta.lensScope && meta.lensScope !== 'all' ? [`lensScope: ${meta.lensScope}`] : []),
+        `name: ${yamlString(name)}`,
+        `description: ${yamlString(description)}`,
+        `kind: ${yamlString(meta.kind)}`,
+        ...(meta.coin ? [`coin: ${yamlString(meta.coin)}`] : []),
+        ...(meta.timeframe ? [`timeframe: ${yamlString(meta.timeframe)}`] : []),
+        ...(meta.source ? [`source: ${yamlString(meta.source)}`] : []),
+        ...(meta.direction ? [`direction: ${yamlString(meta.direction)}`] : []),
+        ...(meta.family ? [`family: ${yamlString(meta.family)}`] : []),
+        ...(meta.regime ? [`regime: ${yamlString(meta.regime)}`] : []),
+        ...(meta.ifCondition ? [`ifCondition: ${yamlString(meta.ifCondition.replace(/\n/g, ' '))}`] : []),
+        ...(meta.predicate ? [`predicate: ${yamlString(meta.predicate.replace(/\n/g, ' '))}`] : []),
+        ...(meta.thenAction ? [`thenAction: ${yamlString(meta.thenAction.replace(/\n/g, ' '))}`] : []),
+        ...(meta.strategyFamily ? [`strategyFamily: ${yamlString(meta.strategyFamily)}`] : []),
+        ...(meta.signals ? [`signals: ${yamlString(meta.signals.replace(/\n/g, ' '))}`] : []),
+        ...(meta.invalidation ? [`invalidation: ${yamlString(meta.invalidation.replace(/\n/g, ' '))}`] : []),
+        ...(meta.horizon ? [`horizon: ${yamlString(meta.horizon)}`] : []),
+        ...(meta.sizing ? [`sizing: ${yamlString(meta.sizing.replace(/\n/g, ' '))}`] : []),
+        ...(meta.prior ? [`prior: ${yamlString(meta.prior)}`] : []),
+        ...(meta.audience && meta.audience !== 'all' ? [`audience: ${yamlString(meta.audience)}`] : []),
+        ...(meta.lensScope && meta.lensScope !== 'all' ? [`lensScope: ${yamlString(meta.lensScope)}`] : []),
         // ── provenance of the procedure's acceptance (portable: WHO said yes) ──
-        ...(meta.approvedBy ? [`approvedBy: ${meta.approvedBy}`] : []),
-        ...(meta.approvedAt ? [`approvedAt: ${meta.approvedAt}`] : []),
-        ...(meta.whyAccepted ? [`whyAccepted: ${meta.whyAccepted.replace(/\n/g, ' ')}`] : []),
-        ...(meta.originBotId ? [`originBotId: ${meta.originBotId}`] : []),
-        ...(meta.originBotName ? [`originBotName: ${meta.originBotName.replace(/\n/g, ' ')}`] : []),
-        ...(meta.originMessageId ? [`originMessageId: ${meta.originMessageId}`] : []),
+        ...(meta.approvedBy ? [`approvedBy: ${yamlString(meta.approvedBy)}`] : []),
+        ...(meta.approvedAt ? [`approvedAt: ${yamlString(meta.approvedAt)}`] : []),
+        ...(meta.whyAccepted ? [`whyAccepted: ${yamlString(meta.whyAccepted.replace(/\n/g, ' '))}`] : []),
+        ...(meta.originBotId ? [`originBotId: ${yamlString(meta.originBotId)}`] : []),
+        ...(meta.originBotName ? [`originBotName: ${yamlString(meta.originBotName.replace(/\n/g, ' '))}`] : []),
+        ...(meta.originMessageId ? [`originMessageId: ${yamlString(meta.originMessageId)}`] : []),
     ];
 
     // ── LEDGER FACE: every outcome and lifecycle key, below the marker. The
@@ -1066,38 +1101,38 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         `losses: ${meta.losses}`,
         `sample: ${meta.wins + meta.losses}`,
         ...(meta.consecutiveLosses > 0 ? [`consecutiveLosses: ${meta.consecutiveLosses}`] : []),
-        ...(meta.recentOutcomes ? [`recentOutcomes: ${meta.recentOutcomes}`] : []),
+        ...(meta.recentOutcomes ? [`recentOutcomes: ${yamlString(meta.recentOutcomes)}`] : []),
         ...(meta.netR !== undefined && meta.rSampled && meta.rSampled > 0
             ? [`netR: ${meta.netR.toFixed(2)}`, `rSampled: ${meta.rSampled}`]
             : []),
-        ...(meta.suspendedAt ? [`suspendedAt: ${meta.suspendedAt}`] : []),
+        ...(meta.suspendedAt ? [`suspendedAt: ${yamlString(meta.suspendedAt)}`] : []),
         ...(meta.disabledByUser ? ['disabledByUser: true'] : []),
         ...(meta.manualOnly ? ['manualOnly: true'] : []),
-        `modified: ${meta.modifiedAt ?? new Date().toISOString()}`,
-        ...(meta.evalVerdict ? [`evalVerdict: ${meta.evalVerdict}${meta.evalDetail ? ` (${meta.evalDetail})` : ''}`] : []),
-        ...(meta.lastEvalAt ? [`lastEvalAt: ${meta.lastEvalAt}`] : []),
-        ...(meta.refinedAt ? [`refinedAt: ${meta.refinedAt}`] : []),
-        ...(meta.lastEvidenceAt ? [`lastEvidenceAt: ${meta.lastEvidenceAt}`] : []),
-        ...(meta.lastMatchedAt ? [`lastMatchedAt: ${meta.lastMatchedAt}`] : []),
-        ...(meta.supersededBy ? [`supersededBy: ${meta.supersededBy}`] : []),
+        `modified: ${yamlString(meta.modifiedAt ?? new Date().toISOString())}`,
+        ...(meta.evalVerdict ? [`evalVerdict: ${yamlString(`${meta.evalVerdict}${meta.evalDetail ? ` (${meta.evalDetail})` : ''}`)}`] : []),
+        ...(meta.lastEvalAt ? [`lastEvalAt: ${yamlString(meta.lastEvalAt)}`] : []),
+        ...(meta.refinedAt ? [`refinedAt: ${yamlString(meta.refinedAt)}`] : []),
+        ...(meta.lastEvidenceAt ? [`lastEvidenceAt: ${yamlString(meta.lastEvidenceAt)}`] : []),
+        ...(meta.lastMatchedAt ? [`lastMatchedAt: ${yamlString(meta.lastMatchedAt)}`] : []),
+        ...(meta.supersededBy ? [`supersededBy: ${yamlString(meta.supersededBy)}`] : []),
         ...(meta.evalStreak ? [`evalStreak: ${meta.evalStreak}`] : []),
-        ...(meta.controlIds && meta.controlIds.length > 0 ? [`controlIds: ${meta.controlIds.slice(-CONTROL_ID_TAIL).join(',')}`] : []),
+        ...(meta.controlIds && meta.controlIds.length > 0 ? [`controlIds: ${yamlString(meta.controlIds.slice(-CONTROL_ID_TAIL).join(','))}`] : []),
         // The control group's aggregate sample, written beside the id tail it
         // is counted from. Only when non-zero: an ABSENT pair is what the
         // cold-start branch of the CI gate reads as "no control evidence".
         ...(meta.controlWins || meta.controlLosses
             ? [`controlWins: ${meta.controlWins ?? 0}`, `controlLosses: ${meta.controlLosses ?? 0}`]
             : []),
-        ...(meta.overriddenIds && meta.overriddenIds.length > 0 ? [`overriddenIds: ${meta.overriddenIds.slice(-20).join(',')}`] : []),
-        ...(meta.crossRegimeIds && meta.crossRegimeIds.length > 0 ? [`crossRegimeIds: ${meta.crossRegimeIds.slice(-20).join(',')}`] : []),
+        ...(meta.overriddenIds && meta.overriddenIds.length > 0 ? [`overriddenIds: ${yamlString(meta.overriddenIds.slice(-20).join(','))}`] : []),
+        ...(meta.crossRegimeIds && meta.crossRegimeIds.length > 0 ? [`crossRegimeIds: ${yamlString(meta.crossRegimeIds.slice(-20).join(','))}`] : []),
         ...(meta.regimeStats ? [`regimeStats: ${JSON.stringify(meta.regimeStats)}`] : []),
-        ...(meta.prediction ? [serializePrediction(meta.prediction)] : []),
+        ...(meta.prediction ? [`prediction: ${yamlString(JSON.stringify(meta.prediction))}`] : []),
         ...(meta.claimTestedEvidence !== undefined ? [`claimTestedEvidence: ${meta.claimTestedEvidence}`] : []),
         ...(meta.shadow ? [`shadow: ${JSON.stringify(meta.shadow)}`] : []),
         ...(meta.history && meta.history.length > 0 ? [`history: ${JSON.stringify(meta.history)}`] : []),
         ...(meta.previousVersion ? [`previousVersion: ${JSON.stringify(meta.previousVersion)}`] : []),
         ...(meta.birthEvidence ? [`birthEvidence: ${JSON.stringify(meta.birthEvidence)}`] : []),
-        `tradeIds: ${meta.tradeIds.slice(-20).join(',')}`,
+        `tradeIds: ${yamlString(meta.tradeIds.slice(-20).join(','))}`,
         // Monotonic evidence counter — the TRUE cumulative count, maintained
         // by countTradeOutcome on every counting path. The max() against the
         // tail-20 tradeIds list is only a FLOOR for legacy rows written
@@ -1111,7 +1146,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
     ];
 
     // One frontmatter block, two faces. The parser reads straight through the
-    // marker (it is an HTML comment, invisible to a YAML reader and to a human
+    // marker (it is a YAML comment, invisible to a YAML reader and to a human
     // skimming the file), so a legacy file and a freshly-split file parse
     // identically — no migration, no rewrite, nothing lost.
     return [
@@ -1121,7 +1156,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...ledger,
         '---',
         '',
-        `# ${title}`,
+        `# ${name}`,
         '',
         meta.body.trim(),
         '',
@@ -3193,6 +3228,12 @@ export const applyRescopeProposal = async (
 
     meta.ifCondition = ifCondition;
     meta.thenAction = thenAction;
+    // Description is a live retrieval trigger, so it must move with a re-scope.
+    // Leaving the old sentence here can make the prose point at a claim the
+    // structured fields and body have already replaced.
+    meta.description = buildSkillDescription(meta.kind, {
+        coin: meta.coin, direction: meta.direction, family: meta.family, regime: meta.regime,
+    }, ifCondition, thenAction);
     // A re-scope moves the trigger, so the machine clause that used to prove it
     // describes a different claim now: take the rewrite's predicate when it
     // carried one, and DROP it otherwise. Keeping the old one would let the desk

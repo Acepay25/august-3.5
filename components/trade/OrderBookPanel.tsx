@@ -89,19 +89,42 @@ const Row: React.FC<{ side: 'bid' | 'ask'; level: LadderLevel; maxTotal: number;
     </div>
 );
 
+/** Cold-start skeleton: the ladder's real grid geometry before the data
+ *  exists, so the first paint reads "loading" instead of "broken" (no blank
+ *  heavy surfaces — docs/ui-doctrine.md). Stock animate-pulse; no new
+ *  keyframes for the motion inventory to chase. */
+const SkeletonRow: React.FC<{ side: 'bid' | 'ask' }> = ({ side }) => (
+    <div className={`${GRID} items-center py-[1.5px]`}>
+        <span className={`h-3 w-2/3 animate-pulse rounded-sm ${side === 'bid' ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`} />
+        <span className="ml-auto h-3 w-10 animate-pulse rounded-sm bg-zinc-800/80" />
+        <span className="ml-auto h-3 w-8 animate-pulse rounded-sm bg-zinc-800/80" />
+    </div>
+);
+
 const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol, live = false, liveDepth }) => {
     const [book, setBook] = useState<OrderBookData | null>(null);
+    // The poll's failure is a STATE, not a silence: a swallowed catch left a
+    // permanently failing book indistinguishable from a loading one.
+    const [bookFailed, setBookFailed] = useState(false);
 
     // Fallback poll only while the socket is down.
     useEffect(() => {
         if (live) return;
         let cancelled = false;
         let timer = 0;
+        setBookFailed(false);
         const load = async (): Promise<void> => {
             try {
                 const next = await fetchOrderBookDepth(symbol);
-                if (!cancelled) setBook(next);
-            } catch { /* keep the last ladder on a failed poll */ }
+                if (!cancelled) {
+                    setBook(next);
+                    setBookFailed(false);
+                }
+            } catch {
+                // Keep the last ladder on a failed poll — but SAY the poll is
+                // failing (the header + the body below read this state).
+                if (!cancelled) setBookFailed(true);
+            }
             if (!cancelled) timer = window.setTimeout(() => void load(), 5000);
         };
         void load();
@@ -109,6 +132,9 @@ const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol, live = false, l
     }, [symbol, live]);
 
     const usingLive = live && !!liveDepth;
+    // Skeleton only while genuinely LOADING (no book yet, no failure). A
+    // loaded-but-empty book and a failing poll are their own honest states.
+    const bookLoading = !usingLive && !book && !bookFailed;
     const asks = usingLive ? liveDepth!.asks : book?.asks ?? [];
     const bids = usingLive ? liveDepth!.bids : book?.bids ?? [];
     // Binance depth asks arrive ASCENDING (best ask first, index 0). Take the
@@ -153,9 +179,9 @@ const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol, live = false, l
     return (
         <div className="flex h-full min-h-0 flex-col border-l border-white/[0.06] bg-zinc-900/40">
             <div className="flex shrink-0 items-center justify-between px-2 py-1.5">
-                <span className="ui-kicker">Order Book</span>
-                <span className={`font-mono text-ui-xs ${usingLive ? 'text-emerald-400' : 'text-zinc-600'}`} title={usingLive ? 'depth20@100ms websocket' : 'REST poll every 5s'}>
-                    {usingLive ? 'live' : `${dominant}`}
+                <h2 className="ui-kicker">Order Book</h2>
+                <span className={`font-mono text-ui-xs ${usingLive ? 'text-emerald-400' : asksView.length || bidsView.length ? 'text-zinc-600' : bookFailed ? 'text-rose-400' : 'text-zinc-600 animate-pulse'}`} title={usingLive ? 'depth20@100ms websocket' : 'REST poll every 5s'}>
+                    {usingLive ? 'live' : asksView.length || bidsView.length ? `${dominant}` : bookFailed ? 'offline' : book ? 'empty' : 'loading'}
                 </span>
             </div>
             {/* Column headers share the rows' grid so all three columns align.
@@ -170,7 +196,26 @@ const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol, live = false, l
                 <span className="text-right">Total</span>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden">
-                {asksView.map(a => (
+                {bookLoading ? (
+                    // Cold state: a skeleton ladder at the real geometry —
+                    // asks above the spread band, bids below — instead of a
+                    // lone "Loading book…" line in an empty column.
+                    <div data-testid="orderbook-empty">
+                        <p className="sr-only">Loading book…</p>
+                        {Array.from({ length: LADDER_DEPTH }, (_, i) => <SkeletonRow key={`sa${i}`} side="ask" />)}
+                    </div>
+                ) : asksView.length === 0 && bidsView.length === 0 ? (
+                    // Loaded-but-empty, or the poll is failing: say WHICH,
+                    // instead of a skeleton that would never clear.
+                    <p
+                        data-testid={bookFailed ? 'orderbook-error' : 'orderbook-empty-book'}
+                        className="px-2 py-3 text-ui-dense leading-5 text-zinc-500"
+                    >
+                        {bookFailed
+                            ? 'Book unavailable — the exchange is not answering. Retrying every 5s.'
+                            : 'No depth data in the book.'}
+                    </p>
+                ) : asksView.map(a => (
                     <Row key={`a${a.price}`} side="ask" level={a} maxTotal={maxTotal} wall={sellWalls.has(a.price)} />
                 ))}
                 {/* The spread band reuses the same grid, so it reads as a row
@@ -185,12 +230,13 @@ const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol, live = false, l
                     <span className="text-right text-zinc-300">{bestAsk && bestBid ? fmtPrice(spreadValue) : '—'}</span>
                     <span className={`text-right ${spreadPercent > 0.05 ? 'text-amber-400' : ''}`}>{spreadPctText}</span>
                 </div>
-                {bidsView.map(b => (
+                {bookLoading ? (
+                    <div aria-hidden>
+                        {Array.from({ length: LADDER_DEPTH }, (_, i) => <SkeletonRow key={`sb${i}`} side="bid" />)}
+                    </div>
+                ) : bidsView.map(b => (
                     <Row key={`b${b.price}`} side="bid" level={b} maxTotal={maxTotal} wall={buyWalls.has(b.price)} />
                 ))}
-                {asksView.length === 0 && bidsView.length === 0 && (
-                    <p data-testid="orderbook-empty" className="px-2 py-3 text-ui-dense text-zinc-600">Loading book…</p>
-                )}
             </div>
         </div>
     );

@@ -40,9 +40,10 @@ import { initMemoryFiles, getMemoryFiles } from '../services/learning/MemoryFile
 import { readBotMemoryMarkdown, botMemoryFolderName } from '../services/bots/BotMemoryService';
 import { TradeOutcome } from '../types';
 import type { LoggedTrade, TradeAnalysis } from '../types';
+import { saveHarnessSettings } from '../utils/harnessSettings';
 
 const USER = 'bot-learn-user';
-const BOT = { id: 'bot-7', name: 'Macro', providerId: 'prov-bot' };
+const BOT = { id: 'bot-7', name: 'Macro', providerId: 'prov-bot', modelId: 'model-x' };
 
 const botTrade = (id: string): LoggedTrade => ({
     id,
@@ -66,6 +67,7 @@ beforeEach(async () => {
     store = {};
     syncSpy.mockClear();
     localStorage.clear();
+    saveHarnessSettings({ autoDraftingEnabled: true });
     await initMemoryFiles(USER);
 });
 
@@ -91,6 +93,28 @@ describe('recordBotTurnOutcome', () => {
         const ensemble = { ...botTrade('ens-1'), modelsUsed: { 'prov-bot': 'm', 'prov-other': 'm2' } };
         await turn([notTheBot, ensemble]);
         expect(syncSpy).not.toHaveBeenCalled();
+    });
+
+    it('requires the exact provider and model before attributing a trade to the bot', async () => {
+        const wrongModel = { ...botTrade('wrong-model'), modelsUsed: { 'prov-bot': 'model-y' } };
+        const exactBot = botTrade('exact-bot');
+        await turn([wrongModel, exactBot]);
+        expect(syncSpy).toHaveBeenCalledTimes(1);
+        expect(syncSpy.mock.calls[0][0]).toMatchObject({ id: 'exact-bot' });
+    });
+
+    it('honors the auto-drafting switch while preserving bot lessons and pending trades', async () => {
+        saveHarnessSettings({ autoDraftingEnabled: false });
+        const trades = [botTrade('draft-later')];
+        await turn(trades);
+        expect(botLessonCount(BOT.id)).toBe(1);
+        expect(syncSpy).not.toHaveBeenCalled();
+
+        // The closed trade was not marked as folded while off; it can be
+        // processed on a later turn after the trader opts in.
+        saveHarnessSettings({ autoDraftingEnabled: true });
+        await turn(trades);
+        expect(syncSpy).toHaveBeenCalledTimes(1);
     });
 
     it('writes its lesson where BotMemoryService reads it back', async () => {

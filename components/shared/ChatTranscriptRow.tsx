@@ -19,7 +19,7 @@
  *    while the answer streams. `toolActions` is the persistent trail.
  */
 import React from 'react';
-import { Pencil, RotateCcw } from './Icons';
+import { InterruptedRunNotice } from './InterruptedRunNotice';
 import ChatWorkTimeline, { type ChatWorkView } from '../trade/panels/ChatWorkTimeline';
 import { CopyChip, FadingText, PinChip, RetryChip, SpeakChip } from './chatChips';
 import KeyLevelsCard from '../trade/KeyLevelsCard';
@@ -126,11 +126,11 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
             )}
 
             {isUser ? (
-                <div className="max-w-[85%] rounded-bubble bg-zinc-800 px-3 py-2 text-ui-caption leading-5 text-zinc-100">
+                <div className="max-w-[85%] rounded-bubble bg-zinc-800 px-3 py-2 text-ui-base leading-relaxed text-zinc-100">
                     <FadingText text={body} streaming={!!row.streaming} />
                 </div>
             ) : (
-                <div className="w-full max-w-full text-zinc-200 text-ui-caption leading-relaxed">
+                <div className="w-full max-w-full text-zinc-200 text-ui-base leading-relaxed">
                     <ChatWorkTimeline entry={work} />
                     {body.trim()
                         ? <FadingText text={body} streaming={!!row.streaming} />
@@ -184,26 +184,13 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                 Requires at least ONE handler: a "Run stopped" label with no
                 button beside it is a dead notice — it names a problem and offers
                 no way out, which is worse than saying nothing. */}
-            {!isUser && row.interrupted && (onRetry || (onEditPrompt && row.interruptedPrompt)) && (
-                <div className="mt-1 flex flex-wrap items-center gap-1.5" data-testid="interrupted-run-notice">
-                    <span className="text-ui-xs text-zinc-500">Run stopped</span>
-                    {onEditPrompt && row.interruptedPrompt && (
-                        <button type="button"
-                            onClick={() => onEditPrompt(row.interruptedPrompt!)}
-                            className="flex items-center hit-target gap-1 rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
-                            <Pencil className="h-3 w-3" aria-hidden="true" />
-                            <span>Edit prompt</span>
-                        </button>
-                    )}
-                    {onRetry && (
-                        <button type="button"
-                            onClick={onRetry}
-                            className="flex items-center hit-target gap-1 rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
-                            <RotateCcw className="h-3 w-3" aria-hidden="true" />
-                            <span>Try again</span>
-                        </button>
-                    )}
-                </div>
+            {!isUser && row.interrupted && (
+                <InterruptedRunNotice
+                    onEditPrompt={onEditPrompt && row.interruptedPrompt
+                        ? () => onEditPrompt(row.interruptedPrompt!)
+                        : undefined}
+                    onTryAgain={onRetry ?? undefined}
+                />
             )}
 
             <div className="mt-1 flex items-center gap-1">

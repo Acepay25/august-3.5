@@ -429,7 +429,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
 
     if (selected) {
         return (
-            <div className="flex h-full min-h-0 flex-col bg-zinc-950 px-5 py-4 text-zinc-100">
+            <div className="flex h-full min-h-0 flex-col bg-surface-page px-5 py-4 text-zinc-100">
                 <div className="min-h-0 flex-1">
                     <SkillDetail
                         skill={selected}
@@ -446,7 +446,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
     }
 
     return (
-        <div className="flex h-full flex-col bg-zinc-950 text-zinc-100">
+        <div className="flex h-full flex-col bg-surface-page text-zinc-100" data-testid="studio-view">
             <div className="flex items-center justify-between gap-3 border-b border-white/5 px-5 py-3">
                 <div>
                     <h2 className="font-serif text-ui-xl tracking-tight text-zinc-100">Skills</h2>

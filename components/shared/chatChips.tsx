@@ -129,6 +129,6 @@ export const PinChip: React.FC<{ pinned: boolean; onToggle: () => void }> = ({ p
  *  is CSS-only and can never eat text. */
 export const FadingText: React.FC<{ text: string; streaming: boolean; className?: string }> = ({ text, streaming, className }) => (
     <div className={streaming ? 'stream-fade' : undefined}>
-        <MarkdownContent content={text} className={className ?? "!text-ui-sm [&_p]:my-1 [&_li]:text-ui-sm"} />
+        <MarkdownContent content={text} className={className ?? "!text-ui-base [&_p]:my-1 [&_li]:text-ui-base"} />
     </div>
 );

@@ -25,11 +25,11 @@ vi.mock('../services/learning/MemoryModelService', () => ({
 }));
 
 import LearnView, { type LearnTab } from '../components/learn/LearnView';
+import { ToastProvider } from '../components/shared/Toast';
 import { initMemoryFiles } from '../services/learning/MemoryFilesService';
 import { queueSkillDraft } from '../utils/skillDrafts';
 import * as supervisorStore from '../services/learning/supervisorStore';
 import { recordTombstone } from '../services/learning/skillGraveyard';
-import { getHarnessSettings, saveHarnessSettings } from '../utils/harnessSettings';
 
 const USER = 'learn-ui-user';
 
@@ -87,8 +87,6 @@ describe('Learn surface', () => {
     });
 
     it('switches to Health and renders the memory report', async () => {
-        // The report itself is always on; only the dashboards rest under Focus.
-        saveHarnessSettings({ viewDensity: 'detail' });
         mount();
         fireEvent.click(screen.getByTestId('learn-tab-health'));
         await waitFor(() => {
@@ -160,13 +158,11 @@ describe('Learn deep link', () => {
 
 describe('One learning surface (WS-5.1)', () => {
     it('Health carries the learning analytics that used to live in the Journal', async () => {
-        saveHarnessSettings({ viewDensity: 'detail' });
         mount();
         fireEvent.click(screen.getByTestId('learn-tab-health'));
         await waitFor(() => expect(screen.getByTestId('learn-signals')).toBeTruthy());
     });
 });
-
 describe('Graveyard view (WS-5.1)', () => {    it('Health lists what was retired and why, instead of only counting it', async () => {
         await recordTombstone(USER, {
             slug: 'btc-old-range-rule', reason: 'eval-hurts', sampleN: 6, liftPts: -12,
@@ -240,51 +236,74 @@ describe('The Approvals tab', () => {
 });
 
 /**
- * Density is a whole-view preset, not six toggles: one setting decides whether
- * the loop's dashboards are on screen, and the shorter screen must SAY what is
- * resting. A panel that silently disappears is indistinguishable from a feature
- * that broke, which is the difference between minimalism and loss.
+ * The Health tab is one always-on surface: the memory report, the learning
+ * analytics, the lesson browser and the runtime telemetry all render with no
+ * preset to rest them — a panel that only appears when a setting says so is
+ * a panel a first run never meets.
  */
-describe('Focus rests the telemetry without deleting it', () => {
-    it('hides the dashboards and names what is resting', async () => {
-        saveHarnessSettings({ viewDensity: 'focus' });
+describe('Health shows the loop telemetry with no preset behind it', () => {
+    it('renders the panels without writing any setting first', async () => {
         mount();
         fireEvent.click(screen.getByTestId('learn-tab-health'));
         await waitFor(() => expect(screen.getByTestId('memory-health-card')).toBeTruthy());
-        expect(screen.queryByTestId('learn-signals')).toBeNull();
-        expect(screen.queryByTestId('learn-system')).toBeNull();
-        expect(screen.getByTestId('learn-resting').textContent).toMatch(/resting/i);
-    });
-
-    it('the Show Detail press writes the shared setting and reveals them', async () => {
-        saveHarnessSettings({ viewDensity: 'focus' });
-        mount();
-        fireEvent.click(screen.getByTestId('learn-tab-health'));
-        fireEvent.click(await screen.findByTestId('learn-show-detail'));
+        // The panels are lazy (Suspense), so the assertions wait for the
+        // mounts — the PRESET they used to wait on is gone, the timing is not.
         await waitFor(() => expect(screen.getByTestId('learn-signals')).toBeTruthy());
-        expect(screen.getByTestId('learn-system')).toBeTruthy();
-        expect(getHarnessSettings().viewDensity).toBe('detail');
-    });
-
-    it('and the surface owns the way back — Rest these writes focus again', async () => {
-        // The bottom bar used to be the only control that could close these
-        // again. Deleting the bar must not leave Detail a one-way door: the
-        // surface that opens the panels has to be able to rest them.
-        saveHarnessSettings({ viewDensity: 'focus' });
-        mount();
-        fireEvent.click(screen.getByTestId('learn-tab-health'));
-        fireEvent.click(await screen.findByTestId('learn-show-detail'));
         await waitFor(() => expect(screen.getByTestId('learn-system')).toBeTruthy());
-        fireEvent.click(screen.getByTestId('learn-rest-telemetry'));
-        await waitFor(() => expect(screen.getByTestId('learn-resting')).toBeTruthy());
-        expect(screen.queryByTestId('learn-system')).toBeNull();
-        expect(getHarnessSettings().viewDensity).toBe('focus');
     });
 
-    it('the notebook health never rests — it is the one panel with a press on it', async () => {
-        saveHarnessSettings({ viewDensity: 'focus' });
+    it('the notebook health is there too — it is the one panel with a press on it', async () => {
         mount();
         fireEvent.click(screen.getByTestId('learn-tab-health'));
         await waitFor(() => expect(screen.getByTestId('memory-health-card')).toBeTruthy());
+    });
+});
+
+/**
+ * The global-memory switch lives on the Learn surface (MemoryFilesManager) —
+ * Settings → Memory kept only a link here, so if App stopped handing the flag
+ * and its setter through LearnView the ONE writer of that flag would silently
+ * vanish from the UI (the switch renders only when the setter is supplied).
+ * A real state holder mounts it so the pressed switch must flip aria-checked —
+ * an inert control would leave it frozen.
+ */
+const GlobalMemoryHarness: React.FC = () => {
+    const [enabled, setEnabled] = React.useState(false);
+    return (
+        <ToastProvider>
+            <LearnView username={USER} trades={[]} memoryConfig={null}
+                isGlobalMemoryEnabled={enabled}
+                setIsGlobalMemoryEnabled={setEnabled} />
+        </ToastProvider>
+    );
+};
+
+const openMemoryTab = async (): Promise<void> => {
+    fireEvent.click(screen.getByTestId('learn-tab-memory'));
+    // MemoryFilesManager is lazy — wait for its header before asserting on it.
+    await screen.findByText(/Notebook files the model reads/);
+};
+
+describe('The Memory tab', () => {
+    it('renders the global-memory switch and writes through the setter', async () => {
+        render(<GlobalMemoryHarness />);
+        await openMemoryTab();
+        const sw = screen.getByRole('switch', { name: 'Toggle Global Memory' });
+        expect(sw.getAttribute('aria-checked')).toBe('false');
+        fireEvent.click(sw);
+        await waitFor(() => expect(sw.getAttribute('aria-checked')).toBe('true'));
+    });
+
+    it('shows no global-memory switch when the setter is not handed in', async () => {
+        // The bare mount() has no ToastProvider either, but the Memory pane's
+        // notebook browser is the only child that needs one; this test mounts
+        // it wrapped to reach the pane and pin the ABSENCE of the switch.
+        render(
+            <ToastProvider>
+                <LearnView username={USER} trades={[]} memoryConfig={null} />
+            </ToastProvider>,
+        );
+        await openMemoryTab();
+        expect(screen.queryByRole('switch', { name: 'Toggle Global Memory' })).toBeNull();
     });
 });

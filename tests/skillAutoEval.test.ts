@@ -100,7 +100,7 @@ tradeIds: x,y
         expect(first.verdict).toBe('helps');
 
         const content = getMemoryFiles().files.find(f => f.name === 'btc-short-avoid.md')!.content;
-        expect(content).toMatch(/evalVerdict: helps \(3\/3\)/);
+        expect(content).toMatch(/evalVerdict: "helps \(3\/3\)"/);
         expect(content).toContain('lastEvalAt:');
 
         // Cooldown: just-evaluated skill is not immediately due again.

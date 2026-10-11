@@ -9,6 +9,7 @@ export default tseslint.config(
       'dist/**',
       'dist_electron/**',
       'node_modules/**',
+      '.probe-artifacts/**',
       'android/**',
       'coverage/**',
       'test-results/**',

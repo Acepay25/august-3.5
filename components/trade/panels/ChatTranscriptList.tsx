@@ -8,7 +8,8 @@
  */
 
 import React, { useState } from 'react';
-import { Pencil, RotateCcw, Zap } from '../../shared/Icons';
+import { Zap } from '../../shared/Icons';
+import { InterruptedRunNotice } from '../../shared/InterruptedRunNotice';
 import type { Message } from '../../../types/message';
 import type { LiveEntry } from '../../../services/trade/chatStore';
 import { parseKeyLevels, type MessageLevelLines } from '../../../services/trade/keyLevels';
@@ -146,7 +147,7 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                                 <div className="flex max-w-[85%] items-start gap-1">
                                     {!answerStreaming && <CopyChip text={e.text} className="mt-2" />}
                                     {!answerStreaming && <RetryChip onRetry={() => void send('', e.id)} className="mt-2" />}
-                                    <p className="min-w-0 rounded-bubble bg-zinc-800 px-3 py-2 text-ui-sm leading-5 text-zinc-100">{e.text}</p>
+                                    <p className="min-w-0 rounded-bubble bg-zinc-800 px-3 py-2 text-ui-base leading-relaxed text-zinc-100">{e.text}</p>
                                 </div>
                             )}
                         </div>
@@ -168,35 +169,29 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                                 `retryOf` re-dispatch is the same one the post-mortem
                                 retry uses. */}
                             {e.interrupted && !e.streaming && (
-                                <div className="flex flex-wrap items-center gap-1.5" data-testid="interrupted-run-notice">
-                                    <span className="text-ui-xs text-zinc-500">Run stopped</span>
-                                    <button type="button"
-                                        onClick={() => {
-                                            const asked = entries[i - 1]?.role === 'user' ? entries[i - 1].text : '';
-                                            if (asked) setDraftText?.(asked);
-                                        }}
-                                        className="flex items-center hit-target gap-1 rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
-                                        <Pencil className="h-3 w-3" aria-hidden="true" />
-                                        <span>Edit prompt</span>
-                                    </button>
-                                    <button type="button"
-                                        onClick={() => {
-                                            const asked = entries[i - 1]?.role === 'user' ? entries[i - 1].text : '';
-                                            void send(asked, entries[i - 1]?.id);
-                                        }}
-                                        className="flex items-center hit-target gap-1 rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
-                                        <RotateCcw className="h-3 w-3" aria-hidden="true" />
-                                        <span>Try again</span>
-                                    </button>
-                                </div>
+                                <InterruptedRunNotice
+                                    onEditPrompt={(() => {
+                                        const asked = entries[i - 1]?.role === 'user' ? entries[i - 1].text : '';
+                                        return asked ? () => setDraftText?.(asked) : undefined;
+                                    })()}
+                                    onTryAgain={() => {
+                                        const asked = entries[i - 1]?.role === 'user' ? entries[i - 1].text : '';
+                                        void send(asked, entries[i - 1]?.id);
+                                    }}
+                                />
                             )}
-                            <div className="text-ui-sm leading-5 text-zinc-200">
+                            <div className="text-ui-base leading-relaxed text-zinc-200">
                                 {shownText
                                     ? <FadingText text={shownText} streaming={!!e.streaming} />
                                     : null}
                             </div>
                             {shownText && !e.streaming && (
-                                <div className="flex items-center gap-2 opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 focus-within:opacity-100">
+                                /* Always visible, matching ChatTranscriptRow's
+                                    action row — the dock's chips used to be
+                                    hover-gated on a `group/msg` no ancestor
+                                    carried, so a mouse user could never see
+                                    them. */
+                                <div className="flex items-center gap-2">
                                     <CopyChip text={shownText} />
                                     {onToggleWatch && analysisId && pinnedMessageIds && (
                                         <PinChip pinned={pinnedMessageIds.has(analysisId)}

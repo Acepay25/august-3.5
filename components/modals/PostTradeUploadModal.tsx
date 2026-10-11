@@ -86,7 +86,7 @@ export const PostTradeUploadModal: React.FC<{
     };
 
     return (
-        <div ref={dialogRef} className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Enhance post-mortem analysis">
+        <div ref={dialogRef} className="fixed inset-0 bg-black/70 z-modal flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Enhance post-mortem analysis">
             <div className="bg-zinc-900 rounded-2xl shadow-2xl p-6 w-full max-w-lg border border-white/10 animate-fade-in max-h-[90vh] overflow-y-auto">
                 <h3 className="text-lg font-bold text-cyan-400 mb-2">Enhance Post-Mortem Analysis?</h3>
                 <p className="text-ui-base text-zinc-400 mb-4">
