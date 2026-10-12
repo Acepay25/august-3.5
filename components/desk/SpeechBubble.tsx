@@ -16,8 +16,8 @@ import React from 'react';
 const BUBBLE_MAX_CHARS = 64;
 const FADE_MS = 4000;
 
-const truncate = (s: string, n = BUBBLE_MAX_CHARS): string => {
-    const cleaned = (s ?? '').replace(/\s+/g, ' ').trim();
+const normalize = (s: string): string => (s ?? '').replace(/\s+/g, ' ').trim();
+const clip = (cleaned: string, n = BUBBLE_MAX_CHARS): string => {
     if (cleaned.length <= n) return cleaned;
     return `${cleaned.slice(0, n - 1).trimEnd()}…`;
 };
@@ -57,7 +57,8 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
     emphasis = 'normal',
     'data-testid': testId,
 }) => {
-    const cleaned = truncate(text);
+    const spoken = normalize(text);
+    const cleaned = clip(spoken);
     if (!cleaned) return null;
     const accent = (toneKey && TONE_ACCENT[toneKey.toLowerCase()]) ?? '#fbbf24';
     const sideClass =
@@ -71,7 +72,8 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
     return (
         <div
             role="status"
-            aria-label={`${speaker} says: ${cleaned}`}
+            aria-label={`${speaker} says: ${spoken}`}
+            title={spoken}
             data-testid={testId}
             data-side={side}
             data-emphasis={emphasis}
