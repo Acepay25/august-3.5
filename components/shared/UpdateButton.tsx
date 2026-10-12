@@ -161,6 +161,11 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
             <div className={`flex items-center gap-2 ${className}`}>
                 <span
                     className={`flex items-center gap-1.5 text-ui-dense text-rose-400 ${verboseError ? 'max-w-[260px]' : ''}`}
+                    // In the short-error branch the only text on screen is the
+                    // generic "Update error", so the real message has to live on
+                    // this wrapper; in the verbose branch it moves to the
+                    // truncating span below, and a title here would shadow it.
+                    title={verboseError ? undefined : (error || '')}
                 >
                     <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     {verboseError && error ? <span className="truncate" title={error}>{error}</span> : 'Update error'}

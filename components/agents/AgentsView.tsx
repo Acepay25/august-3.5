@@ -726,7 +726,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     <ul className="space-y-1 px-2 pb-2 pl-9">
                         {routines.map(cfg => (
                             <li key={cfg.id} className="flex items-baseline gap-2">
-                                <span className="min-w-0 flex-1 truncate text-ui-xs text-zinc-400" title={cfg.name}>
+                                <span className="min-w-0 flex-1 truncate text-ui-xs text-zinc-400" title={`${cfg.name} · ${cfg.schedule?.cron ?? '—'}`}>
                                     {cfg.name}
                                     <span className="ml-1 font-mono text-ui-2xs text-zinc-600">
                                         {cfg.schedule?.cron ?? '—'}
