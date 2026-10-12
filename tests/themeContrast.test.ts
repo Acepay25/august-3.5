@@ -205,7 +205,7 @@ describe('motion lockout (WS-5.4)', () => {
  */describe('clipped text names its fallback', () => {
     const CLIP = /truncate|line-clamp/;
     const FB = /\s(?:title|aria-label|aria-labelledby)=/;
-    const EMPTY_FB = /\s(?:title|aria-label|aria-labelledby)=(?:\{\s*undefined\s*\}|""|''|"")/;
+    const EMPTY_FB = /\s(?:title|aria-label|aria-labelledby)=(?:\{\s*(?:undefined|null|false|''|"")\s*\}|\{\s*``\s*\}|""|'')/;
 
     /**
      * The count this gate holds is only as honest as its scanner, and the scanner
@@ -362,6 +362,11 @@ describe('motion lockout (WS-5.4)', () => {
         expect(clippedWithoutFallback('<span data-title="x" className="truncate">{name}</span>')).toHaveLength(1);
         // A fallback that names nothing is not a fallback.
         expect(clippedWithoutFallback('<span className="truncate" title={undefined}>{name}</span>')).toHaveLength(1);
+        // Every other way to write a fallback that carries no text.
+        expect(clippedWithoutFallback('<span className="truncate" title={null}>{name}</span>')).toHaveLength(1);
+        expect(clippedWithoutFallback('<span className="truncate" title={false}>{name}</span>')).toHaveLength(1);
+        expect(clippedWithoutFallback('<span className="truncate" title={``}>{name}</span>')).toHaveLength(1);
+        expect(clippedWithoutFallback('<span className="truncate" title={\'\'}>{name}</span>')).toHaveLength(1);
         // The bug class: an arrow function must not cut the tag in half.
         expect(clippedWithoutFallback('<button onClick={() => open(id)} className="truncate" title={full}>{x}</button>')).toHaveLength(0);
         expect(clippedWithoutFallback('<button onClick={() => open(id)} className="truncate">{x}</button>')).toHaveLength(1);
