@@ -655,7 +655,7 @@ body {
    shows a wrapping `Tip: …` line with a live duration tick.
    Expanded, it becomes the boxed, scrollable trace as clean bullets. */
 .reasoning-row {
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   overflow: hidden;
   border: 1px solid transparent;
 }
@@ -1111,7 +1111,7 @@ body.desk-idle-motion-off {
 }
 
 .ui-control {
-  border-radius: 0.5rem;
+  border-radius: var(--radius-control);
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: var(--color-zinc-800);
   color: var(--color-zinc-200);
@@ -1134,7 +1134,7 @@ body.desk-idle-motion-off {
   gap: 6px;
   white-space: nowrap;
   padding: 4px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: var(--color-zinc-800);
   color: var(--color-zinc-200);

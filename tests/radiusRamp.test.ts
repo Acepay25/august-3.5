@@ -28,6 +28,12 @@ import { join, relative } from 'path';
  * `radius={[0, 6, 6, 0]}` (`WinRateDashboard.tsx:454`) and an SVG glyph's `rx`
  * (`BotFace.tsx:71`) round DATA shapes, not chrome, and the doctrine's
  * "nothing else invents a radius" was never about them.
+ *
+ * Walking only `.tsx` is deliberate too. `services/analysis/taLibrary.ts:128`
+ * declares a helper named `rounded` and comments across `services/**` use the
+ * English word, so widening this walk to `.ts` would report 70 identifiers and
+ * lines of prose as drift. The printable report (`utils/reportExport.ts`) owns a
+ * separate light stylesheet for paper and its one radius is already 8px.
  */
 
 const BASELINE = 9;
@@ -133,50 +139,69 @@ describe('radius tokens own every non-token radius', () => {
 
     /**
      * The theme file is where a fourth radius actually hid: `.ui-panel` drew
-     * `1rem` (16px) on a panel root, and the scrollbar thumb `10px`, while the
-     * class-based gate could only ever see `rounded-*`. A `border-radius` here is
-     * legal when it is a token (`var(--radius-*)`, or the 8px/12px/999px it
-     * stands for) or a micro-rounding of a hairline mark — 4px and under, which
-     * is what the splash candles (1.5px), the progress tracks (1–2px), the
-     * reasoning caret (1px), the `kbd` cap (4px) and the scrollbar thumb (4px)
-     * actually are. Anything between 5px and 11px, or above 12px that is not a
-     * pill, is an invented radius.
+     * `1rem` (16px) on a panel root and the scrollbar thumb `10px`, neither of
+     * which `OFF_TOKEN` can see. Three more rules (`.reasoning-row`,
+     * `.ui-control`, `.tip-label`) carried the raw number a token stands for;
+     * they name the token now, so the rule here is that a SURFACE radius in
+     * `index.css` must be `var(--radius-control)` or `var(--radius-bubble)`.
+     * Only two families may still be written as numbers, because no token
+     * describes them: pills and circles (`999px`, and the `50%` a circle needs)
+     * and the micro-rounding of hairline marks 4px and under — the splash
+     * candles (1.5px), the progress tracks (2px), the caret and bars (1px), the
+     * `kbd` cap and the thin scrollbar thumb (4px).
+     *
+     * Legality alone was still a blanket: it would have admitted a NEW 4px card,
+     * or `33%`, so the file's radii are also pinned BY VALUE. Same move as the
+     * class floor — adding, removing or changing a radius here has to be an
+     * edit to that list, made on purpose. An unreadable token is refused rather
+     * than skipped, so a new CSS form gets looked at instead of slipping past.
      */
     const CSS_RADIUS_DECL = /border-radius:\s*([^;}]+)/g;
 
-    /** Judge EVERY corner in a declaration — `14px 8px 8px 8px` must not pass on
-     *  the strength of its last three. A token this cannot read is refused, not
-     *  waved through: the theme file today writes only numbers and the two vars,
-     *  so a refusal means a new form arrived and someone should look at it. */
-    const illegalThemeRadii = (css: string): string[] => {
-        const bad: string[] = [];
+    const themeRadii = (css: string): string[] => {
+        const toks: string[] = [];
         for (const decl of css.matchAll(CSS_RADIUS_DECL)) {
-            for (const tok of decl[1].trim().split(/\s+/).filter(Boolean)) {
-                if (/^var\(--radius-(control|bubble)\)$/.test(tok)) continue;
-                const num = /^([0-9.]+)(px|rem|%)?$/.exec(tok);
-                if (!num) { bad.push(`unreadable:${tok}`); continue; }
-                const px = num[2] === 'rem' ? parseFloat(num[1]) * 16 : parseFloat(num[1]);
-                const legal = num[2] === '%' || px <= 4 || px === 8 || px === 12 || px === 999;
-                if (!legal) bad.push(tok);
-            }
+            for (const tok of decl[1].trim().split(/\s+/).filter(Boolean)) toks.push(tok);
         }
-        return bad;
+        return toks.sort();
     };
 
-    it('keeps index.css on the same two radii the classes use', () => {
-        expect(illegalThemeRadii(readFileSync('index.css', 'utf8')), 'invented radii in the theme file').toEqual([]);
+    const illegalThemeRadii = (css: string): string[] => themeRadii(css).filter(tok => {
+        if (/^var\(--radius-(control|bubble)\)$/.test(tok)) return false;
+        const num = /^([0-9.]+)(px|rem|%)?$/.exec(tok);
+        if (!num) return true;
+        if (num[2] === '%') return num[1] !== '50';
+        const px = num[2] === 'rem' ? parseFloat(num[1]) * 16 : parseFloat(num[1]);
+        return !(px <= 4 || px === 999);
+    });
+
+    const THEME_RADIUS_INVENTORY = [
+        '1.5px', '1px', '1px', '1px', '2px', '2px', '4px', '4px',
+        '999px', '999px', '999px', '999px', '999px', '999px', '999px', '999px',
+        'var(--radius-bubble)',
+        'var(--radius-control)', 'var(--radius-control)', 'var(--radius-control)', 'var(--radius-control)',
+    ].sort();
+
+    it('keeps every surface radius in index.css on a token, and pins the rest', () => {
+        const css = readFileSync('index.css', 'utf8');
+        expect(illegalThemeRadii(css), 'invented radii in the theme file').toEqual([]);
+        expect(themeRadii(css), 'theme radii changed — update the list deliberately').toEqual(THEME_RADIUS_INVENTORY);
     });
 
     it('really sees an invented radius in the theme file', () => {
         expect(illegalThemeRadii('border-radius: 1rem;')).toEqual(['1rem']);
         expect(illegalThemeRadii('border-radius: 10px;')).toEqual(['10px']);
-        expect(illegalThemeRadii('border-radius: 14px 8px 8px 8px;')).toEqual(['14px']);
+        // A number equal to a token is still refused: a surface must NAME it, or
+        // a future token change would move the classes and leave this behind.
+        expect(illegalThemeRadii('border-radius: 8px;')).toEqual(['8px']);
+        expect(illegalThemeRadii('border-radius: 0.5rem;')).toEqual(['0.5rem']);
+        expect(illegalThemeRadii('border-radius: 14px 8px 8px 8px;')).toEqual(['14px', '8px', '8px', '8px']);
+        expect(illegalThemeRadii('border-radius: 33%;')).toEqual(['33%']);   // not a circle
+        expect(illegalThemeRadii('border-radius: inherit;')).toEqual(['inherit']);
         expect(illegalThemeRadii('border-radius: var(--radius-bubble);')).toEqual([]);
         expect(illegalThemeRadii('border-radius: var(--radius-bubble) 0 0 0;')).toEqual([]);
-        expect(illegalThemeRadii('border-radius: 0.5rem;')).toEqual([]);   // 8px
         expect(illegalThemeRadii('border-radius: 1.5px;')).toEqual([]);    // hairline mark
         expect(illegalThemeRadii('border-radius: 999px;')).toEqual([]);    // pill
         expect(illegalThemeRadii('border-radius: 50%;')).toEqual([]);      // circle
-        expect(illegalThemeRadii('border-radius: inherit;')).toEqual(['unreadable:inherit']);
     });
 });
