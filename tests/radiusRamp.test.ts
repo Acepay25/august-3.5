@@ -20,10 +20,30 @@ import { join, relative } from 'path';
  * and 3 comments that use the English word "rounded".
  *
  * Like themeContrast's clipped-text ratchet, this holds the count at or under
- * the baseline, so a new off-token radius anywhere in the UI fails the build.
+ * the baseline — and separately pins the floor BY NAME, so rewording one of
+ * those three comments cannot quietly hand the sweep 1 slot of slack: the
+ * inventory assertion fails and the next author lowers `BASELINE` on purpose.
+ *
+ * Chart geometry stays out of this gate on purpose: a Recharts bar's
+ * `radius={[0, 6, 6, 0]}` (`WinRateDashboard.tsx:454`) and an SVG glyph's `rx`
+ * (`BotFace.tsx:71`) round DATA shapes, not chrome, and the doctrine's
+ * "nothing else invents a radius" was never about them.
  */
 
 const BASELINE = 9;
+
+/** The floor, by identity — `path|class` for every site the doctrine forbids touching. */
+const FLOOR_INVENTORY = [
+    'components/analysis/WatchListPanel.tsx|rounded-none',
+    'components/analysis/WatchListPanel.tsx|rounded-t-2xl',
+    'components/shared/ImagePreview.tsx|rounded-t-lg',
+    'components/shared/MarkdownRenderer.tsx|rounded',
+    'components/shared/MarkdownRenderer.tsx|rounded-none',
+    'components/shell/RightPanel.tsx|rounded-t-md',
+    'components/shell/SurfaceMenuList.tsx|rounded-r-full',
+    'components/trade/BiasChips.tsx|rounded',
+    'components/trade/panels/ChatWorkTimeline.tsx|rounded',
+];
 
 const OFF_TOKEN = /rounded-(?!control\b|bubble\b|full\b)[a-z0-9[\]/.%-]*|(?<![-\w])rounded(?![-\w])/g;
 
@@ -46,6 +66,20 @@ describe('radius tokens own every non-token radius', () => {
             }
         }
         expect(count, offenders.sort((a, b) => b.localeCompare(a)).slice(0, 12).join(' | ')).toBeLessThanOrEqual(BASELINE);
+    });
+
+    it('knows its floor by name, not only by number', () => {
+        const found: string[] = [];
+        for (const path of [...walk('components'), 'App.tsx']) {
+            if (!path.endsWith('.tsx')) continue;
+            const matches = readFileSync(path, 'utf8').match(OFF_TOKEN) ?? [];
+            const rel = relative(process.cwd(), path).replace(/\\/g, '/');
+            for (const m of matches) found.push(`${rel}|${m}`);
+        }
+        // Fails BOTH ways on purpose: a new off-token class lands here as an
+        // unexpected entry, and deleting one of these (a reworded comment)
+        // leaves a gap that has to be closed by editing BASELINE deliberately.
+        expect(found.sort()).toEqual(FLOOR_INVENTORY);
     });
 
     it('really sees an off-token radius when one is typed', () => {
@@ -108,18 +142,23 @@ describe('radius tokens own every non-token radius', () => {
      * actually are. Anything between 5px and 11px, or above 12px that is not a
      * pill, is an invented radius.
      */
-    const CSS_RADIUS = /border-radius:\s*([0-9.]+)(px|rem|%)|(border-radius:\s*var\(--radius-(?:control|bubble)\))/g;
+    const CSS_RADIUS_DECL = /border-radius:\s*([^;}]+)/g;
 
+    /** Judge EVERY corner in a declaration — `14px 8px 8px 8px` must not pass on
+     *  the strength of its last three. A token this cannot read is refused, not
+     *  waved through: the theme file today writes only numbers and the two vars,
+     *  so a refusal means a new form arrived and someone should look at it. */
     const illegalThemeRadii = (css: string): string[] => {
         const bad: string[] = [];
-        let m: RegExpExecArray | null;
-        CSS_RADIUS.lastIndex = 0;
-        while ((m = CSS_RADIUS.exec(css)) !== null) {
-            if (m[3]) continue;                       // a token reference
-            const raw = m[1];
-            const px = m[2] === 'rem' ? parseFloat(raw) * 16 : parseFloat(raw);
-            const legal = px <= 4 || px === 8 || px === 12 || px === 999 || m[2] === '%';
-            if (!legal) bad.push(`${raw}${m[2]}`);
+        for (const decl of css.matchAll(CSS_RADIUS_DECL)) {
+            for (const tok of decl[1].trim().split(/\s+/).filter(Boolean)) {
+                if (/^var\(--radius-(control|bubble)\)$/.test(tok)) continue;
+                const num = /^([0-9.]+)(px|rem|%)?$/.exec(tok);
+                if (!num) { bad.push(`unreadable:${tok}`); continue; }
+                const px = num[2] === 'rem' ? parseFloat(num[1]) * 16 : parseFloat(num[1]);
+                const legal = num[2] === '%' || px <= 4 || px === 8 || px === 12 || px === 999;
+                if (!legal) bad.push(tok);
+            }
         }
         return bad;
     };
@@ -131,9 +170,13 @@ describe('radius tokens own every non-token radius', () => {
     it('really sees an invented radius in the theme file', () => {
         expect(illegalThemeRadii('border-radius: 1rem;')).toEqual(['1rem']);
         expect(illegalThemeRadii('border-radius: 10px;')).toEqual(['10px']);
+        expect(illegalThemeRadii('border-radius: 14px 8px 8px 8px;')).toEqual(['14px']);
         expect(illegalThemeRadii('border-radius: var(--radius-bubble);')).toEqual([]);
+        expect(illegalThemeRadii('border-radius: var(--radius-bubble) 0 0 0;')).toEqual([]);
         expect(illegalThemeRadii('border-radius: 0.5rem;')).toEqual([]);   // 8px
         expect(illegalThemeRadii('border-radius: 1.5px;')).toEqual([]);    // hairline mark
         expect(illegalThemeRadii('border-radius: 999px;')).toEqual([]);    // pill
+        expect(illegalThemeRadii('border-radius: 50%;')).toEqual([]);      // circle
+        expect(illegalThemeRadii('border-radius: inherit;')).toEqual(['unreadable:inherit']);
     });
 });
