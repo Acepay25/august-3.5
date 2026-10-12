@@ -86,6 +86,26 @@ describe('deterministicDraftGate', () => {
         if (out.ok) expect(out.crafted.prediction!.expectedLiftPts).toBe(20);
     });
 
+    it('stamps the activation key retrieval scores, when the craft wrote none', () => {
+        // The deterministic writers (session review, verdict citations, pass
+        // mining, self-improvement, book seeds) build crafts in code and never
+        // set a description, so without this the skill reaches the notebook with
+        // no trigger sentence for `descriptionOverlap` to score at all.
+        const out = deterministicDraftGate({ crafted: crafted(), tradeId: 't1', username: USER });
+        expect(out.ok).toBe(true);
+        if (out.ok) {
+            expect(out.crafted.description)
+                .toBe('Use this skill whenever BTC sweeps the lows and reclaims within a bar or two.');
+        }
+    });
+
+    it('keeps a description the craft wrote instead of overwriting it with the default', () => {
+        const mine = 'What it does. Use this skill whenever funding flips negative on a fresh high.';
+        const out = deterministicDraftGate({ crafted: crafted({ description: mine }), tradeId: 't1', username: USER });
+        expect(out.ok).toBe(true);
+        if (out.ok) expect(out.crafted.description).toBe(mine);
+    });
+
     it('refuses a tombstoned trigger', () => {
         tombstoneSkillDraftKey(draftTriggerKey('BTCUSDT', crafted()), USER);
         const out = deterministicDraftGate({ crafted: crafted(), tradeId: 't1', username: USER, coin: 'BTCUSDT' });

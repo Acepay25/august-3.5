@@ -33,6 +33,18 @@ KIND:
 
 IF/THEN must be mechanical (price, candle close, level, volume, regime). No vibes.
 
+DESCRIPTION — the activation key. Retrieval scores this string against the
+live setup to decide whether the skill loads at all, so it carries the
+trigger, not praise:
+"What it does in one sentence. Use this skill whenever <the concrete trigger
+phrases>. Do NOT use for <one brief out-of-scope clause>."
+Lead with the triggers; keep the exclusion to a single clause.
+
+EXAMPLES — when the post-mortem contains a concrete instance, add up to two
+{"input","output"} pairs: the setup as it appeared, and what this procedure
+says to do. Omit "examples" when nothing concrete exists — a fabricated
+example is worse than an absent one.
+
 A skill may carry a full STRATEGY beside the rule. When the post-mortem supports a complete trade plan, state it in the
 "strategy" object so the app can build a ticket from it — entry, stop, target,
 sizing, and the conditions that must hold. Use plain price/level/condition
@@ -43,6 +55,7 @@ are still expected, because that is where the lesson actually lives.
 Output ONLY JSON:
 {
   "name": "short kebab-or-title (max 8 words)",
+  "description": "what it does — Use this skill whenever <trigger phrases>. Do NOT use for <one clause>.",
   "kind": "avoid" | "repeat",
   "when": "trigger in one sentence",
   "whenNot": ["looks like this but is not this — why"],
@@ -50,6 +63,7 @@ Output ONLY JSON:
   "steps": ["step 1 with the exact check", "step 2", "step 3"],
   "pitfalls": ["observed failure -> what to do instead"],
   "verification": "how the agent confirms the procedure worked",
+  "examples": [{"input": "the setup as it appeared", "output": "what this procedure says to do"}],
   "relatedSkills": ["slug of a skill this one overlaps or contradicts"],
   "validate": "how to know the IF still holds",
   "output": "what the next ticket should do",
@@ -112,6 +126,13 @@ export const formatCraftedSkillBody = (skill: CraftedSkill): string => {
         ...section('Pitfalls', bullets(skill.pitfalls ?? [])),
         '',
         ...section('Verification', bullets([skill.verification])),
+        // Examples are genuinely optional — a pure avoid-rule may have
+        // nothing concrete to cite — so the section is OMITTED when empty,
+        // not filled with the "none recorded" placeholder the required
+        // sections carry.
+        ...(skill.examples?.length
+            ? ['', '## Examples', '', ...skill.examples.map(ex => `- Input: ${ex.input} → Output: ${ex.output}`)]
+            : []),
         ...(skill.relatedSkills?.length ? ['', ...section('Related skills', bullets(skill.relatedSkills))] : []),
     ].join('\n').replace(/\n{3,}/g, '\n\n').trim();
 };
@@ -157,10 +178,14 @@ Rules:
 - If the current skill carries a "strategy" plan (entry/stop/target/sizing),
   keep it and tighten it against the losses — a refinement must not silently
   drop the plan.
+- Refresh the description's trigger phrases when the losses changed WHEN
+  this skill applies — the description is the activation key retrieval
+  scores, so a stale trigger hides the refined skill.
 
 Output ONLY JSON with the same shape:
 {
   "name": "short kebab-or-title (max 8 words)",
+  "description": "what it does — Use this skill whenever <updated trigger phrases>. Do NOT use for <one clause>.",
   "kind": "avoid" | "repeat",
   "when": "tightened trigger in one sentence",
   "inputs": ["coin", "direction", "timeframe or family"],

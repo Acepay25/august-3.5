@@ -30,6 +30,7 @@ import {
     queueSkillDraft, listSkillDrafts, isDraftTombstoned, draftTriggerKey,
 } from '../../utils/skillDrafts';
 import { defaultPrediction } from '../../utils/skillPrediction';
+import { defaultDescription } from '../../utils/skillDescription';
 import { evaluateSkillWorth, validateCraftedSkill } from './skillWorthGate';
 import { listSkills, skillStrictlyMatchesSetup, maybeMergeSkill, type SkillMeta } from './SkillMemoryService';
 import {
@@ -95,9 +96,15 @@ export const deterministicDraftGate = (input: DeterministicGateInput): DraftGate
     if (ifThenFail) return { ok: false, reason: ifThenFail, judged: true };
     return {
         ok: true,
-        crafted: crafted.prediction
-            ? crafted
-            : { ...crafted, prediction: defaultPrediction({ coin, family }) },
+        crafted: {
+            ...crafted,
+            // The activation key, synthesized in the prompts' own shape when
+            // the craft arrived without one — the deterministic constructors
+            // build crafts in code and never set a description. Same pattern
+            // as the prediction default below.
+            description: crafted.description || defaultDescription(crafted) || undefined,
+            prediction: crafted.prediction ?? defaultPrediction({ coin, family }),
+        },
     };
 };
 
@@ -226,6 +233,9 @@ export const gateEvidenceBackedDraft = async (input: EvidenceGateInput): Promise
                     kind: decision.kind ?? crafted.kind,
                     ifCondition: (decision.ifCondition || '').trim() || crafted.ifCondition,
                     thenAction: (decision.thenAction || '').trim() || crafted.thenAction,
+                    // `when` is untouched by the gate, so a synthesized
+                    // description keeps matching the craft the model wrote.
+                    description: crafted.description || defaultDescription(crafted) || undefined,
                     prediction: decision.prediction ?? defaultPrediction({ coin, family }),
                 };
                 queueSkillDraft({ tradeId, coin, crafted: gated }, username);

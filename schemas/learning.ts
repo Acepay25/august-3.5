@@ -123,8 +123,15 @@ export const CraftedSkillSchema = z.object({
   kind: z.enum(['repeat', 'avoid']).catch('avoid'),
   // Activation key (what the skill does + WHEN to reach for it, with
   // trigger words) — the supervisor writes this; skills-index lines lead
-  // with it. Optional: legacy crafts fall back to the generated rationale.
-  description: z.string().max(400).optional(),
+  // with it, and retrieval scores it against the live setup. Sliced to the
+  // Agent-Skills spec's 1024 rather than rejected when a model rambles past
+  // it — a boundary that rejects a whole craft over one long sentence
+  // teaches the loop nothing (same philosophy as `predicate` below).
+  // Optional: legacy crafts fall back to a synthesized trigger sentence.
+  description: z.preprocess(
+    (v) => (typeof v === 'string' ? v.slice(0, 1024) : v),
+    z.string().optional(),
+  ),
   when: z.string().min(8),
   inputs: z.array(z.string()).default([]),
   steps: z.array(z.string()).min(1),
@@ -182,6 +189,18 @@ export const CraftedSkillSchema = z.object({
   verification: z.string().max(240).optional(),
   /** Cross-references by slug, so a family of skills can be navigated. */
   relatedSkills: z.array(z.string().max(60)).max(6).optional(),
+  /** Concrete instances from the source material: the setup as it appeared,
+   *  and what the procedure says to do. Optional — a pure avoid-rule may
+   *  have nothing concrete to cite, and a fabricated example is worse than
+   *  an absent one. Over-eager models list more than the section renders,
+   *  so the array is sliced to three rather than rejected. */
+  examples: z.preprocess(
+    (v) => (Array.isArray(v) ? v.slice(0, 3) : v),
+    z.array(z.object({
+      input: z.string().max(200),
+      output: z.string().max(200),
+    })).optional(),
+  ),
   // Birth certificate: the falsifiable claim the skill must
   // pre-register. Optional at the schema edge (legacy crafts + refinements
   // carry none) — the persistence layer fills a deterministic default so

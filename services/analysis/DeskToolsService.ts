@@ -910,12 +910,15 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                 'Propose a NEW trading skill (an evidence-gated IF/THEN procedure). The proposal lands as a '
                 + 'PENDING DRAFT a human approves in the Coach inbox — it does NOT enter the active skill '
                 + 'library until approved. Use when you spot a repeatable edge the notebook has no skill for. '
-                + 'Provide the full procedure: when it triggers, the steps, how to validate, the IF/THEN pair.',
+                + 'Provide the full procedure: when it triggers, the steps, how to validate, the IF/THEN pair. '
+                + 'Also write the activation description: what the skill does, then "Use this skill whenever '
+                + '<trigger phrases>."',
             parameters: {
                 type: 'object',
                 properties: {
                     name: { type: 'string', description: 'Short skill name, e.g. "Funding-exhaustions long"' },
                     kind: { type: 'string', enum: ['repeat', 'avoid'], description: 'repeat = an edge to take, avoid = a trap to dodge' },
+                    description: { type: 'string', description: 'The activation key retrieval scores: what the skill does, then "Use this skill whenever <trigger phrases>. Do NOT use for <one brief exclusion>." Under 1024 chars.' },
                     coin: { type: 'string', description: 'Coin scope (e.g. BTC) or empty for any market' },
                     when: { type: 'string', description: 'The situation this skill triggers on (prose)' },
                     steps: { type: 'string', description: 'JSON array of the procedure steps' },
@@ -2286,6 +2289,7 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     const crafted = parseCraftedSkill({
                         name: asString(call.arguments.name),
                         kind: call.arguments.kind === 'repeat' ? 'repeat' : 'avoid',
+                        description: asString(call.arguments.description) || undefined,
                         when: asString(call.arguments.when),
                         steps,
                         inputs: [],

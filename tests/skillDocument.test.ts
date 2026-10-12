@@ -93,6 +93,47 @@ describe('the recall card is projected from the sections', () => {
         expect(card.text.startsWith('IF ')).toBe(true);
     });
 
+    it('an Examples section is written, parsed back, and projected last', () => {
+        const withEx = craft({
+            examples: [{ input: 'funding +8, daily low swept, 1h close above it', output: 'long, stop under the wick' }],
+        });
+        const text = formatCraftedSkillBody(withEx);
+        expect(text).toContain('## Examples');
+        // Optional means omitted, not padded: the required sections print a
+        // "none recorded" line, and a fabricated example is worse than none.
+        expect(formatCraftedSkillBody(craft())).not.toContain('## Examples');
+        // The heading is a real section to the reader, not a stray block that
+        // lands in `other` and only survives by accident.
+        expect(parseSkillBody(text).examples).toHaveLength(1);
+
+        const card = projectSkillCard(text, {
+            ifCondition: withEx.ifCondition, thenAction: withEx.thenAction, budget: 700,
+        });
+        expect(card.text).toContain('Examples:');
+
+        // Under pressure the examples are the first WHOLE block to go — a seat
+        // can act without an instance of the setup, not without the trigger.
+        const tight = projectSkillCard(text, {
+            ifCondition: withEx.ifCondition, thenAction: withEx.thenAction, budget: 240,
+        });
+        expect(tight.text.startsWith('IF ')).toBe(true);
+        expect(tight.text).not.toContain('Examples:');
+        // …and a block label never survives alone. Both `Examples:` and
+        // `Procedure:` used to be able to: the budget skips whole lines, so the
+        // heading fit while its items did not, and the card announced a section
+        // with nothing in it. One rule now, measured at every budget.
+        for (const budget of [90, 150, 240, 300, 400, 500, 700]) {
+            const c = projectSkillCard(text, {
+                ifCondition: withEx.ifCondition, thenAction: withEx.thenAction, budget,
+            });
+            const bare = c.text.split('\n').findIndex((l, i, all) =>
+                /:$/.test(l) && (i === all.length - 1 || /:$/.test(all[i + 1])));
+            expect(bare, `dangling heading at budget ${budget}: ${c.text}`).toBe(-1);
+            expect(c.chars).toBeLessThanOrEqual(budget);
+            expect(c.text).toContain('IF ');
+        }
+    });
+
     it('a legacy body with no headings at all still yields a usable card', () => {
         const legacy = '**When:** skip BTC shorts when funding is positive\n\n**My rule:** when funding positive, I skip shorts';
         const card = projectSkillCard(legacy, { ifCondition: 'funding positive', thenAction: 'skip the short' });

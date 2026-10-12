@@ -84,7 +84,7 @@ Rules:
 - kind "repeat" = a setup the tape shows working; kind "avoid" = a trap the tape shows losing (fading a band walk, chasing a failed break, and similar).
 - Name each skill specifically (coin + timeframe + pattern), never generically.
 - Inventing a pattern the digest does not support is worse than drafting none. If nothing qualifies, return an empty array.
-- Keep "description" as the activation key: what the skill does and WHEN to reach for it.
+- Keep "description" as the activation key — retrieval scores it against the live setup: what the skill does, then "Use this skill whenever <the concrete trigger phrases the tape supports>. Do NOT use for <one brief exclusion>."
 - The digest is built from CLOSED candles, so also author a "predicate" where the IF clause reduces to candle math: ${PREDICATE_GRAMMAR_HINT} A predicate is what lets the desk re-check the trigger in code on every later run instead of trusting a seat to read prose; omit it when the clause cannot be reduced.`;
 
 // ─── Digest ──────────────────────────────────────────────────────────────────

@@ -88,6 +88,25 @@ describe('approving a draft creates the skill, and says so only when it did', ()
         expect(listSkillDrafts(USER)).toHaveLength(0);
     });
 
+    it('a draft that never wrote an activation key reaches the library with one', async () => {
+        // The claim behind `utils/skillDescription.ts`: the gates stamp the
+        // trigger sentence, so a code-built draft is not filed as a skill
+        // retrieval can never score. Read it back out of the WRITTEN file.
+        queueDraft(craft());
+        const result = await approveSkillDraft(listSkillDrafts(USER)[0], USER, []);
+        expect(result.created).toBe(true);
+        expect(listSkills()[0].meta.description).toBe(
+            'Use this skill whenever funding has run positive for many sessions and price stalls at swept lows.',
+        );
+    });
+
+    it('a draft that wrote its own activation key keeps exactly that', async () => {
+        const mine = 'Take the continuation. Use this skill whenever funding flips negative on a fresh high.';
+        queueDraft(craft({ description: mine }));
+        await approveSkillDraft(listSkillDrafts(USER)[0], USER, []);
+        expect(listSkills()[0].meta.description).toBe(mine);
+    });
+
     it('reports the file it wrote instead of resolving void like a no-op', async () => {
         queueDraft(craft());
         const result = await approveSkillDraft(listSkillDrafts(USER)[0], USER, []);

@@ -35,6 +35,11 @@ export interface SkillSections {
     steps: string[];
     pitfalls: string[];
     verification: string[];
+    /** Concrete instances (the craft's `## Examples`), projected only after
+     *  the procedure — under budget pressure this is the first whole block
+     *  to go, because a seat can act without an example but not without the
+     *  steps. */
+    examples: string[];
     /** Everything not claimed by a known heading, kept so an unknown section
      *  written by a hand-edited file is never silently lost. */
     other: Array<{ title: string; lines: string[] }>;
@@ -59,10 +64,11 @@ const HEADINGS: Record<string, keyof Omit<SkillSections, 'other'>> = {
     'steps': 'steps',
     'pitfalls': 'pitfalls',
     'verification': 'verification',
+    'examples': 'examples',
 };
 
 const list = (): Record<keyof Omit<SkillSections, 'other'>, string[]> => ({
-    whenToUse: [], validate: [], whenNot: [], inputs: [], steps: [], pitfalls: [], verification: [], plan: [],
+    whenToUse: [], validate: [], whenNot: [], inputs: [], steps: [], pitfalls: [], verification: [], examples: [], plan: [],
 });
 
 /**
@@ -153,9 +159,10 @@ const stripBullet = (line: string): string => line.replace(/^[-*]\s*/, '').repla
  * then the trigger as the file writes it (the substituted `${SYMBOL}`/
  * `${REGIME}` text lives there and nowhere else), then the two fields that stop
  * a seat applying the skill to the wrong setup — when-NOT and the first
- * pitfall — then verification, the ticket fields, the numbered procedure, and
- * finally everything the parser could not classify. Budget is spent in that
- * priority, so a clipped card loses the tail, never the trigger.
+ * pitfall — then verification, the ticket fields, the numbered procedure, the
+ * concrete examples, and finally everything the parser could not classify.
+ * Budget is spent in that priority, so a clipped card loses the tail, never
+ * the trigger.
  *
  * A body that already fits is served UNCHANGED. The card exists to decide what
  * to drop when the budget bites; re-shaping a skill that needs no trimming
@@ -174,38 +181,48 @@ export const projectSkillCard = (
     }
 
     const s = parseSkillBody(whole);
-    const lines: string[] = [];
+    // A card line, and the block it belongs to when it is part of one. A block
+    // is a heading plus its items: the budget skips whole lines, so a heading
+    // can survive while every item under it is skipped — which is what the
+    // `Procedure:` guard below used to patch up for one heading at a time.
+    type CardLine = { text: string; block?: string; heading?: boolean };
+    const lines: CardLine[] = [];
+    const add = (text: string, block?: string, heading = false): void => { lines.push({ text, block, heading }); };
 
-    if (opts.ifCondition && opts.thenAction) lines.push(`IF ${opts.ifCondition} THEN ${opts.thenAction}`);
+    if (opts.ifCondition && opts.thenAction) add(`IF ${opts.ifCondition} THEN ${opts.thenAction}`);
     const when = s.whenToUse.map(stripBullet)[0];
-    if (when) lines.push(`When: ${when}`);
+    if (when) add(`When: ${when}`);
     const not = s.whenNot.map(stripBullet)[0];
-    if (not) lines.push(`NOT when: ${not}`);
+    if (not) add(`NOT when: ${not}`);
     const pit = s.pitfalls.map(stripBullet)[0];
-    if (pit) lines.push(`Watch: ${pit}`);
+    if (pit) add(`Watch: ${pit}`);
     const verify = s.verification.map(stripBullet)[0] ?? s.validate.map(stripBullet)[0];
-    if (verify) lines.push(`Verify: ${verify}`);
+    if (verify) add(`Verify: ${verify}`);
     // The procedure itself, last-but-one: it is the longest part and the one a
     // seat can ask again for, whereas the trigger and the exclusions are what
     // it cannot reconstruct. Whole steps only — a half-line step is worse than
     // none, because "wait for the 1h close" truncated to "wait for the" reads
     // as an instruction rather than as a loss.
     // The ticket fields, when the skill is a strategy rather than a rule.
-    s.plan.forEach(line => lines.push(stripBullet(line)));
+    s.plan.forEach(line => add(stripBullet(line), 'plan'));
     if (s.steps.length) {
-        lines.push('Procedure:');
-        s.steps.forEach((st, i) => lines.push(`${i + 1}. ${stripBullet(st)}`));
+        add('Procedure:', 'steps', true);
+        s.steps.forEach((st, i) => add(`${i + 1}. ${stripBullet(st)}`, 'steps'));
     }
     // The rest of the file, in document order. Nothing the trader wrote is
     // dropped for the crime of using an unrecognised heading.
-    s.inputs.forEach(line => lines.push(stripBullet(line)));
+    s.inputs.forEach(line => add(stripBullet(line)));
+    if (s.examples.length) {
+        add('Examples:', 'examples', true);
+        s.examples.forEach(line => add(stripBullet(line), 'examples'));
+    }
     s.other.forEach(sec => {
         if (!sec.lines.length) return;
-        lines.push(`${sec.title}:`);
-        sec.lines.forEach(line => lines.push(stripBullet(line)));
+        add(`${sec.title}:`, `other:${sec.title}`, true);
+        sec.lines.forEach(line => add(stripBullet(line), `other:${sec.title}`));
     });
 
-    const full = lines.join('\n');
+    const full = lines.map(l => l.text).join('\n');
     if (full.length <= budget) {
         return { text: full, chars: full.length, clipped: false, droppedChars: 0 };
     }
@@ -218,29 +235,32 @@ export const projectSkillCard = (
     // budget is spent on its longest prefix and nothing else is attempted.
     // "Clipped" must never mean "the trigger is missing".
     let kept = '';
+    const keptLines: CardLine[] = [];
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-        const next = kept ? `${kept}\n${line}` : line;
+        const next = kept ? `${kept}\n${line.text}` : line.text;
         if (next.length > budget) {
             if (kept) continue;
             return {
-                text: line.slice(0, Math.max(0, budget)),
-                chars: Math.min(line.length, Math.max(0, budget)),
+                text: line.text.slice(0, Math.max(0, budget)),
+                chars: Math.min(line.text.length, Math.max(0, budget)),
                 clipped: true,
-                droppedChars: full.length - Math.min(line.length, Math.max(0, budget)),
+                droppedChars: full.length - Math.min(line.text.length, Math.max(0, budget)),
             };
         }
         kept = next;
+        keptLines.push(line);
     }
-    // A `Procedure:` label whose every step was skipped would read as an
-    // instruction that was never given.
-    if (s.steps.length && !/\d+\.\s/.test(kept)) {
-        kept = kept.split('\n').filter(l => l !== 'Procedure:').join('\n');
-    }
+    // A block label whose every item was skipped reads as an instruction that
+    // was never given — for `Procedure:` that was the documented one-off here,
+    // and the `Examples:` block reproduced the bug. One rule now: a heading is
+    // only kept when at least one item of its own block survived.
+    const survivors = new Set(keptLines.filter(l => !l.heading && l.block).map(l => l.block));
+    const text = keptLines.filter(l => !l.heading || survivors.has(l.block)).map(l => l.text).join('\n');
     return {
-        text: kept,
-        chars: kept.length,
-        clipped: kept.length < full.length,
-        droppedChars: full.length - kept.length,
+        text,
+        chars: text.length,
+        clipped: text.length < full.length,
+        droppedChars: full.length - text.length,
     };
 };

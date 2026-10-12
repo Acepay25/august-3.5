@@ -309,24 +309,85 @@ Rules:
 - Output ONLY the transcribed text.`,
     },
     {
+        // KEEP IN SYNC with SKILL_CRAFT_FALLBACK (services/learning/SkillCraftService.ts):
+        // this text is only the Settings diff base, while the call-site constant
+        // is what actually runs — a stale copy here makes every override diff lie.
         id: 'learning.skill_craft',
         name: 'Skill craft (IF/THEN → procedure)',
-        description: 'After a post-mortem, the memory model turns the lesson into a Grok-style skill: when, inputs, steps, validate, return, approval.',
+        description: 'After a post-mortem, the memory model turns the lesson into a skill: description, when, inputs, steps, pitfalls, verification, validate, return, approval.',
         usage: ['Post-mortem skill draft (inbox Approve to save)'],
         fallback: `You turn a closed-trade post-mortem into ONE reusable trading skill.
 
-A skill is a procedure, not a diary sentence.
-1. when to use it
-2. required inputs
-3. sequence of work
-4. how to validate
-5. what to return
-6. what requires human approval
+A skill is a PROCEDURE another agent will follow, not a diary sentence. It has
+to carry these parts:
 
-KIND: avoid if LOSS or "do not take"; repeat if WIN and the IF is a keep-doing rule.
-IF/THEN must be mechanical. Output ONLY JSON with name, kind, when, inputs, steps, validate, output, approval, ifCondition, thenAction, predicate.
+1. when to use it — the concrete trigger
+2. when NOT to use it — the situations that LOOK like this one and are not
+3. required inputs
+4. the sequence of work (steps), each with the exact check or tool call
+5. the pitfalls you have actually seen: "X happens -> do Y instead"
+6. how to verify the procedure worked, not just that it was followed
+7. how to validate the trigger still holds
+8. what to return (the ticket action)
+9. what requires human approval
 
-PREDICATE BRIEF: ${PREDICATE_GRAMMAR_HINT}`,
+A one-line rule is a SEED, not a finished skill. If the post-mortem only
+supports "when X, avoid", still fill whenNot and pitfalls with what you
+observed — an empty section is how a skill degrades back into a rule.
+
+KIND:
+- avoid — the trade lost or the lesson is "do not take this"
+- repeat — the trade won and the lesson is "take this only when the IF holds"
+
+IF/THEN must be mechanical (price, candle close, level, volume, regime). No vibes.
+
+DESCRIPTION — the activation key. Retrieval scores this string against the
+live setup to decide whether the skill loads at all, so it carries the
+trigger, not praise:
+"What it does in one sentence. Use this skill whenever <the concrete trigger
+phrases>. Do NOT use for <one brief out-of-scope clause>."
+Lead with the triggers; keep the exclusion to a single clause.
+
+EXAMPLES — when the post-mortem contains a concrete instance, add up to two
+{"input","output"} pairs: the setup as it appeared, and what this procedure
+says to do. Omit "examples" when nothing concrete exists — a fabricated
+example is worse than an absent one.
+
+A skill may carry a full STRATEGY beside the rule. When the post-mortem supports a complete trade plan, state it in the
+"strategy" object so the app can build a ticket from it — entry, stop, target,
+sizing, and the conditions that must hold. Use plain price/level/condition
+language, not numbers you invented. Omit "strategy" entirely when the lesson
+is only "do not take this" — but the whenNot / pitfalls / verification sections
+are still expected, because that is where the lesson actually lives.
+
+Output ONLY JSON:
+{
+  "name": "short kebab-or-title (max 8 words)",
+  "description": "what it does — Use this skill whenever <trigger phrases>. Do NOT use for <one clause>.",
+  "kind": "avoid" | "repeat",
+  "when": "trigger in one sentence",
+  "whenNot": ["looks like this but is not this — why"],
+  "inputs": ["coin", "direction", "timeframe or family"],
+  "steps": ["step 1 with the exact check", "step 2", "step 3"],
+  "pitfalls": ["observed failure -> what to do instead"],
+  "verification": "how the agent confirms the procedure worked",
+  "examples": [{"input": "the setup as it appeared", "output": "what this procedure says to do"}],
+  "relatedSkills": ["slug of a skill this one overlaps or contradicts"],
+  "validate": "how to know the IF still holds",
+  "output": "what the next ticket should do",
+  "approval": "when a human must confirm (size, new coin, conflicting skill)",
+  "ifCondition": "IF clause without the word IF",
+  "thenAction": "THEN clause without the word THEN",
+  "strategy": {
+    "entry": "price / zone / condition to enter",
+    "invalidation": "what voids the setup",
+    "stop": "protective level",
+    "target": "first objective",
+    "sizing": "risk budget or size rule",
+    "conditions": ["must be true to trade this now"]
+  },
+  "predicate": ${JSON.stringify(PREDICATE_GRAMMAR_HINT)}
+}`,
     },
     {
         id: 'learning.chart_scan',
@@ -341,7 +402,7 @@ Rules:
 - kind "repeat" = a setup the tape shows working; kind "avoid" = a trap the tape shows losing (fading a band walk, chasing a failed break, and similar).
 - Name each skill specifically (coin + timeframe + pattern), never generically.
 - Inventing a pattern the digest does not support is worse than drafting none. If nothing qualifies, return an empty array.
-- Keep "description" as the activation key: what the skill does and WHEN to reach for it.
+- Keep "description" as the activation key — retrieval scores it against the live setup: what the skill does, then "Use this skill whenever <the concrete trigger phrases the tape supports>. Do NOT use for <one brief exclusion>."
 - The digest is built from CLOSED candles, so also author a "predicate" where the IF clause reduces to candle math: ${PREDICATE_GRAMMAR_HINT} A predicate is what lets the desk re-check the trigger in code on every later run instead of trusting a seat to read prose; omit it when the clause cannot be reduced.`,
     },
 ];
