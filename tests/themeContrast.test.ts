@@ -190,9 +190,12 @@ describe('motion lockout (WS-5.4)', () => {
  * `truncate` and `line-clamp` are the two classes that can make information
  * unreadable while the layout still looks perfect: the row renders, the
  * sentence stops mid-word, and nothing on screen says the rest exists. Measured
- * across the tree, 105 of 125 clipped elements carried no `title`, no
- * `aria-label` and no `Tip` — which is most of what "this looks messy" means in
- * practice, and no other gate can see it (jsdom lays nothing out).
+ * across the tree on 2026-10-07, 105 of 125 clipped elements carried no `title`,
+ * no `aria-label` and no `Tip` — which is most of what "this looks messy" means
+ * in practice, and no other gate can see it (jsdom lays nothing out).
+ * Re-measured 2026-10-12: the offenders are still exactly 105, but the tagged
+ * population has grown to 128 — so this baseline sits at reality rather than
+ * having been earned down, and the denominator above is the older census.
  *
  * This is a RATCHET, not a clean bill: the baseline is the count at the time it
  * was written, so the number can only fall. Fixing a file should lower the
