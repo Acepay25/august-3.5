@@ -83,7 +83,7 @@ const Row: React.FC<{ side: 'bid' | 'ask'; level: LadderLevel; maxTotal: number;
             className={`absolute inset-y-0 left-0 rounded-control ${side === 'bid' ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`}
             style={{ width: `${maxTotal > 0 ? Math.min(100, (level.total / maxTotal) * 100) : 0}%` }}
         />
-        <span className={`relative truncate ${side === 'bid' ? 'text-emerald-400' : 'text-rose-400'} ${wall ? 'font-bold' : ''}`}>{fmtPrice(level.price)}</span>
+        <span className={`relative truncate ${side === 'bid' ? 'text-emerald-400' : 'text-rose-400'} ${wall ? 'font-bold' : ''}`} title={fmtPrice(level.price)}>{fmtPrice(level.price)}</span>
         <span className={`relative text-right text-zinc-400 ${wall ? 'font-bold text-zinc-200' : ''}`}>{fmtQty(level.qty)}</span>
         <span className="relative text-right text-zinc-500">{fmtQty(level.total)}</span>
     </div>

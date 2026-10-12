@@ -55,7 +55,7 @@ const PatternMemoryCard: React.FC<PatternMemoryCardProps> = ({ trades, finalSumm
             <div className="flex items-center justify-between gap-2 border-b border-white/5 px-4 py-3">
                 <div className="flex min-w-0 items-center gap-2">
                     <FileTextIcon className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden="true" />
-                    <h3 className="truncate text-ui-sm font-semibold text-zinc-100">Pattern memory</h3>
+                    <h3 className="truncate text-ui-sm font-semibold text-zinc-100" title="Pattern memory">Pattern memory</h3>
                     <span className="hidden shrink-0 font-mono text-ui-2xs text-zinc-600 sm:inline">pattern-memory.md</span>
                 </div>
                 {onRegenerate && (

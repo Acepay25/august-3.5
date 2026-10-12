@@ -133,7 +133,7 @@ const MemoryProvenanceStrip: React.FC<MemoryProvenanceStripProps> = ({
             <button type="button" onClick={() => setOpen(v => !v)} aria-expanded={open}
                 className="flex w-full items-center gap-1.5 py-0.5 text-left">
                 <span className="shrink-0 font-mono text-ui-2xs uppercase tracking-widest text-zinc-600">memory</span>
-                <span className="min-w-0 flex-1 truncate text-ui-xs text-zinc-500">{parts.join(' · ')}</span>
+                <span className="min-w-0 flex-1 truncate text-ui-xs text-zinc-500" title={parts.join(' · ')}>{parts.join(' · ')}</span>
                 {grouped.heldOut && (
                     <StatusPill
                         tone="warn"
@@ -163,10 +163,10 @@ const MemoryProvenanceStrip: React.FC<MemoryProvenanceStripProps> = ({
                     ))}
                     {grouped.others.map(({ kind, path }) => (
                         <div key={`${kind}:${path}`} className="flex items-center gap-1.5">
-                            <span className="w-9 shrink-0 truncate font-mono text-ui-2xs uppercase tracking-wider text-zinc-600">
+                            <span className="w-9 shrink-0 truncate font-mono text-ui-2xs uppercase tracking-wider text-zinc-600" title={(KIND_LABEL[kind] ?? kind).split(' ')[0]}>
                                 {(KIND_LABEL[kind] ?? kind).split(' ')[0]}
                             </span>
-                            <span className="min-w-0 flex-1 truncate font-mono text-ui-xs text-zinc-500">{path}</span>
+                            <span className="min-w-0 flex-1 truncate font-mono text-ui-xs text-zinc-500" title={path}>{path}</span>
                         </div>
                     ))}
                 </div>

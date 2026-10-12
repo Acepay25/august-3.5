@@ -162,10 +162,10 @@ const DOCK_DEFAULT = 384;
 /** Registry id of the Chart AI dock inside the shared right-panel contract. */
 const DOCK_ID = 'chart-ai';
 
-const Stat: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
     <div className="flex min-w-0 flex-col px-3.5 first:pl-3">
         <span className="text-ui-2xs uppercase tracking-wider text-zinc-500">{label}</span>
-        <span className="truncate font-mono text-ui-sm font-medium tabular-nums text-zinc-200">{value}</span>
+        <span className="truncate font-mono text-ui-sm font-medium tabular-nums text-zinc-200" title={value}>{value}</span>
     </div>
 );
 

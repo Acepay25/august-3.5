@@ -44,7 +44,7 @@ const AutomationView: React.FC<{
                 </button>
                 <div className="flex items-center gap-2.5 min-w-0">
                     <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_6px_#22d3ee66]" />
-                    <h3 className="text-ui-base font-bold text-white truncate">{config.name}</h3>
+                    <h3 className="text-ui-base font-bold text-white truncate" title={config.name}>{config.name}</h3>
                     <span className="text-ui-xs font-mono text-zinc-500 hidden sm:inline">{humanizeCron(config.schedule.cron)}</span>
                     {config.enabled && (() => {
                         const next = getNextRunAt(config);

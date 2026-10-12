@@ -16,7 +16,7 @@ export const CalibrationSection: React.FC<{ profile: PersonalizedLearningProfile
                 <div className="space-y-2">
                     {profile.worstSetups.slice(0, 4).map((s, i) => (
                         <div key={i} className="flex items-center justify-between text-ui-base">
-                            <span className="text-zinc-400 truncate pr-2">{s.description}</span>
+                            <span className="text-zinc-400 truncate pr-2" title={s.description}>{s.description}</span>
                             <span className="text-rose-400 font-bold whitespace-nowrap">{s.winRate}% WR</span>
                         </div>
                     ))}

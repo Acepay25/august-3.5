@@ -50,7 +50,7 @@ const Plan: React.FC<{ meta: StrategyMeta; onChanged: () => void }> = ({ meta, o
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                        <span className="truncate text-ui-dense font-semibold text-zinc-100">{meta.name}</span>
+                        <span className="truncate text-ui-dense font-semibold text-zinc-100" title={meta.name}>{meta.name}</span>
                         <span
                             className={`shrink-0 rounded-control px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wider ${
                                 meta.status === 'active'
@@ -80,7 +80,7 @@ const Plan: React.FC<{ meta: StrategyMeta; onChanged: () => void }> = ({ meta, o
                 {rows.filter(([, v]) => !!v).map(([k, v]) => (
                     <React.Fragment key={k}>
                         <dt className="text-ui-2xs uppercase tracking-wider text-zinc-600">{k}</dt>
-                        <dd className="truncate text-ui-dense text-zinc-300">{v}</dd>
+                        <dd className="truncate text-ui-dense text-zinc-300" title={v}>{v}</dd>
                     </React.Fragment>
                 ))}
             </dl>

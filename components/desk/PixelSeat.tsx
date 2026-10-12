@@ -231,7 +231,7 @@ export const PixelSeat: React.FC<PixelSeatProps> = ({
                 so the floor shows who is who (u1). */}
             {!compact && (
                 <span className="mt-0.5 flex max-w-[9.5rem] items-center gap-1">
-                    <span className="max-w-[7.5rem] truncate rounded-control border border-white/10 bg-zinc-900/80 px-1.5 py-0.5 text-ui-xs font-semibold tracking-wide text-zinc-200">
+                    <span className="max-w-[7.5rem] truncate rounded-control border border-white/10 bg-zinc-900/80 px-1.5 py-0.5 text-ui-xs font-semibold tracking-wide text-zinc-200" title={name}>
                         {name}
                     </span>
                     {roleTag && (
@@ -245,7 +245,7 @@ export const PixelSeat: React.FC<PixelSeatProps> = ({
                 </span>
             )}
             {!compact && statusText && (
-                <span className="line-clamp-1 max-w-[7.5rem] text-ui-2xs italic text-zinc-500">
+                <span className="line-clamp-1 max-w-[7.5rem] text-ui-2xs italic text-zinc-500" title={statusText}>
                     {statusText}
                 </span>
             )}

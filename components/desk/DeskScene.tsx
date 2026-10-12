@@ -417,13 +417,13 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                         <div className="flex flex-wrap items-baseline gap-x-2">
                             <span className="text-ui-xs font-bold uppercase tracking-widest text-zinc-500">Desk view</span>
                             {caption && (
-                                <span className="truncate text-ui-dense font-medium text-zinc-200">{caption}</span>
+                                <span className="truncate text-ui-dense font-medium text-zinc-200" title={caption}>{caption}</span>
                             )}
                             {phase && (
-                                <span className="truncate text-ui-xs text-zinc-500">· {phase}</span>
+                                <span className="truncate text-ui-xs text-zinc-500" title={phase}>· {phase}</span>
                             )}
                             {verdict && (
-                                <span className="truncate text-ui-xs text-zinc-500">· {verdict}</span>
+                                <span className="truncate text-ui-xs text-zinc-500" title={verdict}>· {verdict}</span>
                             )}
                         </div>
                         {stages && stages.length > 0 && (
@@ -855,7 +855,7 @@ const HistoryButton: React.FC<{
                                             : 'text-zinc-300 hover:bg-zinc-800/60'
                                     }`}
                                 >
-                                    <span className="min-w-0 truncate font-mono">{e.seatName}</span>
+                                    <span className="min-w-0 truncate font-mono" title={e.seatName}>{e.seatName}</span>
                                     <span className="shrink-0 tabular-nums text-zinc-500">
                                         {e.previous
                                             ? `${(e.previous.x * 100).toFixed(0)}→${(e.next.x * 100).toFixed(0)}`

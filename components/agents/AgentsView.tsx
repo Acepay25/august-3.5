@@ -267,7 +267,7 @@ const Row: React.FC<{
                     </span>
                     <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-1">
-                            <span className="truncate text-ui-sm font-semibold text-zinc-200">{title}</span>
+                            <span className="truncate text-ui-sm font-semibold text-zinc-200" title={title}>{title}</span>
                             {attention && (
                                 <span title={attention} data-testid="row-attention"
                                     className="shrink-0 text-ui-2xs font-bold text-amber-400">⚠</span>
@@ -279,7 +279,7 @@ const Row: React.FC<{
                                 </span>
                             )}
                         </span>
-                        <span className="block truncate text-ui-dense text-zinc-500">{preview || 'No messages yet'}</span>
+                        <span className="block truncate text-ui-dense text-zinc-500" title={preview || 'No messages yet'}>{preview || 'No messages yet'}</span>
                     </span>
                 </button>
                 <span className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
@@ -344,7 +344,7 @@ const InlineVerdict: React.FC<{ m: Message }> = ({ m }) => {
                 <StatusPill tone={up ? 'up' : down ? 'down' : 'neutral'} kicker>
                     {a.direction ?? 'No trade'}
                 </StatusPill>
-                <span className="truncate text-ui-caption font-semibold text-zinc-100">{a.coinName ?? 'setup'}</span>
+                <span className="truncate text-ui-caption font-semibold text-zinc-100" title={a.coinName ?? 'setup'}>{a.coinName ?? 'setup'}</span>
                 {a.rrRatio && (
                     <span className="rounded-control border border-white/[0.04] bg-white/[0.04] px-1.5 py-0.5 font-mono text-ui-xs font-medium text-zinc-300">
                         {fmtRiskReward(a.rrRatio, 1)} R:R
@@ -929,7 +929,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                                     <MessageSquare className="h-3 w-3" aria-hidden="true" />
                                                 </span>
                                                 <span className="min-w-0 flex-1">
-                                                    <span className="block truncate text-ui-sm font-semibold text-zinc-200">{r.title}</span>
+                                                    <span className="block truncate text-ui-sm font-semibold text-zinc-200" title={r.title}>{r.title}</span>
                                                 </span>
                                                 <span className="shrink-0 pt-0.5 font-mono text-ui-2xs text-zinc-600">
                                                     {relTimeMs(r.atMs)}
@@ -984,7 +984,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                 <div className="flex shrink-0 items-center gap-1.5 border-t border-zinc-800/80 px-3 py-2">
                     <span data-testid="desk-status" title={providerReady ? 'A provider is configured — the desk can think' : 'No provider ready — configure one in Settings'}
                         className={`h-1.5 w-1.5 shrink-0 rounded-full ${providerReady ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
-                    <span className="min-w-0 flex-1 truncate text-ui-dense text-zinc-500">{providerReady ? 'Ready' : 'No provider'}</span>
+                    <span className="min-w-0 flex-1 truncate text-ui-dense text-zinc-500" title={providerReady ? 'Ready' : 'No provider'}>{providerReady ? 'Ready' : 'No provider'}</span>
                 </div>
             </aside>
 
@@ -1018,7 +1018,13 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                         <PanelLeftOpen className="h-3.5 w-3.5" aria-hidden="true" />
                                     </button>
                                 )}
-                                <span className="min-w-0 truncate text-ui-sm font-semibold text-zinc-200">
+                                <span className="min-w-0 truncate text-ui-sm font-semibold text-zinc-200" title={activeBot
+                                        ? `@${activeBot.name}`
+                                        /* The desk pane IS the active chat session —
+                                            loaded App conversations included — so the
+                                            title names the session, not a brand. The
+                                            dock row above keeps the "Chart AI" name. */
+                                        : (activeSession?.title?.trim() || 'Desk')}>
                                     {activeBot
                                         ? `@${activeBot.name}`
                                         /* The desk pane IS the active chat session —
@@ -1126,7 +1132,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                                 {a.kind === 'image' && (
                                                     <img src={a.payload} alt="" className="h-5 w-5 rounded-control object-cover" />
                                                 )}
-                                                <span className="max-w-[9rem] truncate">{a.name}</span>
+                                                <span className="max-w-[9rem] truncate" title={a.name}>{a.name}</span>
                                                 <button type="button" aria-label={`Remove ${a.name}`}
                                                     onClick={() => removeAttachment(a.id)}
                                                     className="text-zinc-500 transition-colors hover:text-rose-400">×</button>

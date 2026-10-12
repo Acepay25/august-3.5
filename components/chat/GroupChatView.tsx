@@ -155,7 +155,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                     ))}
                 </span>
                 <div className="min-w-0 flex-1">
-                    <p className="truncate text-ui-lede font-semibold text-zinc-100">
+                    <p className="truncate text-ui-lede font-semibold text-zinc-100" title={groupDisplayName(group, bots)}>
                         {groupDisplayName(group, bots)}
                     </p>
                 </div>
@@ -290,8 +290,8 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                                 >
                                     <BotAvatar bot={m} size={28} />
                                     <span className="min-w-0">
-                                        <span className="block truncate text-ui-sm font-semibold text-zinc-200">{m.name}</span>
-                                        <span className="block truncate text-ui-xs text-zinc-500">
+                                        <span className="block truncate text-ui-sm font-semibold text-zinc-200" title={m.name}>{m.name}</span>
+                                        <span className="block truncate text-ui-xs text-zinc-500" title={m.title || formatModelDisplayName(m.modelId)}>
                                             {m.title || formatModelDisplayName(m.modelId)}
                                         </span>
                                     </span>

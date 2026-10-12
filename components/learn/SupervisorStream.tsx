@@ -105,7 +105,7 @@ const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
         <div className="rounded-bubble border border-white/[0.06] bg-zinc-900/60 p-2.5" data-testid={`supervisor-event-${ev.id}`}>
             <div className="flex items-center gap-1.5">
                 <span className="text-cyan-300">{PHASE_ICON[decision ? 'deciding' : ev.phase] ?? PHASE_ICON[ev.phase]}</span>
-                <span className="truncate text-ui-sm font-semibold text-zinc-100">{ev.itemTitle || ev.text}</span>
+                <span className="truncate text-ui-sm font-semibold text-zinc-100" title={ev.itemTitle || ev.text}>{ev.itemTitle || ev.text}</span>
                 {ev.itemKind && (
                     <span className="shrink-0 rounded-full border border-white/10 px-1.5 py-0.5 text-ui-2xs uppercase tracking-wider text-zinc-500">
                         {KIND_LABEL[ev.itemKind] || ev.itemKind}
@@ -186,7 +186,7 @@ const SupervisorStream: React.FC<SupervisorStreamProps> = ({ onClose }) => {
                 <ListChecks className="h-4 w-4 text-cyan-300" aria-hidden="true" />
                 <span className="text-ui-caption font-semibold text-zinc-100">Skill supervisor</span>
                 {snap.modelName && (
-                    <span className="truncate rounded-full border border-white/10 px-1.5 py-0.5 text-ui-2xs font-semibold text-zinc-400">
+                    <span className="truncate rounded-full border border-white/10 px-1.5 py-0.5 text-ui-2xs font-semibold text-zinc-400" title={snap.modelName}>
                         {snap.modelName}
                     </span>
                 )}

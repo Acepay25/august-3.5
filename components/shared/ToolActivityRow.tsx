@@ -149,7 +149,7 @@ const ToolRowGroupView: React.FC<{ group: ToolRowGroup; running: boolean }> = ({
             {anyCalling ? (
                 <span className="min-w-0 truncate">· calling…</span>
             ) : detail ? (
-                <span className="min-w-0 truncate">· {detail}</span>
+                <span className="min-w-0 truncate" title={detail}>· {detail}</span>
             ) : anyFailed ? (
                 <span className="min-w-0 truncate text-rose-300/80">· failed</span>
             ) : null}

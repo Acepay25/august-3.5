@@ -149,8 +149,8 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                                         </span>
                                         <BotAvatar bot={bot} size={30} />
                                         <span className="min-w-0 flex-1">
-                                            <span className="block truncate text-ui-caption font-semibold text-zinc-100">{bot.name}</span>
-                                            {bot.title && <span className="block truncate text-ui-dense text-zinc-500">{bot.title}</span>}
+                                            <span className="block truncate text-ui-caption font-semibold text-zinc-100" title={bot.name}>{bot.name}</span>
+                                            {bot.title && <span className="block truncate text-ui-dense text-zinc-500" title={bot.title}>{bot.title}</span>}
                                         </span>
                                     </button>
                                     {checked && (

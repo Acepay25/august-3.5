@@ -198,7 +198,7 @@ export const RegimeMatrixStrip: React.FC<{
                 ))}
                 {rows.map(row => (
                     <React.Fragment key={row.family}>
-                        <span className="self-center truncate text-ui-dense text-zinc-400">
+                        <span className="self-center truncate text-ui-dense text-zinc-400" title={row.family.replace(/_/g, ' ')}>
                             {row.family.replace(/_/g, ' ')}
                         </span>
                         {row.cells.map((cell, i) => {

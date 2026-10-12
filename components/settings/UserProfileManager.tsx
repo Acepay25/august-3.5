@@ -135,7 +135,7 @@ const UserProfileManager: React.FC<UserProfileManagerProps> = ({ isVisible, isLo
                                      <span className="w-10 h-10 shrink-0 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-zinc-200 transition-colors">
                                          <UserIcon />
                                      </span>
-                                     <span className="flex-1 truncate font-medium text-zinc-200 group-hover:text-white">{user}</span>
+                                     <span className="flex-1 truncate font-medium text-zinc-200 group-hover:text-white" title={user}>{user}</span>
                                      {isBusy && selectedUser === user && <span className="text-ui-sm text-zinc-400">Loading…</span>}
                                  </button>
                                  <button

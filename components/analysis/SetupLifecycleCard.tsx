@@ -48,7 +48,7 @@ export const SetupLifecycleCard: React.FC<SetupLifecycleCardProps> = ({ analysis
                     {STEPS.map(step => (
                         <div key={step.stage} className="min-w-0">
                             <div className={`h-1 rounded-full ${isStepComplete(lifecycle.stage, step.stage) ? 'bg-zinc-300' : 'bg-zinc-800'}`} />
-                            <span className={`mt-1 block truncate text-ui-2xs ${isStepComplete(lifecycle.stage, step.stage) ? 'text-zinc-200' : 'text-zinc-600'}`}>{step.label}</span>
+                            <span className={`mt-1 block truncate text-ui-2xs ${isStepComplete(lifecycle.stage, step.stage) ? 'text-zinc-200' : 'text-zinc-600'}`} title={step.label}>{step.label}</span>
                         </div>
                     ))}
                 </div>

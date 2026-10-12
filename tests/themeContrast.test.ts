@@ -219,7 +219,7 @@ describe('motion lockout (WS-5.4)', () => {
      *    clipping was invisible to the count (`TradeChatPanel.tsx:963,970`);
      *  - the 600-char window could be satisfied by a NEIGHBOUR's `title=`.
      *
-     * So the real residual is measured here with a scanner that knows JSX: strings,
+     * The real residual is measured here with a scanner that knows JSX: strings,
      * template literals, `${…}` and `{…}` attribute expressions are traversed, a
      * `=>` is not a tag end, comments are skipped, and closing tags maintain a real
      * ancestor stack. On the tree this was written, the honest count is 107 — two
@@ -227,7 +227,7 @@ describe('motion lockout (WS-5.4)', () => {
      * The number goes down from here by fixing files, and a new clipped element
      * anywhere in `components/` fails the build.
      */
-    const BASELINE = 107;
+    const BASELINE = 29;
     const BS = String.fromCharCode(92);
     const BT = String.fromCharCode(96);
 

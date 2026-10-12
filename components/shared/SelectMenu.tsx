@@ -235,7 +235,7 @@ const SelectMenuInner: React.FC<SelectMenuProps> = ({
                 {prefix && (
                     <span className="pl-2.5 text-ui-xs uppercase tracking-widest text-zinc-500">{prefix}</span>
                 )}
-                <span className={`min-w-0 flex-1 truncate text-left text-ui-sm font-semibold ${triggerClassName ? '' : prefix ? 'px-1.5 py-1' : 'px-2.5 py-1'}`}>
+                <span className={`min-w-0 flex-1 truncate text-left text-ui-sm font-semibold ${triggerClassName ? '' : prefix ? 'px-1.5 py-1' : 'px-2.5 py-1'}`} title={current?.label ?? placeholder}>
                     {current?.label ?? placeholder}
                 </span>
                 <ChevronDownIcon className={`${triggerClassName ? '' : 'mr-2'} h-3 w-3 shrink-0 text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -284,7 +284,7 @@ const SelectMenuInner: React.FC<SelectMenuProps> = ({
                                                     : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
                                         }`}
                                     >
-                                        <span className="min-w-0 flex-1 truncate">{opt.label}</span>
+                                        <span className="min-w-0 flex-1 truncate" title={opt.label}>{opt.label}</span>
                                         {opt.meta && (
                                             <span className="shrink-0 text-ui-dense text-zinc-500">{opt.meta}</span>
                                         )}

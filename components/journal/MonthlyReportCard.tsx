@@ -24,7 +24,7 @@ export const MonthlyReportCard: React.FC<{ username: string }> = ({ username }) 
         if (!row || row.n === 0) return null;
         return (
             <div key={row.label} className="flex items-baseline justify-between gap-3 text-ui-dense tabular-nums">
-                <span className="truncate text-zinc-300">{row.label}</span>
+                <span className="truncate text-zinc-300" title={row.label}>{row.label}</span>
                 <span className="shrink-0 text-zinc-500">
                     {row.n} closed · {row.winRate.toFixed(0)}% win
                     {row.brier !== null && <> · Brier {row.brier.toFixed(3)} ({row.quality})</>}

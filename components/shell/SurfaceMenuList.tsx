@@ -137,7 +137,7 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                             </span>
                         )}
                     </span>
-                    {!collapsed && <span className="flex-1 truncate">{label}</span>}
+                    {!collapsed && <span className="flex-1 truncate" title={label}>{label}</span>}
                     {!collapsed && badge && <Badge badge={badge} />}
                     {!collapsed && (
                         <kbd className="shrink-0 opacity-0 transition-opacity duration-[120ms] group-hover:opacity-100 group-focus-visible:opacity-100 rounded-control border border-white/5 bg-zinc-800 px-1.5 py-0.5 font-mono text-ui-2xs text-zinc-500">{shortcut}</kbd>

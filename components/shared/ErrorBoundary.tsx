@@ -79,7 +79,7 @@ class ErrorBoundary extends Component<Props, State> {
                 return (
                     <div className=" rounded-bubble border border-rose-500/30 bg-rose-500/10 p-3 text-ui-sm text-rose-300">
                         <div className="font-bold uppercase tracking-widest text-ui-2xs mb-1">This message failed to render</div>
-                        <div className="text-rose-300/70 truncate">{this.state.error?.message || 'Unknown error'}</div>
+                        <div className="text-rose-300/70 truncate" title={this.state.error?.message || 'Unknown error'}>{this.state.error?.message || 'Unknown error'}</div>
                         <button
                             onClick={this.handleReset}
                             className="mt-2 px-2.5 py-1 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-ui-xs font-bold uppercase tracking-widest transition-colors"

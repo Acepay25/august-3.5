@@ -443,7 +443,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                                                 const hi = Math.max(from.value, to.value);
                                                 return (
                                                     <div key={`${line.startTime}-${i}`} className="flex items-baseline justify-between gap-2 text-ui-sm">
-                                                        <span className="text-zinc-300 truncate">{line.label || line.type}</span>
+                                                        <span className="text-zinc-300 truncate" title={line.label || line.type}>{line.label || line.type}</span>
                                                         <span className="font-mono text-white shrink-0">
                                                             ${lo.toLocaleString()}–${hi.toLocaleString()}
                                                             <span className="text-zinc-600"> · {line.importance}</span>
@@ -458,7 +458,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                                 {/* AI Summary */}
                                 {!isAIAnalyzing && aiSummary && (
                                     <div className="bg-zinc-900 border border-white/10 rounded-control px-3 py-2">
-                                        <span className="text-ui-xs text-zinc-400 leading-relaxed line-clamp-3">{aiSummary}</span>
+                                        <span className="text-ui-xs text-zinc-400 leading-relaxed line-clamp-3" title={aiSummary}>{aiSummary}</span>
                                     </div>
                                 )}
                             </div>
