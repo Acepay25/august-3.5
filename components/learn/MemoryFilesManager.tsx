@@ -554,16 +554,19 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                     }
                                 };
                                 return (
-                                    <button
+                                    <div
                                         key={folder.id}
-                                        type="button"
-                                        onClick={() => {
-                                            setSelectedFolderId(folder.id);
-                                            setIsCreatingFolder(false);
-                                            setIsCreatingFile(false);
-                                        }}
-                                        className="w-full flex items-center gap-3.5 px-4 py-3.5 border-b border-zinc-800 last:border-b-0 hover:bg-zinc-800/80 transition-colors text-left group/folder"
+                                        className="flex w-full items-center gap-3.5 border-b border-zinc-800 px-4 py-3.5 text-left transition-colors last:border-b-0 hover:bg-zinc-800/80 group/folder"
                                     >
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setSelectedFolderId(folder.id);
+                                                setIsCreatingFolder(false);
+                                                setIsCreatingFile(false);
+                                            }}
+                                            className="flex min-w-0 flex-1 items-center gap-3.5 text-left"
+                                        >
                                         <span className="w-9 h-9 rounded-control bg-zinc-800 border border-zinc-700/80 flex items-center justify-center shrink-0">
                                             <FolderIcon className="w-4 h-4 text-zinc-400" aria-hidden="true" />
                                         </span>
@@ -575,13 +578,14 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                                 {count} {count === 1 ? 'file' : 'files'} · {formatFolderUpdated(folder.id)}
                                             </span>
                                         </span>
+                                        </button>
                                         <span className="hidden group-hover/folder:flex items-center shrink-0">
                                             <button
                                                 type="button"
                                                 aria-label={`Move ${folder.name} up`}
                                                 title="Move up"
                                                 disabled={index === 0}
-                                                onClick={e => { e.stopPropagation(); void handleMove(-1); }}
+                                                onClick={() => void handleMove(-1)}
                                                 className="rounded-control p-1 text-zinc-500 transition-colors hover:text-zinc-200 disabled:opacity-30"
                                             >
                                                 <ChevronUpIcon className="h-4 w-4" aria-hidden="true" />
@@ -591,14 +595,14 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                                 aria-label={`Move ${folder.name} down`}
                                                 title="Move down"
                                                 disabled={index === sorted.length - 1}
-                                                onClick={e => { e.stopPropagation(); void handleMove(1); }}
+                                                onClick={() => void handleMove(1)}
                                                 className="rounded-control p-1 text-zinc-500 transition-colors hover:text-zinc-200 disabled:opacity-30"
                                             >
                                                 <ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
                                             </button>
                                         </span>
                                         <ChevronRightIcon className="w-4 h-4 text-zinc-600 shrink-0 group-hover/folder:hidden" aria-hidden="true" />
-                                    </button>
+                                    </div>
                                 );
                             })
                         )}
