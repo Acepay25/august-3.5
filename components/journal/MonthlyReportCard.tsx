@@ -34,7 +34,7 @@ export const MonthlyReportCard: React.FC<{ username: string }> = ({ username }) 
         );
     };
     return (
-        <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
+        <div className="rounded-bubble border border-white/10 bg-zinc-900/60 p-4">
             <div className="flex items-baseline justify-between">
                 <p className="text-ui-xs font-bold uppercase tracking-widest text-zinc-500">
                     Monthly report · {card.periodStart.slice(0, 10)} → {card.generatedAt.slice(0, 10)}

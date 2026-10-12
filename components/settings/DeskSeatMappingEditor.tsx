@@ -117,14 +117,14 @@ export const DeskSeatMappingEditor: React.FC = () => {
                     </p>
                 </div>
                 <span
-                    className="shrink-0 rounded border border-white/10 bg-zinc-950 px-1.5 py-0.5 font-mono text-ui-xs text-zinc-400"
+                    className="shrink-0 rounded-control border border-white/10 bg-zinc-950 px-1.5 py-0.5 font-mono text-ui-xs text-zinc-400"
                     title="The override table is per-user; this is the user it will be saved under."
                 >
                     user: {activeUser}
                 </span>
             </div>
 
-            <div className="rounded-md border border-white/10 bg-zinc-950/40">
+            <div className="rounded-control border border-white/10 bg-zinc-950/40">
                 {entries.length === 0 ? (
                     <p className="px-3 py-2 text-ui-dense text-zinc-500">
                         No overrides — every seat uses the default heuristic.
@@ -141,7 +141,7 @@ export const DeskSeatMappingEditor: React.FC = () => {
                                 >
                                     <span
                                         aria-hidden="true"
-                                        className="inline-block h-3 w-3 shrink-0 rounded-sm border border-white/10"
+                                        className="inline-block h-3 w-3 shrink-0 rounded-control border border-white/10"
                                         style={{ background: ROLE_SWATCH[role] }}
                                     />
                                     <span className="min-w-0 flex-1 truncate font-mono text-zinc-200" title={name}>
@@ -160,7 +160,7 @@ export const DeskSeatMappingEditor: React.FC = () => {
                                         onClick={() => handleRemove(name)}
                                         title="Remove override"
                                         aria-label={`Remove override for ${name}`}
-                                        className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-rose-300"
+                                        className="rounded-control p-1 text-zinc-500 hover:bg-zinc-800 hover:text-rose-300"
                                     >
                                         <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                                     </button>
@@ -178,20 +178,20 @@ export const DeskSeatMappingEditor: React.FC = () => {
                     onChange={e => setDraftName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
                     placeholder="Seat name (e.g. Satoshi)"
-                    className="min-w-0 flex-1 rounded-md border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-ui-sm text-zinc-100 placeholder-zinc-600 focus:border-amber-400/40 focus:outline-none"
+                    className="min-w-0 flex-1 rounded-control border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-ui-sm text-zinc-100 placeholder-zinc-600 focus:border-amber-400/40 focus:outline-none"
                 />
                 <SelectMenu
                     value={draftRole}
                     onChange={v => setDraftRole(v as RolePreset)}
                     options={ROLES.map(r => ({ value: r, label: ROLE_LABEL[r] }))}
                     aria-label="Role"
-                    triggerClassName="rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-ui-sm hover:bg-zinc-800"
+                    triggerClassName="rounded-control border border-white/10 bg-zinc-950 px-2 py-1.5 text-ui-sm hover:bg-zinc-800"
                 />
                 <button
                     type="button"
                     onClick={handleAdd}
                     disabled={!draftName.trim()}
-                    className="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2.5 py-1.5 text-ui-sm font-semibold text-zinc-200 enabled:hover:bg-zinc-700 disabled:text-zinc-600"
+                    className="inline-flex items-center gap-1 rounded-control bg-zinc-800 px-2.5 py-1.5 text-ui-sm font-semibold text-zinc-200 enabled:hover:bg-zinc-700 disabled:text-zinc-600"
                 >
                     <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add
                 </button>
@@ -201,7 +201,7 @@ export const DeskSeatMappingEditor: React.FC = () => {
                         onClick={askResetAll}
                         title="Remove all overrides (typed confirm)"
                         data-testid="desk-mapping-reset"
-                        className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-ui-sm text-zinc-400 hover:text-rose-300"
+                        className="inline-flex items-center gap-1 rounded-control border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-ui-sm text-zinc-400 hover:text-rose-300"
                     >
                         <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Reset
                     </button>

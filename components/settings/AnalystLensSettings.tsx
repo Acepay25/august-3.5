@@ -232,7 +232,7 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, providers, onChan
 
         .trading-style-section {
           background: rgba(40, 40, 55, 0.6);
-          border-radius: 10px;
+          border-radius: 12px;
           padding: 12px;
           margin-bottom: 16px;
           border: 1px solid rgba(255, 255, 255, 0.08);
@@ -317,7 +317,7 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, providers, onChan
 
         .role-card {
           background: rgba(40, 40, 55, 0.8);
-          border-radius: 10px;
+          border-radius: 12px;
           padding: 14px;
           border: 1px solid rgba(255, 255, 255, 0.08);
           transition: border-color 0.2s ease;
@@ -357,7 +357,7 @@ export const AnalystLensSettings: React.FC<Props> = ({ config, providers, onChan
           padding: 8px 10px;
           background: rgba(20, 20, 30, 0.8);
           border: 1px solid rgba(255, 255, 255, 0.15);
-          border-radius: 6px;
+          border-radius: 8px;
           color: #fff;
           font-size: 13px;
           cursor: pointer;

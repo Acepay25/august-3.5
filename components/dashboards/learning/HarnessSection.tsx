@@ -124,7 +124,7 @@ export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, 
                             type="button"
                             aria-pressed={windowDays === d}
                             onClick={() => onWindowDaysChange(d)}
-                            className={`min-h-6 px-2.5 py-1 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors ${
+                            className={`min-h-6 px-2.5 py-1 rounded-control text-ui-2xs font-bold uppercase tracking-wider border transition-colors ${
                                 windowDays === d ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'
                             }`}
                         >
@@ -140,36 +140,36 @@ export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, 
 
             {/* Pool stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
+                <div className="bg-zinc-800 rounded-bubble border border-white/5 p-3">
                     <p className="text-ui-2xs text-zinc-500 uppercase tracking-wider mb-1">Setups indexed</p>
                     <p className="text-xl font-black text-white">{poolStats.indexed}</p>
                     <p className="text-ui-2xs text-zinc-600">closed trades in pool</p>
                 </div>
-                <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
+                <div className="bg-zinc-800 rounded-bubble border border-white/5 p-3">
                     <p className="text-ui-2xs text-zinc-500 uppercase tracking-wider mb-1">Avg matches / query</p>
                     <p className="text-xl font-black text-white">{poolStats.avgMatches.toFixed(1)}</p>
                     <p className="text-ui-2xs text-zinc-600">sampled {poolStats.sampled} queries</p>
                 </div>
-                <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
+                <div className="bg-zinc-800 rounded-bubble border border-white/5 p-3">
                     <p className="text-ui-2xs text-zinc-500 uppercase tracking-wider mb-1">Cold-start queries</p>
                     <p className={`text-xl font-black ${poolStats.coldStartQueries > 0 ? 'text-amber-300' : 'text-emerald-400'}`}>
                         {poolStats.sampled > 0 ? `${Math.round((poolStats.coldStartQueries / poolStats.sampled) * 100)}%` : '—'}
                     </p>
                     <p className="text-ui-2xs text-zinc-600">below {COLD_START_MIN} matches → confidence scaled down</p>
                 </div>
-                <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
+                <div className="bg-zinc-800 rounded-bubble border border-white/5 p-3">
                     <p className="text-ui-2xs text-zinc-500 uppercase tracking-wider mb-1">Drawdown</p>
                     <p className="text-xl font-black text-rose-400">{drawdown.open.toFixed(1)}%</p>
                     <p className="text-ui-2xs text-zinc-600">open · historical max {drawdown.max.toFixed(1)}%</p>
                 </div>
             </div>
 
-            <div className="bg-zinc-800 rounded-xl border border-white/5 p-3">
+            <div className="bg-zinc-800 rounded-bubble border border-white/5 p-3">
                 <p className="text-ui-2xs text-zinc-500 uppercase tracking-wider mb-2">Evidence coverage vs outcome</p>
                 <p className="text-ui-xs text-zinc-600 mb-2">Recorded trend, not causal proof.</p>
                 <div className="grid grid-cols-3 gap-2">
                     {evidenceQuality.map(bucket => (
-                        <div key={bucket.coverage} className="rounded-lg border border-white/5 bg-zinc-950/50 p-2">
+                        <div key={bucket.coverage} className="rounded-control border border-white/5 bg-zinc-950/50 p-2">
                             <p className="text-ui-xs uppercase tracking-widest text-zinc-500">{bucket.coverage}</p>
                             <p className="text-ui-base font-semibold text-zinc-100">{bucket.winRate !== null ? `${bucket.winRate}% WR` : '—'}</p>
                             <p className="text-ui-xs text-zinc-600">n={bucket.n}{bucket.avgProbability !== null ? ` · avg p ${bucket.avgProbability}` : ''}</p>
@@ -179,7 +179,7 @@ export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, 
             </div>
 
             {/* Per-model × regime leaderboard */}
-            <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
+            <div className="bg-zinc-800 rounded-bubble border border-white/5 p-3 sm:p-4">
                 <h4 className="text-ui-xs sm:text-ui-sm font-bold text-zinc-500 uppercase tracking-wider mb-2 sm:mb-3">Per-model track record by regime</h4>
                 {leaderboard.length === 0 ? (
                     <p className="text-ui-sm text-zinc-600 italic">Log ≥3 trades per model to see the leaderboard.</p>

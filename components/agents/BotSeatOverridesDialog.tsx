@@ -27,7 +27,7 @@ const ALL_TOOLS = DESK_TOOL_DEFINITIONS.map(d => d.function.name);
 const seatFor = (bots: HermesBot[], bot: AgentBot): HermesBot | undefined =>
     bots.find(b => b.providerId === bot.providerId && b.model === bot.modelId);
 
-const FIELD = 'w-full resize-y rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-sm leading-relaxed text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30';
+const FIELD = 'w-full resize-y rounded-control border border-white/10 bg-zinc-900 px-3 py-2 text-ui-sm leading-relaxed text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30';
 const LABEL = 'mb-1 block text-ui-dense font-semibold uppercase tracking-widest text-zinc-500';
 
 const BotSeatOverridesDialog: React.FC<{ open: boolean; bot: AgentBot | null; onClose: () => void }> = ({ open, bot, onClose }) => {
@@ -74,7 +74,7 @@ const BotSeatOverridesDialog: React.FC<{ open: boolean; bot: AgentBot | null; on
 
     return (
         <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label={`Debate overrides for ${bot.name}`}>
-            <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl" data-testid="bot-seat-overrides">
+            <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-bubble border border-white/10 bg-zinc-950 p-6 shadow-2xl" data-testid="bot-seat-overrides">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                         <h2 className="text-lg font-semibold text-zinc-100">Debate overrides</h2>
@@ -84,7 +84,7 @@ const BotSeatOverridesDialog: React.FC<{ open: boolean; bot: AgentBot | null; on
                         </p>
                     </div>
                     <button type="button" onClick={onClose} aria-label="Close debate overrides"
-                        className="shrink-0 rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200">
+                        className="shrink-0 rounded-control p-1.5 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200">
                         <X className="h-4 w-4" aria-hidden="true" />
                     </button>
                 </div>
@@ -92,7 +92,7 @@ const BotSeatOverridesDialog: React.FC<{ open: boolean; bot: AgentBot | null; on
                 {!loaded && <p className="mt-6 text-ui-sm text-zinc-600">Loading…</p>}
 
                 {loaded && !seat && (
-                    <p className="mt-6 rounded-lg border border-white/10 bg-zinc-900/60 p-3 text-ui-sm leading-relaxed text-zinc-400">
+                    <p className="mt-6 rounded-control border border-white/10 bg-zinc-900/60 p-3 text-ui-sm leading-relaxed text-zinc-400">
                         No debate seat runs {bot.providerId} / {bot.modelId}, so there is nothing to
                         override. Put this model on your Team first.
                     </p>
@@ -120,7 +120,7 @@ const BotSeatOverridesDialog: React.FC<{ open: boolean; bot: AgentBot | null; on
                                     return (
                                         <button key={t} type="button" aria-pressed={on} data-testid={`override-tool-${t}`}
                                             onClick={() => setTools(prev => on ? prev.filter(x => x !== t) : [...prev, t])}
-                                            className={`rounded px-1.5 py-0.5 text-ui-xs transition-colors ${
+                                            className={`rounded-control px-1.5 py-0.5 text-ui-xs transition-colors ${
                                                 on ? 'bg-zinc-700 text-zinc-100' : 'border border-white/10 text-zinc-500 hover:text-zinc-300'
                                             }`}>
                                             {t}
@@ -139,12 +139,12 @@ const BotSeatOverridesDialog: React.FC<{ open: boolean; bot: AgentBot | null; on
 
                 <div className="mt-6 flex items-center justify-end gap-2">
                     <button type="button" onClick={onClose}
-                        className="rounded-lg px-4 py-2 text-ui-caption font-semibold text-zinc-400 hover:text-zinc-200">
+                        className="rounded-control px-4 py-2 text-ui-caption font-semibold text-zinc-400 hover:text-zinc-200">
                         Cancel
                     </button>
                     <button type="button" onClick={() => void save()} disabled={!seat}
                         data-testid="save-seat-overrides"
-                        className="rounded-lg bg-zinc-200 px-4 py-2 text-ui-caption font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40">
+                        className="rounded-control bg-zinc-200 px-4 py-2 text-ui-caption font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40">
                         Save
                     </button>
                 </div>

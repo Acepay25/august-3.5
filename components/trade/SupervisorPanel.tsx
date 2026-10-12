@@ -12,7 +12,7 @@ import SupervisorStream from '../learn/SupervisorStream';
 
 export const SupervisorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => (
     <div className="absolute inset-0 z-40 flex items-start justify-center bg-black/50 px-6 pt-14 pb-6" data-testid="supervisor-panel">
-        <div className="flex max-h-full w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-xl">
+        <div className="flex max-h-full w-full max-w-lg flex-col overflow-hidden rounded-bubble border border-white/10 bg-zinc-950 shadow-xl">
             <SupervisorStream onClose={onClose} />
         </div>
     </div>

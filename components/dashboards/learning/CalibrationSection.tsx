@@ -9,7 +9,7 @@ export const CalibrationSection: React.FC<{ profile: PersonalizedLearningProfile
     <>
         {/* Setups to Avoid */}
         {profile.worstSetups.length > 0 && (
-            <div className="bg-rose-950/20 rounded-xl border border-rose-500/20 p-3 sm:p-4">
+            <div className="bg-rose-950/20 rounded-bubble border border-rose-500/20 p-3 sm:p-4">
                 <h4 className="text-ui-xs sm:text-ui-sm font-bold text-rose-400 uppercase tracking-wider mb-2 sm:mb-3 flex items-center gap-2">
                     Setups to Avoid
                 </h4>
@@ -26,7 +26,7 @@ export const CalibrationSection: React.FC<{ profile: PersonalizedLearningProfile
 
         {/*Confidence Calibration */}
         {profile.confidenceAccuracy.length > 0 && (
-            <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
+            <div className="bg-zinc-800 rounded-bubble border border-white/5 p-3 sm:p-4">
                 <h4 className="text-ui-xs sm:text-ui-sm font-bold text-zinc-500 uppercase tracking-wider mb-3 sm:mb-4">
                     Confidence Calibration
                 </h4>

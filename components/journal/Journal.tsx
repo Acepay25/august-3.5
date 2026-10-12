@@ -366,7 +366,7 @@ const LastTwentyCard: React.FC<{ trades: LoggedTrade[] }> = ({ trades }) => {
         : 'text-zinc-500';
 
   return (
-    <section className="rounded-xl border border-white/[0.06] bg-zinc-900/40 p-4" data-testid="journal-last-20">
+    <section className="rounded-bubble border border-white/[0.06] bg-zinc-900/40 p-4" data-testid="journal-last-20">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 className="text-ui-xs font-semibold uppercase tracking-wider text-zinc-500">
           Last {RECENT_TRADES_WINDOW} logged trades

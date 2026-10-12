@@ -58,7 +58,7 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                     <PinIcon className="h-4 w-4 text-zinc-300" aria-hidden="true" />
                     <h2 className="text-ui-base font-semibold text-zinc-100">Pinned signals</h2>
                     <span className="text-ui-dense text-zinc-500">{openCount} open</span>
-                    <button type="button" onClick={onClose} className="ml-auto rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Close pinned signals">
+                    <button type="button" onClick={onClose} className="ml-auto rounded-control p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" aria-label="Close pinned signals">
                         <CloseIcon className="h-4 w-4" aria-hidden="true" />
                     </button>
                 </div>
@@ -68,7 +68,7 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                             key={id}
                             type="button"
                             onClick={() => setFilter(id)}
-                            className={`rounded-md px-2 py-1 text-ui-dense capitalize ${filter === id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+                            className={`rounded-control px-2 py-1 text-ui-dense capitalize ${filter === id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
                         >
                             {id}
                         </button>
@@ -76,7 +76,7 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
                     {bookRisk && (
-                        <p className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-dense leading-relaxed text-zinc-400">{bookRisk}</p>
+                        <p className="rounded-control border border-white/10 bg-zinc-900 px-3 py-2 text-ui-dense leading-relaxed text-zinc-400">{bookRisk}</p>
                     )}
                     {visible.length === 0 ? (
                         <p className="px-2 py-8 text-center text-ui-caption text-zinc-500">
@@ -94,7 +94,7 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                         const priced = symbol ? PriceAlertService.getCurrentPrice(symbol.includes('USDT') ? symbol : `${symbol}USDT`) : undefined;
                         const paper = paperPnlR(analysis, priced);
                         return (
-                            <div key={signal.messageId} className=" rounded-xl border border-white/10 bg-zinc-900/60 p-3">
+                            <div key={signal.messageId} className=" rounded-bubble border border-white/10 bg-zinc-900/60 p-3">
                                 <div className="flex flex-wrap items-baseline gap-2">
                                     <span className="text-ui-sm font-semibold text-zinc-100">{analysis.coinName || 'Setup'}</span>
                                     <span className="text-ui-dense font-medium text-zinc-300">{dir}</span>
@@ -136,17 +136,17 @@ const WatchListPanel: React.FC<WatchListPanelProps> = ({
                                 <div className="mt-3 flex flex-wrap gap-1.5">
                                     {pending && !resolution && (
                                         <>
-                                            <button type="button" onClick={() => onLogTrade(signal.messageId, TradeOutcome.WIN, signal.conversationId)} className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-ui-dense font-semibold text-emerald-300">Win</button>
-                                            <button type="button" onClick={() => onLogTrade(signal.messageId, TradeOutcome.LOSS, signal.conversationId)} className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-2.5 py-1 text-ui-dense font-semibold text-rose-300">Loss</button>
+                                            <button type="button" onClick={() => onLogTrade(signal.messageId, TradeOutcome.WIN, signal.conversationId)} className="rounded-control border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-ui-dense font-semibold text-emerald-300">Win</button>
+                                            <button type="button" onClick={() => onLogTrade(signal.messageId, TradeOutcome.LOSS, signal.conversationId)} className="rounded-control border border-rose-500/40 bg-rose-500/15 px-2.5 py-1 text-ui-dense font-semibold text-rose-300">Loss</button>
                                         </>
                                     )}
                                     {pending && resolution && onConfirmAutopilot && (
-                                        <button type="button" onClick={() => onConfirmAutopilot(signal.messageId, signal.conversationId)} className="rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-2.5 py-1 text-ui-dense font-semibold text-cyan-300">Confirm autopilot</button>
+                                        <button type="button" onClick={() => onConfirmAutopilot(signal.messageId, signal.conversationId)} className="rounded-control border border-cyan-500/40 bg-cyan-500/15 px-2.5 py-1 text-ui-dense font-semibold text-cyan-300">Confirm autopilot</button>
                                     )}
-                                    <button type="button" onClick={() => onOpenSignal(signal.conversationId, signal.messageId)} className="rounded-lg border border-white/10 px-2.5 py-1 text-ui-dense text-zinc-300 hover:text-zinc-100">
+                                    <button type="button" onClick={() => onOpenSignal(signal.conversationId, signal.messageId)} className="rounded-control border border-white/10 px-2.5 py-1 text-ui-dense text-zinc-300 hover:text-zinc-100">
                                         {inThisChat ? 'Show in chat' : 'Open chat'}
                                     </button>
-                                    <button type="button" onClick={() => onToggleWatch(signal.messageId, signal.conversationId)} className="rounded-lg border border-white/10 px-2.5 py-1 text-ui-dense text-zinc-500 hover:text-zinc-300">
+                                    <button type="button" onClick={() => onToggleWatch(signal.messageId, signal.conversationId)} className="rounded-control border border-white/10 px-2.5 py-1 text-ui-dense text-zinc-500 hover:text-zinc-300">
                                         Unpin
                                     </button>
                                 </div>

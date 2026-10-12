@@ -235,7 +235,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                         </p>
                     </div>
                     {setIsStrategiesEnabled && (
-                        <div className="shrink-0 flex items-center gap-2.5 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+                        <div className="shrink-0 flex items-center gap-2.5 rounded-control border border-zinc-800 bg-zinc-900/60 px-3 py-2">
                             <div className="text-right">
                                 <p className="text-ui-xs font-bold text-zinc-300 uppercase tracking-widest">Inject into analysis</p>
                                 <p className="text-ui-2xs text-zinc-600">{isStrategiesEnabled ? 'On — enabled books are used' : 'Off'}</p>
@@ -249,7 +249,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isProcessing}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white text-ui-xs font-bold uppercase tracking-widest transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-control bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white text-ui-xs font-bold uppercase tracking-widest transition-colors"
                     >
                         <UploadIcon className="w-3.5 h-3.5" aria-hidden="true" />
                         {isProcessing ? 'Working…' : 'Upload PDF book'}
@@ -279,7 +279,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                 {isLoading ? (
                     <div className="flex justify-center py-10"><LoadingIcon className="w-6 h-6 text-zinc-500" aria-hidden="true" /></div>
                 ) : docs.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/40 px-6 py-12 text-center">
+                    <div className="rounded-bubble border border-dashed border-zinc-800 bg-zinc-900/40 px-6 py-12 text-center">
                         <BookmarkIcon className="w-8 h-8 text-zinc-500 mx-auto mb-3" aria-hidden="true" />
                         <p className="text-ui-sm font-bold text-zinc-400">No strategy books yet</p>
                         <p className="text-ui-dense text-zinc-600 mt-1 max-w-sm mx-auto leading-relaxed">
@@ -290,7 +290,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                 ) : docs.map(doc => {
                     const isExpanded = expandedId === doc.id;
                     return (
-                        <div key={doc.id} className={`rounded-xl border transition-colors ${isExpanded ? 'border-cyan-500/30 bg-zinc-900' : 'border-white/5 bg-zinc-900/60 hover:border-white/10'}`}>
+                        <div key={doc.id} className={`rounded-bubble border transition-colors ${isExpanded ? 'border-cyan-500/30 bg-zinc-900' : 'border-white/5 bg-zinc-900/60 hover:border-white/10'}`}>
                             <button
                                 type="button"
                                 onClick={() => openEditor(doc)}
@@ -318,7 +318,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                         value={drafts[doc.id] ?? doc.summary}
                                         onChange={(e) => setDrafts(prev => ({ ...prev, [doc.id]: e.target.value }))}
                                         spellCheck={false}
-                                        className="w-full h-64 resize-y bg-zinc-950 border border-zinc-800 rounded-lg p-3 font-mono text-ui-dense leading-relaxed text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/40 transition-colors whitespace-pre"
+                                        className="w-full h-64 resize-y bg-zinc-950 border border-zinc-800 rounded-control p-3 font-mono text-ui-dense leading-relaxed text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/40 transition-colors whitespace-pre"
                                         placeholder="AI summary — edit freely; your text is what the models see."
                                         aria-label={`Edit strategies from ${doc.sourceName}`}
                                     />
@@ -327,14 +327,14 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                             <button
                                                 type="button"
                                                 onClick={() => handleSaveEdit(doc)}
-                                                className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-ui-xs font-bold uppercase tracking-widest transition-colors"
+                                                className="px-3 py-1.5 rounded-control bg-cyan-600 hover:bg-cyan-700 text-white text-ui-xs font-bold uppercase tracking-widest transition-colors"
                                             >
                                                 Save
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => handleToggleDoc(doc)}
-                                                className="px-3 py-1.5 rounded-lg border border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 text-ui-xs font-bold uppercase tracking-widest transition-colors"
+                                                className="px-3 py-1.5 rounded-control border border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                                             >
                                                 {doc.enabled ? 'Disable' : 'Enable'}
                                             </button>
@@ -342,7 +342,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                                 type="button"
                                                 onClick={() => handleResummarize(doc)}
                                                 disabled={isProcessing}
-                                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 disabled:opacity-50 text-ui-xs font-bold uppercase tracking-widest transition-colors"
+                                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-control border border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 disabled:opacity-50 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                                             >
                                                 <RefreshIcon className="w-3 h-3" aria-hidden="true" />
                                                 Re-summarize
@@ -351,7 +351,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                         <button
                                             type="button"
                                             onClick={() => handleDelete(doc)}
-                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-ui-xs font-bold uppercase tracking-widest transition-colors"
+                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-control border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                                         >
                                             <TrashIcon className="w-3 h-3" aria-hidden="true" />
                                             Delete

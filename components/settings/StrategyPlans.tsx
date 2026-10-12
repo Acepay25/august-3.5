@@ -44,7 +44,7 @@ const Plan: React.FC<{ meta: StrategyMeta; onChanged: () => void }> = ({ meta, o
 
     return (
         <div
-            className="rounded-lg border border-zinc-800 bg-zinc-900 p-3"
+            className="rounded-control border border-zinc-800 bg-zinc-900 p-3"
             data-testid={`strategy-plan-${meta.status}`}
         >
             <div className="flex items-start justify-between gap-3">
@@ -52,7 +52,7 @@ const Plan: React.FC<{ meta: StrategyMeta; onChanged: () => void }> = ({ meta, o
                     <div className="flex items-center gap-2">
                         <span className="truncate text-ui-dense font-semibold text-zinc-100">{meta.name}</span>
                         <span
-                            className={`shrink-0 rounded px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wider ${
+                            className={`shrink-0 rounded-control px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wider ${
                                 meta.status === 'active'
                                     ? 'bg-emerald-500/15 text-emerald-300'
                                     : meta.status === 'retired'
@@ -71,7 +71,7 @@ const Plan: React.FC<{ meta: StrategyMeta; onChanged: () => void }> = ({ meta, o
                     type="button"
                     disabled={busy}
                     onClick={() => void act(meta.status === 'active' ? 'retired' : 'active')}
-                    className="shrink-0 rounded-lg border border-white/10 bg-zinc-800 px-2.5 py-1 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700 disabled:opacity-50"
+                    className="shrink-0 rounded-control border border-white/10 bg-zinc-800 px-2.5 py-1 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700 disabled:opacity-50"
                 >
                     {meta.status === 'active' ? 'Retire' : 'Activate'}
                 </button>

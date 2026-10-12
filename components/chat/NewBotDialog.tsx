@@ -107,7 +107,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
 
     return (
         <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label="New Bot">
-            <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl" data-testid="new-bot-dialog">
+            <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-bubble border border-white/10 bg-zinc-950 p-6 shadow-2xl" data-testid="new-bot-dialog">
                 <div className="flex items-start justify-between">
                     <div>
                         <h2 className="text-lg font-semibold text-zinc-100">New Bot</h2>
@@ -119,7 +119,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                         type="button"
                         onClick={onClose}
                         aria-label="Close new bot dialog"
-                        className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+                        className="rounded-control p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
                     >
                         <X className="h-4 w-4" aria-hidden="true" />
                     </button>
@@ -142,7 +142,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                             type="button"
                             onClick={() => setTab(key)}
                             data-testid={`avatar-tab-${key}`}
-                            className={`rounded-lg px-3 py-1.5 text-ui-sm font-semibold transition-colors ${
+                            className={`rounded-control px-3 py-1.5 text-ui-sm font-semibold transition-colors ${
                                 tab === key ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
                             }`}
                         >
@@ -160,7 +160,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                                 onClick={() => setFace('auto')}
                                 data-testid="face-auto"
                                 aria-label="Auto face (follows the name)"
-                                className={`flex h-11 w-11 items-center justify-center rounded-lg border text-ui-xs font-semibold uppercase tracking-wide ${
+                                className={`flex h-11 w-11 items-center justify-center rounded-control border text-ui-xs font-semibold uppercase tracking-wide ${
                                     face === 'auto' ? 'border-zinc-400 bg-zinc-800 text-zinc-200' : 'border-white/10 text-zinc-500 hover:border-white/25'
                                 }`}
                             >
@@ -173,7 +173,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                                     onClick={() => setFace(spec)}
                                     data-testid={`face-${i}`}
                                     aria-label={`Face ${i + 1}`}
-                                    className={`flex h-11 w-11 items-center justify-center rounded-lg border ${
+                                    className={`flex h-11 w-11 items-center justify-center rounded-control border ${
                                         face !== 'auto' && face.shape === spec.shape && face.hue === spec.hue
                                             ? 'border-zinc-400 bg-zinc-800'
                                             : 'border-transparent hover:border-white/25'
@@ -206,7 +206,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                                     onClick={() => setUploadShape(spec.shape)}
                                     data-testid={`upload-shape-${spec.shape}`}
                                     aria-label={`${spec.shape} clip`}
-                                    className={`flex h-11 w-11 items-center justify-center rounded-lg border ${
+                                    className={`flex h-11 w-11 items-center justify-center rounded-control border ${
                                         uploadShape === spec.shape ? 'border-zinc-400 bg-zinc-800' : 'border-transparent hover:border-white/25'
                                     }`}
                                 >
@@ -215,7 +215,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                             ))}
                         </div>
                         <div className="mt-3 flex items-center justify-center">
-                            <label className="cursor-pointer rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-ui-sm font-medium text-zinc-300 hover:border-white/25 hover:text-zinc-100">
+                            <label className="cursor-pointer rounded-control border border-white/10 bg-zinc-900 px-3 py-1.5 text-ui-sm font-medium text-zinc-300 hover:border-white/25 hover:text-zinc-100">
                                 {uploadSrc ? 'Replace image…' : 'Upload image…'}
                                 <input
                                     type="file"
@@ -267,7 +267,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                                     onClick={() => setPixelRole(role)}
                                     data-testid={`pixel-${role}`}
                                     aria-label={`Pixel ${role}`}
-                                    className={`flex h-11 w-11 items-center justify-center rounded-lg border ${
+                                    className={`flex h-11 w-11 items-center justify-center rounded-control border ${
                                         pixelRole === role ? 'border-zinc-400 bg-zinc-800' : 'border-transparent hover:border-white/25'
                                     }`}
                                 >
@@ -289,7 +289,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                             onChange={e => setName(e.target.value)}
                             placeholder="inbox-triage"
                             data-testid="bot-name"
-                            className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
+                            className="w-full rounded-control border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
                         />
                     </div>
                     <div>
@@ -299,7 +299,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                             value={title}
                             onChange={e => setTitle(e.target.value)}
                             placeholder="Inbox Triage"
-                            className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
+                            className="w-full rounded-control border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
                         />
                     </div>
                     <div>
@@ -310,7 +310,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                             onChange={e => setDescription(e.target.value)}
                             placeholder="What should this Bot help with?"
                             rows={3}
-                            className="w-full resize-none rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
+                            className="w-full resize-none rounded-control border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
                         />
                     </div>
 
@@ -318,7 +318,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                         bot itself (the Team/group merge): pick a role to
                         inherit its curated prompt (optionally refined by
                         instructions), or leave general. */}
-                    <div className="space-y-3 rounded-lg border border-white/10 bg-zinc-900/50 p-3">
+                    <div className="space-y-3 rounded-control border border-white/10 bg-zinc-900/50 p-3">
                         <div className="flex items-center gap-2">
                             <span className="shrink-0 text-ui-dense font-semibold uppercase tracking-widest text-zinc-500">Role</span>
                             <SelectMenu
@@ -327,7 +327,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                                 value={role}
                                 onChange={v => setRole(v as AnalystRole)}
                                 options={SEAT_ROLE_OPTIONS.map(r => ({ value: r.value, label: r.label }))}
-                                triggerClassName="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2 py-2 text-ui-sm hover:bg-zinc-800"
+                                triggerClassName="min-w-0 flex-1 rounded-control border border-white/10 bg-zinc-900 px-2 py-2 text-ui-sm hover:bg-zinc-800"
                             />
                         </div>
                         {role !== AnalystRole.UNASSIGNED && (
@@ -336,7 +336,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                                 onClick={() => setCustomPrompt(builtInPromptForRole(role))}
                                 data-testid="bot-inherit"
                                 title="Copy the built-in role prompt into the instructions box — edit freely"
-                                className="rounded px-1.5 py-0.5 text-ui-xs font-bold uppercase tracking-wider text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+                                className="rounded-control px-1.5 py-0.5 text-ui-xs font-bold uppercase tracking-wider text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
                             >
                                 Inherit prompt
                             </button>
@@ -351,7 +351,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                                     : 'Leave empty for the general-analyst default (full market analysis, web + tools)'}
                                 rows={3}
                                 data-testid="bot-instructions"
-                                className="w-full resize-y rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-sm leading-relaxed text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
+                                className="w-full resize-y rounded-control border border-white/10 bg-zinc-900 px-3 py-2 text-ui-sm leading-relaxed text-zinc-100 placeholder-zinc-600 outline-none focus:border-white/30"
                             />
                             <p className="mt-1 text-ui-dense leading-snug text-zinc-600">
                                 {role !== AnalystRole.UNASSIGNED
@@ -373,7 +373,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                         {advancedOpen ? '▾' : '▸'} Advanced
                     </button>
                     {advancedOpen && (
-                        <div className="space-y-3 rounded-lg border border-white/10 bg-zinc-900/50 p-3">
+                        <div className="space-y-3 rounded-control border border-white/10 bg-zinc-900/50 p-3">
                             <div>
                                 <span className="mb-1 block text-ui-dense font-semibold uppercase tracking-widest text-zinc-500">Shared notebook</span>
                                 <label className="flex items-start gap-2 text-ui-sm text-zinc-300">
@@ -397,7 +397,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                                     value={providerId}
                                     onChange={setProviderId}
                                     options={readyProviders.map(p => ({ value: p.id, label: p.name }))}
-                                    triggerClassName="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption hover:bg-zinc-800"
+                                    triggerClassName="w-full rounded-control border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption hover:bg-zinc-800"
                                 />
                             </div>
                             <div>
@@ -408,7 +408,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                                     value={effectiveModel}
                                     onChange={setModelId}
                                     options={(provider?.models ?? []).map(m => ({ value: m, label: formatModelDisplayName(m) }))}
-                                    triggerClassName="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption hover:bg-zinc-800"
+                                    triggerClassName="w-full rounded-control border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption hover:bg-zinc-800"
                                 />
                             </div>
                             <p className="text-ui-dense leading-snug text-zinc-600">
@@ -422,7 +422,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                     <button
                         type="button"
                         onClick={onClose}
-                        className="rounded-lg px-4 py-2 text-ui-caption font-semibold text-zinc-400 hover:text-zinc-200"
+                        className="rounded-control px-4 py-2 text-ui-caption font-semibold text-zinc-400 hover:text-zinc-200"
                     >
                         Cancel
                     </button>
@@ -431,7 +431,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
                         onClick={create}
                         disabled={!canCreate}
                         data-testid="create-bot"
-                        className="rounded-lg bg-zinc-200 px-4 py-2 text-ui-caption font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                        className="rounded-control bg-zinc-200 px-4 py-2 text-ui-caption font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                     >
                         Create Bot
                     </button>

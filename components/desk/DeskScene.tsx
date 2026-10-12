@@ -408,7 +408,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
         >
             {ResetDialog}
             <div
-                className={`relative flex flex-col gap-2 rounded-2xl border border-white/10 bg-zinc-950 p-3 shadow-2xl ${seatContainerClass}`}
+                className={`relative flex flex-col gap-2 rounded-bubble border border-white/10 bg-zinc-950 p-3 shadow-2xl ${seatContainerClass}`}
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header — caption + run-contract + zoom/close. */}
@@ -431,7 +431,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                                 {stages.map((stage, i) => {
                                     const chip = (
                                         <span
-                                            className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-ui-2xs font-semibold uppercase tracking-wider ${
+                                            className={`inline-flex items-center gap-1 rounded-control px-1.5 py-0.5 text-ui-2xs font-semibold uppercase tracking-wider ${
                                                 stage.state === 'done'
                                                     ? 'bg-zinc-800 text-zinc-300'
                                                     : stage.state === 'running'
@@ -472,7 +472,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                                 {exchanges.map(ex => (
                                     <span
                                         key={`${ex.from}->${ex.to}`}
-                                        className="inline-flex items-center gap-1 rounded border border-white/5 bg-zinc-950/60 px-1.5 py-0.5 text-ui-2xs text-zinc-500"
+                                        className="inline-flex items-center gap-1 rounded-control border border-white/5 bg-zinc-950/60 px-1.5 py-0.5 text-ui-2xs text-zinc-500"
                                         title={`${ex.from} addressed ${ex.to} ${ex.count}×`}
                                     >
                                         <span className="font-medium text-zinc-400">{ex.from}</span>
@@ -492,7 +492,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                             aria-pressed={editRoom}
                             title={editRoom ? 'Done editing' : 'Edit room (drag seats)'}
                             data-testid="desk-edit-room"
-                            className={`flex h-7 items-center gap-1 rounded-md px-2 text-ui-xs font-semibold uppercase tracking-wider transition-colors ${
+                            className={`flex h-7 items-center gap-1 rounded-control px-2 text-ui-xs font-semibold uppercase tracking-wider transition-colors ${
                                 editRoom
                                     ? 'bg-amber-400/20 text-amber-300 ring-1 ring-amber-400/50'
                                     : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
@@ -538,7 +538,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                                 onClick={askReset}
                                 title="Reset to default positions"
                                 data-testid="desk-reset-layout"
-                                className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2 text-ui-xs text-zinc-400 hover:text-rose-300"
+                                className="flex h-7 items-center gap-1 rounded-control border border-white/10 bg-zinc-950 px-2 text-ui-xs text-zinc-400 hover:text-rose-300"
                             >
                                 Reset
                             </button>
@@ -548,7 +548,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                             onClick={() => setZoom(z => !z)}
                             aria-label={zoom ? 'Restore desk view' : 'Expand desk view'}
                             title={zoom ? 'Restore' : 'Expand'}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                            className="flex h-7 w-7 items-center justify-center rounded-control text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                         >
                             {zoom ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />}
                         </button>
@@ -556,7 +556,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                             type="button"
                             onClick={onClose}
                             aria-label="Close desk view"
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                            className="flex h-7 w-7 items-center justify-center rounded-control text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                         >
                             <X className="h-4 w-4" aria-hidden="true" />
                         </button>
@@ -566,7 +566,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                 {/* Floor canvas — relative so absolute seat anchors map to it. */}
                 <div
                     ref={floorRef}
-                    className={`relative min-h-0 flex-1 overflow-hidden rounded-xl border bg-gradient-to-b from-zinc-900/40 to-zinc-950/60 ${
+                    className={`relative min-h-0 flex-1 overflow-hidden rounded-bubble border bg-gradient-to-b from-zinc-900/40 to-zinc-950/60 ${
                         editRoom ? 'border-amber-400/40' : 'border-white/5'
                     }`}
                     data-testid="desk-floor"
@@ -615,7 +615,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                                 compact
                                 iconVariant="subtle"
                                 title="No analyst seats yet"
-                                className="rounded-md border border-dashed border-white/10"
+                                className="rounded-control border border-dashed border-white/10"
                             />
                         </div>
                     ) : (
@@ -638,7 +638,7 @@ export const DeskScene: React.FC<DeskSceneProps> = ({
                                     className={`absolute -translate-x-1/2 -translate-y-1/2 transition-transform ${
                                         editRoom ? 'cursor-grab' : ''
                                     } ${isDragging ? 'cursor-grabbing z-30 scale-110' : ''} ${
-                                        isDragging ? 'rounded-md ring-2 ring-amber-400/60 shadow-lg shadow-amber-400/20' : ''
+                                        isDragging ? 'rounded-control ring-2 ring-amber-400/60 shadow-lg shadow-amber-400/20' : ''
                                     } ${isDragging ? 'is-dragging' : ''} ${
                                         isPulsing ? 'desk-tactile-pulse' : ''
                                     }`}
@@ -810,7 +810,7 @@ const HistoryButton: React.FC<{
                 aria-haspopup="true"
                 aria-expanded={open}
                 data-testid={testId}
-                className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-zinc-950 px-2 text-ui-xs text-zinc-300 enabled:hover:bg-zinc-800 enabled:hover:text-zinc-100 disabled:text-zinc-600"
+                className="flex h-7 items-center gap-1 rounded-control border border-white/10 bg-zinc-950 px-2 text-ui-xs text-zinc-300 enabled:hover:bg-zinc-800 enabled:hover:text-zinc-100 disabled:text-zinc-600"
             >
                 {label}
             </button>
@@ -822,7 +822,7 @@ const HistoryButton: React.FC<{
                     // Per-row onKeyDown handles ArrowUp/Down/Enter; the
                     // global Escape listener set up by `useEffect`
                     // (above) catches Escape and closes the popover.
-                    className="absolute right-0 top-full z-30 mt-1 w-56 rounded-md border border-white/15 bg-zinc-950/95 px-2 py-1.5 shadow-2xl backdrop-blur"
+                    className="absolute right-0 top-full z-30 mt-1 w-56 rounded-bubble border border-white/15 bg-zinc-950/95 px-2 py-1.5 shadow-2xl backdrop-blur"
                 >
                     <p className="px-1 pb-1 text-ui-2xs font-semibold uppercase tracking-widest text-zinc-500">
                         {kind === 'undo' ? 'Next to undo' : 'Next to redo'} · {depth}
@@ -849,7 +849,7 @@ const HistoryButton: React.FC<{
                                             el.scrollIntoView({ block: 'nearest' });
                                         }
                                     }}
-                                    className={`flex items-center justify-between gap-2 rounded px-1.5 py-1 text-ui-xs cursor-pointer outline-none ${
+                                    className={`flex items-center justify-between gap-2 rounded-control px-1.5 py-1 text-ui-xs cursor-pointer outline-none ${
                                         isFocused
                                             ? 'bg-zinc-800 text-zinc-100 ring-1 ring-amber-400/40'
                                             : 'text-zinc-300 hover:bg-zinc-800/60'

@@ -16,7 +16,7 @@ const StatusBadge: React.FC<{ tool: ForgedTool }> = ({ tool }) => {
         retired: 'bg-zinc-900 text-zinc-600 line-through',
     };
     return (
-        <span className={`rounded px-1.5 py-0.5 text-ui-xs font-bold uppercase tracking-wider ${map[tool.status]}`}>
+        <span className={`rounded-control px-1.5 py-0.5 text-ui-xs font-bold uppercase tracking-wider ${map[tool.status]}`}>
             {tool.status}
         </span>
     );
@@ -63,7 +63,7 @@ export const ToolForgeManager: React.FC = () => {
                 A candidate is an inert HTTP recipe — it cannot run until you approve it.
             </p>
             {tools.length === 0 && (
-                <p className="rounded-lg border border-white/5 bg-zinc-900/50 px-3 py-4 text-center text-ui-sm text-zinc-600">
+                <p className="rounded-control border border-white/5 bg-zinc-900/50 px-3 py-4 text-center text-ui-sm text-zinc-600">
                     No forged tools yet. Models propose one by calling <code className="text-zinc-400">forge_tool</code> when the desk lacks a lookup they need.
                 </p>
             )}
@@ -72,7 +72,7 @@ export const ToolForgeManager: React.FC = () => {
                 return (
                     <div
                         key={tool.id}
-                        className="rounded-lg border border-white/5 bg-zinc-900/40 p-3"
+                        className="rounded-control border border-white/5 bg-zinc-900/40 p-3"
                         data-testid={`forged-tool-${tool.id}`}
                     >
                         <div className="flex items-center gap-2">
@@ -95,7 +95,7 @@ export const ToolForgeManager: React.FC = () => {
                                     type="button"
                                     onClick={() => act(() => approveForgedTool(tool.id))}
                                     data-testid={`approve-forged-${tool.id}`}
-                                    className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-ui-dense font-semibold text-zinc-200 hover:bg-zinc-800"
+                                    className="flex items-center gap-1 rounded-control border border-white/10 px-2 py-1 text-ui-dense font-semibold text-zinc-200 hover:bg-zinc-800"
                                 >
                                     <Check className="h-3 w-3" aria-hidden="true" /> Approve network access
                                 </button>
@@ -104,7 +104,7 @@ export const ToolForgeManager: React.FC = () => {
                                 <button
                                     type="button"
                                     onClick={() => act(() => retireForgedTool(tool.id))}
-                                    className="flex items-center gap-1 rounded-md px-2 py-1 text-ui-dense text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                                    className="flex items-center gap-1 rounded-control px-2 py-1 text-ui-dense text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                                 >
                                     <Ban className="h-3 w-3" aria-hidden="true" /> Retire
                                 </button>
@@ -113,7 +113,7 @@ export const ToolForgeManager: React.FC = () => {
                                 type="button"
                                 onClick={() => act(() => deleteForgedTool(tool.id))}
                                 aria-label={`Delete ${tool.id}`}
-                                className="ml-auto rounded p-1 text-zinc-600 hover:bg-zinc-800 hover:text-rose-300"
+                                className="ml-auto rounded-control p-1 text-zinc-600 hover:bg-zinc-800 hover:text-rose-300"
                             >
                                 <Trash2 className="h-3 w-3" aria-hidden="true" />
                             </button>

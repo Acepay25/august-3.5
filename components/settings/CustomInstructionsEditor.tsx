@@ -32,12 +32,12 @@ const InstructionCard: React.FC<{
     const { confirm: confirmDelete, ConfirmDialogComponent } = useConfirmDialog();
 
     return (
-        <div className={`rounded-2xl border transition-[background-color,border-color,opacity,box-shadow] duration-[150ms] ease-[var(--ease-snappy)] ${instruction.isActive ? 'bg-zinc-900 border-cyan-500/30 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.1)]' : 'bg-zinc-800 border-white/5 opacity-80 hover:opacity-100'}`}>
+        <div className={`rounded-bubble border transition-[background-color,border-color,opacity,box-shadow] duration-[150ms] ease-[var(--ease-snappy)] ${instruction.isActive ? 'bg-zinc-900 border-cyan-500/30 shadow-[0_0_15px_-5px_rgba(176, 176, 182,0.1)]' : 'bg-zinc-800 border-white/5 opacity-80 hover:opacity-100'}`}>
             <div className="p-3 flex items-center justify-between gap-3">
                 <div className="flex-1 flex items-center gap-3 min-w-0">
                     <button
                         onClick={() => setIsExpanded(!isExpanded)}
-                        className="p-1 rounded hover:bg-zinc-800 transition-colors text-zinc-500 hover:text-zinc-300"
+                        className="p-1 rounded-control hover:bg-zinc-800 transition-colors text-zinc-500 hover:text-zinc-300"
                     >
                         <ChevronDownIcon className={`w-4 h-4 transition-transform duration-[150ms] ease-[var(--ease-snappy)] ${isExpanded ? 'rotate-180' : ''}`} />
                     </button>
@@ -48,7 +48,7 @@ const InstructionCard: React.FC<{
                                 type="text"
                                 value={instruction.title}
                                 onChange={(e) => onUpdate(instruction.id, { title: e.target.value })}
-                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-ui-sm text-white font-bold focus:border-cyan-500/50 outline-none"
+                                className="w-full bg-zinc-950 border border-white/10 rounded-control px-2 py-1 text-ui-sm text-white font-bold focus:border-cyan-500/50 outline-none"
                                 placeholder="Instruction Title"
                             />
                         ) : (
@@ -72,7 +72,7 @@ const InstructionCard: React.FC<{
                             const ok = await confirmDelete({ title: 'Delete this instruction?', message: 'This cannot be undone.', confirmLabel: 'Delete' });
                             if (ok) onDelete(instruction.id);
                         }}
-                        className="p-1.5 text-zinc-600 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"
+                        className="p-1.5 text-zinc-600 hover:text-rose-400 hover:bg-rose-500/10 rounded-control transition-colors"
                         title="Delete"
                     >
                         <TrashIcon className="w-4 h-4" aria-hidden="true" />
@@ -87,7 +87,7 @@ const InstructionCard: React.FC<{
                         value={instruction.content}
                         onChange={(e) => onUpdate(instruction.id, { content: e.target.value })}
                         placeholder="Enter instruction content..."
-                        className="w-full h-32 bg-zinc-950 border border-white/10 rounded-lg p-3 text-ui-sm text-zinc-300 focus:outline-none focus:border-cyan-500/30 resize-none leading-relaxed custom-scrollbar font-mono"
+                        className="w-full h-32 bg-zinc-950 border border-white/10 rounded-control p-3 text-ui-sm text-zinc-300 focus:outline-none focus:border-cyan-500/30 resize-none leading-relaxed custom-scrollbar font-mono"
                     />
                     <div className="flex justify-end mt-2">
                         <span className="text-ui-xs text-zinc-500">
@@ -161,29 +161,29 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
             </p>
 
             {/* Tabs for Mode Selection */}
-            <div className="flex space-x-1 bg-zinc-900 p-1 rounded-xl border border-white/5">
+            <div className="flex space-x-1 bg-zinc-900 p-1 rounded-control border border-white/5">
                 <button
                     onClick={() => onTabChange('general')}
-                    className={`flex-1 py-1.5 text-ui-xs font-bold uppercase tracking-wider rounded-lg transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'general' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    className={`flex-1 py-1.5 text-ui-xs font-bold uppercase tracking-wider rounded-control transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'general' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
                 >
                     Standard
                 </button>
                 <button
                     onClick={() => onTabChange('accuracyOriginal')}
-                    className={`flex-1 py-1.5 text-ui-xs font-bold uppercase tracking-wider rounded-lg transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'accuracyOriginal' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    className={`flex-1 py-1.5 text-ui-xs font-bold uppercase tracking-wider rounded-control transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'accuracyOriginal' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
                 >
                     Strict Mode
                 </button>
                 <button
                     onClick={() => onTabChange('accuracyPure')}
-                    className={`flex-1 py-1.5 text-ui-xs font-bold uppercase tracking-wider rounded-lg transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'accuracyPure' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    className={`flex-1 py-1.5 text-ui-xs font-bold uppercase tracking-wider rounded-control transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'accuracyPure' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
                 >
                     Pure AI
                 </button>
             </div>
 
             {/* Word Count Progress */}
-            <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
+            <div className="bg-zinc-800 rounded-bubble p-3 border border-white/5">
                 <div className="flex justify-between items-center text-ui-xs font-mono mb-1.5">
                     <span className="text-zinc-500 uppercase font-bold tracking-wider">Token Usage</span>
                     <span className={`${totalWordCount > MAX_WORD_COUNT ? 'text-rose-400 font-bold' : 'text-zinc-400'}`}>
@@ -203,7 +203,7 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
             {/* Instruction List */}
             <div className="space-y-3">
                 {currentInstructions.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-10 text-center border border-dashed border-white/10 rounded-2xl">
+                    <div className="flex flex-col items-center justify-center py-10 text-center border border-dashed border-white/10 rounded-bubble">
                         <span className="text-3xl mb-3"></span>
                         <p className="text-ui-sm text-zinc-600 italic">No custom instructions for this mode yet.</p>
                     </div>
@@ -223,7 +223,7 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
             <button
                 onClick={handleAddInstruction}
                 disabled={currentInstructions.length >= MAX_ITEMS}
-                className="w-full py-3 rounded-2xl border border-white/10 bg-zinc-800 hover:bg-zinc-700 text-ui-sm font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-control border border-white/10 bg-zinc-800 hover:bg-zinc-700 text-ui-sm font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
                 + Add New Instruction ({currentInstructions.length}/{MAX_ITEMS})
             </button>

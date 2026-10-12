@@ -77,12 +77,12 @@ class ErrorBoundary extends Component<Props, State> {
             if (this.props.compact) {
                 // Inline fallback — one bad message must not take down the app.
                 return (
-                    <div className=" rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-ui-sm text-rose-300">
+                    <div className=" rounded-bubble border border-rose-500/30 bg-rose-500/10 p-3 text-ui-sm text-rose-300">
                         <div className="font-bold uppercase tracking-widest text-ui-2xs mb-1">This message failed to render</div>
                         <div className="text-rose-300/70 truncate">{this.state.error?.message || 'Unknown error'}</div>
                         <button
                             onClick={this.handleReset}
-                            className="mt-2 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-ui-xs font-bold uppercase tracking-widest transition-colors"
+                            className="mt-2 px-2.5 py-1 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                         >
                             Retry
                         </button>
@@ -105,7 +105,7 @@ class ErrorBoundary extends Component<Props, State> {
                         </p>
 
                         {/* Error Details (Collapsed) */}
-                        <details className="text-left bg-zinc-800 rounded-lg p-3 text-ui-sm">
+                        <details className="text-left bg-zinc-800 rounded-bubble p-3 text-ui-sm">
                             <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">
                                 Technical Details
                             </summary>
@@ -118,13 +118,13 @@ class ErrorBoundary extends Component<Props, State> {
                         <div className="flex flex-col gap-3">
                             <button
                                 onClick={this.handleReload}
-                                className="w-full py-3 px-4 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl transition-colors"
+                                className="w-full py-3 px-4 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-control transition-colors"
                             >
                                 Reload App
                             </button>
                             <button
                                 onClick={this.handleClearAndReload}
-                                className="w-full py-2 px-4 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-ui-base rounded-lg transition-colors"
+                                className="w-full py-2 px-4 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-ui-base rounded-control transition-colors"
                             >
                                 Clear Session &amp; Reload
                             </button>

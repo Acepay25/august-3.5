@@ -79,7 +79,7 @@ const CONFIDENCE_COLORS: Record<string, string> = {
 const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
         return (
-            <div className="bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 shadow-xl">
+            <div className="bg-zinc-900 border border-white/10 rounded-bubble px-3 py-2 shadow-xl">
                 <p className="text-ui-xs text-zinc-400 uppercase tracking-wider mb-1">{label}</p>
                 {payload.map((entry: any, index: number) => (
                     <p key={index} className="text-ui-base font-bold" style={{ color: entry.color }}>
@@ -194,12 +194,12 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 {/* Date Range Controls */}
                 <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2">
                     {/* Preset Buttons */}
-                    <div className="flex gap-1 bg-zinc-800 rounded-lg p-1 border border-white/5 w-full sm:w-auto">
+                    <div className="flex gap-1 bg-zinc-800 rounded-control p-1 border border-white/5 w-full sm:w-auto">
                         {DATE_PRESETS.map(preset => (
                             <button
                                 key={preset.days}
                                 onClick={() => handlePresetClick(preset.days)}
-                                className={`flex-1 sm:flex-none px-2 sm:px-3 py-1.5 text-ui-2xs sm:text-ui-xs font-bold uppercase tracking-wider rounded-md transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${!isCustomRange && selectedPreset === preset.days
+                                className={`flex-1 sm:flex-none px-2 sm:px-3 py-1.5 text-ui-2xs sm:text-ui-xs font-bold uppercase tracking-wider rounded-control transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${!isCustomRange && selectedPreset === preset.days
                                     ? 'bg-cyan-500 text-white shadow-md'
                                     : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
                                     }`}
@@ -218,7 +218,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                 setCustomStartDate(e.target.value);
                                 if (e.target.value && customEndDate) setIsCustomRange(true);
                             }}
-                            className="flex-1 sm:flex-none px-2 py-1 text-ui-xs font-mono bg-zinc-800 border border-white/10 rounded-md text-zinc-300 focus:outline-none focus:border-cyan-500/50"
+                            className="flex-1 sm:flex-none px-2 py-1 text-ui-xs font-mono bg-zinc-800 border border-white/10 rounded-control text-zinc-300 focus:outline-none focus:border-cyan-500/50"
                         />
                         <span className="text-zinc-600 text-ui-xs">to</span>
                         <input
@@ -228,7 +228,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                 setCustomEndDate(e.target.value);
                                 if (customStartDate && e.target.value) setIsCustomRange(true);
                             }}
-                            className="flex-1 sm:flex-none px-2 py-1 text-ui-xs font-mono bg-zinc-800 border border-white/10 rounded-md text-zinc-300 focus:outline-none focus:border-cyan-500/50"
+                            className="flex-1 sm:flex-none px-2 py-1 text-ui-xs font-mono bg-zinc-800 border border-white/10 rounded-control text-zinc-300 focus:outline-none focus:border-cyan-500/50"
                         />
                     </div>
                 </div>
@@ -237,7 +237,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             {/* Top Stats Row */}
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 {/* Win Rate */}
-                <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 text-center">
+                <div className="glass-panel p-3 sm:p-4 rounded-bubble border border-white/5 bg-zinc-800 text-center">
                     <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-1">Win Rate</div>
                     <div className={`text-xl sm:text-3xl font-black ${overallStats.winRate >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {fmtPercent(overallStats.winRate, 0)}
@@ -245,7 +245,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 </div>
 
                 {/* Total Trades */}
-                <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 text-center">
+                <div className="glass-panel p-3 sm:p-4 rounded-bubble border border-white/5 bg-zinc-800 text-center">
                     <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-1">Trades</div>
                     <div className="text-xl sm:text-3xl font-black text-white">{overallStats.totalTrades}</div>
                 </div>
@@ -253,7 +253,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 {/* Net PnL — dollar PnL from manual captures; autopilot
                     confirms carry pnlPercent only (never pnlAmount), so they
                     are shown as the percent line instead of being invisible. */}
-                <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 text-center relative overflow-hidden">
+                <div className="glass-panel p-3 sm:p-4 rounded-bubble border border-white/5 bg-zinc-800 text-center relative overflow-hidden">
                     {overallStats.totalPnL !== 0 && (
                         <div className={`absolute top-0 left-0 w-full h-1 ${overallStats.totalPnL > 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
                     )}
@@ -277,7 +277,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 </div>
 
                 {/* Profit Factor */}
-                <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 text-center">
+                <div className="glass-panel p-3 sm:p-4 rounded-bubble border border-white/5 bg-zinc-800 text-center">
                     <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-1">Profit Factor</div>
                     <div className={`text-xl sm:text-3xl font-black ${overallStats.profitFactor >= 1.5 ? 'text-cyan-400' : overallStats.profitFactor >= 1 ? 'text-amber-400' : 'text-rose-400'}`}>
                         {overallStats.profitFactor >= 999 ? '∞' : `${overallStats.profitFactor}x`}
@@ -290,12 +290,12 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 says frequency format beats raw probability — "when the verdict
                 says High it hit X% over N" — and no consumer journaling tool
                 offers this view. */}
-            <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
+            <div className="glass-panel p-3 sm:p-4 rounded-bubble border border-white/5 bg-zinc-800">
                 <div className="flex items-center justify-between gap-2 mb-2">
                     <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest">Calibration Ledger</div>
                     {ledger.overallBrier !== null && (
                         <span
-                            className={`text-ui-xs font-bold tabular-nums px-1.5 py-0.5 rounded ${
+                            className={`text-ui-xs font-bold tabular-nums px-1.5 py-0.5 rounded-control ${
                                 brierQuality(ledger.overallBrier) === 'good'
                                     ? 'text-emerald-400 bg-emerald-500/10'
                                     : brierQuality(ledger.overallBrier) === 'fair'
@@ -338,7 +338,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             {/* Discipline analytics (Batch 5): the adherence split, mistake
                 cost, post-first-red, and giveback views — the research says
                 these changed behavior where raw P&L did not. */}
-            <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
+            <div className="glass-panel p-3 sm:p-4 rounded-bubble border border-white/5 bg-zinc-800">
                 <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-2">Discipline</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
@@ -409,7 +409,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             </div>
 
             {/* Win Rate Trend Chart */}
-            <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
+            <div className="glass-panel p-3 sm:p-4 rounded-bubble border border-white/5 bg-zinc-800">
                 <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-2 sm:mb-3">Win Rate Trend</div>
                 {trendData.length > 1 ? (
                     <div className="h-32">
@@ -442,7 +442,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             </div>
 
             {/* Performance by Confidence */}
-            <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
+            <div className="glass-panel p-3 sm:p-4 rounded-bubble border border-white/5 bg-zinc-800">
                 <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-2 sm:mb-3">By Confidence</div>
                 {confidenceChartData.length > 0 ? (
                     <div className="h-40">
@@ -478,7 +478,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             </div>
 
             {/* Pattern Family Performance */}
-            <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
+            <div className="glass-panel p-3 sm:p-4 rounded-bubble border border-white/5 bg-zinc-800">
                 <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-2 sm:mb-3">Pattern Families</div>
                 <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     {familyStats.map(family => {
@@ -486,7 +486,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                         return (
                             <div
                                 key={family.family}
-                                className="p-2 sm:p-3 rounded-xl border text-center transition-colors duration-[150ms] ease-[var(--ease-snappy)]"
+                                className="p-2 sm:p-3 rounded-control border text-center transition-colors duration-[150ms] ease-[var(--ease-snappy)]"
                                 style={{
                                     borderColor: `${color}30`,
                                     backgroundColor: `${color}10`
@@ -510,12 +510,12 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             {/* Top Coins + Streaks */}
             <div className="grid grid-cols-1 gap-3 sm:gap-4">
                 {/* Top Coins */}
-                <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
+                <div className="glass-panel p-3 sm:p-4 rounded-bubble border border-white/5 bg-zinc-800">
                     <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-2 sm:mb-3">Top Coins</div>
                     {topCoins.length > 0 ? (
                         <div className="space-y-2">
                             {topCoins.map((coin, idx) => (
-                                <div key={coin.coin} className="flex items-center justify-between p-2 bg-zinc-800 rounded-lg">
+                                <div key={coin.coin} className="flex items-center justify-between p-2 bg-zinc-800 rounded-control">
                                     <div className="flex items-center gap-2">
                                         <span className="text-ui-xs text-zinc-600 font-mono tabular-nums w-4">#{idx + 1}</span>
                                         <span className="font-bold text-ui-base text-white">{coin.coin}</span>
@@ -547,11 +547,11 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                 </div>
 
                 {/* Streaks */}
-                <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800">
+                <div className="glass-panel p-3 sm:p-4 rounded-bubble border border-white/5 bg-zinc-800">
                     <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest mb-2 sm:mb-3">Streaks</div>
                     <div className="space-y-3 sm:space-y-4">
                         {/* Current Streak */}
-                        <div className="flex items-center justify-between p-3 rounded-lg" style={{
+                        <div className="flex items-center justify-between p-3 rounded-control" style={{
                             backgroundColor: streakData.currentStreak.type === 'win' ? `${COLORS.emerald}15` : streakData.currentStreak.type === 'loss' ? `${COLORS.rose}15` : `${COLORS.zinc}15`,
                             borderColor: streakData.currentStreak.type === 'win' ? `${COLORS.emerald}30` : streakData.currentStreak.type === 'loss' ? `${COLORS.rose}30` : `${COLORS.zinc}30`,
                             borderWidth: 1
@@ -568,11 +568,11 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
 
                         {/* Best/Worst */}
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-center">
+                            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-control text-center">
                                 <span className="text-ui-2xs text-emerald-600 uppercase tracking-wider block mb-1">Best Win Streak</span>
                                 <span className="text-2xl font-black text-emerald-400">{streakData.bestWinStreak}</span>
                             </div>
-                            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-center">
+                            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-control text-center">
                                 <span className="text-ui-2xs text-rose-600 uppercase tracking-wider block mb-1">Worst Loss Streak</span>
                                 <span className="text-2xl font-black text-rose-400">{streakData.worstLossStreak}</span>
                             </div>
@@ -583,13 +583,13 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
 
             {/* Avg Win/Loss */}
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                <div className="glass-panel p-3 sm:p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-center">
+                <div className="glass-panel p-3 sm:p-4 rounded-bubble border border-emerald-500/20 bg-emerald-500/5 text-center">
                     <div className="text-ui-2xs sm:text-ui-xs text-emerald-600 uppercase font-bold tracking-widest mb-1">Avg Win</div>
                     <div className="text-ui-lg sm:text-xl font-mono font-bold text-emerald-400">
                         +{overallStats.avgWinSize.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
                     </div>
                 </div>
-                <div className="glass-panel p-3 sm:p-4 rounded-xl border border-rose-500/20 bg-rose-500/5 text-center">
+                <div className="glass-panel p-3 sm:p-4 rounded-bubble border border-rose-500/20 bg-rose-500/5 text-center">
                     <div className="text-ui-2xs sm:text-ui-xs text-rose-600 uppercase font-bold tracking-widest mb-1">Avg Loss</div>
                     <div className="text-ui-lg sm:text-xl font-mono font-bold text-rose-400">
                         -{overallStats.avgLossSize.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}

@@ -154,7 +154,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                             onClick={onExpandNavRail}
                             aria-label="Expand navigation"
                             aria-controls="nav-rail-panel"
-                            className="relative -ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
+                            className="relative -ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-control text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
                         >
                             <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
                             {navUpdateDot && (
@@ -206,11 +206,11 @@ export const Header: React.FC<HeaderProps> = memo(({
 
                                     {/* Session Details Modal */}
                                     {isSessionModalOpen && (
-                                             <div role="dialog" aria-label="Session details" className="absolute top-full left-0 sm:left-auto sm:right-0 mt-4 sm:mt-2 w-80 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-drawer animate-fade-in">
+                                             <div role="dialog" aria-label="Session details" className="absolute top-full left-0 sm:left-auto sm:right-0 mt-4 sm:mt-2 w-80 bg-zinc-900 border border-white/10 rounded-bubble shadow-2xl overflow-hidden z-drawer animate-fade-in">
                                             <div className="p-3 bg-zinc-900">
                                                 {/* Live Market Conditions Section */}
                                                 {liveMarketConditions && (
-                                                    <div className="mb-3 p-2 bg-zinc-800 rounded-lg border border-white/5">
+                                                    <div className="mb-3 p-2 bg-zinc-800 rounded-control border border-white/5">
                                                         <div className="flex items-center justify-between mb-1.5">
                                                             <div className="text-ui-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1">
                                                                 <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 animate-pulse" />
@@ -333,12 +333,12 @@ export const Header: React.FC<HeaderProps> = memo(({
                         signals moved to the Trade surface's market row (stage
                         3) — they are a trading tool, not global chrome. */}
                     {onOpenActivity && (
-                        <div className="inline-flex items-center rounded-xl border border-white/[0.08] bg-zinc-800/60 p-0.5 shadow-sm">
+                        <div className="inline-flex items-center rounded-bubble border border-white/[0.08] bg-zinc-800/60 p-0.5 shadow-sm">
                             <button
                                 type="button"
                                 data-testid="header-activity"
                                 onClick={onOpenActivity}
-                                className="inline-flex items-center rounded-lg px-2.5 py-1 text-ui-dense font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
+                                className="inline-flex items-center rounded-control px-2.5 py-1 text-ui-dense font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
                                 title="Activity — background jobs, skill audits, automations"
                                 aria-label="Activity"
                             >
@@ -350,7 +350,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                     {isPostMortemInProgress && (
                         <button
                             onClick={() => setIsLivePostMortemVisible(true)}
-                            className="p-2.5 bg-zinc-800 text-zinc-300 rounded-xl animate-pulse"
+                            className="p-2.5 bg-zinc-800 text-zinc-300 rounded-control animate-pulse"
                             title="Live Post-Mortem"
                             aria-label="View live post-mortem progress"
                         >

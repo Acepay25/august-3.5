@@ -56,7 +56,7 @@ export const EquityCurveDashboard: React.FC<EquityCurveDashboardProps> = ({ trad
         : chartColor('--color-rose-400', '#f97d80');
 
     return (
-        <div className=" glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-zinc-800 mb-3 sm:mb-5">
+        <div className=" glass-panel p-3 sm:p-4 rounded-bubble border border-white/5 bg-zinc-800 mb-3 sm:mb-5">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2 sm:mb-3">
                 <div className="text-ui-2xs sm:text-ui-xs text-zinc-500 uppercase font-bold tracking-widest">Equity Curve (cumulative P&L %)</div>
                 <div className="flex items-center gap-3 text-ui-xs font-mono">
@@ -78,7 +78,7 @@ export const EquityCurveDashboard: React.FC<EquityCurveDashboardProps> = ({ trad
                         <XAxis dataKey="label" tick={{ fill: chartColor('--color-zinc-500', '#8c8c86'), fontSize: 9 }} tickLine={false} axisLine={false} minTickGap={40} />
                         <YAxis tick={{ fill: chartColor('--color-zinc-500', '#8c8c86'), fontSize: 9 }} tickLine={false} axisLine={false} />
                         <Tooltip
-                            contentStyle={{ background: chartColor('--color-zinc-900', '#141412'), border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 11 }}
+                            contentStyle={{ background: chartColor('--color-zinc-900', '#141412'), border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, fontSize: 11 }}
                             labelStyle={{ color: chartColor('--color-zinc-400', '#a3a39d') }}
                         />
                         <ReferenceLine y={0} stroke="rgba(255,255,255,0.12)" />

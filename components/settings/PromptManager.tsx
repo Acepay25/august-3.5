@@ -222,7 +222,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                     <button
                         type="button"
                         onClick={handleResetAll}
-                        className=" shrink-0 px-3 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-ui-sm font-medium transition-colors"
+                        className=" shrink-0 px-3 py-2 rounded-control border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-ui-sm font-medium transition-colors"
                     >
                         Reset all ({modifiedCount})
                     </button>
@@ -236,7 +236,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search prompts…"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-3 py-3 text-ui-base text-zinc-200 placeholder-zinc-600 outline-none focus:border-zinc-600"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-control pl-10 pr-3 py-3 text-ui-base text-zinc-200 placeholder-zinc-600 outline-none focus:border-zinc-600"
                     aria-label="Search prompts"
                 />
             </div>
@@ -256,27 +256,27 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                         <div className="flex items-center gap-2 shrink-0">
                             <button
                                 onClick={() => { setIsDiff(v => !v); setIsPreview(false); }}
-                                className={`px-3 py-1.5 rounded-lg text-ui-base transition-colors ${isDiff ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'}`}
+                                className={`px-3 py-1.5 rounded-control text-ui-base transition-colors ${isDiff ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'}`}
                             >
                                 Diff
                             </button>
                             <button
                                 onClick={() => { setIsPreview(v => !v); setIsDiff(false); }}
-                                className="px-3 py-1.5 rounded-lg text-ui-base text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 transition-colors"
+                                className="px-3 py-1.5 rounded-control text-ui-base text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 transition-colors"
                             >
                                 {isPreview ? 'Write' : 'Preview'}
                             </button>
                             <button
                                 onClick={handleSave}
                                 disabled={!isDirty || isSaving}
-                                className="px-3 py-1.5 rounded-lg text-ui-base bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-100 transition-colors"
+                                className="px-3 py-1.5 rounded-control text-ui-base bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-100 transition-colors"
                             >
                                 {isSaving ? 'Saving…' : 'Save'}
                             </button>
                             {isModified && (
                                 <button
                                     onClick={handleResetOne}
-                                    className="px-3 py-1.5 rounded-lg text-ui-base text-zinc-500 hover:text-zinc-200 transition-colors"
+                                    className="px-3 py-1.5 rounded-control text-ui-base text-zinc-500 hover:text-zinc-200 transition-colors"
                                 >
                                     Reset
                                 </button>
@@ -291,7 +291,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                             ))}
                         </ul>
                     )}
-                    <div className="flex-1 min-h-[320px] rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
+                    <div className="flex-1 min-h-[320px] rounded-bubble border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
                         {isDiff ? (
                             <PromptDiffView baseText={selectedEntry.fallback} currentText={draft} />
                         ) : isPreview ? (
@@ -330,7 +330,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                             {groupLabel(selectedGroupKey)}
                         </h4>
                     )}
-                    <div className="flex-1 min-h-0 rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">
+                    <div className="flex-1 min-h-0 rounded-bubble border border-zinc-800 bg-zinc-900 overflow-hidden">
                         {isLoading ? (
                             <div className="flex justify-center py-16"><LoadingIcon className="w-6 h-6 text-zinc-500" aria-hidden="true" /></div>
                         ) : visibleEntries.length === 0 ? (
@@ -346,7 +346,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                                         onClick={() => { void openEntry(entry); }}
                                         className="w-full flex items-center gap-3.5 px-4 py-3.5 border-b border-zinc-800 last:border-b-0 hover:bg-zinc-800/80 transition-colors text-left"
                                     >
-                                        <span className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 flex items-center justify-center shrink-0">
+                                        <span className="w-9 h-9 rounded-control bg-zinc-800 border border-zinc-700/80 flex items-center justify-center shrink-0">
                                             <FileTextIcon className="w-4 h-4 text-zinc-400" aria-hidden="true" />
                                         </span>
                                         <span className="flex-1 min-w-0">
@@ -368,7 +368,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                     </div>
                 </div>
             ) : (
-                <div className="flex-1 min-h-0 rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">
+                <div className="flex-1 min-h-0 rounded-bubble border border-zinc-800 bg-zinc-900 overflow-hidden">
                     {isLoading ? (
                         <div className="flex justify-center py-16"><LoadingIcon className="w-6 h-6 text-zinc-500" aria-hidden="true" /></div>
                     ) : (
@@ -382,7 +382,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                                         onClick={() => { void selectCategory(group.key); }}
                                         className="w-full flex items-center gap-3.5 px-4 py-3.5 border-b border-zinc-800 last:border-b-0 hover:bg-zinc-800/80 transition-colors text-left"
                                     >
-                                        <span className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 flex items-center justify-center shrink-0">
+                                        <span className="w-9 h-9 rounded-control bg-zinc-800 border border-zinc-700/80 flex items-center justify-center shrink-0">
                                             <FolderIcon className="w-4 h-4 text-zinc-400" aria-hidden="true" />
                                         </span>
                                         <span className="flex-1 min-w-0">

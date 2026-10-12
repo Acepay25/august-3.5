@@ -90,7 +90,7 @@ const AccountRow: React.FC<{
                         data-testid="nav-settings"
                         onClick={onOpenSettings}
                         aria-label="Settings"
-                        className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
+                        className="flex h-9 w-9 items-center justify-center rounded-control text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
                     >
                         <Settings className="h-4 w-4" aria-hidden="true" />
                     </button>
@@ -105,7 +105,7 @@ const AccountRow: React.FC<{
             className="flex shrink-0 items-center gap-2 border-t border-white/[0.06] px-3 py-2.5"
         >
             <div
-                className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-0.5"
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-control py-0.5"
                 title={activeUsername ? `Signed in as ${activeUsername}` : 'No profile'}
             >
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-ui-sm font-bold uppercase text-zinc-300">
@@ -125,7 +125,7 @@ const AccountRow: React.FC<{
                     data-testid="nav-settings"
                     onClick={onOpenSettings}
                     aria-label="Settings"
-                    className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
+                    className="flex h-7 w-7 items-center justify-center rounded-control text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
                 >
                     <Settings className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -202,7 +202,7 @@ const NavRail: React.FC<NavRailProps> = ({
                     aria-expanded={expanded}
                     aria-label="Collapse navigation"
                     aria-controls="nav-rail-panel"
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
+                    className="flex h-8 w-8 items-center justify-center rounded-control text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
                 >
                     <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
                 </button>

@@ -71,7 +71,7 @@ const ModelsTab: React.FC<{ tab: ModelsTabProps }> = ({ tab: props }) => {
                 description="Connect a provider, then choose which model fills each seat on the desk."
             />
             {providerConfigsLoaded && readyConfigProviders.length === 0 && (
-                <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.05] p-4">
+                <div className="rounded-bubble border border-cyan-500/20 bg-cyan-500/[0.05] p-4">
                     <h3 className="text-ui-base font-semibold text-zinc-100">Connect an AI service to get started</h3>
                     <p className="mt-1 text-ui-sm leading-relaxed text-zinc-400">
                         Add a provider below, paste its key, pick a model, then use Test before running your first analysis.
@@ -81,7 +81,7 @@ const ModelsTab: React.FC<{ tab: ModelsTabProps }> = ({ tab: props }) => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {readyConfigProviders.length > 0 && (
-                    <div className="rounded-2xl border border-white/[0.07] bg-zinc-900/50 p-4">
+                    <div className="rounded-bubble border border-white/[0.07] bg-zinc-900/50 p-4">
                         <div className="mb-2 text-ui-dense font-semibold uppercase tracking-[0.08em] text-zinc-500">
                             Vision Model
                         </div>
@@ -97,7 +97,7 @@ const ModelsTab: React.FC<{ tab: ModelsTabProps }> = ({ tab: props }) => {
                     </div>
                 )}
 
-                <div className="rounded-2xl border border-white/[0.07] bg-zinc-900/50 p-4">
+                <div className="rounded-bubble border border-white/[0.07] bg-zinc-900/50 p-4">
                     <div className="mb-2 text-ui-dense font-semibold uppercase tracking-[0.08em] text-zinc-500">
                         Memory Model
                     </div>
@@ -122,7 +122,7 @@ const ModelsTab: React.FC<{ tab: ModelsTabProps }> = ({ tab: props }) => {
                     </p>
                 </div>
 
-                <div className="rounded-2xl border border-white/[0.07] bg-zinc-900/50 p-4">
+                <div className="rounded-bubble border border-white/[0.07] bg-zinc-900/50 p-4">
                     <div className="mb-2 text-ui-dense font-semibold uppercase tracking-[0.08em] text-zinc-500">
                         Debate Moderator
                     </div>

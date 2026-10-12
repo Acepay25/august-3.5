@@ -19,7 +19,7 @@ const SkillsTab: React.FC<{ tab: SkillsTabProps }> = ({ tab: props }) => {
                 full-screen Strategy Studio; Settings
                 keeps only the pointer + forged-tool
                 approvals (which have no Studio home). */}
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <div className="rounded-bubble border border-zinc-800 bg-zinc-900 p-4">
                 <div className="flex items-center justify-between gap-3">
                     <div>
                         <h3 className="text-ui-caption font-bold text-zinc-100">Skills</h3>
@@ -31,7 +31,7 @@ const SkillsTab: React.FC<{ tab: SkillsTabProps }> = ({ tab: props }) => {
                         <button
                             type="button"
                             onClick={onOpenStrategyStudio}
-                            className="shrink-0 rounded-lg border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
+                            className="shrink-0 rounded-control border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
                         >
                             Open Strategy Studio
                         </button>

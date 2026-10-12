@@ -24,7 +24,7 @@ const StatusBadge: React.FC<{ a: MemoryAmendment }> = ({ a }) => {
         rejected: 'bg-zinc-900 text-zinc-600 line-through',
     };
     return (
-        <span className={`rounded px-1.5 py-0.5 text-ui-xs font-bold uppercase tracking-wider ${map[a.status]}`}>
+        <span className={`rounded-control px-1.5 py-0.5 text-ui-xs font-bold uppercase tracking-wider ${map[a.status]}`}>
             {a.status}
         </span>
     );
@@ -82,32 +82,32 @@ export const AmendmentsInbox: React.FC = () => {
         <div className="space-y-2" data-testid="amendments-inbox">
             {saveError && (
                 <p role="alert" data-testid="amendment-save-error"
-                    className="rounded-lg border border-rose-900/50 bg-rose-950/20 px-3 py-2 text-ui-dense leading-snug text-rose-300">
+                    className="rounded-control border border-rose-900/50 bg-rose-950/20 px-3 py-2 text-ui-dense leading-snug text-rose-300">
                     {saveError}
                 </p>
             )}
             {amendments.length === 0 && (
-                <p className="rounded-lg border border-white/5 bg-zinc-900/50 px-3 py-4 text-center text-ui-sm text-zinc-600">
+                <p className="rounded-control border border-white/5 bg-zinc-900/50 px-3 py-4 text-center text-ui-sm text-zinc-600">
                     No amendment proposals. Models can propose corrections to your notebook via <code className="text-zinc-400">amend_memory</code>.
                 </p>
             )}
             {pending.map(a => (
-                <div key={a.id} className="rounded-lg border border-amber-900/40 bg-zinc-900/40 p-3" data-testid={`amendment-${a.id}`}>
+                <div key={a.id} className="rounded-bubble border border-amber-900/40 bg-zinc-900/40 p-3" data-testid={`amendment-${a.id}`}>
                     <div className="flex items-center gap-2">
                         <code className="text-ui-sm font-semibold text-zinc-200">{a.fileName}</code>
-                        <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wider text-zinc-400">{a.kind}</span>
+                        <span className="rounded-control bg-zinc-800 px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wider text-zinc-400">{a.kind}</span>
                         <StatusBadge a={a} />
                         <span className="ml-auto shrink-0 text-ui-xs text-zinc-600">{a.proposedBy} · {phtStamp(a.createdAt)}</span>
                     </div>
                     <p className="mt-1.5 text-ui-dense leading-snug text-zinc-400"><span className="text-zinc-600">Reason:</span> {a.reason}</p>
-                    <pre className="mt-1.5 max-h-28 overflow-y-auto whitespace-pre-wrap rounded bg-zinc-950/60 p-2 text-ui-xs leading-4 text-zinc-300 custom-scrollbar">{a.proposedContent}</pre>
+                    <pre className="mt-1.5 max-h-28 overflow-y-auto whitespace-pre-wrap rounded-control bg-zinc-950/60 p-2 text-ui-xs leading-4 text-zinc-300 custom-scrollbar">{a.proposedContent}</pre>
                     <div className="mt-2 flex items-center gap-2">
                         <button
                             type="button"
                             disabled={busyId === a.id}
                             onClick={() => { void resolve(a, true); }}
                             data-testid={`approve-amendment-${a.id}`}
-                            className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-ui-dense font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-40"
+                            className="flex items-center gap-1 rounded-control border border-white/10 px-2 py-1 text-ui-dense font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-40"
                         >
                             <Check className="h-3 w-3" aria-hidden="true" /> {a.kind === 'supersede' ? 'Append correction' : 'Apply replacement'}
                         </button>
@@ -115,7 +115,7 @@ export const AmendmentsInbox: React.FC = () => {
                             type="button"
                             disabled={busyId === a.id}
                             onClick={() => { void resolve(a, false); }}
-                            className="flex items-center gap-1 rounded-md px-2 py-1 text-ui-dense text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-40"
+                            className="flex items-center gap-1 rounded-control px-2 py-1 text-ui-dense text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-40"
                         >
                             <X className="h-3 w-3" aria-hidden="true" /> Reject
                         </button>
@@ -123,7 +123,7 @@ export const AmendmentsInbox: React.FC = () => {
                 </div>
             ))}
             {resolved.length > 0 && (
-                <details className="rounded-lg border border-white/5 bg-zinc-900/30 px-3 py-2">
+                <details className="rounded-control border border-white/5 bg-zinc-900/30 px-3 py-2">
                     <summary className="cursor-pointer text-ui-dense text-zinc-500">{resolved.length} resolved</summary>
                     <div className="mt-2 space-y-1.5">
                         {resolved.map(a => (

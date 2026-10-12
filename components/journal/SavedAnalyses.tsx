@@ -34,14 +34,14 @@ const SavedAnalysisRowImpl: React.FC<{
   const safeDirection = direction || 'Neutral';
 
   return (
-    <div className={`bg-zinc-950 rounded-lg border ${isSelected ? 'border-cyan-500' : 'border-white/10'}`}>
+    <div className={`bg-zinc-950 rounded-bubble border ${isSelected ? 'border-cyan-500' : 'border-white/10'}`}>
       <div className="flex items-center p-3 cursor-pointer" onClick={() => onToggle(item.id)}>
         <input
           type="checkbox"
           checked={isSelected}
           onChange={() => onSelect(item.id)}
           onClick={(e) => e.stopPropagation()}
-          className="form-checkbox h-5 w-5 bg-zinc-900 border-white/10 text-cyan-600 focus-visible:ring-cyan-500 rounded cursor-pointer flex-shrink-0"
+          className="form-checkbox h-5 w-5 bg-zinc-900 border-white/10 text-cyan-600 focus-visible:ring-cyan-500 rounded-control cursor-pointer flex-shrink-0"
           aria-label={`Select ${coinName || 'analysis'} for deletion`}
         />
         <div className="flex-1 min-w-0 ml-4">
@@ -57,7 +57,7 @@ const SavedAnalysisRowImpl: React.FC<{
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onLocate(item.id); }}
-            className="mr-2 shrink-0 rounded-md border border-white/10 px-2 py-1 text-ui-xs text-zinc-400 transition-colors hover:border-white/25 hover:text-zinc-200"
+            className="mr-2 shrink-0 rounded-control border border-white/10 px-2 py-1 text-ui-xs text-zinc-400 transition-colors hover:border-white/25 hover:text-zinc-200"
             aria-label={`Locate ${coinName || 'analysis'} in the chat`}
           >
             Locate
@@ -80,10 +80,10 @@ const SavedAnalysisRowImpl: React.FC<{
               <strong className="text-zinc-400 block mb-1">Take Profit Targets:</strong>
               <div className="flex flex-col gap-2">
                 {(takeProfit || []).map((tp, i) => (
-                  <div key={i} className="flex items-center justify-between font-mono text-emerald-400 bg-zinc-900 p-2 rounded-md border border-white/5">
+                  <div key={i} className="flex items-center justify-between font-mono text-emerald-400 bg-zinc-900 p-2 rounded-control border border-white/5">
                     <span>{tp.price}</span>
                     <div className="flex items-center gap-2 text-ui-sm">
-                      {tp.percentage && <span className="text-cyan-300 bg-cyan-900/50 px-2 py-0.5 rounded-md">{tp.percentage}</span>}
+                      {tp.percentage && <span className="text-cyan-300 bg-cyan-900/50 px-2 py-0.5 rounded-control">{tp.percentage}</span>}
                     </div>
                   </div>
                 ))}
@@ -201,7 +201,7 @@ const SavedAnalyses: React.FC<SavedAnalysesProps> = ({ analyses, onDelete, onCle
           <button
             type="button"
             onClick={handleDeleteSelected}
-            className="w-full flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 px-4 rounded-md"
+            className="w-full flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 px-4 rounded-control"
           >
             <TrashIcon /> Delete Selected ({selectedIds.length})
           </button>
@@ -210,7 +210,7 @@ const SavedAnalyses: React.FC<SavedAnalysesProps> = ({ analyses, onDelete, onCle
             type="button"
             onClick={onClearAll}
             disabled={(analyses || []).length === 0}
-            className="w-full flex items-center justify-center gap-1.5 bg-rose-900/50 hover:bg-rose-900/80 text-rose-400 font-bold py-2 px-4 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-1.5 bg-rose-900/50 hover:bg-rose-900/80 text-rose-400 font-bold py-2 px-4 rounded-control disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <TrashIcon /> Clear All Saved
           </button>

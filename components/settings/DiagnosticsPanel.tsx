@@ -45,7 +45,7 @@ export const DiagnosticsPanel: React.FC = () => {
     const hasErrors = promiseError || globalError;
 
     const renderError = (error: ErrorLog, label: string): React.ReactNode => (
-        <div className="p-3 rounded-xl bg-rose-950/30 border border-rose-500/20 space-y-1">
+        <div className="p-3 rounded-bubble bg-rose-950/30 border border-rose-500/20 space-y-1">
             <div className="flex items-center justify-between">
                 <span className="text-ui-sm font-semibold text-rose-400">{label}</span>
                 <span className="text-ui-xs text-zinc-500">
@@ -125,7 +125,7 @@ export const DiagnosticsPanel: React.FC = () => {
             {leaks.length > 0 ? (
                 <ul className="space-y-2">
                     {leaks.map((entry, index) => (
-                        <li key={`${entry.at}-${index}`} className="rounded-xl border border-white/10 bg-zinc-950/50 p-3">
+                        <li key={`${entry.at}-${index}`} className="rounded-bubble border border-white/10 bg-zinc-950/50 p-3">
                             <p className="text-ui-xs text-zinc-600">
                                 {entry.at ? new Date(entry.at).toLocaleString() : 'Unknown time'}
                             </p>

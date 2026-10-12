@@ -74,7 +74,7 @@ const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange,
                         on the Chat surface, and the Chat composer sits at
                         z-[90]. The overlay that closes it is z-20 either
                         way; only the panel needed lifting. */}
-                    <div className="absolute left-2 top-9 z-40 w-40 rounded-xl border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="tf-picker">
+                    <div className="absolute left-2 top-9 z-40 w-40 rounded-bubble border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="tf-picker">
                         <p className="px-2 py-1 text-ui-2xs uppercase tracking-widest text-zinc-600">Timeframes</p>
                         <div className="grid grid-cols-2 gap-0.5">
                             {CHART_INTERVALS.map(tf => {
@@ -83,7 +83,7 @@ const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange,
                                     <button key={tf} type="button" onClick={() => toggle(tf)} disabled={tf === interval}
                                         aria-pressed={isShown}
                                         title={tf === interval ? 'The current timeframe always shows' : undefined}
-                                        className={`flex items-center justify-between rounded-lg px-2 py-1 text-ui-dense transition-colors hover:bg-white/[0.06] disabled:opacity-40 ${
+                                        className={`flex items-center justify-between rounded-control px-2 py-1 text-ui-dense transition-colors hover:bg-white/[0.06] disabled:opacity-40 ${
                                             isShown ? 'text-zinc-100' : 'text-zinc-500'
                                         }`}>
                                         {tf}

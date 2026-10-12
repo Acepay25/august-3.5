@@ -39,7 +39,7 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
     );
 
     return (
-        <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
+        <div className="bg-zinc-800 rounded-bubble border border-white/5 p-3 sm:p-4">
             <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
                 <h4 className="text-ui-xs sm:text-ui-sm font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
                     <Brain className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" /> Memory Graph
@@ -48,7 +48,7 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
                     {(['all', 'used', 'learned'] as const).map(t => (
                         <button key={t} type="button" onClick={() => setGraphTab(t)}
                             aria-pressed={graphTab === t}
-                            className={`min-h-6 px-2.5 py-1 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors ${graphTab === t ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}>
+                            className={`min-h-6 px-2.5 py-1 rounded-control text-ui-2xs font-bold uppercase tracking-wider border transition-colors ${graphTab === t ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}>
                             {t}
                         </button>
                     ))}
@@ -63,7 +63,7 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
                     {[...graphKinds.entries()].map(([kind, count]) => {
                         const samples = [...memoryGraph.nodes.values()].filter(n => n.kind === kind).slice(0, 4);
                         return (
-                            <div key={kind} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 flex items-center justify-between gap-2">
+                            <div key={kind} className="rounded-control border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 flex items-center justify-between gap-2">
                                 <span className="text-ui-xs uppercase tracking-wider text-zinc-500 font-bold shrink-0">{KIND_LABELS[kind] ?? kind}</span>
                                 <span className="text-ui-xs text-zinc-600 truncate min-w-0">{samples.map(s => s.label).join(' · ')}</span>
                                 <span className="text-ui-xs font-mono tabular-nums text-zinc-400 shrink-0">{count}</span>
@@ -77,7 +77,7 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
                     ? <p className="text-ui-sm text-zinc-600 italic">Nothing used yet — skills appear here once injected into an analysis.</p>
                     : <div className="space-y-1.5">
                         {learnedSkills.slice(0, 8).map(s => (
-                            <div key={s.file.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-ui-dense">
+                            <div key={s.file.id} className="rounded-control border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-ui-dense">
                                 <span className="text-zinc-500 font-mono">{s.meta.kind}</span> <span className="text-zinc-300">{s.file.name.replace(/\.md$/i, '')}</span>
                                 <span className="text-zinc-500"> · {Math.round(s.meta.wins)}/{Math.round(s.meta.losses)}</span>
                             </div>
@@ -89,7 +89,7 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
                     ? <p className="text-ui-sm text-zinc-600 italic">Nothing learned yet — close trades with post-mortems to grow skill memory.</p>
                     : <div className="space-y-1.5">
                         {notebookSkills.slice(0, 10).map(s => (
-                            <div key={s.file.id} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-ui-dense">
+                            <div key={s.file.id} className="rounded-control border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-ui-dense">
                                 <span className="text-zinc-500 font-mono">{s.meta.kind}</span> <span className="text-zinc-300">{s.meta.ifCondition || s.file.name.replace(/\.md$/i, '')}</span>
                                 <span className="text-zinc-500"> · {Math.round(s.meta.wins)}/{Math.round(s.meta.losses)} · {s.meta.status}</span>
                             </div>

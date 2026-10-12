@@ -78,7 +78,7 @@ const describeRosterSync = (prev: CatalogSkill[] | null, next: CatalogSkill[]): 
  *  data and inventing six gradients would be decoration with no meaning. The
  *  tile carries an icon on a neutral surface instead. */
 const tileClass = (enabled: boolean, kind: SkillMeta['kind']): string => {
-    const base = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border';
+    const base = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-control border';
     if (!enabled) return `${base} border-zinc-800 bg-zinc-900 text-zinc-600`;
     return kind === 'avoid'
         ? `${base} border-rose-500/30 bg-rose-500/10 text-rose-300`

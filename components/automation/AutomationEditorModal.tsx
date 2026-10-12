@@ -255,7 +255,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
     return (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
             <div
-                className="w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl animate-fade-in"
+                className="w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar rounded-bubble border border-zinc-800 bg-zinc-950 shadow-2xl animate-fade-in"
                 onClick={(e) => e.stopPropagation()}
                 role="dialog"
                 aria-label={initial ? `Edit automation ${initial.name}` : 'New automation'}
@@ -263,7 +263,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-900/60">
                     <h3 className="text-ui-base font-bold text-white tracking-tight">{initial ? 'Edit automation' : 'New automation'}</h3>
-                    <button onClick={onClose} className="rounded-lg p-1 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors" aria-label="Close">
+                    <button onClick={onClose} className="rounded-control p-1 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors" aria-label="Close">
                         <X className="h-4 w-4" aria-hidden="true" />
                     </button>
                 </div>
@@ -278,7 +278,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             placeholder="e.g. BTCUSDT hourly check"
-                            className="w-full bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-ui-base text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/50"
+                            className="w-full bg-zinc-950 border border-white/10 rounded-control px-3 py-2 text-ui-base text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/50"
                         />
                     </div>
 
@@ -295,7 +295,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                         key={value}
                                         type="button"
                                         onClick={() => setFrequencyMode(value)}
-                                        className={`px-2 py-1 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${frequencyMode === value ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                        className={`px-2 py-1 rounded-control text-ui-2xs font-bold uppercase tracking-wider border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${frequencyMode === value ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
                                     >
                                         {label}
                                     </button>
@@ -309,7 +309,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                         max={frequencyMode === 'minutes' ? 59 : 24}
                                         value={frequencyEvery}
                                         onChange={(e) => setFrequencyEvery(Math.max(1, Math.min(frequencyMode === 'minutes' ? 59 : 24, parseInt(e.target.value, 10) || 1)))}
-                                        className="w-14 bg-zinc-950 border border-white/10 rounded px-1.5 py-1 text-ui-sm font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50"
+                                        className="w-14 bg-zinc-950 border border-white/10 rounded-control px-1.5 py-1 text-ui-sm font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50"
                                         aria-label={frequencyMode === 'minutes' ? 'Minutes between runs' : 'Hours between runs'}
                                     />
                                     <span className="text-ui-xs text-zinc-500">{frequencyMode === 'minutes' ? 'min' : 'h'}</span>
@@ -325,7 +325,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                         key={p.label}
                                         type="button"
                                         onClick={() => setScheduleDays(p.days)}
-                                        className={`px-1.5 py-0.5 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${JSON.stringify([...scheduleDays].sort()) === JSON.stringify([...p.days].sort()) ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                        className={`px-1.5 py-0.5 rounded-control text-ui-2xs font-bold uppercase tracking-wider border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${JSON.stringify([...scheduleDays].sort()) === JSON.stringify([...p.days].sort()) ? 'bg-cyan-500/20 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
                                     >
                                         {p.label}
                                     </button>
@@ -340,7 +340,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                         key={d.dow}
                                         type="button"
                                         onClick={() => setScheduleDays(prev => on ? prev.filter(x => x !== d.dow) : [...prev, d.dow])}
-                                        className={`w-11 h-9 rounded-lg border text-ui-xs font-bold uppercase tracking-wider transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${on ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                        className={`w-11 h-9 rounded-control border text-ui-xs font-bold uppercase tracking-wider transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${on ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
                                         title={on ? `Remove ${d.label} — this day will not trigger` : `Add ${d.label} — this day triggers the automation`}
                                         aria-pressed={on}
                                     >
@@ -360,7 +360,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                         onChange={(v) => setScheduleTime(prev => ({ ...prev, h: parseInt(v, 10) }))}
                                         options={Array.from({ length: 24 }, (_, i) => ({ value: String(i), label: String(i).padStart(2, '0') }))}
                                         aria-label="Hour"
-                                        triggerClassName="min-w-[3rem] justify-center rounded border border-white/10 bg-zinc-950 px-1.5 py-1 text-ui-sm font-mono hover:border-cyan-500/50 focus:border-cyan-500/50"
+                                        triggerClassName="min-w-[3rem] justify-center rounded-control border border-white/10 bg-zinc-950 px-1.5 py-1 text-ui-sm font-mono hover:border-cyan-500/50 focus:border-cyan-500/50"
                                     />
                                     <span className="text-zinc-600 text-ui-sm">:</span>
                                     <SelectMenu
@@ -368,7 +368,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                         onChange={(v) => setScheduleTime(prev => ({ ...prev, m: parseInt(v, 10) }))}
                                         options={Array.from({ length: 60 }, (_, i) => ({ value: String(i), label: String(i).padStart(2, '0') }))}
                                         aria-label="Minute"
-                                        triggerClassName="min-w-[3rem] justify-center rounded border border-white/10 bg-zinc-950 px-1.5 py-1 text-ui-sm font-mono hover:border-cyan-500/50 focus:border-cyan-500/50"
+                                        triggerClassName="min-w-[3rem] justify-center rounded-control border border-white/10 bg-zinc-950 px-1.5 py-1 text-ui-sm font-mono hover:border-cyan-500/50 focus:border-cyan-500/50"
                                     />
                                     <span className="text-zinc-600 text-ui-sm">:</span>
                                     <SelectMenu
@@ -376,7 +376,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                         onChange={(v) => setScheduleTime(prev => ({ ...prev, s: parseInt(v, 10) }))}
                                         options={Array.from({ length: 60 }, (_, i) => ({ value: String(i), label: String(i).padStart(2, '0') }))}
                                         aria-label="Second"
-                                        triggerClassName="min-w-[3rem] justify-center rounded border border-white/10 bg-zinc-950 px-1.5 py-1 text-ui-sm font-mono hover:border-cyan-500/50 focus:border-cyan-500/50"
+                                        triggerClassName="min-w-[3rem] justify-center rounded-control border border-white/10 bg-zinc-950 px-1.5 py-1 text-ui-sm font-mono hover:border-cyan-500/50 focus:border-cyan-500/50"
                                     />
                                 </div>
                             </div>
@@ -404,7 +404,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                 onChange={(e) => setAdvancedCron(e.target.value)}
                                 placeholder="Leave empty to use the day/time schedule above"
                                 spellCheck={false}
-                                className={`w-full mt-1.5 bg-zinc-950 border rounded px-2.5 py-1.5 text-ui-sm font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 ${cronValid ? 'border-white/10' : 'border-rose-500/50'}`}
+                                className={`w-full mt-1.5 bg-zinc-950 border rounded-control px-2.5 py-1.5 text-ui-sm font-mono text-zinc-200 focus:outline-none focus:border-cyan-500/50 ${cronValid ? 'border-white/10' : 'border-rose-500/50'}`}
                             />
                         </details>
 
@@ -420,7 +420,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                             <button
                                 type="button"
                                 onClick={() => setInputSource('template')}
-                                className={`flex-1 px-3 py-2 rounded-lg border text-left transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${inputSource === 'template' ? 'bg-cyan-500/10 border-cyan-500/30' : 'bg-zinc-900 border-white/10 hover:border-white/20'}`}
+                                className={`flex-1 px-3 py-2 rounded-control border text-left transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${inputSource === 'template' ? 'bg-cyan-500/10 border-cyan-500/30' : 'bg-zinc-900 border-white/10 hover:border-white/20'}`}
                             >
                                 <span className={`text-ui-xs font-bold uppercase tracking-widest ${inputSource === 'template' ? 'text-cyan-300' : 'text-zinc-400'}`}>Fixed prompt</span>
                                 <span className="block text-ui-xs text-zinc-500 mt-0.5">Every run sends the template below</span>
@@ -428,7 +428,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                             <button
                                 type="button"
                                 onClick={() => setInputSource('last_analysis')}
-                                className={`flex-1 px-3 py-2 rounded-lg border text-left transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${inputSource === 'last_analysis' ? 'bg-cyan-500/10 border-cyan-500/30' : 'bg-zinc-900 border-white/10 hover:border-white/20'}`}
+                                className={`flex-1 px-3 py-2 rounded-control border text-left transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${inputSource === 'last_analysis' ? 'bg-cyan-500/10 border-cyan-500/30' : 'bg-zinc-900 border-white/10 hover:border-white/20'}`}
                             >
                                 <span className={`text-ui-xs font-bold uppercase tracking-widest ${inputSource === 'last_analysis' ? 'text-cyan-300' : 'text-zinc-400'}`}>Repeat last</span>
                                 <span className="block text-ui-xs text-zinc-500 mt-0.5">Re-analyze your last manual analysis (prompt + chart)</span>
@@ -441,7 +441,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                 placeholder="Analyze BTCUSDT on the 1h chart for a long setup with entry, stop loss, targets and invalidation."
                                 spellCheck={false}
                                 rows={3}
-                                className="w-full mt-2 bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-ui-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/50 resize-y"
+                                className="w-full mt-2 bg-zinc-950 border border-white/10 rounded-control px-3 py-2 text-ui-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/50 resize-y"
                             />
                         )}
                     </div>
@@ -465,7 +465,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                 placeholder="Unknown bot — pick another, or run the ensemble"
                                 aria-label="Run as bot"
                                 data-testid="automation-run-as-bot"
-                                triggerClassName="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption hover:bg-zinc-800"
+                                triggerClassName="w-full rounded-control border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption hover:bg-zinc-800"
                             />
                             <p className="text-ui-xs text-zinc-500 mt-1.5">
                                 {runAsBot
@@ -486,7 +486,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                     key={value}
                                     type="button"
                                     onClick={() => setMode(value)}
-                                    className={`flex-1 px-3 py-2 rounded-lg border text-ui-xs font-bold uppercase tracking-widest transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${mode === value ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                    className={`flex-1 px-3 py-2 rounded-control border text-ui-xs font-bold uppercase tracking-widest transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${mode === value ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
                                 >
                                     {label}
                                 </button>
@@ -495,7 +495,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                     </div>
 
                     {/* Lenses toggle */}
-                    <div className="flex items-center justify-between bg-zinc-900 border border-white/10 rounded-lg px-3 py-2.5">
+                    <div className="flex items-center justify-between bg-zinc-900 border border-white/10 rounded-control px-3 py-2.5">
                         <div>
                             <p className="text-ui-sm font-bold text-zinc-300">Analyst Lenses</p>
                             <p className="text-ui-xs text-zinc-500 mt-0.5">Macro / Technical / Risk personas (needs 3 distinct models)</p>
@@ -542,7 +542,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                         key={style}
                                         type="button"
                                         onClick={() => setLensTradingStyle(style)}
-                                        className={`flex-1 px-2 py-1.5 rounded-lg border text-ui-2xs font-bold uppercase tracking-widest transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${lensTradingStyle === style ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
+                                        className={`flex-1 px-2 py-1.5 rounded-control border text-ui-2xs font-bold uppercase tracking-widest transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${lensTradingStyle === style ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
                                     >
                                         {style}
                                     </button>
@@ -566,7 +566,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                     )}
 
                     {error && (
-                        <p className="text-ui-dense text-rose-400 bg-rose-500/5 border border-rose-500/20 rounded-lg px-3 py-2">{error}</p>
+                        <p className="text-ui-dense text-rose-400 bg-rose-500/5 border border-rose-500/20 rounded-control px-3 py-2">{error}</p>
                     )}
                 </div>
 
@@ -575,16 +575,16 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                     {onDelete && initial ? (
                         <button
                             onClick={onDelete}
-                            className="px-3 py-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-ui-xs font-bold uppercase tracking-widest transition-colors"
+                            className="px-3 py-2 rounded-control border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                         >
                             Delete
                         </button>
                     ) : <span />}
                     <div className="flex items-center gap-2">
-                        <button onClick={onClose} className="px-4 py-2 rounded-lg border border-white/10 text-zinc-400 hover:text-zinc-200 text-ui-xs font-bold uppercase tracking-widest transition-colors">
+                        <button onClick={onClose} className="px-4 py-2 rounded-control border border-white/10 text-zinc-400 hover:text-zinc-200 text-ui-xs font-bold uppercase tracking-widest transition-colors">
                             Cancel
                         </button>
-                        <button onClick={handleSave} className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-ui-xs font-bold uppercase tracking-widest transition-colors">
+                        <button onClick={handleSave} className="px-4 py-2 rounded-control bg-cyan-600 hover:bg-cyan-700 text-white text-ui-xs font-bold uppercase tracking-widest transition-colors">
                             {initial ? 'Save changes' : 'Create automation'}
                         </button>
                     </div>

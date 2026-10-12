@@ -30,7 +30,7 @@ const ActionsTab: React.FC<{ tab: ActionsTabProps }> = ({ tab: props }) => {
             {/* Training data — the journal as one model-ready JSON record per
                 trade. A local download of the trader's own rows; nothing here
                 leaves the machine. */}
-            <section className="rounded-xl border border-white/[0.06] bg-zinc-800/40 p-4" data-testid="training-export-card">
+            <section className="rounded-bubble border border-white/[0.06] bg-zinc-800/40 p-4" data-testid="training-export-card">
                 <h3 className="text-ui-dense font-semibold text-zinc-200">Training data</h3>
                 <p className="mt-1 max-w-prose text-ui-xs leading-4 text-zinc-500">
                     One JSON record per trade on its own line: the plan it came from, the verdict,

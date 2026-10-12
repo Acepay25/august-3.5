@@ -54,11 +54,11 @@ export const RowMenu: React.FC<{
     return createPortal(
         <div role="menu" data-testid="row-menu-popover"
             style={{ left, top, width: MENU_W }}
-            className="fixed z-drawer rounded-control border border-zinc-800/80 bg-zinc-900 p-1 shadow-lg shadow-black/40">
+            className="fixed z-drawer rounded-bubble border border-zinc-800/80 bg-zinc-900 p-1 shadow-lg shadow-black/40">
             {items.map(item => (
                 <button key={item.label} type="button" role="menuitem"
                     onClick={() => { item.onSelect(); onClose(); }}
-                    className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-ui-dense transition-colors ${
+                    className={`flex w-full items-center gap-2 rounded-control px-2 py-1 text-left text-ui-dense transition-colors ${
                         item.danger ? 'text-rose-300 hover:bg-rose-500/10' : 'text-zinc-300 hover:bg-zinc-800'
                     }`}>
                     {item.label}

@@ -161,7 +161,7 @@ const dataUrlToFile = (dataUrl: string, filename: string): File => {
 const SurfaceSkeleton: React.FC = () => (
     <div className="flex h-full min-h-0 w-full flex-col gap-3 bg-zinc-950 p-4" role="status" aria-label="Loading">
         <div className="h-8 w-40 animate-pulse rounded-control bg-zinc-900" />
-        <div className="flex-1 animate-pulse rounded-2xl border border-white/[0.06] bg-zinc-900" />
+        <div className="flex-1 animate-pulse rounded-bubble border border-white/[0.06] bg-zinc-900" />
     </div>
 );
 
@@ -2838,12 +2838,12 @@ const App: React.FC = () => {
                                     Running
                                 </span>
                                 <button type="button" onClick={() => setIsPipelineCollapsed(false)} className="text-ui-dense text-zinc-400 transition-colors hover:text-zinc-100" title="Show pipeline steps">Show</button>
-                                <button type="button" onClick={() => setIsPipelineDismissed(true)} className="rounded p-1 text-zinc-500 transition-colors hover:text-zinc-200" title="Hide for this run" aria-label="Dismiss analysis progress">
+                                <button type="button" onClick={() => setIsPipelineDismissed(true)} className="rounded-control p-1 text-zinc-500 transition-colors hover:text-zinc-200" title="Hide for this run" aria-label="Dismiss analysis progress">
                                     <CloseIcon className="h-3.5 w-3.5" aria-hidden="true" />
                                 </button>
                             </div>
                         ) : (
-                        <div className="pointer-events-auto h-fit max-h-[calc(100vh-7rem)] overflow-y-auto rounded-2xl border border-white/10 bg-zinc-950 p-3 custom-scrollbar" aria-label="Analysis progress">
+                        <div className="pointer-events-auto h-fit max-h-[calc(100vh-7rem)] overflow-y-auto rounded-bubble border border-white/10 bg-zinc-950 p-3 custom-scrollbar" aria-label="Analysis progress">
                             <div className="flex items-center justify-between px-1 pb-3">
                                 <div>
                                     <h2 className="text-ui-base font-medium text-zinc-200">Analysis</h2>
@@ -2860,7 +2860,7 @@ const App: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={() => setIsPipelineCollapsed(true)}
-                                        className="rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+                                        className="rounded-control p-1 text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
                                         title="Collapse"
                                         aria-label="Collapse analysis progress"
                                     >
@@ -2869,7 +2869,7 @@ const App: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={() => setIsPipelineDismissed(true)}
-                                        className="rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+                                        className="rounded-control p-1 text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
                                         title="Hide for this run"
                                         aria-label="Dismiss analysis progress"
                                     >
@@ -2889,7 +2889,7 @@ const App: React.FC = () => {
                                     onOpenPostMortem={() => setIsLivePostMortemVisible(true)}
                                     />
                             ) : (
-                                <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
+                                <div className="rounded-bubble border border-white/10 bg-zinc-900/60 p-4">
                                     <div className="flex items-center gap-2 text-ui-base text-zinc-300" aria-live="polite">
                                         <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
                                         {loadingMessage || 'Analysis in progress'}
@@ -2897,7 +2897,7 @@ const App: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={handleCancelAnalysis}
-                                        className=" mt-4 w-full rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-ui-sm font-medium text-rose-300 transition-colors hover:bg-rose-500/20"
+                                        className=" mt-4 w-full rounded-control border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-ui-sm font-medium text-rose-300 transition-colors hover:bg-rose-500/20"
                                     >
                                         Stop generating
                                     </button>

@@ -103,7 +103,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
         rehypePlugins={[[rehypeKatex, KATEX_OPTIONS]]}
         components={{
           pre: ({ children }) => (
-            <pre className="my-3 rounded-lg bg-black/50 border border-white/10 p-3 overflow-x-auto text-ui-sm font-mono leading-relaxed text-zinc-300 whitespace-pre-wrap [&_code]:rounded-none [&_code]:border-0 [&_code]:bg-transparent [&_code]:px-0 [&_code]:py-0">
+            <pre className="my-3 rounded-bubble bg-black/50 border border-white/10 p-3 overflow-x-auto text-ui-sm font-mono leading-relaxed text-zinc-300 whitespace-pre-wrap [&_code]:rounded-none [&_code]:border-0 [&_code]:bg-transparent [&_code]:px-0 [&_code]:py-0">
               {children}
             </pre>
           ),
@@ -127,7 +127,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             return (
               <code
                 {...props}
-                className="rounded border border-white/10 bg-white/[0.06] px-1 py-0.5 font-mono text-[12.5px] text-zinc-200"
+                className="rounded-control border border-white/10 bg-white/[0.06] px-1 py-0.5 font-mono text-[12.5px] text-zinc-200"
               >
                 {children}
               </code>

@@ -320,7 +320,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                         {!isEmbedded && (
                         <button
                             onClick={onClose}
-                            className="p-3 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors active:scale-95"
+                            className="p-3 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-control transition-colors active:scale-95"
                             aria-label="Close"
                         >
                             <CloseIcon className="w-5 h-5" aria-hidden="true" />
@@ -341,7 +341,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                             aria-label="Market symbol"
                             className="shrink-0"
                             drop="up"
-                            triggerClassName="h-12 min-w-[112px] rounded-xl border border-white/10 bg-zinc-800 px-4 text-ui-base font-bold hover:bg-zinc-700 focus:border-cyan-500"
+                            triggerClassName="h-12 min-w-[112px] rounded-control border border-white/10 bg-zinc-800 px-4 text-ui-base font-bold hover:bg-zinc-700 focus:border-cyan-500"
                         />
 
                         {/* Interval Selector — bound to the SAME state the chart's
@@ -354,7 +354,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                             aria-label="Chart interval"
                             className="shrink-0"
                             drop="up"
-                            triggerClassName="h-12 min-w-[78px] rounded-xl border border-white/10 bg-zinc-800 px-4 text-ui-base font-bold hover:bg-zinc-700 focus:border-cyan-500"
+                            triggerClassName="h-12 min-w-[78px] rounded-control border border-white/10 bg-zinc-800 px-4 text-ui-base font-bold hover:bg-zinc-700 focus:border-cyan-500"
                         />
                     </div>
 
@@ -363,7 +363,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                         <button
                             onClick={() => { void handleExtractAndAnalyze(); }}
                             disabled={!!analysisProgress}
-                            className="flex items-center justify-center gap-2 h-12 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white text-ui-base font-bold px-6 rounded-xl shadow-lg shadow-cyan-900/30 transition-[--tw-gradient-from,--tw-gradient-to,transform] duration-[150ms] ease-[var(--ease-snappy)] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95"
+                            className="flex items-center justify-center gap-2 h-12 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white text-ui-base font-bold px-6 rounded-control shadow-lg shadow-cyan-900/30 transition-[--tw-gradient-from,--tw-gradient-to,transform] duration-[150ms] ease-[var(--ease-snappy)] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95"
                         >
                             {analysisProgress ? <LoadingIcon className="w-4 h-4" aria-hidden="true" /> : <CameraIcon className="w-4 h-4" aria-hidden="true" />}
                             <span>{analysisProgress || 'Analyze'}</span>
@@ -402,7 +402,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
 
                                 {/* Market Bias Badge */}
                                 {!isAIAnalyzing && marketBias !== 'neutral' && (
-                                    <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 ${marketBias === 'bullish'
+                                    <div className={`flex items-center gap-2 rounded-control px-3 py-1.5 ${marketBias === 'bullish'
                                         ? 'bg-emerald-500/10 border border-emerald-500/20'
                                         : 'bg-rose-500/10 border border-rose-500/20'
                                         }`}>
@@ -415,7 +415,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
 
                                 {/* Key Levels */}
                                 {!isAIAnalyzing && keyLevels.length > 0 && (
-                                    <div className="bg-zinc-900 border border-white/10 rounded-lg px-3 py-2">
+                                    <div className="bg-zinc-900 border border-white/10 rounded-control px-3 py-2">
                                         <span className="text-ui-xs font-bold text-zinc-500 uppercase tracking-wider">Key Levels</span>
                                         <div className="flex flex-col gap-1 mt-1">
                                             {keyLevels.slice(0, 4).map((level, i) => (
@@ -434,7 +434,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                                     the chart above (modelDrawings); this row is the readable
                                     summary of the same numbers, not a second copy of them. */}
                                 {!isAIAnalyzing && trendlines.length > 0 && (
-                                    <div className="bg-zinc-900 border border-white/10 rounded-lg px-3 py-2" data-testid="ai-trendlines">
+                                    <div className="bg-zinc-900 border border-white/10 rounded-control px-3 py-2" data-testid="ai-trendlines">
                                         <span className="text-ui-xs font-bold text-zinc-500 uppercase tracking-wider">Trendlines</span>
                                         <div className="flex flex-col gap-1 mt-1">
                                             {trendlines.slice(0, 4).map((line, i) => {
@@ -457,7 +457,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
 
                                 {/* AI Summary */}
                                 {!isAIAnalyzing && aiSummary && (
-                                    <div className="bg-zinc-900 border border-white/10 rounded-lg px-3 py-2">
+                                    <div className="bg-zinc-900 border border-white/10 rounded-control px-3 py-2">
                                         <span className="text-ui-xs text-zinc-400 leading-relaxed line-clamp-3">{aiSummary}</span>
                                     </div>
                                 )}
@@ -483,7 +483,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                                 <Spinner size="w-3 h-3" color="border-cyan-400" className="ml-2" />
                             )}
                             {!isAIAnalyzing && marketBias !== 'neutral' && (
-                                <span className={`ml-2 px-2 py-0.5 rounded text-ui-xs font-bold uppercase ${marketBias === 'bullish'
+                                <span className={`ml-2 px-2 py-0.5 rounded-control text-ui-xs font-bold uppercase ${marketBias === 'bullish'
                                     ? 'bg-emerald-500/20 text-emerald-400'
                                     : 'bg-rose-500/20 text-rose-400'
                                     }`}>
@@ -498,7 +498,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                     {isInsightsPanelExpanded && marketInsights && !isAIAnalyzing && (
                         <div id="live-market-insights" className="px-4 sm:px-6 pb-6 space-y-4 max-h-[45vh] overflow-y-auto custom-scrollbar">
                             {/* Current Situation */}
-                            <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
+                            <div className="bg-zinc-800 rounded-bubble p-3 border border-white/5">
                                 <div className="flex items-center gap-2 mb-2">
                                     <ActivityIcon className="w-4 h-4 text-cyan-400" aria-hidden="true" />
                                     <span className="text-ui-sm font-bold text-zinc-400 uppercase tracking-wider">Current Situation</span>
@@ -508,7 +508,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
 
                             {/* Key Observations */}
                             {marketInsights.observations.length > 0 && (
-                                <div className="bg-zinc-800 rounded-xl p-3 border border-white/5">
+                                <div className="bg-zinc-800 rounded-bubble p-3 border border-white/5">
                                     <div className="flex items-center gap-2 mb-2">
                                         <span className="text-ui-sm font-bold text-zinc-400 uppercase tracking-wider">Key Observations</span>
                                     </div>
@@ -526,7 +526,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                             {/* Potential Moves */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {/* Bullish Scenario */}
-                                <div className="bg-emerald-500/5 rounded-xl p-3 border border-emerald-500/20">
+                                <div className="bg-emerald-500/5 rounded-bubble p-3 border border-emerald-500/20">
                                     <div className="flex items-center gap-2 mb-2">
                                         <TrendUpIcon className="w-4 h-4 text-emerald-400" aria-hidden="true" />
                                         <span className="text-ui-sm font-bold text-emerald-400 uppercase tracking-wider">Bullish</span>
@@ -535,7 +535,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                                 </div>
 
                                 {/* Bearish Scenario */}
-                                <div className="bg-rose-500/5 rounded-xl p-3 border border-rose-500/20">
+                                <div className="bg-rose-500/5 rounded-bubble p-3 border border-rose-500/20">
                                     <div className="flex items-center gap-2 mb-2">
                                         <TrendDownIcon className="w-4 h-4 text-rose-400" aria-hidden="true" />
                                         <span className="text-ui-sm font-bold text-rose-400 uppercase tracking-wider">Bearish</span>
@@ -546,7 +546,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
 
                             {/* Risk Factors */}
                             {marketInsights.riskFactors.length > 0 && (
-                                <div className="bg-amber-500/5 rounded-xl p-3 border border-amber-500/20">
+                                <div className="bg-amber-500/5 rounded-bubble p-3 border border-amber-500/20">
                                     <div className="flex items-center gap-2 mb-2">
                                         <AlertTriangleIcon className="w-4 h-4 text-amber-400" aria-hidden="true" />
                                         <span className="text-ui-sm font-bold text-amber-400 uppercase tracking-wider">Watch Out</span>
@@ -568,7 +568,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                         id would make the two divs indistinguishable. */}
                     {isInsightsPanelExpanded && isAIAnalyzing && (
                         <div className="px-4 sm:px-6 pb-6">
-                            <div className="bg-zinc-800 rounded-xl p-6 border border-white/5 flex flex-col items-center justify-center gap-3">
+                            <div className="bg-zinc-800 rounded-bubble p-6 border border-white/5 flex flex-col items-center justify-center gap-3">
                                 <Spinner size="w-8 h-8" color="border-cyan-400" />
                                 <span className="text-ui-base text-zinc-400">Analyzing market conditions...</span>
                             </div>
@@ -579,7 +579,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
 
             {/* Notification Toast */}
             {notification && (
-                <div className="absolute top-28 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-confirm bg-emerald-500/90 text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-fade-in">
+                <div className="absolute top-28 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-confirm bg-emerald-500/90 text-white px-5 py-3.5 rounded-bubble shadow-2xl flex items-center gap-3 animate-fade-in">
                     <CheckIcon className="w-5 h-5 shrink-0" aria-hidden="true" />
                     <span className="font-medium text-ui-base">{notification}</span>
                 </div>

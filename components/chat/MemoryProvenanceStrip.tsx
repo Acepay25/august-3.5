@@ -156,7 +156,7 @@ const MemoryProvenanceStrip: React.FC<MemoryProvenanceStripProps> = ({
                             <button type="button" onClick={() => flag(slug)}
                                 aria-label={`Flag ${slug} as wrong in this answer`}
                                 title="This rule was wrong here — record the negative evidence"
-                                className="shrink-0 rounded p-0.5 text-zinc-600 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
+                                className="shrink-0 rounded-control p-0.5 text-zinc-600 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
                                 {flagged.has(slug) ? <Check className="h-3 w-3 text-emerald-400" aria-hidden="true" /> : <Flag className="h-3 w-3" aria-hidden="true" />}
                             </button>
                         </div>

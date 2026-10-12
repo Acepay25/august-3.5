@@ -41,7 +41,7 @@ const SessionUsagePanel: React.FC = () => {
     const renderSummary = (label: string, s: ReturnType<typeof summarizeUsagePeriod>): React.ReactNode => {
         const tokens = s.promptTokens + s.completionTokens || s.tokensEst;
         return (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <div className="rounded-bubble border border-zinc-800 bg-zinc-900 p-4">
                 <p className="text-ui-dense text-zinc-500">{label}</p>
                 <p className="mt-1 text-ui-base text-zinc-100">{s.runs} runs · {Math.round(s.durationMs / 1000)}s</p>
                 <p className="mt-1 text-ui-dense text-zinc-500">
@@ -63,7 +63,7 @@ const SessionUsagePanel: React.FC = () => {
                 {renderSummary('Last 7 days', week)}
             </div>
             {models.length > 0 && (
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+                <div className="rounded-bubble border border-zinc-800 bg-zinc-900 p-4">
                     <p className="text-ui-dense font-semibold uppercase tracking-widest text-zinc-500">Today by model</p>
                     <div className="mt-3 flex items-center gap-4">
                         <svg viewBox="0 0 80 80" className="h-20 w-20 shrink-0" aria-hidden="true">
@@ -139,7 +139,7 @@ export const HarnessControls: React.FC = () => {
         setSettings(saveHarnessSettings(next));
     };
     return (
-        <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+        <div className="space-y-3 rounded-bubble border border-zinc-800 bg-zinc-900 p-4">
             <p className="text-ui-dense font-semibold uppercase tracking-widest text-zinc-500">Harness</p>
             <label className="block text-ui-dense text-zinc-400">
                 Account equity (USD)
@@ -149,7 +149,7 @@ export const HarnessControls: React.FC = () => {
                     value={settings.equityUsd || ''}
                     placeholder="Not set"
                     onChange={e => persist({ equityUsd: Math.max(0, Number(e.target.value) || 0) })}
-                    className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                    className="mt-1 w-full rounded-control border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
                 />
             </label>
             <label className="block text-ui-dense text-zinc-400">
@@ -161,7 +161,7 @@ export const HarnessControls: React.FC = () => {
                     step={0.1}
                     value={settings.riskPercent}
                     onChange={e => persist({ riskPercent: Math.min(10, Math.max(0.1, Number(e.target.value) || 1)) })}
-                    className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                    className="mt-1 w-full rounded-control border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
                 />
             </label>
             <label className="block text-ui-dense text-zinc-400">
@@ -237,7 +237,7 @@ export const HarnessControls: React.FC = () => {
                     ]}
                     aria-label="Prompt A/B (control lane)"
                     className="mt-1 w-full"
-                    triggerClassName="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-ui-sm hover:bg-zinc-800"
+                    triggerClassName="w-full rounded-control border border-zinc-700 bg-zinc-950 px-2 py-1 text-ui-sm hover:bg-zinc-800"
                 />
             </label>
             <label className="block text-ui-dense text-zinc-400">
@@ -251,7 +251,7 @@ export const HarnessControls: React.FC = () => {
                     ]}
                     aria-label="Default thinking effort"
                     className="mt-1 w-full"
-                    triggerClassName="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-ui-sm hover:bg-zinc-800"
+                    triggerClassName="w-full rounded-control border border-zinc-700 bg-zinc-950 px-2 py-1 text-ui-sm hover:bg-zinc-800"
                 />
             </label>
             <label className="block text-ui-dense text-zinc-400">
@@ -263,7 +263,7 @@ export const HarnessControls: React.FC = () => {
                     step={1}
                     value={settings.skillLibraryCap ?? 40}
                     onChange={e => persist({ skillLibraryCap: Math.min(200, Math.max(5, Math.round(Number(e.target.value) || 40))) })}
-                    className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                    className="mt-1 w-full rounded-control border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
                 />
                 <span className="mt-1 block text-ui-xs text-zinc-600">How many confirmed skills the worth gate holds before it turns comparative (displacement/revival). Default 40.</span>
             </label>
@@ -281,7 +281,7 @@ export const HarnessControls: React.FC = () => {
                     ]}
                     aria-label="Session guard preset"
                     className="mt-1 w-full"
-                    triggerClassName="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-ui-sm hover:bg-zinc-800"
+                    triggerClassName="w-full rounded-control border border-zinc-700 bg-zinc-950 px-2 py-1 text-ui-sm hover:bg-zinc-800"
                 />
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -295,7 +295,7 @@ export const HarnessControls: React.FC = () => {
                         placeholder="preset"
                         value={settings.guardDailyLossPct ?? ''}
                         onChange={e => persist({ guardDailyLossPct: e.target.value === '' ? undefined : Math.min(25, Math.max(0.5, Number(e.target.value))) })}
-                        className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                        className="mt-1 w-full rounded-control border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
                     />
                 </label>
                 <label className="block text-ui-dense text-zinc-400">
@@ -307,7 +307,7 @@ export const HarnessControls: React.FC = () => {
                         placeholder="preset"
                         value={settings.guardMaxTradesPerDay ?? ''}
                         onChange={e => persist({ guardMaxTradesPerDay: e.target.value === '' ? undefined : Math.min(20, Math.max(1, Math.floor(Number(e.target.value)))) })}
-                        className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                        className="mt-1 w-full rounded-control border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
                     />
                 </label>
             </div>
@@ -319,7 +319,7 @@ export const HarnessControls: React.FC = () => {
                     type="checkbox"
                     checked={checklist.enabled}
                     onChange={e => setChecklist(saveChecklistConfig({ ...checklist, enabled: e.target.checked }))}
-                    className="rounded border-zinc-700 bg-zinc-950"
+                    className="rounded-control border-zinc-700 bg-zinc-950"
                 />
                 Pre-trade checklist at capture (off by default)
             </label>
@@ -331,7 +331,7 @@ export const HarnessControls: React.FC = () => {
                     step={0.05}
                     value={settings.debateCostCapUsd}
                     onChange={e => persist({ debateCostCapUsd: Number(e.target.value) || 0 })}
-                    className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                    className="mt-1 w-full rounded-control border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
                 />
             </label>
         </div>

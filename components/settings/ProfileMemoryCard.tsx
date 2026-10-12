@@ -51,7 +51,7 @@ const ProfileMemoryCard: React.FC = () => {
                 model saves these with <span className="font-mono text-zinc-400">remember</span> and they
                 ride every prompt as a one-line index. Delete anything that's wrong or stale.
             </p>
-            <label className="mb-3 flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/40 p-2.5" data-testid="trader-learning-toggle">
+            <label className="mb-3 flex cursor-pointer items-center gap-2 rounded-control border border-zinc-800 bg-zinc-950/40 p-2.5" data-testid="trader-learning-toggle">
                 <input type="checkbox" checked={learning} onChange={e => { setTraderLearningEnabled(e.target.checked); setLearning(e.target.checked); }}
                     className="h-3.5 w-3.5 accent-cyan-400" />
                 <span className="text-ui-dense text-zinc-300">
@@ -63,13 +63,13 @@ const ProfileMemoryCard: React.FC = () => {
                 </span>
             </label>
             {entries.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-zinc-800 px-3 py-4 text-center text-ui-dense text-zinc-600">
+                <p className="rounded-control border border-dashed border-zinc-800 px-3 py-4 text-center text-ui-dense text-zinc-600">
                     No memories yet — the assistant saves one when it learns something durable about you.
                 </p>
             ) : (
                 <ul className="space-y-2">
                     {entries.map(e => (
-                        <li key={e.slug} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-2.5">
+                        <li key={e.slug} className="rounded-control border border-zinc-800 bg-zinc-950/40 p-2.5">
                             <div className="flex items-start gap-2">
                                 <span className={`mt-0.5 shrink-0 rounded-full border px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wider ${KIND_STYLE[e.kind]}`}>
                                     {e.kind}
@@ -91,7 +91,7 @@ const ProfileMemoryCard: React.FC = () => {
                                 </div>
                                 <button type="button" onClick={() => { forgetProfileMemory(e.slug); refresh(); }}
                                     aria-label={`Forget memory ${e.slug}`} title="Forget"
-                                    className="shrink-0 rounded-md border border-zinc-800 p-1.5 text-zinc-500 transition-colors hover:border-rose-500/40 hover:text-rose-300">
+                                    className="shrink-0 rounded-control border border-zinc-800 p-1.5 text-zinc-500 transition-colors hover:border-rose-500/40 hover:text-rose-300">
                                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                                 </button>
                             </div>

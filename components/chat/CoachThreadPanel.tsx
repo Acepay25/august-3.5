@@ -43,7 +43,7 @@ const timeAgo = (iso: string): string => {
 const CardShell: React.FC<{ children: React.ReactNode; testId?: string }> = ({ children, testId }) => (
     <div
         data-testid={testId}
-        className="rounded-xl border border-white/[0.06] bg-zinc-900/40 p-4"
+        className="rounded-bubble border border-white/[0.06] bg-zinc-900/40 p-4"
     >
         {children}
     </div>
@@ -59,7 +59,7 @@ const ActionButton: React.FC<{
         type="button"
         data-testid={testId}
         onClick={onPress}
-        className={`rounded-lg px-3 py-1.5 text-ui-sm font-semibold transition-colors ${
+        className={`rounded-control px-3 py-1.5 text-ui-sm font-semibold transition-colors ${
             variant === 'solid'
                 ? 'bg-zinc-200 text-zinc-900 hover:bg-white'
                 : 'border border-white/10 text-zinc-300 hover:bg-zinc-800 hover:text-white'
@@ -127,7 +127,7 @@ const DraftCard: React.FC<{
     return (
         <CardShell testId={`coach-draft-${d.id}`}>
             <div className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-zinc-800 text-ui-xs font-bold uppercase text-zinc-400">
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-control border border-white/10 bg-zinc-800 text-ui-xs font-bold uppercase text-zinc-400">
                     {d.crafted.kind === 'avoid' ? 'AV' : 'RP'}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -159,7 +159,7 @@ const DraftCard: React.FC<{
                     disabled={proofState === 'running'}
                     data-testid={`coach-draft-prove-${d.id}`}
                     title="Replay this coin's candle history and report what the matched detector behavior would have done"
-                    className="rounded-lg border border-white/10 px-3 py-1.5 text-ui-sm font-semibold text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-control border border-white/10 px-3 py-1.5 text-ui-sm font-semibold text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                     {proofState === 'running' ? 'Replaying history…' : 'Prove on history'}
                 </button>
@@ -252,7 +252,7 @@ const CoachThreadPanel: React.FC<CoachThreadPanelProps> = ({ onAllowDraft, onDen
             {/* Thread identity header — reference vocabulary: avatar, title,
                 muted subtitle. */}
             <div className="flex items-center gap-3 pb-2">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-zinc-800 text-zinc-300">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control border border-white/10 bg-zinc-800 text-zinc-300">
                     <GraduationCap className="h-5 w-5" aria-hidden="true" />
                 </span>
                 <div className="min-w-0">

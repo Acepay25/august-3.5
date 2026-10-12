@@ -51,7 +51,7 @@ const EvidencePackCard: React.FC<EvidencePackCardProps> = ({ pack }) => {
     return (
         <div className="mb-2">
             <AuditPanel>
-                <Task defaultOpen={false} className="rounded-xl">
+                <Task defaultOpen={false} className="rounded-bubble">
                 <TaskTrigger title={`Verdict evidence · ${parts.join(' · ')}`} />
                 <TaskContent>
                     {statsLine && (

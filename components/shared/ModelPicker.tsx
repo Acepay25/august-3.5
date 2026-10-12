@@ -392,7 +392,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                 no boxed chrome. */}
             <button
                 onClick={handleToggle}
-                className={`flex items-center gap-1.5 rounded-lg text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white ${
+                className={`flex items-center gap-1.5 rounded-control text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white ${
                     compact ? 'px-2 py-1 text-ui-dense' : 'px-2.5 py-1.5 text-ui-base font-medium'
                 }`}
             >
@@ -414,7 +414,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                     ref={flyoutRef}
                     onMouseDownCapture={(e) => e.stopPropagation()}
                     onPointerDownCapture={(e) => e.stopPropagation()}
-                    className={`fixed z-flyout flex flex-col bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-fade-in ${
+                    className={`fixed z-flyout flex flex-col bg-zinc-900 border border-white/10 rounded-bubble shadow-2xl overflow-hidden animate-fade-in ${
                         mode !== "provider-only" && (hoveredProvider || isSearching) ? "min-w-[320px]" : "min-w-[192px]"
                     }`}
                     style={{ top: flyoutPos.top, left: flyoutPos.left, maxHeight: flyoutPos.maxHeight }}
@@ -448,7 +448,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                     type="checkbox"
                                     checked={freeOnly}
                                     onChange={(e) => handleFreeOnlyToggle(e.target.checked)}
-                                    className="rounded border-zinc-600 bg-zinc-800 text-zinc-200 focus-visible:ring-zinc-500/40"
+                                    className="rounded-control border-zinc-600 bg-zinc-800 text-zinc-200 focus-visible:ring-zinc-500/40"
                                 />
                                 Free models only
                             </label>
@@ -459,7 +459,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                             type="button"
                             onClick={handleRefresh}
                             disabled={isRefreshing}
-                            className="flex items-center gap-1.5 text-ui-dense text-zinc-400 hover:text-cyan-300 disabled:opacity-50 transition-colors px-1.5 py-0.5 rounded hover:bg-zinc-800 cursor-pointer"
+                            className="flex items-center gap-1.5 text-ui-dense text-zinc-400 hover:text-cyan-300 disabled:opacity-50 transition-colors px-1.5 py-0.5 rounded-control hover:bg-zinc-800 cursor-pointer"
                             title="Refresh models from provider APIs"
                             aria-label="Refresh models"
                         >

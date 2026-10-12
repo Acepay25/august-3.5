@@ -20,7 +20,7 @@ const VisionDataViewer: React.FC<VisionDataViewerProps> = ({ isVisible, onClose,
             <CodeIcon />
             <h2 className="text-lg font-bold tracking-tight">Raw Vision Telemetry</h2>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors" aria-label="Close vision telemetry">
+          <button onClick={onClose} className="p-2 rounded-control text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors" aria-label="Close vision telemetry">
             <CloseIcon />
           </button>
         </header>
@@ -35,7 +35,7 @@ const VisionDataViewer: React.FC<VisionDataViewerProps> = ({ isVisible, onClose,
             (visionData || []).map((data, index) => (
               <div key={index} className="animate-fade-in">
                 <h3 className="text-ui-sm font-bold text-zinc-500 uppercase tracking-widest mb-2 pl-1">Chart {index + 1} Extraction</h3>
-                <div className="bg-zinc-900 p-4 rounded-xl border border-white/10 overflow-x-auto shadow-inner">
+                <div className="bg-zinc-900 p-4 rounded-bubble border border-white/10 overflow-x-auto shadow-inner">
                     <pre className="whitespace-pre-wrap text-ui-sm text-emerald-300/90 font-mono leading-relaxed">{data}</pre>
                 </div>
               </div>

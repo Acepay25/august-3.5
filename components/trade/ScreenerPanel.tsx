@@ -92,7 +92,7 @@ const ScreenerRowView = React.memo<ScreenerRowViewProps>(({
                 title="Load on the chart and prefill the Chart AI to scan this coin's candles for skills"
                 aria-label={`Learn skills from ${display}`}
                 onClick={ev => { ev.stopPropagation(); onLearn(symbol); }}
-                className="ml-2 inline-flex rounded p-0.5 text-zinc-600 transition-colors hover:bg-white/10 hover:text-cyan-300"
+                className="ml-2 inline-flex rounded-control p-0.5 text-zinc-600 transition-colors hover:bg-white/10 hover:text-cyan-300"
             >
                 <BrainCircuit className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
@@ -107,7 +107,7 @@ const ScreenerRowView = React.memo<ScreenerRowViewProps>(({
         <td className="px-3 py-1.5">{regimePill(regime)}</td>
         <td className="px-3 py-1.5">
             {setupCount > 0
-                ? <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-ui-xs font-semibold text-amber-300" title={setupsTitle}>
+                ? <span className="rounded-control bg-amber-500/10 px-1.5 py-0.5 text-ui-xs font-semibold text-amber-300" title={setupsTitle}>
                     {setupCount} · {setupTitle}
                 </span>
                 : <span className="text-zinc-600">—</span>}
@@ -259,7 +259,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                 aria-label="Market screener"
                 tabIndex={-1}
                 data-testid="screener-panel"
-                className="fixed left-1/2 top-1/2 z-modal flex max-h-[82vh] w-[min(880px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl focus:outline-none"
+                className="fixed left-1/2 top-1/2 z-modal flex max-h-[82vh] w-[min(880px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-bubble border border-white/10 bg-zinc-900 shadow-2xl focus:outline-none"
             >
                 <div className="flex shrink-0 items-center gap-3 border-b border-white/[0.06] px-4 py-2.5">
                     <h2 className="text-ui-caption font-bold text-zinc-100">Screener</h2>
@@ -282,7 +282,7 @@ export const ScreenerPanel: React.FC<ScreenerPanelProps> = ({ open, onClose, onC
                         Setups only
                     </button>
                     <button type="button" onClick={onClose} aria-label="Close screener"
-                        className="shrink-0 rounded p-1 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
+                        className="shrink-0 rounded-control p-1 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
                         <X className="h-4 w-4" aria-hidden="true" />
                     </button>
                 </div>

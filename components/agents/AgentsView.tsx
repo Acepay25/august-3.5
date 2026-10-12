@@ -292,7 +292,7 @@ const Row: React.FC<{
                         )}
                         {onPin && (
                             <button type="button" onClick={onPin} aria-label={pinned ? `Unpin ${title}` : `Pin ${title}`}
-                                className={`hit-target rounded p-0.5 transition-opacity ${
+                                className={`hit-target rounded-control p-0.5 transition-opacity ${
                                     pinned ? 'text-zinc-400 opacity-100' : 'text-zinc-600 opacity-0 group-hover:opacity-100'
                                 }`}>
                                 <Pin className="h-3 w-3" aria-hidden="true" />
@@ -306,7 +306,7 @@ const Row: React.FC<{
                                     const r = e.currentTarget.getBoundingClientRect();
                                     setMenuAt(m => m ? null : { x: r.right - MENU_W, y: r.bottom + 4 });
                                 }}
-                                className="hit-target rounded p-0.5 text-zinc-600 opacity-0 transition-opacity hover:text-zinc-300 focus-visible:opacity-100 group-hover:opacity-100">
+                                className="hit-target rounded-control p-0.5 text-zinc-600 opacity-0 transition-opacity hover:text-zinc-300 focus-visible:opacity-100 group-hover:opacity-100">
                                 <Ellipsis className="h-3 w-3" aria-hidden="true" />
                             </button>
                         )}
@@ -684,14 +684,14 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         {onRenameBot && (
                             <button type="button" aria-label={`Rename ${r.bot.name}`} data-testid="rail-rename"
                                 onClick={() => { setRenamingId(r.bot.id); setRenameDraft(r.bot.name); }}
-                                className="hit-target rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
+                                className="hit-target rounded-control p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
                                 <Pencil className="h-3 w-3" aria-hidden="true" />
                             </button>
                         )}
                         {onDeleteBot && (
                             <button type="button" aria-label={`Delete ${r.bot.name}`}
                                 onClick={() => onDeleteBot(r.bot.id)}
-                                className="hit-target rounded p-0.5 text-zinc-600 transition-colors hover:text-rose-300">
+                                className="hit-target rounded-control p-0.5 text-zinc-600 transition-colors hover:text-rose-300">
                                 <Trash2 className="h-3 w-3" aria-hidden="true" />
                             </button>
                         )}
@@ -797,7 +797,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             aria-label="Search conversations" data-testid="rail-search"
                             className="w-full rounded-control border border-zinc-800/80 bg-zinc-950/70 py-1.5 pl-8 pr-7 text-ui-dense text-zinc-200 outline-none placeholder:text-zinc-500 transition-colors focus:border-zinc-700 focus:bg-zinc-950" />
                         {!query && (
-                            <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-zinc-800/80 bg-zinc-900/80 px-1 py-0.5 font-mono text-ui-xs leading-none text-zinc-500">
+                            <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-control border border-zinc-800/80 bg-zinc-900/80 px-1 py-0.5 font-mono text-ui-xs leading-none text-zinc-500">
                                 /
                             </kbd>
                         )}
@@ -855,7 +855,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     onClick={() => setSortByName(v => !v)}
                                     title={sortByName ? 'Sorted by name — click for most recent' : 'Sorted by most recent — click for name'}
                                     aria-label="Sort conversations"
-                                    className="ml-auto rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
+                                    className="ml-auto rounded-control p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
                                     <ArrowUpDown className="h-3 w-3" aria-hidden="true" />
                                 </button>
                             )}
@@ -889,14 +889,14 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                         {onEditGroup && (
                                             <button type="button" aria-label={`Edit ${groupDisplayName(g, bots)}`}
                                                 onClick={() => onEditGroup(g.id)} data-testid="rail-edit-group"
-                                                className="hit-target rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
+                                                className="hit-target rounded-control p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
                                                 <Pencil className="h-3 w-3" aria-hidden="true" />
                                             </button>
                                         )}
                                         {onDeleteGroup && (
                                             <button type="button" aria-label={`Delete ${groupDisplayName(g, bots)}`}
                                                 onClick={() => onDeleteGroup(g.id)} data-testid="rail-delete-group"
-                                                className="hit-target rounded p-0.5 text-zinc-600 transition-colors hover:text-rose-300">
+                                                className="hit-target rounded-control p-0.5 text-zinc-600 transition-colors hover:text-rose-300">
                                                 <Trash2 className="h-3 w-3" aria-hidden="true" />
                                             </button>
                                         )}
@@ -944,7 +944,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                                         const rect = e.currentTarget.getBoundingClientRect();
                                                         setConvMenuAt(m => m?.id === r.id ? null : { id: r.id, x: rect.right - MENU_W, y: rect.bottom + 4 });
                                                     }}
-                                                    className="absolute right-1.5 top-1.5 rounded p-0.5 text-zinc-600 opacity-0 transition-opacity hover:text-zinc-300 focus-visible:opacity-100 group-hover:opacity-100">
+                                                    className="absolute right-1.5 top-1.5 rounded-control p-0.5 text-zinc-600 opacity-0 transition-opacity hover:text-zinc-300 focus-visible:opacity-100 group-hover:opacity-100">
                                                     <Ellipsis className="h-3 w-3" aria-hidden="true" />
                                                 </button>
                                             )}
@@ -1114,7 +1114,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             {!activeBot && modelFallback && (
                                 <ModelFallbackBanner modelIssue={modelFallback.issue} provider={modelFallback.provider} />
                             )}
-                            <div className="chat-column rounded-2xl border border-white/[0.08] bg-zinc-900/90 shadow-xl backdrop-blur-md p-2.5 transition-colors focus-within:border-zinc-500">
+                            <div className="chat-column rounded-bubble border border-white/[0.08] bg-zinc-900/90 shadow-xl backdrop-blur-md p-2.5 transition-colors focus-within:border-zinc-500">
                                 <input type="file" multiple accept="image/*" className="hidden"
                                     ref={fileInputRef} data-testid="composer-file"
                                     onChange={e => { attachFiles(e.target.files); e.target.value = ''; }} />
@@ -1124,7 +1124,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                             <span key={a.id}
                                                 className="flex items-center gap-1 rounded-control border border-zinc-800 bg-zinc-950 py-0.5 pl-1.5 pr-1 text-ui-xs text-zinc-300">
                                                 {a.kind === 'image' && (
-                                                    <img src={a.payload} alt="" className="h-5 w-5 rounded object-cover" />
+                                                    <img src={a.payload} alt="" className="h-5 w-5 rounded-control object-cover" />
                                                 )}
                                                 <span className="max-w-[9rem] truncate">{a.name}</span>
                                                 <button type="button" aria-label={`Remove ${a.name}`}

@@ -53,11 +53,11 @@ const MistakeWarningBanner: React.FC<MistakeWarningBannerProps> = ({
     };
 
     return (
-        <div className=" relative overflow-hidden rounded-xl bg-zinc-900 border border-amber-500/30 p-4 mb-4 shadow-lg animate-fade-in">
+        <div className=" relative overflow-hidden rounded-bubble bg-zinc-900 border border-amber-500/30 p-4 mb-4 shadow-lg animate-fade-in">
             {/* Dismiss Button */}
             <button
                 onClick={handleDismiss}
-                className="absolute top-2 right-2 p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                className="absolute top-2 right-2 p-1.5 rounded-control bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
                 aria-label="Dismiss warning"
             >
                 <CloseIcon className="h-4 w-4" aria-hidden="true" />
