@@ -222,7 +222,7 @@ export const VersionHistoryDashboard: React.FC = () => {
                                             onChange={(v) => setSelectedRuleIndex(Number(v))}
                                             options={rules.map((s, idx) => ({
                                                 value: String(idx),
-                                                label: `Skill #${idx + 1}: ${s.file.name.replace(/\.md$/i, '').substring(0, 24)}`,
+                                                label: `Skill #${idx + 1}: ${s.file.name.replace(/\.md$/i, '')}`,
                                             }))}
                                             aria-label="Select skill"
                                             className="w-full"
