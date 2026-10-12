@@ -202,32 +202,172 @@ describe('motion lockout (WS-5.4)', () => {
  * constant in the same commit that fixes it, and leaving it pinned while the
  * count drops is the failure mode this repo already calls the "green check that
  * encodes the bug".
- */
-describe('clipped text names its fallback', () => {
-    const CLIPPED = /truncate|line-clamp/;
-    // Attribute-name boundary: `data-title=` must NOT count as a title
-    // fallback (the substring form did).
-    const FALLBACK = /\s(?:title|aria-label|aria-labelledby)=/;
-    const BASELINE = 105;
+ */describe('clipped text names its fallback', () => {
+    const CLIP = /truncate|line-clamp/;
+    const FB = /\s(?:title|aria-label|aria-labelledby)=/;
+    const EMPTY_FB = /\s(?:title|aria-label|aria-labelledby)=(?:\{\s*undefined\s*\}|""|''|"")/;
+
+    /**
+     * The count this gate holds is only as honest as its scanner, and the scanner
+     * that shipped with it was not honest. It read `<tag` plus 600 characters and
+     * stopped at the FIRST `>`, which means:
+     *
+     *  - `<button onClick={() => x()} className="truncate">` is cut at the arrow,
+     *    so the `truncate` and its `title=` land on opposite sides of the cut and
+     *    the element passes or fails at random;
+     *  - a tag whose attributes span several lines is never parsed at all, so its
+     *    clipping was invisible to the count (`TradeChatPanel.tsx:963,970`);
+     *  - the 600-char window could be satisfied by a NEIGHBOUR's `title=`.
+     *
+     * So the real residual is measured here with a scanner that knows JSX: strings,
+     * template literals, `${…}` and `{…}` attribute expressions are traversed, a
+     * `=>` is not a tag end, comments are skipped, and closing tags maintain a real
+     * ancestor stack. On the tree this was written, the honest count is 107 — two
+     * MORE than the old gate's 105, because the old gate could not see everything.
+     * The number goes down from here by fixing files, and a new clipped element
+     * anywhere in `components/` fails the build.
+     */
+    const BASELINE = 107;
+    const BS = String.fromCharCode(92);
+    const BT = String.fromCharCode(96);
+
+    /** Index just past the depth-0 `>` that ends the tag opened at `lt`, or -1. */
+    function tagEnd(src: string, lt: number): number {
+        const stack: { kind: string; ch?: string; depth: number }[] = [{ kind: 'code', depth: 0 }];
+        let i = lt + 1;
+        while (i < src.length) {
+            const top = stack[stack.length - 1];
+            const c = src[i];
+            if (top.kind === 'str') {
+                if (c === BS) { i += 2; continue; }
+                if (c === top.ch) stack.pop();
+                i++; continue;
+            }
+            if (top.kind === 'tmpl') {
+                if (c === BS) { i += 2; continue; }
+                if (c === BT) { stack.pop(); i++; continue; }
+                if (c === '$' && src[i + 1] === '{') { stack.push({ kind: 'expr', depth: 1 }); i += 2; continue; }
+                i++; continue;
+            }
+            if (c === '"' || c === "'" || c === BT) {
+                stack.push(c === BT ? { kind: 'tmpl', depth: 0 } : { kind: 'str', ch: c, depth: 0 });
+                i++; continue;
+            }
+            if (c === '{') { top.depth++; i++; continue; }
+            if (c === '}') {
+                top.depth--;
+                if (top.kind === 'expr' && top.depth === 0) { stack.pop(); i++; continue; }
+                if (top.depth < 0) return -1;
+                i++; continue;
+            }
+            if (c === '>' && top.kind === 'code' && top.depth === 0) {
+                if (src[i - 1] === '=') { i++; continue; }
+                return i + 1;
+            }
+            i++;
+        }
+        return -1;
+    }
+
+    /** Next element opening tag, skipping comments and top-level strings. */
+    function nextTag(src: string, from: number): { start: number; end: number; name: string; attrs: string } | null {
+        let i = from;
+        while (i < src.length) {
+            const c = src[i];
+            if (c === '/' && src[i + 1] === '/') { const n = src.indexOf('\n', i); i = n < 0 ? src.length : n + 1; continue; }
+            if (c === '/' && src[i + 1] === '*') { const e = src.indexOf('*/', i + 2); i = e < 0 ? src.length : e + 2; continue; }
+            if (c === '"' || c === "'" || c === BT) {
+                i++;
+                while (i < src.length && src[i] !== c) { if (src[i] === BS) i++; i++; }
+                i++; continue;
+            }
+            if (c === '<' && /[a-zA-Z]/.test(src[i + 1] || '') && src[i - 1] !== '/') {
+                const m = /^<([a-zA-Z][\w.]*)/.exec(src.slice(i, i + 80));
+                if (!m) { i++; continue; }
+                const end = tagEnd(src, i);
+                if (end < 0) { i++; continue; }
+                return { start: i, end, name: m[1], attrs: src.slice(i + m[1].length + 1, end - 1) };
+            }
+            i++;
+        }
+        return null;
+    }
+
+    /**
+     * An offender is a clipped element whose OWN tag names no text. There is no
+     * ancestor exemption on purpose: a browser shows the DEEPEST `title`, so an
+     * ancestor tooltip does not describe what this element truncated — and a
+     * first draft of this rule accepted any-depth, ever-open, even `title={undefined}`
+     * ancestors, which turned `BASELINE = 0` into a rubber stamp. Elements sitting
+     * under an ancestor title are counted here and fixed by giving one element both
+     * strings, or a second hover target — not by exempting the child.
+     */
+    const clippedWithoutFallback = (src: string): string[] => {
+        const found: string[] = [];
+        const stack: { name: string; attrs: string }[] = [];
+        let cur = 0;
+        for (let guard = 0; guard < 20000; guard++) {
+            const open = nextTag(src, cur);
+            if (!open) break;
+            const closeRe = /<\/([a-zA-Z][\w.]*)>/g;
+            closeRe.lastIndex = cur;
+            const nc = closeRe.exec(src);
+            if (nc && nc.index < open.start) {
+                for (let k = stack.length - 1; k >= 0; k--) if (stack[k].name === nc[1]) { stack.length = k; break; }
+                cur = nc.index + nc[0].length;
+                continue;
+            }
+            if (CLIP.test(open.attrs) && (!FB.test(open.attrs) || EMPTY_FB.test(open.attrs))) {
+                const line = src.slice(0, open.start).split('\n').length;
+                found.push(`L${line} <${open.name}> ${open.attrs.replace(/\s+/g, ' ').slice(0, 60)}`);
+            }
+            if (!open.attrs.trimEnd().endsWith('/')) stack.push({ name: open.name, attrs: open.attrs });
+            cur = open.end;
+        }
+        return found;
+    };
 
     const offenders: string[] = [];
     for (const path of tsxFilesUnder('components')) {
-        const src = readFileSync(resolve(path), 'utf8');
-        for (const match of src.matchAll(/<[a-zA-Z][a-zA-Z0-9]*[\s\S]{0,600}?>/g)) {
-            const tag = match[0];
-            if (!CLIPPED.test(tag)) continue;
-            if (FALLBACK.test(tag)) continue;
-            offenders.push(`${relative(process.cwd(), path)}: ${tag.replace(/\s+/g, ' ').slice(0, 72)}`);
+        for (const hit of clippedWithoutFallback(readFileSync(resolve(path), 'utf8'))) {
+            offenders.push(`${relative(process.cwd(), path)}: ${hit}`);
         }
     }
 
     it(`holds the clipped-without-fallback count at or under ${BASELINE}`, () => {
-        expect(offenders.length, offenders.slice(0, 12).join(' | ')).toBeLessThanOrEqual(BASELINE);
+        expect(offenders.length, offenders.slice(0, 8).join(' | ')).toBeLessThanOrEqual(BASELINE);
     });
 
-    // Guard the guard: a scan matching no clipped tags at all would pass
-    // vacuously, and this suite has been bitten by that exact shape before.
-    it('finds the clipped elements it is counting', () => {
-        expect(offenders.length).toBeGreaterThan(10);
+    // Guard the guard. The removed assertion was `offenders.length > 10`, which
+    // could only pass while the debt existed and would have failed the day the
+    // tree was clean — and a scanner that matched nothing would have passed at
+    // every count. These probe the detector itself instead.
+    it('reads a tag to its real end, not to the first angle bracket', () => {
+        expect(clippedWithoutFallback('<span className="truncate">{name}</span>')).toHaveLength(1);
+        expect(clippedWithoutFallback('<p className="line-clamp-2">{body}</p>')).toHaveLength(1);
+        expect(clippedWithoutFallback('<span className="truncate" title={name}>{name}</span>')).toHaveLength(0);
+        expect(clippedWithoutFallback('<span className="truncate" aria-label={name}>{name}</span>')).toHaveLength(0);
+        expect(clippedWithoutFallback('<span data-title="x" className="truncate">{name}</span>')).toHaveLength(1);
+        // A fallback that names nothing is not a fallback.
+        expect(clippedWithoutFallback('<span className="truncate" title={undefined}>{name}</span>')).toHaveLength(1);
+        // The bug class: an arrow function must not cut the tag in half.
+        expect(clippedWithoutFallback('<button onClick={() => open(id)} className="truncate" title={full}>{x}</button>')).toHaveLength(0);
+        expect(clippedWithoutFallback('<button onClick={() => open(id)} className="truncate">{x}</button>')).toHaveLength(1);
+        // A `[...]` variant selector containing `>` must not end the tag either.
+        expect(clippedWithoutFallback('<p className="[&>span]:truncate truncate">{x}</p>')).toHaveLength(1);
+        // Neither a neighbour's nor an ancestor's tooltip covers this element.
+        expect(clippedWithoutFallback('<div>\n  <span title="a">{a}</span>\n  <span className="truncate">{b}</span>\n</div>')).toHaveLength(1);
+        expect(clippedWithoutFallback('<summary title="3 awaiting review">\n  <span className="truncate">{label}</span>\n</summary>')).toHaveLength(1);
+        // A comment that merely mentions truncating is not markup.
+        expect(clippedWithoutFallback('// never truncated here\nconst x = 1;')).toHaveLength(0);
+    });
+
+    it('counts what the tree actually contains, so the number is a measurement', () => {
+        // The old scanner could not see multi-line tags; prove this one can, by
+        // checking a known one is reported. If this ever stops matching, the count
+        // below is no longer the truth and must be re-derived before it is lowered.
+        const known = clippedWithoutFallback(readFileSync(resolve('components/trade/TradeChatPanel.tsx'), 'utf8'));
+        expect(known.length).toBeGreaterThanOrEqual(2);
+        expect(known.some(o => /<button>/.test(o))).toBe(true);
     });
 });
