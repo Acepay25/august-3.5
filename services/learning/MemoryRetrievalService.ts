@@ -112,6 +112,33 @@ const RISK_RULES_MAX = 300;
 const MISTAKE_LINE_MAX = 200;
 /** Extra matched skills surfaced as index lines at verdict depth (on top of #1). */
 const VERDICT_EXTRA_SKILLS = 2;
+/** Longest description an index line carries verbatim. Index lines are the
+ *  ALWAYS-ON tier: a spec-max 1024-char description would spend the whole
+ *  per-line budget on one skill, so the tail is clipped — named in the app's
+ *  ONE marker voice, pointing at the file that holds the rest. Covers the
+ *  realistic pushy description (~150-350 chars) without clipping it. */
+const SKILL_INDEX_DESC_MAX = 240;
+/**
+ * Worst-case whole index line — status header + evidence tail + the capped
+ * description + its clip note. The per-run cost estimate spends this per extra
+ * skill instead of the old bare 160-char guess, which a spec-max description
+ * would have silently blown past.
+ *
+ * MEASURED 2026-10-13 at the caps the code actually enforces: status word 9
+ * (`SkillStatus` has three values), origin handle 40 (both the writer at
+ * `SkillMemoryService:2646` and the reader at `:597` cut it there), evidence 58
+ * (the longest string `evidenceFreshness` returns), description 240 plus its
+ * clip note — 606 chars with a 64-char slug, which is what `serializeSkill`
+ * allows the title to be. The previous value here was 460: 146 chars short of a
+ * line the running path produces, so the estimate understated the always-on
+ * layer it exists to account for.
+ *
+ * The one part with no cap upstream is the file name (`slugifyName` shortens
+ * nothing), and the line embeds it twice — a longer slug than 64 grows the line
+ * past this figure. `tests/skillDescriptionTrigger.test.ts` measures a real
+ * produced line against it, so the number fails loudly instead of drifting.
+ */
+export const SKILL_INDEX_LINE_MAX = 620;
 /** Pull tier (the recall tool): the model ASKED for the procedure, so it
  *  gets more than the verdict slice's standing injection — 700 on purpose,
  *  a different tier from `SKILL_BLOCK_MAX`, not a competing budget. */
@@ -304,12 +331,15 @@ const dimsOverlap = (meta: SkillMeta, query: MemoryRetrievalQuery): number => {
 };
 
 /** Stop-words a setup phrase and a skill description both carry regardless of
- *  topic. Excluded so shared vocabulary cannot manufacture a match. */
+ *  topic. Excluded so shared vocabulary cannot manufacture a match. "use" and
+ *  "whenever" are the pushy description template's own words — every
+ *  synthesized description carries them, and unfiltered they would dilute
+ *  every score by the same dead weight. */
 const DESCRIPTIVE_STOPWORDS = new Set([
     'the', 'a', 'an', 'and', 'or', 'but', 'if', 'then', 'when', 'while', 'until', 'before', 'after',
     'is', 'are', 'was', 'were', 'be', 'been', 'being', 'it', 'its', 'this', 'that', 'these', 'those',
     'to', 'of', 'in', 'on', 'at', 'by', 'for', 'with', 'from', 'as', 'into', 'over', 'under',
-    'not', 'no', 'do', 'does', 'did', 'take', 'trade', 'setup', 'avoid', 'repeat', 'skill',
+    'not', 'no', 'do', 'does', 'did', 'use', 'whenever', 'take', 'trade', 'setup', 'avoid', 'repeat', 'skill',
     'short', 'long', 'entry', 'enter', 'exit', 'target', 'stop', 'loss', 'level', 'levels',
     'learned', 'cluster', 'losing', 'winning', 'trades', 'pattern', 'price', 'market',
 ]);
@@ -322,6 +352,24 @@ const contentWords = (text: string): Set<string> => {
         .split(/\s+/)
         .filter(w => w.length >= 3 && !DESCRIPTIVE_STOPWORDS.has(w));
     return new Set(words);
+};
+
+/**
+ * The pushy description template ends with a "Do NOT use for X" exclusion
+ * clause. The scorer cannot weigh negation, so the clause is cut before
+ * scoring — a description that names the situation it refuses must not have
+ * that situation's words counted toward a match. Scoring ONLY: the full
+ * description still renders and injects. The phrase is a fixed contract with
+ * the writers — utils/skillDescription.ts and the craft prompts.
+ */
+const EXCLUSION_SPLIT = /\bdo\s+not\s+use\b/i;
+
+const positiveDescription = (description: string): string => {
+    const at = description.search(EXCLUSION_SPLIT);
+    // A description that STARTS with the exclusion has no trigger clause at
+    // all — malformed, but scoring the whole string keeps its behavior
+    // identical to an unsplit description instead of zeroing it silently.
+    return at > 0 ? description.slice(0, at) : description;
 };
 
 /**
@@ -349,7 +397,7 @@ const descriptionOverlap = (
         query.pattern,
         query.regime,
     ].filter(Boolean).join(' ');
-    const a = contentWords(meta.description || '');
+    const a = contentWords(positiveDescription(meta.description || ''));
     const b = contentWords(setupText);
     if (a.size === 0 || b.size === 0) return 0;
     let intersection = 0;
@@ -389,7 +437,7 @@ export function estimateMemoryTokensPerRun(): { worstCase: number; typical: numb
         SKILL_BLOCK_MAX +
         RISK_RULES_MAX +
         MISTAKE_LINE_MAX +
-        VERDICT_EXTRA_SKILLS * 160;
+        VERDICT_EXTRA_SKILLS * SKILL_INDEX_LINE_MAX;
     const worstCase = Math.round(chars / 4);
     return { worstCase, typical: Math.round(worstCase / 2) };
 };
@@ -458,9 +506,18 @@ export function substituteSkillContext(text: string, query?: MemoryRetrievalQuer
 /** One-line index entry (progressive disclosure tier 1 — near-zero tokens). */
 const skillIndexLine = (name: string, meta: SkillMeta, status?: SkillMeta['status']): string => {
     // The stored one-sentence description wins when present (zcode memory
-    // pattern) — it was written to be read by models and humans alike.
+    // pattern) — it was written to be read by models and humans alike. A
+    // spec-max description is clipped to the always-on budget, with the clip
+    // named so the model reads the line as an index, not the whole skill.
     const rule = meta.description
-        ? meta.description
+        ? (meta.description.length > SKILL_INDEX_DESC_MAX
+            ? `${meta.description.slice(0, SKILL_INDEX_DESC_MAX).trimEnd()} ${clipNote({
+                source: 'skill description',
+                kept: SKILL_INDEX_DESC_MAX,
+                total: meta.description.length,
+                guidance: `the full text is in skills/${name}`,
+            })}`
+            : meta.description)
         : meta.ifCondition
             ? `IF ${meta.ifCondition} THEN ${meta.thenAction}`
             : meta.body.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').slice(0, 100) || name;
@@ -508,8 +565,8 @@ const matchedSkillBlock = (
     // description and never reached a single step. The recall tool, which the
     // model must ASK for, already did this correctly via projectSkillCard
     // (rule → trigger → when-NOT → pitfall → verification → ticket → numbered
-    // procedure). The stage that produces the binding decision must not be
-    // served worse than the on-demand one, so it uses the same projector.
+    // procedure → examples). The stage that produces the binding decision must
+    // not be served worse than the on-demand one, so it uses the same projector.
     //
     // A body that already fits is served UNCHANGED — the projector's own
     // guard — so short skills keep their exact text, and the clip is named in

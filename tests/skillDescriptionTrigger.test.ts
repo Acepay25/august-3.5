@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { getMemoryFilesContext, stageBudgetChars } from '../services/learning/MemoryRetrievalService';
+import { getMemoryFilesContext, stageBudgetChars, SKILL_INDEX_LINE_MAX } from '../services/learning/MemoryRetrievalService';
 import { initMemoryFiles, createMemoryFile, deleteMemoryFile, getMemoryFiles } from '../services/learning/MemoryFilesService';
-import { serializeSkill, type SkillMeta } from '../services/learning/SkillMemoryService';
+import { serializeSkill, parseSkillMarkdown, type SkillMeta } from '../services/learning/SkillMemoryService';
+import { defaultDescription } from '../utils/skillDescription';
 
 // The research doc's #1 and #5:
 //   #1  description must be a retrieval TRIGGER, not decoration. A skill
@@ -189,5 +190,115 @@ describe('doctrine slot is accounted, not invisible (plan #5)', () => {
         );
         expect(out).toContain('btc-reclaim-repeat.md');
         expect(out).not.toContain('x'.repeat(2000));
+    });
+});
+
+/**
+ * The other half of the description contract — where the text comes from and
+ * what its size costs. Four claims, each about a running path, each measured
+ * rather than trusted from a comment:
+ *
+ *  - `utils/skillDescription.ts` synthesizes the activation key for the
+ *    deterministic drafters that never write one, in the exact shape the craft
+ *    prompts demand.
+ *  - the scorer cuts the description at its `Do NOT use for` clause, so the
+ *    situation an exclusion REFUSES cannot be the reason the skill matches.
+ *  - the always-on index line clips a spec-max description and names the clip,
+ *    inside the chars `estimateMemoryTokensPerRun` spends per extra skill.
+ *  - a 1024-char description survives serialize → parse; the old 300 cap cut an
+ *    activation key mid-phrase on the way back in.
+ */
+describe('the synthesized activation key', () => {
+    const metaWith = (description: string, extra: Partial<SkillMeta> = {}): SkillMeta => ({
+        status: 'confirmed',
+        kind: 'repeat',
+        description,
+        wins: 2,
+        losses: 1,
+        consecutiveLosses: 0,
+        tradeIds: ['a', 'b', 'c'],
+        evidenceCount: 3,
+        approvedBy: 'grandfathered',
+        body: '**When:** a band walk into the open\n**What I do:** take the continuation.',
+        ...extra,
+    });
+
+    const fresh = async (prefix: string): Promise<string> => {
+        const user = `${prefix}-${Math.random().toString(36).slice(2)}`;
+        await initMemoryFiles(user);
+        await freeBudgetForSkills(user);
+        return user;
+    };
+
+    it('writes the trigger sentence the scorer is built to split', () => {
+        expect(defaultDescription({ when: 'BTC reclaims the 15m VWAP on expanding volume' }))
+            .toBe('Use this skill whenever BTC reclaims the 15m VWAP on expanding volume.');
+        // The if/then pair is the fallback for a craft that carries no `when`.
+        expect(defaultDescription({ when: '', ifCondition: 'RSI over 70', thenAction: 'fade the breakout' }))
+            .toBe('Use this skill whenever RSI over 70 → fade the breakout.');
+        // Trailing dots are folded away and the exclusion is lowercased, so one
+        // sentence reads as a sentence — and the split phrase stays intact.
+        expect(defaultDescription({ when: 'a band walk into the open.', whenNot: ['a failed retest.', ''] }))
+            .toBe('Use this skill whenever a band walk into the open. Do NOT use for a failed retest.');
+        // Nothing to say is not a description.
+        expect(defaultDescription({ when: '   ' })).toBe('');
+    });
+
+    it('does not let the exclusion it writes count as the match it refuses', async () => {
+        const user = await fresh('desc-excl');
+        const description = defaultDescription({ when: 'a band walk into the open', whenNot: ['a failed breakout retest'] });
+        await seed(user, metaWith(description), metaWith(description).body);
+        // No coin, direction, family or regime on the row: the ONLY way this
+        // skill can reach the model is through its description.
+        const refused = getMemoryFilesContext(
+            { coin: 'BTCUSDT', direction: 'Long', family: 'failed breakout retest', regime: 'choppy' },
+            undefined, 'analyst', 'verdict',
+        );
+        expect(refused, 'the exclusion names the refused setup; its words must not score').not.toContain('btc-reclaim-repeat.md');
+        const matched = getMemoryFilesContext(
+            { coin: 'BTCUSDT', direction: 'Long', family: 'band walk into the open', regime: 'trending' },
+            undefined, 'analyst', 'verdict',
+        );
+        expect(matched).toContain('btc-reclaim-repeat.md');
+    });
+
+    it('clips a spec-max description into the line the per-run estimate budgets', async () => {
+        const user = await fresh('desc-budget');
+        // Exactly the Agent-Skills maximum, with a long origin handle and fresh
+        // evidence so the header is at its widest too. TWO rows, because the
+        // first match is served as a full block — the index line this budget
+        // exists for is what the extra matches are served as.
+        const description = ('Use this skill whenever a band walk into the open. ' + 'w'.repeat(1100)).slice(0, 1024);
+        expect(description).toHaveLength(1024);
+        for (const name of ['btc-band-one.md', ('x'.repeat(64) + '.md')]) {
+            const meta = metaWith(description, {
+                coin: 'BTCUSDT', direction: 'Long',
+                // The widest header the caps allow: `SkillStatus` has three
+                // values, and the handle is capped at 40 by both the writer
+                // (SkillMemoryService:2646) and the reader (:597).
+                originBotName: 'h'.repeat(40),
+            });
+            const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+            await createMemoryFile(skills.id, name, serializeSkill(meta, 'Band walk'), user, true);
+        }
+        const out = getMemoryFilesContext(
+            { coin: 'BTCUSDT', direction: 'Long', family: 'band walk into the open', regime: 'trending' },
+            undefined, 'analyst', 'verdict',
+        );
+        const line = out.split('\n').find(l => l.includes('[truncated skill description'));
+        expect(line, 'a spec-max description must be clipped, and the clip named').toBeDefined();
+        expect(line!).toContain('first 240 of 1024 chars');
+        // The estimate is only worth having if the line it budgets fits in it.
+        expect(line!.length).toBeLessThanOrEqual(SKILL_INDEX_LINE_MAX);
+        expect(line!.length).toBeGreaterThan(400);
+    });
+
+    it('carries a spec-max description through the write and back', () => {
+        const exact = 'Use this skill whenever the 15m reclaim of the prior session high holds on expanding volume while the desk is flat. Do NOT use for a failed retest.';
+        expect(parseSkillMarkdown(serializeSkill(metaWith(exact), 'Round trip'))?.description).toBe(exact);
+        // Past the spec it is cut at 1024 — the same number serializeSkill
+        // writes — and not at the old 300, which amputated the exclusion clause.
+        const tooLong = 'Use this skill whenever ' + 'v'.repeat(1200);
+        expect(parseSkillMarkdown(serializeSkill(metaWith(tooLong), 'Round trip'))?.description).toHaveLength(1024);
     });
 });

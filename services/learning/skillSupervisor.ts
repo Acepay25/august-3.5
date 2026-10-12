@@ -77,7 +77,7 @@ const SupervisorVerdictSchema = z.object({
         when: z.string().min(8).max(300).optional(),
         ifCondition: z.string().min(12).max(300).optional(),
         thenAction: z.string().min(12).max(300).optional(),
-        description: z.string().min(10).max(300).optional(),
+        description: z.string().min(10).max(1024).optional(),
         prediction: z.unknown().optional(),
     }).partial().optional(),
 });
@@ -98,7 +98,7 @@ const catalogIndex = (): string => {
     }
 };
 
-const SUPERVISOR_SYSTEM = 'You are the quality gate for a trading skill system. You judge each item the way a rigorous human reviewer would: verify against the existing catalog, the graveyard (tried-and-failed) and the trader\'s memory; reject duplicates, vague or non-mechanical rules, and unfalsifiable claims; ENHANCE what is salvageable by making the IF mechanical and writing a description that states WHAT the skill does and WHEN to use it (with trigger words — that description is the activation key); approve what is already solid. You output ONLY JSON.';
+const SUPERVISOR_SYSTEM = 'You are the quality gate for a trading skill system. You judge each item the way a rigorous human reviewer would: verify against the existing catalog, the graveyard (tried-and-failed) and the trader\'s memory; reject duplicates, vague or non-mechanical rules, and unfalsifiable claims; ENHANCE what is salvageable by making the IF mechanical and writing a description that states WHAT the skill does, then "Use this skill whenever <trigger phrases>" (with trigger words — that description is the activation key retrieval scores against the live setup); approve what is already solid. You output ONLY JSON.';
 
 const verdictPrompt = (itemBlock: string, evidence: { graveyard: string; memory: string; extra?: string }): string => `Judge this item.
 

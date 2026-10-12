@@ -61,6 +61,7 @@ import {
     evaluateClaim,
     type SkillPrediction,
 } from '../../utils/skillPrediction';
+import { defaultDescription } from '../../utils/skillDescription';
 import { ciGatePasses } from '../../utils/skillStatistics';
 import { queueLearningProposal, type ProposalApplyResult } from '../../utils/learningQueue';
 import { getSkillLibraryCap, getHarnessSettings } from '../../utils/harnessSettings';
@@ -675,8 +676,10 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         })(),
         evalDetail: pick('evalVerdict')?.replace(/^(helps|mixed|hurts|inconclusive)\s*/i, '').replace(/^\(|\)$/g, '') || undefined,
         lastEvalAt: pick('lastEvalAt'),
-        // One-sentence semantic summary + debate provenance.
-        description: pick('description')?.slice(0, 300) || undefined,
+        // One-sentence semantic summary + debate provenance. Capped at the
+        // Agent-Skills spec's 1024 — the same cap serializeSkill writes, so a
+        // round-trip never truncates the activation key mid-phrase.
+        description: pick('description')?.slice(0, 1024) || undefined,
         originMessageId: pick('originMessageId') || undefined,
         supersededBy: pick('supersededBy') || undefined,
         // Sequential-eval streak: consecutive runs of the same
@@ -2469,6 +2472,10 @@ const ingestCraftedSkillUnlocked = async (
         // Overwritten, never merged: a predicate describes its clause, so
         // rewriting the clause invalidates any predicate the old one carried.
         meta.predicate = sanitizePredicate(crafted.predicate);
+        // A skill that never had the activation key gains it here; one that
+        // has one keeps its own — a merge must not overwrite a description
+        // the trader has already seen with the craft's new prose.
+        if (!meta.description && crafted.description) meta.description = crafted.description;
         // A legacy skill updated through the craft path gains its birth
         // certificate here if it never had one.
         if (!meta.prediction) {
@@ -2486,6 +2493,7 @@ const ingestCraftedSkillUnlocked = async (
         }, username);
         return;
     }
+    const description = (crafted.description || defaultDescription(crafted) || '').trim().slice(0, 1024) || undefined;
     const meta: SkillMeta = {
         status: 'candidate',
         kind,
@@ -2493,6 +2501,7 @@ const ingestCraftedSkillUnlocked = async (
         direction: setupDir,
         family: trade.analysis?.detectedPatternFamily,
         regime: trade.marketRegime,
+        ...(description ? { description } : {}),
         wins: trade.outcome === TradeOutcome.WIN ? 1 : 0,
         losses: trade.outcome === TradeOutcome.LOSS ? 1 : 0,
         consecutiveLosses: trade.outcome === TradeOutcome.LOSS ? 1 : 0,
@@ -2567,11 +2576,14 @@ const ingestCraftedSkillFromDraftUnlocked = async (
         return meta?.ifCondition?.toLowerCase() === crafted.ifCondition.toLowerCase();
     });
     if (existing) return { created: false, reason: 'duplicate', slug: existing.name }; // already learned — never duplicate a trigger
+    const description = (crafted.description || defaultDescription(crafted) || '').trim().slice(0, 1024) || undefined;
     const meta: SkillMeta = {
         status: 'candidate',
         kind: crafted.kind,
-        // The supervisor's activation-key description, when it crafted one.
-        ...(crafted.description ? { description: crafted.description.slice(0, 300) } : {}),
+        // The activation key: the craft's own description when it has one,
+        // else the synthesized trigger sentence (queued drafts from before
+        // the gates stamped one). Capped at the spec's 1024.
+        ...(description ? { description } : {}),
         ...(crafted.timeframe ? { timeframe: crafted.timeframe } : {}),
         ...(crafted.source ? { source: crafted.source } : {}),
         coin,
