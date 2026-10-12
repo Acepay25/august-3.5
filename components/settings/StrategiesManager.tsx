@@ -304,7 +304,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                             {doc.enabled ? 'Enabled' : 'Disabled'}
                                         </StatusPill>
                                     </div>
-                                    <p className="text-ui-dense text-zinc-500 mt-1 leading-relaxed line-clamp-2">{doc.summary}</p>
+                                    <p className="text-ui-dense text-zinc-500 mt-1 leading-relaxed line-clamp-2" title={doc.summary}>{doc.summary}</p>
                                     <p className="text-ui-xs text-zinc-600 mt-1 font-mono">
                                         {doc.pageCount} pages · {doc.charCount.toLocaleString()} chars · {new Date(doc.updatedAt).toLocaleDateString()}
                                     </p>

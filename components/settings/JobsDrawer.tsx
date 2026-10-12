@@ -145,7 +145,7 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                             {jobs.map(job => (
                                 <div key={job.id} data-job-row className="rounded-control border border-white/5 bg-zinc-900/70 p-2.5">
                                     <div className="flex items-center gap-2">
-                                        <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-zinc-200">
+                                        <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-zinc-200" title={JOB_LABEL[job.type] ?? job.type}>
                                             {JOB_LABEL[job.type] ?? job.type}
                                         </span>
                                         <span className={`rounded-control px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wide ${STATUS_STYLE[job.status]}`}>
@@ -153,7 +153,7 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                                         </span>
                                     </div>
                                     {job.result?.error && (
-                                        <p className="mt-1 line-clamp-2 text-ui-xs text-rose-400/80">
+                                        <p className="mt-1 line-clamp-2 text-ui-xs text-rose-400/80" title={String(job.result.error?.message ?? job.result.error).slice(0, 200)}>
                                             {String(job.result.error?.message ?? job.result.error).slice(0, 200)}
                                         </p>
                                     )}
@@ -169,7 +169,7 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                             {evaluated.map(({ name, meta }) => (
                                 <div key={name} data-eval-row className="rounded-control border border-white/5 bg-zinc-900/70 p-2.5">
                                     <div className="flex items-center gap-2">
-                                        <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-zinc-200">{name}</span>
+                                        <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-zinc-200" title={name}>{name}</span>
                                         {meta.evalVerdict && (
                                             <span className={`rounded-control px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wide ${VERDICT_STYLE[meta.evalVerdict] ?? 'bg-zinc-800 text-zinc-400'}`}>
                                                 {meta.evalVerdict}

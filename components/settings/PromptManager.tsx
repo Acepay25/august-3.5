@@ -353,7 +353,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                                             <span className="block font-mono text-ui-base text-zinc-100 truncate">
                                                 {entry.id.replace(/\./g, '-')}.md
                                             </span>
-                                            <span className="block text-ui-sm text-zinc-500 mt-0.5 truncate">
+                                            <span className="block text-ui-sm text-zinc-500 mt-0.5 truncate" title={entry.description}>
                                                 {entry.description}
                                             </span>
                                         </span>
@@ -386,7 +386,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                                             <FolderIcon className="w-4 h-4 text-zinc-400" aria-hidden="true" />
                                         </span>
                                         <span className="flex-1 min-w-0">
-                                            <span className="block text-ui-base font-medium text-zinc-100 truncate">
+                                            <span className="block text-ui-base font-medium text-zinc-100 truncate" title={group.label}>
                                                 {group.label}
                                             </span>
                                             <span className="block text-ui-sm text-zinc-500 mt-0.5 truncate">

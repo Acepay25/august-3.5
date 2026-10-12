@@ -53,7 +53,7 @@ const InstructionCard: React.FC<{
                             />
                         ) : (
                             <div className="flex items-center gap-2">
-                                <span className={`text-ui-sm font-bold truncate ${instruction.isActive ? 'text-cyan-100' : 'text-zinc-400'}`}>{instruction.title || 'Untitled'}</span>
+                                <span className={`text-ui-sm font-bold truncate ${instruction.isActive ? 'text-cyan-100' : 'text-zinc-400'}`} title={instruction.title || 'Untitled'}>{instruction.title || 'Untitled'}</span>
                                 {instruction.isActive && <StatusPill tone="info" kicker>Active</StatusPill>}
                             </div>
                         )}

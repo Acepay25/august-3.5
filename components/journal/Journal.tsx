@@ -299,11 +299,11 @@ const JournalInner: React.FC<JournalProps> = ({
     );
 };
 
-const Stat: React.FC<{ label: string; value: React.ReactNode; sub?: string }> = ({ label, value, sub }) => (
+const Stat: React.FC<{ label: string; value: string; sub?: string }> = ({ label, value, sub }) => (
   <div className="min-w-0">
     <div className="text-ui-xs uppercase tracking-wider text-zinc-500 mb-1">{label}</div>
-    <div className="text-ui-lg font-semibold text-zinc-100 truncate">{value}</div>
-    {sub && <div className="text-ui-dense text-zinc-500 truncate mt-0.5">{sub}</div>}
+    <div className="text-ui-lg font-semibold text-zinc-100 truncate" title={value}>{value}</div>
+    {sub && <div className="text-ui-dense text-zinc-500 truncate mt-0.5" title={sub}>{sub}</div>}
   </div>
 );
 
@@ -405,7 +405,7 @@ const LastTwentyCard: React.FC<{ trades: LoggedTrade[] }> = ({ trades }) => {
             {typeof r.realizedR === 'number' && (
               <span className="font-mono text-ui-2xs text-zinc-400">{r.realizedR >= 0 ? '+' : ''}{r.realizedR.toFixed(2)}R</span>
             )}
-            {r.strategy && <span className="text-zinc-500 truncate max-w-[18ch]">{r.strategy}</span>}
+            {r.strategy && <span className="text-zinc-500 truncate max-w-[18ch]" title={r.strategy}>{r.strategy}</span>}
             {r.tags.length > 0 && (
               <span className="text-amber-300/80">{r.tags.join(' · ')}</span>
             )}

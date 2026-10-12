@@ -577,7 +577,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-control border border-zinc-700/80 bg-zinc-950">
                                                         <Box className="h-3 w-3 text-zinc-400" aria-hidden="true" />
                                                     </span>
-                                                    <span className="truncate text-ui-caption font-medium">{c.name}</span>
+                                                    <span className="truncate text-ui-caption font-medium" title={c.name}>{c.name}</span>
                                                 </span>
                                                 <span className={` h-1.5 w-1.5 shrink-0 rounded-full ${isReady ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
                                             </button>
@@ -648,7 +648,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                         </>
                                     ) : (
                                         <>
-                                            <h3 className="truncate text-ui-lede font-semibold text-zinc-100">{nameDraft.trim() || selected.name}</h3>
+                                            <h3 className="truncate text-ui-lede font-semibold text-zinc-100" title={nameDraft.trim() || selected.name}>{nameDraft.trim() || selected.name}</h3>
                                             <button onClick={() => setIsEditingName(true)} className="p-1 text-zinc-500 hover:text-zinc-200" title="Edit name" aria-label="Edit provider name">
                                                 <Pencil className="h-3 w-3" aria-hidden="true" />
                                             </button>
@@ -761,7 +761,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                                         <button onClick={() => setEditingModelId(null)} aria-label="Cancel rename" className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
                                                     </div>
                                                 ) : (
-                                                    <span className="min-w-0 flex-1 truncate font-mono text-ui-caption">{m}</span>
+                                                    <span className="min-w-0 flex-1 truncate font-mono text-ui-caption" title={m}>{m}</span>
                                                 )}
                                                 <div className="ml-4 flex shrink-0 items-center gap-2.5" onClick={e => e.stopPropagation()}>
                                                     <span className="font-mono text-ui-xs font-medium text-zinc-500">{badgeText}</span>

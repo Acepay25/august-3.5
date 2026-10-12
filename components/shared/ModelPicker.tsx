@@ -396,7 +396,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                     compact ? 'px-2 py-1 text-ui-dense' : 'px-2.5 py-1.5 text-ui-base font-medium'
                 }`}
             >
-                <span className="truncate max-w-[180px]">{getDisplayText()}</span>
+                <span className="truncate max-w-[180px]" title={getDisplayText()}>{getDisplayText()}</span>
                 <ChevronDownIcon className={`h-3.5 w-3.5 shrink-0 text-zinc-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
@@ -510,7 +510,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({
                                                     : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
                                         }`}
                                     >
-                                        <span className="truncate">{provider.name}</span>
+                                        <span className="truncate" title={provider.name}>{provider.name}</span>
                                         {mode !== 'provider-only' && (
                                             <ChevronRightIcon className="w-3 h-3 text-zinc-600 shrink-0" aria-hidden="true" />
                                         )}

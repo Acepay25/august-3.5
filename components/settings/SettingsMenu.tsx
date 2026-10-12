@@ -170,7 +170,7 @@ const NavTabButton: React.FC<{
     >
         <span className="flex min-w-0 items-center gap-2.5">
             <span className={`shrink-0 ${active ? 'text-zinc-100' : 'text-zinc-500'}`}>{icon}</span>
-            <span className="truncate">{label}</span>
+            <span className="truncate" title={label}>{label}</span>
         </span>
         {badge && (
             <span className="shrink-0 rounded-full bg-zinc-700 px-1.5 py-0.5 font-mono text-ui-2xs font-bold leading-none text-zinc-200">

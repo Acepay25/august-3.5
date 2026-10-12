@@ -23,7 +23,7 @@ const ChatAttachmentStrip: React.FC<ChatAttachmentStripProps> = ({ attachments, 
                 {a.kind === 'image'
                     ? <img src={a.payload} alt={a.name} className="h-8 w-12 rounded-control object-cover" />
                     : <FileText className="h-3 w-3 text-zinc-500" aria-hidden="true" />}
-                <span className="max-w-[120px] truncate">{a.name}</span>
+                <span className="max-w-[120px] truncate" title={a.name}>{a.name}</span>
                 <button type="button" aria-label={`Remove ${a.name}`} onClick={() => onRemove(a.id)}
                     className="text-zinc-500 hover:text-rose-400"><X className="h-3 w-3" aria-hidden="true" /></button>
             </span>

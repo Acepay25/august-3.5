@@ -244,7 +244,7 @@ const SkillDetail: React.FC<{
 
             <div className="flex items-start justify-between gap-4 pb-5">
                 <div className="min-w-0">
-                    <h3 className="truncate text-xl font-bold tracking-tight text-zinc-100">{skill.name}</h3>
+                    <h3 className="truncate text-xl font-bold tracking-tight text-zinc-100" title={skill.name}>{skill.name}</h3>
                     <p className="mt-1 text-ui-base leading-relaxed text-zinc-500">
                         {meta?.description || descriptionOf(skill.body) || 'No description.'}
                     </p>

@@ -130,7 +130,7 @@ export const AmendmentsInbox: React.FC = () => {
                             <div key={a.id} className="flex items-center gap-2 text-ui-dense text-zinc-500">
                                 <StatusBadge a={a} />
                                 <code className="text-zinc-400">{a.fileName}</code>
-                                <span className="truncate text-zinc-600">{a.reason}</span>
+                                <span className="truncate text-zinc-600" title={a.reason}>{a.reason}</span>
                             </div>
                         ))}
                     </div>

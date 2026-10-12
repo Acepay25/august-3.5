@@ -39,8 +39,8 @@ const ThinkingModal: React.FC<ThinkingModalProps> = ({ isOpen, onClose, title, s
                     <div className="flex min-w-0 items-start gap-3">
                         <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-control border border-cyan-400/20 bg-cyan-500/10 text-cyan-300"><BrainIcon className="h-4 w-4" aria-hidden="true" /></div>
                         <div className="min-w-0">
-                            <h2 id="thinking-modal-title" className="truncate text-ui-base font-bold text-white sm:text-ui-lg">{title}</h2>
-                            {subtitle && <p className="mt-0.5 truncate text-ui-xs text-zinc-500">{subtitle}</p>}
+                            <h2 id="thinking-modal-title" className="truncate text-ui-base font-bold text-white sm:text-ui-lg" title={title}>{title}</h2>
+                            {subtitle && <p className="mt-0.5 truncate text-ui-xs text-zinc-500" title={subtitle}>{subtitle}</p>}
                         </div>
                     </div>
                     <button ref={closeButtonRef} type="button" onClick={onClose} className="shrink-0 rounded-control p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400" aria-label="Close thinking viewer" title="Close thinking viewer"><CloseIcon /></button>

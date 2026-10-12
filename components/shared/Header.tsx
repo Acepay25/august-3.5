@@ -239,7 +239,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                                         <div key={session.id} className="flex items-center justify-between text-ui-sm py-0.5">
                                                             <div className="flex items-center gap-2 min-w-0">
                                                                 <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${session.isOpen ? 'bg-emerald-500 shadow-[0_0_8px_rgba(7,181,106,0.6)]' : 'bg-zinc-700'}`} />
-                                                                <span className={session.isOpen ? 'text-white font-medium truncate' : 'text-zinc-500 truncate'}>{session.name.replace(' Session', '')}</span>
+                                                                <span className={session.isOpen ? 'text-white font-medium truncate' : 'text-zinc-500 truncate'} title={session.name.replace(' Session', '')}>{session.name.replace(' Session', '')}</span>
                                                             </div>
                                                             <div className="flex items-center gap-1.5 flex-shrink-0">
                                                                 <span className={`text-ui-2xs px-1.5 py-0 rounded-full border whitespace-nowrap ${session.volatility === 'High' ? 'border-rose-500/30 text-rose-400 bg-rose-500/10' :

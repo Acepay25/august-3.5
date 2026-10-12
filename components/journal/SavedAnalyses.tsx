@@ -48,7 +48,7 @@ const SavedAnalysisRowImpl: React.FC<{
           <div className="flex items-center gap-3">
             <span className={`font-bold ${safeDirection === 'Long' ? 'text-emerald-400' : safeDirection === 'Short' ? 'text-rose-400' : 'text-zinc-400'}`}>{safeDirection}</span>
             <span className="font-mono text-ui-base font-bold text-zinc-300">{coinName}</span>
-            <span className="text-zinc-300 truncate hidden sm:block">{(activeStrategies || []).join(', ')}</span>
+            <span className="text-zinc-300 truncate hidden sm:block" title={(activeStrategies || []).join(', ')}>{(activeStrategies || []).join(', ')}</span>
           </div>
           <p className="text-ui-base text-zinc-300 mt-1 truncate">Prompt: "{userPrompt}"</p>
           <p className="text-ui-sm text-zinc-500 mt-1">{new Date(timestamp).toLocaleString()}</p>

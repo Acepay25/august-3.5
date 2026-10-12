@@ -87,7 +87,7 @@ export const WhyAvoidPanel: React.FC<{ analysis: TradeAnalysis }> = ({ analysis 
                                 <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${dotTone(step.tone)}`} />
                                 <span className="min-w-0">
                                     <span className="text-zinc-500">{step.label}: </span>
-                                    <span className={`${textTone(step.tone)} line-clamp-2`}>{step.value}</span>
+                                    <span className={`${textTone(step.tone)} line-clamp-2`} title={step.value}>{step.value}</span>
                                 </span>
                             </li>
                         ))}

@@ -108,7 +108,7 @@ const StepTaskBlock: React.FC<{ step: AnalysisStep; isPostMortem?: boolean }> = 
           {step.subSteps?.map((sub, idx) => (
             <TaskItem key={idx} className="flex items-center gap-2 text-ui-sm">
               <span className="text-zinc-500">{sub.label}</span>
-              {sub.detail && <span className="text-zinc-600 truncate">{sub.detail}</span>}
+              {sub.detail && <span className="text-zinc-600 truncate" title={sub.detail}>{sub.detail}</span>}
               {sub.filename && (
                 <TaskItemFile className="ml-auto flex-shrink-0">
                   {sub.filename.split(/[/\\]/).pop()}

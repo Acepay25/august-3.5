@@ -65,7 +65,7 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
                         return (
                             <div key={kind} className="rounded-control border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 flex items-center justify-between gap-2">
                                 <span className="text-ui-xs uppercase tracking-wider text-zinc-500 font-bold shrink-0">{KIND_LABELS[kind] ?? kind}</span>
-                                <span className="text-ui-xs text-zinc-600 truncate min-w-0">{samples.map(s => s.label).join(' · ')}</span>
+                                <span className="text-ui-xs text-zinc-600 truncate min-w-0" title={samples.map(s => s.label).join(' · ')}>{samples.map(s => s.label).join(' · ')}</span>
                                 <span className="text-ui-xs font-mono tabular-nums text-zinc-400 shrink-0">{count}</span>
                             </div>
                         );

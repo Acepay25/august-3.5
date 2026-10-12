@@ -484,7 +484,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                         className="w-full flex items-center gap-3 px-5 py-4 border-b border-zinc-800 last:border-b-0 hover:bg-zinc-800/80 transition-colors text-left"
                                     >
                                         <FileTextIcon className="w-5 h-5 text-zinc-500 shrink-0" aria-hidden="true" />
-                                        <span className="flex-1 min-w-0 font-mono text-ui-base text-zinc-100 truncate">
+                                        <span className="flex-1 min-w-0 font-mono text-ui-base text-zinc-100 truncate" title={file.name}>
                                             {file.name}
                                         </span>
                                         {file.autoManaged && (
@@ -525,8 +525,10 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                 <FileText className="w-4 h-4 text-zinc-400" aria-hidden="true" />
                             </span>
                             <span className="flex-1 min-w-0">
-                                <span className="block text-ui-base font-medium text-zinc-100 truncate">Suggestions</span>
-                                <span className="block text-ui-sm text-zinc-500 mt-0.5 truncate">
+                                <span className="block text-ui-base font-medium text-zinc-100 truncate" title="Suggestions">Suggestions</span>
+                                <span className="block text-ui-sm text-zinc-500 mt-0.5 truncate" title={suggestionsFile?.content.trim()
+                                        ? `Updated ${phtStamp(suggestionsFile.updatedAt)}`
+                                        : 'Memory model review — tap to open'}>
                                     {suggestionsFile?.content.trim()
                                         ? `Updated ${phtStamp(suggestionsFile.updatedAt)}`
                                         : 'Memory model review — tap to open'}
@@ -566,7 +568,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                             <FolderIcon className="w-4 h-4 text-zinc-400" aria-hidden="true" />
                                         </span>
                                         <span className="flex-1 min-w-0">
-                                            <span className="block text-ui-base font-medium text-zinc-100 truncate">
+                                            <span className="block text-ui-base font-medium text-zinc-100 truncate" title={folder.name}>
                                                 {folder.name}
                                             </span>
                                             <span className="block text-ui-sm text-zinc-500 mt-0.5 truncate">

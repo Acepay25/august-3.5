@@ -136,7 +136,7 @@ export const SymbolPicker: React.FC<SymbolPickerProps> = ({ symbols, value, onCh
                                     onClick={() => commit(s.symbol)}
                                     className={`flex w-full items-center gap-2 px-3 py-1.5 text-left ${i === cursor ? 'bg-white/[0.06]' : ''}`}
                                 >
-                                    <span className="w-28 shrink-0 truncate font-mono text-ui-sm font-bold text-zinc-100">{display(s.symbol)}</span>
+                                    <span className="w-28 shrink-0 truncate font-mono text-ui-sm font-bold text-zinc-100" title={display(s.symbol)}>{display(s.symbol)}</span>
                                     <span className="min-w-0 flex-1 truncate text-ui-dense text-zinc-500">{s.baseAsset} perpetual</span>
                                     <span className="shrink-0 font-mono text-ui-dense tabular-nums text-zinc-300">
                                         {s.lastPrice > 0 ? s.lastPrice.toLocaleString(undefined, { maximumFractionDigits: s.lastPrice < 1 ? 6 : 2 }) : '—'}
