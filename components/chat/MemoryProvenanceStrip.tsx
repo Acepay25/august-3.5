@@ -150,7 +150,7 @@ const MemoryProvenanceStrip: React.FC<MemoryProvenanceStripProps> = ({
                         <div key={slug} className="flex items-center gap-1.5">
                             <span className="w-9 shrink-0 font-mono text-ui-2xs uppercase tracking-wider text-cyan-300/80">skill</span>
                             <button type="button" onClick={() => openSkillCard(slug)}
-                                className="min-w-0 flex-1 truncate text-left font-mono text-ui-xs text-zinc-300 hover:underline">
+                                className="min-w-0 flex-1 truncate text-left font-mono text-ui-xs text-zinc-300 hover:underline" title={`/${slug}`}>
                                 /{slug}
                             </button>
                             <button type="button" onClick={() => flag(slug)}

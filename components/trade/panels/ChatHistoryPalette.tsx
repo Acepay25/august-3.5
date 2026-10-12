@@ -78,7 +78,7 @@ const ChatHistoryPalette: React.FC<ChatHistoryPaletteProps> = ({
                             onClick={() => onSelect(s.id)}
                             onMouseEnter={() => onSelChange(i)}
                             className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left">
-                            <span className={`truncate text-ui-sm ${s.id === activeId ? 'font-semibold text-zinc-100' : 'text-zinc-300'}`}>{s.kind === 'panel' ? '◆ ' : ''}{s.title}</span>
+                            <span className={`truncate text-ui-sm ${s.id === activeId ? 'font-semibold text-zinc-100' : 'text-zinc-300'}`} title={`${s.kind === 'panel' ? '◆ ' : ''}${s.title}`}>{s.kind === 'panel' ? '◆ ' : ''}{s.title}</span>
                             <span className="shrink-0 text-ui-xs text-zinc-600">{relTime(s.updatedAt)}</span>
                         </button>
                         {canDelete && (

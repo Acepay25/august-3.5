@@ -571,7 +571,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                             <span className="block text-ui-base font-medium text-zinc-100 truncate" title={folder.name}>
                                                 {folder.name}
                                             </span>
-                                            <span className="block text-ui-sm text-zinc-500 mt-0.5 truncate">
+                                            <span className="block text-ui-sm text-zinc-500 mt-0.5 truncate" title={`${count} ${count === 1 ? 'file' : 'files'} · ${formatFolderUpdated(folder.id)}`}>
                                                 {count} {count === 1 ? 'file' : 'files'} · {formatFolderUpdated(folder.id)}
                                             </span>
                                         </span>

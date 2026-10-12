@@ -350,7 +350,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                                             <FileTextIcon className="w-4 h-4 text-zinc-400" aria-hidden="true" />
                                         </span>
                                         <span className="flex-1 min-w-0">
-                                            <span className="block font-mono text-ui-base text-zinc-100 truncate">
+                                            <span className="block font-mono text-ui-base text-zinc-100 truncate" title={`${entry.id.replace(/\./g, '-')}.md`}>
                                                 {entry.id.replace(/\./g, '-')}.md
                                             </span>
                                             <span className="block text-ui-sm text-zinc-500 mt-0.5 truncate" title={entry.description}>
@@ -389,7 +389,7 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
                                             <span className="block text-ui-base font-medium text-zinc-100 truncate" title={group.label}>
                                                 {group.label}
                                             </span>
-                                            <span className="block text-ui-sm text-zinc-500 mt-0.5 truncate">
+                                            <span className="block text-ui-sm text-zinc-500 mt-0.5 truncate" title={`${group.entries.length} ${group.entries.length === 1 ? 'prompt' : 'prompts'}${edited > 0 ? ` · ${edited} edited` : ''}`}>
                                                 {group.entries.length} {group.entries.length === 1 ? 'prompt' : 'prompts'}
                                                 {edited > 0 ? ` · ${edited} edited` : ''}
                                             </span>

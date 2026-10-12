@@ -50,7 +50,7 @@ const SavedAnalysisRowImpl: React.FC<{
             <span className="font-mono text-ui-base font-bold text-zinc-300">{coinName}</span>
             <span className="text-zinc-300 truncate hidden sm:block" title={(activeStrategies || []).join(', ')}>{(activeStrategies || []).join(', ')}</span>
           </div>
-          <p className="text-ui-base text-zinc-300 mt-1 truncate">Prompt: "{userPrompt}"</p>
+          <p className="text-ui-base text-zinc-300 mt-1 truncate" title={`Prompt: "${userPrompt}"`}>Prompt: "{userPrompt}"</p>
           <p className="text-ui-sm text-zinc-500 mt-1">{new Date(timestamp).toLocaleString()}</p>
         </div>
         {onLocate && (

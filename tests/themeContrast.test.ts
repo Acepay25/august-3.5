@@ -222,12 +222,24 @@ describe('motion lockout (WS-5.4)', () => {
      * The real residual is measured here with a scanner that knows JSX: strings,
      * template literals, `${…}` and `{…}` attribute expressions are traversed, a
      * `=>` is not a tag end, comments are skipped, and closing tags maintain a real
-     * ancestor stack. On the tree this was written, the honest count is 107 — two
-     * MORE than the old gate's 105, because the old gate could not see everything.
-     * The number goes down from here by fixing files, and a new clipped element
-     * anywhere in `components/` fails the build.
+     * ancestor stack. The first honest measurement was 107 — two MORE than the old
+     * gate's 105, because the old gate could not see every tag. Every one of those
+     * 107 now names its own text, so BASELINE is 0 and this is a ban: a new clipped
+     * element anywhere in `components/` fails the build.
+     *
+     * The last 9 were the interesting ones. They clipped inside an ancestor that
+     * already carried a `title`, and a browser shows the DEEPEST title — so the
+     * obvious move (give the child a tooltip) would have DELETED information: in
+     * `MemoryHealthCard` the only copy of the byte-policy explanation, in
+     * `BiasChips` the only statement that a chip is code-calculated rather than the
+     * model's opinion. Each was resolved by putting both strings on one element
+     * (label + explanation, chip + claim, name + "signed in as"), or by noticing the
+     * ancestor tooltip merely restated text already visible in the row
+     * (`JobsDrawer`'s schedule, `NavRail`'s "Signed in as X", `UpdateButton`'s error)
+     * and dropping it. Nothing was exempted to reach zero, and there is no ancestor
+     * exemption to hide behind — see the rationale on `clippedWithoutFallback`.
      */
-    const BASELINE = 29;
+    const BASELINE = 0;
     const BS = String.fromCharCode(92);
     const BT = String.fromCharCode(96);
 
@@ -362,12 +374,20 @@ describe('motion lockout (WS-5.4)', () => {
         expect(clippedWithoutFallback('// never truncated here\nconst x = 1;')).toHaveLength(0);
     });
 
-    it('counts what the tree actually contains, so the number is a measurement', () => {
-        // The old scanner could not see multi-line tags; prove this one can, by
-        // checking a known one is reported. If this ever stops matching, the count
-        // below is no longer the truth and must be re-derived before it is lowered.
-        const known = clippedWithoutFallback(readFileSync(resolve('components/trade/TradeChatPanel.tsx'), 'utf8'));
-        expect(known.length).toBeGreaterThanOrEqual(2);
-        expect(known.some(o => /<button>/.test(o))).toBe(true);
+    it('sees a tag whose attributes span several lines', () => {
+        // The old scanner read only to the first `>`, so a multi-line opening tag
+        // was invisible to it. This used to be asserted against TradeChatPanel.tsx,
+        // which is now fixed — a guard must not depend on the debt still existing.
+        const multiLine = [
+            '<button',
+            '    key={g.id}',
+            '    onClick={() => pick(g.id)}',
+            '    className="block w-full truncate text-ui-dense"',
+            '>',
+            '    {g.name}',
+            '</button>',
+        ].join('\n');
+        expect(clippedWithoutFallback(multiLine)).toHaveLength(1);
+        expect(clippedWithoutFallback(multiLine.replace('w-full truncate', 'w-full') + '\n')).toHaveLength(0);
     });
 });

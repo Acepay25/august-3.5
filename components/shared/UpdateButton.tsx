@@ -161,10 +161,9 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
             <div className={`flex items-center gap-2 ${className}`}>
                 <span
                     className={`flex items-center gap-1.5 text-ui-dense text-rose-400 ${verboseError ? 'max-w-[260px]' : ''}`}
-                    title={error || ''}
                 >
                     <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                    {verboseError && error ? <span className="truncate">{error}</span> : 'Update error'}
+                    {verboseError && error ? <span className="truncate" title={error}>{error}</span> : 'Update error'}
                 </span>
                 <button
                     onClick={checkForUpdates}

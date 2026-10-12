@@ -144,7 +144,6 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                     >
                         <summary
                             className="flex cursor-pointer list-none items-center gap-2 text-ui-dense text-zinc-400 [&::-webkit-details-marker]:hidden"
-                            title={`${who ? `${who} — ` : ''}${n} item${n === 1 ? '' : 's'} awaiting human review`}
                         >
                             <span
                                 aria-hidden="true"
@@ -153,7 +152,7 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                                 ▸
                             </span>
                             {icon}
-                            <span className="min-w-0 flex-1 truncate">
+                            <span className="min-w-0 flex-1 truncate" title={`${who ? `${who} · ` : ''}${label} — ${n} item${n === 1 ? '' : 's'} awaiting human review`}>
                                 {who ? <span className="text-zinc-500">{who} · </span> : null}
                                 {label}
                             </span>
@@ -165,7 +164,7 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                         </summary>
                         <div className="mb-1 mt-1 space-y-0.5 border-l border-white/10 pl-4">
                             {g.items.map((a, i) => (
-                                <p key={`${a.at}-${i}`} className="truncate text-ui-xs leading-4 text-zinc-500">
+                                <p key={`${a.at}-${i}`} className="truncate text-ui-xs leading-4 text-zinc-500" title={`${a.verb} ${a.label}${a.review ? ` — review: ${a.review}` : ''}`}>
                                     <span className="text-zinc-400">{a.verb}</span> {a.label}
                                     {a.review ? <span className="text-zinc-600"> — review: {a.review}</span> : null}
                                 </p>
@@ -183,7 +182,6 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                     <details className="group/tool-line" data-testid="tool-actions-blocked">
                         <summary
                             className="flex cursor-pointer list-none items-center gap-2 text-ui-dense text-rose-300 [&::-webkit-details-marker]:hidden"
-                            title="The harness refused these side-effects — nothing was stored."
                         >
                             <span
                                 aria-hidden="true"
@@ -192,7 +190,7 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                                 ▸
                             </span>
                             <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-400" aria-hidden="true" />
-                            <span className="min-w-0 flex-1 truncate">
+                            <span className="min-w-0 flex-1 truncate" title={`Blocked — ${who.length === 1 ? `${who[0]}: ` : ''}${counts.join(', ')} rejected · nothing stored. The harness refused these side-effects.`}>
                                 <span className="font-semibold">Blocked</span>
                                 {' — '}
                                 {who.length === 1 ? <span className="text-rose-400/80">{who[0]}: </span> : null}
@@ -204,7 +202,7 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                         </summary>
                         <div className="mb-1 mt-1 space-y-0.5 border-l border-rose-500/20 pl-4">
                             {failItems.map((a, i) => (
-                                <p key={`${a.at}-${i}`} className="truncate text-ui-xs leading-4 text-zinc-500">
+                                <p key={`${a.at}-${i}`} className="truncate text-ui-xs leading-4 text-zinc-500" title={`${a.verb} ${a.label}${a.review ? ` — review: ${a.review}` : ''}`}>
                                     <span className="text-rose-400/80">{a.verb}</span> {a.label}
                                     {a.review ? <span className="text-zinc-600"> — review: {a.review}</span> : null}
                                 </p>
