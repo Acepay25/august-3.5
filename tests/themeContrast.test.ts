@@ -17,6 +17,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { openTags, filesWalkedShortOfTheirEnd, type Open } from './jsxScan';
 
 const rootCss = readFileSync(resolve(__dirname, '../index.css'), 'utf8');
 
@@ -193,19 +194,33 @@ describe('motion lockout (WS-5.4)', () => {
  * across the tree on 2026-10-07, 105 of 125 clipped elements carried no `title`,
  * no `aria-label` and no `Tip` — which is most of what "this looks messy" means
  * in practice, and no other gate can see it (jsdom lays nothing out).
- * Re-measured 2026-10-12: the offenders are still exactly 105, but the tagged
- * population has grown to 128 — so this baseline sits at reality rather than
- * having been earned down, and the denominator above is the older census.
  *
- * This is a RATCHET, not a clean bill: the baseline is the count at the time it
- * was written, so the number can only fall. Fixing a file should lower the
- * constant in the same commit that fixes it, and leaving it pinned while the
- * count drops is the failure mode this repo already calls the "green check that
- * encodes the bug".
- */describe('clipped text names its fallback', () => {
+ * It shipped as a ratchet — a constant that can only fall — and stayed one for
+ * five days: re-measured 2026-10-12 the count was still exactly 105 while the
+ * tagged population had grown to 128, because the scanner holding the number
+ * could not read a real JSX tag (see the rationale on `BASELINE`). With a
+ * JSX-aware scanner it measured 107, two MORE than the ratchet could see. All
+ * 107 now name their own text, the constant is 0, and the guard tests below
+ * probe the detector rather than the debt, because the count is only as honest
+ * as the parser holding it up.
+ */
+describe('clipped text names its fallback', () => {
     const CLIP = /truncate|line-clamp/;
     const FB = /\s(?:title|aria-label|aria-labelledby)=/;
     const EMPTY_FB = /\s(?:title|aria-label|aria-labelledby)=(?:\{\s*(?:undefined|null|false|''|"")\s*\}|\{\s*``\s*\}|""|'')/;
+    /**
+     * A fallback that truncates is not a fallback: the tooltip exists to show the
+     * tail the row clipped, and `title={x.slice(0, 200)}` on `{x.slice(0, 200)}`
+     * shows the same cut text in a second place. Found three times while closing
+     * the 107 (`JobsDrawer`, `AgentsView`, `VersionHistoryDashboard`), each one
+     * written by the reasonable-looking instinct to make the tooltip "as long as
+     * the row". Only the direct call forms are refused — `.slice(`, `.substring(`,
+     * `.substr(` — because a fallback that hides its cut behind a named
+     * `const short = x.slice(...)` is a different (and much rarer) shape, and an
+     * inline date projection (`last served ${d.slice(0, 10)}`) is legitimate on an
+     * element that is not clipped, which is why this is checked against `CLIP`.
+     */
+    const TRUNCATING_FB = /\s(?:title|aria-label|aria-labelledby)=\{[^}]*(?:\.slice\(|\.substring\(|\.substr\()/;
 
     /**
      * The count this gate holds is only as honest as its scanner, and the scanner
@@ -219,13 +234,17 @@ describe('motion lockout (WS-5.4)', () => {
      *    clipping was invisible to the count (`TradeChatPanel.tsx:963,970`);
      *  - the 600-char window could be satisfied by a NEIGHBOUR's `title=`.
      *
-     * The real residual is measured here with a scanner that knows JSX: strings,
-     * template literals, `${…}` and `{…}` attribute expressions are traversed, a
-     * `=>` is not a tag end, comments are skipped, and closing tags maintain a real
-     * ancestor stack. The first honest measurement was 107 — two MORE than the old
-     * gate's 105, because the old gate could not see every tag. Every one of those
-     * 107 now names its own text, so BASELINE is 0 and this is a ban: a new clipped
-     * element anywhere in `components/` fails the build.
+     * The real residual is measured with the walker in `./jsxScan`: strings, template
+     * literals, `${…}` and `{…}` attribute expressions, comments, regex literals and
+     * JSX text are each read as what they are, and every opening tag is reported with
+     * its attribute text and ancestry. The first honest measurement was 107 — two MORE
+     * than the old gate's 105. A second correction came later: this block kept its own
+     * copy of the scanner, that copy read `/```[\s\S]*?```/g` as three template
+     * literals, and the strategy cards in `StrategyStudio.tsx` went unread from line 36
+     * of the file onward — which is where the 108th clipped element was hiding. The
+     * population today is 131 and every one of them names its own text, so BASELINE is
+     * 0 and this is a ban: a new clipped element anywhere in `components/` fails the
+     * build.
      *
      * The last 9 were the interesting ones. They clipped inside an ancestor that
      * already carried a `title`, and a browser shows the DEEPEST title — so the
@@ -240,114 +259,74 @@ describe('motion lockout (WS-5.4)', () => {
      * exemption to hide behind — see the rationale on `clippedWithoutFallback`.
      */
     const BASELINE = 0;
-    const BS = String.fromCharCode(92);
-    const BT = String.fromCharCode(96);
-
-    /** Index just past the depth-0 `>` that ends the tag opened at `lt`, or -1. */
-    function tagEnd(src: string, lt: number): number {
-        const stack: { kind: string; ch?: string; depth: number }[] = [{ kind: 'code', depth: 0 }];
-        let i = lt + 1;
-        while (i < src.length) {
-            const top = stack[stack.length - 1];
-            const c = src[i];
-            if (top.kind === 'str') {
-                if (c === BS) { i += 2; continue; }
-                if (c === top.ch) stack.pop();
-                i++; continue;
-            }
-            if (top.kind === 'tmpl') {
-                if (c === BS) { i += 2; continue; }
-                if (c === BT) { stack.pop(); i++; continue; }
-                if (c === '$' && src[i + 1] === '{') { stack.push({ kind: 'expr', depth: 1 }); i += 2; continue; }
-                i++; continue;
-            }
-            if (c === '"' || c === "'" || c === BT) {
-                stack.push(c === BT ? { kind: 'tmpl', depth: 0 } : { kind: 'str', ch: c, depth: 0 });
-                i++; continue;
-            }
-            if (c === '{') { top.depth++; i++; continue; }
-            if (c === '}') {
-                top.depth--;
-                if (top.kind === 'expr' && top.depth === 0) { stack.pop(); i++; continue; }
-                if (top.depth < 0) return -1;
-                i++; continue;
-            }
-            if (c === '>' && top.kind === 'code' && top.depth === 0) {
-                if (src[i - 1] === '=') { i++; continue; }
-                return i + 1;
-            }
-            i++;
-        }
-        return -1;
-    }
-
-    /** Next element opening tag, skipping comments and top-level strings. */
-    function nextTag(src: string, from: number): { start: number; end: number; name: string; attrs: string } | null {
-        let i = from;
-        while (i < src.length) {
-            const c = src[i];
-            if (c === '/' && src[i + 1] === '/') { const n = src.indexOf('\n', i); i = n < 0 ? src.length : n + 1; continue; }
-            if (c === '/' && src[i + 1] === '*') { const e = src.indexOf('*/', i + 2); i = e < 0 ? src.length : e + 2; continue; }
-            if (c === '"' || c === "'" || c === BT) {
-                i++;
-                while (i < src.length && src[i] !== c) { if (src[i] === BS) i++; i++; }
-                i++; continue;
-            }
-            if (c === '<' && /[a-zA-Z]/.test(src[i + 1] || '') && src[i - 1] !== '/') {
-                const m = /^<([a-zA-Z][\w.]*)/.exec(src.slice(i, i + 80));
-                if (!m) { i++; continue; }
-                const end = tagEnd(src, i);
-                if (end < 0) { i++; continue; }
-                return { start: i, end, name: m[1], attrs: src.slice(i + m[1].length + 1, end - 1) };
-            }
-            i++;
-        }
-        return null;
-    }
 
     /**
-     * An offender is a clipped element whose OWN tag names no text. There is no
-     * ancestor exemption on purpose: a browser shows the DEEPEST `title`, so an
-     * ancestor tooltip does not describe what this element truncated — and a
-     * first draft of this rule accepted any-depth, ever-open, even `title={undefined}`
-     * ancestors, which turned `BASELINE = 0` into a rubber stamp. Elements sitting
-     * under an ancestor title are counted here and fixed by giving one element both
-     * strings, or a second hover target — not by exempting the child.
+     * The walk lives in `./jsxScan`: one lexer for both source-shape gates, because
+     * the copy that lived here could not read a regex literal or an apostrophe and
+     * went blind inside `UpdateOverlay.tsx` (8 of that file's 239 lines were read),
+     * which is exactly how a clipped element hiding in a blind region could keep the
+     * ban passing while the rule looked satisfied.
      */
-    const clippedWithoutFallback = (src: string): string[] => {
-        const found: string[] = [];
-        const stack: { name: string; attrs: string }[] = [];
-        let cur = 0;
-        for (let guard = 0; guard < 20000; guard++) {
-            const open = nextTag(src, cur);
-            if (!open) break;
-            const closeRe = /<\/([a-zA-Z][\w.]*)>/g;
-            closeRe.lastIndex = cur;
-            const nc = closeRe.exec(src);
-            if (nc && nc.index < open.start) {
-                for (let k = stack.length - 1; k >= 0; k--) if (stack[k].name === nc[1]) { stack.length = k; break; }
-                cur = nc.index + nc[0].length;
-                continue;
-            }
-            if (CLIP.test(open.attrs) && (!FB.test(open.attrs) || EMPTY_FB.test(open.attrs))) {
-                const line = src.slice(0, open.start).split('\n').length;
-                found.push(`L${line} <${open.name}> ${open.attrs.replace(/\s+/g, ' ').slice(0, 60)}`);
-            }
-            if (!open.attrs.trimEnd().endsWith('/')) stack.push({ name: open.name, attrs: open.attrs });
-            cur = open.end;
-        }
-        return found;
-    };
+    const clipped = (src: string): Open[] => openTags(src).filter(t => CLIP.test(t.attrs));
+
+    /**
+     * An offender is a clipped element whose OWN tag names no text, or names a
+     * cut of it. There is no ancestor exemption on purpose: a browser shows the
+     * DEEPEST `title`, so an ancestor tooltip does not describe what this element
+     * truncated — and a first draft of this rule accepted any-depth, ever-open,
+     * even `title={undefined}` ancestors, which turned `BASELINE = 0` into a
+     * rubber stamp. Elements sitting under an ancestor title are counted here and
+     * fixed by giving one element both strings, or a second hover target — not by
+     * exempting the child.
+     */
+    const clippedWithoutFallback = (src: string): string[] =>
+        clipped(src)
+            .filter(t => !FB.test(t.attrs) || EMPTY_FB.test(t.attrs) || TRUNCATING_FB.test(t.attrs))
+            .map(t => `L${t.line} <${t.name}> ${t.attrs.replace(/\s+/g, ' ').slice(0, 60)}`);
+
+    // The ban covers every surface that can clip: `components/` and `App.tsx`.
+    // App.tsx carries no clip class today (measured 2026-10-13), which is exactly
+    // why it belongs in the list — the rule is about the shape, not the census.
+    const CLIP_FILES = [...tsxFilesUnder('components'), resolve(__dirname, '../App.tsx')];
 
     const offenders: string[] = [];
-    for (const path of tsxFilesUnder('components')) {
-        for (const hit of clippedWithoutFallback(readFileSync(resolve(path), 'utf8'))) {
+    let clippedSeen = 0;
+    for (const path of CLIP_FILES) {
+        const src = readFileSync(resolve(path), 'utf8');
+        clippedSeen += clipped(src).length;
+        for (const hit of clippedWithoutFallback(src)) {
             offenders.push(`${relative(process.cwd(), path)}: ${hit}`);
         }
     }
 
     it(`holds the clipped-without-fallback count at or under ${BASELINE}`, () => {
         expect(offenders.length, offenders.slice(0, 8).join(' | ')).toBeLessThanOrEqual(BASELINE);
+    });
+
+    /**
+     * The control for the control. A ban at 0 passes just as happily when the
+     * scanner reads no tags at all, and this scanner has been caught twice: reading
+     * only to the first `>`, and — in the copy that lived here until the walker moved
+     * to `./jsxScan` — going blind after a regex literal. The measured population is
+     * in the test NAME, so the run reports the census instead of leaving it as a
+     * comment; the floor sits well under it and exists to catch a parser that stops
+     * parsing, not to police the layout, so it should not move when someone un-clips
+     * a row.
+     */
+    it(`sees the clipped population it is guarding (${clippedSeen} clipped)`, () => {
+        expect(clippedSeen).toBeGreaterThanOrEqual(100);
+    });
+
+    /**
+     * Same reach control as `jsxNesting`, for this gate's own file set: a file whose
+     * second half clips an element the walk never reported was not read to the end,
+     * and a ban at 0 over it would be a measurement of nothing.
+     */
+    it('walks to the end of every file it reads', () => {
+        const blind = filesWalkedShortOfTheirEnd(
+            CLIP_FILES.map(p => ({ path: relative(process.cwd(), p), src: readFileSync(resolve(p), 'utf8') })),
+        );
+        expect(blind, blind.join('\n')).toEqual([]);
     });
 
     // Guard the guard. The removed assertion was `offenders.length > 10`, which
@@ -377,6 +356,21 @@ describe('motion lockout (WS-5.4)', () => {
         expect(clippedWithoutFallback('<summary title="3 awaiting review">\n  <span className="truncate">{label}</span>\n</summary>')).toHaveLength(1);
         // A comment that merely mentions truncating is not markup.
         expect(clippedWithoutFallback('// never truncated here\nconst x = 1;')).toHaveLength(0);
+    });
+
+    it('refuses a fallback that truncates the text it was added to reveal', () => {
+        // The three shapes written while closing the 107, all planted here: each
+        // one made the tooltip and the row agree on the SAME cut, so the tail
+        // stayed hidden in a second place.
+        expect(clippedWithoutFallback('<span className="truncate" title={x.slice(0, 200)}>{x.slice(0, 200)}</span>')).toHaveLength(1);
+        expect(clippedWithoutFallback('<span className="truncate" aria-label={`Talk: ${r.title.substring(0, 40)}`}>{r.title}</span>')).toHaveLength(1);
+        expect(clippedWithoutFallback('<span className="truncate" title={x.substr(0, 9)}>{x}</span>')).toHaveLength(1);
+        // The accepted shape: the row clips, the fallback carries the whole string.
+        expect(clippedWithoutFallback('<span className="truncate" title={x}>{x}</span>')).toHaveLength(0);
+        expect(clippedWithoutFallback('<span className="truncate" title={x}>{x.slice(0, 200)}</span>')).toHaveLength(0);
+        // A cut inside a fallback is fine on an element that never clips — the
+        // `last served ${date.slice(0, 10)}` projection in MemoryHealthCard is one.
+        expect(clippedWithoutFallback('<Row label={p} title={`served ${d.slice(0, 10)}`} />')).toHaveLength(0);
     });
 
     it('sees a tag whose attributes span several lines', () => {

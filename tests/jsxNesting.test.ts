@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'fs';
-import { join, relative } from 'path';
+import { readFileSync } from 'fs';
+import { join, relative, resolve } from 'path';
+import { openTags, unclosedFrames, tsxFilesUnder, filesWalkedShortOfTheirEnd, REPO_ROOT } from './jsxScan';
 
 /**
  * A `<button>` cannot contain a `<button>`: React says so at render
@@ -10,114 +11,168 @@ import { join, relative } from 'path';
  *
  * Found by accident in `MemoryFilesManager.tsx`'s notebook folder rows — a row
  * button wrapping two reorder buttons — while reading a render log for something
- * else. This gate is the general form: it walks every element in `components/**`
- * with a real JSX-aware scanner (strings, template literals, `${…}` and `{…}`
- * attribute expressions traversed, `=>` refused, comments skipped) and fails if
- * any interactive element opens inside another one.
+ * else. This gate is the general form, and it needs two things a tag regex cannot
+ * give it:
+ *
+ *  1. Where it is. The lexing lives in `./jsxScan` (JSX text vs code, regex
+ *     literals vs division) because the clipped-text gate needs the same reach,
+ *     and the two copies that existed failed differently.
+ *  2. What a component renders. `<Button>` inside `<button>` is the same bug
+ *     written with a capital letter, so interactivity is DERIVED per component
+ *     from the tags its own file renders. A `/Button$/` name heuristic was tried
+ *     first and is exactly the label-based check this repo already refuses.
  */
 
-const BS = String.fromCharCode(92);
-const BT = String.fromCharCode(96);
+const FORBIDS_INTERACTIVE = /^(button|a|summary)$/;
+/**
+ * Two different questions, so two lists. `button`, `a` and `summary` are the
+ * elements whose content model forbids interactive content inside them — React
+ * warns about these. `label` and `dialog` are interactive content themselves but
+ * happily contain a button, so treating them as forbidding would refuse markup
+ * that is legal (a `<button>` inside a settings `<label>` is this app's own
+ * checkbox shape). `input` belongs to the second list only: it is a void element,
+ * so it can never be an ancestor, but `<button><input/></button>` still puts
+ * interactive content inside a button.
+ */
+const INTERACTIVE_CONTENT = /^(button|a|summary|label|select|textarea|input)$/;
 
-function tagEnd(src: string, lt: number): number {
-    const stack: { kind: string; ch?: string; depth: number }[] = [{ kind: 'code', depth: 0 }];
-    let i = lt + 1;
-    while (i < src.length) {
-        const top = stack[stack.length - 1];
-        const c = src[i];
-        if (top.kind === 'str') {
-            if (c === BS) { i += 2; continue; }
-            if (c === top.ch) stack.pop();
-            i++; continue;
-        }
-        if (top.kind === 'tmpl') {
-            if (c === BS) { i += 2; continue; }
-            if (c === BT) { stack.pop(); i++; continue; }
-            if (c === '$' && src[i + 1] === '{') { stack.push({ kind: 'expr', depth: 1 }); i += 2; continue; }
-            i++; continue;
-        }
-        if (c === '"' || c === "'" || c === BT) {
-            stack.push(c === BT ? { kind: 'tmpl' } : { kind: 'str', ch: c });
-            i++; continue;
-        }
-        if (c === '{') { top.depth++; i++; continue; }
-        if (c === '}') {
-            top.depth--;
-            if (top.kind === 'expr' && top.depth === 0) { stack.pop(); i++; continue; }
-            if (top.depth < 0) return -1;
-            i++; continue;
-        }
-        if (c === '>' && top.kind === 'code' && top.depth === 0) {
-            if (src[i - 1] === '=') { i++; continue; }
-            return i + 1;
-        }
-        i++;
-    }
-    return -1;
-}
+const label = (file: string): string => relative(REPO_ROOT, file).replace(/\\/g, '/');
 
-const VOID = new Set(['img', 'br', 'hr', 'input', 'meta', 'link', 'source', 'area', 'base', 'col', 'embed', 'param', 'track', 'wbr']);
-// Interactive per HTML: these may not contain each other.
-const INTERACTIVE = /^(button|a|summary|label|select|textarea|dialog)$/;
+/** Uppercase declarations, in order: the component a position belongs to. */
+const DECL = /^(?:export\s+)?(?:default\s+)?(?:const|function|class|let)\s+([A-Z][A-Za-z0-9_]*)/gm;
+const declarations = (src: string): { pos: number; name: string }[] =>
+    [...src.matchAll(DECL)].map(m => ({ pos: m.index ?? 0, name: m[1] }));
 
-const walk = (dir: string): string[] => readdirSync(dir).flatMap(name => {
-    const full = join(dir, name);
-    return statSync(full).isDirectory() ? walk(full) : [full];
-});
-
-const nestedInteractive = (src: string, file: string): string[] => {
-    const found: string[] = [];
-    const stack: { name: string; line: number }[] = [];
-    let i = 0;
-    while (i < src.length) {
-        const c = src[i];
-        if (c === '/' && src[i + 1] === '/') { const n = src.indexOf('\n', i); i = n < 0 ? src.length : n + 1; continue; }
-        if (c === '/' && src[i + 1] === '*') { const e = src.indexOf('*/', i + 2); i = e < 0 ? src.length : e + 2; continue; }
-        if (c === '"' || c === "'" || c === BT) {
-            i++;
-            while (i < src.length && src[i] !== c) { if (src[i] === BS) i++; i++; }
-            i++; continue;
-        }
-        if (c === '<' && /[a-zA-Z/]/.test(src[i + 1] || '')) {
-            if (src[i + 1] === '/') {
-                const name = /^<\/([a-zA-Z][\w.]*)/.exec(src.slice(i, i + 40))?.[1];
-                if (name) {
-                    for (let k = stack.length - 1; k >= 0; k--) if (stack[k].name === name) { stack.length = k; break; }
-                    i += name.length + 3;
-                    continue;
-                }
-            } else {
-                const m = /^<([a-zA-Z][\w.]*)/.exec(src.slice(i, i + 60));
-                if (m) {
-                    const end = tagEnd(src, i);
-                    if (end > 0) {
-                        const name = m[1];
-                        const selfClosed = src.slice(i + m[0].length, end - 1).trimEnd().endsWith('/') || VOID.has(name.toLowerCase());
-                        if (INTERACTIVE.test(name) && stack.some(a => INTERACTIVE.test(a.name))) {
-                            const outer = stack.filter(a => INTERACTIVE.test(a.name)).pop()!;
-                            found.push(`${relative(process.cwd(), file)}: <${name}> at line ${src.slice(0, i).split('\n').length} inside <${outer.name}> at line ${outer.line}`);
-                        }
-                        if (!selfClosed) stack.push({ name, line: src.slice(0, i).split('\n').length });
-                        i = end;
-                        continue;
-                    }
-                }
-            }
-        }
-        i++;
-    }
-    return found;
+const ownerOf = (decls: { pos: number; name: string }[], pos: number): string | null => {
+    let name: string | null = null;
+    for (const d of decls) { if (d.pos > pos) break; name = d.name; }
+    return name;
 };
 
-describe('interactive elements do not nest', () => {
-    const offenders: string[] = [];
-    for (const path of [...walk('components'), 'App.tsx']) {
-        if (!path.endsWith('.tsx')) continue;
-        offenders.push(...nestedInteractive(readFileSync(path, 'utf8'), path));
+const FILES = [...tsxFilesUnder(join(REPO_ROOT, 'components')), resolve(REPO_ROOT, 'App.tsx')].map(file => {
+    const src = readFileSync(file, 'utf8');
+    return { file, src, tags: openTags(src), decls: declarations(src) };
+});
+
+/**
+ * What each component renders. `forbidsRoot` = its outermost element is a
+ * button/anchor/summary, so anything placed inside one lands inside that button;
+ * `rendersInteractive` = it renders interactive content anywhere in its body, so
+ * placing it inside a button puts a button there even when its own root is a div.
+ * Both are deliberately over-approximated — a component that draws a button in one
+ * branch refuses the same nesting in all of them — and these sets can only ever add
+ * a refusal, never grant one.
+ */
+const forbidsRoot = new Set<string>();
+const rendersInteractive = new Set<string>();
+for (const f of FILES) {
+    for (const t of f.tags) {
+        if (!INTERACTIVE_CONTENT.test(t.name)) continue;
+        const owner = ownerOf(f.decls, t.start);
+        if (!owner) continue;
+        rendersInteractive.add(owner);
+        if (t.isRoot && FORBIDS_INTERACTIVE.test(t.name)) forbidsRoot.add(owner);
     }
+}
+// A component whose root is another such component (`const OpenChip = () =>
+// <RetryChip />`) inherits both facts, until the sets stop growing.
+for (;;) {
+    let grew = false;
+    for (const f of FILES) {
+        for (const t of f.tags) {
+            if (!t.isRoot) continue;
+            const owner = ownerOf(f.decls, t.start);
+            if (!owner || owner === t.name) continue;
+            if ((FORBIDS_INTERACTIVE.test(t.name) || forbidsRoot.has(t.name)) && !forbidsRoot.has(owner)) {
+                forbidsRoot.add(owner); grew = true;
+            }
+            if ((INTERACTIVE_CONTENT.test(t.name) || rendersInteractive.has(t.name)) && !rendersInteractive.has(owner)) {
+                rendersInteractive.add(owner); grew = true;
+            }
+        }
+    }
+    if (!grew) break;
+}
+
+const isOuter = (name: string): boolean => FORBIDS_INTERACTIVE.test(name) || forbidsRoot.has(name);
+const isInner = (name: string): boolean => INTERACTIVE_CONTENT.test(name) || rendersInteractive.has(name);
+
+const nestedInteractive = (src: string, file: string): string[] =>
+    openTags(src)
+        .filter(t => isInner(t.name) && t.ancestors.some(isOuter))
+        .map(t => {
+            const outer = t.ancestors.filter(isOuter).pop()!;
+            const how = FORBIDS_INTERACTIVE.test(outer) ? `<${outer}>` : `<${outer}>, which renders as a button`;
+            return `${label(file)}: <${t.name}> at line ${t.line} inside ${how}`;
+        });
+
+/** Coverage control for the walker: the tag population it actually read. */
+const TAGS_SEEN = FILES.reduce((n, f) => n + f.tags.length, 0);
+
+const offenders: string[] = [];
+for (const f of FILES) offenders.push(...nestedInteractive(f.src, f.file));
+
+describe('interactive elements do not nest', () => {
+    /**
+     * A walker that stops mid-file is worse than one with no rule at all, because
+     * the ban below then passes on the files it never read. `UpdateOverlay.tsx` was
+     * exactly that: 8 of its 239 lines were walked after a regex literal was read as
+     * three template literals, and a nested pair planted in the blind region passed
+     * the gate. This asks each file a question the walk cannot answer without having
+     * finished it.
+     */
+    it('walks to the end of every file it reads', () => {
+        const blind = filesWalkedShortOfTheirEnd(FILES.map(f => ({ path: label(f.file), src: f.src })));
+        expect(blind, blind.join('\n')).toEqual([]);
+    });
+
+    /**
+     * Guard for the guard, because the reach control is itself a heuristic: the
+     * frame-balance signal has to fire on a walk that ended inside an unclosed
+     * string, or `filesWalkedShortOfTheirEnd` is only the midpoint test again.
+     */
+    it('notices a walk that ends inside something it opened', () => {
+        expect(unclosedFrames('<div><span>ok</span></div>')).toBe(0);
+        expect(unclosedFrames('const a = [1, 2];\n<button>x</button>')).toBe(0);
+        expect(unclosedFrames("const broken = 'never closed;")).toBeGreaterThan(0);
+        expect(unclosedFrames('const t = `never closed either')).toBeGreaterThan(0);
+    });
+
+    /**
+     * The control for the derivation. If `openTags` quietly stopped parsing, the ban
+     * would pass on an empty set; the measured count is in the test NAME so the run
+     * reports it instead of leaving it as a comment, and the floor sits well below it
+     * so a parser regression fails here rather than silently clearing the ban.
+     */
+    it(`reads every opening tag it is guarding (${TAGS_SEEN} read)`, () => {
+        expect(TAGS_SEEN).toBeGreaterThanOrEqual(3000);
+    });
 
     it(`finds no interactive element inside another (${offenders.length} offender(s))`, () => {
         expect(offenders, offenders.slice(0, 10).join('\n')).toEqual([]);
+    });
+
+    /**
+     * Interactivity by definition, not by name: the components whose own root element
+     * forbids interactive content. Pinned by inventory (2026-10-13) so a wrapper that
+     * starts rendering a button shows up as a named change rather than a moved number.
+     */
+    it('knows a component by what it renders', () => {
+        expect([...forbidsRoot].sort().join(',')).toBe(
+            'ActionButton,CheckForUpdatesRow,CopyChip,ExportTray,NavTabButton,PinChip,PixelSeat,RailButton,RetryChip,SpeakChip,SupervisorIndicator,ToggleSwitch',
+        );
+        // This list is a MEASUREMENT, and it moved when the walker learned to skip a
+        // `//` comment sitting between attributes (`CustomInstructionsEditor.tsx:194`
+        // writes one): the mis-terminated tag had credited `CustomInstructionsEditor`
+        // with a button root it does not have (its own root is the scroll `<div>` at
+        // `:157`) and hid `PixelSeat`, whose root really is a `<button>` (`:167`).
+        // `label` roots are interactive content but not forbidden containers, so they
+        // must NOT appear above — a button inside a settings label is legal.
+        expect(forbidsRoot.has('FieldLabel')).toBe(false);
+        // and a wrapper whose root is a div is not a button either…
+        expect(forbidsRoot.has('SelectMenuInner')).toBe(false);
+        // …but it does render one, so it may not go inside a button.
+        expect(rendersInteractive.has('SelectMenuInner')).toBe(true);
     });
 
     it('really catches a button inside a button', () => {
@@ -130,5 +185,53 @@ describe('interactive elements do not nest', () => {
         // a row that is a div wrapping buttons is exactly the fix applied to
         // MemoryFilesManager's folder rows, so it must pass.
         expect(nestedInteractive('<div role="list"><button>open</button><span><button>up</button></span></div>', 'probe.tsx')).toHaveLength(0);
+        // legal despite looking interactive: a dialog and a label may hold a button
+        expect(nestedInteractive('<dialog><button>ok</button></dialog>', 'probe.tsx')).toHaveLength(0);
+        expect(nestedInteractive('<label><button>toggle</button></label>', 'probe.tsx')).toHaveLength(0);
+        // but a void interactive element still may not sit inside a button
+        expect(nestedInteractive('<button><input type="text" /></button>', 'probe.tsx')).toHaveLength(1);
+    });
+
+    /**
+     * The apostrophe bug, planted. "Don't" used to open a fake string and every tag
+     * after it — including this nested pair — went unread.
+     */
+    it('reads JSX text as text, not as a string that started somewhere', () => {
+        expect(nestedInteractive("<p>Don't close the app</p><button><button>x</button></button>", 'probe.tsx')).toHaveLength(1);
+        expect(nestedInteractive("<p>It's fine here</p>", 'probe.tsx')).toHaveLength(0);
+        // A real string inside an expression container is still a string: its `<` is
+        // not markup, and its quote must not run on past the `}`.
+        expect(nestedInteractive("<button>{'a<b'}{'y>z'}</button>", 'probe.tsx')).toHaveLength(0);
+        expect(nestedInteractive('<button>{"5 < 6" && "7 > 8"}</button>', 'probe.tsx')).toHaveLength(0);
+        expect(nestedInteractive("<p>She's here</p><p>{'x'} and y</p><button><button>n</button></button>", 'probe.tsx')).toHaveLength(1);
+    });
+
+    /**
+     * The class that really blinded the walk for 200 lines: a regex literal whose
+     * body holds quotes or backticks, written the way `UpdateOverlay.tsx` writes it
+     * (it strips fenced markdown blocks).
+     */
+    it('reads a regex literal as a regex, not as three template literals', () => {
+        const src = [
+            'const strip = (raw: string): string[] => raw',
+            '    .replace(/```[\\s\\S]*?```/g, "")',
+            '    .split("")',
+            '<button><button>x</button></button>',
+        ].join('\n');
+        expect(nestedInteractive(src, 'probe.tsx')).toHaveLength(1);
+        // Division must not be read as a regex either, or `a / b` swallows the line.
+        expect(nestedInteractive('const half = total / 2;\n<button><button>x</button></button>', 'probe.tsx')).toHaveLength(1);
+        expect(nestedInteractive('const re = /a[b"c]/g;\n<button><button>x</button></button>', 'probe.tsx')).toHaveLength(1);
+    });
+
+    /**
+     * The capital-letter form of the same bug, which no HTML-name rule can see:
+     * `<button>` wrapping a component that IS a button.
+     */
+    it('catches a component that renders a button placed inside one', () => {
+        expect(nestedInteractive('<button><RetryChip /></button>', 'probe.tsx')).toHaveLength(1);
+        expect(nestedInteractive('<RetryChip><button>x</button></RetryChip>', 'probe.tsx')).toHaveLength(1);
+        expect(nestedInteractive('<button><FadingText text={t} /></button>', 'probe.tsx')).toHaveLength(0);
+        expect(nestedInteractive('<div><RetryChip /></div>', 'probe.tsx')).toHaveLength(0);
     });
 });

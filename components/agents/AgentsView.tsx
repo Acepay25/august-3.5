@@ -937,7 +937,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                             </button>
                                             {(onDeleteConversation || onClearConversation) && !active && (
                                                 <button type="button" data-testid="conversation-menu"
-                                                    aria-label={`Conversation options: ${r.title.slice(0, 40)}`}
+                                                    aria-label="Conversation options"
                                                     onPointerDown={e => e.stopPropagation()}
                                                     onClick={e => {
                                                         e.stopPropagation();

@@ -571,6 +571,14 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                 .replace(/^[\s`*_]+/, '').trim();
                             const winRate = sample > 0 ? meta.wins / sample : 0;
                             const expectancy = skillExpectancyR(meta);
+                            // The origin line clips on a narrow card. Both halves
+                            // come from these two consts so the hover text is
+                            // provably the concatenation of what the row paints —
+                            // the alternative (repeating the fields in a `title`) is
+                            // how a fallback starts agreeing with its own truncation.
+                            const originSource = meta.source ?? 'seeded';
+                            const originBot = meta.originBotName ? ` · from @${meta.originBotName}` : '';
+                            const origin = `${originSource}${originBot}`;
                             // The per-card regime edge and attribution lift
                             // stay as hover reads, not panels: the family ×
                             // regime heatmap above owns the edge number and
@@ -679,13 +687,13 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                     </div>
                                     {/* Origin + the evidence clock. */}
                                     <div className="flex items-center justify-between gap-2 text-ui-2xs text-zinc-600">
-                                        <span className="truncate">
+                                        <span className="truncate" title={origin}>
                                             {/* No source is a fact worth printing
                                                 silently: the old `?? '—'` put a bare
                                                 em dash under every book-seeded card,
                                                 which reads as a broken field. */}
-                                            {meta.source ?? 'seeded'}
-                                            {meta.originBotName && <span className="text-zinc-700">{` · from @${meta.originBotName}`}</span>}
+                                            {originSource}
+                                            {originBot && <span className="text-zinc-700">{originBot}</span>}
                                         </span>
                                         <span
                                             className={`shrink-0 font-mono tabular-nums ${meta.lastEvalAt ? 'text-zinc-500' : 'text-zinc-700'}`}

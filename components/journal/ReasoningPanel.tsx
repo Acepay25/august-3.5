@@ -111,10 +111,11 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
                   <div className="mt-2 space-y-1.5 max-h-60 overflow-y-auto custom-scrollbar">
                     {debateTurns.map((turn, idx) => {
                       const colors = getProviderColor(turn.provider);
+                      const spoken = turn.finalOutput || turn.reasoning || '';
                       return (
                         <div key={turn.id} className="text-ui-sm">
                           <span className={`font-bold ${colors.text}`}>{turn.debateTurnSpeaker || turn.provider}:</span>{' '}
-                          <span className="text-zinc-500">{(turn.finalOutput || turn.reasoning).slice(0, 200)}{(turn.finalOutput || turn.reasoning).length > 200 && '...'}</span>
+                          <span className="text-zinc-500" title={spoken}>{spoken.slice(0, 200)}{spoken.length > 200 && '...'}</span>
                         </div>
                       );
                     })}

@@ -152,7 +152,7 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                                         </span>
                                     </div>
                                     {job.result?.error && (
-                                        <p className="mt-1 line-clamp-2 text-ui-xs text-rose-400/80" title={String(job.result.error?.message ?? job.result.error).slice(0, 200)}>
+                                        <p className="mt-1 line-clamp-2 text-ui-xs text-rose-400/80" title={String(job.result.error?.message ?? job.result.error)}>
                                             {String(job.result.error?.message ?? job.result.error).slice(0, 200)}
                                         </p>
                                     )}
