@@ -130,14 +130,14 @@ export const VersionHistoryDashboard: React.FC = () => {
             <div className={`
         relative overflow-hidden
         bg-gradient-to-br ${config.split(' ')[0]} ${config.split(' ')[1]}
-        rounded-3xl border border-white/5
+        rounded-bubble border border-white/5
         transition-[border-color,box-shadow,transform] duration-[150ms] ease-[var(--ease-snappy)] hover:shadow-2xl hover:border-white/10 hover:-translate-y-1
         ${large ? 'col-span-1 md:col-span-2 row-span-2' : 'col-span-1'}
         flex flex-col group
       `}>
                 <div className="p-6 flex-1 flex flex-col relative z-10">
                     <div className="flex items-center justify-between mb-4">
-                        <div className={`p-2 rounded-2xl bg-zinc-800 ${config.split(' ').pop()} group-hover:scale-110 transition-transform duration-[150ms] ease-[var(--ease-snappy)]`}>
+                        <div className={`p-2 rounded-control bg-zinc-800 ${config.split(' ').pop()} group-hover:scale-110 transition-transform duration-[150ms] ease-[var(--ease-snappy)]`}>
                             {icon}
                         </div>
                         {large && <div className="text-ui-sm font-mono text-white/30 uppercase tracking-widest">Live Monitor</div>}
@@ -189,7 +189,7 @@ export const VersionHistoryDashboard: React.FC = () => {
                                     </ResponsiveContainer>
                                 </div>
                             ) : (
-                                <div className="h-48 w-full min-w-0 flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-emerald-500/20 bg-emerald-500/5 text-center">
+                                <div className="h-48 w-full min-w-0 flex flex-col items-center justify-center gap-2 rounded-bubble border border-dashed border-emerald-500/20 bg-emerald-500/5 text-center">
                                     <Icons.Chart className="h-6 w-6 text-emerald-500/60" />
                                     <p className="text-ui-base font-medium text-zinc-200">No feedback yet</p>
                                     <p className="max-w-[240px] text-ui-dense leading-relaxed text-zinc-500">Resolved trades will create the first reinforcement signal.</p>
@@ -226,7 +226,7 @@ export const VersionHistoryDashboard: React.FC = () => {
                                             }))}
                                             aria-label="Select skill"
                                             className="w-full"
-                                            triggerClassName="w-full rounded-md border border-white/10 bg-zinc-900 px-2.5 py-1.5 text-ui-sm hover:bg-zinc-800"
+                                            triggerClassName="w-full rounded-control border border-white/10 bg-zinc-900 px-2.5 py-1.5 text-ui-sm hover:bg-zinc-800"
                                         />
                                     </div>
                                     <div className="border-t border-zinc-800/80 py-2 overflow-y-auto max-h-[100px] custom-scrollbar">
@@ -273,7 +273,7 @@ export const VersionHistoryDashboard: React.FC = () => {
                                             }))}
                                             aria-label="Select insight"
                                             className="w-full"
-                                            triggerClassName="w-full rounded-md border border-white/10 bg-zinc-900 px-2.5 py-1.5 text-ui-sm hover:bg-zinc-800"
+                                            triggerClassName="w-full rounded-control border border-white/10 bg-zinc-900 px-2.5 py-1.5 text-ui-sm hover:bg-zinc-800"
                                         />
                                     </div>
                                     <div className="border-t border-zinc-800/80 py-2 overflow-y-auto max-h-[100px] custom-scrollbar">
@@ -288,7 +288,7 @@ export const VersionHistoryDashboard: React.FC = () => {
                                         <div className="flex gap-1">
                                             <button
                                                 onClick={() => handleInsightFeedback(insights[selectedInsightIndex]?.id, true)}
-                                                className="p-1 rounded text-ui-2xs bg-amber-500/10 hover:bg-amber-500/25 text-amber-200/80 hover:text-amber-200 transition-colors"
+                                                className="p-1 rounded-control text-ui-2xs bg-amber-500/10 hover:bg-amber-500/25 text-amber-200/80 hover:text-amber-200 transition-colors"
                                                 title="Mark helpful"
                                                 aria-label="Mark helpful"
                                             >
@@ -296,7 +296,7 @@ export const VersionHistoryDashboard: React.FC = () => {
                                             </button>
                                             <button
                                                 onClick={() => handleInsightFeedback(insights[selectedInsightIndex]?.id, false)}
-                                                className="p-1 rounded text-ui-2xs bg-amber-500/10 hover:bg-amber-500/25 text-amber-200/80 hover:text-amber-200 transition-colors"
+                                                className="p-1 rounded-control text-ui-2xs bg-amber-500/10 hover:bg-amber-500/25 text-amber-200/80 hover:text-amber-200 transition-colors"
                                                 title="Mark not helpful"
                                                 aria-label="Mark not helpful"
                                             >
@@ -373,7 +373,7 @@ export const VersionHistoryDashboard: React.FC = () => {
                 which build the trader is on. The Learn tab owns the chrome. */}
             <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] pb-2.5">
                 <div className="flex items-center gap-2.5">
-                    <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-1.5">
+                    <div className="rounded-control border border-zinc-700 bg-zinc-800 p-1.5">
                         <Icons.Brain className="h-4 w-4 text-zinc-300" />
                     </div>
                     <div>
@@ -381,7 +381,7 @@ export const VersionHistoryDashboard: React.FC = () => {
                         <p className="text-ui-2xs font-mono text-zinc-500">Learning &amp; runtime overview</p>
                     </div>
                 </div>
-                <span aria-label="System version" className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1 font-mono text-ui-dense text-zinc-300">
+                <span aria-label="System version" className="rounded-control border border-zinc-800 bg-zinc-900 px-2.5 py-1 font-mono text-ui-dense text-zinc-300">
                     v{APP_VERSION}
                 </span>
             </div>

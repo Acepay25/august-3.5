@@ -80,15 +80,15 @@ const AutomationRunCard: React.FC<{
     }, [isBotReply, run.status, run.error, run.message?.text, analysis, snapshot]);
 
     const outcomeActions: { key: RunOutcomeConfirm; label: string; className: string }[] = [
-        { key: 'win', label: 'Win', className: ' rounded-xl bg-emerald-500/15 border border-emerald-500/40 px-4 py-2 text-ui-sm font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25' },
-        { key: 'loss', label: 'Loss', className: ' rounded-xl bg-rose-500/15 border border-rose-500/40 px-4 py-2 text-ui-sm font-bold text-rose-300 transition-colors hover:bg-rose-500/25' },
-        { key: 'entry_not_hit', label: 'Entry not hit', className: 'rounded-xl border border-white/10 bg-zinc-800 px-4 py-2 text-ui-sm font-bold text-zinc-200 transition-colors hover:bg-zinc-700' },
+        { key: 'win', label: 'Win', className: ' rounded-control bg-emerald-500/15 border border-emerald-500/40 px-4 py-2 text-ui-sm font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25' },
+        { key: 'loss', label: 'Loss', className: ' rounded-control bg-rose-500/15 border border-rose-500/40 px-4 py-2 text-ui-sm font-bold text-rose-300 transition-colors hover:bg-rose-500/25' },
+        { key: 'entry_not_hit', label: 'Entry not hit', className: 'rounded-control border border-white/10 bg-zinc-800 px-4 py-2 text-ui-sm font-bold text-zinc-200 transition-colors hover:bg-zinc-700' },
     ];
 
     return (
         <div className="w-full max-w-3xl mx-auto">
             {/* Chat bubble — like a normal AI message */}
-            <div className="rounded-2xl border border-white/5 bg-zinc-900/80 p-4 sm:p-5 shadow-lg">
+            <div className="rounded-bubble border border-white/5 bg-zinc-900/80 p-4 sm:p-5 shadow-lg">
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                     {statusBadge}
                     <span className={`font-black text-ui-base tracking-wider uppercase ${directionColor}`}>{direction}</span>
@@ -97,7 +97,7 @@ const AutomationRunCard: React.FC<{
                 </div>
 
                 {run.status === 'error' && run.error && (
-                    <div className="px-3 py-2.5 bg-rose-500/5 border border-rose-500/15 rounded-lg text-ui-sm text-rose-300/90 leading-relaxed mb-3">
+                    <div className="px-3 py-2.5 bg-rose-500/5 border border-rose-500/15 rounded-control text-ui-sm text-rose-300/90 leading-relaxed mb-3">
                         {run.error}
                     </div>
                 )}
@@ -123,7 +123,7 @@ const AutomationRunCard: React.FC<{
                                 </button>
                                 <div className={`collapsible-content ${showReasoning ? 'expanded' : ''} space-y-2`}>
                                     {Object.entries(run.message.thoughtProcesses).map(([key, text]) => (
-                                        <div key={key} className="p-2.5 bg-zinc-950 border border-white/5 rounded-lg">
+                                        <div key={key} className="p-2.5 bg-zinc-950 border border-white/5 rounded-control">
                                             <p className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-600 mb-1">{modelIdToName[key] ?? key}</p>
                                             <p className="text-ui-dense text-zinc-400 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto custom-scrollbar">{String(text)}</p>
                                         </div>
@@ -138,7 +138,7 @@ const AutomationRunCard: React.FC<{
                                 </button>
                                 <div className={`collapsible-content ${showDebate ? 'expanded' : ''} space-y-1.5`}>
                                     {run.message.debateTurns.map((turn, i) => (
-                                        <div key={i} className="p-2.5 bg-zinc-950 border border-white/5 rounded-lg">
+                                        <div key={i} className="p-2.5 bg-zinc-950 border border-white/5 rounded-control">
                                             <p className="text-ui-2xs font-bold uppercase tracking-widest text-cyan-400/80 mb-1">{turn.speaker}{turn.round ? ` · Round ${turn.round}` : ''}</p>
                                             <p className="text-ui-dense text-zinc-400 leading-relaxed whitespace-pre-wrap max-h-40 overflow-y-auto custom-scrollbar">{turn.text}</p>
                                         </div>

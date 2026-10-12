@@ -60,7 +60,7 @@ const JournalTab: React.FC<{ tab: JournalTabProps }> = ({ tab: props }) => {
                         onClose();
                         onOpenJournal?.('log');
                     }}
-                    className="group flex flex-col rounded-xl border border-white/[0.06] bg-zinc-800/30 p-4 text-left transition-colors hover:border-cyan-500/40 hover:bg-zinc-800/60"
+                    className="group flex flex-col rounded-bubble border border-white/[0.06] bg-zinc-800/30 p-4 text-left transition-colors hover:border-cyan-500/40 hover:bg-zinc-800/60"
                 >
                     <div className="flex items-center justify-between w-full">
                         <span className="font-semibold text-ui-sm text-zinc-200 group-hover:text-cyan-400 transition-colors">Trade Log</span>
@@ -75,7 +75,7 @@ const JournalTab: React.FC<{ tab: JournalTabProps }> = ({ tab: props }) => {
                         onClose();
                         onOpenLearn?.('memory');
                     }}
-                    className="group flex flex-col rounded-xl border border-white/[0.06] bg-zinc-800/30 p-4 text-left transition-colors hover:border-cyan-500/40 hover:bg-zinc-800/60"
+                    className="group flex flex-col rounded-bubble border border-white/[0.06] bg-zinc-800/30 p-4 text-left transition-colors hover:border-cyan-500/40 hover:bg-zinc-800/60"
                 >
                     <div className="flex items-center justify-between w-full">
                         <span className="font-semibold text-ui-sm text-zinc-200 group-hover:text-cyan-400 transition-colors">Pattern Memory</span>

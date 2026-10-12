@@ -53,7 +53,7 @@ const FieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 );
 
 const inputBase =
-    'w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-ui-base text-zinc-100 ' +
+    'w-full px-3.5 py-2.5 rounded-control bg-zinc-950 border border-zinc-800 text-ui-base text-zinc-100 ' +
     'placeholder-zinc-600 font-mono focus:outline-none focus:border-zinc-600 ' +
     // transition-colors: only the border recolours on focus; nothing geometry does.
     'transition-colors duration-[150ms] ease-[var(--ease-snappy)]';
@@ -62,7 +62,7 @@ const inputBase =
 // extended thinking). SelectMenu draws its own chevron, so unlike the old
 // native-select base there is no appearance-none / bg-image arrow here.
 const selectTriggerBase =
-    'w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-ui-base text-zinc-100 ' +
+    'w-full px-3.5 py-2.5 rounded-control bg-zinc-950 border border-zinc-800 text-ui-base text-zinc-100 ' +
     'focus:outline-none focus:border-zinc-600 transition-colors duration-[150ms] ease-[var(--ease-snappy)] ' +
     'cursor-pointer hover:bg-zinc-900';
 
@@ -106,7 +106,7 @@ const ProviderHealthBlock: React.FC<{ providerId: string }> = ({ providerId }) =
         return `${Math.round(mins / 60)}h ago`;
     };
     return (
-        <div className=" rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
+        <div className=" rounded-control border border-zinc-800 bg-zinc-950/60 px-3 py-2">
             <div className="flex items-center justify-between">
                 <p className="text-ui-xs font-bold uppercase tracking-widest text-zinc-500">Live health (this session)</p>
                 {cooldownMs > 0 && (
@@ -544,7 +544,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                 </div>
                 <button
                     onClick={() => { if (selected) void refreshCatalog(selected, false); }}
-                    className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                    className="rounded-control p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
                     title="Refresh model catalogs"
                     aria-label="Refresh model catalogs"
                 >
@@ -552,7 +552,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                 </button>
             </div>
 
-            <div className="grid min-h-[540px] w-full overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 md:grid-cols-[280px_minmax(0,1fr)]">
+            <div className="grid min-h-[540px] w-full overflow-hidden rounded-bubble border border-zinc-800 bg-zinc-900 md:grid-cols-[280px_minmax(0,1fr)]">
                 <div className="flex flex-col border-b border-zinc-800 p-3 md:border-b-0 md:border-r">
                     <div className="min-h-0 flex-1 space-y-5 overflow-y-auto">
                         {([
@@ -569,12 +569,12 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                             <button
                                                 key={c.id}
                                                 onClick={() => { setSelectedId(c.id); setShowAddProvider(false); }}
-                                                className={`flex w-full items-center justify-between rounded-lg px-2 py-2 text-left ${
+                                                className={`flex w-full items-center justify-between rounded-control px-2 py-2 text-left ${
                                                     isSelectedRow ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
                                                 }`}
                                             >
                                                 <span className="flex min-w-0 items-center gap-2">
-                                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-zinc-700/80 bg-zinc-950">
+                                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-control border border-zinc-700/80 bg-zinc-950">
                                                         <Box className="h-3 w-3 text-zinc-400" aria-hidden="true" />
                                                     </span>
                                                     <span className="truncate text-ui-caption font-medium">{c.name}</span>
@@ -589,7 +589,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                     </div>
                     <button
                         onClick={() => setShowAddProvider(true)}
-                        className="mt-3 flex w-full items-center justify-center rounded-lg border border-dashed border-zinc-700 py-2 text-ui-caption text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                        className="mt-3 flex w-full items-center justify-center rounded-control border border-dashed border-zinc-700 py-2 text-ui-caption text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
                     >
                         + Add provider
                     </button>
@@ -627,13 +627,13 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                 <FieldLabel>Model list (comma-separated)</FieldLabel>
                                 <div className="flex gap-2">
                                     <input type="text" value={newModels} onChange={(e) => { setNewModels(e.target.value); setAddError(''); }} placeholder={newFormat === 'google' ? 'gemini-2.5-flash, gemini-2.5-pro' : 'deepseek-v4-flash-free, mimo-v2.5-free'} className={`${inputBase} min-w-0 flex-1`} />
-                                    <button type="button" onClick={handleDiscoverNewModels} disabled={isDiscoveringNew || !newUrl.trim() || !newKey.trim()} className="shrink-0 rounded-xl border border-zinc-700 px-3 text-ui-sm text-zinc-400 disabled:opacity-40">
+                                    <button type="button" onClick={handleDiscoverNewModels} disabled={isDiscoveringNew || !newUrl.trim() || !newKey.trim()} className="shrink-0 rounded-control border border-zinc-700 px-3 text-ui-sm text-zinc-400 disabled:opacity-40">
                                         {isDiscoveringNew ? '…' : 'Discover'}
                                     </button>
                                 </div>
                                 {addError && <p className="mt-1 text-ui-sm text-rose-300">{addError}</p>}
                             </div>
-                            <button onClick={handleAddProvider} disabled={!newName.trim() || !newUrlValidation.valid} className="w-full rounded-xl bg-zinc-100 py-2 text-ui-sm font-bold text-zinc-950 disabled:opacity-40">
+                            <button onClick={handleAddProvider} disabled={!newName.trim() || !newUrlValidation.valid} className="w-full rounded-control bg-zinc-100 py-2 text-ui-sm font-bold text-zinc-950 disabled:opacity-40">
                                 Create provider
                             </button>
                         </div>
@@ -643,7 +643,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                 <div className="flex min-w-0 items-center gap-2">
                                     {isEditingName ? (
                                         <>
-                                            <input type="text" value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} className="rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1 text-ui-base font-semibold text-zinc-100 focus:outline-none" autoFocus />
+                                            <input type="text" value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} className="rounded-control border border-zinc-700 bg-zinc-950 px-2 py-1 text-ui-base font-semibold text-zinc-100 focus:outline-none" autoFocus />
                                             <button onClick={() => setIsEditingName(false)} className="text-ui-sm text-zinc-400">Done</button>
                                         </>
                                     ) : (
@@ -655,10 +655,10 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                         </>
                                     )}
                                     <div className=" ml-1 flex items-center gap-1">
-                                        <span className={`rounded-md px-2 py-0.5 text-ui-dense font-semibold ${selected.isEnabled ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>
+                                        <span className={`rounded-control px-2 py-0.5 text-ui-dense font-semibold ${selected.isEnabled ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>
                                             {selected.isEnabled ? 'Enabled' : 'Disabled'}
                                         </span>
-                                        <button type="button" onClick={() => { void onToggleProvider(selected.id); }} className="rounded-md px-2 py-0.5 text-ui-dense text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200">
+                                        <button type="button" onClick={() => { void onToggleProvider(selected.id); }} className="rounded-control px-2 py-0.5 text-ui-dense text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200">
                                             {selected.isEnabled ? 'Disable' : 'Enable'}
                                         </button>
                                     </div>
@@ -750,13 +750,13 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                         return (
                                             <div key={m} className="space-y-1">
                                             <div
-                                                className={`flex h-[48px] items-center rounded-xl px-3.5 ${
+                                                className={`flex h-[48px] items-center rounded-control px-3.5 ${
                                                     isSelectedModel ? 'bg-zinc-800 text-zinc-100' : 'bg-zinc-800/70 text-zinc-300 hover:bg-zinc-800'
                                                 }`}
                                             >
                                                 {isEditingThis ? (
                                                     <div className="flex min-w-0 flex-1 items-center gap-2" onClick={e => e.stopPropagation()}>
-                                                        <input type="text" value={editModelInput} onChange={(e) => setEditModelInput(e.target.value)} className="w-full rounded-lg border border-zinc-600 bg-zinc-950 px-2 py-1 font-mono text-ui-base text-zinc-100 focus:outline-none" autoFocus />
+                                                        <input type="text" value={editModelInput} onChange={(e) => setEditModelInput(e.target.value)} className="w-full rounded-control border border-zinc-600 bg-zinc-950 px-2 py-1 font-mono text-ui-base text-zinc-100 focus:outline-none" autoFocus />
                                                         <button onClick={() => handleUpdateModelSubmit(m)} aria-label={`Confirm rename of model ${m}`} className="p-1 text-zinc-300 hover:text-white transition-colors"><Check className="h-3.5 w-3.5" aria-hidden="true" /></button>
                                                         <button onClick={() => setEditingModelId(null)} aria-label="Cancel rename" className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
                                                     </div>
@@ -804,11 +804,11 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                 {showAddModelInput ? (
                                     <div className="mt-2 flex gap-2">
                                         <input type="text" value={newModelInput} onChange={(e) => setNewModelInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddModelSubmit()} placeholder="model id" className={`${inputBase} flex-1`} autoFocus />
-                                        <button onClick={handleAddModelSubmit} className="rounded-xl bg-zinc-100 px-3 text-ui-sm font-bold text-zinc-950">Add</button>
-                                        <button onClick={() => setShowAddModelInput(false)} className="rounded-xl px-3 text-ui-sm text-zinc-500">Cancel</button>
+                                        <button onClick={handleAddModelSubmit} className="rounded-control bg-zinc-100 px-3 text-ui-sm font-bold text-zinc-950">Add</button>
+                                        <button onClick={() => setShowAddModelInput(false)} className="rounded-control px-3 text-ui-sm text-zinc-500">Cancel</button>
                                     </div>
                                 ) : (
-                                    <button onClick={() => setShowAddModelInput(true)} className="mt-2 flex w-full items-center justify-center rounded-lg border border-dashed border-zinc-700 py-2 text-ui-caption text-zinc-400 hover:border-zinc-500 hover:text-zinc-200">
+                                    <button onClick={() => setShowAddModelInput(true)} className="mt-2 flex w-full items-center justify-center rounded-control border border-dashed border-zinc-700 py-2 text-ui-caption text-zinc-400 hover:border-zinc-500 hover:text-zinc-200">
                                         + Add model
                                     </button>
                                 )}
@@ -826,7 +826,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                         <button
                             onClick={handleSave}
                             disabled={!isDirty || saveState === 'saving'}
-                            className={`rounded-xl px-4 py-2 text-ui-sm font-bold uppercase tracking-wider ${
+                            className={`rounded-control px-4 py-2 text-ui-sm font-bold uppercase tracking-wider ${
                                 saveState === 'saved'
                                     ? 'border border-emerald-500/40 bg-emerald-500/20 text-emerald-300'
                                     : isDirty
@@ -836,10 +836,10 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                         >
                             {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved' : 'Save'}
                         </button>
-                        <button onClick={handleDiscoverModels} disabled={isDiscovering || !(draftUrl || selected.baseUrl).trim() || !(draftKey || selected.apiKey).trim()} className="rounded-xl px-3 py-2 text-ui-sm text-zinc-500 hover:text-zinc-200 disabled:opacity-40">
+                        <button onClick={handleDiscoverModels} disabled={isDiscovering || !(draftUrl || selected.baseUrl).trim() || !(draftKey || selected.apiKey).trim()} className="rounded-control px-3 py-2 text-ui-sm text-zinc-500 hover:text-zinc-200 disabled:opacity-40">
                             {isDiscovering ? 'Discovering…' : 'Discover models'}
                         </button>
-                        <button onClick={handleTest} disabled={isTesting || !draftUrlValidation.valid || selected.models.length === 0} className="rounded-xl border border-zinc-700 px-3 py-2 text-ui-sm font-bold uppercase tracking-wider text-zinc-300 disabled:opacity-40">
+                        <button onClick={handleTest} disabled={isTesting || !draftUrlValidation.valid || selected.models.length === 0} className="rounded-control border border-zinc-700 px-3 py-2 text-ui-sm font-bold uppercase tracking-wider text-zinc-300 disabled:opacity-40">
                             {isTesting ? 'Testing…' : 'Test all'}
                         </button>
                     </div>

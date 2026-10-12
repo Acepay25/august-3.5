@@ -16,7 +16,7 @@ export const TaskItemFile = ({
 }: TaskItemFileProps) => (
   <div
     className={cn(
-      'text-ui-sm inline-flex items-center gap-1 px-1.5 py-0.5 text-zinc-100 border border-zinc-700 bg-zinc-800 rounded-md',
+      'text-ui-sm inline-flex items-center gap-1 px-1.5 py-0.5 text-zinc-100 border border-zinc-700 bg-zinc-800 rounded-control',
       className,
     )}
     {...props}

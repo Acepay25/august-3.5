@@ -54,7 +54,7 @@ const ChatHistoryPalette: React.FC<ChatHistoryPaletteProps> = ({
     onQueryChange, onSelChange, onSelect, onDelete, onShowAll, onClose,
 }) => (
     <div className="absolute inset-0 z-40 flex items-start justify-center bg-black/50 px-6 pt-20" data-testid="chat-history-backdrop" onClick={onClose}>
-        <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl" data-testid="chat-history" onClick={e => e.stopPropagation()}>
+        <div className="w-full max-w-sm overflow-hidden rounded-bubble border border-white/10 bg-zinc-900 shadow-2xl" data-testid="chat-history" onClick={e => e.stopPropagation()}>
             <input
                 autoFocus
                 value={query}
@@ -73,7 +73,7 @@ const ChatHistoryPalette: React.FC<ChatHistoryPaletteProps> = ({
                 <p className="px-3 py-1 text-ui-xs uppercase tracking-widest text-zinc-600">Recent</p>
                 {rows.length === 0 && <p className="px-3 py-2 text-ui-dense text-zinc-600">No conversations match.</p>}
                 {rows.map((s, i) => (
-                    <div key={s.id} className={`group flex items-center gap-2 rounded-lg px-3 py-2 ${i === sel ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}>
+                    <div key={s.id} className={`group flex items-center gap-2 rounded-control px-3 py-2 ${i === sel ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}>
                         <button type="button"
                             onClick={() => onSelect(s.id)}
                             onMouseEnter={() => onSelChange(i)}

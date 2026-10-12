@@ -68,7 +68,7 @@ export const UpdateTradeModal: React.FC<{
 
     return (
         <div ref={dialogRef} className="fixed inset-0 bg-black/70 z-modal flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Update trade setup">
-            <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg border border-cyan-500/30 animate-fade-in max-h-[90vh] overflow-y-auto">
+            <div className="bg-zinc-900 rounded-bubble shadow-2xl w-full max-w-lg border border-cyan-500/30 animate-fade-in max-h-[90vh] overflow-y-auto">
                 {/* Header */}
                 <div className="p-5 border-b border-white/5 bg-cyan-500/10">
                     <div className="flex items-center gap-3">
@@ -93,7 +93,7 @@ export const UpdateTradeModal: React.FC<{
                         <button
                             onClick={onAutoCapture}
                             disabled={isCapturing || isProcessing}
-                            className="w-full p-4 rounded-xl border border-cyan-500/20 bg-cyan-950/30 hover:bg-cyan-950/50 hover:border-cyan-500/40 transition-colors duration-[150ms] ease-[var(--ease-snappy)] text-left group disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden"
+                            className="w-full p-4 rounded-bubble border border-cyan-500/20 bg-cyan-950/30 hover:bg-cyan-950/50 hover:border-cyan-500/40 transition-colors duration-[150ms] ease-[var(--ease-snappy)] text-left group disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden"
                         >
                             {isCapturing && (
                                 <div className="absolute inset-0 bg-cyan-500/10 animate-pulse" />
@@ -104,7 +104,7 @@ export const UpdateTradeModal: React.FC<{
                                     <div className="font-bold text-cyan-300 group-hover:text-cyan-200 transition-colors flex items-center gap-2">
                                         {isCapturing ? 'Fetching Market Data...' : 'Auto-Capture Market Data'}
                                         {!isCapturing && (
-                                            <span className="text-ui-2xs bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">
+                                            <span className="text-ui-2xs bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded-control uppercase tracking-wider font-bold">
                                                 Recommended
                                             </span>
                                         )}
@@ -135,17 +135,17 @@ export const UpdateTradeModal: React.FC<{
                             value={updateText}
                             onChange={(e) => setUpdateText(e.target.value)}
                             placeholder="Describe market changes..."
-                            className="w-full bg-zinc-800 border border-white/10 rounded-xl p-3 text-ui-base text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 min-h-[80px] resize-none"
+                            className="w-full bg-zinc-800 border border-white/10 rounded-control p-3 text-ui-base text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 min-h-[80px] resize-none"
                             disabled={isCapturing}
                         />
                     </div>
 
                     {/* Image Upload Section */}
-                    <div className="bg-zinc-800 p-3 rounded-xl border border-white/5">
+                    <div className="bg-zinc-800 p-3 rounded-control border border-white/5">
                         <ImagePreview images={images} onRemoveImage={removeImage} />
                         <button
                             onClick={() => fileInputRef.current?.click()}
-                            className="w-full mt-2 flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50"
+                            className="w-full mt-2 flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold py-2.5 px-4 rounded-control transition-colors disabled:opacity-50"
                             disabled={isProcessing || isCapturing}
                         >
                             <UploadIcon /> {isProcessing ? 'Processing...' : 'Upload Updated Chart'}
@@ -159,14 +159,14 @@ export const UpdateTradeModal: React.FC<{
                     <button
                         onClick={onClose}
                         disabled={isCapturing}
-                        className="py-2 px-4 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-ui-base disabled:opacity-50"
+                        className="py-2 px-4 rounded-control text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-ui-base disabled:opacity-50"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleConfirm}
                         disabled={isProcessing || isCapturing || (updateText.trim() === '' && images.length === 0)}
-                        className="py-2 px-4 rounded-lg text-white bg-cyan-600 hover:bg-cyan-700 transition-colors font-bold disabled:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed flex items-center gap-2 justify-center"
+                        className="py-2 px-4 rounded-control text-white bg-cyan-600 hover:bg-cyan-700 transition-colors font-bold disabled:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed flex items-center gap-2 justify-center"
                     >
                         {isProcessing ? <LoadingIcon /> : 'Run Manual Update'}
                     </button>

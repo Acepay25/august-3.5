@@ -614,7 +614,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                                             skill's kind is neither. aria-hidden because the kind badge
                                             beside it already says it. */}
                                         <span aria-hidden="true"
-                                            className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-zinc-800 text-zinc-300">
+                                            className="flex size-10 shrink-0 items-center justify-center rounded-control border border-white/10 bg-zinc-800 text-zinc-300">
                                             {meta.kind === 'avoid'
                                                 ? <PowerOff className="h-4 w-4" aria-hidden="true" />
                                                 : <RotateCcw className="h-4 w-4" aria-hidden="true" />}

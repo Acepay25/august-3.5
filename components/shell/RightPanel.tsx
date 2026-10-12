@@ -128,7 +128,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
                                     type="button"
                                     onClick={() => onCloseDock(dock.id)}
                                     aria-label={`Close ${dock.label}`}
-                                    className="rounded p-1 text-zinc-600 transition-colors hover:bg-white/[0.06] hover:text-zinc-200"
+                                    className="rounded-control p-1 text-zinc-600 transition-colors hover:bg-white/[0.06] hover:text-zinc-200"
                                 >
                                     <X className="h-3 w-3" aria-hidden="true" />
                                 </button>

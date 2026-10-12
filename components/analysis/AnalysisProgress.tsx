@@ -193,7 +193,7 @@ const CompletionSummaryBar: React.FC<{
   return (
     <Collapsible defaultOpen={outcome.open}>
       <CollapsibleTrigger asChild>
-        <button className="group w-full flex items-center gap-2 py-2 px-1 cursor-pointer rounded-lg hover:bg-zinc-800 transition-colors">
+        <button className="group w-full flex items-center gap-2 py-2 px-1 cursor-pointer rounded-control hover:bg-zinc-800 transition-colors">
           <ChevronDownIcon className="size-4 text-zinc-500 transition-transform duration-[150ms] ease-[var(--ease-snappy)] group-data-[state=open]:rotate-180" aria-hidden="true" />
           <span className={`text-ui-base font-bold ${outcome.text}`}>
             {outcome.title}
@@ -267,7 +267,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
             {isPostMortemInProgress && onOpenPostMortem && (
               <button
                 onClick={onOpenPostMortem}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-sm font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 border border-white/10 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-control text-ui-sm font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 border border-white/10 transition-colors"
               >
                 <EyeIcon className="size-3.5" aria-hidden="true" />
                 View Post-Mortem
@@ -275,7 +275,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
             )}
             <button
               onClick={onCancel}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-sm font-medium text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors ml-auto"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-control text-ui-sm font-medium text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors ml-auto"
             >
               <SkipIcon className="size-3.5" aria-hidden="true" />
               Stop generating

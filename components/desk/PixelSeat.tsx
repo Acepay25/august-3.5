@@ -170,7 +170,7 @@ export const PixelSeat: React.FC<PixelSeatProps> = ({
             data-testid={testId}
             data-role={role}
             aria-label={`Open ${name} seat`}
-            className={`group/seat relative flex flex-col items-center gap-1 rounded-md p-1 text-center transition-transform hover:scale-[1.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 ${
+            className={`group/seat relative flex flex-col items-center gap-1 rounded-control p-1 text-center transition-transform hover:scale-[1.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 ${
                 speaking ? 'is-speaking' : thinking ? 'is-thinking' : live ? 'is-live' : ''
             } ${role === 'moderator' ? 'is-moderator' : ''}`}
             // The inline animationDelay staggers the breath + sway
@@ -231,13 +231,13 @@ export const PixelSeat: React.FC<PixelSeatProps> = ({
                 so the floor shows who is who (u1). */}
             {!compact && (
                 <span className="mt-0.5 flex max-w-[9.5rem] items-center gap-1">
-                    <span className="max-w-[7.5rem] truncate rounded-sm border border-white/10 bg-zinc-900/80 px-1.5 py-0.5 text-ui-xs font-semibold tracking-wide text-zinc-200">
+                    <span className="max-w-[7.5rem] truncate rounded-control border border-white/10 bg-zinc-900/80 px-1.5 py-0.5 text-ui-xs font-semibold tracking-wide text-zinc-200">
                         {name}
                     </span>
                     {roleTag && (
                         <span
                             title={roleTag}
-                            className="shrink-0 rounded-sm border border-white/10 bg-zinc-950/60 px-1 py-0.5 font-mono text-ui-micro uppercase tracking-wider text-zinc-500"
+                            className="shrink-0 rounded-control border border-white/10 bg-zinc-950/60 px-1 py-0.5 font-mono text-ui-micro uppercase tracking-wider text-zinc-500"
                         >
                             {roleTag}
                         </span>

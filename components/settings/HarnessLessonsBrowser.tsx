@@ -16,7 +16,7 @@ export const HarnessLessonsBrowser: React.FC = () => {
         refresh();
     };
     return (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+        <div className="rounded-bubble border border-zinc-800 bg-zinc-900 p-4">
             <div className="flex items-baseline justify-between">
                 <p className="text-ui-dense font-semibold uppercase tracking-widest text-zinc-500">
                     Harness lessons ({lessons.length})
@@ -38,7 +38,7 @@ export const HarnessLessonsBrowser: React.FC = () => {
             ) : (
                 <ul className="mt-2 space-y-1.5">
                     {lessons.map(l => (
-                        <li key={l.id} className="flex items-start justify-between gap-3 rounded-lg border border-zinc-800/80 bg-zinc-950/50 px-3 py-2">
+                        <li key={l.id} className="flex items-start justify-between gap-3 rounded-control border border-zinc-800/80 bg-zinc-950/50 px-3 py-2">
                             <div className="min-w-0">
                                 <p className="text-ui-xs uppercase tracking-widest text-zinc-500">
                                     {l.kind} · {l.scope}{l.provider ? ` · ${l.provider}` : ''} · {l.at.slice(0, 10)}
@@ -49,7 +49,7 @@ export const HarnessLessonsBrowser: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={() => clearOne(l.id)}
-                                className="shrink-0 rounded-md px-2 py-0.5 text-ui-xs uppercase tracking-widest text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200"
+                                className="shrink-0 rounded-control px-2 py-0.5 text-ui-xs uppercase tracking-widest text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200"
                             >
                                 Clear
                             </button>

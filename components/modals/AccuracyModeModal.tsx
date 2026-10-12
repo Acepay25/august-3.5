@@ -21,18 +21,18 @@ export const AccuracyModeModal: React.FC<AccuracyModeModalProps> = ({ isOpen, on
 
   return (
     <div ref={dialogRef} className="fixed inset-0 bg-black/70 z-modal flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="Accuracy mode">
-      <div className={`bg-zinc-950 border ${isEnabling ? 'border-cyan-500/30 shadow-2xl shadow-cyan-950/30' : 'border-zinc-800 shadow-2xl shadow-black/60'} rounded-2xl max-w-md w-full overflow-hidden max-h-[90vh] overflow-y-auto`}>
+      <div className={`bg-zinc-950 border ${isEnabling ? 'border-cyan-500/30 shadow-2xl shadow-cyan-950/30' : 'border-zinc-800 shadow-2xl shadow-black/60'} rounded-bubble max-w-md w-full overflow-hidden max-h-[90vh] overflow-y-auto`}>
         <div className="p-6 text-center">
           {isEnabling ? (
             <>
-              <div className="w-14 h-14 bg-cyan-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-cyan-500/30 text-cyan-400 animate-pulse">
+              <div className="w-14 h-14 bg-cyan-500/10 rounded-control flex items-center justify-center mx-auto mb-4 border border-cyan-500/30 text-cyan-400 animate-pulse">
                 <BotIcon />
               </div>
               <h2 className="text-xl font-bold text-zinc-100 tracking-tight mb-2">Enable Accuracy Mode?</h2>
               <p className="text-zinc-400 text-ui-sm mb-6 leading-relaxed">
                 This will activate the <strong>10-Layer Accuracy Protocol</strong>.
               </p>
-              <ul className="text-left text-ui-sm text-zinc-300 space-y-2.5 bg-zinc-900/80 p-4 rounded-xl border border-white/10 mb-6">
+              <ul className="text-left text-ui-sm text-zinc-300 space-y-2.5 bg-zinc-900/80 p-4 rounded-bubble border border-white/10 mb-6">
                 <li className="flex items-center gap-2.5">
                   <ShieldCheck className="h-4 w-4 text-cyan-400 shrink-0" aria-hidden="true" />
                   <span><strong>Strict Logic:</strong> Lazy analysis is forbidden.</span>
@@ -49,7 +49,7 @@ export const AccuracyModeModal: React.FC<AccuracyModeModalProps> = ({ isOpen, on
             </>
           ) : (
             <>
-              <div className="w-14 h-14 bg-zinc-900 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-zinc-800 text-zinc-400">
+              <div className="w-14 h-14 bg-zinc-900 rounded-control flex items-center justify-center mx-auto mb-4 border border-zinc-800 text-zinc-400">
                 <CloseIcon className="w-6 h-6 text-zinc-400" aria-hidden="true" />
               </div>
               <h2 className="text-xl font-bold text-zinc-100 mb-2">Disable Accuracy Mode?</h2>
@@ -62,13 +62,13 @@ export const AccuracyModeModal: React.FC<AccuracyModeModalProps> = ({ isOpen, on
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="flex-1 py-3 rounded-xl font-bold text-zinc-400 hover:bg-zinc-800 transition-colors"
+              className="flex-1 py-3 rounded-control font-bold text-zinc-400 hover:bg-zinc-800 transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
-              className={`flex-1 py-3 rounded-xl font-bold text-white transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${isEnabling ? 'bg-cyan-600 hover:bg-cyan-500 shadow-lg shadow-cyan-900/40' : 'bg-zinc-700 hover:bg-zinc-600'}`}
+              className={`flex-1 py-3 rounded-control font-bold text-white transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${isEnabling ? 'bg-cyan-600 hover:bg-cyan-500 shadow-lg shadow-cyan-900/40' : 'bg-zinc-700 hover:bg-zinc-600'}`}
             >
               {isEnabling ? 'Enable Mode' : 'Disable Mode'}
             </button>

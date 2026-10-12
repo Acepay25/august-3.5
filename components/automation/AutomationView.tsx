@@ -37,7 +37,7 @@ const AutomationView: React.FC<{
             <div className="px-4 py-2.5 border-b border-white/5 bg-zinc-900 shrink-0 flex items-center justify-between gap-3 flex-wrap">
                 <button
                     onClick={onBack}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-ui-sm font-bold text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-control text-ui-sm font-bold text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
                     aria-label="Back to automations"
                 >
                     <ChevronLeftIcon className="w-3.5 h-3.5" aria-hidden="true" /> Back
@@ -77,7 +77,7 @@ const AutomationView: React.FC<{
                     <button
                         onClick={onRunNow}
                         disabled={isRunning || !config.enabled}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-ui-xs font-bold uppercase tracking-widest transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-control bg-cyan-600 hover:bg-cyan-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-ui-xs font-bold uppercase tracking-widest transition-colors"
                         title={config.enabled ? 'Run this automation now' : 'Enable the automation first'}
                     >
                         {isRunning ? <LoadingIcon className="w-3 h-3 animate-spin" aria-hidden="true" /> : <Play className="w-3 h-3" aria-hidden="true" />}
@@ -87,14 +87,14 @@ const AutomationView: React.FC<{
                         <button
                             type="button"
                             onClick={() => onPauseUntil(Date.now() + 8 * 60 * 60 * 1000)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-ui-xs font-bold uppercase tracking-widest transition-colors"
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-control border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                         >
                             Pause 8h
                         </button>
                     )}
                     <button
                         onClick={onRefresh}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-ui-xs font-bold uppercase tracking-widest transition-colors"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-control border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                         title="Refresh runs"
                         aria-label="Refresh runs"
                     >
@@ -102,13 +102,13 @@ const AutomationView: React.FC<{
                     </button>
                     <button
                         onClick={onEdit}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-ui-xs font-bold uppercase tracking-widest transition-colors"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-control border border-white/10 text-zinc-300 hover:text-white hover:border-white/25 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                     >
                         <EditIcon className="w-3 h-3" aria-hidden="true" /> Edit
                     </button>
                     <button
                         onClick={onDelete}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-ui-xs font-bold uppercase tracking-widest transition-colors"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-control border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-ui-xs font-bold uppercase tracking-widest transition-colors"
                     >
                         <TrashIcon className="w-3 h-3" aria-hidden="true" /> Delete
                     </button>

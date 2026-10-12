@@ -80,7 +80,7 @@ const Row: React.FC<{ side: 'bid' | 'ask'; level: LadderLevel; maxTotal: number;
     >
         <span
             aria-hidden
-            className={`absolute inset-y-0 left-0 rounded-sm ${side === 'bid' ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`}
+            className={`absolute inset-y-0 left-0 rounded-control ${side === 'bid' ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`}
             style={{ width: `${maxTotal > 0 ? Math.min(100, (level.total / maxTotal) * 100) : 0}%` }}
         />
         <span className={`relative truncate ${side === 'bid' ? 'text-emerald-400' : 'text-rose-400'} ${wall ? 'font-bold' : ''}`}>{fmtPrice(level.price)}</span>
@@ -95,9 +95,9 @@ const Row: React.FC<{ side: 'bid' | 'ask'; level: LadderLevel; maxTotal: number;
  *  keyframes for the motion inventory to chase. */
 const SkeletonRow: React.FC<{ side: 'bid' | 'ask' }> = ({ side }) => (
     <div className={`${GRID} items-center py-[1.5px]`}>
-        <span className={`h-3 w-2/3 animate-pulse rounded-sm ${side === 'bid' ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`} />
-        <span className="ml-auto h-3 w-10 animate-pulse rounded-sm bg-zinc-800/80" />
-        <span className="ml-auto h-3 w-8 animate-pulse rounded-sm bg-zinc-800/80" />
+        <span className={`h-3 w-2/3 animate-pulse rounded-control ${side === 'bid' ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`} />
+        <span className="ml-auto h-3 w-10 animate-pulse rounded-control bg-zinc-800/80" />
+        <span className="ml-auto h-3 w-8 animate-pulse rounded-control bg-zinc-800/80" />
     </div>
 );
 

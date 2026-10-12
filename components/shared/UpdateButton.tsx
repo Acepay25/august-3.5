@@ -85,8 +85,8 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
         return null;
     }
 
-    const baseClasses = 'inline-flex items-center justify-center gap-1.5 h-7 px-2.5 rounded-lg text-ui-dense font-medium transition-[background-color,box-shadow,transform] duration-[150ms] ease-[var(--ease-snappy)]';
-    const iconButtonClasses = 'inline-flex items-center justify-center h-7 w-7 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-cyan-400 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500';
+    const baseClasses = 'inline-flex items-center justify-center gap-1.5 h-7 px-2.5 rounded-control text-ui-dense font-medium transition-[background-color,box-shadow,transform] duration-[150ms] ease-[var(--ease-snappy)]';
+    const iconButtonClasses = 'inline-flex items-center justify-center h-7 w-7 rounded-control text-zinc-400 hover:bg-zinc-800 hover:text-cyan-400 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500';
 
     // Checking state — show spinner with text
     if (status === 'checking') {
@@ -105,7 +105,7 @@ export const UpdateButton: React.FC<{ className?: string }> = ({ className = '' 
         return (
             <div className={`flex items-center gap-2 ${className}`}>
                 <span
-                    className="flex items-center gap-1.5 rounded-md px-2 py-1 text-ui-dense font-medium text-emerald-300"
+                    className="flex items-center gap-1.5 rounded-control px-2 py-1 text-ui-dense font-medium text-emerald-300"
                     title={`Version ${version} is available`}
                 >
                     <Download className="h-3.5 w-3.5" aria-hidden="true" />

@@ -874,12 +874,12 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     {/* Segmented chat actions: new + history */}
                     <div className="flex items-center rounded-control border border-white/[0.04] bg-white/[0.02] p-0.5">
                         <button type="button" onClick={() => addSession('solo')} aria-label="New chat" title="New chat"
-                            className="hit-target rounded p-1 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
+                            className="hit-target rounded-control p-1 text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
                             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                         <button type="button" onClick={() => { setHistoryOpen(v => !v); setHistoryQuery(''); setHistorySel(0); setHistoryShowAll(false); }}
                             aria-label="Past conversations" aria-expanded={historyOpen} title="Past conversations"
-                            className={`hit-target rounded p-1 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${historyOpen ? 'bg-white/[0.08] text-zinc-100' : 'text-zinc-400'}`}>
+                            className={`hit-target rounded-control p-1 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${historyOpen ? 'bg-white/[0.08] text-zinc-100' : 'text-zinc-400'}`}>
                             <History className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                     </div>
@@ -891,10 +891,10 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                         {showNewMenu && (
                             <>
                                 <div className="fixed inset-0 z-20" aria-hidden onClick={() => setShowNewMenu(false)} />
-                                <div className="absolute right-0 top-9 z-30 max-h-96 w-56 overflow-y-auto rounded-xl border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="chat-new-menu">
+                                <div className="absolute right-0 top-9 z-30 max-h-96 w-56 overflow-y-auto rounded-bubble border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="chat-new-menu">
                                     {isPanel && (
                                         <button type="button" onClick={() => { setShowNewMenu(false); setPanelPickerFor(activeId); }}
-                                            className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
+                                            className="block w-full rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                             Panel models <span className="text-zinc-600">· {activeSession.panelModels?.length ?? 0}/{PANEL_MAX_MODELS}</span>
                                         </button>
                                     )}
@@ -910,13 +910,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                                 onClick={() => { setShowNewMenu(false); if (lastUser) void send('', lastUser.id); }}
                                                 disabled={!ready || busy || !lastUser}
                                                 data-testid="dock-rerun"
-                                                className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06] disabled:opacity-40">
+                                                className="block w-full rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06] disabled:opacity-40">
                                                 Re-run last question
                                             </button>
                                         );
                                     })()}
                                     <button type="button" onClick={() => { setShowNewMenu(false); onToggleExpanded?.(); }}
-                                        className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
+                                        className="block w-full rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                         {expanded ? 'Shrink back' : 'Expand over chart'}
                                     </button>
                                     {/* The jump OUT of the dock. Stage 3 moved it
@@ -926,31 +926,31 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                     {onOpenChat && (
                                         <button type="button" onClick={() => { setShowNewMenu(false); onOpenChat(); }}
                                             data-testid="dock-open-chat"
-                                            className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
+                                            className="block w-full rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                             Open in Chat
                                         </button>
                                     )}
                                     <div className="my-1 border-t border-white/[0.06]" />
                                     <p className="px-2 py-0.5 text-ui-2xs uppercase tracking-widest text-zinc-600">Start</p>
-                                    <button type="button" onClick={() => addSession('panel')} className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
+                                    <button type="button" onClick={() => addSession('panel')} className="block w-full rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                         New panel <span className="text-zinc-600">· up to {PANEL_MAX_MODELS} models</span>
                                     </button>
                                     <button type="button" onClick={() => { setShowNewMenu(false); setShowNewBot(true); }}
                                         data-testid="new-agent-option"
-                                        className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
+                                        className="block w-full rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                         New agent <span className="text-zinc-600">· create a roster bot</span>
                                     </button>
                                     {onNewGroup && (
                                         <button type="button" onClick={() => { setShowNewMenu(false); onNewGroup(); }}
                                             data-testid="new-group-option"
-                                            className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
+                                            className="block w-full rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                             New room <span className="text-zinc-600">· create a group</span>
                                         </button>
                                     )}
                                     {onOpenCoach && (
                                         <button type="button" onClick={() => { setShowNewMenu(false); onOpenCoach(); }}
                                             data-testid="dock-coach-option"
-                                            className="block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
+                                            className="block w-full rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                             Coach inbox
                                             {coachCount > 0 && (
                                                 <span className="ml-1 rounded-full bg-amber-500/20 px-1.5 text-ui-2xs tabular-nums text-amber-300">
@@ -962,13 +962,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                     {renderGroupSurface && groups.length > 0 && groups.slice(0, 6).map(g => (
                                         <button key={g.id} type="button"
                                             onClick={() => { setShowNewMenu(false); const existing = sessions.find(s => s.groupId === g.id); if (existing) { chatStore.setActiveId(existing.id); return; } chatStore.addSession({ kind: 'group', title: g.name, groupId: g.id }); }}
-                                            className="block w-full truncate rounded-lg px-2 py-1 text-left text-ui-dense text-zinc-400 hover:bg-white/[0.06]">
+                                            className="block w-full truncate rounded-control px-2 py-1 text-left text-ui-dense text-zinc-400 hover:bg-white/[0.06]">
                                             {g.name} <span className="text-zinc-600">· room</span>
                                         </button>
                                     ))}
                                     {bots.length > 0 && bots.slice(0, 6).map(b => (
                                         <button key={b.id} type="button" onClick={() => openBotSession(b.id)}
-                                            className="block w-full truncate rounded-lg px-2 py-1 text-left text-ui-dense text-zinc-400 hover:bg-white/[0.06]">
+                                            className="block w-full truncate rounded-control px-2 py-1 text-left text-ui-dense text-zinc-400 hover:bg-white/[0.06]">
                                             {b.name} <span className="text-zinc-600">· as bot</span>
                                         </button>
                                     ))}
@@ -1103,7 +1103,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
 
             {/* Composer — the reference's layout: a workspace-style section
                 header (symbol · panel seats · bot · packet age), then one
-                rounded card holding the input and its toolbar, then a plain
+                rounded-bubble card holding the input and its toolbar, then a plain
                 sentence-case disclaimer. Generous padding, no hard divider. */}
             <ChatComposer
                 symbol={symbol}

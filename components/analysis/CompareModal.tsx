@@ -67,13 +67,13 @@ const CompareModal: React.FC<CompareModalProps> = ({ primary, secondary, analysi
 
   return (
     <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Compare analyses" className="w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Compare analyses" className="w-full max-w-2xl overflow-hidden rounded-bubble border border-white/10 bg-zinc-900 shadow-2xl">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div>
             <div className="text-ui-sm font-medium text-zinc-200">Compare runs</div>
             <div className="text-ui-xs text-zinc-500">This run vs the previous analysis in the thread</div>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white" aria-label="Close">
+          <button type="button" onClick={onClose} className="rounded-control p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white" aria-label="Close">
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
@@ -112,7 +112,7 @@ const CompareModal: React.FC<CompareModalProps> = ({ primary, secondary, analysi
                       key={m.id}
                       type="button"
                       onClick={() => onPickSecondary(m.id)}
-                      className="flex w-full items-center justify-between rounded-lg border border-white/5 bg-zinc-950/60 px-3 py-1.5 text-left text-ui-dense text-zinc-300 transition-colors hover:border-white/20 hover:bg-zinc-800"
+                      className="flex w-full items-center justify-between rounded-control border border-white/5 bg-zinc-950/60 px-3 py-1.5 text-left text-ui-dense text-zinc-300 transition-colors hover:border-white/20 hover:bg-zinc-800"
                     >
                       <span className="truncate">{m.analysis?.direction} {m.analysis?.coinName || ''} · {m.analysis?.confidence}</span>
                       <span className="shrink-0 text-ui-2xs text-zinc-500">{new Date(m.createdAt).toLocaleString()}</span>

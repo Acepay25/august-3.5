@@ -56,7 +56,7 @@ const CheckForUpdatesRow: React.FC = () => {
             data-testid="profile-check-updates"
             disabled={busy || phase === 'checking' || phase === 'downloading' || phase === 'installing'}
             onClick={() => { setBusy(true); void checkForUpdates().finally(() => setBusy(false)); }}
-            className="rounded border border-white/10 px-1.5 py-0.5 text-ui-2xs text-zinc-400 transition-colors hover:border-white/25 hover:text-zinc-200 disabled:opacity-50"
+            className="rounded-control border border-white/10 px-1.5 py-0.5 text-ui-2xs text-zinc-400 transition-colors hover:border-white/25 hover:text-zinc-200 disabled:opacity-50"
         >
             {label}
         </button>
@@ -78,7 +78,7 @@ const ProfileTab: React.FC<{ tab: ProfileTabProps }> = ({ tab: props }) => {
                 description="The active trader profile — its journal, memory and backups are separate from every other profile on this device."
             />
 
-            <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/[0.07] bg-zinc-900/50 p-5">
+            <div className="flex flex-wrap items-center gap-4 rounded-bubble border border-white/[0.07] bg-zinc-900/50 p-5">
                 <span aria-hidden="true" className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-white/10 bg-zinc-800 text-xl font-semibold text-zinc-100">
                     {initial}
                 </span>
@@ -113,7 +113,7 @@ const ProfileTab: React.FC<{ tab: ProfileTabProps }> = ({ tab: props }) => {
                     { label: 'Wins / Losses', value: `${wins}/${losses}`, tone: 'text-zinc-100' },
                     { label: 'Open / Pending', value: String(trades.length - decided), tone: trades.length - decided > 0 ? 'text-amber-400' : 'text-zinc-100' },
                 ].map(stat => (
-                    <div key={stat.label} className="rounded-xl border border-white/[0.06] bg-zinc-800/40 px-3.5 py-3">
+                    <div key={stat.label} className="rounded-bubble border border-white/[0.06] bg-zinc-800/40 px-3.5 py-3">
                         <div className="text-ui-xs font-semibold uppercase tracking-wider text-zinc-500">{stat.label}</div>
                         <div className={`mt-1 font-mono text-xl font-bold tabular-nums ${stat.tone}`}>{stat.value}</div>
                     </div>

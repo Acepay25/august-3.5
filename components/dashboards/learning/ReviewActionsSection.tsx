@@ -23,7 +23,7 @@ export const ReviewActionsSection: React.FC<ReviewActionsSectionProps> = ({
         r.recommendation === 'promote' || r.recommendation === 'demote' || r.recommendation === 'retire' || r.recommendation === 'refine');
 
     return (
-        <div className="bg-zinc-800 rounded-xl border border-white/5 p-3 sm:p-4">
+        <div className="bg-zinc-800 rounded-bubble border border-white/5 p-3 sm:p-4">
             <h4 className="text-ui-xs sm:text-ui-sm font-bold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <Scale className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" /> Skill Review — Apply
             </h4>
@@ -34,7 +34,7 @@ export const ReviewActionsSection: React.FC<ReviewActionsSectionProps> = ({
                 ? <p className="text-ui-sm text-zinc-600 italic">No actions recommended — every skill is where its evidence says it belongs.</p>
                 : <div className="space-y-1.5">
                     {actionableReviews.slice(0, 8).map(r => (
-                        <div key={r.fileId} className="rounded-lg border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 flex items-center gap-2">
+                        <div key={r.fileId} className="rounded-control border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 flex items-center gap-2">
                             <div className="min-w-0 flex-1">
                                 <span className={`text-ui-xs font-bold uppercase tracking-wider ${r.recommendation === 'retire' || r.recommendation === 'demote' ? 'text-rose-400' : r.recommendation === 'refine' ? 'text-amber-400' : 'text-emerald-400'}`}>
                                     {r.recommendation}
@@ -46,7 +46,7 @@ export const ReviewActionsSection: React.FC<ReviewActionsSectionProps> = ({
                                 <button
                                     onClick={() => onRefine(r.fileId, r.title)}
                                     disabled={applyingFileId === r.fileId}
-                                    className="shrink-0 px-2 py-1 rounded text-ui-xs font-bold uppercase tracking-wider border border-white/10 bg-zinc-900 text-zinc-300 hover:text-white hover:border-white/25 disabled:opacity-40 transition-colors"
+                                    className="shrink-0 px-2 py-1 rounded-control text-ui-xs font-bold uppercase tracking-wider border border-white/10 bg-zinc-900 text-zinc-300 hover:text-white hover:border-white/25 disabled:opacity-40 transition-colors"
                                 >
                                     {applyingFileId === r.fileId ? '…' : 'Refine'}
                                 </button>
@@ -54,7 +54,7 @@ export const ReviewActionsSection: React.FC<ReviewActionsSectionProps> = ({
                                 <button
                                     onClick={() => onApply(r.fileId, r.title, r.recommendation as 'promote' | 'demote' | 'retire')}
                                     disabled={applyingFileId === r.fileId}
-                                    className="shrink-0 px-2 py-1 rounded text-ui-xs font-bold uppercase tracking-wider border border-white/10 bg-zinc-900 text-zinc-300 hover:text-white hover:border-white/25 disabled:opacity-40 transition-colors"
+                                    className="shrink-0 px-2 py-1 rounded-control text-ui-xs font-bold uppercase tracking-wider border border-white/10 bg-zinc-900 text-zinc-300 hover:text-white hover:border-white/25 disabled:opacity-40 transition-colors"
                                 >
                                     {applyingFileId === r.fileId ? '…' : 'Apply'}
                                 </button>

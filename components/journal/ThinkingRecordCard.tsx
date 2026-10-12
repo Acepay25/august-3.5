@@ -39,7 +39,7 @@ const roleLabel = (record: ThinkingRecord): string => {
 };
 
 const Section: React.FC<{ title: string; children: React.ReactNode; defaultOpen?: boolean }> = ({ title, children, defaultOpen = false }) => (
-  <details className="rounded-md border border-white/5 bg-black/20" open={defaultOpen}>
+  <details className="rounded-control border border-white/5 bg-black/20" open={defaultOpen}>
     <summary className="cursor-pointer flex items-center gap-1.5 px-2.5 py-1.5 text-ui-xs font-bold uppercase tracking-wider text-zinc-500 hover:text-zinc-300 select-none">
       <ChevronDown className="w-3 h-3 transition-transform" aria-hidden="true" />
       {title}
@@ -61,7 +61,7 @@ export const ThinkingRecordCard: React.FC<ThinkingRecordCardProps> = ({ record }
   const parts = displayThinkingParts(record);
 
   return (
-    <div className={`rounded-lg border ${colors.border} ${colors.bg} p-3`}>
+    <div className={`rounded-bubble border ${colors.border} ${colors.bg} p-3`}>
       <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
         <div className="flex items-center gap-2">
           {isTurn ? (
@@ -79,10 +79,10 @@ export const ThinkingRecordCard: React.FC<ThinkingRecordCardProps> = ({ record }
         </div>
         <div className="flex items-center gap-1.5">
           {record.confidence && (
-            <span className="text-ui-xs px-1.5 py-0.5 rounded bg-black/30 text-zinc-400">{record.confidence}</span>
+            <span className="text-ui-xs px-1.5 py-0.5 rounded-control bg-black/30 text-zinc-400">{record.confidence}</span>
           )}
           {record.probability != null && (
-            <span className="text-ui-xs px-1.5 py-0.5 rounded bg-black/30 text-zinc-400">{record.probability}%</span>
+            <span className="text-ui-xs px-1.5 py-0.5 rounded-control bg-black/30 text-zinc-400">{record.probability}%</span>
           )}
           {record.outcome && (
             <span className={`px-1.5 py-0.5 rounded-full text-ui-xs border ${OUTCOME_BADGE[record.outcome] || ''}`}>
@@ -98,7 +98,7 @@ export const ThinkingRecordCard: React.FC<ThinkingRecordCardProps> = ({ record }
         </p>
       )}
 
-      <button type="button" onClick={() => setIsModalOpen(true)} className="mt-3 flex w-full items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-left text-ui-xs font-bold uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:bg-zinc-800 hover:text-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400" aria-haspopup="dialog">
+      <button type="button" onClick={() => setIsModalOpen(true)} className="mt-3 flex w-full items-center justify-between rounded-control border border-white/10 bg-black/20 px-3 py-2 text-left text-ui-xs font-bold uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:bg-zinc-800 hover:text-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400" aria-haspopup="dialog">
         <span>View full thinking</span>
         <span aria-hidden="true">Open →</span>
       </button>

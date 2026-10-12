@@ -162,7 +162,7 @@ const NavTabButton: React.FC<{
         type="button"
         onClick={onClick}
         aria-current={active ? 'page' : undefined}
-        className={`flex w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left text-ui-sm font-medium transition-colors ${
+        className={`flex w-full items-center justify-between gap-2 rounded-control px-2.5 py-2 text-left text-ui-sm font-medium transition-colors ${
             active
                 ? 'bg-zinc-800 text-zinc-100 shadow-sm ring-1 ring-white/[0.07]'
                 : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100'
@@ -375,13 +375,13 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="settings-title"
-                    className="relative flex h-[min(860px,94vh)] w-[min(1180px,97vw)] overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl animate-fade-in"
+                    className="relative flex h-[min(860px,94vh)] w-[min(1180px,97vw)] overflow-hidden rounded-bubble border border-white/10 bg-zinc-900 shadow-2xl animate-fade-in"
                 >
                     <button
                         type="button"
                         onClick={requestClose}
                         aria-label="Close settings"
-                        className="absolute right-4 top-4 z-10 rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+                        className="absolute right-4 top-4 z-10 rounded-control p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
                     >
                         <CloseIcon className="h-5 w-5" aria-hidden="true" />
                     </button>

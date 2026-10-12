@@ -182,7 +182,7 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
                     type="button"
                     onClick={() => setIsAdvancedOpen(p => !p)}
                     aria-expanded={isAdvancedOpen}
-                    className="flex w-full items-center justify-between gap-4 rounded-2xl border border-white/[0.07] bg-zinc-900/50 px-4 py-3 text-left transition-colors hover:bg-zinc-800/40"
+                    className="flex w-full items-center justify-between gap-4 rounded-bubble border border-white/[0.07] bg-zinc-900/50 px-4 py-3 text-left transition-colors hover:bg-zinc-800/40"
                 >
                     <span className="min-w-0">
                         <span className="block text-ui-caption font-semibold text-zinc-200">Advanced</span>

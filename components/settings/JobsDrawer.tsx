@@ -85,7 +85,7 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
         <div className="fixed inset-y-0 right-0 z-drawer flex w-full max-w-sm flex-col border-l border-white/10 bg-zinc-950 shadow-2xl shadow-black/60 animate-fade-in">
             <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
                 <p className="text-ui-dense font-bold uppercase tracking-widest text-zinc-400">Activity</p>
-                <button type="button" onClick={onClose} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors" aria-label="Close activity">
+                <button type="button" onClick={onClose} className="rounded-control p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors" aria-label="Close activity">
                     <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
             </div>
@@ -106,7 +106,7 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                                 type="button"
                                 data-testid="activity-automation-new"
                                 onClick={onCreateAutomation}
-                                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-ui-xs text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200"
+                                className="inline-flex items-center gap-1 rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200"
                                 title="New automation"
                                 aria-label="New automation"
                             >
@@ -116,7 +116,7 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                         </div>
                         <div className="space-y-2 pb-4">
                             {automations.length === 0 ? (
-                                <p className="rounded-lg border border-white/5 bg-zinc-900/70 p-2.5 text-ui-xs leading-5 text-zinc-500">
+                                <p className="rounded-control border border-white/5 bg-zinc-900/70 p-2.5 text-ui-xs leading-5 text-zinc-500">
                                     No automations yet. Schedule an analysis to run itself.
                                 </p>
                             ) : (
@@ -126,7 +126,7 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                                         type="button"
                                         data-testid="activity-automation-row"
                                         onClick={() => onOpenAutomation?.(a.id)}
-                                        className="flex w-full items-center gap-2 rounded-lg border border-white/5 bg-zinc-900/70 p-2.5 text-left transition-colors hover:bg-zinc-900"
+                                        className="flex w-full items-center gap-2 rounded-control border border-white/5 bg-zinc-900/70 p-2.5 text-left transition-colors hover:bg-zinc-900"
                                         title={`${a.name} — ${humanizeCron(a.schedule.cron)}`}
                                     >
                                         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${a.enabled ? 'bg-emerald-400' : 'bg-zinc-700'}`} />
@@ -143,12 +143,12 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                         <p className="pb-2 text-ui-2xs font-bold uppercase tracking-widest text-zinc-600">Queued / recent</p>
                         <div className="space-y-2 pb-4">
                             {jobs.map(job => (
-                                <div key={job.id} data-job-row className="rounded-lg border border-white/5 bg-zinc-900/70 p-2.5">
+                                <div key={job.id} data-job-row className="rounded-control border border-white/5 bg-zinc-900/70 p-2.5">
                                     <div className="flex items-center gap-2">
                                         <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-zinc-200">
                                             {JOB_LABEL[job.type] ?? job.type}
                                         </span>
-                                        <span className={`rounded-md px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wide ${STATUS_STYLE[job.status]}`}>
+                                        <span className={`rounded-control px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wide ${STATUS_STYLE[job.status]}`}>
                                             {job.status}
                                         </span>
                                     </div>
@@ -167,11 +167,11 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                         <p className="pb-2 text-ui-2xs font-bold uppercase tracking-widest text-zinc-600">Recent skill audits</p>
                         <div className="space-y-2">
                             {evaluated.map(({ name, meta }) => (
-                                <div key={name} data-eval-row className="rounded-lg border border-white/5 bg-zinc-900/70 p-2.5">
+                                <div key={name} data-eval-row className="rounded-control border border-white/5 bg-zinc-900/70 p-2.5">
                                     <div className="flex items-center gap-2">
                                         <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-zinc-200">{name}</span>
                                         {meta.evalVerdict && (
-                                            <span className={`rounded-md px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wide ${VERDICT_STYLE[meta.evalVerdict] ?? 'bg-zinc-800 text-zinc-400'}`}>
+                                            <span className={`rounded-control px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wide ${VERDICT_STYLE[meta.evalVerdict] ?? 'bg-zinc-800 text-zinc-400'}`}>
                                                 {meta.evalVerdict}
                                             </span>
                                         )}

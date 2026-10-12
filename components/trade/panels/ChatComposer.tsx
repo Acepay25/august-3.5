@@ -103,7 +103,7 @@ export const ModelFallbackBanner: React.FC<{
     provider: ProviderConfig | null;
 }> = ({ modelIssue, provider }) => (
     modelIssue && provider ? (
-        <div className="mb-1.5 flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-ui-dense leading-4 text-amber-300" data-testid="model-fallback-warning" role="status">
+        <div className="mb-1.5 flex items-start gap-1.5 rounded-control border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-ui-dense leading-4 text-amber-300" data-testid="model-fallback-warning" role="status">
             <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="min-w-0 flex-1">
                 {modelIssue} Answering with <strong className="font-semibold">{provider.name} · {formatModelDisplayName(provider.selectedModel)}</strong> — re-pick a model in the dropdown.
@@ -175,7 +175,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                 onRemove={removeAttachment}
             />
         )}
-        <div className="rounded-2xl border border-white/[0.08] bg-surface-raised px-3 py-2.5">
+        <div className="rounded-bubble border border-white/[0.08] bg-surface-raised px-3 py-2.5">
             <textarea
                 ref={composerRef}
                 data-testid="composer-input"
@@ -209,14 +209,14 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                     {showAttachMenu && (
                         <>
                             <div className="fixed inset-0 z-20" aria-hidden onClick={() => setShowAttachMenu(false)} />
-                            <div className="absolute bottom-9 left-0 z-30 w-48 rounded-xl border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="attach-menu">
+                            <div className="absolute bottom-9 left-0 z-30 w-48 rounded-bubble border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="attach-menu">
                                 <button type="button" onClick={() => { setShowAttachMenu(false); fileInputRef.current?.click(); }}
-                                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
+                                    className="flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                     <FileText className="h-3.5 w-3.5 text-zinc-500" aria-hidden="true" /> Upload files &amp; images
                                 </button>
                                 <button type="button" onClick={() => { setShowAttachMenu(false); captureChart(); }}
                                     disabled={!onCaptureChart} title={onCaptureChart ? undefined : 'Chart not ready'}
-                                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-300 transition-colors hover:bg-white/[0.06] disabled:opacity-40">
+                                    className="flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-300 transition-colors hover:bg-white/[0.06] disabled:opacity-40">
                                     <Camera className="h-3.5 w-3.5 text-zinc-500" aria-hidden="true" /> Screenshot chart
                                 </button>
                             </div>
@@ -277,7 +277,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                                 picking an item is a trap. */}
                             <div className="fixed inset-0 z-20" aria-hidden onClick={() => { setShowModelMenu(false); setModelQuery(''); }} />
                             <div
-                                className="absolute bottom-8 right-0 z-30 w-64 rounded-xl border border-white/10 bg-zinc-900 shadow-xl"
+                                className="absolute bottom-8 right-0 z-30 w-64 rounded-bubble border border-white/10 bg-zinc-900 shadow-xl"
                                 data-testid="composer-model-menu"
                                 role="menu"
                                 aria-label="Model"
@@ -318,7 +318,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                                         <div key={section.provider.id}>
                                             <p className="sticky top-0 z-10 bg-zinc-900 px-2 pb-1 pt-2 text-ui-2xs uppercase tracking-widest text-zinc-600">{section.provider.name}</p>
                                             {section.models.map(o => (
-                                                <div key={o.value} className={`flex items-center gap-1 rounded-lg pr-1.5 transition-colors hover:bg-white/[0.06] ${o.value === selectedChatModel ? 'bg-white/[0.04]' : ''}`}>
+                                                <div key={o.value} className={`flex items-center gap-1 rounded-control pr-1.5 transition-colors hover:bg-white/[0.06] ${o.value === selectedChatModel ? 'bg-white/[0.04]' : ''}`}>
                                                     <button type="button"
                                                         onClick={() => toggleStar(o.value)}
                                                         aria-label={starred.includes(o.value) ? `Unstar ${o.label}` : `Star ${o.label}`}
@@ -332,7 +332,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                                                         aria-checked={o.value === selectedChatModel}
                                                         onClick={() => { changeSoloModel(o.value); setShowModelMenu(false); setModelQuery(''); }}
                                                         title={o.label}
-                                                        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1.5 pr-1 text-left text-ui-dense transition-colors hover:bg-white/[0.04]">
+                                                        className="flex min-w-0 flex-1 items-center gap-2 rounded-control py-1.5 pr-1 text-left text-ui-dense transition-colors hover:bg-white/[0.04]">
                                                         <Check className={`h-3 w-3 shrink-0 ${o.value === selectedChatModel ? 'text-emerald-400' : 'opacity-0'}`} aria-hidden="true" />
                                                         <span className="min-w-0 truncate" title={o.label}>{o.label}</span>
                                                     </button>
@@ -349,7 +349,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                                     {onRefreshModels && (
                                         <button type="button" role="menuitem"
                                             onClick={() => { void onRefreshModels(); setShowModelMenu(false); }}
-                                            className="mt-1 block w-full rounded-lg px-2 py-1.5 text-left text-ui-dense text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
+                                            className="mt-1 block w-full rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
                                             Refresh model list
                                         </button>
                                     )}
@@ -374,7 +374,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                         <>
                             <div className="fixed inset-0 z-20" aria-hidden onClick={() => setShowEffortMenu(false)} />
                             <div
-                                className="absolute bottom-8 right-0 z-30 w-40 rounded-xl border border-white/10 bg-zinc-900 p-1 shadow-xl"
+                                className="absolute bottom-8 right-0 z-30 w-40 rounded-bubble border border-white/10 bg-zinc-900 p-1 shadow-xl"
                                 data-testid="effort-menu"
                                 role="menu"
                                 aria-label="Thinking effort"
@@ -393,7 +393,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                                         aria-checked={effort === c.id}
                                         autoFocus={effort === c.id}
                                         onClick={() => { changeEffort(c.id); setShowEffortMenu(false); }}
-                                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-dense transition-colors hover:bg-white/[0.06] ${effort === c.id ? 'text-zinc-100' : 'text-zinc-500'}`}
+                                        className={`flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left text-ui-dense transition-colors hover:bg-white/[0.06] ${effort === c.id ? 'text-zinc-100' : 'text-zinc-500'}`}
                                     >
                                         <Check className={`h-3 w-3 shrink-0 ${effort === c.id ? 'text-emerald-400' : 'opacity-0'}`} aria-hidden="true" />
                                         {c.label}

@@ -103,7 +103,7 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
 
               {/* Debate turns (collapsible) */}
               {debateTurns.length > 0 && (
-                <details className="rounded-lg border border-white/5 bg-zinc-800 p-2">
+                <details className="rounded-control border border-white/5 bg-zinc-800 p-2">
                   <summary className="cursor-pointer text-ui-sm font-medium text-zinc-500 hover:text-zinc-300 flex items-center gap-2">
                     <MessageSquare className="w-3 h-3" aria-hidden="true" />
                     Debate Transcript ({debateTurns.length} turns)

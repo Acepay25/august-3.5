@@ -106,7 +106,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
 
     return (
         <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label="New Group Chat">
-            <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl" data-testid="new-group-dialog">
+            <div className="w-full max-w-md rounded-bubble border border-white/10 bg-zinc-950 p-6 shadow-2xl" data-testid="new-group-dialog">
                 <div className="flex items-start justify-between">
                     <div>
                         <h2 className="text-lg font-semibold text-zinc-100">{editing ? 'Group Settings' : 'New Group Chat'}</h2>
@@ -120,7 +120,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                         type="button"
                         onClick={onClose}
                         aria-label="Close new group dialog"
-                        className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+                        className="rounded-control p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
                     >
                         <X className="h-4 w-4" aria-hidden="true" />
                     </button>
@@ -132,7 +132,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                         const role = roles[bot.id] ?? memberRoleOf(bot);
                         return (
                             <li key={bot.id}>
-                                <div className={`rounded-lg px-3 py-2 transition-colors ${checked ? 'bg-zinc-800' : 'hover:bg-zinc-900'}`}>
+                                <div className={`rounded-control px-3 py-2 transition-colors ${checked ? 'bg-zinc-800' : 'hover:bg-zinc-900'}`}>
                                     <button
                                         type="button"
                                         onClick={() => toggle(bot.id)}
@@ -141,7 +141,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                                         className="flex w-full items-center gap-3 text-left"
                                     >
                                         <span
-                                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-control border ${
                                                 checked ? 'border-zinc-200 bg-zinc-200' : 'border-zinc-600'
                                             }`}
                                         >
@@ -162,7 +162,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                                                 value={role}
                                                 onChange={v => setRole(bot.id, v as AnalystRole)}
                                                 options={MEMBER_ROLE_OPTIONS.map(r => ({ value: r.value, label: r.label }))}
-                                                triggerClassName="min-w-0 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2 py-1.5 text-ui-sm hover:bg-zinc-800"
+                                                triggerClassName="min-w-0 flex-1 rounded-control border border-white/10 bg-zinc-900 px-2 py-1.5 text-ui-sm hover:bg-zinc-800"
                                             />
                                         </div>
                                     )}
@@ -181,7 +181,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                     <button
                         type="button"
                         onClick={onClose}
-                        className="rounded-lg px-4 py-2 text-ui-caption font-semibold text-zinc-400 hover:text-zinc-200"
+                        className="rounded-control px-4 py-2 text-ui-caption font-semibold text-zinc-400 hover:text-zinc-200"
                     >
                         Cancel
                     </button>
@@ -194,7 +194,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
                         }}
                         disabled={saveDisabled}
                         data-testid="create-group"
-                        className="rounded-lg bg-zinc-200 px-4 py-2 text-ui-caption font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                        className="rounded-control bg-zinc-200 px-4 py-2 text-ui-caption font-bold text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                     >
                         {editing ? 'Save' : `Create Group${selected.size >= 2 ? ` (${selected.size})` : ''}`}
                     </button>

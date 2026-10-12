@@ -102,7 +102,7 @@ const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
         }
     };
     return (
-        <div className="rounded-xl border border-white/[0.06] bg-zinc-900/60 p-2.5" data-testid={`supervisor-event-${ev.id}`}>
+        <div className="rounded-bubble border border-white/[0.06] bg-zinc-900/60 p-2.5" data-testid={`supervisor-event-${ev.id}`}>
             <div className="flex items-center gap-1.5">
                 <span className="text-cyan-300">{PHASE_ICON[decision ? 'deciding' : ev.phase] ?? PHASE_ICON[ev.phase]}</span>
                 <span className="truncate text-ui-sm font-semibold text-zinc-100">{ev.itemTitle || ev.text}</span>
@@ -116,7 +116,7 @@ const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
             <p className="mt-1 text-ui-dense text-zinc-400">{ev.text}</p>
             {/* The model's verdict text for this item — live while streaming. */}
             {ev.streamText && (
-                <pre className="mt-1.5 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-black/30 p-2 font-mono text-ui-xs leading-4 text-zinc-500 custom-scrollbar">
+                <pre className="mt-1.5 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded-control bg-black/30 p-2 font-mono text-ui-xs leading-4 text-zinc-500 custom-scrollbar">
                     {ev.streamText}{ev.streaming ? '▍' : ''}
                 </pre>
             )}

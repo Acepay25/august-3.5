@@ -50,7 +50,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ imageUrl, onClose }
                 <img
                     src={imageUrl}
                     alt="Full size preview"
-                    className="max-w-full max-h-[90vh] object-contain rounded-lg"
+                    className="max-w-full max-h-[90vh] object-contain rounded-bubble"
                     onClick={(e) => e.stopPropagation()}
                 />
             </div>

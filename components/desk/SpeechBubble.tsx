@@ -78,7 +78,7 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
             className={`absolute z-20 ${sideClass} bottom-full mb-2 w-44 max-w-[12rem] animate-[bubble-pop_150ms_var(--ease-snappy)]`}
         >
             <div
-                className={`relative rounded-md border bg-zinc-900/95 px-2 py-1.5 shadow-lg shadow-black/40 backdrop-blur-sm ${
+                className={`relative rounded-bubble border bg-zinc-900/95 px-2 py-1.5 shadow-lg shadow-black/40 backdrop-blur-sm ${
                     emphasis === 'block-print'
                         ? 'border-amber-400/40'
                         : 'border-white/15'
@@ -94,7 +94,7 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
                 </p>
                 {conviction !== null && conviction !== undefined && (
                     <span
-                        className="mt-1 inline-flex items-center gap-1 rounded border border-white/10 bg-zinc-950/70 px-1.5 py-0.5 text-ui-2xs font-semibold text-zinc-300"
+                        className="mt-1 inline-flex items-center gap-1 rounded-control border border-white/10 bg-zinc-950/70 px-1.5 py-0.5 text-ui-2xs font-semibold text-zinc-300"
                         title="Sealed conviction (0-100)"
                     >
                         <span className="text-ui-micro uppercase tracking-widest text-zinc-500">Conv</span>

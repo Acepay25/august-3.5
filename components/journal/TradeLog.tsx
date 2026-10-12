@@ -111,7 +111,7 @@ const TradeDetailView: React.FC<{
     if (isAccuracyMode) {
         containerClass = "bg-zinc-900 border border-zinc-700";
         modeBadge = (
-            <span className="text-ui-xs font-semibold uppercase tracking-widest px-2 py-0.5 rounded-md border border-zinc-600 bg-zinc-800 text-zinc-300 ml-1">
+            <span className="text-ui-xs font-semibold uppercase tracking-widest px-2 py-0.5 rounded-control border border-zinc-600 bg-zinc-800 text-zinc-300 ml-1">
                 {accuracySubMode === 'pure_ai' ? 'Pure AI' : 'Strict Mode'}
             </span>
         );
@@ -141,7 +141,7 @@ const TradeDetailView: React.FC<{
                         <OutcomeBadge outcome={outcome} />
                     </div>
 
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-8 py-8 lg:px-10 lg:py-10">
+                    <div className="rounded-bubble border border-zinc-800 bg-zinc-900 px-8 py-8 lg:px-10 lg:py-10">
                         {postMortem ? (
                             <MarkdownContent content={postMortem} className="text-ui-lede text-zinc-200 leading-8" />
                         ) : (
@@ -161,7 +161,7 @@ const TradeDetailView: React.FC<{
                             <p className="text-ui-base text-zinc-500 mb-3">Evidence</p>
                             <div className="flex gap-3 overflow-x-auto pb-2">
                                 {(postMortemImages || []).map((img, i) => (
-                                    <img key={i} src={img} className="h-24 w-auto rounded-lg border border-zinc-800 cursor-pointer" onClick={() => setViewerImageUrl(img)} alt="" />
+                                    <img key={i} src={img} className="h-24 w-auto rounded-control border border-zinc-800 cursor-pointer" onClick={() => setViewerImageUrl(img)} alt="" />
                                 ))}
                             </div>
                         </div>
@@ -172,17 +172,17 @@ const TradeDetailView: React.FC<{
                             <ChevronDownIcon className="w-4 h-4 transition-transform group-open:rotate-180" aria-hidden="true" />
                             Trade setup
                         </summary>
-                        <div className={`mt-6 rounded-xl overflow-hidden ${containerClass}`}>
+                        <div className={`mt-6 rounded-bubble overflow-hidden ${containerClass}`}>
                         <div className="px-5 py-6 space-y-5">
                             <SetupLifecycleCard analysis={analysis} outcome={outcome} triggeredEntryIndices={trade.triggeredEntryIndices} compact embedded />
                             <div className="grid grid-cols-2 gap-4 text-ui-base pt-2 font-mono tabular-nums">
 
                                 {/* Trade Settings Row */}
-                                <div className="col-span-2 flex items-center justify-between bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 mb-1 flex-wrap gap-3">
+                                <div className="col-span-2 flex items-center justify-between bg-zinc-950 p-3.5 rounded-control border border-zinc-800 mb-1 flex-wrap gap-3">
                                     <span className="text-ui-dense uppercase font-semibold text-zinc-500 tracking-widest">Trade Parameters</span>
                                     <div className="flex items-center gap-2.5 flex-wrap">
                                         <span className="text-ui-sm text-zinc-400">Leverage:</span>
-                                        <div className="flex items-center bg-zinc-800 rounded-lg border border-zinc-700 px-2.5 py-1">
+                                        <div className="flex items-center bg-zinc-800 rounded-control border border-zinc-700 px-2.5 py-1">
                                             <input
                                                 type="number"
                                                 value={localLeverage}
@@ -199,7 +199,7 @@ const TradeDetailView: React.FC<{
                                                 <button
                                                     key={val}
                                                     onClick={(e) => handlePresetClick(e, val)}
-                                                    className={`text-ui-xs px-2 py-1 rounded-md border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${parseInt(localLeverage) === val
+                                                    className={`text-ui-xs px-2 py-1 rounded-control border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${parseInt(localLeverage) === val
                                                         ? 'bg-zinc-700 border-zinc-500 text-zinc-100 font-semibold'
                                                         : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300'
                                                         }`}
@@ -218,7 +218,7 @@ const TradeDetailView: React.FC<{
                                                     <button
                                                         key={o}
                                                         onClick={() => onUpdateOutcome(trade.id, o)}
-                                                        className={`px-1.5 py-0.5 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${
+                                                        className={`px-1.5 py-0.5 rounded-control text-ui-2xs font-bold uppercase tracking-wider border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${
                                                             trade.outcome === o
                                                                 ? o === TradeOutcome.WIN
                                                                     ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
@@ -255,7 +255,7 @@ const TradeDetailView: React.FC<{
                                                         title={analysis?.tradeTypeManualOverride
                                                             ? 'Manually set — click to change'
                                                             : 'Auto-detected — set it yourself'}
-                                                        className={`px-1.5 py-0.5 rounded text-ui-2xs font-bold uppercase tracking-wider border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${
+                                                        className={`px-1.5 py-0.5 rounded-control text-ui-2xs font-bold uppercase tracking-wider border transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${
                                                             (trade.tradeType || analysis?.tradeType) === tt
                                                                 ? 'bg-zinc-700 border-white/20 text-zinc-100'
                                                                 : 'bg-zinc-800 border-white/10 text-zinc-500 hover:text-zinc-300'
@@ -280,7 +280,7 @@ const TradeDetailView: React.FC<{
                                                     value={pnlDraftAmount}
                                                     onChange={(e) => setPnlDraftAmount(e.target.value)}
                                                     placeholder={pnlAmount !== undefined ? undefined : '—'}
-                                                    className="w-20 bg-zinc-800 border border-white/10 rounded px-1.5 py-0.5 text-ui-xs font-mono text-zinc-300 outline-none focus:border-cyan-500/40"
+                                                    className="w-20 bg-zinc-800 border border-white/10 rounded-control px-1.5 py-0.5 text-ui-xs font-mono text-zinc-300 outline-none focus:border-cyan-500/40"
                                                     aria-label="PnL in dollars"
                                                 />
                                                 <span className="text-ui-xs text-zinc-400">%</span>
@@ -289,7 +289,7 @@ const TradeDetailView: React.FC<{
                                                     value={pnlDraftPercent}
                                                     onChange={(e) => setPnlDraftPercent(e.target.value)}
                                                     placeholder={pnlPercent !== undefined ? undefined : '—'}
-                                                    className="w-14 bg-zinc-800 border border-white/10 rounded px-1.5 py-0.5 text-ui-xs font-mono text-zinc-300 outline-none focus:border-cyan-500/40"
+                                                    className="w-14 bg-zinc-800 border border-white/10 rounded-control px-1.5 py-0.5 text-ui-xs font-mono text-zinc-300 outline-none focus:border-cyan-500/40"
                                                     aria-label="PnL as leveraged percent"
                                                 />
                                                 <button
@@ -298,7 +298,7 @@ const TradeDetailView: React.FC<{
                                                         pnlAmount: pnlDraftAmount.trim() !== '' ? parseFloat(pnlDraftAmount) : undefined,
                                                         pnlPercent: pnlDraftPercent.trim() !== '' ? parseFloat(pnlDraftPercent) : undefined,
                                                     })}
-                                                    className="px-2 py-1 rounded-md bg-zinc-700 hover:bg-zinc-600 text-zinc-100 text-ui-xs font-semibold uppercase tracking-widest transition-colors"
+                                                    className="px-2 py-1 rounded-control bg-zinc-700 hover:bg-zinc-600 text-zinc-100 text-ui-xs font-semibold uppercase tracking-widest transition-colors"
                                                     title="Save PnL"
                                                 >
                                                     Save
@@ -308,22 +308,22 @@ const TradeDetailView: React.FC<{
                                     </div>
                                 </div>
 
-                                <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800">
+                                <div className="p-4 bg-zinc-950 rounded-bubble border border-zinc-800">
                                     <span className="text-ui-dense uppercase font-semibold text-zinc-500 block mb-1.5">Entry Zone</span>
                                     <span className="text-cyan-200 font-bold text-ui-base">{(entryPoints || [])[0]?.price || 'N/A'}</span>
                                 </div>
-                                <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800">
+                                <div className="p-4 bg-zinc-950 rounded-bubble border border-zinc-800">
                                     <span className="text-ui-dense uppercase font-semibold text-zinc-500 block mb-1.5">Stop Loss</span>
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-rose-300 font-bold text-ui-base">{stopLoss}</span>
                                         {stopLossPercentage && <span className="text-rose-500/60 text-ui-2xs">{stopLossPercentage}</span>}
                                     </div>
                                 </div>
-                                <div className="col-span-2 p-4 bg-zinc-950 rounded-xl border border-zinc-800">
+                                <div className="col-span-2 p-4 bg-zinc-950 rounded-bubble border border-zinc-800">
                                     <span className="text-ui-dense uppercase font-semibold text-zinc-500 block mb-2">Take Profit Targets</span>
                                     <div className="flex flex-wrap gap-2">
                                         {(takeProfit || []).map((tp, i) => (
-                                            <div key={i} className="flex items-center gap-1 bg-emerald-900/20 px-2 py-1 rounded border border-emerald-500/10">
+                                            <div key={i} className="flex items-center gap-1 bg-emerald-900/20 px-2 py-1 rounded-control border border-emerald-500/10">
                                                 <span className="text-emerald-300 font-bold">{tp.price}</span>
                                                 {tp.percentage && <span className="text-emerald-600 text-ui-2xs">{tp.percentage}</span>}
                                             </div>
@@ -337,7 +337,7 @@ const TradeDetailView: React.FC<{
                                     of pre-feature trades stays clean rather than
                                     showing dashes everywhere. */}
                                 {(trade.maxAdverseExcursion !== undefined || trade.maxFavorableExcursion !== undefined) && (
-                                    <div className="col-span-2 p-4 bg-zinc-950 rounded-xl border border-zinc-800" data-testid="trade-excursions">
+                                    <div className="col-span-2 p-4 bg-zinc-950 rounded-bubble border border-zinc-800" data-testid="trade-excursions">
                                         <span className="text-ui-dense uppercase font-semibold text-zinc-500 block mb-1.5">Held Through</span>
                                         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-ui-base tabular-nums">
                                             <span className="text-zinc-300 tabular-nums">
@@ -379,7 +379,7 @@ const TradeDetailView: React.FC<{
                                 )}
 
                                 {invalidationCriteria && invalidationCriteria.length > 0 && (
-                                    <div className="col-span-2 p-2.5 bg-rose-950/20 rounded-lg border border-rose-500/15 hover:border-rose-500/30 transition-colors">
+                                    <div className="col-span-2 p-2.5 bg-rose-950/20 rounded-control border border-rose-500/15 hover:border-rose-500/30 transition-colors">
                                         <span className="text-ui-2xs uppercase font-bold text-rose-400/80 block mb-1">Invalidation Contract</span>
                                         <div className="space-y-1">
                                             {invalidationCriteria.map((c, i) => (
@@ -392,7 +392,7 @@ const TradeDetailView: React.FC<{
                                     </div>
                                 )}
 
-                                {correctedEntry && <div className="col-span-2 bg-amber-500/10 p-2 rounded border border-amber-500/20 text-amber-200 font-medium">Corrected Entry: {correctedEntry}</div>}
+                                {correctedEntry && <div className="col-span-2 bg-amber-500/10 p-2 rounded-control border border-amber-500/20 text-amber-200 font-medium">Corrected Entry: {correctedEntry}</div>}
 
                                 <div className="col-span-2 text-ui-2xs text-zinc-600 pt-3 mt-1 border-t border-white/5 flex justify-between uppercase tracking-wider">
                                     <span>Analyst: {(() => {
@@ -412,7 +412,7 @@ const TradeDetailView: React.FC<{
                                 {/* Pattern-memory gate at analysis time — shows when
                                     memory halted / downsized / warned this trade. */}
                                 {trade.patternMemoryGate && trade.patternMemoryGate.gateResult !== 'PASS' && (
-                                    <div className={`col-span-2 rounded-lg border px-3 py-2 ${trade.patternMemoryGate.gateResult === 'HALT'
+                                    <div className={`col-span-2 rounded-control border px-3 py-2 ${trade.patternMemoryGate.gateResult === 'HALT'
                                         ? ' border-rose-500/40 bg-rose-500/10'
                                         : ' border-amber-500/40 bg-amber-500/10'}`}>
                                         <span className={`text-ui-2xs font-black uppercase tracking-widest flex items-center gap-1.5 ${trade.patternMemoryGate.gateResult === 'HALT' ? 'text-rose-400' : 'text-amber-400'}`}>
@@ -509,7 +509,7 @@ const TradeLogRowImpl: React.FC<{
                     type="checkbox"
                     checked={isSelected}
                     onChange={() => onSelect(trade.id)}
-                    className="form-checkbox hit-target bg-zinc-950 border-zinc-600 text-zinc-300 rounded focus-visible:ring-zinc-500 cursor-pointer"
+                    className="form-checkbox hit-target bg-zinc-950 border-zinc-600 text-zinc-300 rounded-control focus-visible:ring-zinc-500 cursor-pointer"
                 />
             </div>
             <button type="button" onClick={() => onOpenDetail(trade.id)} className="flex-1 min-w-0 flex items-center gap-3 text-left">
@@ -702,7 +702,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                     {outcomeFilter !== 'all' && (
                         <button
                             onClick={() => setOutcomeFilter('all')}
-                            className="p-1 text-zinc-500 hover:text-zinc-300 rounded hover:bg-zinc-800 transition-colors"
+                            className="p-1 text-zinc-500 hover:text-zinc-300 rounded-control hover:bg-zinc-800 transition-colors"
                             aria-label="Clear outcome filter"
                         >
                             <X className="h-3 w-3" aria-hidden="true" />
@@ -739,7 +739,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                         <button
                             onClick={handleUpdateInsights}
                             disabled={isSummarizing || newCount === 0}
-                            className={`w-full flex items-center justify-center gap-2 font-semibold py-3 px-4 rounded-xl transition-colors duration-[150ms] ease-[var(--ease-snappy)] uppercase text-ui-sm tracking-widest disabled:opacity-50 disabled:cursor-not-allowed ${duplicateCount > 0 && newCount === 0
+                            className={`w-full flex items-center justify-center gap-2 font-semibold py-3 px-4 rounded-control transition-colors duration-[150ms] ease-[var(--ease-snappy)] uppercase text-ui-sm tracking-widest disabled:opacity-50 disabled:cursor-not-allowed ${duplicateCount > 0 && newCount === 0
                                 ? 'bg-zinc-800 border border-zinc-700 text-zinc-500'
                                 : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-600'
                                 }`}
@@ -759,7 +759,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                                 }
                             </div>
                         )}
-                        <button onClick={handleDeleteSelected} disabled={isSummarizing} className=" w-full flex items-center justify-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-semibold py-3 px-4 rounded-xl transition-colors duration-[150ms] ease-[var(--ease-snappy)] uppercase text-ui-sm tracking-widest disabled:opacity-50">
+                        <button onClick={handleDeleteSelected} disabled={isSummarizing} className=" w-full flex items-center justify-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-semibold py-3 px-4 rounded-control transition-colors duration-[150ms] ease-[var(--ease-snappy)] uppercase text-ui-sm tracking-widest disabled:opacity-50">
                             <TrashIcon /> Delete Selected ({selectedIds.length})
                         </button>
                     </div>
@@ -769,7 +769,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
             {/* Trade List - Virtualized */}
             <div className="flex-1 overflow-hidden px-8 pb-8">
                 {totalTrades === 0 && trades.length === 0 ? (
-                    <div className="h-full rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
+                    <div className="h-full rounded-bubble border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
                         <EmptyState
                             icon={<Bookmark className="w-8 h-8" aria-hidden="true" />}
                             title="No trades logged yet"
@@ -802,7 +802,7 @@ const TradeLogContent: React.FC<TradeLogContentProps> = ({
                         className="h-full"
                     />
                 ) : (
-                    <div className="h-full rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
+                    <div className="h-full rounded-bubble border border-zinc-800 bg-zinc-900 overflow-hidden flex flex-col">
                         <Virtuoso
                             style={{ height: '100%' }}
                             data={filteredTrades}

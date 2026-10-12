@@ -199,9 +199,9 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
     if (!originalConfig) {
         return (
             <div ref={trapRef} role="dialog" aria-modal="true" aria-label="Scenario simulator" className="fixed inset-0 z-modal flex items-center justify-center bg-black/70">
-                <div className="bg-zinc-900 rounded-2xl p-8 border border-white/10 text-center">
+                <div className="bg-zinc-900 rounded-bubble p-8 border border-white/10 text-center">
                     <p className="text-zinc-400">Unable to load scenario data</p>
-                    <button onClick={onClose} className="mt-4 px-4 py-2 bg-zinc-800 rounded-lg text-zinc-300 hover:bg-zinc-700">
+                    <button onClick={onClose} className="mt-4 px-4 py-2 bg-zinc-800 rounded-control text-zinc-300 hover:bg-zinc-700">
                         Close
                     </button>
                 </div>
@@ -212,7 +212,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
     return (
             <div ref={trapRef} role="dialog" aria-modal="true" aria-label="Scenario simulator" className=" fixed inset-0 z-modal flex items-center justify-center bg-black/90">
             {/* Modal Container */}
-            <div className="relative w-full max-w-5xl h-[90vh] mx-4 bg-zinc-950 rounded-2xl border border-zinc-800 shadow-2xl shadow-black/60 overflow-hidden flex flex-col">
+            <div className="relative w-full max-w-5xl h-[90vh] mx-4 bg-zinc-950 rounded-bubble border border-zinc-800 shadow-2xl shadow-black/60 overflow-hidden flex flex-col">
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-zinc-900">
@@ -223,7 +223,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                             </h2>
                             <div className="flex items-center gap-2 mt-0.5">
                                 <span className="text-ui-base font-mono text-zinc-300">{originalConfig.coinName}</span>
-                                <span className={`text-ui-sm font-bold uppercase px-2 py-0.5 rounded border ${directionBg} ${directionColor}`}>
+                                <span className={`text-ui-sm font-bold uppercase px-2 py-0.5 rounded-control border ${directionBg} ${directionColor}`}>
                                     {originalConfig.direction}
                                 </span>
                             </div>
@@ -232,14 +232,14 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                     <div className="flex items-center gap-3">
                         <button
                             onClick={handleReset}
-                            className="px-3 py-1.5 text-ui-sm font-bold uppercase tracking-wider text-zinc-400 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
+                            className="px-3 py-1.5 text-ui-sm font-bold uppercase tracking-wider text-zinc-400 bg-zinc-800 hover:bg-zinc-700 rounded-control transition-colors"
                         >
                             Reset
                         </button>
                         <button
                             onClick={onClose}
                             aria-label="Close"
-                            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
+                            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-control transition-colors"
                         >
                             <CloseIcon className="w-5 h-5" aria-hidden="true" />
                         </button>
@@ -275,7 +275,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                 };
 
                                 return (
-                                    <div className="bg-zinc-800 rounded-xl border border-white/10 p-5">
+                                    <div className="bg-zinc-800 rounded-bubble border border-white/10 p-5">
                                         <h3 className="text-ui-sm font-bold uppercase tracking-widest text-zinc-500 mb-4">
                                             Adjust Parameters
                                         </h3>
@@ -289,17 +289,17 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                 Entry Price
                                             </label>
                                             <div className="flex items-center gap-2">
-                                                <button type="button" aria-label="Lower entry price" onClick={() => adjust(setEntry, entry, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Lower entry price" onClick={() => adjust(setEntry, entry, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-control text-zinc-400 hover:text-white transition-colors">
                                                     -
                                                 </button>
                                                 <input
                                                     type="number"
                                                     value={entry}
                                                     onChange={(e) => setEntry(e.target.value)}
-                                                    className="w-full bg-zinc-800 border border-zinc-700/50 rounded-lg px-4 py-3 text-lg font-mono text-center text-zinc-100 focus:outline-none focus:border-zinc-500/60"
+                                                    className="w-full bg-zinc-800 border border-zinc-700/50 rounded-control px-4 py-3 text-lg font-mono text-center text-zinc-100 focus:outline-none focus:border-zinc-500/60"
                                                     step="any"
                                                 />
-                                                <button type="button" aria-label="Raise entry price" onClick={() => adjust(setEntry, entry, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Raise entry price" onClick={() => adjust(setEntry, entry, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-control text-zinc-400 hover:text-white transition-colors">
                                                     +
                                                 </button>
                                             </div>
@@ -311,17 +311,17 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                 Stop Loss
                                             </label>
                                             <div className="flex items-center gap-2">
-                                                <button type="button" aria-label="Lower stop loss" onClick={() => adjust(setStopLoss, stopLoss, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Lower stop loss" onClick={() => adjust(setStopLoss, stopLoss, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-control text-zinc-400 hover:text-white transition-colors">
                                                     -
                                                 </button>
                                                 <input
                                                     type="number"
                                                     value={stopLoss}
                                                     onChange={(e) => setStopLoss(e.target.value)}
-                                                    className="w-full bg-zinc-800 border border-rose-500/30 rounded-lg px-4 py-3 text-lg font-mono text-center text-rose-200 focus:outline-none focus:border-rose-500/60"
+                                                    className="w-full bg-zinc-800 border border-rose-500/30 rounded-control px-4 py-3 text-lg font-mono text-center text-rose-200 focus:outline-none focus:border-rose-500/60"
                                                     step="any"
                                                 />
-                                                <button type="button" aria-label="Raise stop loss" onClick={() => adjust(setStopLoss, stopLoss, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Raise stop loss" onClick={() => adjust(setStopLoss, stopLoss, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-control text-zinc-400 hover:text-white transition-colors">
                                                     +
                                                 </button>
                                             </div>
@@ -333,17 +333,17 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                 Target 1
                                             </label>
                                             <div className="flex items-center gap-2">
-                                                <button type="button" aria-label="Lower first target" onClick={() => adjust(setTarget1, target1, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Lower first target" onClick={() => adjust(setTarget1, target1, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-control text-zinc-400 hover:text-white transition-colors">
                                                     -
                                                 </button>
                                                 <input
                                                     type="number"
                                                     value={target1}
                                                     onChange={(e) => setTarget1(e.target.value)}
-                                                    className="w-full bg-zinc-800 border border-emerald-500/30 rounded-lg px-4 py-3 text-lg font-mono text-center text-emerald-200 focus:outline-none focus:border-emerald-500/60"
+                                                    className="w-full bg-zinc-800 border border-emerald-500/30 rounded-control px-4 py-3 text-lg font-mono text-center text-emerald-200 focus:outline-none focus:border-emerald-500/60"
                                                     step="any"
                                                 />
-                                                <button type="button" aria-label="Raise first target" onClick={() => adjust(setTarget1, target1, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Raise first target" onClick={() => adjust(setTarget1, target1, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-control text-zinc-400 hover:text-white transition-colors">
                                                     +
                                                 </button>
                                             </div>
@@ -355,18 +355,18 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                 Target 2 (Optional)
                                             </label>
                                             <div className="flex items-center gap-2">
-                                                <button type="button" aria-label="Lower second target" onClick={() => adjust(setTarget2, target2, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Lower second target" onClick={() => adjust(setTarget2, target2, -1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-control text-zinc-400 hover:text-white transition-colors">
                                                     -
                                                 </button>
                                                 <input
                                                     type="number"
                                                     value={target2}
                                                     onChange={(e) => setTarget2(e.target.value)}
-                                                    className="w-full bg-zinc-800 border border-emerald-500/20 rounded-lg px-4 py-3 text-lg font-mono text-center text-emerald-200/80 focus:outline-none focus:border-emerald-500/40"
+                                                    className="w-full bg-zinc-800 border border-emerald-500/20 rounded-control px-4 py-3 text-lg font-mono text-center text-emerald-200/80 focus:outline-none focus:border-emerald-500/40"
                                                     step="any"
                                                     placeholder="—"
                                                 />
-                                                <button type="button" aria-label="Raise second target" onClick={() => adjust(setTarget2, target2, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                                                <button type="button" aria-label="Raise second target" onClick={() => adjust(setTarget2, target2, 1)} className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-control text-zinc-400 hover:text-white transition-colors">
                                                     +
                                                 </button>
                                             </div>
@@ -384,7 +384,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                     options={[1, 2, 3, 5, 10, 20, 25, 50, 75, 100, 125].map((lev) => ({ value: String(lev), label: `${lev}x` }))}
                                                     aria-label="Leverage"
                                                     className="w-full"
-                                                    triggerClassName="w-full rounded-lg border border-amber-500/30 bg-zinc-800 px-4 py-3 text-lg font-mono hover:bg-zinc-700 focus:border-amber-500/60"
+                                                    triggerClassName="w-full rounded-control border border-amber-500/30 bg-zinc-800 px-4 py-3 text-lg font-mono hover:bg-zinc-700 focus:border-amber-500/60"
                                                 />
                                             </div>
                                             <div>
@@ -395,7 +395,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                     type="number"
                                                     value={positionSize}
                                                     onChange={(e) => setPositionSize(e.target.value)}
-                                                    className="w-full bg-zinc-800 border border-zinc-700/50 rounded-lg px-4 py-3 text-lg font-mono text-center text-zinc-100 focus:outline-none focus:border-zinc-500/60"
+                                                    className="w-full bg-zinc-800 border border-zinc-700/50 rounded-control px-4 py-3 text-lg font-mono text-center text-zinc-100 focus:outline-none focus:border-zinc-500/60"
                                                     step="100"
                                                 />
                                             </div>
@@ -406,7 +406,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
                             {/* Suggestions */}
                             {scenarioResult?.suggestions && scenarioResult.suggestions.length > 0 && (
-                                <div className="bg-cyan-950/20 rounded-xl border border-cyan-500/20 p-4">
+                                <div className="bg-cyan-950/20 rounded-bubble border border-cyan-500/20 p-4">
                                     <h4 className="text-ui-xs uppercase font-bold text-cyan-400 tracking-widest mb-3">
                                          Suggestions
                                     </h4>
@@ -423,14 +423,14 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                         <div className="space-y-5">
 
                             {/* R:R Comparison Card */}
-                            <div className="bg-zinc-800 rounded-xl border border-white/10 p-5">
+                            <div className="bg-zinc-800 rounded-bubble border border-white/10 p-5">
                                 <h3 className="text-ui-sm font-bold uppercase tracking-widest text-zinc-500 mb-4">
                                     Impact Analysis
                                 </h3>
 
                                 <div className="grid grid-cols-2 gap-4">
                                     {/* Original */}
-                                    <div className="bg-zinc-800 rounded-lg p-4 border border-white/5">
+                                    <div className="bg-zinc-800 rounded-control p-4 border border-white/5">
                                         <span className="text-ui-2xs uppercase font-bold text-zinc-500 tracking-widest">Original</span>
                                         <div className="text-3xl font-black text-zinc-400 mt-1">
                                             1:{comparison?.original.rrRatio || '—'}
@@ -441,7 +441,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                     </div>
 
                                     {/* Scenario */}
-                                    <div className={`rounded-lg p-4 border ${comparison && comparison.rrChange > 0
+                                    <div className={`rounded-control p-4 border ${comparison && comparison.rrChange > 0
                                         ? 'bg-emerald-950/30 border-emerald-500/30'
                                         : comparison && comparison.rrChange < 0
                                             ? 'bg-rose-950/30 border-rose-500/30'
@@ -461,7 +461,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
                                 {/* Change Badge */}
                                 {comparison && comparison.rrChange !== 0 && (
-                                    <div className={`mt-4 text-center text-ui-base font-bold py-2 rounded-lg ${comparison.rrChange > 0
+                                    <div className={`mt-4 text-center text-ui-base font-bold py-2 rounded-control ${comparison.rrChange > 0
                                         ? 'bg-emerald-500/10 text-emerald-400'
                                         : 'bg-rose-500/10 text-rose-400'
                                         }`}>
@@ -475,7 +475,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
                             {/* Monte Carlo Results */}
                             {scenarioResult?.monteCarlo && (
-                                <div className="bg-zinc-800 rounded-xl border border-white/10 p-5">
+                                <div className="bg-zinc-800 rounded-bubble border border-white/10 p-5">
                                     <div className="flex items-center justify-between mb-4">
                                         <h3 className="text-ui-sm font-bold uppercase tracking-widest text-zinc-500">
                                             Monte Carlo Simulation
@@ -486,14 +486,14 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                     </div>
 
                                     <div className="grid grid-cols-3 gap-3 mb-4">
-                                        <div className="text-center p-3 rounded-lg bg-black/30">
+                                        <div className="text-center p-3 rounded-control bg-black/30">
                                             <span className="text-ui-2xs text-zinc-500 block">Win Rate</span>
                                             <span className={`text-xl font-black ${scenarioResult.monteCarlo.winRate >= 50 ? 'text-emerald-400' : 'text-rose-400'
                                                 }`}>
                                                 {scenarioResult.monteCarlo.winRate}%
                                             </span>
                                         </div>
-                                        <div className="text-center p-3 rounded-lg bg-black/30">
+                                        <div className="text-center p-3 rounded-control bg-black/30">
                                             <span className="text-ui-2xs text-zinc-500 block">EV</span>
                                             <span className={`text-xl font-black ${scenarioResult.monteCarlo.expectedValue >= 0 ? 'text-emerald-400' : 'text-rose-400'
                                                 }`}>
@@ -501,7 +501,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                 {scenarioResult.monteCarlo.expectedValue}%
                                             </span>
                                         </div>
-                                        <div className="text-center p-3 rounded-lg bg-black/30">
+                                        <div className="text-center p-3 rounded-control bg-black/30">
                                             <span className="text-ui-2xs text-zinc-500 block">Max DD</span>
                                             <span className="text-xl font-black text-amber-400">
                                                 {scenarioResult.monteCarlo.maxDrawdownAvg}%
@@ -536,7 +536,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
                             {/* Historical Matches */}
                             {scenarioResult?.historicalMatches && scenarioResult.historicalMatches.length > 0 && (
-                                <div className="bg-zinc-800 rounded-xl border border-white/10 p-5">
+                                <div className="bg-zinc-800 rounded-bubble border border-white/10 p-5">
                                     <h3 className="text-ui-sm font-bold uppercase tracking-widest text-zinc-500 mb-4">
                                         Historical Matches
                                     </h3>
@@ -544,7 +544,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                     {(() => {
                                         const stats = calculateHistoricalWinRate(scenarioResult.historicalMatches);
                                         return (
-                                            <div className={`text-center p-3 rounded-lg mb-4 ${stats.winRate >= 60 ? 'bg-emerald-950/30 border border-emerald-500/20' :
+                                            <div className={`text-center p-3 rounded-control mb-4 ${stats.winRate >= 60 ? 'bg-emerald-950/30 border border-emerald-500/20' :
                                                 stats.winRate >= 40 ? 'bg-amber-950/30 border border-amber-500/20' :
                                                     'bg-rose-950/30 border border-rose-500/20'
                                                 }`}>
@@ -562,7 +562,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                         {scenarioResult.historicalMatches.slice(0, 3).map((match, i) => (
                                             <div
                                                 key={i}
-                                                className={`text-ui-xs px-3 py-2 rounded-lg flex items-center justify-between ${match.trade.outcome === TradeOutcome.WIN
+                                                className={`text-ui-xs px-3 py-2 rounded-control flex items-center justify-between ${match.trade.outcome === TradeOutcome.WIN
                                                     ? 'bg-emerald-950/20 text-emerald-300'
                                                     : 'bg-rose-950/20 text-rose-300'
                                                     }`}
@@ -582,12 +582,12 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
 
                             {/* USD Risk/Reward Display */}
                             {currentMetrics && (
-                                <div className="bg-zinc-800 rounded-xl border border-white/10 p-5">
+                                <div className="bg-zinc-800 rounded-bubble border border-white/10 p-5">
                                     <h3 className="text-ui-sm font-bold uppercase tracking-widest text-zinc-500 mb-4">
                                         Dollar Impact
                                     </h3>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div className="text-center p-3 rounded-lg bg-rose-950/20 border border-rose-500/20">
+                                        <div className="text-center p-3 rounded-control bg-rose-950/20 border border-rose-500/20">
                                             <span className="text-ui-2xs text-rose-400 block">Risk</span>
                                             <span className="text-xl font-black text-rose-400">
                                                 ${currentMetrics.riskUSD.toLocaleString()}
@@ -603,7 +603,7 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                                                 {currentMetrics.leveragedRiskPercent}% of margin at {currentScenarioConfig?.leverage ?? scenarioLeverage}x
                                             </span>
                                         </div>
-                                        <div className="text-center p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/20">
+                                        <div className="text-center p-3 rounded-control bg-emerald-950/20 border border-emerald-500/20">
                                             <span className="text-ui-2xs text-emerald-400 block">Reward (TP1)</span>
                                             <span className="text-xl font-black text-emerald-400">
                                                 ${currentMetrics.rewardUSD.toLocaleString()}
@@ -622,11 +622,11 @@ const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
                 {/* Footer */}
                 <div className="px-6 py-4 border-t border-white/10 bg-zinc-950 flex items-center justify-between">
                     <span className="text-ui-xs text-zinc-600">
-                        Press <kbd className="px-1.5 py-0.5 bg-zinc-800 rounded text-ui-2xs">ESC</kbd> to close
+                        Press <kbd className="px-1.5 py-0.5 bg-zinc-800 rounded-control text-ui-2xs">ESC</kbd> to close
                     </span>
                     <button
                         onClick={onClose}
-                        className="px-6 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white font-bold text-ui-base rounded-lg transition-colors"
+                        className="px-6 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white font-bold text-ui-base rounded-control transition-colors"
                     >
                         Close
                     </button>

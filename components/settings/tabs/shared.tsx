@@ -20,7 +20,7 @@ const SettingsGroup: React.FC<{
                 {description && <p className="mt-0.5 text-ui-dense leading-relaxed text-zinc-600">{description}</p>}
             </div>
         )}
-        <div className="divide-y divide-white/[0.05] overflow-hidden rounded-2xl border border-white/[0.07] bg-zinc-900/50">
+        <div className="divide-y divide-white/[0.05] overflow-hidden rounded-bubble border border-white/[0.07] bg-zinc-900/50">
             {children}
         </div>
     </section>
@@ -40,7 +40,7 @@ const SettingsRow: React.FC<{
     }`}>
         <div className="flex min-w-0 flex-1 items-start gap-3.5">
             {icon && (
-                <span aria-hidden="true" className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.04] text-zinc-400">
+                <span aria-hidden="true" className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-control border border-white/[0.06] bg-white/[0.04] text-zinc-400">
                     {icon}
                 </span>
             )}

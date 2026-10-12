@@ -149,7 +149,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
 
     return (
         <div
-            className={`pointer-events-auto p-4 rounded-xl border shadow-xl animate-slide-in-right ${typeStyles[toast.type]}`}
+            className={`pointer-events-auto p-4 rounded-bubble border shadow-xl animate-slide-in-right ${typeStyles[toast.type]}`}
             // Errors announce assertively; everything else announces politely
             // so a burst of toasts doesn't shout over the screen reader.
             role={toast.type === 'error' ? 'alert' : 'status'}
@@ -168,7 +168,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
                                 toast.action!.onClick();
                                 onDismiss();
                             }}
-                            className="mt-2 text-ui-sm font-bold px-3 py-1 rounded-lg bg-zinc-700 hover:bg-zinc-600 transition-colors"
+                            className="mt-2 text-ui-sm font-bold px-3 py-1 rounded-control bg-zinc-700 hover:bg-zinc-600 transition-colors"
                         >
                             {toast.action.label}
                         </button>
@@ -176,7 +176,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
                 </div>
                 <button
                     onClick={onDismiss}
-                    className="p-1 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors flex-shrink-0"
+                    className="p-1 rounded-control hover:bg-white/10 text-white/70 hover:text-white transition-colors flex-shrink-0"
                     aria-label="Dismiss"
                 >
                     <X className="h-4 w-4" aria-hidden="true" />

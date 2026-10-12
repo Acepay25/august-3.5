@@ -905,7 +905,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     <div
                         key={tickFlash.seq}
                         data-testid="hero-price"
-                        className={`-mx-1 rounded px-1 font-mono text-ui-price font-semibold tabular-nums ${changeTone} ${tickFlash.cls}`.trim()}
+                        className={`-mx-1 rounded-control px-1 font-mono text-ui-price font-semibold tabular-nums ${changeTone} ${tickFlash.cls}`.trim()}
                     >
                         {Number.isFinite(markPrice) ? fmtPrice(markPrice!) : '—'}
                     </div>
@@ -1035,7 +1035,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     <LevelAccuracyBadge
                         drawings={modelDrawings}
                         candles={levelCandles}
-                        className="absolute top-2 right-2 z-10 bg-zinc-900/90 border border-white/10 rounded px-2 py-1" />
+                        className="absolute top-2 right-2 z-10 bg-zinc-900/90 border border-white/10 rounded-control px-2 py-1" />
                 </div>
                 {/* The order book sits BETWEEN the chart and the AI dock, not
                     to the chart's left. The chart is the primary object on this

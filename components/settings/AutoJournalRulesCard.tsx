@@ -45,7 +45,7 @@ export const AutoJournalRulesCard: React.FC<AutoJournalRulesCardProps> = ({ user
                     &ldquo;Never&rdquo; dismisses it — remove a rule to go back to asking.
                 </p>
             </div>
-            <div className="divide-y divide-white/[0.05] overflow-hidden rounded-2xl border border-white/[0.07] bg-zinc-900/50">
+            <div className="divide-y divide-white/[0.05] overflow-hidden rounded-bubble border border-white/[0.07] bg-zinc-900/50">
                 {rules.length === 0 ? (
                     <EmptyState
                         compact
@@ -58,7 +58,7 @@ export const AutoJournalRulesCard: React.FC<AutoJournalRulesCardProps> = ({ user
                     <div key={rule.coin} className="flex items-center gap-3 p-4">
                         <span
                             aria-hidden="true"
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.04] ${
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-control border border-white/[0.06] bg-white/[0.04] ${
                                 rule.policy === 'always' ? 'text-emerald-400' : 'text-rose-400'
                             }`}
                         >

@@ -34,7 +34,7 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
 
     return (
         <div ref={dialogRef} className=" fixed inset-0 bg-black/70 z-modal flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label="Outcome mismatch warning">
-            <div className="bg-zinc-900 border border-amber-500/30 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl transform transition-colors duration-[150ms] ease-[var(--ease-snappy)] scale-100 max-h-[90vh] overflow-y-auto">
+            <div className="bg-zinc-900 border border-amber-500/30 rounded-bubble w-full max-w-md overflow-hidden shadow-2xl transform transition-colors duration-[150ms] ease-[var(--ease-snappy)] scale-100 max-h-[90vh] overflow-y-auto">
 
                 {/* Header */}
                 <div className="bg-amber-500/10 p-5 border-b border-amber-500/20 flex items-start gap-4">
@@ -55,13 +55,13 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                 {/* Content */}
                 <div className="p-6 space-y-6">
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-center">
+                        <div className="p-4 rounded-control bg-zinc-950 border border-zinc-800 text-center">
                             <div className="text-ui-xs uppercase font-bold text-zinc-500 tracking-wider">You Logged</div>
                             <div className={`text-xl font-black mt-1 ${userOutcome === 'WIN' ? 'text-emerald-400' : 'text-rose-400'}`}>
                                 {userOutcome}
                             </div>
                         </div>
-                        <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-center">
+                        <div className="p-4 rounded-control bg-zinc-950 border border-zinc-800 text-center">
                             <div className="text-ui-xs uppercase font-bold text-zinc-500 tracking-wider">Price Shows</div>
                             <div className={`text-xl font-black mt-1 ${priceValidation.outcome === 'WIN' ? 'text-emerald-400' : 'text-rose-400'}`}>
                                 {priceValidation.outcome}
@@ -69,7 +69,7 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                         </div>
                     </div>
 
-                    <div className="p-4 rounded-xl bg-zinc-800 border border-white/10 text-ui-base text-zinc-300 space-y-2">
+                    <div className="p-4 rounded-control bg-zinc-800 border border-white/10 text-ui-base text-zinc-300 space-y-2">
                         <p className="font-semibold text-white">Analysis:</p>
                         <ul className="list-disc pl-4 space-y-1 text-ui-sm sm:text-ui-base">
                             {tpFirstTime && (
@@ -83,7 +83,7 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                                 </li>
                             )}
                         </ul>
-                        <p className="text-ui-sm text-amber-500/80 mt-2 bg-amber-500/10 p-2 rounded-lg">
+                        <p className="text-ui-sm text-amber-500/80 mt-2 bg-amber-500/10 p-2 rounded-control">
                             {tpHitFirst
                                 ? 'The Take Profit was reached <strong>BEFORE</strong> the Stop Loss.'
                                 : 'The Stop Loss was touched <strong>BEFORE</strong> any Take Profit was reached.'}
@@ -97,13 +97,13 @@ const OutcomeMismatchModal: React.FC<OutcomeMismatchModalProps> = ({
                     <div className="grid grid-cols-2 gap-3">
                         <button
                             onClick={() => onResolve('WIN')}
-                            className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/50 hover:bg-emerald-500/20 text-emerald-400 font-bold transition-[background-color,transform] duration-[150ms] ease-[var(--ease-snappy)] active:scale-95"
+                            className="p-3 rounded-control bg-emerald-500/10 border border-emerald-500/50 hover:bg-emerald-500/20 text-emerald-400 font-bold transition-[background-color,transform] duration-[150ms] ease-[var(--ease-snappy)] active:scale-95"
                         >
                             Select WIN
                         </button>
                         <button
                             onClick={() => onResolve('LOSS')}
-                            className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/50 hover:bg-rose-500/20 text-rose-400 font-bold transition-[background-color,transform] duration-[150ms] ease-[var(--ease-snappy)] active:scale-95"
+                            className="p-3 rounded-control bg-rose-500/10 border border-rose-500/50 hover:bg-rose-500/20 text-rose-400 font-bold transition-[background-color,transform] duration-[150ms] ease-[var(--ease-snappy)] active:scale-95"
                         >
                             Select LOSS
                         </button>

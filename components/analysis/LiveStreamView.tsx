@@ -75,7 +75,7 @@ const AnalystPanel: React.FC<{
   const showLoadingState = output === null || (output !== null && typedText.length === 0 && !isFinished);
 
   return (
-    <div className={`flex flex-col h-full rounded-2xl border ${colorClasses.border} ${colorClasses.bg} shadow-xl transition-colors duration-[150ms] ease-[var(--ease-snappy)] overflow-hidden relative group will-change-transform`}>
+    <div className={`flex flex-col h-full rounded-bubble border ${colorClasses.border} ${colorClasses.bg} shadow-xl transition-colors duration-[150ms] ease-[var(--ease-snappy)] overflow-hidden relative group will-change-transform`}>
       <div className={`absolute top-0 left-0 w-full h-1 ${colorClasses.accent} opacity-50`}></div>
       <div className="p-4 sm:p-5 flex justify-between items-start border-b border-white/5 bg-zinc-800">
         <div>
@@ -89,7 +89,7 @@ const AnalystPanel: React.FC<{
       <div className="flex-1 p-4 sm:p-5 overflow-y-auto custom-scrollbar relative">
         {(
           <details
-            className="mb-4 rounded-lg border border-white/10 bg-black/20 group"
+            className="mb-4 rounded-control border border-white/10 bg-black/20 group"
             open={thinkingOpen}
             onToggle={(e) => setThinkingOpen((e.target as HTMLDetailsElement).open)}
           >
@@ -197,7 +197,7 @@ const LiveStreamView: React.FC<LiveStreamViewProps> = ({
             </h2>
             <p className="text-zinc-500 text-ui-sm sm:text-ui-base mt-1 font-medium">{config.subtitle}</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-white/10 transition-colors duration-[150ms] ease-[var(--ease-snappy)]" aria-label="Close live view">
+          <button onClick={onClose} className="p-2 rounded-control bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-white/10 transition-colors duration-[150ms] ease-[var(--ease-snappy)]" aria-label="Close live view">
             <CloseIcon />
           </button>
         </header>
