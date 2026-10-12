@@ -85,7 +85,7 @@ export const ToolForgeManager: React.FC = () => {
                             )}
                         </div>
                         <p className="mt-1 text-ui-dense leading-snug text-zinc-400">{tool.proposal.description}</p>
-                        <p className="mt-1 truncate text-ui-xs text-zinc-600">
+                        <p className="mt-1 truncate text-ui-xs text-zinc-600" title={`${tool.proposal.method ?? 'GET'} ${tool.proposal.urlTemplate}${tool.proposal.extractPath ? ` → ${tool.proposal.extractPath}` : ''}`}>
                             {tool.proposal.method ?? 'GET'} {tool.proposal.urlTemplate}
                             {tool.proposal.extractPath ? ` → ${tool.proposal.extractPath}` : ''}
                         </p>

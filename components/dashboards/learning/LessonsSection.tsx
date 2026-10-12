@@ -54,7 +54,7 @@ export const LessonsSection: React.FC<LessonsSectionProps> = ({ topLessons, clos
                         return (
                             <div key={i} className="rounded-control border border-white/5 bg-zinc-950/40 px-2.5 py-2">
                                 <div className="flex items-center justify-between text-ui-base">
-                                    <span className="text-zinc-300 truncate pr-2 flex items-center gap-1.5">
+                                    <span className="text-zinc-300 truncate pr-2 flex items-center gap-1.5" title={`${l.label} ×${l.count}`}>
                                         {l.kind === 'loss' ? (
                                             <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-400" aria-hidden="true" />
                                         ) : (
@@ -114,7 +114,7 @@ export const LessonsSection: React.FC<LessonsSectionProps> = ({ topLessons, clos
                                         ) : (
                                             matches.slice(-8).map(t => (
                                                 <div key={t.id} className="flex items-center justify-between rounded-control bg-zinc-900/60 border border-white/5 px-2 py-1 text-ui-xs font-mono tabular-nums">
-                                                    <span className="text-zinc-400 truncate pr-2">
+                                                    <span className="text-zinc-400 truncate pr-2" title={`${new Date(t.timestamp).toLocaleDateString()} · ${t.analysis?.direction} · ${t.marketRegime ?? '?'}`}>
                                                         {new Date(t.timestamp).toLocaleDateString()} · {t.analysis?.direction}
                                                         <span className="text-zinc-600"> · {t.marketRegime ?? '?'}</span>
                                                     </span>

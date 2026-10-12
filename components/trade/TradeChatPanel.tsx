@@ -962,13 +962,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                     {renderGroupSurface && groups.length > 0 && groups.slice(0, 6).map(g => (
                                         <button key={g.id} type="button"
                                             onClick={() => { setShowNewMenu(false); const existing = sessions.find(s => s.groupId === g.id); if (existing) { chatStore.setActiveId(existing.id); return; } chatStore.addSession({ kind: 'group', title: g.name, groupId: g.id }); }}
-                                            className="block w-full truncate rounded-control px-2 py-1 text-left text-ui-dense text-zinc-400 hover:bg-white/[0.06]">
+                                            className="block w-full truncate rounded-control px-2 py-1 text-left text-ui-dense text-zinc-400 hover:bg-white/[0.06]" title={g.name}>
                                             {g.name} <span className="text-zinc-600">· room</span>
                                         </button>
                                     ))}
                                     {bots.length > 0 && bots.slice(0, 6).map(b => (
                                         <button key={b.id} type="button" onClick={() => openBotSession(b.id)}
-                                            className="block w-full truncate rounded-control px-2 py-1 text-left text-ui-dense text-zinc-400 hover:bg-white/[0.06]">
+                                            className="block w-full truncate rounded-control px-2 py-1 text-left text-ui-dense text-zinc-400 hover:bg-white/[0.06]" title={b.name}>
                                             {b.name} <span className="text-zinc-600">· as bot</span>
                                         </button>
                                     ))}

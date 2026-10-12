@@ -516,7 +516,7 @@ const TradeLogRowImpl: React.FC<{
                 <FileTextIcon className="w-5 h-5 text-zinc-500 shrink-0" aria-hidden="true" />
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-ui-base font-medium text-zinc-100 truncate">{coinName}.md</span>
+                        <span className="text-ui-base font-medium text-zinc-100 truncate" title={`${coinName}.md`}>{coinName}.md</span>
                         <OutcomeBadge outcome={outcome} />
                         {analysis?.verdictReview && (
                             <StatusPill
@@ -529,7 +529,7 @@ const TradeLogRowImpl: React.FC<{
                         )}
                         {isInsight && <span className="text-ui-xs uppercase tracking-widest text-zinc-500">memory</span>}
                     </div>
-                    <p className="text-ui-sm text-zinc-500 mt-1 truncate tabular-nums">
+                    <p className="text-ui-sm text-zinc-500 mt-1 truncate tabular-nums" title={`${direction}${tradeType ? ` · ${tradeType === 'scalp' ? '◆' : '◇'} ${tradeType}` : ''}${strategy ? ` · ${strategy}` : ''} · ${phtDayYear(timestamp)}${pnlLabel ? ` · ${pnlLabel}` : ''}${alphaLabel ? ` · ${alphaLabel}` : ''}${capLabel ? ` · ${capLabel}` : ''}`}>
                         {direction}{tradeType ? ` · ${tradeType === 'scalp' ? '◆' : '◇'} ${tradeType}` : ''}{strategy ? ` · ${strategy}` : ''} · {phtDayYear(timestamp)}
                         {pnlLabel ? ` · ${pnlLabel}` : ''}
                         {alphaLabel ? ` · ${alphaLabel}` : ''}

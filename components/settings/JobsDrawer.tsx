@@ -127,10 +127,9 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                                         data-testid="activity-automation-row"
                                         onClick={() => onOpenAutomation?.(a.id)}
                                         className="flex w-full items-center gap-2 rounded-control border border-white/5 bg-zinc-900/70 p-2.5 text-left transition-colors hover:bg-zinc-900"
-                                        title={`${a.name} — ${humanizeCron(a.schedule.cron)}`}
                                     >
                                         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${a.enabled ? 'bg-emerald-400' : 'bg-zinc-700'}`} />
-                                        <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-zinc-200">{a.name}</span>
+                                        <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-zinc-200" title={a.name}>{a.name}</span>
                                         <span className="shrink-0 text-ui-2xs text-zinc-600">{humanizeCron(a.schedule.cron)}</span>
                                     </button>
                                 ))

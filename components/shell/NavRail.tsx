@@ -106,7 +106,6 @@ const AccountRow: React.FC<{
         >
             <div
                 className="flex min-w-0 flex-1 items-center gap-2 rounded-control py-0.5"
-                title={activeUsername ? `Signed in as ${activeUsername}` : 'No profile'}
             >
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-ui-sm font-bold uppercase text-zinc-300">
                     {/* The person's initial, not a bot glyph — this row is the one
@@ -115,8 +114,8 @@ const AccountRow: React.FC<{
                     {activeUsername ? activeUsername.charAt(0) : <BotIcon className="h-4 w-4 text-zinc-500" aria-hidden="true" />}
                 </span>
                 <span className="min-w-0 flex-1">
-                    <span className="block truncate text-ui-caption text-zinc-300" data-testid="nav-account-name">{activeUsername || 'No profile'}</span>
-                    <span className="block truncate text-ui-2xs text-zinc-600">Signed in</span>
+                    <span className="block truncate text-ui-caption text-zinc-300" data-testid="nav-account-name" title={activeUsername || 'No profile'}>{activeUsername || 'No profile'}</span>
+                    <span className="block truncate text-ui-2xs text-zinc-600" title="Signed in">Signed in</span>
                 </span>
             </div>
             <Tip label="Settings" shortcut="Ctrl+,">

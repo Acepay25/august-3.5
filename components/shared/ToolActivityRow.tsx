@@ -147,11 +147,11 @@ const ToolRowGroupView: React.FC<{ group: ToolRowGroup; running: boolean }> = ({
                 <span className="shrink-0 tabular-nums text-zinc-500">×{group.count}</span>
             )}
             {anyCalling ? (
-                <span className="min-w-0 truncate">· calling…</span>
+                <span className="min-w-0 truncate" title="calling…">· calling…</span>
             ) : detail ? (
                 <span className="min-w-0 truncate" title={detail}>· {detail}</span>
             ) : anyFailed ? (
-                <span className="min-w-0 truncate text-rose-300/80">· failed</span>
+                <span className="min-w-0 truncate text-rose-300/80" title="failed">· failed</span>
             ) : null}
         </div>
     );

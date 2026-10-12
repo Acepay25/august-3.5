@@ -24,8 +24,8 @@ interface MemoryHealthCardProps {
 }
 
 const Row: React.FC<{ label: string; value: React.ReactNode; title?: string }> = ({ label, value, title }) => (
-    <div className="flex items-baseline justify-between gap-3 py-1" title={title}>
-        <span className="min-w-0 truncate text-ui-dense text-zinc-500">{label}</span>
+    <div className="flex items-baseline justify-between gap-3 py-1">
+        <span className="min-w-0 truncate text-ui-dense text-zinc-500" title={title ? `${label} — ${title}` : label}>{label}</span>
         <span className="shrink-0 font-mono text-ui-dense tabular-nums text-zinc-200">{value}</span>
     </div>
 );

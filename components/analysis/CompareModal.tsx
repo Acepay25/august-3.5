@@ -114,7 +114,7 @@ const CompareModal: React.FC<CompareModalProps> = ({ primary, secondary, analysi
                       onClick={() => onPickSecondary(m.id)}
                       className="flex w-full items-center justify-between rounded-control border border-white/5 bg-zinc-950/60 px-3 py-1.5 text-left text-ui-dense text-zinc-300 transition-colors hover:border-white/20 hover:bg-zinc-800"
                     >
-                      <span className="truncate">{m.analysis?.direction} {m.analysis?.coinName || ''} · {m.analysis?.confidence}</span>
+                      <span className="truncate" title={`${m.analysis?.direction} ${m.analysis?.coinName || ''} · ${m.analysis?.confidence}`}>{m.analysis?.direction} {m.analysis?.coinName || ''} · {m.analysis?.confidence}</span>
                       <span className="shrink-0 text-ui-2xs text-zinc-500">{new Date(m.createdAt).toLocaleString()}</span>
                     </button>
                   ))}

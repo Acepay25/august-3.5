@@ -242,7 +242,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                                         >
                                             {ACTIVITY_ICON[entry.kind]}
                                         </span>
-                                        <span className="min-w-0 flex-1 truncate text-zinc-400">
+                                        <span className="min-w-0 flex-1 truncate text-zinc-400" title={entry.kind === 'sent' ? 'You sent a message' : entry.kind === 'working' ? `${entry.botName} is working…` : entry.kind === 'replied' ? `${entry.botName} replied` : entry.kind === 'passed' ? `${entry.botName} passed${entry.detail ? ` (${entry.detail})` : ''}` : undefined}>
                                             {entry.kind === 'sent' && 'You sent a message'}
                                             {entry.kind === 'working' && `${entry.botName} is working…`}
                                             {entry.kind === 'replied' && `${entry.botName} replied`}
