@@ -165,7 +165,10 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
 
     if (profile.totalAnalyzedTrades < 3) {
         return (
-            <div className="space-y-4 p-3 sm:p-4 overflow-y-auto custom-scrollbar">
+            // Same testid as the populated branch below: it names THIS pane, so
+            // a test can prove the lazy analytics pane mounted without having
+            // to know which of its two states the store happens to be in.
+            <div data-testid="learn-analytics" className="space-y-4 p-3 sm:p-4 overflow-y-auto custom-scrollbar">
                 {memoryGraphSection}
                 {harnessSection}
                 {lessonsSection}
@@ -181,7 +184,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     }
 
     return (
-        <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 overflow-y-auto custom-scrollbar">
+        <div data-testid="learn-analytics" className="space-y-4 sm:space-y-6 p-3 sm:p-4 overflow-y-auto custom-scrollbar">
             {memoryGraphSection}
             {harnessSection}
             {lessonsSection}

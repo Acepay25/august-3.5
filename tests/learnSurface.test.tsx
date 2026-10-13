@@ -1,12 +1,39 @@
 /**
  * Learn surface smoke test (WS-5.1) — the tabs mount, switch, and show
- * the stores they claim to. MemoryFilesManager is lazy, so the tab-switch
- * assertions stay on the always-loaded Queue and Health panes.
+ * the stores they claim to. Six of this surface's panes are `React.lazy`, so
+ * the module graph is paid for here, once, before any assertion runs — see
+ * `beforeAll` below.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+
+/**
+ * A lazy boundary's first mount pays for transforming its whole module graph,
+ * and vitest does that lazily, inside whichever test happens to open the tab.
+ * On an idle machine that is a second; alongside the other 510 files it has
+ * measured 19s, so the run fails two ways and neither names the cause: the
+ * `waitFor` gives up at 1s and reports a missing heading ("renders the
+ * global-memory switch", "falls back to Approvals"), or the test blows its
+ * budget outright. Both were seen on 2026-10-13 in two consecutive full runs,
+ * on different tests, while the file passed 3/3 solo.
+ *
+ * Importing the same specifiers here instantiates them once, so `lazy()`
+ * resolves from the module registry on mount. A larger `testTimeout` would
+ * only decide how slow a first mount is acceptable — and would tax every
+ * genuinely-fast test in the file to hide it.
+ */
+beforeAll(async () => {
+    await Promise.all([
+        import('../components/learn/MemoryFilesManager'),
+        import('../components/settings/HarnessLessonsBrowser'),
+        import('../components/dashboards/LearningDashboard'),
+        import('../components/dashboards/VersionHistoryDashboard'),
+        import('../components/settings/SessionUsagePanel'),
+        import('../components/settings/DiagnosticsPanel'),
+    ]);
+});
 
 let store: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
@@ -42,8 +69,23 @@ beforeEach(async () => {
 
 afterEach(cleanup);
 
+/**
+ * App hands every surface a ToastProvider; this harness now does too.
+ *
+ * It used not to, and nothing failed, because the panes that call `useToast`
+ * sit behind `lazy()`: the boundary was still pending when the assertions ran,
+ * so `LearningDashboard` never mounted inside a test and its missing provider
+ * stayed invisible. Pre-warming the lazy chunks (beforeAll) made that honest —
+ * and the pane then threw, exactly as it would in any tree without the
+ * provider. The tests that "passed" against those Health panes were asserting
+ * on a subtree that had never rendered.
+ */
 const mount = (): void => {
-    render(<LearnView username={USER} trades={[]} memoryConfig={null} />);
+    render(
+        <ToastProvider>
+            <LearnView username={USER} trades={[]} memoryConfig={null} />
+        </ToastProvider>,
+    );
 };
 
 describe('Learn surface', () => {
@@ -112,14 +154,14 @@ const DeepLinkHarness: React.FC = () => {
     const [nav, setNav] = React.useState<LearnTab | null>(null);
     const [on, setOn] = React.useState(true);
     return (
-        <>
+        <ToastProvider>
             <button data-testid="link-health" onClick={() => setNav('health')} />
             <button data-testid="toggle-mount" onClick={() => setOn(v => !v)} />
             {on && (
                 <LearnView username={USER} trades={[]} memoryConfig={null}
                     initialTab={nav} onInitialTabConsumed={() => setNav(null)} />
             )}
-        </>
+        </ToastProvider>
     );
 };
 
@@ -160,10 +202,15 @@ describe('One learning surface (WS-5.1)', () => {
     it('Health carries the learning analytics that used to live in the Journal', async () => {
         mount();
         fireEvent.click(screen.getByTestId('learn-tab-health'));
-        await waitFor(() => expect(screen.getByTestId('learn-signals')).toBeTruthy());
+        // `learn-signals` is the div AROUND the Suspense boundary, so it exists
+        // as soon as the tab renders — asserting on it proved nothing about the
+        // pane inside. This asserts the lazy pane itself mounted.
+        await waitFor(() => expect(screen.getByTestId('learn-analytics')).toBeTruthy());
     });
 });
-describe('Graveyard view (WS-5.1)', () => {    it('Health lists what was retired and why, instead of only counting it', async () => {
+
+describe('Graveyard view (WS-5.1)', () => {
+    it('Health lists what was retired and why, instead of only counting it', async () => {
         await recordTombstone(USER, {
             slug: 'btc-old-range-rule', reason: 'eval-hurts', sampleN: 6, liftPts: -12,
             retiredAt: '2026-09-01T00:00:00.000Z',
@@ -295,9 +342,9 @@ describe('The Memory tab', () => {
     });
 
     it('shows no global-memory switch when the setter is not handed in', async () => {
-        // The bare mount() has no ToastProvider either, but the Memory pane's
-        // notebook browser is the only child that needs one; this test mounts
-        // it wrapped to reach the pane and pin the ABSENCE of the switch.
+        // `mount()` provides Toast now (see the note on it); this case still
+        // spells its own wrapper because it pins the ABSENCE of the switch,
+        // which is a property of the props handed in, not of the provider.
         render(
             <ToastProvider>
                 <LearnView username={USER} trades={[]} memoryConfig={null} />
