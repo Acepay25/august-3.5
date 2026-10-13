@@ -556,7 +556,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                 return (
                                     <div
                                         key={folder.id}
-                                        className="flex w-full items-center gap-3.5 border-b border-zinc-800 px-4 py-3.5 text-left transition-colors last:border-b-0 hover:bg-zinc-800/80 group/folder"
+                                        className="flex w-full items-center border-b border-zinc-800 text-left transition-colors last:border-b-0 hover:bg-zinc-800/80 group/folder"
                                     >
                                         <button
                                             type="button"
@@ -565,7 +565,15 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                                 setIsCreatingFolder(false);
                                                 setIsCreatingFile(false);
                                             }}
-                                            className="flex min-w-0 flex-1 items-center gap-3.5 text-left"
+                                            // The row's inset lives HERE, on the control, not on
+                                            // the wrapper: padding on the wrapper highlighted the
+                                            // whole row but only the middle band was clickable, and
+                                            // on the touch build — where the reorder arrows wait for
+                                            // a hover that never comes — the dead strip was the
+                                            // entire edge of the row. Geometry is unchanged: 16px
+                                            // inset, 14px between the name and the arrows, 16px to
+                                            // the right edge.
+                                            className="flex min-w-0 flex-1 items-center gap-3.5 py-3.5 pl-4 pr-3.5 text-left"
                                         >
                                         <span className="w-9 h-9 rounded-control bg-zinc-800 border border-zinc-700/80 flex items-center justify-center shrink-0">
                                             <FolderIcon className="w-4 h-4 text-zinc-400" aria-hidden="true" />
@@ -579,7 +587,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                             </span>
                                         </span>
                                         </button>
-                                        <span className="hidden group-hover/folder:flex items-center shrink-0">
+                                        <span className="hidden group-hover/folder:flex items-center shrink-0 pr-4">
                                             <button
                                                 type="button"
                                                 aria-label={`Move ${folder.name} up`}
