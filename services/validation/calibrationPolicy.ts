@@ -742,7 +742,7 @@ This specific combination of factors has historically performed poorly.`
 // =============================================================================
 
 interface ProviderAccuracyContext {
-    rankings: { provider: string; winRate: number; sampleSize: number }[];
+    rankings: { provider: string; label: string; winRate: number; sampleSize: number }[];
     mostAccurate: string | null;
     leastAccurate: string | null;
     accuracySpread: number;          // Difference between best and worst
@@ -751,9 +751,20 @@ interface ProviderAccuracyContext {
 
 /**
  * Get provider accuracy rankings for ensemble moderator context.
+ *
+ * `byProvider` is keyed by ProviderConfig id (`types/calibration.ts:31`, and
+ * `hooks/useTradeLogging.ts:458` writes exactly that — the first key of
+ * `modelsUsed`). Ids are the right thing to STORE and the wrong thing to hand
+ * a model: the moderator reads answers labelled by provider name, so a line
+ * telling it to "weight custom-1720000000 more heavily" names something that
+ * appears nowhere else in its context. `providerLabels` (id → display name,
+ * from the configs the caller already loads) is what turns the ranking into
+ * something the seat can act on; without it the prose degrades to the id,
+ * which is the old behaviour and still truthful, just less useful.
  */
 export const getProviderAccuracyContext = (
-    calibration: ConfidenceCalibration | undefined
+    calibration: ConfidenceCalibration | undefined,
+    providerLabels: Record<string, string> = {},
 ): ProviderAccuracyContext => {
     const defaultResult: ProviderAccuracyContext = {
         rankings: [],
@@ -783,24 +794,26 @@ export const getProviderAccuracyContext = (
     const mostAccurate = validRankings[0].provider;
     const leastAccurate = validRankings[validRankings.length - 1].provider;
     const accuracySpread = validRankings[0].winRate - validRankings[validRankings.length - 1].winRate;
+    const labelOf = (id: string): string => providerLabels[id] || id;
 
     let promptInjection = '';
     if (validRankings.length >= 2 && accuracySpread >= 10) {
         const rankingStr = validRankings.slice(0, 4).map(
-            r => `${r.provider}: ${r.winRate}% (n=${r.total})`
+            r => `${labelOf(r.provider)}: ${r.winRate}% (n=${r.total})`
         ).join(', ');
 
         promptInjection = ` PROVIDER ACCURACY RANKING:
 ${rankingStr}
 
-INSTRUCTION FOR MODERATOR: Weight ${mostAccurate}'s analysis more heavily (${validRankings[0].winRate}% accuracy).
-Be skeptical of ${leastAccurate}'s recommendations (${validRankings[validRankings.length - 1].winRate}% accuracy).
+INSTRUCTION FOR MODERATOR: Weight ${labelOf(mostAccurate)}'s analysis more heavily (${validRankings[0].winRate}% accuracy).
+Be skeptical of ${labelOf(leastAccurate)}'s recommendations (${validRankings[validRankings.length - 1].winRate}% accuracy).
 When providers disagree, favor the more historically accurate provider.`;
     }
 
     return {
         rankings: validRankings.map(r => ({
             provider: r.provider,
+            label: labelOf(r.provider),
             winRate: r.winRate,
             sampleSize: r.total
         })),

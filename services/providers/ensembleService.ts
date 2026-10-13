@@ -736,7 +736,15 @@ export * from './ensembleConsensus';
  * Dead code,).
  */
 const buildCalibrationContext = (
-    analysts: { name: string; providerId?: string; result: { analysis: TradeAnalysis } }[],
+    // The ledger `granular.byProvider` is rebuilt from is keyed by ProviderConfig
+    // id (`types/calibration.ts:31`; written at `hooks/useTradeLogging.ts:458` as
+    // the first key of `modelsUsed`), so this is that key and nothing else. The
+    // arm here used to fall back to `analyst.name` — a display name can never hit
+    // an id-keyed map, so it produced no rescue, only a misleading implication
+    // that names are a valid key. An analyst with no id (`:978` reads
+    // `analystProviders?.[index]`, so it can be undefined) gets no calibration
+    // line at all, which is stated in the loop rather than left to a miss.
+    analysts: { name: string; providerId: string | undefined; result: { analysis: TradeAnalysis } }[],
 ): string => {
     const calibrationData = GlobalLearningService.getCalibration();
     if (!calibrationData) return '';
@@ -745,9 +753,13 @@ const buildCalibrationContext = (
     for (const analyst of analysts) {
         const rawProb = analyst.result.analysis.probability;
         if (typeof rawProb !== 'number' || isNaN(rawProb)) continue;
+        // Stated as a skip rather than left to a lookup that happens to miss:
+        // no id means no row in the id-keyed ledger, so there is no historical
+        // claim to make about this analyst.
+        if (!analyst.providerId) continue;
         const calibratedProb = getBayesianCalibratedConfidence(
             calibrationData,
-            analyst.providerId || analyst.name,
+            analyst.providerId,
             analyst.result.analysis.confidence as ConfidenceLevel,
             rawProb,
         );
