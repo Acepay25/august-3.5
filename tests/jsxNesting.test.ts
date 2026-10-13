@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join, relative, resolve } from 'path';
-import { openTags, unclosedFrames, tsxFilesUnder, filesWalkedShortOfTheirEnd, REPO_ROOT } from './jsxScan';
+import { openTags, unclosedFrames, declarations, ownerOf, tsxFilesUnder, filesWalkedShortOfTheirEnd, REPO_ROOT } from './jsxScan';
 
 /**
  * A `<button>` cannot contain a `<button>`: React says so at render
@@ -38,21 +38,15 @@ const INTERACTIVE_CONTENT = /^(button|a|summary|label|select|textarea|input)$/;
 
 const label = (file: string): string => relative(REPO_ROOT, file).replace(/\\/g, '/');
 
-/** Uppercase declarations, in order: the component a position belongs to. */
-const DECL = /^(?:export\s+)?(?:default\s+)?(?:const|function|class|let)\s+([A-Z][A-Za-z0-9_]*)/gm;
-const declarations = (src: string): { pos: number; name: string }[] =>
-    [...src.matchAll(DECL)].map(m => ({ pos: m.index ?? 0, name: m[1] }));
-
-const ownerOf = (decls: { pos: number; name: string }[], pos: number): string | null => {
-    let name: string | null = null;
-    for (const d of decls) { if (d.pos > pos) break; name = d.name; }
-    return name;
-};
-
 const FILES = [...tsxFilesUnder(join(REPO_ROOT, 'components')), resolve(REPO_ROOT, 'App.tsx')].map(file => {
     const src = readFileSync(file, 'utf8');
     return { file, src, tags: openTags(src), decls: declarations(src) };
 });
+
+/** How many of the attributed declarations are nested inside another body.
+ *  The gate used to know only column-0 ones, so this is the population the
+ *  owner map gained, measured rather than claimed. */
+const NESTED_DECLARATIONS = FILES.reduce((n, f) => n + f.decls.filter(d => d.indent > 0).length, 0);
 
 /**
  * What each component renders. `forbidsRoot` = its outermost element is a
@@ -148,8 +142,54 @@ describe('interactive elements do not nest', () => {
         expect(TAGS_SEEN).toBeGreaterThanOrEqual(3000);
     });
 
-    it(`finds no interactive element inside another (${offenders.length} offender(s))`, () => {
+    /**
+     * Owner attribution, which decides what each derived set knows. A nested
+     * component used to be invisible: its tags were credited to the enclosing
+     * component and its own name was attributed nothing, so a rule written
+     * against components could not see it.
+     */
+    it('attributes a component declared inside another one', () => {
+        const src = [
+            'export const Outer: React.FC = () => {',
+            '    const InnerCard = (): React.ReactElement => (<button type="button">inner</button>);',
+            '    return (<div><span>after the nested one</span></div>);',
+            '};',
+        ].join('\n');
+        const decls = declarations(src);
+        expect(decls.map(d => d.name).join(',')).toBe('Outer,InnerCard');
+        const innerTag = src.indexOf('<button');
+        const afterTag = src.indexOf('<span>');
+        expect(ownerOf(decls, innerTag)).toBe('InnerCard');
+        // …and the enclosing component still owns its own later markup, rather
+        // than handing everything after the nested one to it.
+        expect(ownerOf(decls, afterTag)).toBe('Outer');
+        expect(decls.find(d => d.name === 'InnerCard')!.indent).toBeGreaterThan(0);
+    });
+
+    it('does not let a one-line constant own the rest of the file', () => {
+        const src = [
+            'const SEEN_KEY = \'a_key\';',
+            'export const Panel = (): React.ReactElement => (<div><p>x</p></div>);',
+        ].join('\n');
+        const decls = declarations(src);
+        expect(ownerOf(decls, src.indexOf('<p>'))).toBe('Panel');
+    });
+
+    it('reads prose punctuation inside JSX as prose', () => {
+        const src = 'const Card = () => (<p>foo (x</p>);\nconst Next = () => (<b>y</b>);';
+        const decls = declarations(src);
+        expect(ownerOf(decls, src.indexOf('<b>'))).toBe('Next');
+    });
+
+    it('finds no interactive element inside another', () => {
         expect(offenders, offenders.slice(0, 10).join('\n')).toEqual([]);
+    });
+
+    it(`attributes ${NESTED_DECLARATIONS} declarations nested inside another body`, () => {
+        // Not a debt count: the population the owner map has to get right. It
+        // exists so the nested-attribution rule above is known to be load-bearing
+        // in this repo, not just in the fixture.
+        expect(NESTED_DECLARATIONS).toBeGreaterThan(0);
     });
 
     /**

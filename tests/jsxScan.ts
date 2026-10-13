@@ -84,6 +84,10 @@ function tagEnd(src: string, lt: number): number {
     let i = lt + 1;
     while (i < src.length) {
         const top = stack[stack.length - 1];
+        // The stack empties when the region past this `<` closes more braces
+        // than it opens — which means this was never a tag, just code with a
+        // comparison in it. Refuse the read instead of crashing on it.
+        if (!top) return -1;
         const c = src[i];
         if (top.kind === 'str') {
             if (c === BS) { i += 2; continue; }
@@ -227,6 +231,153 @@ export const openTags = (src: string): Open[] => walk(src).tags;
 
 /** Frames still open at end of file. Zero says the walk finished what it started. */
 export const unclosedFrames = (src: string): number => walk(src).unclosed;
+
+/**
+ * Uppercase declarations and the span each one owns, so a component declared
+ * INSIDE another function is attributed to itself. Not hypothetical:
+ * `components/dashboards/VersionHistoryDashboard.tsx:116` declares `ModernCard`
+ * inside the dashboard and `components/shared/ConfirmDialog.tsx:136` declares
+ * its own component. A nested name the owner map does not know has its tags
+ * credited to the enclosing component instead, and the nested name is then
+ * known to nothing — which is how `<button><ModernCard/></button>` escapes a
+ * rule written against components.
+ *
+ * The span is walked with the same lexing as `openTags`, because both cheap
+ * readings are wrong here: an indentation rule cut `PixelSeat`'s range short,
+ * and a bare brace count treats the `(` inside `<span>foo (x</span>` as code.
+ * A declaration ends at the first of: a `;` at its own depth, another
+ * declaration at its depth or shallower, a delimiter that closes around it, or
+ * end of file.
+ */
+export interface Declaration { name: string; start: number; end: number; indent: number }
+
+const DECL_HERE = /^(?:const|let|function|class)\s+([A-Z][A-Za-z0-9_]*)\b/;
+
+export function declarations(src: string): Declaration[] {
+    type Frame =
+        | { kind: 'code'; base: number }
+        | { kind: 'text' }
+        | { kind: 'str'; ch: string }
+        | { kind: 'tmpl' };
+    const frames: Frame[] = [{ kind: 'code', base: 0 }];
+    const out: Declaration[] = [];
+    const pending: { decl: Declaration; depth: number }[] = [];
+    let depth = 0;
+    let i = 0;
+
+    /** Every declaration at `depth` or deeper ends at `pos`. */
+    const closeFrom = (pos: number, atOrBelow: number): void => {
+        for (let k = pending.length - 1; k >= 0; k--) {
+            if (pending[k].depth >= atOrBelow) { pending[k].decl.end = pos; pending.splice(k, 1); }
+        }
+    };
+
+    while (i < src.length) {
+        const top = frames[frames.length - 1];
+        const c = src[i];
+
+        if (top.kind === 'str') {
+            if (c === BS) { i += 2; continue; }
+            if (c === top.ch) frames.pop();
+            i++; continue;
+        }
+        if (top.kind === 'tmpl') {
+            if (c === BS) { i += 2; continue; }
+            if (c === BT) { frames.pop(); i++; continue; }
+            if (c === '$' && src[i + 1] === '{') { frames.push({ kind: 'code', base: depth }); depth++; i += 2; continue; }
+            i++; continue;
+        }
+        if (top.kind === 'text') {
+            // JSX text: a quote is a character and a paren is prose. Only `{`
+            // leaves text, and that part IS code.
+            if (c === '{') { frames.push({ kind: 'code', base: depth }); depth++; i++; continue; }
+            if (c === '<' && /[a-zA-Z/]/.test(src[i + 1] || '')) {
+                const end = tagEnd(src, i);
+                if (end > 0) {
+                    if (src[i + 1] === '/') {
+                        const m = /^<\/([a-zA-Z][\w.]*)/.exec(src.slice(i, i + 60));
+                        for (let k = frames.length - 1; k >= 0; k--) if (frames[k].kind === 'text') { frames.length = k; break; }
+                        i += (m?.[1].length || 0) + 3;
+                        continue;
+                    }
+                    const name = /^<([a-zA-Z][\w.]*)/.exec(src.slice(i, i + 60))?.[1] || '';
+                    const selfClosed = src.slice(i + name.length + 1, end - 1).trimEnd().endsWith('/') || VOID.has(name.toLowerCase());
+                    if (!selfClosed) frames.push({ kind: 'text' });
+                    i = end;
+                    continue;
+                }
+            }
+            i++; continue;
+        }
+
+        // code frame
+        if (c === '/' && (src[i + 1] === '/' || src[i + 1] === '*')) {
+            const lineComment = src[i + 1] === '/';
+            const e = lineComment ? src.indexOf('\n', i) : src.indexOf('*/', i + 2);
+            i = e < 0 ? src.length : lineComment ? e + 1 : e + 2;
+            continue;
+        }
+        if (c === '"' || c === "'" || c === BT) {
+            frames.push(c === BT ? { kind: 'tmpl' } : { kind: 'str', ch: c });
+            i++; continue;
+        }
+        if (c === '/' && isRegexStart(src, i)) {
+            const e = skipRegex(src, i);
+            if (e >= 0) { i = e; continue; }
+        }
+        if (c === '<' && /[a-zA-Z]/.test(src[i + 1] || '') && !/[A-Za-z0-9_$.]/.test(src[i - 1] || '')) {
+            const end = tagEnd(src, i);
+            if (end > 0) {
+                const name = /^<([a-zA-Z][\w.]*)/.exec(src.slice(i, i + 60))?.[1] || '';
+                const selfClosed = src.slice(i + name.length + 1, end - 1).trimEnd().endsWith('/') || VOID.has(name.toLowerCase());
+                if (!selfClosed) frames.push({ kind: 'text' });
+                i = end;
+                continue;
+            }
+        }
+        if (c === '{' || c === '(' || c === '[') { depth++; i++; continue; }
+        if (c === '}' || c === ')' || c === ']') {
+            depth--;
+            if (c === '}' && depth === top.base && frames.length > 1) frames.pop();
+            closeFrom(i + 1, depth + 1);
+            if (depth < 0) depth = 0;
+            i++; continue;
+        }
+        if (c === ';') { closeFrom(i + 1, depth); i++; continue; }
+        if (/[a-z]/.test(c) && (i === 0 || /[\s;})\]]/.test(src[i - 1]))) {
+            const m = DECL_HERE.exec(src.slice(i, i + 60));
+            if (m) {
+                // A sibling at this depth ends whatever this depth had open:
+                // `function` declarations carry no trailing `;` to do it.
+                closeFrom(i, depth);
+                const lineStart = src.lastIndexOf('\n', i - 1) + 1;
+                const decl: Declaration = { name: m[1], start: i, end: src.length, indent: i - lineStart };
+                pending.push({ decl, depth });
+                out.push(decl);
+                i += m[0].length;
+                continue;
+            }
+        }
+        i++;
+    }
+    for (const p of pending) p.decl.end = src.length;
+    return out.sort((a, b) => a.start - b.start);
+}
+
+/**
+ * The component a position belongs to: the innermost declaration range holding
+ * it. "Innermost" is why this cannot be "the last declaration before the
+ * position" — with a nested component, every later tag of the enclosing one
+ * would be credited to the inner instead.
+ */
+export function ownerOf(decls: Declaration[], pos: number): string | null {
+    let best: Declaration | null = null;
+    for (const d of decls) {
+        if (d.start > pos || d.end <= pos) continue;
+        if (!best || (d.end - d.start) < (best.end - best.start)) best = d;
+    }
+    return best ? best.name : null;
+}
 
 /** Every `.tsx` under `dir`, recursively, as absolute paths. */
 export function tsxFilesUnder(dir: string): string[] {
