@@ -20,9 +20,22 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
  * on different tests, while the file passed 3/3 solo.
  *
  * Importing the same specifiers here instantiates them once, so `lazy()`
- * resolves from the module registry on mount. A larger `testTimeout` would
- * only decide how slow a first mount is acceptable — and would tax every
- * genuinely-fast test in the file to hide it.
+ * resolves from the module registry on mount; the assertions then measure the
+ * pane, not the compiler. A larger `testTimeout` would instead have decided how
+ * slow a first mount is acceptable, and taxed every genuinely-fast test in the
+ * file to hide it.
+ *
+ * The hook gets its own budget because moving the cost out of the tests
+ * revealed it lands in the hook instead: in one full 511-file run this
+ * `beforeAll` hit the 10s default and failed, which skipped all sixteen tests
+ * in the file — a worse outcome than the flake it replaced.
+ *
+ * MEASURED 2026-10-13: 444ms solo on an idle machine (1,180ms with a cold
+ * transform cache) and 555ms from inside a full run. The budget below is ~50×
+ * the in-run measurement, because the failure mode of a tight one is the whole
+ * file skipping and the cost being bounded is machine-dependent setup that does
+ * no assertions. Per-test budgets stay at the default, so a genuinely slow test
+ * still fails — this number cannot hide one.
  */
 beforeAll(async () => {
     await Promise.all([
@@ -33,7 +46,7 @@ beforeAll(async () => {
         import('../components/settings/SessionUsagePanel'),
         import('../components/settings/DiagnosticsPanel'),
     ]);
-});
+}, 30_000);
 
 let store: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
