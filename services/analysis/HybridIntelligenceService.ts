@@ -89,6 +89,7 @@ import {
     generateSessionCalibrationPrompt
 } from '../validation/calibrationPrompts';
 import { getProviderAccuracyContext } from '../validation/calibrationPolicy';
+import { loadProviderConfigs } from '../infrastructure/ProviderConfigService';
 import { ConfidenceLevel } from '../validation/calibrationStore';
 
 import { generateValidationPromptInjection, generateCorrelationRiskPrompt } from '../validation/AccuracyValidationService';
@@ -1226,7 +1227,8 @@ export const generateEnhancedHybridPromptInjection = (
     calibration?: ConfidenceCalibration,
     correlationRiskPrompt?: string,
     granularContext?: { coin?: string; pattern?: string; timeframe?: string; regime?: 'trending' | 'ranging' | 'volatile' },
-    proposedConfidence?: ConfidenceLevel
+    proposedConfidence?: ConfidenceLevel,
+    providerLabels: Record<string, string> = {}
 ): { prompt: string; adjustedConfidence?: ConfidenceLevel; totalPenalty?: number } => {
     // Get base hybrid data injection
     const baseInjection = generateHybridPromptInjection(data);
@@ -1267,7 +1269,7 @@ export const generateEnhancedHybridPromptInjection = (
     // Get provider accuracy context for ensemble weighting
     let providerAccuracyInjection = '';
     if (calibration) {
-        const providerContext = getProviderAccuracyContext(calibration);
+        const providerContext = getProviderAccuracyContext(calibration, providerLabels);
         if (providerContext.promptInjection) {
             providerAccuracyInjection = providerContext.promptInjection;
         }
@@ -1345,13 +1347,20 @@ export const tryFetchHybridDataFromPromptWithCalibration = async (
 
     try {
         // Fetch all data in parallel
-        const [data, correlationRisk] = await Promise.all([
+        const [data, correlationRisk, providerConfigs] = await Promise.all([
             fetchHybridData(symbol),
             calculateCorrelationRisk(symbol).catch(err => {
                 console.warn('[HybridIntelligence] Correlation risk fetch failed:', err);
                 return null;
-            })
+            }),
+            // The moderator is told which provider to trust more; that only
+            // lands if it is named the way the answers it reads are named.
+            // Fails soft: a config read must not cost the trader their market
+            // data, and the ranking degrades to ids rather than vanishing.
+            loadProviderConfigs().catch(() => []),
         ]);
+        const providerLabels: Record<string, string> = {};
+        for (const c of providerConfigs) providerLabels[c.id] = c.name;
 
         const promptInjection = generateHybridPromptInjection(data);
 
@@ -1374,7 +1383,8 @@ export const tryFetchHybridDataFromPromptWithCalibration = async (
             calibration,
             correlationRiskPrompt,
             granularContext,
-            'High' // Default proposed confidence, will be adjusted by calibration
+            'High', // Default proposed confidence, will be adjusted by calibration
+            providerLabels
         );
 
         return {

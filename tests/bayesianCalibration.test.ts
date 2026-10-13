@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getBayesianCalibratedConfidence } from '../services/validation/calibrationPolicy';
+import { getBayesianCalibratedConfidence, getProviderAccuracyContext } from '../services/validation/calibrationPolicy';
 import { initializeCalibration } from '../services/validation/calibrationStore';
 import type { ConfidenceLevel } from '../services/validation/calibrationStore';
 import type { ConfidenceCalibration, GranularCalibration } from '../types';
@@ -17,6 +17,16 @@ import type { ConfidenceCalibration, GranularCalibration } from '../types';
  */
 
 const EMPTY = {};
+
+const EMPTY_GRANULAR: GranularCalibration = {
+  byCoin: EMPTY,
+  byPattern: EMPTY,
+  byTimeframe: EMPTY,
+  byRegime: EMPTY,
+  bySession: EMPTY,
+  byDayOfWeek: EMPTY,
+  byProvider: EMPTY,
+};
 
 const calibrationWithProvider = (
   provider: string,
@@ -90,5 +100,56 @@ describe('Bayesian calibrated confidence', () => {
     expect(ask(cal, 85, 'High')).toBe(62);
     expect(ask(cal, 85, 'Medium')).toBe(62);
     expect(ask(cal, 85, 'Low')).toBe(62);
+  });
+});
+
+/**
+ * The other half of the same ledger: `getProviderAccuracyContext` turns
+ * `granular.byProvider` into a paragraph that instructs the moderator which
+ * seat to trust. Those keys are ProviderConfig ids (`types/calibration.ts:31`,
+ * written as the first key of `modelsUsed` at `hooks/useTradeLogging.ts:458`),
+ * and a debate labels its answers by display name — so a ranking that says
+ * "Weight custom-1729000000's analysis more heavily" points the model at a
+ * string that appears nowhere else in its context. The ids stay in the data;
+ * the prose has to speak the names.
+ */
+describe('provider accuracy ranking reaches the moderator as a name', () => {
+  const ranked = (): ConfidenceCalibration => {
+    const granular: GranularCalibration = {
+      byCoin: EMPTY, byPattern: EMPTY, byTimeframe: EMPTY, byRegime: EMPTY,
+      bySession: EMPTY, byDayOfWeek: EMPTY,
+      byProvider: {
+        'gemini': { wins: 16, losses: 4, total: 20 },
+        'custom-1729000000': { wins: 4, losses: 16, total: 20 },
+      },
+    };
+    return { ...initializeCalibration(), granular };
+  };
+  const LABELS = { 'gemini': 'Gemini', 'custom-1729000000': 'Binance Mirror' };
+
+  it('names providers by display name in the instruction it writes', () => {
+    const out = getProviderAccuracyContext(ranked(), LABELS);
+    expect(out.promptInjection).toContain('Binance Mirror');
+    expect(out.promptInjection).toContain('Gemini');
+    expect(out.promptInjection).not.toContain('custom-1729000000');
+    // The structured data keeps the id, because that is the join key.
+    expect(out.rankings.map(r => r.provider)).toEqual(['gemini', 'custom-1729000000']);
+    expect(out.rankings.map(r => r.label)).toEqual(['Gemini', 'Binance Mirror']);
+  });
+
+  it('degrades to the id when no label map is handed in, and never invents one', () => {
+    const out = getProviderAccuracyContext(ranked());
+    expect(out.promptInjection).toContain('custom-1729000000');
+    expect(out.rankings[1].label).toBe('custom-1729000000');
+    // A provider the user deleted is still an id this app can report; it must
+    // not become an empty label or a guess.
+    const partial = getProviderAccuracyContext(ranked(), { 'gemini': 'Gemini' });
+    expect(partial.rankings[1].label).toBe('custom-1729000000');
+  });
+
+  it('writes no ranking at all when the ledger has nothing to rank', () => {
+    const empty = { ...initializeCalibration(), granular: { ...EMPTY_GRANULAR } };
+    expect(getProviderAccuracyContext(empty).promptInjection).toBe('');
+    expect(getProviderAccuracyContext(undefined).promptInjection).toBe('');
   });
 });
