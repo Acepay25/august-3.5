@@ -24,7 +24,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'fs';
 
 import * as chatStore from '../services/trade/chatStore';
-import { liveEntryFromMessage } from '../services/trade/chatSessions';
+import { entriesForSession, liveEntryFromMessage } from '../services/trade/chatSessions';
 import { MessageRole, type Message } from '../types';
 
 // The dock feature spans the shell + the extracted chatTurnRunner — the
@@ -69,13 +69,27 @@ describe('the bridges are gone', () => {
 });
 
 describe('the trader and the bot read the SAME conversation', () => {
-    it('one merge, used by the render AND the model history', () => {
-        expect(panelSrc).toMatch(/const mergeBotConversation = useCallback\(/);
-        // The render:
-        expect(panelSrc).toMatch(/\(\) => mergeBotConversation\(boundBot, activeSession\.entries, botThreadRows\)/);
-        // And the history the bot answers from:
-        expect(panelSrc).toMatch(/const conversation = mergeBotConversation\(/);
+    // The merge moved to `services/trade/chatSessions.ts#entriesForSession`, so
+    // BOTH readers import one function instead of the dock owning a copy the
+    // runner had to be handed. These pins are the same contract, re-expressed:
+    // one implementation, two callers, neither caller allowed its own merge.
+    const panelOnly = readFileSync('components/trade/TradeChatPanel.tsx', 'utf8');
+    const runnerOnly = readFileSync('services/trade/chatTurnRunner.ts', 'utf8');
+    const IMPORT = /import\s*\{[^}]*\bentriesForSession\b[^}]*\}\s*from\s*'[^']*chatSessions'/s;
+
+    it('one merge, imported by the render AND by the model history', () => {
+        expect(panelOnly, 'the dock render must read the shared merge').toMatch(IMPORT);
+        expect(runnerOnly, 'the bot must answer from the shared merge').toMatch(IMPORT);
+        expect(panelSrc).toMatch(/\(\) => entriesForSession\(activeSession\.entries, canonicalRows\)/);
+        expect(panelSrc).toMatch(/const conversation = entriesForSession\(/);
         expect(panelSrc).toMatch(/const history = retryIdx >= 0 \? conversation\.slice\(0, retryIdx\) : conversation;/);
+    });
+
+    it('neither reader re-implements it', () => {
+        // A second copy is a second answer to "what did we say" — the exact
+        // split this file exists to keep closed.
+        expect(panelSrc).not.toMatch(/canonical\.map\(liveEntryFromMessage\)/);
+        expect(panelSrc).not.toMatch(/mergeBotConversation/);
     });
 
     it('the history no longer reads the raw session', () => {
@@ -85,21 +99,20 @@ describe('the trader and the bot read the SAME conversation', () => {
     });
 
     it('takes the canonical rows first, then only what has no counterpart yet', () => {
-        expect(panelSrc).toMatch(/if \(!bot \|\| !canonical\) return local;/);
-        expect(panelSrc).toMatch(/const rows: LiveEntry\[\] = canonical\.map\(liveEntryFromMessage\)/);
-    });
-
-    it('a local row the canonical list already has REPLACES it, never appends', () => {
-        // The optimistic user bubble and the streaming answer both take this
-        // path. Appending would show every exchange twice.
-        expect(panelSrc).toMatch(/const at = rows\.findIndex\(m => m\.id === e\.id\);/);
-        expect(panelSrc).toMatch(/if \(at >= 0\) rows\[at\] = e;/);
+        // Behaviour, not shape: see tests/mergedChatThread.test.ts for the
+        // canonical-first order, the replace-not-append rule, and the
+        // undefined-canonical fallback that every case below rests on.
+        const local = [{ id: 'a', role: 'ai' as const, text: 'streaming', tools: [], streaming: true }];
+        expect(entriesForSession(local, undefined)).toBe(local);
     });
 
     it('leaves a solo or panel session completely alone', () => {
         // A chart-side session is a conversation of its own — it has its own
-        // tool rounds and key levels, and no counterpart to be a view of.
-        expect(panelSrc).toMatch(/if \(!bot \|\| !canonical\) return local;/);
+        // tool rounds and key levels, and no counterpart to be a view of. The
+        // gate now lives at each call site: canonical rows are handed over only
+        // when the session is bound to a bot that exists.
+        expect(panelSrc).toMatch(/const canonicalRows = boundBot \? botThreadRows : undefined;/);
+        expect(panelSrc).toMatch(/session\.botId && bots\.some\(b => b\.id === session\.botId\) \? botThreadRows : undefined/);
     });
 });
 

@@ -53,7 +53,7 @@ import { getActiveUsername } from '../../utils/activeUser';
 import { baseOf, quoteOf } from '../../utils/symbol';
 import { isPassReply } from '../agents/groupRounds';
 import {
-    titleFromMessage, PANEL_MAX_MODELS,
+    titleFromMessage, entriesForSession, PANEL_MAX_MODELS,
 } from './chatSessions';
 import { saveToolPayload } from './toolPayloadStore';
 import * as chatStore from './chatStore';
@@ -231,12 +231,11 @@ export interface ChatTurnRunnerDeps {
     /** The shell's render-snapshot sessions — the learning-hook review scan
      *  reads it (the turns themselves read the store FRESH instead). */
     sessions: LiveSession[];
-    /** The canonical bot conversation rows (App's `messages`), LIVE. */
+    /** The canonical bot conversation rows (App's `messages`), LIVE. The bot
+     *  answers from them through `entriesForSession` — the same merge the dock's
+     *  render calls, imported rather than injected so there is no second copy
+     *  to drift and no prop a future caller can forget to pass. */
     botThreadRows?: Message[];
-    /** ONE merge of the canonical conversation into a bot session's view. */
-    mergeBotConversation: (
-        bot: AgentBot | undefined, local: LiveEntry[], canonical: Message[] | undefined,
-    ) => LiveEntry[];
     /** Composer attachment tray (read at send, cleared after). */
     attachments: Attachment[];
     /** Attached images as the analysis pipeline takes them. */
@@ -291,7 +290,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
     const {
         symbol, interval, effort, selectedChatModel, chartLevels, allDrawings, trades,
         getChartSnapshot, provider, configForSeat, systemPromptFor, bots, activeId, draft,
-        sessions, botThreadRows, mergeBotConversation, attachments, attachedImages,
+        sessions, botThreadRows, attachments, attachedImages,
         clearAttachments, setDraft, setContextAt, setAnalysisMessageIds, addModelDrawings,
         clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onRunAnalysis,
     } = deps;
@@ -861,10 +860,9 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         // Reading the raw session here is what let a turn said in the Chat
         // surface reach the trader but never reach the bot: two views of one
         // conversation, which is the split this merge exists to remove.
-        const conversation = mergeBotConversation(
-            session.botId ? bots.find(b => b.id === session.botId) : undefined,
+        const conversation = entriesForSession(
             session.entries,
-            botThreadRows,
+            session.botId && bots.some(b => b.id === session.botId) ? botThreadRows : undefined,
         );
         const retryIdx = retryEntry ? conversation.findIndex(e => e.id === retryEntry.id) : -1;
         const history = retryIdx >= 0 ? conversation.slice(0, retryIdx) : conversation;
