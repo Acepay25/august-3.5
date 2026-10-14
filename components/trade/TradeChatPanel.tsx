@@ -50,7 +50,7 @@ import type { ChartDrawing } from '../../services/trade/chartDrawings';
 import type { MessageLevelLines } from '../../services/trade/keyLevels';
 import type { TradeProposal } from '../../services/trade/proposedTrade';
 import type { WatchPlan } from '../../services/trade/tradePlanLevels';
-import { liveEntryFromMessage, PANEL_MAX_MODELS, type PanelSeatRef } from '../../services/trade/chatSessions';
+import { entriesForSession, PANEL_MAX_MODELS, type PanelSeatRef } from '../../services/trade/chatSessions';
 import * as chatStore from '../../services/trade/chatStore';
 import type { LiveEntry, LiveSession } from '../../services/trade/chatStore';
 import { panelSeatKey } from '../../services/trade/chatPanel';
@@ -327,7 +327,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const isPanel = activeSession.kind === 'panel';
     /** A bot session starts EMPTY, and that is correct: a bot's conversation
      *  belongs to `messages`, which this session renders as a view of
-     *  (`mergeBotConversation`). Seeding the session with a copy of it on open
+     *  (`entriesForSession`). Seeding the session with a copy of it on open
      *  is what made the dock's transcript a stale snapshot — the copy could
      *  never learn anything the canonical store did not already say. */
     const openBotSession = useCallback((botId: string): void => {
@@ -347,32 +347,19 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     // conversation plus the row that has no counterpart yet: the answer
     // currently streaming, which joins `messages` only once it settles.
     //
-    // ONE merge, used by BOTH the transcript render and the model's own history
-    // below. That is the point: if the trader and the bot could read two
-    // different conversations, the store cut would have moved the split rather
-    // than closed it. Solo and panel sessions pass through untouched — a
-    // chart-side session is a conversation of its own, with its own tool
-    // rounds and key levels, and has no counterpart to be a view of.
-    const mergeBotConversation = useCallback(
-        (bot: AgentBot | undefined, local: LiveEntry[], canonical: Message[] | undefined): LiveEntry[] => {
-            if (!bot || !canonical) return local;
-            const rows: LiveEntry[] = canonical.map(liveEntryFromMessage);
-            const known = new Set(rows.map(e => e.id));
-            for (const e of local) {
-                // A local row whose id is already canonical is the SAME turn
-                // settling — replace it, never append it, or every exchange
-                // appears twice.
-                const at = rows.findIndex(m => m.id === e.id);
-                if (at >= 0) rows[at] = e;
-                else if (e.streaming || !known.has(e.id)) rows.push(e);
-            }
-            return rows;
-        },
-        [],
-    );
+    // ONE merge — `entriesForSession` in `services/trade/chatSessions.ts` — is
+    // imported by BOTH readers: this render and the model's own history in
+    // `chatTurnRunner`. That is the point: if the trader and the bot could read
+    // two different conversations, the store cut would have moved the split
+    // rather than closed it. A session with no counterpart passes through
+    // untouched — `canonicalRows` is undefined unless this session IS a view of
+    // a conversation, which today means a bot session. Solo and panel sessions
+    // are chart-side conversations of their own, with their own tool rounds and
+    // key levels, and have no counterpart to be a view of.
+    const canonicalRows = boundBot ? botThreadRows : undefined;
     const entries = useMemo<LiveEntry[]>(
-        () => mergeBotConversation(boundBot, activeSession.entries, botThreadRows),
-        [boundBot, activeSession.entries, botThreadRows, mergeBotConversation],
+        () => entriesForSession(activeSession.entries, canonicalRows),
+        [activeSession.entries, canonicalRows],
     );
     const busy = !!snap.running[activeId];
 
@@ -526,7 +513,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         draft,
         sessions,
         botThreadRows,
-        mergeBotConversation,
         attachments,
         attachedImages,
         clearAttachments,
@@ -539,7 +525,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         onPlanPresented,
         onBotTurnCommit,
         onRunAnalysis,
-    }), [symbol, interval, effort, selectedChatModel, chartLevels, allDrawings, trades, getChartSnapshot, provider, configForSeat, systemPromptFor, bots, activeId, draft, sessions, botThreadRows, mergeBotConversation, attachments, attachedImages, clearAttachments, setDraft, setContextAt, setAnalysisMessageIds, addModelDrawings, clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onRunAnalysis]);
+    }), [symbol, interval, effort, selectedChatModel, chartLevels, allDrawings, trades, getChartSnapshot, provider, configForSeat, systemPromptFor, bots, activeId, draft, sessions, botThreadRows, attachments, attachedImages, clearAttachments, setDraft, setContextAt, setAnalysisMessageIds, addModelDrawings, clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onRunAnalysis]);
     const { send, runFullAnalysis, runHarnessTurn } = runner;
 
     // ── Per-session composer memory ─────────────────────────────────────────

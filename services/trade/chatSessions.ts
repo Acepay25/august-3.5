@@ -426,11 +426,10 @@ export const saveSessions = (sessions: ChatSession[], pinnedIds: readonly string
  *
  * This converts the Chat rail's rows into the shape the dock stores, so a bot
  * session opened in the dock can be seeded with the history it should have
- * inherited. It is a ONE-WAY adoption, deliberately: the dock continues the
+ * inherited. It is a ONE-WAY projection by design: the dock continues the
  * conversation with its own richer transport (streaming, desk tools, reasoning
- * rows, key levels) rather than replaying the Chat's. Fully unifying the two
- * means one store owning both surfaces, which is a larger change than a
- * converter — this closes the data loss without pretending to be that.
+ * rows, key levels) rather than replaying the Chat's. {@link entriesForSession}
+ * is the other half — the single merge that makes both homes read ONE thread.
  */
 export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
     const traces = [
@@ -460,4 +459,52 @@ export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
         // stamp as meaningful and 0 as noise.
         at: Number.isFinite(at) ? at : undefined,
     };
+};
+
+/**
+ * THE ONE MERGE — one thread, whichever home it is read from.
+ *
+ * Both homes write, and that is not going to change: the dock's turn runner
+ * streams into a session's `entries` (~40 write sites in `chatTurnRunner.ts`,
+ * each with tool lines, reasoning traces and a streaming flag), while the Chat
+ * surface's turns settle into App `messages` — the record the Journal, the
+ * analyses gallery and the learning loop read, and the only one rich enough to
+ * carry `analysis`, `planId`, `debateTurns` and `runStats`. Replacing either
+ * writer with the other would cost the dock its streaming state or the trader
+ * their verdict cards.
+ *
+ * So the thread is a READ model over both, keyed by id, and the id is the trick
+ * that makes two writers safe: `liveEntryFromMessage` keys a projected row by
+ * `m.id`, and the `present_trade` path already writes the dock entry under the
+ * SAME id as the conversation Message (`chatStore.findSessionByEntryId`), so a
+ * turn that exists twice is one row here, not a duplicate. That is also why
+ * this must be the only merge in the app — a second one would be a second
+ * answer to "what did we say", which is the split this closes.
+ *
+ * Rules, inherited from the merge this replaces in `TradeChatPanel`:
+ *  - canonical rows first, in conversation order;
+ *  - a local row whose id already exists REPLACES it (the settling turn carries
+ *    the dock's richer chrome), never appends — appending is what made every
+ *    exchange appear twice;
+ *  - a local row with no canonical counterpart joins at the end: a chart-side
+ *    tool round, a harness notice, or the answer still streaming, which reaches
+ *    `messages` only once it settles.
+ *
+ * `canonical` undefined ⇒ the session has no counterpart and its own entries
+ * are the whole transcript — a solo or panel chat is a conversation of its own,
+ * so a reload can never invent a merge the trader never had.
+ */
+export const entriesForSession = (
+    local: StoredChatEntry[],
+    canonical: readonly Message[] | undefined,
+): StoredChatEntry[] => {
+    if (!canonical) return local;
+    const rows: StoredChatEntry[] = canonical.map(liveEntryFromMessage);
+    const known = new Set(rows.map(e => e.id));
+    for (const e of local) {
+        const at = rows.findIndex(m => m.id === e.id);
+        if (at >= 0) rows[at] = e;
+        else if (!known.has(e.id)) rows.push(e);
+    }
+    return rows;
 };

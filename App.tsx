@@ -1929,8 +1929,9 @@ const App: React.FC = () => {
     /** A bot turn asked in the Chart AI dock, committed to the conversation
      *  that owns it.
      *
-     *  The dock is a VIEW of `messages` (see mergeBotConversation in the dock),
-     *  and a view cannot write. So the turn had to be committed here, and until
+     *  The dock is a VIEW of `messages` (see `entriesForSession` in
+     *  `services/trade/chatSessions.ts`), and a view cannot write. So the turn
+     *  had to be committed here, and until
      *  it was, a question asked in Chart AI produced an answer the Chat
      *  surface could not see — the trader switched surfaces and found the
      *  exchange had never happened.
