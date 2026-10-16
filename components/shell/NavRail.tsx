@@ -60,8 +60,10 @@ interface NavRailProps {
     surface: AppSurface;
     onSelectSurface: (surface: AppSurface) => void;
     badges?: Partial<Record<AppSurface, NavBadge>>;
-    onOpenApprovals?: () => void;
-    approvalsCount?: number;
+    /** Rail row that opens the Knowledge surface on its Skills tab — the
+     *  occasional-config destination Claude keeps under "Customize", and the
+     *  successor to the Skills surface row. */
+    onOpenCustomize?: () => void;
     onOpenSettings: () => void;
 }
 
@@ -72,7 +74,9 @@ interface NavRailProps {
  *  The identity is a READOUT, not a control: it used to open Switch profile,
  *  which meant a click on your own name threw you back to the workspace picker.
  *  Profile actions live in Settings → Profile, their one home. */
-const AccountRow: React.FC<{
+/** Exported because the Chat surface's single sidebar carries it once the rail is
+ *  not rendered there — one account row per screen either way. */
+export const AccountRow: React.FC<{
     expanded: boolean;
     activeUsername: string | null;
     onOpenSettings: () => void;
@@ -142,8 +146,7 @@ const NavRail: React.FC<NavRailProps> = ({
     surface,
     onSelectSurface,
     badges,
-    onOpenApprovals,
-    approvalsCount,
+    onOpenCustomize,
     onOpenSettings,
 }) => {
     const width = expanded ? NAV_RAIL_EXPANDED_PX : NAV_RAIL_COLLAPSED_PX;
@@ -156,7 +159,9 @@ const NavRail: React.FC<NavRailProps> = ({
     // Using the drawer IS the intent; leaving it open over the surface it just
     // moved you to would cover the thing you asked for.
     const chooseSurface = (next: AppSurface): void => { onSelectSurface(next); if (isOverlay) onCloseOverlay?.(); };
-    const openApprovals = (): void => { onOpenApprovals?.(); if (isOverlay) onCloseOverlay?.(); };
+    // Same overlay rule: a rail row pressed from the below-1024 drawer must
+    // close the drawer, or Settings opens behind it.
+    const openCustomize = (): void => { onOpenCustomize?.(); if (isOverlay) onCloseOverlay?.(); };
     const openSettings = (): void => { onOpenSettings(); if (isOverlay) onCloseOverlay?.(); };
 
     return (
@@ -211,8 +216,7 @@ const NavRail: React.FC<NavRailProps> = ({
                 <SurfaceMenuList
                     surface={surface}
                     badges={badges}
-                    approvalsCount={approvalsCount}
-                    onOpenApprovals={openApprovals}
+                    onOpenCustomize={openCustomize}
                     onSelect={chooseSurface}
                     collapsed={!expanded}
                 />

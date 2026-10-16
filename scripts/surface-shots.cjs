@@ -8,6 +8,9 @@ const { chromium } = require('@playwright/test');
 
 const PORT = process.env.PROBE_PORT ? Number(process.env.PROBE_PORT) : 4191;
 const MOCK_PORT = process.env.MOCK_PORT ? Number(process.env.MOCK_PORT) : 8791;
+// SHOTS_EMPTY=1 profiles with no conversation, so the Chat surface's empty
+// state can be looked at rather than asserted.
+const SHOTS_EMPTY = !!process.env.SHOTS_EMPTY;
 // LIVE_BASE=http://127.0.0.1:3000 attaches to an ALREADY-RUNNING dev server
 // instead of spawning a competing vite (strictPort would just die). The
 // browser context is still throwaway — seeding never touches a real profile.
@@ -34,8 +37,7 @@ async function seed(page) {
         localStorage.setItem('august_surface_v1', 'trade');
         sessionStorage.setItem('activeUsername', 'Probe User');
     });
-    await page.evaluate(async (mockPort) => {
-        const db = await new Promise((resolve, reject) => {
+    await page.evaluate(async ({ mockPort, empty }) => {        const db = await new Promise((resolve, reject) => {
             const request = indexedDB.open('FuturesAI-DB', 1);
             request.onupgradeneeded = () => {
                 if (!request.result.objectStoreNames.contains('userProfiles')) {
@@ -57,10 +59,10 @@ async function seed(page) {
             baseUrl: `http://127.0.0.1:${mockPort}/v1`, apiFormat: 'chat_completions',
             isEnabled: true, isBuiltIn: false, models: ['mock-mini'], selectedModel: 'mock-mini',
         }]));
-    }, MOCK_PORT);
+    }, { mockPort: MOCK_PORT, empty: SHOTS_EMPTY });
     // Seed a populated journal so the Journal surface has rows, and a chat so
     // the Agents surface renders a thread — the spec must judge real screens.
-    await page.evaluate(async () => {
+    await page.evaluate(async ({ empty }) => {
         const analysis = (over) => ({
             direction: 'Long', confidence: 'High', coinName: 'BTCUSDT',
             entryPoints: [{ price: '84210.5', description: 'reclaim' }],
@@ -90,7 +92,11 @@ async function seed(page) {
         });
         store.put({
             ...(cur || { username: 'Probe User' }),
-            conversations: [conv], lastActiveConversationId: conv.id,
+            // SHOTS_EMPTY=1 leaves the profile with no conversation, so the
+            // Chat surface's empty state — the one screen the reference is most
+            // recognisable for — can actually be looked at rather than asserted.
+            conversations: empty ? [] : [conv],
+            lastActiveConversationId: empty ? null : conv.id,
             tradeLog: [
                 row('t1', 300, 'WIN', 'scalp', 'Long', 'BTCUSDT'),
                 row('t2', 280, 'LOSS', 'scalp', 'Short', 'BTCUSDT'),
@@ -102,7 +108,7 @@ async function seed(page) {
         });
         await new Promise((resolve) => { setTimeout(resolve, 200); });
         db.close();
-    });
+    }, { empty: SHOTS_EMPTY });
 }
 
 async function main() {
@@ -125,24 +131,50 @@ async function main() {
         await seed(page);
         await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(() => !document.querySelector('#splash'), null, { timeout: 25000 });
-        await page.waitForSelector('[data-testid="nav-rail"]', { timeout: 25000 });
+        // The rail is gone; the title-bar switch is what proves the shell mounted.
+        await page.waitForSelector('[data-testid^="surface-switch-"]', { timeout: 25000 });
         await sleep(2000);
 
-        const navTo = async (name) => page.evaluate((n) => {
-            const re = new RegExp('^' + n, 'i');
-            const hit = [...document.querySelectorAll('[data-testid="surface-menu"] button')]
-                .find(b => re.test((b.getAttribute('aria-label') || b.textContent || '').trim()));
+        // The destination rows are gone — the title-bar switch is the navigation
+        // now — so press the switch by surface id. The label→id map is written
+        // out because a switch that no longer exists returns 'not found' and
+        // would otherwise re-shoot whatever surface happened to be open.
+        const SWITCH_ID = { Trade: 'trade', Journal: 'journal', Chat: 'agents', Knowledge: 'learn' };
+        const navTo = async (name) => page.evaluate((id) => {
+            const hit = document.querySelector(`[data-testid="surface-switch-${id}"]`);
             if (!hit) return 'not found';
             hit.click();
             return 'clicked';
-        }, name);
+        }, SWITCH_ID[name] || name);
 
-        for (const surface of ['Trade', 'Journal', 'Skills', 'Chat', 'Learn']) {
+        // 'Skills' is gone from the rail — it is a tab of the Knowledge surface,
+        // shot below through the Customize row that reaches it. The surface row
+        // itself is named 'Knowledge' now, and the sweep must ask for that: a
+        // label that no longer matches returns 'not found' and re-shoots whatever
+        // surface happened to be open, which is the vacuous read every gate here
+        // exists to catch.
+        for (const surface of ['Trade', 'Journal', 'Chat', 'Knowledge']) {
             const how = await navTo(surface);
             await sleep(2500); // let lazy chunks + data settle
-            // Settings overlay, opened the way a person does, for the spec.
             await page.screenshot({ path: path.join(SHOTS, `surface-${surface.toLowerCase()}.png`) });
             console.log(`  ${surface}: ${how} -> surface-${surface.toLowerCase()}.png`);
+        }
+        // The Chat surface's switch, shot as the destination it reaches: the
+        // chart with the Chart AI dock carrying the SAME conversation. Judging
+        // "is this as clean as Claude" off the thread alone would miss the one
+        // hop this surface has.
+        await navTo('Chat');
+        await sleep(1200);
+        const pill = page.locator('[data-testid="surface-switch-trade"]');
+        if (await pill.count()) {
+            await pill.first().click();
+            await sleep(2500);
+            await page.screenshot({ path: path.join(SHOTS, 'surface-hop-chart-ai.png') });
+            console.log('  Chat → Chart AI hop -> surface-hop-chart-ai.png');
+            await page.locator('[data-testid="surface-switch-agents"]').first().click();
+            await sleep(800);
+        } else {
+            console.log('  Chat → Chart AI hop: NO SWITCH FOUND');
         }
         // Settings modal — opened the way a person does (the rail button);
         // there is no #/settings hash route, and the overlay mounts outside
@@ -152,7 +184,129 @@ async function main() {
         await sleep(1500);
         await page.screenshot({ path: path.join(SHOTS, 'surface-settings.png') });
         console.log('  Settings -> surface-settings.png');
+        // The skill library, shot through the row that promises it — Customize
+        // lands on the Knowledge surface's Skills tab.
         await page.keyboard.press('Escape');
+        await sleep(800);
+        const tabbed = await page.evaluate(() => {
+            // Dismiss anything floating above the app first: this step used to
+            // run while the Settings dialog was still open, so the click landed
+            // on the sidebar BEHIND the overlay and the "Knowledge → Skills"
+            // screenshot was a picture of the Settings dialog.
+            const dlg = document.querySelector('[aria-labelledby="settings-title"]');
+            if (dlg) return 'settings dialog still open';
+            const hit = document.querySelector('[data-testid="nav-customize"]');
+            if (!hit) return 'no Customize row';
+            hit.click();
+            return 'clicked';
+        });
+        await sleep(2500);
+        await page.screenshot({ path: path.join(SHOTS, 'surface-knowledge-skills.png') });
+        console.log(`  Knowledge → Skills: ${tabbed} -> surface-knowledge-skills.png`);
+
+        // ── The states the reference is drawn in, not just the surfaces ──
+        // Comparing "is this Claude" against four root screenshots misses the
+        // parts the reference actually shows: a record open in the right panel,
+        // a disclosure expanded, a settings section other than the first, the
+        // picker the composer opens. Each step below presses the real control;
+        // a step that cannot find it says so in the log rather than re-shooting
+        // whatever is already on screen.
+        const shoot = async (name, how) => {
+            await page.screenshot({ path: path.join(SHOTS, `${name}.png`) });
+            console.log(`  ${name}: ${how} -> ${name}.png`);
+        };
+        const press = async (selector, ms = 1200) => {
+            const hit = await page.evaluate((sel) => {
+                const el = document.querySelector(sel);
+                if (!el) return 'missing';
+                el.click();
+                return 'clicked';
+            }, selector);
+            await sleep(ms);
+            return hit;
+        };
+
+        // The skill record in the right panel — the reference's SKILL.md view.
+        // The catalog lives on Knowledge's MEMORY tab (the Skills tab is the
+        // library + studio), so this switches tabs before pressing a row.
+        await press('[data-testid="learn-tab-memory"]', 1800);
+        let how = await press('[data-testid="skills-catalog-grid"] button', 1500);
+        await shoot('ui-skill-viewer', how);
+        await press('[data-testid="learn-right-panel"] button[aria-label*="Close"]');
+
+        // The audit disclosure under a settled verdict: August's answer to the
+        // reference's collapsible "Ran a command" stack.
+        await navTo('Chat');
+        await sleep(1500);
+        how = await press('[data-testid="agent-thread"] details summary', 900);
+        await shoot('ui-chat-audit-open', how);
+
+        // The composer's model chip. Pressed by its own testid, not by its text:
+        // the label is the model's name, which changes with whatever is selected,
+        // and a text match would report `missing` on a machine that has a model
+        // picked while still shooting the previous state under a new name.
+        how = await press('[data-testid="composer-model-chip"]', 1200);
+        await shoot('ui-model-picker', how);
+        await page.keyboard.press('Escape');
+        await sleep(500);
+
+        // Settings on a section that is not the first — the reference's Memory
+        // list is what the Knowledge surface's own tabs are compared against.
+        // The gear lives in two places by design: the title-bar band everywhere
+        // except Chat, and Chat's account row (that surface has no band). A
+        // selector list, so this does not silently shoot the open surface again.
+        await press('[data-testid="header-settings"],[data-testid="nav-settings"]', 1500);
+        how = await page.evaluate(() => {
+            const hit = [...document.querySelectorAll('[aria-labelledby="settings-title"] button')]
+                .find(b => /^Memory$/i.test((b.textContent || '').trim()));
+            if (!hit) return 'missing';
+            hit.click();
+            return 'clicked';
+        });
+        await sleep(1500);
+        await shoot('ui-settings-memory', how);
+        await page.keyboard.press('Escape');
+
+        // The empty conversation: the reference's hero + composer at rest.
+        await sleep(600);
+        how = await press('[data-testid="rail-new"]', 900);
+        how += await page.evaluate(() => {
+            const hit = [...document.querySelectorAll('button')]
+                .find(b => /^New chat$/i.test((b.textContent || '').trim()));
+            if (!hit) return '';
+            hit.click();
+            return ' / new-chat';
+        });
+        await sleep(1200);
+        await shoot('ui-chat-empty', how);
+
+        // The states that exist only after an interaction, and that no numeric
+        // gate can vouch for: the revealed search field, the compact timeframe
+        // menu, the collapsed column, and the phone layout.
+        await navTo('Chat');
+        await sleep(1400);
+        how = await press('[data-testid="rail-search-toggle"]', 700);
+        await shoot('ui-search-open', how);
+        await page.keyboard.press('Escape');
+        how = await press('[data-testid="tf-compact"]', 700);
+        await shoot('ui-tf-menu-open', how);
+        await page.keyboard.press('Escape');
+        how = await press('[data-testid="rail-collapse"]', 900);
+        await shoot('ui-chat-collapsed', how);
+        await press('[data-testid="nav-rail-toggle-header"]', 900);
+
+        await page.setViewportSize({ width: 430, height: 860 });
+        await sleep(1200);
+        await navTo('Chat');
+        await sleep(1600);
+        await page.screenshot({ path: path.join(SHOTS, 'ui-phone-chat.png') });
+        console.log('  ui-phone-chat (430px) -> ui-phone-chat.png');
+        await navTo('Trade');
+        await sleep(2000);
+        await page.screenshot({ path: path.join(SHOTS, 'ui-phone-trade.png') });
+        console.log('  ui-phone-trade (430px) -> ui-phone-trade.png');
+        await page.setViewportSize({ width: 1440, height: 900 });
+
         console.log(`pageerrors: ${errors.length}`);
         if (errors.length) console.log(errors.slice(0, 3).join('\n'));
     } catch (err) {

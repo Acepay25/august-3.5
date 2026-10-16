@@ -1,6 +1,7 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
-import { LoadingIcon, CheckIcon, EyeIcon, ActivityIcon, CloudOffIcon, AlertTriangleIcon, PanelLeftOpen } from './Icons';
-import { useUpdateStatusDot } from './UpdateButton';
+import { ActivityIcon, SettingsIcon } from './Icons';
+import NavExpandButton from '../shell/NavExpandButton';
+import StatusCluster from '../shell/StatusCluster';
 import { getSessionContext, getAllSessionsStatus, SessionContext, SessionStatus } from '../../services/infrastructure/SessionService';
 import { baseOf } from '../../utils/symbol';
 import { surfaceLabel } from '../shell/SurfaceMenuList';
@@ -42,6 +43,18 @@ interface HeaderProps {
      *  the hidden sidebar's expand button also carries the update-status dot,
      *  so the one quiet status carrier stays visible in the resting view. */
     onExpandNavRail?: () => void;
+    /** The screen switch, built once by the App and handed to whichever title
+     *  bar this surface actually renders — the band here, the Chat surface's own
+     *  row. A second wiring is how one of them drifts. */
+    surfaceSwitch?: React.ReactNode;
+    /** Settings, for the same reason: the account row that owned the gear only
+     *  exists on the Chat surface now. */
+    onOpenSettings?: () => void;
+    /** The band's own status cluster, overridable so the App can build it ONCE
+     *  and hand the same node to the Chat surface's own title bar — that surface
+     *  renders no band, and a second wiring of the same callbacks is how one of
+     *  them drifts. Absent, the band wires its own. */
+    status?: React.ReactNode;
 }
 
 // Memoized: Header re-renders every time App does (typing, progress ticks);
@@ -59,8 +72,10 @@ export const Header: React.FC<HeaderProps> = memo(({
     onOpenVisionData,
     hasVisionData = false,
     onExpandNavRail,
+    surfaceSwitch,
+    onOpenSettings,
+    status,
 }) => {
-    const navUpdateDot = useUpdateStatusDot();
     const [sessionContext, setSessionContext] = useState<SessionContext | null>(null);
     const [allSessions, setAllSessions] = useState<SessionStatus[]>([]);
     const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
@@ -147,43 +162,28 @@ export const Header: React.FC<HeaderProps> = memo(({
                         successor: one quiet button that gives the left column
                         back, riding the update dot while it is the only nav
                         surface on screen. */}
-                    {onExpandNavRail && (
-                        <button
-                            type="button"
-                            data-testid="nav-rail-toggle-header"
-                            onClick={onExpandNavRail}
-                            aria-label="Expand navigation"
-                            aria-controls="nav-rail-panel"
-                            className="relative -ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-control text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
+                    {onExpandNavRail && <NavExpandButton onExpand={onExpandNavRail} />}
+                    {/* The screen switch, not a label naming the screen. The
+                        destination rows used to sit in the sidebar and the band
+                        then spelled out the same place a second time; the rows
+                        are gone (that was the brief) and this control is now the
+                        one answer to "where am I, and where do I go". */}
+                    {surfaceSwitch ?? (
+                        <span
+                            data-testid="header-surface-label"
+                            className="shrink-0 select-none text-ui-dense font-semibold uppercase tracking-wider text-zinc-300"
                         >
-                            <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
-                            {navUpdateDot && (
-                                <span data-testid="nav-update-dot-header" className="absolute -right-0.5 -top-0.5">
-                                    {navUpdateDot}
-                                </span>
-                            )}
-                        </button>
+                            {surfaceLabel(surface)}
+                        </span>
                     )}
-                    {/* Where you are, not a control. Navigation is the persistent
-                        NavRail to the left; this names the surface it moved you
-                        to, which is the one thing the rail's active bar cannot
-                        spell out at a glance. */}
-                    <span
-                        data-testid="header-surface-label"
-                        className="shrink-0 select-none text-ui-dense font-semibold uppercase tracking-wider text-zinc-300"
-                    >
-                        {surfaceLabel(surface)}
-                    </span>
 
                     <div className="flex flex-col justify-center">
                         <div className="flex items-center gap-3">
-                            {/* Demoted per the redesign (§2.1): the surface
-                                label reads first; the wordmark is a quiet
-                                brand mark, not the header's headline. The
-                                gradient stays — doctrine reserves it FOR the
-                                wordmark and the active-nav bar. */}
-                            <h1 className="bg-gradient-to-r from-brand-start via-brand-mid to-brand-end bg-clip-text font-serif text-ui-sm leading-none tracking-tight text-transparent">August Trading</h1>
-
+                            {/* The serif wordmark left the band with the
+                                destination rows: the reference's title bar names
+                                the conversation, not the product, and once the
+                                switch marks the screen the brand was the third
+                                thing in a row saying where you are. */}
                             {/* Session Display */}
                             {sessionContext && (
                                 <div className="static sm:relative" ref={sessionModalRef}>
@@ -300,64 +300,34 @@ export const Header: React.FC<HeaderProps> = memo(({
                         </div>
                     </div>
                 </div>
-                {/* Right Side: Minimal Actions */}
-                <div className=" flex items-center gap-2">
-                    {saveStatus === 'SAVING' && (
-                        <span role="status" aria-label="Saving">
-                            <LoadingIcon className="h-4 w-4 text-zinc-500" aria-hidden="true" />
-                        </span>
-                    )}
-                    {saveStatus === 'SAVED' && (
-                        <span role="status" aria-label="Saved">
-                            <CheckIcon className="h-4 w-4 text-emerald-500" aria-hidden="true" />
-                        </span>
-                    )}
-                    {!isOnline && (
-                        <span role="status" aria-label="Offline">
-                            <CloudOffIcon className="h-4 w-4 text-amber-500" aria-hidden="true" />
-                        </span>
-                    )}
-                    {saveStatus === 'ERROR' && (
-                        <span role="status" aria-label="Save failed">
-                            <AlertTriangleIcon className="h-4 w-4 text-rose-500" aria-hidden="true" />
-                        </span>
-                    )}
-
-                    {/* Desktop: Segmented Quick Action Tray. Approvals is NOT
-                        here — the activity rail owns that drawer (WS-5.2), and
-                        this tray used to repeat it under a second name. The
-                        Activity entry is the drawer's only opener and sits
-                        outside the desktop-only tray: touch never had a path
-                        to the job queue, and the Activity drawer is where the
-                        rail's automations section landed (stage 3). Pinned
-                        signals moved to the Trade surface's market row (stage
-                        3) — they are a trading tool, not global chrome. */}
-                    {onOpenActivity && (
-                        <div className="inline-flex items-center rounded-bubble border border-white/[0.08] bg-zinc-800/60 p-0.5 shadow-sm">
-                            <button
-                                type="button"
-                                data-testid="header-activity"
-                                onClick={onOpenActivity}
-                                className="inline-flex items-center rounded-control px-2.5 py-1 text-ui-dense font-semibold text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100 transition-colors"
-                                title="Activity — background jobs, skill audits, automations"
-                                aria-label="Activity"
-                            >
-                                <span>Activity</span>
-                            </button>
-                        </div>
-                    )}
-
-                    {isPostMortemInProgress && (
-                        <button
-                            onClick={() => setIsLivePostMortemVisible(true)}
-                            className="p-2.5 bg-zinc-800 text-zinc-300 rounded-control animate-pulse"
-                            title="Live Post-Mortem"
-                            aria-label="View live post-mortem progress"
-                        >
-                            <EyeIcon />
-                        </button>
-                    )}
-                </div>
+                {/* Right Side: the shell's status cluster, shared with the Chat
+                    surface's own title bar so there is one owner of these four
+                    signals and one opener for the Activity drawer. */}
+                {onOpenSettings && (
+                    /* Settings lived in the rail's account row, which only the
+                       Chat surface has now. A control that vanishes because its
+                       host moved is a feature removed by accident — so it rides
+                       in the title bar wherever there is no account row. */
+                    <button
+                        type="button"
+                        data-testid="header-settings"
+                        onClick={onOpenSettings}
+                        aria-label="Settings"
+                        title="Settings · Ctrl+,"
+                        className="flex h-8 w-8 items-center justify-center rounded-control text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
+                    >
+                        <SettingsIcon className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                )}
+                {status ?? (
+                    <StatusCluster
+                        saveStatus={saveStatus}
+                        isOnline={isOnline}
+                        isPostMortemInProgress={isPostMortemInProgress}
+                        onOpenLivePostMortem={() => setIsLivePostMortemVisible(true)}
+                        onOpenActivity={onOpenActivity}
+                    />
+                )}
 
             </div>
         </header >

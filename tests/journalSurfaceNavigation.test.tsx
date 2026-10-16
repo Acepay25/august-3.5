@@ -188,8 +188,13 @@ describe('App journal routing (source contract)', () => {
         expect(src).not.toContain('journal-rest-telemetry');
     });
 
-    it('the surface menu + Alt-shortcuts enter the journal through openJournal', () => {
-        expect(appSrc).toMatch(/onSelectSurface=\{handleSurfaceSelect\}/);
+    it('the title-bar switch enters the journal through openJournal', () => {
+        // This asserted `onSelectSurface={handleSurfaceSelect}` — the NavRail's
+        // prop — until the rail was deleted. The route-out did not go away, it
+        // changed host, so the check names the host that exists: the switch's
+        // own onSelect, which routes every destination through the router.
+        expect(appSrc).toMatch(/<SurfaceSwitch\b/);
+        expect(appSrc).toMatch(/onSelect=\{\(next\) => \{[\s\S]{0,600}handleSurfaceSelect\(next\);/);
         expect(routerSrc).toMatch(/if \(next === 'journal'\) \{\s*openJournal\(\);/);
         // App reads the router off the hook rather than keeping a private
         // copy — a second surface state is how they would diverge. openJournal

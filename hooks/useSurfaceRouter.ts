@@ -3,7 +3,7 @@
  *
  * First slice of the App.tsx context split (handoff 2.1). This state is a
  * self-contained routing cluster: the surface, the journal's deep-link state,
- * the surface-enter direction, and the two hash effects that keep the URL and
+ * and the two hash effects that keep the URL and
  * the screen in agreement. It had no reason to live inside a 3,400-line
  * component alongside 140-odd unrelated hook calls.
  *
@@ -47,8 +47,6 @@ export interface SurfaceRouter {
     journalTab: JournalUIState['tab'];
     setJournalTab: (tab: JournalUIState['tab']) => void;
     journalOpenNonce: number;
-    surfaceEnterFrom: 'left' | 'right' | null;
-    setSurfaceEnterFrom: (from: 'left' | 'right' | null) => void;
     openJournal: (tab?: JournalUIState['tab']) => void;
     handleSurfaceSelect: (next: AppSurface) => void;
 }
@@ -85,25 +83,18 @@ export const useSurfaceRouter = (opts: SurfaceRouterOptions): SurfaceRouter => {
         setSurface('journal');
     }, [setSurface, setIsSettingsMenuVisible, setIsLiveMarketVisible, setIsWatchListVisible]);
 
-    /** Which edge the NEXT surface should appear to arrive from, for the
-     *  Chat ⇄ Chart AI hop. Set on that hop only and consumed once — a stale
-     *  direction would replay on an unrelated visit. */
-    const [surfaceEnterFrom, setSurfaceEnterFrom] = useState<'left' | 'right' | null>(null);
+    /** Switching surfaces changes the CONTENT and nothing else — no slide, no
+     *  resize tween. The hop used to carry a direction flag ('left' | 'right')
+     *  into a keyframe on the entering surface; the owner asked for the plain
+     *  swap instead, so the flag has no reader and must not come back as dead
+     *  plumbing. */
     const handleSurfaceSelect = useCallback((next: AppSurface): void => {
-        // Chat is reached FROM the chart, so it arrives from the left; the
-        // chart is reached FROM Chat, so it arrives from the right. Every
-        // other surface pair gets no directional animation at all.
-        setSurfaceEnterFrom(
-            (next === 'agents' && surface === 'trade') ? 'left'
-                : (next === 'trade' && surface === 'agents') ? 'right'
-                    : null,
-        );
         if (next === 'journal') {
             openJournal();
             return;
         }
         setSurface(next);
-    }, [openJournal, setSurface, surface]);
+    }, [openJournal, setSurface]);
 
     useEffect(() => {
         const apply = (): void => {
@@ -175,7 +166,6 @@ export const useSurfaceRouter = (opts: SurfaceRouterOptions): SurfaceRouter => {
         surface, setSurface,
         journalTab, setJournalTab,
         journalOpenNonce,
-        surfaceEnterFrom, setSurfaceEnterFrom,
         openJournal, handleSurfaceSelect,
     };
 };
