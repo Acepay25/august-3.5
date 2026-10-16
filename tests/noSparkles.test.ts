@@ -46,13 +46,17 @@ describe('the Sparkles glyph is gone', () => {
         expect(importing, `lucide Sparkles imported in: ${importing.join(', ')}`).toEqual([]);
     });
 
-    it('Studio still has an identity glyph, it is just not this one', () => {
+    it('the skill library still has an identity glyph, it is just not this one', () => {
         // Sparkles WAS the Studio marker in the nav rail. Removing it without
-        // replacing it would have left the surface with no icon at all.
+        // replacing it would have left the entry with no icon at all. The Studio
+        // is no longer a surface row — its nav entry is the Customize row — so
+        // the contract is re-asserted there rather than dropped with the row it
+        // used to live on.
         const shell = readFileSync('components/shell/SurfaceMenuList.tsx', 'utf8');
-        const studio = /id:\s*'skills'[^}]*Icon:\s*(\w+)/.exec(shell);
-        expect(studio, 'the Studio nav row has no icon').not.toBeNull();
-        expect(studio![1]).not.toBe('SparklesIcon');
-        expect(studio![1]).toMatch(/^\w+$/);
+        const customize = /data-testid="nav-customize"[\s\S]{0,900}?<(\w+)\s+className="h-4 w-4/.exec(shell);
+        expect(customize, 'the Customize row (the library\'s nav entry) has no icon').not.toBeNull();
+        expect(customize![1]).not.toBe('Sparkles');
+        expect(customize![1]).not.toBe('SparklesIcon');
+        expect(customize![1]).toMatch(/^\w+$/);
     });
 });

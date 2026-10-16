@@ -33,6 +33,9 @@ export interface SettingsTabProps {
     onOpenLearn?: (tab?: LearnTab) => void;
     /** The librarian's ProviderConfig — Models picks it, Memory names it. */
     memoryConfig?: ProviderConfig | null;
-    /** Opens the Strategy Studio — the browse/annotate playbook library. */
+    /** Jump to the skill library. It used to open a full-screen surface, then a
+     *  Settings tab; it is now the Knowledge surface's Skills tab, so this
+     *  crosses surfaces. Kept as a callback because the Strategies tab's
+     *  "browse everything" button needs it and cannot navigate itself. */
     onOpenStrategyStudio?: () => void;
 }

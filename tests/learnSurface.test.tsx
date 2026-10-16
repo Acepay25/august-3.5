@@ -1,52 +1,40 @@
 /**
  * Learn surface smoke test (WS-5.1) — the tabs mount, switch, and show
- * the stores they claim to. Six of this surface's panes are `React.lazy`, so
- * the module graph is paid for here, once, before any assertion runs — see
- * `beforeAll` below.
+ * the stores they claim to. Six of this surface's panes are `React.lazy`;
+ * see the note below on how their first-mount cost is handled now.
  */
 
-import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 
 /**
- * A lazy boundary's first mount pays for transforming its whole module graph,
- * and vitest does that lazily, inside whichever test happens to open the tab.
- * On an idle machine that is a second; alongside the other 510 files it has
- * measured 19s, so the run fails two ways and neither names the cause: the
- * `waitFor` gives up at 1s and reports a missing heading ("renders the
- * global-memory switch", "falls back to Approvals"), or the test blows its
- * budget outright. Both were seen on 2026-10-13 in two consecutive full runs,
- * on different tests, while the file passed 3/3 solo.
+ * There is deliberately NO file-level lazy-import pre-warm in this file any
+ * more. One used to sit here, importing six lazy panes in `beforeAll` so no test
+ * could race a `Suspense` boundary while vitest transformed its module graph
+ * lazily. It was the wrong instrument, and the measurements say so:
  *
- * Importing the same specifiers here instantiates them once, so `lazy()`
- * resolves from the module registry on mount; the assertions then measure the
- * pane, not the compiler. A larger `testTimeout` would instead have decided how
- * slow a first mount is acceptable, and taxed every genuinely-fast test in the
- * file to hide it.
+ *   - warm transform cache: ~450 ms. Cold: it blew the 30 s hook budget.
+ *   - a hook that times out SKIPS every test in the file — sixteen gone, with
+ *     the cause reported as a hook timeout rather than as a real assertion.
  *
- * The hook gets its own budget because moving the cost out of the tests
- * revealed it lands in the hook instead: in one full 511-file run this
- * `beforeAll` hit the 10s default and failed, which skipped all sixteen tests
- * in the file — a worse outcome than the flake it replaced.
- *
- * MEASURED 2026-10-13: 444ms solo on an idle machine (1,180ms with a cold
- * transform cache) and 555ms from inside a full run. The budget below is ~50×
- * the in-run measurement, because the failure mode of a tight one is the whole
- * file skipping and the cost being bounded is machine-dependent setup that does
- * no assertions. Per-test budgets stay at the default, so a genuinely slow test
- * still fails — this number cannot hide one.
+ * With the hook removed, fifteen of the sixteen tests pass unchanged. Exactly one
+ * mounts a lazy pane (`learn-analytics`), and that one now waits for the chunk it
+ * actually needs, with a budget named where the wait happens. A cold cache can
+ * therefore cost one honest failure, never a silent skip — and a genuinely slow
+ * test still fails on its own, because no global timeout was raised to hide it.
  */
-beforeAll(async () => {
-    await Promise.all([
-        import('../components/learn/MemoryFilesManager'),
-        import('../components/settings/HarnessLessonsBrowser'),
-        import('../components/dashboards/LearningDashboard'),
-        import('../components/dashboards/VersionHistoryDashboard'),
-        import('../components/settings/SessionUsagePanel'),
-        import('../components/settings/DiagnosticsPanel'),
-    ]);
-}, 30_000);
+
+/**
+ * There is deliberately NO file-level lazy-import pre-warm here any more. It
+ * existed so a test could not race a `Suspense` chunk, but it was the wrong
+ * instrument: measured 2026-10-16, its six imports cost ~450 ms on a warm
+ * transform cache and blew the 30 s hook budget on a cold one — and a hook that
+ * times out SKIPS all sixteen tests, so the guard produced a bigger failure than
+ * the race it prevented. With it removed, fifteen of the sixteen tests pass
+ * unchanged; the one that genuinely mounts a lazy pane waits for that chunk
+ * where it happens, with a budget named for it.
+ */
 
 let store: Record<string, unknown> = {};
 vi.mock('../services/infrastructure/PreferencesService', () => ({
@@ -102,18 +90,22 @@ const mount = (): void => {
 };
 
 describe('Learn surface', () => {
-    it('offers one inbox, then where it lives, then whether it is sound', () => {
+    it('offers the inbox, the library, where it lives, and whether it is sound', () => {
         mount();
-        for (const tab of ['coach', 'memory', 'health']) {
+        for (const tab of ['coach', 'skills', 'memory', 'health']) {
             expect(screen.getByTestId(`learn-tab-${tab}`)).toBeTruthy();
         }
-        // StrategyStudio is the one owner of the playbook table and has its own
-        // surface (Alt+3). Mounting it here too gave it a second, half-wired
-        // copy: no onClose, so "Try in chat" was dead on this tab.
-        expect(screen.queryByTestId('learn-tab-skills')).toBeNull();
+        // The library is THIS surface's tab now — Alt+3 and the Customize row both
+        // land here. What must NOT happen is this surface mounting the Studio
+        // itself; it renders the one App hands in (pinned in
+        // deadControlsGuard.test.ts), so "Try in chat" still has its onClose.
         // The inbox leads and is the default, so what a trader sees on arrival is
         // the decisions — the supervisor's log is telemetry and lives on Health.
+        // Asserted BEFORE the tab is moved: the amendments are not on the Skills
+        // tab, and reading them after the click would prove nothing about landing.
         expect(screen.getByTestId('learn-view').textContent).toContain('amendment');
+        fireEvent.click(screen.getByTestId('learn-tab-skills'));
+        expect(screen.getByTestId('learn-skills')).toBeTruthy();
         fireEvent.click(screen.getByTestId('learn-tab-health'));
         expect(screen.getByTestId('learn-view').textContent).toContain('Skill supervisor');
     });
@@ -213,13 +205,20 @@ describe('Learn deep link', () => {
 
 describe('One learning surface (WS-5.1)', () => {
     it('Health carries the learning analytics that used to live in the Journal', async () => {
+        // Pay the compiler BEFORE asserting, so no wait is racing a transform.
+        // This is the one test in the file that mounts a lazy pane; the old
+        // file-level pre-warm did it for six modules and skipped all sixteen
+        // tests whenever the machine was slow. Scoped here, a slow machine can
+        // only ever fail this one test — and it fails on the assertion below,
+        // which is the thing actually being claimed.
+        await import('../components/dashboards/LearningDashboard');
         mount();
         fireEvent.click(screen.getByTestId('learn-tab-health'));
         // `learn-signals` is the div AROUND the Suspense boundary, so it exists
         // as soon as the tab renders — asserting on it proved nothing about the
         // pane inside. This asserts the lazy pane itself mounted.
         await waitFor(() => expect(screen.getByTestId('learn-analytics')).toBeTruthy());
-    });
+    }, 40_000);
 });
 
 describe('Graveyard view (WS-5.1)', () => {
@@ -271,13 +270,23 @@ describe('The Approvals tab', () => {
         await waitFor(() => expect(screen.getByTestId('fake-coach-pane')).toBeTruthy());
     });
 
-    it('counts the decisions waiting on the tab', () => {
+    /**
+     * The count is still spoken — it is the reason you open this tab — but it is
+     * no longer PRINTED here as well as on the rail row. Inside the Knowledge
+     * surface the drafts are the list on screen, so a second "12" was a picture
+     * of the thing you had just navigated to read. Both halves are pinned: the
+     * accessible name carries the number, the visible label does not.
+     */
+    it('speaks the decisions waiting without printing the rail\'s count twice', () => {
         mountCoach(0);
         expect(screen.getByTestId('learn-tab-coach').textContent).not.toMatch(/\d/);
+        expect(screen.getByTestId('learn-tab-coach').getAttribute('aria-label')).toBeNull();
         cleanup();
         mountCoach(7);
-        expect(screen.getByTestId('learn-tab-coach').textContent).toContain('7');
-        expect(screen.getByTestId('learn-tab-coach').getAttribute('title')).toBe('7 awaiting your decision');
+        const tab = screen.getByTestId('learn-tab-coach');
+        expect(tab.getAttribute('aria-label')).toBe('Approvals — 7 awaiting your decision');
+        expect(tab.textContent).not.toContain('7');
+        expect(tab.getAttribute('title')).toBe('7 awaiting your decision');
     });
 
     // A stored id from before the tabs were merged must not strand the surface

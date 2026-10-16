@@ -506,7 +506,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                         <button
                             type="button"
                             onClick={() => { setIsCreatingFolder(v => !v); setIsCreatingFile(false); }}
-                            className="text-ui-sm text-zinc-400 hover:text-zinc-100 transition-colors"
+                            className="min-h-6 text-ui-sm text-zinc-400 hover:text-zinc-100 transition-colors"
                         >
                             New folder
                         </button>

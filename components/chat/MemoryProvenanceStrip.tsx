@@ -131,7 +131,7 @@ const MemoryProvenanceStrip: React.FC<MemoryProvenanceStripProps> = ({
     return (
         <div className="border-t border-zinc-800/80 pt-1" data-testid="memory-provenance-strip">
             <button type="button" onClick={() => setOpen(v => !v)} aria-expanded={open}
-                className="flex w-full items-center gap-1.5 py-0.5 text-left">
+                className="hit-target flex w-full items-center gap-1.5 py-0.5 text-left">
                 <span className="shrink-0 font-mono text-ui-2xs uppercase tracking-widest text-zinc-600">memory</span>
                 <span className="min-w-0 flex-1 truncate text-ui-xs text-zinc-500" title={parts.join(' · ')}>{parts.join(' · ')}</span>
                 {grouped.heldOut && (

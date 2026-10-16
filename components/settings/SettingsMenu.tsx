@@ -30,7 +30,6 @@ const GeneralTab = lazy(() => import('./tabs/GeneralTab'));
 const LensesTab = lazy(() => import('./tabs/LensesTab'));
 const PromptsTab = lazy(() => import('./tabs/PromptsTab'));
 const MemoryTab = lazy(() => import('./tabs/MemoryTab'));
-const SkillsTab = lazy(() => import('./tabs/SkillsTab'));
 const StrategiesTab = lazy(() => import('./tabs/StrategiesTab'));
 const ActionsTab = lazy(() => import('./tabs/ActionsTab'));
 
@@ -39,11 +38,11 @@ const TabFallback: React.FC = () => (
     <div className="p-6 text-ui-dense text-zinc-600">Loading…</div>
 );
 
-export type SettingsTab = 'profile' | 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts' | 'strategies' | 'skills';
+export type SettingsTab = 'profile' | 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts' | 'strategies';
 
 /** Tabs whose embedded manager owns the whole scroll container (their own
  *  padding, their own sticky headers) — the workspace adds none. */
-const FULL_BLEED_TABS: SettingsTab[] = ['prompts', 'memory', 'instructions', 'strategies', 'skills'];
+const FULL_BLEED_TABS: SettingsTab[] = ['prompts', 'memory', 'instructions', 'strategies'];
 
 interface SettingsMenuProps {
     isVisible: boolean;
@@ -84,8 +83,6 @@ interface SettingsMenuProps {
     lensConfig: AnalystLensConfig;
     onSetLensConfig: (config: AnalystLensConfig) => void;
     // Modals & Navigation triggers from main view
-    /** Opens the Strategy Studio — the browse/annotate playbook library. */
-    onOpenStrategyStudio?: () => void;
     /** Opens the Learn surface — the one home for the queues, the notebook and
      *  memory health. Settings keeps the provider/model switches and links here.
      *  Pass a tab to land somewhere specific. */
@@ -217,13 +214,9 @@ const NAV_GROUPS: NavGroup[] = [
     {
         title: 'Knowledge',
         entries: [
-            // Named for what it holds. This tab is the forged-tool approval queue
-            // (`tabs/SkillsTab.tsx`, badged by `pendingForged`) — it was called
-            // "Skills", which is why a person looking for their learned skills
-            // opened it, found tool requests, and concluded the skills had
-            // vanished. The id stays `skills`: the badge and render branch key
-            // off it, and renaming it churns gates for no user-visible gain.
-            { id: 'skills', label: 'Tool approvals', icon: <BookOpen className={NAV_ICON} />, keywords: 'forged tool approval candidate request https' },
+            // Skills left this dialog for the Knowledge SURFACE's own tab, so the
+            // library and the notebook sit together instead of one being a
+            // settings pane. The rail's Customize row and Alt+3 land there.
             { id: 'memory', label: 'Memory', icon: <Brain className={NAV_ICON} />, keywords: 'notebook amendment supervisor profile memory files global' },
             { id: 'strategies', label: 'Playbooks', icon: <BookOpen className={NAV_ICON} />, keywords: 'strategy book pdf upload studio families import' },
         ],
@@ -265,13 +258,13 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     const [activeInstructionTab, setActiveInstructionTab] = useState<InstructionTab>('general');
     const [isDirty, setIsDirty] = useState(false);
     const [navQuery, setNavQuery] = useState('');
-    // Pending-proposal counters for the nav badges: model-authored tools
-    // and notebook amendments waiting for a human decision.
-    const [pendingForged, setPendingForged] = useState(() => loadForgedTools().filter(t => t.status === 'candidate').length);
+    // The notebook amendments waiting for a human decision. The forged-tool count
+    // used to sit here too, badging the Skills tab; the queue moved to the
+    // Knowledge surface with the library, and a badge for a tab that is no longer
+    // in this dialog is just a number chasing nothing.
     const [pendingAmendments, setPendingAmendments] = useState(() => listAmendments('pending').length);
     useEffect(() => {
         const sync = (): void => {
-            setPendingForged(loadForgedTools().filter(t => t.status === 'candidate').length);
             setPendingAmendments(listAmendments('pending').length);
         };
         sync();
@@ -293,7 +286,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
         || entry.keywords.includes(navQ);
     const navBadge = (id: SettingsTab): string | undefined => {
         if (id === 'memory') return pendingAmendments > 0 ? String(pendingAmendments) : undefined;
-        if (id === 'skills') return pendingForged > 0 ? String(pendingForged) : undefined;
         if (id === 'journal') return props.loggedTrades && props.loggedTrades.length > 0 ? String(props.loggedTrades.length) : undefined;
         return undefined;
     };
@@ -596,14 +588,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 </Suspense>
                             )}
 
-                            {activeTab === 'skills' && (
-                                <Suspense fallback={<TabFallback />}>
-                                    <SkillsTab tab={{
-                                        onOpenStrategyStudio: props.onOpenStrategyStudio,
-                                    }} />
-                                </Suspense>
-                            )}
-
                             {activeTab === 'strategies' && (
                                 <Suspense fallback={<TabFallback />}>
                                     <StrategiesTab tab={{
@@ -612,7 +596,12 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         visionConfig: props.visionConfig,
                                         isStrategiesEnabled: props.isStrategiesEnabled,
                                         setIsStrategiesEnabled: props.setIsStrategiesEnabled,
-                                        onOpenStrategyStudio: props.onOpenStrategyStudio,
+                                        // The library left this dialog for the
+                                        // Knowledge surface's Skills tab, so the
+                                        // jump crosses surfaces now — and Settings
+                                        // closes itself on the way, the same way
+                                        // "open the notebook" already does.
+                                        onOpenStrategyStudio: () => props.onOpenLearn?.('skills'),
                                     }} />
                                 </Suspense>
                             )}
