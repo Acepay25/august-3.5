@@ -198,8 +198,13 @@ describe('interactive elements do not nest', () => {
      * starts rendering a button shows up as a named change rather than a moved number.
      */
     it('knows a component by what it renders', () => {
+        // `NavExpandButton` joined on 2026-10-16: the collapsed rail's expand
+        // control moved out of `shared/Header` into its own component so the
+        // Chat surface's title bar could render the SAME button once the global
+        // band stopped spanning the window. Its root is a bare <button>, which
+        // is precisely what this inventory is for.
         expect([...forbidsRoot].sort().join(',')).toBe(
-            'ActionButton,CheckForUpdatesRow,CopyChip,ExportTray,NavTabButton,PinChip,PixelSeat,RailButton,RetryChip,SpeakChip,SupervisorIndicator,ToggleSwitch',
+            'ActionButton,CheckForUpdatesRow,CopyChip,ExportTray,NavExpandButton,NavTabButton,PinChip,PixelSeat,RailButton,RetryChip,SpeakChip,SupervisorIndicator,ToggleSwitch',
         );
         // This list is a MEASUREMENT, and it moved when the walker learned to skip a
         // `//` comment sitting between attributes (`CustomInstructionsEditor.tsx:194`

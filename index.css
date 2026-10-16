@@ -1233,15 +1233,27 @@ body.desk-idle-motion-off {
   transition: left 0.18s var(--ease-snappy), width 0.18s var(--ease-snappy);
 }
 
-/* Quiet workspace grid for the empty chat canvas. It stays out of the way
-   of the composer and chat content; base matches the page color (#0b0b0a). */
-.chat-hero-grid {
-  background-color: #0b0b0a;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-  background-size: 24px 24px;
-  background-position: center top;
+/* `form-checkbox` is a Tailwind **v3 forms-plugin** class and this app never
+   installed that plugin. With no rule behind it the browser painted a NATIVE
+   white box — on the Journal surface it was the brightest object on the screen,
+   and every `bg-zinc-950` / `border-zinc-600` utility sitting next to it was
+   ignored, because a UA-appearance checkbox draws its own background.
+   The call sites already carry size, border and fill utilities, so this adds
+   only the two things they cannot express: drop the UA appearance, and give a
+   checked box a mark that reads on a near-black fill. */
+.form-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-block;
+  flex-shrink: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 0.7em 0.7em;
+  transition: background-color .12s var(--ease-snappy), border-color .12s var(--ease-snappy);
+}
+
+.form-checkbox:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23e4e4e7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-6.5'/%3E%3C/svg%3E");
 }
 
 /* Shared column for messages + composer so they share one width. */
@@ -1416,59 +1428,6 @@ code,
 
 .animate-slide-in-left {
   animation: slideInLeft 0.3s ease-out forwards;
-}
-
-/* ── Directional surface transitions (Chat ⇄ Chart AI) ──────────────────────
- * A short horizontal travel plus a fade, so the direction of the hop is
- * legible without feeling like a page turn. Deliberately a small offset
- * (~28px) rather than a full-width slide: these are two views of ONE
- * conversation, and a big slide would imply a page change that did not happen.
- *
- * CSS keyframes on purpose. The global `prefers-reduced-motion` block below
- * zeroes every animation, so these get accessibility for free. The surface
- * morph is `Element.animate()` (WAAPI), which that block cannot reach — which
- * is why useSurfaceMorph has to check matchMedia by hand. New motion should
- * not inherit that obligation.
- *
- *   .surface-enter-right → arrived FROM the right (Chat → Chart AI)
- *   .surface-enter-left  → arrived FROM the left  (Chart AI → Chat)
- * Applied by App to the ENTERING surface for one cycle. */
-/* The Chat surface and the Chart AI dock are the SAME panel at two
- * sizes, so the transition is a container RESIZE, not two surfaces passing
- * each other. The arriving surface grows out of the dock's own footprint on
- * the right and settles to fill the screen; going back, it collapses into
- * the same edge. One panel, two sizes — which is what it actually is.
- *
- * transform-origin 100% 50% anchored that right edge to the dock, and the
- * surface GREW out of it with a scale. That was the problem: scaling a
- * full-width surface makes it balloon in place, which reads as a pop up in the
- * middle of the screen rather than a slide from the dock's edge. Two rejected
- * attempts are behind this — a small translate, then a pure scale.
- *
- * This is now the hamburger's own motion (`.animate-slide-in-left` above): a
- * translateX reveal pinned to one edge, mirrored. Both surfaces are
- * right-pinned, so a panel sliding in from the right IS the left edge
- * travelling — expanding slides it out to the left, collapsing slides it back. */
-@keyframes surfaceSlideFromRight {
-  from {
-    opacity: 0.4;
-    transform: translateX(100%);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-/* `transform-origin` is deliberately absent — a translate does not need one,
- * and leaving a scale's origin behind is what made the old version look like
- * it was pivoting in place. Both directions share it because a resize has no
- * handedness; the class names are kept because App still sets a direction
- * flag and because they name the two hops. */
-.surface-enter-right,
-.surface-enter-left {
-  animation: surfaceSlideFromRight 0.3s ease-out both;
 }
 
 /* Slide up animation for mobile bottom sheet */

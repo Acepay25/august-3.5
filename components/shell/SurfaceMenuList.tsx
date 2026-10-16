@@ -20,7 +20,7 @@
  */
 
 import React from 'react';
-import {ActivityIcon, FileTextIcon, LayersIcon, BotIcon, GraduationCap, Inbox} from '../shared/Icons';
+import {ActivityIcon, FileTextIcon, LayersIcon, BotIcon, GraduationCap} from '../shared/Icons';
 import Tip from '../ui/Tip';
 
 import type { AppSurface } from '../../hooks/useSurface';
@@ -47,7 +47,11 @@ export const SURFACE_ITEMS: Array<{
 }> = [
     { id: 'trade', label: 'Trade', shortcut: 'Alt+1', Icon: ActivityIcon },
     { id: 'journal', label: 'Journal', shortcut: 'Alt+2', Icon: FileTextIcon },
-    { id: 'skills', label: 'Skills', shortcut: 'Alt+3', Icon: LayersIcon },
+    // 'skills' is NOT a surface any more — the Strategy Studio is the Skills
+    // SETTINGS tab. Its Alt+3 chord and its LayersIcon survive on the
+    // Customize row below, so the muscle memory and the glyph both keep their
+    // meaning; only the destination changed. Chat/Learn keep Alt+4/Alt+5
+    // rather than sliding up a slot and breaking every chord at once.
     // The surface is called Chat; the id stays `agents` because a dozen gates
     // pin it independently of the label (surfaceMenu.test asserts
     // onSelect('agents'), and agents-view / agents-rail / chart-ai-row are
@@ -56,7 +60,11 @@ export const SURFACE_ITEMS: Array<{
     // The RAIL keeps its own "Agents" pill — that names the bot roster, which
     // is a section of this surface, not the surface itself.
     { id: 'agents', label: 'Chat', shortcut: 'Alt+4', Icon: BotIcon },
-    { id: 'learn', label: 'Learn', shortcut: 'Alt+5', Icon: GraduationCap },
+    // Named for what it holds now that it holds the library too: Approvals,
+    // Skills, Memory and Health are tabs of this one surface. "Learn" described
+    // an action and hid the skill library entirely, which is why the Customize
+    // row had to point somewhere else.
+    { id: 'learn', label: 'Knowledge', shortcut: 'Alt+5', Icon: GraduationCap },
 ];
 
 export const surfaceLabel = (id: AppSurface): string =>
@@ -65,11 +73,15 @@ export const surfaceLabel = (id: AppSurface): string =>
 interface SurfaceMenuListProps {
     surface: AppSurface;
     onSelect: (surface: AppSurface) => void;
-    onOpenApprovals?: () => void;
-    approvalsCount?: number;
+    /** The Customize row: opens the Knowledge surface on its Skills tab. Not a
+     *  surface id of its own, so it never claims `aria-current="page"` — it is a
+     *  route into a tab. */
+    onOpenCustomize?: () => void;
     badges?: Partial<Record<AppSurface, NavBadge>>;
     /** 56px rail mode: glyph only, no label column and no shortcut column. */
     collapsed?: boolean;
+    /** Render only the non-destination rows. See the note in the component. */
+    hideSurfaces?: boolean;
 }
 
 const Badge: React.FC<{ badge: NavBadge }> = ({ badge }) => {
@@ -86,17 +98,22 @@ const Badge: React.FC<{ badge: NavBadge }> = ({ badge }) => {
 const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
     surface,
     onSelect,
-    onOpenApprovals,
-    approvalsCount,
+    onOpenCustomize,
     badges,
     collapsed = false,
+    hideSurfaces = false,
 }) => (
     <nav
         aria-label="Surfaces"
         data-testid="surface-menu"
         className={`shrink-0 ${collapsed ? 'px-1.5 pt-2 pb-1' : 'px-2 pt-3 pb-1'}`}
     >
-        {SURFACE_ITEMS.map(({ id, label, shortcut, Icon }) => {
+        {/* The destination rows are the tab strip the redesign was asked to
+            remove; the title-bar switch replaced them on every surface. The
+            Chat sidebar still wants the ONE row that is not a destination —
+            Customize — so the list can render without the surfaces instead of
+            growing a second, smaller component that would drift from this one. */}
+        {!hideSurfaces && SURFACE_ITEMS.map(({ id, label, shortcut, Icon }) => {
             const active = surface === id;
             const badge = badges?.[id];
             /* aria-label replaces the row's content for assistive tech, so the
@@ -152,29 +169,25 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                 : row;
         })}
 
-        {onOpenApprovals && <div className="my-2 border-t border-white/[0.06]" />}
+        {/* No Approvals row. It was a second way into the surface below it, with
+            the same count on both, so one screen showed "Approvals 12" twice —
+            and the number now rides the Knowledge row that actually holds the
+            queue. */}
 
-        {onOpenApprovals && (
+        {onOpenCustomize && (
             <button
                 type="button"
-                data-testid="nav-approvals"
-                onClick={onOpenApprovals}
-                aria-label={approvalsCount ? `Approvals, ${approvalsCount} waiting` : 'Approvals'}
-                className={`flex w-full items-center rounded-control py-2 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${
+                data-testid="nav-customize"
+                onClick={onOpenCustomize}
+                aria-label="Customize, shortcut Alt+3"
+                className={`group flex w-full items-center rounded-control py-2 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${
                     collapsed ? 'justify-center px-2 text-zinc-400' : 'gap-2.5 px-2.5 text-left text-ui-caption text-zinc-400'
                 }`}
             >
-                <span className="relative shrink-0">
-                    <Inbox className="h-4 w-4 text-zinc-500" aria-hidden="true" />
-                    {collapsed && !!approvalsCount && (
-                        <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    )}
-                </span>
-                {!collapsed && <span className="flex-1">Approvals</span>}
-                {!collapsed && !!approvalsCount && (
-                    <span className="shrink-0 rounded-full bg-amber-500 px-1.5 font-mono text-ui-2xs font-bold leading-[14px] text-zinc-950">
-                        {approvalsCount > 99 ? '99+' : approvalsCount}
-                    </span>
+                <LayersIcon className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden="true" />
+                {!collapsed && <span className="flex-1">Customize</span>}
+                {!collapsed && (
+                    <kbd className="shrink-0 opacity-0 transition-opacity duration-[120ms] group-hover:opacity-100 group-focus-visible:opacity-100 rounded-control border border-white/5 bg-zinc-800 px-1.5 py-0.5 font-mono text-ui-2xs text-zinc-500">Alt+3</kbd>
                 )}
             </button>
         )}

@@ -196,28 +196,32 @@ async function main() {
         await seed(page);
         await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(() => !document.querySelector('#splash'), null, { timeout: 25000 });
-        await page.waitForSelector('[data-testid="nav-rail"]', { timeout: 25000 });
+        await page.waitForSelector('[data-testid^="surface-switch-"]', { timeout: 25000 });
         await sleep(2000);
 
-        const navTo = async (name) => page.evaluate((n) => {
-            const re = new RegExp('^' + n, 'i');
-            const hit = [...document.querySelectorAll('[data-testid="surface-menu"] button')]
-                .find(b => re.test((b.getAttribute('aria-label') || b.textContent || '').trim()));
+        // The destination rows are gone, so the switch IS the navigation. Pressed
+        // by surface id, and a miss throws: this loop used to ignore navTo's
+        // return value, which meant a broken route measured whichever surface
+        // happened to be mounted and still reported a number.
+        const SWITCH_ID = { Trade: 'trade', Journal: 'journal', Chat: 'agents', Knowledge: 'learn' };
+        const navTo = async (name) => page.evaluate((id) => {
+            const hit = document.querySelector(`[data-testid="surface-switch-${id}"]`);
             if (!hit) return false;
             hit.click(); return true;
-        }, name);
+        }, SWITCH_ID[name]);
 
         // Each surface is measured at its own root — not main, which some
         // surfaces never render inside.
         const ROOTS = {
             trade: '[data-testid="trade-view"]',
             journal: '[data-testid="journal-view"]',
-            skills: '[data-testid="studio-view"]',
             chat: '[data-testid="agents-view"]',
             learn: '[data-testid="learn-view"]',
         };
-        for (const surface of ['Trade', 'Journal', 'Skills', 'Chat', 'Learn']) {
-            await navTo(surface);
+        // 'Skills' is gone from the rail sweep — the Studio is measured under
+        // Settings below, where it now actually lives.
+        for (const surface of ['Trade', 'Journal', 'Chat', 'Knowledge']) {
+            if (!await navTo(surface)) throw new Error(`no switch entry for ${surface}`);
             const sel = ROOTS[surface.toLowerCase()];
             const ok = await page.waitForSelector(sel, { timeout: 15000 })
                 .then(() => true).catch(() => false);
@@ -225,14 +229,35 @@ async function main() {
             out[surface.toLowerCase()] = await page.evaluate(census, ok ? sel : 'main');
         }
         // Settings is an overlay mounted outside <main> and has no hash route:
-        // open it with its rail button, measure its own dialog root, close it.
-        await page.locator('[data-testid="nav-settings"]').last().click();
+        // open it with the title-bar gear — the rail's button went with the rail —
+        // measure its own dialog root, close it.
+        await page.locator('[data-testid="header-settings"]').last().click();
         const dlg = '[aria-labelledby="settings-title"]';
         const dlgOk = await page.waitForSelector(dlg, { timeout: 15000 })
             .then(() => true).catch(() => false);
         await sleep(1500);
         out.settings = await page.evaluate(census, dlgOk ? dlg : 'main');
         await page.keyboard.press('Escape');
+        await sleep(800);
+        // The Strategy Studio is reached from the Customize row, and that row now
+        // lives in the Chat surface's sidebar — so go back to Chat first. Pressing
+        // a row that is not mounted would fall through to `main` and report
+        // whatever surface happened to be open, the vacuous read this census
+        // documents for every other surface.
+        if (!await navTo('Chat')) throw new Error('no switch entry back to Chat');
+        await page.waitForSelector('[data-testid="nav-customize"]', { timeout: 15000 })
+            .then(() => true).catch(() => false);
+        const studioOpened = await page.evaluate(() => {
+            const hit = document.querySelector('[data-testid="nav-customize"]');
+            if (!hit) return false;
+            hit.click();
+            return true;
+        });
+        const studioOk = studioOpened
+            && await page.waitForSelector('[data-testid="studio-view"]', { timeout: 15000 })
+                .then(() => true).catch(() => false);
+        await sleep(1500);
+        out.skills = await page.evaluate(census, studioOk ? '[data-testid="studio-view"]' : 'main');
 
         const { writeFileSync, mkdirSync } = require('fs');
         mkdirSync(OUT, { recursive: true });

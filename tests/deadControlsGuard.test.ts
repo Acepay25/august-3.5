@@ -20,6 +20,7 @@ const panelSrc = read('components/trade/TradeChatPanel.tsx');
 const tradeSrc = read('components/trade/TradeView.tsx');
 const agentsSrc = read('components/agents/AgentsView.tsx');
 const learnSrc = read('components/learn/LearnView.tsx');
+const composerSrc = read('components/trade/panels/ChatComposer.tsx');
 
 describe('the bot roster has one owner', () => {
     it('no unreachable BotManagerDrawer chain exists', () => {
@@ -79,12 +80,31 @@ describe('a control renders only when it can act', () => {
         expect(appSrc).not.toMatch(/'desk-view'|Open desk view/);
     });
 
+    it('the expand-over-chart row is gated on its handler', () => {
+        expect(panelSrc).toMatch(/\{onToggleExpanded && \(/);
+        expect(panelSrc).toMatch(/Expand over chart/);
+    });
+
+    // The Chat surface's switch lands on the Trade dock, so the dock has to be
+    // handed the conversation's real handlers — a stub there is a control that
+    // presses to nothing. The pane that used to be the panel's second host is
+    // gone: it rendered the same rows without the chart, which read as an inert
+    // toggle, so the switch became a route instead.
+    it('the dock is handed the conversation handlers, not stubs', () => {
+        expect(appSrc).toMatch(/onBotTurnCommit=\{commitDockBotTurn\}/);
+        expect(appSrc).toMatch(/onSoloTurnCommit=\{commitSoloChatTurn\}/);
+        expect(appSrc).toMatch(/conversationRows=\{messages\}/);
+        expect(appSrc).toMatch(/onLogProposedTrade=\{handleLogProposedTrade\}/);
+    });
+
     it('Learn does not mount StrategyStudio a second time', () => {
-        // The word may appear in the rationale comment; the import and the
-        // mount may not.
+        // The claim is about the MOUNT, not the word: Learn has a 'skills' tab
+        // now, and it renders the library through a node App supplies. What must
+        // stay true is that this surface never imports or mounts the Studio
+        // itself — a second copy was half-wired (no onClose) and gave "Try in
+        // chat" nothing to reach.
         expect(learnSrc).not.toMatch(/import\(.*StrategyStudio/);
         expect(learnSrc).not.toMatch(/<StrategyStudio/);
-        expect(learnSrc).not.toMatch(/'skills'/);
     });
 
     it('the effort dropdown carries no decorative meter', () => {
@@ -115,34 +135,58 @@ describe('a control renders only when it can act', () => {
  * this guards against is a surface list that exists in two places (or none),
  * and a header that kept a nav prop after the nav moved out of it.
  */
-describe('the surfaces live in the persistent nav rail', () => {
-    it('the nav rail exists and App mounts it', () => {
-        expect(existsSync('components/shell/NavRail.tsx')).toBe(true);
-        expect(appSrc).toMatch(/<NavRail/);
-        expect(appSrc).toMatch(/onSelectSurface=\{handleSurfaceSelect\}/);
+describe('the surfaces live in the title-bar switch', () => {
+    it('the switch exists and App mounts it exactly once', () => {
+        expect(existsSync('components/shell/SurfaceSwitch.tsx')).toBe(true);
+        // One node, built in App and handed to whichever title bar the surface
+        // renders — the band's, or the Chat surface's own row. Two wirings is how
+        // one of them drifts.
+        expect(appSrc.match(/<SurfaceSwitch/g)?.length).toBe(1);
+        expect(appSrc).toMatch(/surfaceSwitch=\{shellNavSwitch\}/);
+        expect(appSrc).toMatch(/onSelect=\{handleSurfaceSelect\}/);
     });
 
-    it('the header no longer owns the navigation', () => {
-        // The header's hamburger was the only nav host between the two moves;
-        // if either comes back the app has two lists that can disagree.
+    it('the destination rows are out of the sidebar, and the rail is out of the shell', () => {
+        // The brief was to remove the tab strip that opened Trade / Journal /
+        // Chat / Learn / Approvals / Custom. Renaming it (Learn → Knowledge) and
+        // demoting two entries to tabs left the same list standing, so this pins
+        // the removal itself rather than the label.
+        expect(appSrc).not.toMatch(/<NavRail/);
+        // The one nav list the Chat sidebar still renders is Customize only.
+        expect(appSrc).toMatch(/hideSurfaces\b/);
+        const menuSrc = read('components/shell/SurfaceMenuList.tsx');
+        expect(menuSrc).toMatch(/hideSurfaces = false/);
+        expect(menuSrc).toMatch(/!hideSurfaces && SURFACE_ITEMS\.map/);
+    });
+
+    it('no surface grows a second list of destinations', () => {
+        const headerSrc = read('components/shared/Header.tsx');
+        const agentsSrc = read('components/agents/AgentsView.tsx');
         expect(headerSrc).not.toMatch(/<SurfaceMenuList/);
-        expect(headerSrc).not.toMatch(/onSelectSurface/);
-        expect(headerSrc).not.toMatch(/isMobileMenuOpen/);
-        const railSrc = read('components/shell/NavRail.tsx');
-        expect(railSrc).toMatch(/<SurfaceMenuList/);
+        expect(agentsSrc).not.toMatch(/<SurfaceMenuList/);
+        // The switch is handed IN to both, so neither can render its own copy.
+        expect(headerSrc).not.toMatch(/<SurfaceSwitch/);
+        expect(agentsSrc).not.toMatch(/<SurfaceSwitch/);
     });
 
-    it('the rail carries Approvals, and profile switching has one home in Settings', () => {
-        // Approvals stays a nav row. Switch profile is deliberately NOT on the
-        // account row any more: clicking your own name threw you back to the
-        // workspace picker, which is the opposite of what a readout is for.
-        // The capability keeps exactly one home — Settings → Profile — and this
-        // pins that removing the rail entry did not remove the feature.
-        // Approvals is a nav row — it lives in the list the rail mounts, not in
-        // the rail file, which the old assertion's alternation quietly hid.
+    it('Settings is reachable on the surfaces that lost the account row', () => {
+        // The gear lived in the rail's account row. With the rail gone, three
+        // surfaces had no account row and would have silently lost Settings —
+        // a control removed because its host moved is the exact failure mode
+        // this file exists to catch.
+        expect(appSrc).toMatch(/onOpenSettings=\{\(\) => setIsSettingsMenuVisible\(true\)\}/);
+        const header = read('components/shared/Header.tsx');
+        expect(header).toMatch(/data-testid="header-settings"/);
+    });
+
+    it('profile switching has one home in Settings, and the account row is a readout', () => {
+        const railSrc = read('components/shell/NavRail.tsx');
         expect(railSrc).not.toMatch(/nav-switch-user/);
         const menuSrc = read('components/shell/SurfaceMenuList.tsx');
-        expect(menuSrc).toMatch(/data-testid="nav-approvals"/);
+        // Inverted on purpose: Approvals is a tab of the Knowledge surface, so a
+        // rail row for it was a second destination for one queue and a duplicate
+        // count on one screen. The number rides the surface that holds it.
+        expect(menuSrc).not.toMatch(/data-testid="nav-approvals"/);
         const profileSrc = read('components/settings/tabs/ProfileTab.tsx');
         expect(profileSrc).toMatch(/onSwitchUser/);
         expect(appSrc).toMatch(/onSwitchUser=\{handleSwitchUser\}/);
@@ -213,5 +257,32 @@ describe('SettingsMenu has no vestigial journal interface', () => {
         // Guards against "fixing" the dead props by deleting the live chain too.
         expect(read('components/journal/Journal.tsx')).toMatch(/onUpdateTradeType/);
         expect(read('components/journal/TradeLog.tsx')).toMatch(/onUpdateTradeType/);
+    });
+});
+
+describe('a class the framework does not generate must have a rule behind it', () => {
+    // `form-checkbox` is a Tailwind **v3 forms-plugin** name. This app runs v4
+    // and never installed the plugin, so the class styled NOTHING and Chromium
+    // painted a native white checkbox — the brightest object on the Journal
+    // surface, with `bg-zinc-950` beside it ignored because a UA-appearance
+    // control draws its own background. jsdom cannot see any of this: it mounts
+    // markup without resolving a stylesheet, so the only gate is the source.
+    const css = read('index.css');
+    const users = ['components/journal/TradeLog.tsx', 'components/journal/SavedAnalyses.tsx'];
+
+    it('the class is really used — this is not a rule written for nothing', () => {
+        for (const f of users) expect(read(f)).toMatch(/form-checkbox/);
+    });
+
+    it('the rule removes the UA appearance, which IS the defect', () => {
+        const rule = css.match(/\.form-checkbox\s*\{[^}]*\}/);
+        expect(rule, 'no .form-checkbox rule in index.css').toBeTruthy();
+        expect(rule![0]).toMatch(/appearance:\s*none/);
+    });
+
+    it('a checked box gets a mark, because appearance:none draws no glyph', () => {
+        const checked = css.match(/\.form-checkbox:checked\s*\{[^}]*\}/);
+        expect(checked, 'no checked-state rule: the box would go blank when ticked').toBeTruthy();
+        expect(checked![0]).toMatch(/background-image:/);
     });
 });

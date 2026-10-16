@@ -176,67 +176,63 @@ test('a profile with a seeded analysis boots clean', async ({ page }) => {
 // surfaces are Trade/Journal/Studio/Agents) — its seat-card smoke specs went
 // with it.
 
-test('the nav rail reaches the journal and back to the trade chart', async ({ page }) => {
+test('the title-bar switch reaches the journal and back to the trade chart', async ({ page }) => {
     await seedWorkspace(page, 'Navigation Workspace');
 
-    // The surfaces no longer live behind a header drawer that has to be opened
-    // and dismissed around every jump — the rail is persistent, so its `<nav
-    // aria-label="Surfaces">` rows are simply clickable. Matched by prefix
-    // because each row's accessible name also carries its shortcut
-    // ("Journal, shortcut Alt+2"), which an exact string cannot hit. The
-    // anchor includes the punctuation ("Trade," / "Trade.") so the approvals
-    // row — named "Trade approvals" for the drawer it opens — stays out.
-    const surfaces = () => page.getByRole('navigation', { name: 'Surfaces' });
-
-    await surfaces().getByRole('button', { name: /^Journal/ }).click();
+    // The destination rows are gone: the switch in the content column's title
+    // bar is the navigation, addressed by surface id rather than by a label that
+    // also carries the keyboard chord.
+    await page.getByTestId('surface-switch-journal').click();
     await expect(page.getByRole('heading', { name: 'Journal', exact: true })).toBeVisible({ timeout: 10_000 });
-    await surfaces().getByRole('button', { name: /^Trade[.,]/ }).click();
+    await page.getByTestId('surface-switch-trade').click();
     await expect(page.getByTestId('trade-view')).toBeVisible({ timeout: 10_000 });
-    // Where you are is marked on the row now, not spelled out in a toggle's
-    // label: `aria-current="page"` is the contract the rail owns.
-    await expect(surfaces().getByRole('button', { name: /^Trade[.,]/ })).toHaveAttribute('aria-current', 'page');
+    // Where you are is marked on the switch: `aria-current="page"` is the
+    // contract that moved from the rail row to the switch button.
+    await expect(page.getByTestId('surface-switch-trade')).toHaveAttribute('aria-current', 'page');
+    // And the sidebar's destination list is really gone from a surface that has
+    // a sidebar at all — asserted on the Chat surface, where the column still
+    // exists and used to hold it.
+    await page.getByTestId('surface-switch-agents').click();
+    await expect(page.getByTestId('agents-view')).toBeVisible({ timeout: 15_000 });
+    const column = page.getByTestId('agents-rail');
+    await expect(column.getByRole('button', { name: /^Journal/ })).toHaveCount(0);
+    await expect(column.getByRole('button', { name: /^Customize/ })).toBeVisible();
 });
 
-test('the collapsed rail expands, marks the surface, and fills the viewport', async ({ page }) => {
+test('the title-bar switch navigates on a phone, and the conversation column is a drawer', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedWorkspace(page, 'Mobile Workspace');
 
-    // Below NAV_RAIL_AUTO_COLLAPSE_PX the rail rests collapsed and is
-    // aria-hidden + inert, so its rows are unreachable until the header's toggle
-    // opens it. Querying by role while closed would match nothing and prove
-    // nothing, so the closed state is asserted on the toggle itself.
-    const rail = page.getByTestId('nav-rail');
-    const toggle = page.getByTestId('nav-rail-toggle');
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await expect(rail).toBeHidden();
+    // The rail is gone, so navigation on a phone is the switch in the title bar.
+    // It must be reachable and must say which screen you are on — the
+    // `aria-current="page"` contract moved with it.
+    const trade = page.getByTestId('surface-switch-trade');
+    await expect(trade).toBeVisible();
+    await expect(trade).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId('surface-switch-journal')).toBeVisible();
+    await expect(page.getByTestId('surface-switch-learn')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Expand navigation' }).click();
-    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    // A narrow-viewport rail is an OVERLAY: it floats above the content rather
-    // than squeezing a 390px screen into 110px of chart.
+    await page.getByTestId('surface-switch-agents').click();
+    await expect(page.getByTestId('agents-view')).toBeVisible({ timeout: 15_000 });
+
+    // Below md the conversation column is an OVERLAY, not a squeezed third of a
+    // 390px screen. Querying its rows while closed would match nothing and prove
+    // nothing, so the closed state is asserted on the opener.
+    await expect(page.getByTestId('agents-rail')).toBeHidden();
+    await page.getByRole('button', { name: 'Open conversations' }).click();
     await expect(page.getByTestId('rail-backdrop')).toBeVisible();
+    const column = page.getByTestId('agents-rail');
+    await expect(column.getByRole('button', { name: /^Customize/ })).toBeVisible();
+    await expect(column.getByRole('button', { name: /^New/ })).toBeVisible();
 
-    const surfaces = page.getByRole('navigation', { name: 'Surfaces' });
-    await expect(surfaces.getByRole('button', { name: /^Journal/ })).toBeVisible();
-    await expect(surfaces.getByRole('button', { name: /^Trade[.,]/ })).toHaveAttribute('aria-current', 'page');
-    // Approvals and Settings are the rail's two non-surface actions. Live Market
-    // used to be listed here: it is an app-level overlay now
-    // (`isLiveMarketVisible`), not a navigation entry, so asserting it in the
-    // rail would be asserting a control that was deliberately removed.
-    await expect(page.getByTestId('nav-approvals')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
-
-    // Geometry, not visibility. The old drawer was portaled to <body> because the
-    // header's backdrop-filter made the header its containing block, and
-    // `toBeVisible` passed while the panel was clipped to one 53px row. The rail
-    // is not portaled, so it has to measure the viewport on its own.
-    const box = await rail.boundingBox();
+    // Geometry, not visibility. A drawer portaled behind a backdrop-filtered
+    // ancestor reported visible while clipped to one row, so the panel has to
+    // measure the viewport on its own.
+    const box = await column.boundingBox();
     expect(box).not.toBeNull();
     expect(box!.height).toBeGreaterThanOrEqual(800);
 
-    // Using the drawer is the intent — it must put itself down.
-    await surfaces.getByRole('button', { name: /^Journal/ }).click();
-    await expect(page.getByRole('heading', { name: 'Journal', exact: true })).toBeVisible({ timeout: 10_000 });
+    // The backdrop is the other way to put it down.
+    await page.getByTestId('rail-backdrop').click({ position: { x: 300, y: 400 } });
     await expect(page.getByTestId('rail-backdrop')).toHaveCount(0);
-    await expect(rail).toBeHidden();
 });

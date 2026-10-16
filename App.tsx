@@ -82,7 +82,9 @@ const GroupChatView = React.lazy(() => import('./components/chat/GroupChatView')
 const CoachThreadPanel = React.lazy(() => import('./components/chat/CoachThreadPanel'));
 const LearnView = React.lazy(() => import('./components/learn/LearnView'));
 import type { LearnTab } from './components/learn/LearnView';
+import SkillsLibrary from './components/skills/SkillsLibrary';
 const AgentsView = React.lazy(() => import('./components/agents/AgentsView'));
+import ModelChip from './components/shared/ModelChip';
 import ModelPicker from './components/shared/ModelPicker';
 import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
@@ -127,8 +129,10 @@ import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { useSurfaceRouter } from './hooks/useSurfaceRouter';
 import type { AppSurface } from './hooks/useSurface';
 import type { TradeMode } from './components/trade/TradeView';
-import type { NavBadge } from './components/shell/SurfaceMenuList';
-import NavRail, { NAV_RAIL_AUTO_COLLAPSE_PX } from './components/shell/NavRail';
+import SurfaceMenuList, { type NavBadge } from './components/shell/SurfaceMenuList';
+import NavRail, { AccountRow, NAV_RAIL_AUTO_COLLAPSE_PX } from './components/shell/NavRail';
+import StatusCluster from './components/shell/StatusCluster';
+import SurfaceSwitch from './components/shell/SurfaceSwitch';
 // The Journal pulls recharts + react-virtuoso into its chunk — statically
 // importing it put both on the startup path for a surface most users open
 // after days of logging. Lazy-once like the other surfaces; the deep-link
@@ -361,6 +365,11 @@ const App: React.FC = () => {
                 const config = memoryConfigRef.current || readyProvidersRef.current[0] || null;
                 void runNotebookReview(username, config).then((wrote) => {
                     if (wrote) {
+                        // NOT a misroute, verified: Settings → Memory carries an
+                        // "Open the notebook" button (Alt+5) that routes to
+                        // Learn → Memory, which is where Suggestions renders. The
+                        // signpost is the switches tab, the file is one hop on —
+                        // the convention `tests/toolActions.test.tsx` pins.
                         toast.success('Memory reviewed', 'Open Suggestions in Settings → Memory.');
                     }
                 }).catch((err) => {
@@ -380,15 +389,14 @@ const App: React.FC = () => {
     const [learnTab, setLearnTab] = useState<LearnTab | null>(null);
     const learnTabConsumed = useCallback(() => setLearnTab(null), []);
 
-    // Surface + URL routing, the journal deep-link and the surface-enter
-    // direction — one self-contained cluster, lifted out of this component
-    // (handoff 2.1). It owns `useSurface` and needs `setLearnTab` for the
-    // #/journal/learning bookmark, which is why it is called after that.
+    // Surface + URL routing and the journal deep-link — one self-contained
+    // cluster, lifted out of this component (handoff 2.1). It owns `useSurface`
+    // and needs `setLearnTab` for the #/journal/learning bookmark, which is why
+    // it is called after that.
     const {
         surface, setSurface,
         journalTab,
         journalOpenNonce,
-        surfaceEnterFrom, setSurfaceEnterFrom,
         handleSurfaceSelect, openJournal,
     } = useSurfaceRouter({
         isSettingsMenuVisible, setIsSettingsMenuVisible,
@@ -396,6 +404,53 @@ const App: React.FC = () => {
         isWatchListVisible, setIsWatchListVisible,
         setLearnTab,
     });
+    /** The Chat surface's switch: go and talk to the desk WITH the chart.
+     *
+     *  A route, not a mode. The Chat surface is the thread; the Chart AI
+     *  experience lives where the chart is, so the hop lands on the session that
+     *  stands in for the conversation being read — otherwise the dock opens on
+     *  whichever chat was last used and the two surfaces become two transcripts
+     *  wearing one conversation's name. Defined up here because the Alt+6 chord
+     *  below reads it during the same render. */
+    const openChartAi = useCallback((): void => {
+        if (activeConversationId) chatStore.bindConversation(activeConversationId);
+        handleSurfaceSelect('trade');
+    }, [activeConversationId, handleSurfaceSelect]);
+
+    // The Chat ⇄ Chart AI hop is a mode switch, and a mode switch that stops to
+    // load a chunk is not one. Each side warms its PARTNER at idle so the press
+    // never waits on the network: measured in a real browser, the first hop goes
+    // 1680ms → 789ms with the warm-up in place. Only the partner is fetched, not
+    // both, because the surface you are looking at is already loading itself.
+    // The `import()` specifier matches the surface's own lazy declaration, so the
+    // bundler dedupes it to the same chunk rather than a second copy.
+    useEffect(() => {
+        const load = surface === 'agents'
+            ? () => import('./components/trade/TradeView')
+            : surface === 'trade'
+                ? () => import('./components/agents/AgentsView')
+                : null;
+        if (!load) return;
+        const warm = (): void => { void load(); };
+        const idle = window as Window & {
+            requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+            cancelIdleCallback?: (id: number) => void;
+        };
+        if (idle.requestIdleCallback) {
+            const id = idle.requestIdleCallback(warm, { timeout: 2000 });
+            return () => idle.cancelIdleCallback?.(id);
+        }
+        const t = setTimeout(warm, 1200);
+        return () => clearTimeout(t);
+    }, [surface]);
+
+    /** The Customize rail row's destination: the skill library, which is a tab of
+     *  the Knowledge surface now. It used to open Settings → Skills, and before
+     *  that a rail surface — three homes for one library. */
+    const openCustomize = useCallback((): void => {
+        setLearnTab('skills');
+        handleSurfaceSelect('learn');
+    }, [handleSurfaceSelect, setLearnTab]);
     // The trade surface's collapsible left panel: the order book, opened and
     // closed from the toggle in the Chart's own market row. Persisted so the
     // layout survives reloads like the dock width.
@@ -1443,16 +1498,36 @@ const App: React.FC = () => {
             // Alt+1..5 jumps the nav-rail surfaces (Minara nav; Alt keeps
             // the browser/Electron Ctrl+number tab-switching intact).
             const SURFACE_KEYS: Record<string, AppSurface> = {
-                '1': 'trade', '2': 'journal', '3': 'skills', '4': 'agents', '5': 'learn',
+                '1': 'trade', '2': 'journal', '4': 'agents', '5': 'learn',
             };
             if (e.altKey && !e.ctrlKey && !e.metaKey && SURFACE_KEYS[e.key]) {
                 e.preventDefault();
                 handleSurfaceSelect(SURFACE_KEYS[e.key]);
             }
+            // Alt+3 is deliberately NOT deleted with the Skills surface: the
+            // chord is muscle memory for "my skill library", and the library
+            // still exists — it is the Skills SETTINGS tab now. A key that goes
+            // silently missing is the worse outcome.
+            // chord is muscle memory for "my skill library", and the library
+            // still exists — it is the Skills tab of the Knowledge surface now.
+            // A key that goes silently missing is the worse outcome.
+            if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === '3') {
+                e.preventDefault();
+                openCustomize();
+            }
+            // Alt+6 takes the Chat surface's question to the chart. Scoped to
+            // that surface: on any other one the chord would move something the
+            // user cannot see, and a key that silently does nothing is worse
+            // than one that is not bound — so it does not even preventDefault
+            // elsewhere.
+            if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === '6' && surface === 'agents') {
+                e.preventDefault();
+                openChartAi();
+            }
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [handleSurfaceSelect, setIsSettingsMenuVisible, toggleNavRail]);
+    }, [handleSurfaceSelect, setIsSettingsMenuVisible, toggleNavRail, surface]);
 
 
 
@@ -1968,6 +2043,33 @@ const App: React.FC = () => {
         updateMessages(prev => [...prev, row], activeConversationId ?? null);
     }, [updateMessages, activeConversationId]);
 
+    /** A solo (desk) turn asked in the Chart AI panel, committed into the
+     *  conversation that owns it — under the entry's OWN id.
+     *
+     *  `commitDockBotTurn` mints fresh ids because a bot's question has no local
+     *  row to match. A solo turn does: the panel is already painting this exact
+     *  bubble, and `entriesForSession` merges by id. Reusing the id is what makes
+     *  one turn ONE row in both homes — a new id here would append a second
+     *  answer to the pane that just wrote it.
+     *
+     *  Deliberately un-stamped: no `botId`, no `modelsUsed`. A desk answer is the
+     *  desk's, and `deskThread` drops only rows a bot positively owns. */
+    const commitSoloChatTurn = useCallback((
+        row: { id: string; role: 'user' | 'ai'; text: string; workedMs?: number },
+        conversationId: string,
+    ): void => {
+        const at = new Date().toISOString();
+        updateMessages(prev => prev.some(m => m.id === row.id) ? prev : [...prev, {
+            id: row.id,
+            role: row.role === 'user' ? MessageRole.USER : MessageRole.AI,
+            text: row.text,
+            createdAt: at,
+            ...(row.role === 'ai' && typeof row.workedMs === 'number'
+                ? { runStats: { runId: `desk-${row.id}`, startedAt: at, finishedAt: at, durationMs: row.workedMs } }
+                : {}),
+        }], conversationId);
+    }, [updateMessages]);
+
     // ─── Stable identities for overlay/panel callbacks ─────────────────────
     // Inline arrows here were recreated on every App render, busting
     // React.memo on ChatArea/Journal and rebuilding ChatArea's
@@ -2080,6 +2182,15 @@ const App: React.FC = () => {
     // Per-bot learning stats for the Agents rail (WS-3.4). Walks the notebook,
     // so it is keyed to notebook writes and the roster — not to price ticks.
     const botStats = useMemo(() => loadBotLearningStats(), [bots, memoryNonce]);
+    // One number for one meaning: the union of every queue the Knowledge surface
+    // hosts — the notebook's pending drafts, proposals and amendments, plus the
+    // permissions the harness is asking for. A skill draft appears in
+    // approvalItems too, so it is counted once, from the store — not twice
+    // because two surfaces happened to list it.
+    const approvalsWaiting = useMemo(() => {
+        const permissions = approvalItems.filter(i => i.kind !== 'skill').length;
+        return countPendingEverything(activeUsername || 'default') + permissions;
+    }, [approvalItems, activeUsername, skillDraftNonce, learningQueueNonce, memoryNonce]);
     // Surface-menu badges. Memoized because App re-renders on every price tick
     // and both Header and SurfaceMenuList are React.memo'd — a fresh object
     // literal would invalidate the memo once a second for nothing.
@@ -2099,28 +2210,19 @@ const App: React.FC = () => {
                     : 'generating insights',
             };
         }
-        // The Learn badge counts what is still UNDECIDED across every queue
-        // that surface hosts — the Coach inbox's drafts and proposals, the
-        // amendments, everything else. The supervisor may already be working
-        // through them, but a decision the model has not recorded yet is
-        // something the user can still lose.
-        // No Learn count here any more: the Approvals row below it on the same
-        // rail routes into this surface and carries the one number.
+        // The number rides the surface that HOLDS the queues. It used to sit on a
+        // separate Approvals row in the rail — one destination, two rows, the same
+        // count twice on one screen — and that row is gone now that Approvals is a
+        // tab of Knowledge. The supervisor may already be working through them; a
+        // decision the model has not recorded yet is still something to lose.
+        if (approvalsWaiting > 0) {
+            next.learn = {
+                count: approvalsWaiting,
+                detail: `${approvalsWaiting} decision${approvalsWaiting === 1 ? '' : 's'} waiting`,
+            };
+        }
         return next;
-    }, [workingBotId, dmWorkingBotId, isInsightGenerating, insightProgress, activeUsername, skillDraftNonce, learningQueueNonce]);
-    // One number for one meaning. The rail's Approvals row used to count the
-    // drawer's items (which included skill drafts) while the Learn badge counted
-    // drafts + proposals + amendments — two figures for overlapping sets, both
-    // labelled as if they were the whole backlog. This is the union, and the
-    // Learn surface badge is gone, because the row routes INTO that surface.
-    const approvalsWaiting = useMemo(() => {
-        // The notebook's own pending total (drafts + proposals + amendments),
-        // plus the permissions the harness is asking for. A skill draft appears
-        // in approvalItems too, so it is counted once, from the store — not
-        // twice because two surfaces happened to list it.
-        const permissions = approvalItems.filter(i => i.kind !== 'skill').length;
-        return countPendingEverything(activeUsername || 'default') + permissions;
-    }, [approvalItems, activeUsername, skillDraftNonce, learningQueueNonce, memoryNonce]);
+    }, [workingBotId, dmWorkingBotId, isInsightGenerating, insightProgress, activeUsername, skillDraftNonce, learningQueueNonce, approvalsWaiting]);
     const selectTeamThread = useCallback(() => setActiveThread({ kind: 'team' }), []);
     const coachAllowDraft = useCallback((draft: SkillDraft): void => {
         void approveSkillDraft(draft, activeUsername || 'default', loggedTradesRef.current)
@@ -2166,12 +2268,14 @@ const App: React.FC = () => {
     // already open). The Settings → Skills tab is now just a pointer here.
     useEffect(() => {
         const onOpenSkill = (): void => {
-            setIsSettingsMenuVisible(false);
-            setSurface('skills');
+            // The library is the Knowledge surface's Skills tab, so this lands
+            // there — the same destination as the Customize row and Alt+3, not a
+            // third one.
+            openCustomize();
         };
         window.addEventListener('august:open-skill', onOpenSkill);
         return () => window.removeEventListener('august:open-skill', onOpenSkill);
-    }, []);
+    }, [openCustomize]);
 
     // "Try in chat" from the Studio or the learning queue: the dock reads the
     // hand-off itself (see skillDeepLink), but on Learn nothing would show the
@@ -2313,6 +2417,58 @@ const App: React.FC = () => {
     }, [isAnalysisProgressVisible]);
     const showPipelineCard = isAnalysisProgressVisible && !isPipelineDismissed;
 
+    // The title bar's status cluster, built ONCE. Every surface now has exactly
+    // one bar: Trade/Journal/Knowledge get the band — moved INSIDE the content
+    // column so the sidebar runs the full height, the reference's silhouette —
+    // and the Chat surface keeps its own header row, which is why this travels
+    // as a node rather than markup only `shared/Header` can reach. The collapsed
+    // rail's expand button is deliberately NOT a node: each bar renders
+    // `NavExpandButton` from the callbacks it already holds, because an
+    // interactive-root element parked in a local variable gets attributed to
+    // whichever component holds it, and `App` is not a button wrapper.
+    const shellNavSwitch = useMemo(
+        () => (
+            <SurfaceSwitch
+                surface={surface}
+                onSelect={(next) => {
+                    // Chat → Trade is not a plain route: it must carry THIS
+                    // conversation into the Chart AI dock, which is what the
+                    // ChatModePill used to do before the switch absorbed it.
+                    // Drop this and the dock silently opens on its own last
+                    // session — render-probe's "the dock draws the same decision
+                    // cards as the thread" check is what catches it.
+                    if (next === 'trade' && surface === 'agents') { openChartAi(); return; }
+                    handleSurfaceSelect(next);
+                }}
+                badges={navBadges}
+            />
+        ),
+        [surface, handleSurfaceSelect, openChartAi, navBadges],
+    );
+    const shellStatus = useMemo(() => (
+        <StatusCluster
+            saveStatus={saveStatus}
+            isOnline={isOnline}
+            isPostMortemInProgress={isPostMortemInProgress}
+            onOpenLivePostMortem={() => setIsLivePostMortemVisible(true)}
+            onOpenActivity={() => setIsJobsDrawerVisible(true)}
+            activityOpen={isJobsDrawerVisible}
+        />
+    ), [saveStatus, isOnline, isPostMortemInProgress, setIsLivePostMortemVisible, isJobsDrawerVisible]);
+
+    /** One read of "the chat's model pick is unusable", shared by the Chat
+     *  surface's model chip (which colours itself amber) and its banner. */
+    const chatModelFallback = useMemo(() => {
+        const f = computeChatModelFallback(providerConfigs, selectedChatModel);
+        return {
+            issue: f.issue ?? null,
+            providerName: f.provider?.name,
+            // The banner needs BOTH halves: a warning that cannot name a
+            // provider has nothing to tell the user.
+            notice: f.issue && f.provider ? { issue: f.issue, provider: f.provider } : null,
+        };
+    }, [providerConfigs, selectedChatModel]);
+
     return (
         // Outer Suspense boundary. fallback={null} so a suspending lazy
         // subtree (e.g. a modal opening) does NOT blank the always-visible
@@ -2389,7 +2545,6 @@ const App: React.FC = () => {
             <SettingsMenu
                 isVisible={isSettingsMenuVisible}
                 onClose={() => setIsSettingsMenuVisible(false)}
-                onOpenStrategyStudio={() => { setSurface('skills'); setIsSettingsMenuVisible(false); }}
                 onOpenLearn={(tab) => { setLearnTab(tab ?? null); setSurface('learn'); setIsSettingsMenuVisible(false); }}
                 summaryCharLimit={summaryCharLimit}
                 onUpdateSummaryCharLimit={handleUpdateSummaryCharLimit}
@@ -2526,23 +2681,11 @@ const App: React.FC = () => {
             )}
 
 
-            <Header
-                saveStatus={saveStatus}
-                isAnalysisInProgress={isAnalysisInProgress}
-                isPostMortemInProgress={isPostMortemInProgress}
-                currentVisionData={currentVisionData}
-                surface={surface}
-                setIsLivePostMortemVisible={setIsLivePostMortemVisible}
-                isOnline={isOnline}
-                pendingQueueCount={pendingQueueCount}
-                liveMarketConditions={liveMarketConditions}
-                liveMarketSymbol={liveMarketSymbol}
-                onOpenActivity={() => setIsJobsDrawerVisible(true)}
-                onOpenLiveMarket={handleOpenLiveMarket}
-                onOpenVisionData={() => setIsVisionDataVisible(true)}
-                hasVisionData={currentVisionData.length > 0}
-                onExpandNavRail={isNavRailOpen ? undefined : toggleNavRail}
-            />
+            {/* The band is no longer here. It renders as the first child of
+                <main>, so the sidebar runs the full height of the window the way
+                the reference's does and the title bar belongs to the content
+                column instead of cutting across both. */}
+
 
             {/* The old Journal OVERLAY was removed (navigation rewired to the
                 journal surface): the live render is the embedded branch in
@@ -2590,30 +2733,49 @@ const App: React.FC = () => {
             )}
 
 
-            {/* Main row: the nav rail and the surfaces share it. The rail sits BESIDE
-                the content rather than spanning the header too, so the header
-                keeps its full width for the command palette and the live-market
-                read — and so the rail is a plain flex child, not something that
-                has to out-z-index the sticky header. */}
+            {/* Main row. The NavRail is GONE: its five destination rows were the
+                tab strip the redesign was asked to remove, and the switch in each
+                surface's title bar replaces them. The Chat surface keeps its own
+                conversation column, which is the sidebar the reference has. */}
             <div className="flex-1 flex flex-row min-h-0">
-                <NavRail
-                    expanded={isNavRailOpen}
-                    onToggleExpanded={toggleNavRail}
-                    overlay={isNavOverlay}
-                    onCloseOverlay={closeNavOverlay}
-                    activeUsername={activeUsername}
-                    surface={surface}
-                    onSelectSurface={handleSurfaceSelect}
-                    badges={navBadges}
-                    onOpenApprovals={openApprovalsInLearn}
-                    approvalsCount={approvalsWaiting}
-                    onOpenSettings={() => setIsSettingsMenuVisible(true)}
-                />
+                {/* The NavRail is gone. Its five destination rows were the tab
+                    strip this redesign was asked to remove; the switch now in
+                    each surface's title bar replaces them, and the Chat surface
+                    keeps the conversation column that IS the reference's sidebar. */}
                 {/* Surfaces: pages, not modals. The Chat surface is gone — the
                     trade surface's Chart AI dock carries the chats, panels and
                     roster threads; the Coach inbox is a Learn tab; the other
                     tabs embed existing components. */}
                 <main className="flex-1 flex flex-col min-h-0 min-w-0 relative bg-zinc-950">
+                    {/* The band, now the content column's own title bar. NOT
+                        mounted on the Chat surface: that surface has a title bar
+                        of its own (the mode pill and the conversation's name),
+                        and stacking a second one above it is the two-bars shape
+                        the reference never has. Its controls arrive there as
+                        `statusCluster` / `navExpand` — the same nodes, built once
+                        above. */}
+                    {surface !== 'agents' && (
+                    <Header
+                        saveStatus={saveStatus}
+                        isAnalysisInProgress={isAnalysisInProgress}
+                        isPostMortemInProgress={isPostMortemInProgress}
+                        currentVisionData={currentVisionData}
+                        surface={surface}
+                        setIsLivePostMortemVisible={setIsLivePostMortemVisible}
+                        isOnline={isOnline}
+                        pendingQueueCount={pendingQueueCount}
+                        liveMarketConditions={liveMarketConditions}
+                        liveMarketSymbol={liveMarketSymbol}
+                        onOpenActivity={() => setIsJobsDrawerVisible(true)}
+                        onOpenLiveMarket={handleOpenLiveMarket}
+                        onOpenVisionData={() => setIsVisionDataVisible(true)}
+                        hasVisionData={currentVisionData.length > 0}
+                        status={shellStatus}
+                        surfaceSwitch={shellNavSwitch}
+                        onOpenSettings={() => setIsSettingsMenuVisible(true)}
+                        onExpandNavRail={isNavRailOpen ? undefined : toggleNavRail}
+                    />
+                    )}
                     {/* Mistake Warning Banner - Global Risk Reminder */}
                     {loggedTrades.length > 0 && (
                         <React.Suspense fallback={null}>
@@ -2648,10 +2810,11 @@ const App: React.FC = () => {
                                        the Coach inbox, not just list rooms. */
                                     botThreadRows={tradeBotThread}
                                     onBotTurnCommit={commitDockBotTurn}
+                                    onSoloTurnCommit={commitSoloChatTurn}
+                                    conversationRows={messages}
                                     onNewGroup={() => setIsNewGroupOpen(true)}
                                     onOpenCoach={openApprovalsInLearn}
                                     coachCount={coachCount}
-                                    surfaceEnterFrom={surfaceEnterFrom}
                                     verdict={deskSceneMessage?.analysis}
                                     bots={bots}
                                     trades={loggedTrades}
@@ -2659,6 +2822,7 @@ const App: React.FC = () => {
                                     botSessionRequest={tradeBotRequest ?? undefined}
                                     groupSessionRequest={tradeGroupRequest ?? undefined}
                                     onRunAnalysis={handleRunAnalysisFromChat}
+                                    onStopRun={handleCancelAnalysis}
                                     getAnalysisMessage={getAnalysisMessage}
                                     onLogProposedTrade={handleLogProposedTrade}
                                     registerScrollToMessage={registerScrollToMessage}
@@ -2701,18 +2865,6 @@ const App: React.FC = () => {
                                 />
                             </React.Suspense>
                         )}
-                        {surface === 'skills' && (
-                            <React.Suspense fallback={<SurfaceSkeleton />}>
-                                <StrategyStudio
-                                    trades={loggedTrades}
-                                    onOpenStrategySearch={() => setIsStrategySearchVisible(true)}
-                                    username={activeUsername || undefined}
-                                    memoryConfig={memoryConfig}
-                                    currentRegime={(currentHybridData as { regime?: { regime?: string } } | null)?.regime?.regime}
-                                    onClose={() => setSurface('trade')}
-                                />
-                            </React.Suspense>
-                        )}
                         {surface === 'learn' && (
                             <React.Suspense fallback={<SurfaceSkeleton />}>
                                 <LearnView
@@ -2724,6 +2876,23 @@ const App: React.FC = () => {
                                     initialTab={learnTab}
                                     onInitialTabConsumed={learnTabConsumed}
                                     renderCoach={renderCoachInbox}
+                                    renderSkills={() => (
+                                        // Rendered lazily from the tab, not built
+                                        // as a node up top: the Studio reads the
+                                        // live regime, and a const here would
+                                        // evaluate before those values exist.
+                                        <SkillsLibrary studio={(
+                                            <React.Suspense fallback={<SurfaceSkeleton />}>
+                                                <StrategyStudio
+                                                    trades={loggedTrades}
+                                                    onOpenStrategySearch={() => setIsStrategySearchVisible(true)}
+                                                    username={activeUsername || undefined}
+                                                    memoryConfig={memoryConfig}
+                                                    currentRegime={(currentHybridData as { regime?: { regime?: string } } | null)?.regime?.regime}
+                                                />
+                                            </React.Suspense>
+                                        )} />
+                                    )}
                                     renderActionApprovals={renderActionApprovals}
                                     coachCount={coachCount}
                                     reviewSummary={finalTradeSummary}
@@ -2758,7 +2927,6 @@ const App: React.FC = () => {
                                     onAnalyze={handleRunAnalysisFromAgents}
                                     renderGroup={g => renderGroupSurface(g.id)}
                                     coachCount={coachCount}
-                                    surfaceEnterFrom={surfaceEnterFrom}
                                     workingBotId={workingBotId ?? dmWorkingBotId}
                                     lastOpenedMap={threadOpenedMap}
                                     attentionMap={attentionMap}
@@ -2779,28 +2947,35 @@ const App: React.FC = () => {
                                         setIsNewGroupOpen(true);
                                     }}
                                     modelPicker={(
-                                        <ModelPicker providers={providerConfigs} value={selectedChatModel}
-                                            onChange={setSelectedChatModel} onRefreshModels={refreshModelCatalog} compact />
+                                        /* The dock's chip, not a plainer twin of
+                                           it: one pill naming the model, opening a
+                                           searchable, grouped, star-able menu. */
+                                        <ModelChip providers={providerConfigs} value={selectedChatModel}
+                                            onChange={setSelectedChatModel} onRefreshModels={refreshModelCatalog}
+                                            issue={chatModelFallback.issue}
+                                            fallbackLabel={chatModelFallback.providerName} />
                                     )}
-                                    modelFallback={(() => {
-                                        // Same helper the dock uses, over the same
-                                        // list the picker offers: a stale pick warns
-                                        // here as loudly as it does in the dock.
-                                        const f = computeChatModelFallback(providerConfigs, selectedChatModel);
-                                        return f.issue && f.provider ? { issue: f.issue, provider: f.provider } : null;
-                                    })()}
-                                    onOpenInDock={() => {
-                                        // Chat → Chart AI: the chart arrives from
-                                        // the RIGHT. This path deliberately does
-                                        // NOT go through handleSurfaceSelect (the
-                                        // bot/group branches navigate themselves),
-                                        // so the direction has to be set here too
-                                        // or the hop animates as a plain cut.
-                                        setSurfaceEnterFrom('right');
-                                        if (activeThread.kind === 'bot') openBotInTrade(activeThread.botId);
-                                        else if (activeThread.kind === 'group') openGroupInTrade(activeThread.groupId);
-                                        else setSurface('trade');
-                                    }}
+                                    modelFallback={chatModelFallback.notice}
+                                    railExpanded={isNavRailOpen}
+                                    onToggleRailExpanded={toggleNavRail}
+                                    destinationMenu={(
+                                        <SurfaceMenuList
+                                            surface={surface}
+                                            badges={navBadges}
+                                            onOpenCustomize={openCustomize}
+                                            onSelect={handleSurfaceSelect}
+                                            hideSurfaces
+                                        />
+                                    )}
+                                    surfaceSwitch={shellNavSwitch}
+                                    accountRow={(
+                                        <AccountRow
+                                            expanded
+                                            activeUsername={activeUsername}
+                                            onOpenSettings={() => setIsSettingsMenuVisible(true)}
+                                        />
+                                    )}
+                                    statusCluster={shellStatus}
                                     conversations={conversationHistory}
                                     activeConversationId={activeConversationId}
                                     onLoadConversation={(id) => {
@@ -2973,8 +3148,11 @@ const App: React.FC = () => {
                 conversation row menu, jump-to-latest into the transcript's
                 scroll-to-bottom pill. Every other entry was a duplicate. */}
 
-            {/* Strategy Studio is a surface now (surface === 'skills' in the
-                main row) — no overlay state to manage. */}
+            {/* The Strategy Studio is no longer a surface and no longer a
+                SETTINGS tab either: it is mounted by the Knowledge surface's
+                Skills tab (see `renderSkills` on LearnView above), reached from
+                the sidebar's Customize row or Alt+3. No overlay state to manage
+                either way. */}
 
             {/* Side-by-side compare */}
             {comparePrimary && (

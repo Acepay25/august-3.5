@@ -307,6 +307,53 @@ async function seedVerdicts(page) {
             id: 'probe-bot', name: 'Probe Bot', providerId: 'mock', modelId: 'mock-mini',
             avatar: { kind: 'auto' }, createdAt: iso(60),
         }]));
+        // A skill FILE in the notebook store (the Preferences key, served from
+        // localStorage on web). The Learn sweep presses catalog rows, and the
+        // round-trip gate below reads this record: without it the catalog is an
+        // empty state and "Read <skill>" has nothing to open — the probe would
+        // pass by skipping the control it was built to judge. The name is the
+        // one the seeded verdict's evidence pack cites, so a verdict that names
+        // a skill names one that actually exists.
+        localStorage.setItem('memory_files_v1_Probe User', JSON.stringify({
+            version: 1,
+            // The default folder table, because `isSkillFile` resolves a file's
+            // folder BY ID — a blob with folders: [] leaves the seeded skill in
+            // no folder at all, and the catalog then lists nothing while the
+            // probe looks like a feature failure.
+            folders: [
+                { id: 'profile', name: 'profile', order: 0 },
+                { id: 'trader-diary', name: 'trader-diary', order: 1 },
+                { id: 'market-conditions', name: 'market-conditions', order: 2 },
+                { id: 'rules', name: 'rules', order: 3 },
+                { id: 'skills', name: 'skills', order: 4 },
+                { id: 'bots', name: 'bots', order: 5 },
+                { id: 'lens', name: 'lens', order: 6 },
+                { id: 'settled-beliefs', name: 'settled-beliefs', order: 7 },
+                { id: 'distilled', name: 'distilled', order: 8 },
+                { id: 'strategies', name: 'strategies', order: 9 },
+            ],
+            files: [{
+                id: 'probe-skill-1',
+                name: 'fade-the-first-break.md',
+                content: [
+                    '---',
+                    'name: "Fade the first break"',
+                    'description: "Fade the first breakout of the session when volume is thin."',
+                    'kind: "repeat"',
+                    '# august:skill-ledger',
+                    'status: confirmed',
+                    'wins: 4',
+                    'losses: 1',
+                    '---',
+                    '**When:** the first breakout of the session on thin volume',
+                    '**What I do:** fade it back inside the range.',
+                ].join('\n'),
+                folderId: 'skills',
+                enabled: true,
+                createdAt: iso(1500),
+                updatedAt: iso(1500),
+            }],
+        }));
         const analysis = (over) => ({
             direction: 'Long', confidence: 'High', coinName: 'BTCUSDT',
             entryPoints: [{ price: '84210.5', description: 'reclaim' }],
@@ -602,7 +649,8 @@ async function main() {
         // The dock header's primary control is a direct hop to Chat, so the
         // move that a trader makes constantly is one click instead of opening
         // the hamburger. Asserted HERE, from the Trade surface, because the
-        // reverse direction (Chat → dock) is covered by `open-in-dock` later.
+        // reverse direction (Chat → Desk AI) is the mode pill now:
+        // `chat-mode-chart-ai` in the Chat instrument bar.
         //
         // Self-contained on purpose: `navTo`/`openMenu`/`pollFor` are declared
         // further down, and reaching for them from here hits their temporal
@@ -635,8 +683,7 @@ async function main() {
         // every width, so this is a direct row click with no menu to open.
         if (landedOnChat) {
             const backToTrade = await page.evaluate(() => {
-                const hit = [...document.querySelectorAll('[data-testid="surface-menu"] button')]
-                    .find(b => /^Trade/i.test((b.getAttribute('aria-label') || b.textContent || '').trim()));
+                const hit = document.querySelector('[data-testid="surface-switch-trade"]');
                 if (!hit) return 'not found';
                 hit.click();
                 return 'clicked';
@@ -667,9 +714,8 @@ async function main() {
             // no visible label at all), so matching on aria-label is what makes
             // one click work at any width.
             await page.evaluate(() => {
-                const hit = [...document.querySelectorAll('[data-testid="surface-menu"] button')]
-                    .find(b => /^Chat/i.test((b.getAttribute('aria-label') || b.textContent || '').trim()));
-                if (!hit) throw new Error('no Chat row in the nav rail');
+                const hit = document.querySelector('[data-testid="surface-switch-agents"]');
+                if (!hit) throw new Error('no Chat entry in the title-bar switch');
                 hit.click();
             });
             // The transcript container only exists once the thread has a row —
@@ -766,7 +812,7 @@ async function main() {
         check('the declined verdict explains itself', /why avoid|why no trade/i.test(seededText));
 
         // ── Every nav surface must actually mount something ────────────
-        // The five nav-rail surfaces are separate lazy trees; a blank one is
+        // The four nav surfaces are separate lazy trees; a blank one is
         // the same class of defect this probe was written for, and no jsdom
         // suite covers the nav that mounts them. Each is checked for content
         // AND for a pageerror delta, so a surface that renders then throws is
@@ -774,18 +820,22 @@ async function main() {
         const surfaces = [
             { label: 'Trade', expect: '[data-testid="trade-view"]' },
             { label: 'Journal', expect: null },
-            { label: 'Skills', expect: null },
+            // 'Skills' is gone from this list because it is gone from the rail:
+            // the Strategy Studio is the Skills SETTINGS tab now. The rail row
+            // that replaced it is Customize, which opens an overlay rather than
+            // switching a surface, so it cannot be measured here — the Studio's
+            // render is covered by the Settings sweep instead.
             { label: 'Chat', expect: '[data-testid="agents-view"]' },
             // The Approvals row used to open a fixed OVERLAY mounted outside
-            // <main>, which is why this entry asserted the overlay's own root:
-            // measuring <main> re-reported whatever surface was open before and
-            // passed vacuously — one run printed an Approvals byte count
-            // identical to Agents for exactly that reason. It is no longer an
-            // overlay: it routes into Learn's Approvals tab, so the check is now
-            // that the row LANDS on the inbox, which a <main> measurement can
-            // see. The lesson stays: assert the thing the click actually changes.
-            { label: 'Approvals', expect: '[data-testid="learn-coach"]', landsOn: 'Learn' },
-            { label: 'Learn', expect: '[data-testid="learn-view"]' },
+            // <main>, which is why an entry like this asserts the overlay's own
+            // root: measuring <main> re-reported whatever surface was open before
+            // and passed vacuously — one run printed an Approvals byte count
+            // identical to Agents for exactly that reason. The lesson stays:
+            // assert the thing the click actually changes.
+            // Approvals had an entry here while it was a rail row that routed
+            // into Learn's inbox tab. The row is gone — the queue is a tab of the
+            // Knowledge surface, which the entry below visits and sweeps.
+            { label: 'Knowledge', expect: '[data-testid="learn-view"]' },
         ];
         /** Some menu entries open a dialog rather than switch a surface (the
          *  approvals inbox does). A dialog leaves a full-screen backdrop that
@@ -805,19 +855,27 @@ async function main() {
          *  whichever width the app is actually showing. */
         const navTo = async (label) => {
             return page.evaluate((name) => {
+                // The destination rows are gone — the title-bar switch is the
+                // navigation — so press the switch by surface id first. The
+                // label→id map is spelled out rather than guessed from the
+                // label, because 'Chat' is `agents` and 'Knowledge' is `learn`,
+                // and a switch that is missing must return 'not found' instead
+                // of clicking some other button whose text happens to match.
+                const IDS = { Trade: 'trade', Journal: 'journal', Chat: 'agents', Knowledge: 'learn' };
+                const id = IDS[name];
+                if (id) {
+                    const sw = document.querySelector(`[data-testid="surface-switch-${id}"]`);
+                    if (sw) { sw.click(); return 'clicked'; }
+                }
                 const re = new RegExp(`^${name}`, 'i');
                 const matches = (b) => re.test((b.getAttribute('aria-label') || '').trim())
                     || re.test((b.textContent || '').trim());
-                // Scope the search to the nav rail first, and only fall back to
-                // the whole page when the rail is not mounted. The fallback is
-                // still wrong often enough to matter — SymbolPicker's trigger is
-                // labelled "Trade symbol", so a bare `navTo('Trade')` opens the
-                // coin picker instead of navigating — which is why the rail is
-                // tried first rather than the page.
-                const inRail = [...document.querySelectorAll('[data-testid="surface-menu"] button, [data-testid="nav-approvals"]')]
+                // Scoped to a nav list first, exactly as before: SymbolPicker's
+                // trigger is labelled "Trade symbol", so a bare page-wide search
+                // for 'Trade' opens the coin picker instead of navigating.
+                const inMenu = [...document.querySelectorAll('[data-testid="surface-menu"] button')]
                     .find(matches);
-                const hit = inRail
-                    ?? [...document.querySelectorAll('button, a, [role="menuitem"]')].find(matches);
+                const hit = inMenu ?? null;
                 if (!hit) return 'not found';
                 hit.click();
                 return 'clicked';
@@ -840,6 +898,119 @@ async function main() {
             toggle.click();
             return 'expanded';
         });
+        // ── The Chat surface's mode pill ─────────────────────────────────
+        // The Chat surface's switch is a ROUTE to the charted form of the desk,
+        // so only a browser can prove it works: press it, and the canvas plus the
+        // dock must appear WITH the conversation that was on screen. The earlier
+        // build of this control swapped a chartless copy of the same panel in
+        // place of the thread, which no assertion here could distinguish from
+        // doing nothing at all — so these checks measure the destination, the
+        // rows carried, and the way back.
+        {
+            const landed = await navTo('Chat');
+            const before = landed === 'clicked' ? await page.evaluate(() => {
+                // The left column is measured on BOTH sides of the hop because
+                // the two surfaces used to render it from two components with
+                // two widths and two persisted collapse keys. A mode switch
+                // must not restack the shell, and only a real layout can prove
+                // it did not: jsdom reports 0px for every box here.
+                //
+                // The column's OWN box is the measurement, not <main>'s left
+                // edge: on Chat the column is rendered inside <main> and on
+                // Trade the rail is a sibling of it, so `main.left` reads 0 vs
+                // 240 while the column itself sits in the same place, the same
+                // width, both times. Where the column ENDS is the line every
+                // surface's content begins at.
+                const el = document.querySelector('[data-testid="agents-rail"]')
+                    || document.querySelector('[data-testid="nav-rail"]');
+                const box = el && el.offsetParent !== null
+                    ? el.getBoundingClientRect() : null;
+                const sw = document.querySelector('[data-testid^="surface-switch-"]');
+                const swBox = sw ? sw.getBoundingClientRect() : null;
+                return {
+                    swLeft: swBox ? Math.round(swBox.left) : -1,
+                    swTop: swBox ? Math.round(swBox.top) : -1,
+                    railLeft: box ? Math.round(box.left) : -1,
+                    railRight: box ? Math.round(box.right) : -1,
+                    rows: document.querySelectorAll('[data-testid="agent-message"]').length,
+                    cards: document.querySelectorAll(
+                        '[data-testid="agent-thread"] [data-testid="inline-verdict"]').length,
+                };
+            }) : { rows: 0, cards: 0, railLeft: -1, railRight: -1, swLeft: -1, swTop: -1 };
+            const pressed = landed === 'clicked' ? await page.evaluate(() => {
+                const b = document.querySelector('[data-testid="surface-switch-trade"]');
+                if (!b) return 'no switch';
+                b.click();
+                return 'clicked';
+            }) : landed;
+            if (pressed === 'clicked') await page.waitForTimeout(1800);
+            const hop = pressed === 'clicked' ? await page.evaluate(() => {
+                const on = (sel) => {
+                    const el = document.querySelector(sel);
+                    return !!el && el.offsetParent !== null;
+                };
+                const el = document.querySelector('[data-testid="nav-rail"]')
+                    || document.querySelector('[data-testid="agents-rail"]');
+                const box = el && el.offsetParent !== null
+                    ? el.getBoundingClientRect() : null;
+                const sw = document.querySelector('[data-testid^="surface-switch-"]');
+                const swBox = sw ? sw.getBoundingClientRect() : null;
+                return {
+                    chart: on('[data-testid="trade-chart-pane"]'),
+                    dock: on('[data-testid="trade-chat-panel"]'),
+                    chat: on('[data-testid="agents-view"]'),
+                    swLeft: swBox ? Math.round(swBox.left) : -1,
+                    swTop: swBox ? Math.round(swBox.top) : -1,
+                    railLeft: box ? Math.round(box.left) : -1,
+                    railRight: box ? Math.round(box.right) : -1,
+                    rows: document.querySelectorAll(
+                        '[data-testid="trade-chat-panel"] [data-entry-id]').length,
+                    cards: document.querySelectorAll(
+                        '[data-testid="trade-chat-panel"] [data-testid="inline-verdict"]').length,
+                };
+            }) : null;
+            check('the pill takes the Chat surface to the chart AND the Chart AI dock',
+                !!hop && hop.chart && hop.dock && !hop.chat,
+                hop ? `chart=${hop.chart} dock=${hop.dock} chatStillMounted=${hop.chat}` : String(pressed));
+            // The merged thread is the reason the hop is worth taking: the dock
+            // opens on THIS conversation rather than whichever chat was last
+            // used. Compared by row count — the two homes chrome a turn
+            // differently, so a text match measures formatting, not memory.
+            check('the hop carries the conversation into the dock',
+                before.rows > 0 && !!hop && hop.rows >= before.rows,
+                `thread=${before.rows} dock=${hop ? hop.rows : 'n/a'}`);
+            check('the dock draws the same decision cards as the thread',
+                before.cards > 0 && !!hop && hop.cards === before.cards,
+                `thread=${before.cards} dock=${hop ? hop.cards : 'n/a'}`);
+            // The reference's chat ⇄ code switch changes the content and nothing
+            // else — including nothing about where the switch is. Chat's column
+            // header and Trade's title bar both start at the window's left edge,
+            // so the two must land within one control's width of each other. The
+            // tolerance is stated as a number because the old shape of this check
+            // asserted only `> 0`: with the switch in Chat's CONTENT header it
+            // read 259 vs 27 and still passed, which is the exact jump the
+            // transition is supposed to remove.
+            check('the hop keeps the title bar in place and the switch reachable',
+                !!hop && before.swLeft > 0 && hop.swLeft > 0
+                    && hop.swTop === before.swTop
+                    && Math.abs(hop.swLeft - before.swLeft) <= 24,
+                `switch x ${before.swLeft}→${hop ? hop.swLeft : 'n/a'}, y ${before.swTop}→${hop ? hop.swTop : 'n/a'}`);
+
+            const back = await page.evaluate(() => {
+                const b = document.querySelector(
+                    '[data-testid="surface-switch-agents"]');
+                if (!b) return 'no way back';
+                b.click();
+                return 'clicked';
+            });
+            if (back === 'clicked') await page.waitForTimeout(1200);
+            const home = back === 'clicked' ? await page.evaluate(() => {
+                const el = document.querySelector('[data-testid="agents-view"]');
+                return !!el && el.offsetParent !== null;
+            }) : false;
+            check('the dock gives the chat back', home === true, `${back} home=${home}`);
+        }
+
         // ── The nav rail itself (D2) ────────────────────────────────────
         // Placed HERE, after navTo/openMenu, because it calls both — and those
         // are `const`, so reaching them from above this line hits their
@@ -849,52 +1020,93 @@ async function main() {
         // so the rail is checked rather than assumed by them. "Navigation still
         // works" is NOT the same claim as "navigation is on screen with no menu
         // to open", and only this block makes the second one.
+        // Navigation lives in TWO hosts now, on purpose: the Chat surface folded
+        // its destinations and account row into the one sidebar it already had —
+        // the reference has a single column, not a rail standing beside a chat
+        // list — while every other surface still uses the rail. The claim being
+        // checked is "navigation is on screen with no menu to open", so it is
+        // checked wherever it happens to live.
         {
-            const rail = await page.evaluate(() => {
-                const el = document.querySelector('[data-testid="nav-rail"]');
-                if (!el) return null;
+            const nav = await page.evaluate(() => {
+                const sw = [...document.querySelectorAll('[data-testid^="surface-switch-"]')];
+                const rail = document.querySelector('[data-testid="agents-rail"]');
                 return {
-                    expanded: el.getAttribute('data-expanded'),
-                    width: Math.round(el.getBoundingClientRect().width),
-                    // Five surfaces + Trade approvals (named for what the drawer holds — skill
-                    // drafts wait on Learn, and two rows called "Approvals" made
-                    // the list a person wanted unfindable). Rail is nav-only:
-                    // the account row is a READOUT (it used to open Switch
-                    // profile, which threw you back to the workspace picker),
-                    // profile actions live in Settings → Profile, conversations
-                    // on the Chat surface's rail, automations in the Activity drawer.
-                    rows: el.querySelectorAll('[data-testid="surface-menu"] button').length,
-                    accountName: !!el.querySelector('[data-testid="nav-account-name"]'),
-                    switchUserButton: !!el.querySelector('[data-testid="nav-switch-user"]'),
+                    switchCount: sw.length,
+                    switchTop: sw.length ? Math.round(sw[0].getBoundingClientRect().top) : -1,
+                    marked: sw.filter(b => b.getAttribute('aria-current') === 'page')
+                        .map(b => b.getAttribute('data-testid')).join(','),
+                    // The destination rows are gone from the sidebar; only
+                    // Customize remains, so this counts the NON-destination rows
+                    // the reference's sidebar does have.
+                    sidebarRows: rail
+                        ? rail.querySelectorAll('[data-testid="surface-menu"] button').length : -1,
+                    railTop: rail ? Math.round(rail.getBoundingClientRect().top) : -1,
+                    accountName: !!rail?.querySelector('[data-testid="nav-account-name"]'),
+                    switchUserButton: !!rail?.querySelector('[data-testid="nav-switch-user"]'),
                 };
             });
-            check('the nav rail is mounted without opening any menu', rail !== null,
-                rail ? `width ${rail.width}` : 'no [data-testid="nav-rail"]');
-            check('the rail carries every surface row plus Approvals',
-                rail !== null && rail.rows === 6, rail ? `${rail.rows} rows` : 'no rail');
+            check('every surface is reachable from the title-bar switch with no menu to open',
+                nav.switchCount === 4, `${nav.switchCount} entries in the switch`);
+            check('the switch marks the screen you are actually on',
+                nav.marked === 'surface-switch-agents', nav.marked || 'nothing marked');
+            check('the sidebar keeps only the row that is not a destination',
+                nav.sidebarRows === 1, `${nav.sidebarRows} sidebar nav rows`);
             check('the account row says who is signed in and is not a control',
-                rail !== null && rail.accountName && !rail.switchUserButton,
-                rail ? `name=${rail.accountName} switchButton=${rail.switchUserButton}` : 'no rail');
+                nav.accountName && !nav.switchUserButton,
+                `name=${nav.accountName} switchButton=${nav.switchUserButton}`);
+            check('the sidebar runs the full height of the window — nothing is stacked above it',
+                nav.railTop === 0, `agents-rail top ${nav.railTop}px`);
 
-            // Ctrl/Cmd+B must collapse and restore it — the documented binding.
-            // D2 amendment: collapsing HIDES the rail (0px); the expand
-            // affordance moves to the header, which must exist exactly while
-            // the rail does not — an unreachable nav is the trap this catches.
-            await page.keyboard.press('Control+b');
-            await sleep(500);
-            const collapsed = await page.evaluate(() => {
-                const el = document.querySelector('[data-testid="nav-rail"]');
+            // Ctrl+B belongs to the RAIL specifically, which the Chat surface no
+            // longer mounts — so press it on a surface that has one.
+            await navTo('Trade');
+            await sleep(900);
+
+            // The surfaces that lost the rail must show it: the title bar now
+            // starts at the window's left edge, and the switch — not a row list —
+            // is what says where you are.
+            const band = await page.evaluate(() => {
+                const sw = document.querySelector('[data-testid^="surface-switch-"]');
+                const head = sw ? sw.closest('header') : null;
+                const main = document.querySelector('main');
+                if (!head || !main) return null;
+                const h = head.getBoundingClientRect();
+                const m = main.getBoundingClientRect();
                 return {
-                    expanded: el ? el.getAttribute('data-expanded') : null,
-                    width: el ? Math.round(el.getBoundingClientRect().width) : -1,
-                    inert: el ? el.hasAttribute('inert') : false,
+                    headLeft: Math.round(h.left),
+                    headTop: Math.round(h.top),
+                    mainLeft: Math.round(m.left),
+                    rail: !!document.querySelector('[data-testid="nav-rail"]'),
+                    marked: [...document.querySelectorAll('[data-testid^="surface-switch-"]')]
+                        .filter(b => b.getAttribute('aria-current') === 'page')
+                        .map(b => b.getAttribute('data-testid')).join(','),
+                };
+            });
+            check('the rail-less surfaces put the title bar at the window edge and keep the switch',
+                !!band && !band.rail && band.headLeft === band.mainLeft && band.headTop === 0
+                    && band.marked === 'surface-switch-trade',
+                band ? `header x=${band.headLeft} y=${band.headTop}, rail=${band.rail}, ${band.marked}` : 'no header');
+
+            // Ctrl/Cmd+B belongs to the one column that still collapses: the
+            // Chat sidebar. The rail is gone, so press it where a column exists —
+            // and check the pairing that matters, that the header offers the
+            // expand button exactly while the column is away. An unreachable nav
+            // is the trap this catches.
+            await navTo('Chat');
+            await sleep(900);
+            const away = async () => page.evaluate(() => {
+                const el = document.querySelector('[data-testid="agents-rail"]');
+                return {
+                    hidden: el ? el.className.split(/\s+/).includes('md:hidden') : null,
                     headerToggle: !!document.querySelector('[data-testid="nav-rail-toggle-header"]'),
                 };
             });
-            check('Ctrl+B hides the rail completely',
-                collapsed.expanded === 'false' && collapsed.width === 0 && collapsed.inert,
-                `${collapsed.width}px, inert=${collapsed.inert}`);
-            check('the header carries the expand button while the rail is hidden',
+            await page.keyboard.press('Control+b');
+            await sleep(600);
+            const collapsed = await away();
+            check('Ctrl+B puts the conversation column away',
+                collapsed.hidden === true, `md:hidden=${collapsed.hidden}`);
+            check('the title bar carries the expand button exactly while the column is away',
                 collapsed.headerToggle, 'nav-rail-toggle-header');
             const revived = await page.evaluate(() => {
                 const t = document.querySelector('[data-testid="nav-rail-toggle-header"]');
@@ -902,35 +1114,20 @@ async function main() {
                 t.click();
                 return true;
             });
-            await sleep(500);
-            const revivedState = await page.evaluate(() => {
-                const el = document.querySelector('[data-testid="nav-rail"]');
-                return {
-                    expanded: el ? el.getAttribute('data-expanded') : null,
-                    width: el ? Math.round(el.getBoundingClientRect().width) : -1,
-                };
-            });
-            // The rail's expanded width is a source constant — read it instead
-            // of pinning a number that drifts when the shell is tuned.
+            await sleep(600);
+            const backAgain = await away();
             const navRailSrc = require('fs').readFileSync(
                 path.join(ROOT, 'components', 'shell', 'NavRail.tsx'), 'utf8');
             const navRailExpandedPx = Number((navRailSrc.match(/NAV_RAIL_EXPANDED_PX = (\d+)/) || [])[1]) || 240;
-            check('the header toggle revives the full panel',
-                revived && revivedState.expanded === 'true' && revivedState.width === navRailExpandedPx,
-                revivedState ? `${revivedState.width}px, expanded=${revivedState.expanded} (want ${navRailExpandedPx})` : 'no rail');
-            // And Ctrl+B still works in the other direction.
+            const colWidth = await page.evaluate(() => {
+                const el = document.querySelector('[data-testid="agents-rail"]');
+                return el ? Math.round(el.getBoundingClientRect().width) : -1;
+            });
+            check('the title bar toggle brings the column back at the shell width',
+                revived && backAgain.hidden === false && colWidth === navRailExpandedPx,
+                `${colWidth}px, md:hidden=${backAgain.hidden} (want ${navRailExpandedPx})`);
             await page.keyboard.press('Control+b');
             await sleep(500);
-            const hiddenAgain = await page.evaluate(() => {
-                const el = document.querySelector('[data-testid="nav-rail"]');
-                return {
-                    expanded: el ? el.getAttribute('data-expanded') : null,
-                    width: el ? Math.round(el.getBoundingClientRect().width) : -1,
-                };
-            });
-            check('Ctrl+B hides it again from the keyboard',
-                hiddenAgain.expanded === 'false' && hiddenAgain.width === 0,
-                hiddenAgain ? `${hiddenAgain.width}px, expanded=${hiddenAgain.expanded}` : 'no rail');
             await page.evaluate(() => document.querySelector('[data-testid="nav-rail-toggle-header"]')?.click());
             await sleep(500);
             // Leave the run on a known surface before the sweep.
@@ -948,7 +1145,22 @@ async function main() {
             let prev = null;
             const until = Date.now() + deadlineMs;
             while (Date.now() < until) {
-                const now = (await page.locator('main').innerText()).trim();
+                const now = await page.evaluate(() => {
+                    const main = document.querySelector('main');
+                    if (!main) return '';
+                    // The title bar lives INSIDE <main> now, so its text is
+                    // constant across every surface — sampling it would make the
+                    // first two reads equal and return the band as "the surface"
+                    // a beat before the lazy chunk mounts. Measure the branches
+                    // under it, which is what actually changes.
+                    const head = main.querySelector(':scope > header');
+                    let text = '';
+                    for (const el of main.children) {
+                        if (el === head) continue;
+                        text += `${el.innerText ?? ''}\n`;
+                    }
+                    return text.trim();
+                });
                 if (now && now === prev) return now;
                 prev = now;
                 await sleep(250);
@@ -982,19 +1194,6 @@ async function main() {
                 const text = mounted
                     ? (await page.locator(surface.expect).innerText()).trim() : '';
                 check(`${surface.label} panel renders content`, text.length > 40, `${text.length} chars`);
-            } else if (surface.landsOn) {
-                // A nav entry that ROUTES into another surface (Approvals lands on
-                // Learn's inbox) cannot be judged by "did <main> change" — the
-                // surface before it may already have been the same one. Judge the
-                // thing the click actually promises: the inbox tab is selected.
-                const body = await waitSurfaceText();
-                check(`${surface.label} surface renders content`, body.length > 40, `${body.length} chars`);
-                const onInbox = await page.locator(
-                    '[data-testid="learn-tab-coach"][aria-current="true"]').count();
-                check(`${surface.label} lands on the ${surface.landsOn} inbox, not just its surface`,
-                    onInbox === 1, `${onInbox} selected Approvals tab`);
-                const mounted = await page.locator(surface.expect).count();
-                check(`${surface.label} mounts its own root`, mounted === 1, `${mounted}`);
             } else {
                 const body = await waitSurfaceText();
                 check(`${surface.label} surface renders content`, body.length > 40, `${body.length} chars`);
@@ -1024,7 +1223,7 @@ async function main() {
         // first run never meets.
         {
             await openMenu(); await sleep(300);
-            await navTo('Learn'); await sleep(900);
+            await navTo('Knowledge'); await sleep(900);
             const coachTab = page.locator('[data-testid="learn-tab-health"]');
             if (await coachTab.count() === 1) await coachTab.click();
             await sleep(1200);
@@ -1079,7 +1278,7 @@ async function main() {
         //    on every settled result — it is NOT behind the accuracy-mode toggle
         //    — and the Advanced Analytics panel is the only place Monte Carlo
         //    renders at all. A crash in either took a surface down silently:
-        //    the row-count sweep covers the six nav surfaces only, so nothing
+        //    the row-count sweep covers the four nav surfaces only, so nothing
         //    else would have noticed.
         // Navigate FIRST. Reading document.body from whatever surface happens
         // to be open is the "check whose measurement is identical across two
@@ -1298,6 +1497,31 @@ async function main() {
             await page.locator('[data-testid="agent-message"]').count() >= 4,
             `${await page.locator('[data-testid="agent-message"]').count()} rows`);
 
+        // ── Skills left the rail for Settings, and the Customize row is now the
+        //    only quick way in. Nothing else covers it: the surface sweep can no
+        //    longer see a Skills surface, and the Settings sweep below opens only
+        //    Data. So press the row and assert the Studio's OWN root mounted —
+        //    a route that opens the wrong tab would otherwise pass every gate.
+        const customize = await page.evaluate(() => {
+            const b = document.querySelector('[data-testid="nav-customize"]');
+            if (!b) return 'no row';
+            b.click();
+            return 'clicked';
+        });
+        await page.waitForTimeout(1500);
+        const reached = await page.evaluate(() => ({
+            knowledge: !!document.querySelector('[data-testid="learn-view"]'),
+            skillsTab: !!document.querySelector('[data-testid="learn-skills"]'),
+            studio: !!document.querySelector('[data-testid="studio-view"]'),
+        }));
+        // Three things, because landing on the right SURFACE is not the claim —
+        // the row promises the library, so the Skills tab must be the one showing
+        // and the Studio must actually be mounted inside it.
+        check('the Customize row lands on the Skills tab of the Knowledge surface',
+            customize === 'clicked' && reached.knowledge && reached.skillsTab && reached.studio,
+            `${customize} knowledge=${reached.knowledge} skills=${reached.skillsTab} studio=${reached.studio}`);
+        await page.waitForTimeout(600);
+
         // ── Settings → Data hosts the backup manager. Its "Import from file"
         //    control is new, and the Settings overlay mounts outside <main> like
         //    the approvals inbox, so <main> can never show it. The trigger's
@@ -1494,8 +1718,19 @@ async function main() {
                             // the sweep has to honour all three or it cries
                             // wolf at working code.
                             && b.getAttribute('aria-pressed') !== 'true'
-                            && b.getAttribute('aria-current') !== 'true'
+                            // ANY aria-current marks the control as the one you
+                            // are already on — the nav rows and the title-bar
+                            // switch say `page`, the Learn tabs say `true`. The
+                            // sweep only recognised 'true', so it judged the
+                            // current screen's own switch button inert.
+                            && !b.getAttribute('aria-current')
                             && b.getAttribute('aria-selected') !== 'true'
+                            // An OPEN disclosure is the same case: the Activity
+                            // button opens a drawer rather than toggling it, so
+                            // while the drawer stands open a press is correctly
+                            // a no-op, and judging that "inert" would be the
+                            // sweep crying wolf at working code.
+                            && b.getAttribute('aria-expanded') !== 'true'
                             && !skip.includes(nameOf(b)));
                     if (!btn) return null;
                     // Baselines, not absolutes. The app keeps a hash for the
@@ -1512,13 +1747,29 @@ async function main() {
                         // innerText alone cannot tell that from a dead button.
                         fields: main.querySelectorAll('input, textarea, [contenteditable="true"]').length,
                         hash: window.location.hash,
-                        overlay: !!document.querySelector('[role="dialog"], [role="alertdialog"]'),
+                        // This app's drawers mount OUTSIDE <main> — the trap the
+                        // repo's own doctrine names — so "no new text inside
+                        // main" is not evidence of a dead control. The Activity
+                        // drawer is listed by its root because it carries no
+                        // role=dialog; without it the sweep called the drawer's
+                        // only opener inert the moment the title bar moved inside
+                        // <main> and the sweep reached it.
+                        overlay: !!document.querySelector(
+                            '[role="dialog"], [role="alertdialog"], [data-testid="activity-drawer"]'),
                     });
                     const before = state();
+                    // A switch's OWN state flip is movement no text change can
+                    // show: a toggle persists a setting and leaves the page's
+                    // words exactly as they were, which is why the sweep used
+                    // to call "Toggle Global Memory" inert. Captured here, not
+                    // inferred — the flip itself is the evidence, and a switch
+                    // that does NOT flip still fails, as it should.
+                    const ownChecked = btn.getAttribute('aria-checked');
                     btn.click();
                     return {
                         name: nameOf(btn),
                         before,
+                        ownChecked,
                         // Reported with any finding, so a failure says what the
                         // control was rather than making the next reader guess.
                         ctx: `${btn.tagName.toLowerCase()}${btn.type ? `[type=${btn.type}]` : ''}`
@@ -1530,21 +1781,36 @@ async function main() {
                 if (!picked) break;         // nothing left untried on this surface
                 tried.add(picked.name);
                 await sleep(1000);
-                const after = await page.evaluate((base) => {
+                const after = await page.evaluate((p) => {
                     const main = document.querySelector('main') || document.body;
                     const now = {
                         text: (main.innerText || '').trim(),
                         fields: main.querySelectorAll('input, textarea, [contenteditable="true"]').length,
                         hash: window.location.hash,
-                        overlay: !!document.querySelector('[role="dialog"], [role="alertdialog"]'),
+                        // MUST mirror `state()` above. It did not, so a drawer
+                        // that opened was invisible to the after-snapshot and the
+                        // sweep called its opener inert: two halves of one
+                        // comparison measuring different things.
+                        overlay: !!document.querySelector(
+                            '[role="dialog"], [role="alertdialog"], [data-testid="activity-drawer"]'),
                     };
+                    // The switch check: the pressed control's aria-checked
+                    // flipped. Only a control that HAD an aria-checked value is
+                    // eligible, so this reads exactly one component type.
+                    let flipped = false;
+                    if (p.ownChecked !== null) {
+                        const again = [...main.querySelectorAll('button, [role="switch"]')]
+                            .find(b => ((b.getAttribute('aria-label') || b.textContent || '').trim()) === p.name);
+                        flipped = !!again && again.getAttribute('aria-checked') !== p.ownChecked;
+                    }
                     return {
-                        moved: now.text !== base.text
-                            || now.fields !== base.fields
-                            || (now.hash !== base.hash)
-                            || (now.overlay && !base.overlay),
+                        moved: now.text !== p.before.text
+                            || now.fields !== p.before.fields
+                            || (now.hash !== p.before.hash)
+                            || (now.overlay && !p.before.overlay)
+                            || flipped,
                     };
-                }, picked.before);
+                }, picked);
                 if (!after.moved) {
                     const viaBrowserChrome = /export|import|download|copy|save|print/i
                         .test(picked.name);
@@ -1567,9 +1833,57 @@ async function main() {
         // others unjudged — the gate could not see a dead control inside Memory
         // or Health. 18 rounds, because Health alone stacks six panels now that
         // System's telemetry and the supervisor's log fold into it.
-        await sweepSurface('Learn', 18, [
+        await sweepSurface('Knowledge', 18, [
             'learn-tab-coach', 'learn-tab-memory', 'learn-tab-health',
         ]);
+        // ── The skill viewer round trip (gap 1) ──────────────────────────
+        // The sweep presses a catalog row and credits it if the surface moved.
+        // That proves the click did SOMETHING; this proves the thing it did is
+        // the READ the reference promises: the record opens with its
+        // description (the retrieval trigger), its outcome ledger, and a
+        // close that returns the surface. A unit test mounts the panel in
+        // jsdom and passes; only this can see the panel actually appear.
+        {
+            let how = await navTo('Knowledge');
+            if (how === 'not found') {
+                await openMenu();
+                await sleep(400);
+                how = await navTo('Knowledge');
+            }
+            await page.evaluate(() => document
+                .querySelector('[data-testid="learn-tab-memory"]')?.click());
+            const rowPressed = await page.evaluate(() => {
+                const row = [...document.querySelectorAll('[data-testid="skills-catalog-grid"] button')]
+                    .find(b => /read fade-the-first-break/i.test(b.getAttribute('aria-label') || ''));
+                if (!row) return false;
+                row.click();
+                return true;
+            });
+            // Precondition, checked not assumed: a missing row must read as a
+            // broken probe, not as a broken feature.
+            check('the seeded skill row is pressable in the catalog', rowPressed === true, `${rowPressed}`);
+            const opened = await pollFor(async () => {
+                const text = await page.evaluate(() => {
+                    const viewer = document.querySelector('[data-testid="skill-viewer"]');
+                    if (!viewer || viewer.closest('[data-hidden="true"]')) return null;
+                    return viewer.innerText || null;
+                });
+                return text && /Fade the first breakout/.test(text) ? text : null;
+            });
+            check('the skill viewer opens with its description and outcome ledger',
+                !!opened && /4W – 1L/.test(opened), String(opened).slice(0, 120));
+            if (opened) {
+                await page.evaluate(() => {
+                    document.querySelector('[aria-label="Close the skill viewer"]')?.click();
+                });
+                await sleep(600);
+                const hidden = await page.evaluate(() => {
+                    const panel = document.querySelector('[data-testid="learn-right-panel"]');
+                    return panel?.getAttribute('data-hidden') === 'true';
+                });
+                check('closing the viewer hides the panel and keeps the catalog', hidden === true, `${hidden}`);
+            }
+        }
         // Precondition, checked not assumed: if the seeded journal had not
         // loaded, every filter chip would look inert and the sweep would fail
         // for the wrong reason — or worse, pass by skipping everything.
@@ -1619,6 +1933,9 @@ async function main() {
         {
             const goSurface = async (name) => {
                 return page.evaluate((n) => {
+                    const IDS = { Trade: 'trade', Journal: 'journal', Chat: 'agents', Knowledge: 'learn' };
+                    const sw = document.querySelector(`[data-testid="surface-switch-${IDS[n] || ''}"]`);
+                    if (sw) { sw.click(); return 'clicked'; }
                     const hit = [...document.querySelectorAll('[data-testid="surface-menu"] button')]
                         .find(b => new RegExp('^' + n, 'i').test((b.getAttribute('aria-label') || b.textContent || '').trim()));
                     if (!hit) return 'not found';
@@ -1638,9 +1955,16 @@ async function main() {
                 check('the Chat surface carries an instrument picker', false, `${landedChat}/${onChat}`);
             } else {
                 const opened = await page.evaluate(() => {
-                    const bar = document.querySelector('[data-testid="chat-instrument-bar"]');
-                    if (!bar) return 'no bar';
-                    const trig = bar.querySelector('[data-testid="symbol-picker-trigger"]');
+                    // The picker belongs to the COMPOSER now — the header is a
+                    // title and the switch, the reference's shape. Asserting both
+                    // halves means quietly moving it back would not pass.
+                    const card = document.querySelector('[data-testid="chat-composer"]');
+                    const header = document.querySelector('[data-testid="chat-header"]');
+                    if (!card || !header) return 'no composer or header';
+                    if (header.querySelector('[data-testid="symbol-picker-trigger"]')) {
+                        return 'picker is back in the header';
+                    }
+                    const trig = card.querySelector('[data-testid="symbol-picker-trigger"]');
                     if (!trig) return 'no trigger';
                     trig.click();
                     return 'opened';
@@ -1792,14 +2116,15 @@ async function main() {
         const FLOOR_PX = 24;
         const offendersBySurface = [];
         for (const surface of surfaces) {
-            // Measured under its own destination already; scanning it again under
-            // the routing label would report every one of its controls twice and
-            // halve the count of offenders nobody can see.
-            if (surface.landsOn) continue;
             await navTo(surface.label);
             await sleep(900);
             const bad = await page.evaluate(({ floor }) => {
-                const scopes = ['main', 'aside[data-testid="nav-rail"]', 'header'];
+                // The Chat surface's sidebar is `agents-rail`, not `nav-rail` —
+                // the rail is not mounted there at all now, so a sweep that only
+                // knew the second name would leave every destination row on that
+                // surface unmeasured.
+                const scopes = ['main', 'aside[data-testid="nav-rail"]',
+                    'aside[data-testid="agents-rail"]', 'header'];
                 const seen = new Set();
                 const out = [];
                 for (const scope of scopes) {
@@ -1890,7 +2215,7 @@ async function main() {
     }
     console.log('\nRENDER PROBE OK — every exchange renders and keeps the earlier rows in both'
         + ' conversation surfaces, settled verdicts and malformed persisted audit data render without'
-        + ' dropping a row, all six nav surfaces mount, the approvals inbox and the desk pane keep the'
+        + ' dropping a row, all four nav surfaces mount, the approvals inbox and the desk pane keep the'
         + ' trader’s own rows, Settings → Data can back up, export and import a journal file, the health'
         + ' tab shows the idle sweep and the notebook budget, and the run produced zero pageerrors.');
 }
