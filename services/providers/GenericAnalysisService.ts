@@ -14,6 +14,7 @@ import { extractAndParseJson, extractLastJson } from '../../utils/jsonUtils';
 import { sanitizeAIResponse, sanitizeAIResponseLight, sanitizeJSONString } from '../../utils/sanitizers';
 import { sanitizeTradeAnalysis, truncateTextToTokens, formatAnalysisForDisplay, parsePrice } from '../../utils/analysisUtils';
 import { splitThinkingFromOutput, extractAndStripThinkBlocks, createThinkingStreamGate } from '../../utils/thinkingSplit';
+import { CASUAL_CHAT_SYSTEM_PROMPT } from '../../constants/prompts/chatPrompts';
 import { buildTradeInsightBrief, compactInsightForPatternMemory } from '../../utils/tradeInsightBrief';
 import { parseGlobalMemory, parseStrategySearchResults } from '../../schemas/learning';
 import {
@@ -881,7 +882,7 @@ export async function getQuickResponse(
         role: m.role === MessageRole.AI ? 'assistant' : m.role === MessageRole.SYSTEM ? 'system' : 'user',
         content: m.text,
     }));
-    messages.unshift({ role: 'system', content: systemInstruction || 'You are a helpful and concise AI assistant specializing in futures trading concepts. Answer user questions clearly.' });
+    messages.unshift({ role: 'system', content: systemInstruction || CASUAL_CHAT_SYSTEM_PROMPT });
     // Callers pass the current user message as part of `history`; avoid sending the same prompt twice.
     if (messages[messages.length - 1]?.content !== prompt) {
         messages.push({ role: 'user', content: prompt });
@@ -925,7 +926,7 @@ export async function streamQuickResponse(
         role: m.role === MessageRole.AI ? 'assistant' : m.role === MessageRole.SYSTEM ? 'system' : 'user',
         content: m.text,
     }));
-    messages.unshift({ role: 'system', content: systemInstruction || 'You are a helpful and concise AI assistant specializing in futures trading concepts. Answer user questions clearly.' });
+    messages.unshift({ role: 'system', content: systemInstruction || CASUAL_CHAT_SYSTEM_PROMPT });
     if (messages[messages.length - 1]?.content !== prompt) {
         messages.push({ role: 'user', content: prompt });
     }
