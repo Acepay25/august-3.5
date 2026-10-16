@@ -2925,6 +2925,7 @@ const App: React.FC = () => {
                                     onSendBotTurn={async (bot, prompt) =>
                                         (await mailboxRef.current?.runUserBotTurn(bot, prompt)) ?? false}
                                     onAnalyze={handleRunAnalysisFromAgents}
+                                    onStopRun={handleCancelAll}
                                     renderGroup={g => renderGroupSurface(g.id)}
                                     coachCount={coachCount}
                                     workingBotId={workingBotId ?? dmWorkingBotId}
@@ -3003,8 +3004,13 @@ const App: React.FC = () => {
                     Breakpoint: md (768px), NOT lg — the Electron window has an
                     800px minimum width, and at lg (1024px) the whole
                     800-1023px desktop band ran as a silent black box with no
-                    discoverable Stop. Mobile (<md) keeps the dock's Stop. */}
-                {showPipelineCard && (
+                    discoverable Stop. Mobile (<md) keeps the dock's Stop.
+                    NOT on the Chat surface: its reading column is centred, so a
+                    20rem card pinned to the window's right edge landed on top of
+                    the transcript and covered the answer it was waiting for.
+                    There the run's progress is the inline row in the thread and
+                    Stop is the composer's own button. */}
+                {showPipelineCard && surface !== 'agents' && (
                     <div className="pointer-events-none fixed right-4 top-24 z-40 hidden w-[min(20rem,calc(100vw-2rem))] max-h-[calc(100vh-7rem)] md:block">
                         {isPipelineCollapsed ? (
                             /* Collapsed pill: status + expand/dismiss + Stop. */
