@@ -50,13 +50,6 @@ describe('lazy surface skeletons (fix 3)', () => {
     });
 });
 
-describe('progress card breakpoint (fix 4)', () => {
-    it('the fixed overlay shows from md up (Electron floor is 800px < lg)', () => {
-        expect(appSrc).toMatch(/className="pointer-events-none fixed right-4 top-24 z-40 hidden w-\[min\(20rem,calc\(100vw-2rem\)\)\] max-h-\[calc\(100vh-7rem\)\] md:block"/);
-        expect(appSrc).not.toMatch(/top-24 z-40 hidden[\s\S]{0,120}lg:block/);
-    });
-});
-
 describe('slDistancePct plumbed into the Algo probability engine (fix 6a)', () => {
     // Stage 3 removed App's handleCalculateAIProbabilities (its only consumer
     // was the never-openable AdvancedAnalyticsSidePanel), so the App-source

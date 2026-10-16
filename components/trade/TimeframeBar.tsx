@@ -7,9 +7,10 @@
  * is identical in both places and a choice made in one is the choice in the
  * other — not a second, parallel preference.
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Check, ChevronDown, Settings } from '../shared/Icons';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { shouldOpenUpward } from '../../utils/popoverPlacement';
 import {
     CHART_INTERVALS,
     readTfBarSelection,
@@ -38,6 +39,16 @@ export interface TimeframeBarProps {
 const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange, children, className, compact = false }) => {
     const [open, setOpen] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
+    /* This bar is rendered twice: on the chart, where a menu can hang below
+       the trigger, and in the Chat composer, which sits at the bottom of the
+       window — where the same menu ran off the edge and across the disclaimer
+       line. Both menus ask which way to open at the moment they open. */
+    const [menuUp, setMenuUp] = useState(false);
+    const [pickerUp, setPickerUp] = useState(false);
+    const chipRef = useRef<HTMLButtonElement>(null);
+    const gearRef = useRef<HTMLButtonElement>(null);
+    const MENU_H = 208;
+    const PICKER_H = 300;
     /* Both popovers dismiss on Escape, not only on the invisible backdrop.
        Caught by looking at the screen rather than at a test: a menu that the
        keyboard opens and the keyboard cannot close is a trap, and the compact
@@ -67,10 +78,14 @@ const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange,
         <div className={`relative flex shrink-0 flex-wrap items-center gap-0.5 ${className ?? 'border-b border-white/[0.06] px-2 py-1.5'}`}>
             {compact ? (
                 <>
-                    <button type="button" data-testid="tf-compact"
+                    <button type="button" data-testid="tf-compact" ref={chipRef}
                         aria-haspopup="menu" aria-expanded={menuOpen}
                         aria-label={`Timeframe ${interval} — change`}
-                        onClick={() => setMenuOpen(v => !v)}
+                        onClick={() => {
+                            const el = chipRef.current;
+                            if (el) setMenuUp(shouldOpenUpward(el.getBoundingClientRect(), MENU_H));
+                            setMenuOpen(v => !v);
+                        }}
                         className="flex items-center gap-1 rounded-control px-2 py-1 text-ui-dense font-semibold text-zinc-200 transition-colors hover:bg-white/[0.05]">
                         {interval}
                         <ChevronDown className={`h-3 w-3 text-zinc-500 transition-transform ${menuOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
@@ -79,7 +94,7 @@ const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange,
                         <>
                             <div className="fixed inset-0 z-20" aria-hidden onClick={() => setMenuOpen(false)} />
                             <div role="menu" data-testid="tf-compact-menu"
-                                className="absolute left-0 top-8 z-40 w-28 rounded-bubble border border-white/10 bg-zinc-900 p-1 shadow-xl">
+                                className={`absolute left-0 ${menuUp ? 'bottom-8' : 'top-8'} z-40 w-28 rounded-bubble border border-white/10 bg-zinc-900 p-1 shadow-xl`}>
                                 {shownIntervals.map(tf => (
                                     <button key={tf} type="button" role="menuitem"
                                         onClick={() => { onIntervalChange(tf); setMenuOpen(false); }}
@@ -107,7 +122,12 @@ const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange,
                     {tf}
                 </button>
             ))}
-            <button type="button" onClick={() => setOpen(v => !v)}
+            <button type="button" ref={gearRef}
+                onClick={() => {
+                    const el = gearRef.current;
+                    if (el) setPickerUp(shouldOpenUpward(el.getBoundingClientRect(), PICKER_H));
+                    setOpen(v => !v);
+                }}
                 aria-label="Customize timeframes" aria-expanded={open}
                 title="Choose which timeframes show in this bar"
                 className={`ml-0.5 flex h-6 w-6 items-center justify-center rounded-control transition-colors ${
@@ -122,7 +142,7 @@ const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange,
                         on the Chat surface, and the Chat composer sits at
                         z-[90]. The overlay that closes it is z-20 either
                         way; only the panel needed lifting. */}
-                    <div className="absolute left-2 top-9 z-40 w-40 rounded-bubble border border-white/10 bg-zinc-900 p-1 shadow-xl" data-testid="tf-picker">
+                    <div className={`absolute left-2 ${pickerUp ? 'bottom-9' : 'top-9'} z-40 w-40 rounded-bubble border border-white/10 bg-zinc-900 p-1 shadow-xl`} data-testid="tf-picker">
                         <p className="px-2 py-1 text-ui-2xs uppercase tracking-widest text-zinc-600">Timeframes</p>
                         <div className="grid grid-cols-2 gap-0.5">
                             {CHART_INTERVALS.map(tf => {
