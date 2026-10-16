@@ -393,6 +393,26 @@ describe('WS-6 rail completeness', () => {
     });
 });
 
+describe('the composer’s Stop', () => {
+    // The pipeline card used to be the only Stop on this surface, and it floated
+    // over the reading column — covering the answer it was waiting for. Stop is
+    // the send button's other state now, so the run that started here is ended
+    // from the same place. Pinned in jsdom because the mock provider answers
+    // faster than a browser probe can poll.
+    it('is the send button while idle and Stop while the run is in flight', async () => {
+        const onStopRun = vi.fn();
+        render(<AgentsView {...base}
+            onAnalyze={() => new Promise<never>(() => {})} onStopRun={onStopRun} />);
+        const send = () => screen.getByTestId('composer-send');
+        expect(send().getAttribute('aria-label')).toBe('Send');
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'is BTC heavy here' } });
+        fireEvent.click(send());
+        await waitFor(() => expect(send().getAttribute('aria-label')).toBe('Stop'));
+        fireEvent.click(send());
+        expect(onStopRun).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe('the mode switch has exactly one home', () => {
     // The reference's chat ⇄ code switch sits at the LEFT edge of the sidebar,
     // which is the same x the rail-less surfaces put it — so the hop moves the

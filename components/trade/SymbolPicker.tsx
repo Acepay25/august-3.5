@@ -24,7 +24,7 @@ export const SymbolPicker: React.FC<SymbolPickerProps> = ({ symbols, value, onCh
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [cursor, setCursor] = useState(0);
-    const [anchor, setAnchor] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
+    const [anchor, setAnchor] = useState<{ left: number; top?: number; bottom?: number }>({ left: 0 });
     const triggerRef = useRef<HTMLButtonElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
@@ -68,9 +68,23 @@ export const SymbolPicker: React.FC<SymbolPickerProps> = ({ symbols, value, onCh
     // The popover PORTALS to <body> and pins to the trigger's rect — the
     // stats strip is an overflow-x container that would otherwise clip the
     // dropdown to its own box (the later-5 menu-clip bug, again).
+    /** The list's own ceiling: `max-h-80` (320px) plus the search row and the
+     *  border. Used only to decide which way to open — the panel is anchored by
+     *  its bottom edge when it flips, so a short result list leaves no gap. */
+    const PANEL_MAX_H = 364;
     const toggle = (): void => {
         const r = triggerRef.current?.getBoundingClientRect();
-        if (r) setAnchor({ left: Math.min(r.left, Math.max(8, window.innerWidth - 336)), top: r.bottom + 4 });
+        if (r) {
+            // The composer sits at the bottom of the window, so a picker that
+            // always opened downward ran off its edge and across the disclaimer
+            // line under the card. Flip when the space below cannot hold the
+            // list AND there is more room above.
+            const below = window.innerHeight - r.bottom;
+            const left = Math.min(r.left, Math.max(8, window.innerWidth - 336));
+            setAnchor(below < PANEL_MAX_H && r.top > below
+                ? { left, bottom: window.innerHeight - r.top + 4 }
+                : { left, top: r.bottom + 4 });
+        }
         setOpen(o => !o);
     };
 
@@ -102,7 +116,7 @@ export const SymbolPicker: React.FC<SymbolPickerProps> = ({ symbols, value, onCh
                     <div
                         data-testid="symbol-picker"
                         className="fixed z-drawer w-80 overflow-hidden rounded-bubble border border-white/10 bg-zinc-900 shadow-2xl"
-                        style={{ left: anchor.left, top: anchor.top }}
+                        style={anchor}
                     >
                         <div className="flex items-center gap-2 border-b border-white/[0.06] px-3 py-2">
                             <Search className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden="true" />

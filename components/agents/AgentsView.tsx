@@ -37,7 +37,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Inbox, MessageSquare, Pencil, PanelLeftClose, Paperclip, Pin, Plus, Search, Timer, Trash2, Users } from '../shared/Icons';
+import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Inbox, MessageSquare, Pencil, PanelLeftClose, Paperclip, Pin, Plus, Search, StopIcon, Timer, Trash2, Users } from '../shared/Icons';
 import { ModelFallbackBanner } from '../trade/panels/ChatComposer';
 import type { ProviderConfig } from '../../types/provider';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
@@ -87,6 +87,9 @@ interface AgentsViewProps {
      *  provider is configured, so both reasons reach the transcript instead of
      *  vanishing into a void-ed promise. */
     onAnalyze: (prompt: string, images: PipelineImage[]) => Promise<AnalysisTurnOutcome>;
+    /** Ends the run this surface started. Absent ⇒ the send button never turns
+     *  into Stop, and the only stop on screen is the floating pipeline card. */
+    onStopRun?: () => void;
     /** App renders the existing room view; this surface only hosts it. */
     renderGroup?: (group: AgentGroup) => React.ReactNode;
     /** Decisions waiting in the Coach inbox — counts the rail's hop pill. */
@@ -422,7 +425,7 @@ interface BotRow {
 
 const AgentsView: React.FC<AgentsViewProps> = ({
     username, bots, groups, messages, selection, onSelect, onNewBot, onNewGroup,
-    onSendBotTurn, onAnalyze, renderGroup, coachCount, workingBotId,
+    onSendBotTurn, onAnalyze, onStopRun, renderGroup, coachCount, workingBotId,
     lastOpenedMap = {}, modelPicker, modelFallback = null, destinationMenu, accountRow,
     railExpanded = true, onToggleRailExpanded, statusCluster, surfaceSwitch,
     attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup, onRetryPostMortem,
@@ -658,15 +661,25 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         if (!activeBot) {
             const images = attachedImages();
             clearAttachments();
-            // The same session the Chart AI dock renders, written by the same
-            // helper — so a question asked here shows up there, with its answer,
-            // instead of running an entire analysis into a void.
-            await runAnalysisAsChatTurn({
-                sid: chatStore.getActiveId(),
-                text: prompt,
-                image: images[0]?.dataURL,
-                run: () => onAnalyze(prompt, images),
-            });
+            // `busy` used to be set only on the bot path, so an analysis run left
+            // the composer reading as idle: the send button never became Stop,
+            // and nothing disabled a second send while the first was still
+            // streaming. The card that used to carry Stop is gone from this
+            // surface, so this flag is now the only way to end a run from here.
+            setBusy(true);
+            try {
+                // The same session the Chart AI dock renders, written by the same
+                // helper — so a question asked here shows up there, with its
+                // answer, instead of running an entire analysis into a void.
+                await runAnalysisAsChatTurn({
+                    sid: chatStore.getActiveId(),
+                    text: prompt,
+                    image: images[0]?.dataURL,
+                    run: () => onAnalyze(prompt, images),
+                });
+            } finally {
+                setBusy(false);
+            }
             return;
         }
         clearAttachments();
@@ -1366,10 +1379,18 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                             className="border-b-0 px-0 py-0"
                                         />
                                     </div>
-                                    <button type="button" onClick={() => void send()} disabled={!text.trim() || busy}
-                                        aria-label="Send" data-testid="composer-send"
-                                        className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-zinc-100 text-zinc-900 transition-opacity hover:opacity-90 disabled:opacity-30">
-                                        <ArrowUp className="h-4 w-4" aria-hidden="true" />
+                                    <button type="button"
+                                        onClick={() => { if (busy) { onStopRun?.(); return; } void send(); }}
+                                        disabled={!busy && !text.trim()}
+                                        aria-label={busy ? 'Stop' : 'Send'} data-testid="composer-send"
+                                        /* Two states, like the dock's composer. Stop used to live only on the
+                                           pipeline card floating over this surface, which covered the answer it
+                                           was waiting for; the control now sits where the send did. */
+                                        className={`ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-opacity hover:opacity-90 disabled:opacity-30 ${
+                                            busy ? 'bg-rose-500/15 text-rose-300' : 'bg-zinc-100 text-zinc-900'}`}>
+                                        {busy
+                                            ? <StopIcon className="h-3 w-3" fill="currentColor" aria-hidden="true" />
+                                            : <ArrowUp className="h-4 w-4" aria-hidden="true" />}
                                     </button>
                                 </div>
                             </div>
