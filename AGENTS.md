@@ -31,7 +31,7 @@ npm run render-probe        # drive the running app in Chromium; assert rendered
                             #   ROW COUNTS per conversation (dock + Agents),
                             #   send order, reload persistence, that a settled
                             #   verdict + malformed persisted audit data drops no
-                            #   row, that all six nav surfaces mount, that the
+                            #   row, that all four nav surfaces mount, that the
                             #   Learn and Journal surfaces have no INERT control
                             #   (each press must change text, open an overlay, or
                             #   route; already-selected controls and
@@ -81,7 +81,7 @@ every later message down with it — passes the whole suite green. Two finished
 panels shipped unmounted for exactly this reason and no test noticed. Any change
 to how a conversation renders must be checked with `npm run render-probe`, which
 counts rendered rows in a real browser instead of asserting a component returned
-the right thing. It now sweeps all six nav surfaces, the approvals inbox, the
+the right thing. It now sweeps all four nav surfaces, the approvals inbox, the
 Agents desk pane, and Settings → Data (back up / export / import), Tab-focuses
 editable fields and reads back the computed keyboard focus indicator — the only
 gate that can see `index.css`, since jsdom mounts markup without resolving a
