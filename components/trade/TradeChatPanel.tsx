@@ -55,7 +55,7 @@ import * as chatStore from '../../services/trade/chatStore';
 import type { LiveEntry, LiveSession } from '../../services/trade/chatStore';
 import { panelSeatKey } from '../../services/trade/chatPanel';
 import { createChatTurnRunner } from '../../services/trade/chatTurnRunner';
-import type { PanelTurnContext } from '../../services/trade/chatTurnRunner';
+import type { ChatTurnRunnerDeps, PanelTurnContext } from '../../services/trade/chatTurnRunner';
 import type { ChartSnapshot, ChartInterval } from './TradingChart';
 import BiasChips from './BiasChips';
 import { saveBot, type AgentBot } from '../../services/agents/agentRoster';
@@ -136,6 +136,11 @@ interface TradeChatPanelProps {
      *  can scroll straight to it. */
     onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) =>
         Promise<string | { text: string; messageId?: string }>;
+    /** Stop the running analysis (the pipeline's own cancel). The composer's
+     *  Stop needs both this and the chat controller: a Full analysis is a chat
+     *  turn WHOSE WORK is the pipeline, and aborting only the turn's controller
+     *  left the run streaming under a bubble that said it had stopped. */
+    onStopRun?: () => void;
     /** Resolve the message id `onRunAnalysis` handed back into the App-side
      *  message, so a settled answer can show what its verdict was built on —
      *  the why-avoid breakdown, the evidence the moderator actually saw, the
@@ -194,11 +199,23 @@ interface TradeChatPanelProps {
      *  `messages` changes, so a turn said in the Chat surface appears in an
      *  already-open dock session without the trader reopening anything. */
     botThreadRows?: Message[];
+    /** The Chat surface's current thread, handed over by the surface that owns
+     *  the selection. Used ONLY for a session bound by `conversationId` — the
+     *  link that makes one conversation visible in both homes. It is passed in
+     *  rather than recomputed here because deciding which rows belong to a
+     *  thread is `utils/agentThreads`' job and a second caller of it with its
+     *  own arguments would be a second opinion about message ownership. */
+    conversationRows?: Message[];
     /** Commit a bot turn asked HERE into the canonical conversation.
      *  `answer === undefined` is the trader's question; a string is the
      *  settled answer. Fired twice, so the question shows in the other
      *  surface while it is still being answered. */
     onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string, workedMs?: number) => void;
+    /** Commit a SOLO turn asked HERE into the conversation this session is bound
+     *  to, keyed by the entry's own id. See `ChatTurnRunnerDeps.onSoloTurnCommit`
+     *  — without it the merged thread is readable from this pane but nothing a
+     *  trader types here ever reaches the other home. */
+    onSoloTurnCommit?: ChatTurnRunnerDeps['onSoloTurnCommit'];
     /** Jump straight to the Chat surface from the dock header. Routed
      *  through App's surface select so the directional enter animation
      *  (Chat arrives from the left) fires like every other Chat hop. */
@@ -272,12 +289,13 @@ export const ChartAiDockRail: React.FC<{
 const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     symbol, interval, providers, selectedChatModel, onSelectChatModel, live = false,
     chartLevels, chartDrawings, modelDrawings, addModelDrawings, clearModelDrawings, clearAllDrawings,
-    onCaptureChart, getChartSnapshot, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, getAnalysisMessage, onLogProposedTrade, onPlanPresented,
+    onCaptureChart, getChartSnapshot, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onStopRun, getAnalysisMessage, onLogProposedTrade, onPlanPresented,
     onChatLevelsChange,
     renderGroupSurface, groups = [],
     registerScrollToMessage,
     onToggleCollapsed, expanded, onToggleExpanded, onOpenChat,
-    onNewGroup, onOpenCoach, coachCount = 0, botThreadRows, onBotTurnCommit,
+    onNewGroup, onOpenCoach, coachCount = 0, botThreadRows, conversationRows, onBotTurnCommit,
+    onSoloTurnCommit,
     onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage,
     onToggleWatch, pinnedMessageIds,
     onRefreshModels,
@@ -353,10 +371,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     // two different conversations, the store cut would have moved the split
     // rather than closed it. A session with no counterpart passes through
     // untouched — `canonicalRows` is undefined unless this session IS a view of
-    // a conversation, which today means a bot session. Solo and panel sessions
-    // are chart-side conversations of their own, with their own tool rounds and
-    // key levels, and have no counterpart to be a view of.
-    const canonicalRows = boundBot ? botThreadRows : undefined;
+    // a conversation, which means either a bot session (bound by `botId`) or a
+    // Chat-surface session bound by `conversationId`. A chart-side session with
+    // neither is a conversation of its own, with its own tool rounds and key
+    // levels, and has no counterpart to be a view of.
+    const canonicalRows = boundBot
+        ? botThreadRows
+        : (activeSession.conversationId ? conversationRows : undefined);
     const entries = useMemo<LiveEntry[]>(
         () => entriesForSession(activeSession.entries, canonicalRows),
         [activeSession.entries, canonicalRows],
@@ -513,6 +534,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         draft,
         sessions,
         botThreadRows,
+        conversationRows,
         attachments,
         attachedImages,
         clearAttachments,
@@ -524,8 +546,9 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         clearAllDrawings,
         onPlanPresented,
         onBotTurnCommit,
+        onSoloTurnCommit,
         onRunAnalysis,
-    }), [symbol, interval, effort, selectedChatModel, chartLevels, allDrawings, trades, getChartSnapshot, provider, configForSeat, systemPromptFor, bots, activeId, draft, sessions, botThreadRows, attachments, attachedImages, clearAttachments, setDraft, setContextAt, setAnalysisMessageIds, addModelDrawings, clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onRunAnalysis]);
+    }), [symbol, interval, effort, selectedChatModel, chartLevels, allDrawings, trades, getChartSnapshot, provider, configForSeat, systemPromptFor, bots, activeId, draft, sessions, botThreadRows, conversationRows, attachments, attachedImages, clearAttachments, setDraft, setContextAt, setAnalysisMessageIds, addModelDrawings, clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onSoloTurnCommit, onRunAnalysis]);
     const { send, runFullAnalysis, runHarnessTurn } = runner;
 
     // ── Per-session composer memory ─────────────────────────────────────────
@@ -857,6 +880,14 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                             )}
                         </button>
                     )}
+                    {/* The same switch the Chat surface carries, so the hop is
+                        visible from BOTH ends. The ⋯ menu's "Open in Chat" row
+                        stays, but a return route nobody can see is exactly the
+                        asymmetry that made the first version of this control a
+                        dead end — the render probe could get here and not back. */}
+                    {/* The return hop used to be this panel's own ChatModePill.
+                        The title-bar switch carries it now — the Chat entry is
+                        the same route, from the same place, for every surface. */}
                     {/* Segmented chat actions: new + history */}
                     <div className="flex items-center rounded-control border border-white/[0.04] bg-white/[0.02] p-0.5">
                         <button type="button" onClick={() => addSession('solo')} aria-label="New chat" title="New chat"
@@ -901,10 +932,16 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                             </button>
                                         );
                                     })()}
-                                    <button type="button" onClick={() => { setShowNewMenu(false); onToggleExpanded?.(); }}
-                                        className="block w-full rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
-                                        {expanded ? 'Shrink back' : 'Expand over chart'}
-                                    </button>
+                                    {/* Gated on its handler like Collapse is: the
+                                        Chat surface's pane passes none, and a row
+                                        reading "Expand over chart" in a host with
+                                        no chart is a promise plus a dead press. */}
+                                    {onToggleExpanded && (
+                                        <button type="button" onClick={() => { setShowNewMenu(false); onToggleExpanded(); }}
+                                            className="block w-full rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
+                                            {expanded ? 'Shrink back' : 'Expand over chart'}
+                                        </button>
+                                    )}
                                     {/* The jump OUT of the dock. Stage 3 moved it
                                         here from a dedicated header icon: it is a
                                         route, not a frequent toggle, and the
@@ -1078,6 +1115,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     setDraftText={setDraft}
                     analysisMessageIds={analysisMessageIds}
                     getAnalysisMessage={getAnalysisMessage}
+                    resolveVerdictByIdentity={!!activeSession.conversationId}
                     symbol={symbol}
                     getMark={getMarkForDist}
                     onChatLevels={handleCardLevels}
@@ -1102,6 +1140,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 send={send}
                 runFullAnalysis={runFullAnalysis}
                 onRunAnalysis={onRunAnalysis}
+                onStopRun={onStopRun}
                 effort={effort}
                 changeEffort={changeEffort}
                 showEffortMenu={showEffortMenu}

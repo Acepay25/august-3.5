@@ -74,6 +74,10 @@ const MOUNTED: Array<{ symbol: string; from: string; host: string }> = [
     { symbol: 'WhyAvoidPanel', from: 'WhyAvoidPanel', host: 'components/analysis/VerdictAudit.tsx' },
     { symbol: 'WaitForConfirmationBanner', from: 'WhyAvoidPanel', host: 'components/analysis/VerdictAudit.tsx' },
     { symbol: 'Tip', from: 'Tip', host: 'components/desk/DeskScene.tsx' },
+    // The shared decision card is a host too: it is the hop the Chat surface
+    // reaches the audit through, and pinning it here is what makes that hop
+    // PROOF rather than a name.
+    { symbol: 'VerdictAudit', from: 'VerdictAudit', host: 'components/analysis/InlineVerdict.tsx' },
 ];
 
 /** Every surface that has to reach the audit block. */
@@ -98,9 +102,18 @@ describe('the audit panels are mounted, not merely tested', () => {
     });
 
     it('mounts the verdict audit on BOTH settled-verdict surfaces', () => {
-        const users = importersOf('VerdictAudit', 'VerdictAudit');
+        const direct = importersOf('VerdictAudit', 'VerdictAudit');
+        // One hop through the shared decision card counts — but only because the
+        // card is itself pinned as a host in MOUNTED above, so the hop provably
+        // renders the audit instead of merely naming a component. What is being
+        // protected is "the trader can open the audit where they read the
+        // verdict", not which import line says so.
+        const viaCard = (host: string): boolean =>
+            (BINDINGS.get(host) ?? []).some(b => b.symbol === 'InlineVerdict' && b.fromModule === 'InlineVerdict')
+            && direct.includes('components/analysis/InlineVerdict.tsx');
         for (const surface of AUDIT_HOSTS) {
-            expect(users, `the audit block is invisible on ${surface}`).toContain(surface);
+            expect(direct.includes(surface) || viaCard(surface),
+                `the audit block is invisible on ${surface}`).toBe(true);
         }
     });
 

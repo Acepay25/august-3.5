@@ -83,8 +83,10 @@ describe('TradeChatPanel: renders the ids the bridge looks up', () => {
     it('entry wrappers carry data-entry-id + data-message-id without layout changes', () => {
         // The App message id is read once per entry (the Pin chip needs the
         // same value), and the wrapper still stamps both ids on one attribute
-        // pair — no layout change.
-        expect(panelSrc).toMatch(/const analysisId = analysisMessageIds\[e\.id\];/);
+        // pair — no layout change. The map stays the PRIMARY source; a bound
+        // session may fall back to the entry's own id, because a row projected
+        // from the conversation carries the Message's id by construction.
+        expect(panelSrc).toMatch(/const analysisId = analysisMessageIds\[e\.id\]/);
         expect(panelSrc).toMatch(/data-entry-id=\{e\.id\} data-message-id=\{analysisId \?\? e\.id\}/);
         expect(panelSrc).toMatch(/registerScrollToMessage\?: \(fn: \(\(messageId: string\) => void\) \| null\) => void/);
         // The registered function centers the target with a smooth scroll,

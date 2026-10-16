@@ -111,8 +111,12 @@ describe('the trader and the bot read the SAME conversation', () => {
         // tool rounds and key levels, and no counterpart to be a view of. The
         // gate now lives at each call site: canonical rows are handed over only
         // when the session is bound to a bot that exists.
-        expect(panelSrc).toMatch(/const canonicalRows = boundBot \? botThreadRows : undefined;/);
-        expect(panelSrc).toMatch(/session\.botId && bots\.some\(b => b\.id === session\.botId\) \? botThreadRows : undefined/);
+        // A session is a view only when it is BOUND — to a bot, or to a Chat
+        // conversation via `conversationId`. Neither ⇒ canonical rows are
+        // undefined and the session's own entries are the whole transcript.
+        expect(panelSrc).toMatch(/const canonicalRows = boundBot\s+\?\s+botThreadRows/);
+        expect(panelSrc).toMatch(/activeSession\.conversationId \? conversationRows : undefined/);
+        expect(panelSrc).toMatch(/session\.conversationId \? conversationRows : undefined/);
     });
 });
 
@@ -170,13 +174,22 @@ describe('a turn asked in the dock reaches the Chat surface', () => {
     it('commits only a REAL answer, never the stop placeholder', () => {
         // The pending row reads "Running the full ensemble analysis…". Filing
         // that into the conversation would show the other surface a turn that
-        // never finished, said by a bot that said nothing.
-        expect(panelSrc).toMatch(/if \(settledText\.trim\(\) && !\/\^Running the full ensemble\//);
+        // never finished, said by a seat that said nothing. The test now passes,
+        // so it is computed ONCE and named, and both commit paths read it.
+        expect(panelSrc).toMatch(/const settled = !!settledText\.trim\(\) && !\/\^Running the full ensemble\//);
+        expect(panelSrc).toMatch(/if \(settled\) onBotTurnCommit\?\.\(bot, text, settledText/);
     });
 
-    it('fires for a bot session only', () => {
-        // A solo or panel session is not a bot turn and has no bot identity to
-        // commit under.
+    it('a bot turn commits under bot identity; a solo turn only when it is bound', () => {
+        // This case used to read "fires for a bot session only", which was true
+        // for a bleak reason: a solo turn had no path into the conversation at
+        // all, so a question asked in the Desk AI pane was simply never filed.
+        // That split is what the merge exists to close. What must STILL hold is
+        // the guard on the solo path — an unbound dock chat has no conversation
+        // to write into, and guessing one would drop a dock question into
+        // whichever chat the trader has open elsewhere.
         expect(panelSrc).toMatch(/if \(bot\) onBotTurnCommit\?\.\(bot, text\);/);
+        expect(panelSrc).toMatch(/else if \(session\.conversationId\) \{/);
+        expect(panelSrc).toMatch(/else if \(settled && session\.conversationId\) \{/);
     });
 });

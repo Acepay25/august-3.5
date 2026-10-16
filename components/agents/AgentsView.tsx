@@ -37,15 +37,15 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, MessageSquare, Pencil, PanelLeftClose, PanelLeftOpen, Paperclip, Pin, Plus, Search, Timer, Trash2, Users } from '../shared/Icons';
+import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, MessageSquare, Pencil, PanelLeftClose, Paperclip, Pin, Plus, Search, Timer, Trash2, Users } from '../shared/Icons';
 import { ModelFallbackBanner } from '../trade/panels/ChatComposer';
 import type { ProviderConfig } from '../../types/provider';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
 import { runAnalysisAsChatTurn, type AnalysisTurnOutcome } from '../../services/trade/analysisTurn';
 import { DISCLAIMER_SHORT } from '../../constants/disclaimer';
-import { useSurfaceEnter, type SurfaceEnterDirection } from '../../hooks/useSurfaceEnter';
 import * as chatStore from '../../services/trade/chatStore';
 import ChatTranscriptRow, { type ChatRowView } from '../shared/ChatTranscriptRow';
+import { BotAvatar } from '../chat/BotAvatar';
 import SymbolPicker from '../trade/SymbolPicker';
 import TimeframeBar from '../trade/TimeframeBar';
 import type { ChartInterval } from '../trade/TradingChart';
@@ -63,9 +63,12 @@ import {
 import { MessageRole } from '../../types/enums';
 import type { Message } from '../../types/message';
 import StatusPill from '../ui/StatusPill';
-import VerdictAudit from '../analysis/VerdictAudit';
-import { fmtPercent } from '../../utils/formatters';
-import { fmtRiskReward } from '../../utils/riskReward';
+// The shell's own column width, imported rather than repeated: this surface's
+// sidebar and the rail are ONE shell, and two numbers is how the hop started
+// jumping between them.
+import { NAV_RAIL_EXPANDED_PX } from '../shell/NavRail';
+import NavExpandButton from '../shell/NavExpandButton';
+import InlineVerdict from '../analysis/InlineVerdict';
 
 interface AgentsViewProps {
     username: string;
@@ -127,11 +130,32 @@ interface AgentsViewProps {
      *  carry the same amber warning — hidden while a bot is selected, because a
      *  bot answers from its own config and the pick is irrelevant to it. */
     modelFallback?: { issue: string; provider: ProviderConfig } | null;
-    /** Focus this same thread in the Chart AI dock — the two surfaces show
-     *  one conversation, and this is how you hop between them. */
-    onOpenInDock?: () => void;
-    /** Which edge this surface arrived from, for the Chat ⇄ Chart AI hop. */
-    surfaceEnterFrom?: SurfaceEnterDirection;
+    /** The destinations the rail would otherwise render. Handed in as a node
+     *  rather than re-implemented: on this surface the rail is not mounted, so
+     *  this column IS the sidebar — and it is the same `SurfaceMenuList`, not a
+     *  second copy that can drift from the first. */
+    destinationMenu?: React.ReactNode;
+    /** The account + Settings row, for the same reason. */
+    accountRow?: React.ReactNode;
+    /** The shell's status cluster (save state, offline, Activity). Handed in for
+     *  the same reason as the destinations: the sidebar now runs the full height
+     *  of the window, so this surface renders NO global band, and the controls
+     *  that used to live in it need a home in the one title bar this surface
+     *  has. Same component the other surfaces' band uses — not a copy. */
+    statusCluster?: React.ReactNode;
+    /** The screen switch, same reasoning as `statusCluster`: this surface
+     *  renders no global band, so the navigation the sidebar rows used to be has
+     *  to live in the one title bar this surface has. */
+    surfaceSwitch?: React.ReactNode;
+    /** The SAME left-column state every other surface drives, handed in rather
+     *  than re-derived per profile. This surface used to keep its own collapse
+     *  key and its own width, so the Chat ⇄ Chart AI hop restacked the shell:
+     *  the sidebar jumped 320→240px and the header's "Expand navigation" drove
+     *  a rail that was not mounted here. One state, one width, and the switch
+     *  changes only what the column lists — which is what the reference does
+     *  between its chat and code modes. */
+    railExpanded?: boolean;
+    onToggleRailExpanded?: () => void;
     onHydratePins?: (pins: string[]) => void;
     /** The App-side conversations (useConversations). Stage 3 made this rail
      *  the ONE conversation home: these render as their own section here
@@ -154,21 +178,37 @@ const loadPins = (user: string): string[] => {
     try { return JSON.parse(localStorage.getItem(PIN_KEY(user)) || '[]') as string[]; } catch { return []; }
 };
 
-const relTime = (iso: string | null | undefined): string => {
-    if (!iso) return '';
-    const ms = Date.now() - Date.parse(iso);
+/** The ONE duration formatter: elapsed milliseconds → the compact label the
+ *  rail prints (`now`, `45m`, `6h`, `8d`).
+ *
+ *  It takes a DURATION, never a stamp. The bug this replaces subtracted
+ *  `Date.now()` twice — `relTime` computed `Date.now() - Date.parse(iso)` and
+ *  handed that duration to `relTimeMs`, which subtracted `Date.now()` again,
+ *  so an 8-day-old row printed `20731d` (the epoch leaking through). Every
+ *  elapsed label on this surface must come from here so there is exactly one
+ *  place a duration is turned into text. */
+const durationLabel = (ms: number): string => {
     if (!Number.isFinite(ms) || ms < 0) return '';
-    return relTimeMs(ms);
-};
-
-const relTimeMs = (ms: number): string => {
-    if (!ms) return '';
-    const m = Math.round((Date.now() - ms) / 60000);
+    const m = Math.round(ms / 60000);
     if (m < 1) return 'now';
     if (m < 60) return `${m}m`;
     const h = Math.round(m / 60);
     if (h < 24) return `${h}h`;
     return `${Math.round(h / 24)}d`;
+};
+
+/** Elapsed since an ISO stamp; '' when the stamp is missing or unparseable. */
+const relTime = (iso: string | null | undefined): string => {
+    if (!iso) return '';
+    const at = Date.parse(iso);
+    if (!Number.isFinite(at)) return '';
+    return durationLabel(Date.now() - at);
+};
+
+/** Elapsed since an epoch-ms stamp; '' for no stamp. */
+const relTimeMs = (ms: number): string => {
+    if (!ms) return '';
+    return durationLabel(Date.now() - ms);
 };
 
 /** Adapt a pipeline `Message` onto the shared row view, so this surface and
@@ -204,7 +244,14 @@ const chatRowFrom = (m: Message, username: string, deskName: string): ChatRowVie
         toolLines: Object.values(m.liveToolEvents ?? {}).flat(),
         actions: m.toolActions,
         workedMs: typeof m.runStats?.durationMs === 'number' ? m.runStats.durationMs : undefined,
-        analysis: m.analysis,
+        // A planId-stamped row is the "Logged from Chart AI" RECEIPT of a
+        // proposal whose decision card is already on screen — under the answer
+        // that proposed it here, and on the dock's proposal card. Its analysis
+        // is a copy carried for the journal row and the autopilot, so passing
+        // it through here would render the identical ENTRY/STOP/TARGET/
+        // PROBABILITY card a second time in the same turn. One fact, one
+        // carrier: the card belongs to the answer, not to its receipt.
+        analysis: m.planId ? undefined : m.analysis,
         // The harness stamps the failed candidate on the message when a
         // post-mortem throws; the row exposes it so the CTA can offer the re-run.
         postMortemFailed: !!m.postMortemFailedCandidate,
@@ -246,8 +293,12 @@ const Row: React.FC<{
     routinesToggle?: React.ReactNode;
     children?: React.ReactNode;
     Icon: React.FC<{ className?: string }>;
+    /** Identity graphic for this row. A bot's own `BotAvatar` face replaces the
+     *  generic outlined glyph — the same mark the thread bylines and the roster
+     *  already use, so a bot looks like the same bot in every list. */
+    avatar?: React.ReactNode;
     onClick: () => void;
-}> = ({ active, title, preview, time, unread, working, pinned, attention, onPin, manage, actions, stat, testId = 'agent-row', routinesToggle, children, Icon, onClick }) => {
+}> = ({ active, title, preview, time, unread, working, pinned, attention, onPin, manage, actions, stat, testId = 'agent-row', routinesToggle, children, Icon, avatar, onClick }) => {
     const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
     const hasActions = !!actions && actions.length > 0;
     return (
@@ -260,14 +311,16 @@ const Row: React.FC<{
             }}>
             <div className="flex items-start gap-2 px-2 py-1.5">
                 <button type="button" onClick={onClick} data-testid={testId} className="flex min-w-0 flex-1 items-start gap-2 text-left">
-                    <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                        working ? 'border-amber-500/40 text-amber-300' : active ? 'border-zinc-600 text-zinc-200' : 'border-zinc-800 text-zinc-500'
-                    }`}>
-                        <Icon className="h-3 w-3" aria-hidden="true" />
-                    </span>
+                    {avatar ?? (
+                        <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                            working ? 'border-amber-500/40 text-amber-300' : active ? 'border-zinc-600 text-zinc-200' : 'border-zinc-800 text-zinc-500'
+                        }`}>
+                            <Icon className="h-3 w-3" aria-hidden="true" />
+                        </span>
+                    )}
                     <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-1">
-                            <span className="truncate text-ui-sm font-semibold text-zinc-200" title={title}>{title}</span>
+                        <span className="flex min-w-0 items-center gap-1">
+                            <span className="min-w-0 truncate text-ui-sm font-semibold text-zinc-200" title={title}>{title}</span>
                             {attention && (
                                 <span title={attention} data-testid="row-attention"
                                     className="shrink-0 text-ui-2xs font-bold text-amber-400">⚠</span>
@@ -290,15 +343,30 @@ const Row: React.FC<{
                                 {unread > 9 ? '9+' : unread}
                             </span>
                         )}
+                    </span>
+                    {routinesToggle}
+                </span>
+                {/* The row's actions lie OVER the row instead of beside it. In
+                    flow they cost 150px of a 223px row PERMANENTLY — every one of
+                    them invisible until hover — which left 21px for the bot's
+                    NAME, the one line that has to be readable. Absolutely
+                    positioned, the name gets the whole row and the controls still
+                    arrive on hover and on keyboard focus. A pinned row shows its
+                    pin at rest, because that state is information, not an action. */}
+                {(onPin || manage || hasActions) && (
+                    <span className={`absolute right-1 top-1.5 flex items-center gap-1 rounded-control bg-zinc-900/95 px-1 transition-opacity ${
+                        pinned ? 'pointer-events-auto opacity-100'
+                            : 'pointer-events-none opacity-0 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100'
+                    }`}>
                         {onPin && (
                             <button type="button" onClick={onPin} aria-label={pinned ? `Unpin ${title}` : `Pin ${title}`}
-                                className={`hit-target rounded-control p-0.5 transition-opacity ${
-                                    pinned ? 'text-zinc-400 opacity-100' : 'text-zinc-600 opacity-0 group-hover:opacity-100'
+                                className={`hit-target rounded-control p-0.5 transition-colors ${
+                                    pinned ? 'text-zinc-400' : 'text-zinc-600 hover:text-zinc-200'
                                 }`}>
                                 <Pin className="h-3 w-3" aria-hidden="true" />
                             </button>
                         )}
-                        <span className="opacity-0 transition-opacity group-hover:opacity-100">{manage}</span>
+                        {manage}
                         {hasActions && (
                             <button type="button" aria-label={`${title} options`} data-testid="row-menu"
                                 onPointerDown={e => e.stopPropagation()}
@@ -306,13 +374,12 @@ const Row: React.FC<{
                                     const r = e.currentTarget.getBoundingClientRect();
                                     setMenuAt(m => m ? null : { x: r.right - MENU_W, y: r.bottom + 4 });
                                 }}
-                                className="hit-target rounded-control p-0.5 text-zinc-600 opacity-0 transition-opacity hover:text-zinc-300 focus-visible:opacity-100 group-hover:opacity-100">
+                                className="hit-target rounded-control p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
                                 <Ellipsis className="h-3 w-3" aria-hidden="true" />
                             </button>
                         )}
                     </span>
-                    {routinesToggle}
-                </span>
+                )}
             </div>
             {children}
             {menuAt && actions && actions.length > 0 && createPortal(
@@ -323,61 +390,28 @@ const Row: React.FC<{
     );
 };
 
-// ─── Verdict card, inline ───────────────────────────────────────────────────
-
-const VerdictLine: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-    <div className="flex items-baseline justify-between gap-3">
-        <span className="font-mono text-ui-xs uppercase tracking-wider text-zinc-500">{label}</span>
-        <span className="font-mono text-ui-dense font-medium tabular-nums text-zinc-100">{value}</span>
-    </div>
-);
-
-const InlineVerdict: React.FC<{ m: Message }> = ({ m }) => {
-    const a = m.analysis;
-    if (!a) return null;
-    const up = a.direction === 'Long';
-    const down = a.direction === 'Short';
-    return (
-        <div className="mt-2.5 w-full max-w-lg border-t border-zinc-800/80 pt-2.5"
-            data-testid="inline-verdict">
-            <div className="mb-2 flex items-center gap-2">
-                <StatusPill tone={up ? 'up' : down ? 'down' : 'neutral'} kicker>
-                    {a.direction ?? 'No trade'}
-                </StatusPill>
-                <span className="truncate text-ui-caption font-semibold text-zinc-100" title={a.coinName ?? 'setup'}>{a.coinName ?? 'setup'}</span>
-                {a.rrRatio && (
-                    <span className="rounded-control border border-white/[0.04] bg-white/[0.04] px-1.5 py-0.5 font-mono text-ui-xs font-medium text-zinc-300">
-                        {fmtRiskReward(a.rrRatio, 1)} R:R
-                    </span>
-                )}
-                {a.confidence && <span className="ml-auto font-mono text-ui-xs uppercase tracking-wider text-zinc-500">{a.confidence}</span>}
-            </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-control border border-white/[0.04] bg-white/[0.02] p-2.5">
-                <VerdictLine label="entry" value={a.entryPoints?.[0]?.price ?? '—'} />
-                <VerdictLine label="stop" value={a.stopLoss ?? '—'} />
-                <VerdictLine label="target" value={a.takeProfit?.[0]?.price ?? '—'} />
-                {typeof a.probability === 'number' && <VerdictLine label="probability" value={fmtPercent(a.probability, 0)} />}
-            </div>
-            {/* Progressive disclosure for the forensic audit */}
-            <details className="group/audit mt-2" open>
-                <summary className="flex cursor-pointer select-none items-center gap-1.5 py-1 font-mono text-ui-2xs uppercase tracking-wider text-zinc-500 transition-colors hover:text-zinc-300 list-none">
-                    <ChevronDown className="h-3 w-3 transition-transform group-open/audit:rotate-180" aria-hidden="true" />
-                    <span>Inspect debate audit & evidence</span>
-                </summary>
-                <div className="mt-1.5 border-t border-zinc-800/60 pt-1.5">
-                    <VerdictAudit
-                        analysis={a}
-                        evidencePack={m.evidencePack}
-                        runContract={m.runContract}
-                        className="mt-1"
-                    />
-                </div>
-            </details>
-        </div>
-    );
-};
 
 // ─── The view ───────────────────────────────────────────────────────────────
+
+/** Live (<md) viewport flag. Below the column's breakpoint the conversation
+ *  list is an off-canvas drawer rather than a column, so the mode switch cannot
+ *  live in its header — and a copy in each header would be two controls both
+ *  claiming to be the navigation. Same shape as TradeView's `useIsBelowLg`;
+ *  guarded for jsdom (no matchMedia → assume wide). */
+const useIsBelowMd = (): boolean => {
+    const [below, setBelow] = useState<boolean>(() => {
+        try { return !window.matchMedia('(min-width: 768px)').matches; } catch { return false; }
+    });
+    useEffect(() => {
+        let mql: MediaQueryList;
+        try { mql = window.matchMedia('(min-width: 768px)'); } catch { return; }
+        const onChange = (): void => setBelow(!mql.matches);
+        onChange();
+        mql.addEventListener('change', onChange);
+        return () => { mql.removeEventListener('change', onChange); };
+    }, []);
+    return below;
+};
 
 interface BotRow {
     bot: AgentBot;
@@ -389,7 +423,8 @@ interface BotRow {
 const AgentsView: React.FC<AgentsViewProps> = ({
     username, bots, groups, messages, selection, onSelect, onNewBot, onNewGroup,
     onSendBotTurn, onAnalyze, renderGroup, coachCount, workingBotId,
-    lastOpenedMap = {}, modelPicker, modelFallback = null, onOpenInDock, surfaceEnterFrom = null,
+    lastOpenedMap = {}, modelPicker, modelFallback = null, destinationMenu, accountRow,
+    railExpanded = true, onToggleRailExpanded, statusCluster, surfaceSwitch,
     attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup, onRetryPostMortem,
     botStats,
     providerReady = false,
@@ -400,6 +435,12 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 }) => {
     const [pins, setPins] = useState<string[]>(() => loadPins(username));
     const [query, setQuery] = useState('');
+    // The field is revealed, not permanent. The reference's sidebar carries a
+    // magnifier in the list's header rather than a bordered box that is on
+    // screen even while nobody is searching — "lines, not boxes" — and a box
+    // that is always there is the one thing that made this column read as a
+    // form instead of a list.
+    const [searchOpen, setSearchOpen] = useState(false);
     const [text, setText] = useState('');
     // There is no Chat/Analyze switch any more. What a send RUNS is decided by
     // what is selected in the rail: a bot answers in its own persona (its own
@@ -431,14 +472,6 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     // Below md the rail is an overlay, not a column — at 320px a permanent
     // 42vw list left no readable transcript.
     const [railOpen, setRailOpen] = useState(false);
-    // At md+ the rail is a column you can put away to give the thread the
-    // width — persisted per profile, like the pins.
-    const [collapsed, setCollapsed] = useState<boolean>(() => {
-        try { return localStorage.getItem(`agents_rail_collapsed_v1_${username}`) === '1'; } catch { return false; }
-    });
-    useEffect(() => {
-        try { localStorage.setItem(`agents_rail_collapsed_v1_${username}`, collapsed ? '1' : '0'); } catch { /* private mode */ }
-    }, [collapsed, username]);
     const [sortByName, setSortByName] = useState(false);
     // WS-6: the composer attaches images through the SAME reader the Trade dock
     // uses (hooks/useChatAttachments was lifted out of TradeChatPanel for this).
@@ -461,12 +494,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         setShowJump(false);
     }, []);
     const paneRef = useRef<HTMLElement | null>(null);
-    // The ONLY animation on this pane for the Chart AI hop: one right-pinned
-    // translateX keyframe that mirrors the hamburger. The WAAPI morph that
-    // used to run alongside it is gone — two animations on one element fought,
-    // and the scale half read as a pop up instead of a slide.
-    // App owns the flag so re-navigating animates again.
-    const surfaceEnterClass = useSurfaceEnter(surfaceEnterFrom);
+    const composerRef = useRef<HTMLTextAreaElement | null>(null);
     const searchRef = useRef<HTMLInputElement | null>(null);
     const [searchFocusNonce, setSearchFocusNonce] = useState(0);
 
@@ -491,9 +519,18 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         return () => document.removeEventListener('keydown', onKey);
     }, []);
 
+    // `/` (and the palette) asks for the search field. It is revealed on demand
+    // now, so the request has to open it as well as focus it — and focusing
+    // happens in the effect below, because the input does not exist until the
+    // state change that this one causes has rendered.
     useEffect(() => {
-        if (searchFocusNonce) searchRef.current?.focus();
+        if (searchFocusNonce) setSearchOpen(true);
     }, [searchFocusNonce]);
+
+    const searching = searchOpen || query.trim().length > 0;
+    useEffect(() => {
+        if (searching) searchRef.current?.focus();
+    }, [searching]);
 
     const statFor = useCallback((botId: string): BotLearningStat | undefined =>
         botStats?.find(s => s.id === botId), [botStats]);
@@ -659,6 +696,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                 attention={attentionMap?.[r.bot.id]}
                 stat={statFor(r.bot.id)?.skillsAuthored}
                 Icon={Bot}
+                avatar={<BotAvatar bot={r.bot} size={20} working={workingBotId === r.bot.id} />}
                 onPin={() => togglePin(r.bot.id)}
                 onClick={() => selectThread({ kind: 'bot', botId: r.bot.id })}
                 actions={[
@@ -750,17 +788,38 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         ? `Message @${activeBot.name}…`
         : activeGroup ? 'Message the room…' : 'How can I help you today?';
 
+    // Under the composer, and truncated there, so it is also the title there.
+    const contextNote = activeBot
+        ? `@${activeBot.name} answers here`
+        : 'No agent selected — the full analysis runs';
+
     // The + New menu: one creator, four honest verbs. The old chip row made
     // "Agents" and "Rooms" look like navigation when both only opened create
     // dialogs — and "+ New" was the same NewBotDialog a third time.
     const [newMenuAt, setNewMenuAt] = useState<{ x: number; y: number } | null>(null);
     const [convMenuAt, setConvMenuAt] = useState<{ id: string; x: number; y: number } | null>(null);
     const newMenuItems: RowMenuItem[] = [
-        ...(onNewChat ? [{ label: 'New chat', onSelect: () => onNewChat() }] : []),
+        ...(onNewChat ? [{ label: 'New chat', onSelect: () => {
+            onNewChat();
+            // Two things the creator itself cannot do. The pane has to FOLLOW
+            // the conversation that was just made — left where it was, a bot's
+            // thread stayed on screen under a "New chat" header and the press
+            // read as a no-op. And the blank-reuse path, where "New" correctly
+            // hands back the unused blank session rather than minting another
+            // empty one, has to land the caret somewhere, or nothing at all
+            // appears to happen.
+            selectThread({ kind: 'team' });
+            composerRef.current?.focus();
+        } }] : []),
         { label: 'New agent', onSelect: () => onNewBot() },
         { label: 'New room', onSelect: () => onNewGroup() },
         ...(onOpenCoach ? [{ label: coachCount > 0 ? `Coach inbox (${coachCount})` : 'Coach inbox', onSelect: () => onOpenCoach() }] : []),
     ];
+
+    // One switch, one home. The open column's header is its reference position —
+    // the same x the rail-less surfaces use — so the hop does not move it.
+    const belowMd = useIsBelowMd();
+    const switchInRail = railExpanded && !belowMd;
 
     const selectThread = useCallback((t: ThreadSelection): void => {
         onSelect(t);
@@ -772,7 +831,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     }, [onSelect, bots, lastOpenedMap]);
 
     return (
-        <div className={`flex h-full min-h-0 ${surfaceEnterClass}`} data-testid="agents-view">
+        <div className="flex h-full min-h-0" data-testid="agents-view">
             {/* ── Rail — a column at md+, an overlay drawer below ── */}
             {railOpen && (
                 <button type="button" aria-label="Close conversations"
@@ -784,41 +843,55 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                 leaves a closed drawer tabbable for 150ms and makes the flip
                 unmeasurable. The slide-in still animates (visible instantly,
                 transform after); the slide-out is not seen. */}
-            <aside className={`fixed inset-y-0 left-0 z-40 flex w-72 shrink-0 transform flex-col border-r border-zinc-800/80 bg-zinc-900 transition-transform duration-[150ms] ease-[var(--ease-snappy)] ${
-                railOpen ? 'translate-x-0' : 'invisible -translate-x-full md:visible'
-            } md:static md:z-auto md:h-full md:min-h-0 md:w-[min(20rem,42vw)] md:translate-x-0 ${
-                collapsed ? 'md:hidden' : ''
-            }`}
+            <aside
+                /* One width for both sides of the hop: `w-72` stays the mobile
+                   drawer, and md+ takes the shell's own constant through a
+                   custom property, because an inline style would otherwise win
+                   at every breakpoint and flatten the drawer too. */
+                style={{ '--rail-w': `${NAV_RAIL_EXPANDED_PX}px` } as React.CSSProperties}
+                className={`fixed inset-y-0 left-0 z-40 flex w-72 shrink-0 transform flex-col border-r border-zinc-800/80 bg-zinc-900 transition-transform duration-[150ms] ease-[var(--ease-snappy)] ${
+                    railOpen ? 'translate-x-0' : 'invisible -translate-x-full md:visible'
+                } md:static md:z-auto md:h-full md:min-h-0 md:w-[var(--rail-w)] md:translate-x-0 ${
+                    railExpanded ? '' : 'md:hidden'
+                }`}
                 data-testid="agents-rail">
-                <div className="flex shrink-0 items-center gap-1.5 p-2 pb-1.5">
-                    <div className="relative min-w-0 flex-1">
-                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" aria-hidden="true" />
-                        <input ref={searchRef} value={query} onChange={e => setQuery(e.target.value)} placeholder="Search conversations..."
-                            aria-label="Search conversations" data-testid="rail-search"
-                            className="w-full rounded-control border border-zinc-800/80 bg-zinc-950/70 py-1.5 pl-8 pr-7 text-ui-dense text-zinc-200 outline-none placeholder:text-zinc-500 transition-colors focus:border-zinc-700 focus:bg-zinc-950" />
-                        {!query && (
-                            <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-control border border-zinc-800/80 bg-zinc-900/80 px-1 py-0.5 font-mono text-ui-xs leading-none text-zinc-500">
-                                /
-                            </kbd>
+                {/* The column's own header row, and the reference's: the mode
+                    switch owns its LEFT edge, at the same x the rail-less
+                    surfaces put it, so hopping Chat ⇄ Trade changes the content
+                    and not the position of the control that changed it. The
+                    put-away toggle keeps the right edge — the SAME toggle the
+                    rail renders, so the two columns cannot disagree about
+                    whether one is open. */}
+                {(switchInRail || onToggleRailExpanded) && (
+                    <div className="flex shrink-0 items-center justify-between gap-2 px-2 pb-1 pt-2.5">
+                        {switchInRail ? surfaceSwitch : <span aria-hidden />}
+                        {onToggleRailExpanded && (
+                            <button type="button" onClick={onToggleRailExpanded} data-testid="rail-collapse"
+                                aria-label="Collapse conversations" title="Collapse the conversation rail"
+                                className="hidden shrink-0 rounded-control p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 md:block">
+                                <PanelLeftClose className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
                         )}
                     </div>
-                    <button type="button" onClick={() => setCollapsed(true)} data-testid="rail-collapse"
-                        aria-label="Collapse conversations" title="Collapse the conversation rail"
-                        className="hidden shrink-0 rounded-control border border-zinc-800/80 p-1.5 text-zinc-500 transition-colors hover:border-zinc-700 hover:text-zinc-200 md:block">
-                        <PanelLeftClose className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                </div>
+                )}
 
-                <div className="flex shrink-0 items-center px-2 pb-2 pt-0.5">
+                <div className="flex shrink-0 items-center px-2 pb-1 pt-0.5">
+                    {/* A row, not a pill. The reference's "New" is the first
+                        entry in the same borderless list as its destinations,
+                        and it is the shape `SurfaceMenuList` already paints — so
+                        this copies those classes rather than inventing a fourth
+                        control shape for the sidebar. The menu it opens is
+                        unchanged; only the box around it went. */}
                     <button type="button" data-testid="rail-new" aria-haspopup="menu" aria-expanded={!!newMenuAt}
                         onPointerDown={e => e.stopPropagation()}
                         onClick={e => {
                             const r = e.currentTarget.getBoundingClientRect();
                             setNewMenuAt(m => m ? null : { x: r.left, y: r.bottom + 4 });
                         }}
-                        className="flex items-center gap-1 hit-target rounded-full border border-zinc-700/80 bg-zinc-800/60 px-2 py-0.5 text-ui-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-700 hover:text-white">
-                        <Plus className="h-3 w-3" aria-hidden="true" /> New
-                        <ChevronDown className={`h-2.5 w-2.5 transition-transform ${newMenuAt ? 'rotate-180' : ''}`} />
+                        className="group flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-ui-caption text-zinc-400 transition-colors duration-[120ms] ease-[var(--ease-snappy)] hover:bg-white/[0.06] hover:text-zinc-100">
+                        <Plus className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden="true" />
+                        <span className="flex-1 truncate" title="New">New</span>
+                        <ChevronDown className={`h-3 w-3 shrink-0 text-zinc-600 transition-transform ${newMenuAt ? 'rotate-180' : ''}`} aria-hidden="true" />
                     </button>
                     {newMenuAt && createPortal(
                         <RowMenu x={newMenuAt.x} y={newMenuAt.y} items={newMenuItems} onClose={() => setNewMenuAt(null)} />,
@@ -826,9 +899,19 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     )}
                 </div>
 
+                {/* Customize, last in the nav group exactly as the reference
+                    orders New / Projects / Artifacts / Customize — and the only
+                    row left here now that the destinations live in the title
+                    bar. Above `New` it read as an orphan against the top edge. */}
+                {destinationMenu && (
+                    <div className="shrink-0 border-b border-zinc-800/80 pb-1.5" data-testid="sidebar-destinations">
+                        {destinationMenu}
+                    </div>
+                )}
+
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-3 custom-scrollbar">
                     <section data-testid="rail-pinned">
-                        <h4 className="px-1 pb-1 text-ui-sm font-semibold text-zinc-500">Pinned</h4>
+                        <h4 className="px-1 pb-1 text-ui-sm font-semibold uppercase tracking-widest text-zinc-500">Pinned</h4>
                         {/* WS-6: the desk's own conversation is a first-class row,
                             not only the pane you fall back into. */}
                         <Row active={isChartPane} title="Chart AI" testId="chart-ai-row"
@@ -847,20 +930,63 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
                     <section>
                         <div className="flex items-center gap-1 px-1 pb-1">
-                            <h4 className="text-ui-sm font-semibold text-zinc-500">
-                                Chats and tasks
+                            <h4 className="text-ui-sm font-semibold uppercase tracking-widest text-zinc-500">
+                                Bots
                             </h4>
+                            {/* The magnifier is the field's handle, exactly where
+                                the reference puts it — in the list's header, not
+                                as a box permanently above it. */}
+                            <button type="button" data-testid="rail-search-toggle"
+                                onClick={() => setSearchOpen(v => !v)}
+                                aria-expanded={searching}
+                                aria-controls="rail-search-field"
+                                aria-label="Search conversations"
+                                title={searching ? 'Hide the search field' : 'Search conversations (/)'}
+                                className={`ml-auto rounded-control p-1.5 transition-colors hover:text-zinc-200 ${
+                                    searching ? 'text-zinc-200' : 'text-zinc-600'}`}>
+                                <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
                             {(activeBots.length > 1 || listedGroups.length > 1) && (
                                 <button type="button" data-testid="rail-sort"
                                     onClick={() => setSortByName(v => !v)}
                                     title={sortByName ? 'Sorted by name — click for most recent' : 'Sorted by most recent — click for name'}
                                     aria-label="Sort conversations"
-                                    className="ml-auto rounded-control p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
+                                    className="rounded-control p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
                                     <ArrowUpDown className="h-3 w-3" aria-hidden="true" />
                                 </button>
                             )}
+                            {/* The list's own creator, as the reference's BOTS
+                                header carries one. Same handler the `New` menu's
+                                "New agent" verb calls — a second entry point, not
+                                a second behaviour. */}
+                            <button type="button" onClick={onNewBot} data-testid="rail-new-bot"
+                                aria-label="New agent" title="New agent"
+                                className="rounded-control p-1.5 text-zinc-600 transition-colors hover:text-zinc-200">
+                                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
                         </div>
-                        {listedBots.length === 0 && listedGroups.length === 0 && (
+                        {searching && (
+                            <div id="rail-search-field" className="relative mb-1.5 px-1">
+                                <input ref={searchRef} value={query}
+                                    onChange={e => setQuery(e.target.value)}
+                                    onKeyDown={e => {
+                                        if (e.key !== 'Escape') return;
+                                        // Hide ≠ close only applies to surfaces;
+                                        // an empty field has nothing to keep.
+                                        if (query) setQuery('');
+                                        else setSearchOpen(false);
+                                    }}
+                                    placeholder="Search conversations..."
+                                    aria-label="Search conversations" data-testid="rail-search"
+                                    className="w-full rounded-control border border-zinc-800/80 bg-zinc-950/70 py-1.5 pl-3 pr-7 text-ui-dense text-zinc-200 outline-none placeholder:text-zinc-500 transition-colors focus:border-zinc-700 focus:bg-zinc-950" />
+                                {!query && (
+                                    <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-control border border-zinc-800/80 bg-zinc-900/80 px-1 py-0.5 font-mono text-ui-xs leading-none text-zinc-500">
+                                        /
+                                    </kbd>
+                                )}
+                            </div>
+                        )}
+                        {listedBots.length === 0 && (
                             <p className="px-1 py-3 text-ui-dense leading-5 text-zinc-600">
                                 No agents yet. Create one and it appears here with its own thread.
                             </p>
@@ -878,7 +1004,25 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 {showInactive && inactiveBots.map(renderBotRow)}
                             </>
                         )}
-                        {listedGroups.map(g => (
+                        </section>
+
+                        {/* Rooms get their own header for the same reason the
+                            reference's sidebar splits its lists: a bot row and a
+                            room row look identical apart from the icon, so the
+                            section name is what tells them apart. */}
+                        {listedGroups.length > 0 && (
+                        <section data-testid="rail-rooms">
+                            <div className="flex items-center gap-1 px-1 pb-1">
+                                <h4 className="text-ui-sm font-semibold uppercase tracking-widest text-zinc-500">
+                                    Rooms
+                                </h4>
+                                <button type="button" onClick={onNewGroup} data-testid="rail-new-room"
+                                    aria-label="New room" title="New room"
+                                    className="ml-auto rounded-control p-1.5 text-zinc-600 transition-colors hover:text-zinc-200">
+                                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                                </button>
+                            </div>
+                            {listedGroups.map(g => (
                             <Row key={g.id} active={selection.kind === 'group' && selection.groupId === g.id}
                                 title={groupDisplayName(g, bots)} preview={`${g.memberIds.length} seats`} Icon={Users}
                                 pinned={pinnedIds.has(g.id)} onPin={() => togglePin(g.id)}
@@ -902,12 +1046,13 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                         )}
                                     </>
                                 )} />
-                        ))}
-                    </section>
+                            ))}
+                        </section>
+                        )}
 
                     {onLoadConversation && (
                         <section data-testid="rail-conversations">
-                            <h4 className="px-1 pb-1 text-ui-sm font-semibold text-zinc-500">
+                            <h4 className="px-1 pb-1 text-ui-sm font-semibold uppercase tracking-widest text-zinc-500">
                                 Conversations
                             </h4>
                             {visibleConversationRows.length === 0 ? (
@@ -975,12 +1120,15 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     )}
                 </div>
 
-                {/* Identity is the NAV RAIL's row (nav-account: name, initial,
-                    Settings). This row repeated it a second time on the same
-                    screen. What the pane actually owns is the live signal —
-                    is a provider ready for the desk — so that is all it says
-                    now, in the pattern the references' status bars use: a dot
-                    and five words on one hairline. */}
+                {/* Identity, when this column IS the sidebar. It used to live only
+                    in the nav rail, and putting it in both places at once is what
+                    made two account rows share one screen — so it arrives as a
+                    node from App, which knows whether the rail is mounted. */}
+                {accountRow}
+                {/* What the pane actually owns is the live signal — is a provider
+                    ready for the desk — so that is all its own row says, in the
+                    pattern the references' status bars use: a dot and five words
+                    on one hairline. */}
                 <div className="flex shrink-0 items-center gap-1.5 border-t border-zinc-800/80 px-3 py-2">
                     <span data-testid="desk-status" title={providerReady ? 'A provider is configured — the desk can think' : 'No provider ready — configure one in Settings'}
                         className={`h-1.5 w-1.5 shrink-0 rounded-full ${providerReady ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
@@ -998,26 +1146,47 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     <div className="flex min-h-0 flex-1 flex-col">{renderGroup(activeGroup)}</div>
                 ) : (
                     <>
-                        {/* Unified Top Header Strip: Hermes & Claude Desktop minimalism.
-                            Single hairline bar containing identity, instrument picker, timeframe,
-                            and dock hop without stacked toolbars. */}
+                        {/* The chat header: the conversation's name and the
+                            switch, on one hairline row — the reference's shape.
+                            The instrument and timeframe used to sit here too,
+                            which stacked a second toolbar's worth of chrome
+                            above an empty thread; they are context for the next
+                            message, so they live in the composer now. */}
                         <div
-                            data-testid="chat-instrument-bar"
-                            className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] px-4 py-2"
+                            data-testid="chat-header"
+                            className="flex shrink-0 items-center gap-3 border-b border-white/[0.06] px-4 py-2"
                         >
-                            <div className="flex min-w-0 items-center gap-2">
+                            {/* The shell's collapsed-rail button, rendered from
+                                the SAME state the column hides under. This
+                                surface has no global band now, so without it a
+                                put-away rail could only be restored by Alt+1..5. */}
+                            {!railExpanded && onToggleRailExpanded && (
+                                /* md+ only. Below md this surface already has its
+                                   own drawer opener (`rail-open`), and `railExpanded`
+                                   reads false at narrow widths by design — so
+                                   rendering the shell's column-expand button here
+                                   gave a phone two controls that both claim to
+                                   open the sidebar and do different things. */
+                                <span className="hidden md:flex">
+                                    <NavExpandButton onExpand={onToggleRailExpanded} />
+                                </span>
+                            )}
+                            {/* One switch, one home: the open column hosts it at
+                                its left edge; when the column is put away (or is
+                                an off-canvas drawer on a phone) it moves here so
+                                it is never missing, never doubled. */}
+                            {!switchInRail && surfaceSwitch}
+                                                        <div className="flex min-w-0 flex-1 items-center gap-2">
                                 <button type="button" onClick={() => setRailOpen(true)}
                                     aria-label="Open conversations" data-testid="rail-open"
                                     className="shrink-0 rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 md:hidden">
                                     <Users className="h-3.5 w-3.5" aria-hidden="true" />
                                 </button>
-                                {collapsed && (
-                                    <button type="button" onClick={() => setCollapsed(false)} data-testid="rail-expand"
-                                        aria-label="Show conversations" title="Show the conversation rail"
-                                        className="hidden shrink-0 rounded-control border border-zinc-800 p-1 text-zinc-500 transition-colors hover:text-zinc-200 md:block">
-                                        <PanelLeftOpen className="h-3.5 w-3.5" aria-hidden="true" />
-                                    </button>
-                                )}
+                                {/* No in-column expand here: the header's
+                                    "Expand navigation" is the shell's one
+                                    control, and it now reaches this column too.
+                                    A second one made the same action live in
+                                    two places with two different states. */}
                                 <span className="min-w-0 truncate text-ui-sm font-semibold text-zinc-200" title={activeBot
                                         ? `@${activeBot.name}`
                                         /* The desk pane IS the active chat session —
@@ -1054,32 +1223,23 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     </span>
                                 )}
                             </div>
-
-                            <div className="flex shrink-0 items-center gap-2">
-                                <SymbolPicker
-                                    symbols={symbols}
-                                    value={sessionSymbol}
-                                    onChange={setSessionSymbol}
-                                />
-                                <div className="hidden sm:flex items-center">
-                                    <TimeframeBar
-                                        interval={sessionInterval}
-                                        onIntervalChange={setSessionInterval}
-                                        className="border-b-0 px-0 py-0"
-                                    />
-                                </div>
-                                {onOpenInDock && (
-                                    <button type="button" onClick={onOpenInDock} data-testid="open-in-dock"
-                                        className="shrink-0 rounded-control border border-zinc-800 px-2 py-1 text-ui-xs text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200">
-                                        Open in Chart AI
-                                    </button>
-                                )}
-                            </div>
+                            {statusCluster}
                         </div>
-                        <div className="relative min-h-0 flex-1">
-                        <div ref={scroller} onScroll={onScrollerScroll} className="h-full overflow-y-auto custom-scrollbar">
+                        {/* The thread IS this surface. The charted form of the
+                            desk is a different screen, reached from the pill
+                            above — not a copy of this one with the chart
+                            removed, which is what used to render here and made
+                            the two states impossible to tell apart. */}
+                        <div data-testid="agents-thread-column"
+                            className={`flex min-h-0 flex-1 flex-col ${thread.length === 0 ? 'justify-center' : ''}`}>
+                        <div className={`${thread.length === 0 ? 'shrink-0' : 'relative min-h-0 flex-1'}`}>
+                        {/* `h-full` is load-bearing, not decoration: an
+                            overflow-y-auto box with auto height grows to its
+                            content and can never scroll. Losing it while adding
+                            the horizontal pad made the whole thread unscrollable. */}
+                        <div ref={scroller} onScroll={onScrollerScroll} className="h-full overflow-y-auto custom-scrollbar px-4">
                             {thread.length === 0 ? (
-                                <div className="chat-hero-grid flex h-full flex-col items-center justify-center px-6 text-center">
+                                <div className="flex flex-col items-center justify-center px-6 py-2 text-center">
                                     <Bot className="mb-3 h-8 w-8 text-zinc-500" aria-hidden="true" />
                                     <h2 className="font-serif text-3xl font-normal tracking-tight text-zinc-100">{greeting(username || 'trader')}</h2>
                                     <p className="mt-2 max-w-md text-ui-sm leading-relaxed text-zinc-500">
@@ -1094,13 +1254,21 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 <div className="chat-column space-y-4 py-6" data-testid="agent-thread">
                                     {thread.map(m => {
                                         const isUser = m.role === MessageRole.USER;
+                                        const row = chatRowFrom(m, username, activeBot?.name ?? 'desk');
                                         return (
                                             <ChatTranscriptRow
                                                 key={m.id}
-                                                row={chatRowFrom(m, username, activeBot?.name ?? 'desk')}
+                                                row={row}
                                                 onRetry={onRetryPostMortem ? () => onRetryPostMortem(m.id) : undefined}
                                             >
-                                                {!isUser && <InlineVerdict m={m} />}
+                                                {/* The decision card is fed from the ROW MODEL, never from the
+                                                    raw message: a "Logged from Chart AI" receipt carries a copy
+                                                    of the plan's analysis for the journal row and the autopilot,
+                                                    and reading it here drew the identical ENTRY/STOP/TARGET/
+                                                    PROBABILITY card a second time in the same turn.
+                                                    `chatRowFrom` is the one place that decides. */}
+                                                {!isUser && <InlineVerdict analysis={row.analysis}
+                                                    evidencePack={m.evidencePack} runContract={m.runContract} />}
                                             </ChatTranscriptRow>
                                         );
                                     })}
@@ -1120,12 +1288,12 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             {!activeBot && modelFallback && (
                                 <ModelFallbackBanner modelIssue={modelFallback.issue} provider={modelFallback.provider} />
                             )}
-                            <div className="chat-column rounded-bubble border border-white/[0.08] bg-zinc-900/90 shadow-xl backdrop-blur-md p-2.5 transition-colors focus-within:border-zinc-500">
+                            <div data-testid="chat-composer" className="chat-column rounded-bubble border border-white/[0.08] bg-zinc-900/90 shadow-xl backdrop-blur-md p-2.5 transition-colors focus-within:border-zinc-500">
                                 <input type="file" multiple accept="image/*" className="hidden"
                                     ref={fileInputRef} data-testid="composer-file"
                                     onChange={e => { attachFiles(e.target.files); e.target.value = ''; }} />
                                 {attachments.length > 0 && (
-                                    <div className="mb-1.5 flex flex-wrap gap-1 px-1.5" data-testid="composer-attachments">
+                                    <div className="mb-1.5 flex flex-wrap gap-1" data-testid="composer-attachments">
                                         {attachments.map(a => (
                                             <span key={a.id}
                                                 className="flex items-center gap-1 rounded-control border border-zinc-800 bg-zinc-950 py-0.5 pl-1.5 pr-1 text-ui-xs text-zinc-300">
@@ -1140,14 +1308,14 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                         ))}
                                     </div>
                                 )}
-                                <textarea value={text}
+                                <textarea ref={composerRef} value={text}
                                     onChange={e => setText(e.target.value)}
                                     onKeyDown={e => {
                                         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); }
                                     }}
                                     rows={2} placeholder={placeholder} aria-label="Message"
-                                    className="w-full resize-none bg-transparent px-2 py-1 text-ui-caption leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-500" />
-                                <div className="mt-1 flex items-center gap-2 px-1">
+                                    className="w-full resize-none bg-transparent py-1 text-ui-caption leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-500" />
+                                <div className="mt-1 flex items-center gap-2">
                                     <button type="button" onClick={openPicker} data-testid="composer-attach"
                                         aria-label="Attach image"
                                         title={activeBot
@@ -1157,6 +1325,23 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                         className="rounded-control border border-zinc-800/80 p-1 text-zinc-400 transition-colors hover:bg-white/[0.05] hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-zinc-400">
                                         <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
                                     </button>
+                                    {/* The instrument this chat is about, moved out
+                                        of the header: it is context for the next
+                                        message, which is exactly where the
+                                        reference puts context. */}
+                                    <SymbolPicker
+                                        symbols={symbols}
+                                        value={sessionSymbol}
+                                        onChange={setSessionSymbol}
+                                    />
+                                    <div className="hidden sm:flex items-center">
+                                        <TimeframeBar
+                                            interval={sessionInterval}
+                                            onIntervalChange={setSessionInterval}
+                                            compact
+                                            className="border-b-0 px-0 py-0"
+                                        />
+                                    </div>
                                     <button type="button" onClick={() => void send()} disabled={!text.trim() || busy}
                                         aria-label="Send" data-testid="composer-send"
                                         className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-zinc-100 text-zinc-900 transition-opacity hover:opacity-90 disabled:opacity-30">
@@ -1168,14 +1353,19 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 and the model chip share the first (chip owns
                                 the bottom-right), the disclaimer gets its own
                                 line below — August's disclaimer is longer than
-                                Claude's and three items on one row collide. */}
-                            <div className="mx-auto mt-2 flex w-full max-w-[55rem] items-center justify-between gap-3 px-2 text-ui-xs text-zinc-600">
-                                <span className="min-w-0 whitespace-nowrap">{activeBot ? `@${activeBot.name} answers here` : 'No agent selected — the full analysis runs'}</span>
+                                Claude's and three items on one row collide.
+                                `px-2.5` matches the card's own `p-2.5`: the
+                                card and the measure are both 880px and centered,
+                                so the footer text sits on the same left edge as
+                                the typed text above it rather than 7px inside. */}
+                            <div className="mx-auto mt-2 flex w-full max-w-[55rem] items-center justify-between gap-3 px-2.5 text-ui-xs text-zinc-600">
+                                <span className="min-w-0 truncate" title={contextNote}>{contextNote}</span>
                                 {modelPicker}
                             </div>
-                            <div className="mx-auto mt-1 w-full max-w-[55rem] px-2 text-ui-xs text-zinc-600">
+                            <div className="mx-auto mt-1 w-full max-w-[55rem] px-2.5 text-ui-xs text-zinc-600">
                                 <span className="hidden sm:inline">{DISCLAIMER_SHORT}</span>
                             </div>
+                        </div>
                         </div>
                     </>
                 )}

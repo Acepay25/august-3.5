@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { X } from '../shared/Icons';
 import { AutomationConfig, AutomationInputSource, AutomationMode, AutomationModelPick } from '../../types/automation';
 import { parseCron, nextCronTime, humanizeCron } from '../../services/automation/cronParser';
@@ -8,6 +8,7 @@ import ModelPicker from '../shared/ModelPicker';
 import { SelectMenu } from '../shared/SelectMenu';
 import type { AgentBot } from '../../services/agents/agentRoster';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useConfirmDialog } from '../shared/ConfirmDialog';
 
 export interface ModelOption {
     value: string; // `${providerId}::${modelId}`
@@ -180,6 +181,35 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
     const [botId, setBotId] = useState<string>(initial?.botId ?? '');
     const [error, setError] = useState<string | null>(null);
 
+    /** The draft's fingerprint, built after every useState above because none
+     *  of those values exists before them. Compared with the copy captured at
+     *  MOUNT — App gates this modal on `editorIsOpen`, so it remounts per open
+     *  and the mount-time value is exactly "the automation as loaded". One
+     *  string, so no field list to keep in sync as the form grows. */
+    const draftFingerprint = (): string => JSON.stringify([
+        name, frequencyMode, frequencyEvery, scheduleDays, scheduleTime,
+        advancedCron, inputSource, promptTemplate, mode, useLenses,
+        lensTradingStyle, analystSelections, moderatorSelection, botId,
+    ]);
+    const [loadedFingerprint] = useState(draftFingerprint);
+    const isDirty = draftFingerprint() !== loadedFingerprint;
+
+    const { confirm, ConfirmDialogComponent } = useConfirmDialog();
+
+    /** The ONE way out — Cancel, the ✕, Escape and a backdrop click all route
+     *  here. A long schedule edit used to vanish on any of them with no
+     *  question at all, while the sibling ProviderManager asks before the same
+     *  loss. The remount-per-open trade-off is untouched: only the confirmation
+     *  is added, not the retention. */
+    const requestClose = useCallback(() => {
+        if (!isDirty) { onClose(); return; }
+        void confirm({
+            title: 'Discard unsaved changes?',
+            message: 'This automation has edits that have not been saved.',
+            confirmLabel: 'Discard',
+        }).then(ok => { if (ok) onClose(); });
+    }, [confirm, isDirty, onClose]);
+
     const botOptions = useMemo(() => (bots ?? []).map(b => ({ value: b.id, label: b.name, meta: b.title ?? undefined })), [bots]);
     const runAsBot = botId !== '';
 
@@ -195,7 +225,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
         return dayCount;
     }, [frequencyMode, frequencyEvery, scheduleDays.length]);
 
-    useEscapeClose(isVisible, onClose);
+    useEscapeClose(isVisible, requestClose);
     if (!isVisible) return null;
 
     // The generated cron is the source of truth unless a custom cron was
@@ -253,7 +283,8 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
     };
 
     return (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+        <>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={requestClose}>
             <div
                 className="w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar rounded-bubble border border-zinc-800 bg-zinc-950 shadow-2xl animate-fade-in"
                 onClick={(e) => e.stopPropagation()}
@@ -263,7 +294,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-900/60">
                     <h3 className="text-ui-base font-bold text-white tracking-tight">{initial ? 'Edit automation' : 'New automation'}</h3>
-                    <button onClick={onClose} className="rounded-control p-1 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors" aria-label="Close">
+                    <button onClick={requestClose} className="rounded-control p-1 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors" aria-label="Close">
                         <X className="h-4 w-4" aria-hidden="true" />
                     </button>
                 </div>
@@ -581,7 +612,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                         </button>
                     ) : <span />}
                     <div className="flex items-center gap-2">
-                        <button onClick={onClose} className="px-4 py-2 rounded-control border border-white/10 text-zinc-400 hover:text-zinc-200 text-ui-xs font-bold uppercase tracking-widest transition-colors">
+                        <button onClick={requestClose} className="px-4 py-2 rounded-control border border-white/10 text-zinc-400 hover:text-zinc-200 text-ui-xs font-bold uppercase tracking-widest transition-colors">
                             Cancel
                         </button>
                         <button onClick={handleSave} className="px-4 py-2 rounded-control bg-cyan-600 hover:bg-cyan-700 text-white text-ui-xs font-bold uppercase tracking-widest transition-colors">
@@ -591,6 +622,11 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                 </div>
             </div>
         </div>
+            {/* Outside the backdrop: a click inside the confirm must not bubble
+                into requestClose and open a second one. z-confirm (100) clears
+                this modal's z-[90]. */}
+            {ConfirmDialogComponent}
+        </>
     );
 };
 

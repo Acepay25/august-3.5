@@ -100,6 +100,19 @@ describe('buildProposedTradeMessage', () => {
         // to find the plan is the failure this replaces.
         expect(m.planId).toBe('btc-abc');
     });
+    it('is a receipt, not a second report — the numbers are not restated', () => {
+        // §1b.2/§1b.3 of ui-ux-target-plan-2026-10-11.md: the logged text used
+        // to print "@ 100, SL 90, TP 110" directly above a card that labels
+        // those same numbers, and the copy of the analysis it carries drew the
+        // decision card a SECOND time in the same turn. One fact, one carrier:
+        // the card on the answer, the journal row for the record. The receipt
+        // names the plan and stops.
+        const m = buildProposedTradeMessage({ symbol: 'BTCUSDT', direction: 'Short', entry: 100, stopLoss: 105, takeProfits: [90], planId: 'btc-abc' }, 'proposed-4');
+        expect(m.text).toBe('Logged from Chart AI — Short BTCUSDT · plan btc-abc');
+        expect(m.text).not.toMatch(/@ 100/);
+        expect(m.text).not.toMatch(/SL 105/);
+        expect(m.text).not.toMatch(/TP 90/);
+    });
     it('leaves planId absent rather than empty when no plan was minted', () => {
         const m = buildProposedTradeMessage({ symbol: 'BTCUSDT', direction: 'Long', entry: 100, stopLoss: 90, takeProfits: [110] }, 'proposed-3');
         expect(m.planId).toBeUndefined();

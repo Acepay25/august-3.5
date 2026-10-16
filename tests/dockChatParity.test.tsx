@@ -11,7 +11,7 @@
  *
  * Source-contract rather than jsdom: the dock's menu lives inside a 2k-line
  * memo component whose surrounding state is not worth mounting for three
- * buttons, and the same pattern is already used for the surface-enter CSS.
+ * buttons.
  */
 
 import { describe, it, expect } from 'vitest';

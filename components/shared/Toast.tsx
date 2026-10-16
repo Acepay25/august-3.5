@@ -118,13 +118,17 @@ const ToastContainer: React.FC = () => {
 
 const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, onDismiss }) => {
     const duration = toast.duration ?? 5000;
+    // Pause while the reader is on it. A toast is the only place a cause and an
+    // action are shown together, and an 8s error can time out mid-read (WCAG
+    // 2.2.1). Hover and focus both count; the timer restarts on leave.
+    const [paused, setPaused] = useState(false);
 
     useEffect(() => {
-        if (duration > 0) {
+        if (duration > 0 && !paused) {
             const timer = setTimeout(onDismiss, duration);
             return () => clearTimeout(timer);
         }
-    }, [duration, onDismiss]);
+    }, [duration, paused, onDismiss]);
 
     const typeStyles = {
         success: 'bg-emerald-900 border-emerald-500/50 text-emerald-100',
@@ -150,10 +154,14 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: () => void }> = ({ toast, o
     return (
         <div
             className={`pointer-events-auto p-4 rounded-bubble border shadow-xl animate-slide-in-right ${typeStyles[toast.type]}`}
-            // Errors announce assertively; everything else announces politely
-            // so a burst of toasts doesn't shout over the screen reader.
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+            onFocus={() => setPaused(true)}
+            onBlur={() => setPaused(false)}
+            // The ROLES carry the politeness. An explicit `aria-live="polite"`
+            // used to sit here and OVERRODE `role="alert"`, so every error was
+            // announced politely while the comment claimed it shouted.
             role={toast.type === 'error' ? 'alert' : 'status'}
-            aria-live="polite"
         >
             <div className="flex items-start gap-3">
                 {renderIcon(toast.type)}

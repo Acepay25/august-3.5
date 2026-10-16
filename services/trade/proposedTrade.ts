@@ -114,11 +114,18 @@ export const buildProposedTradeAnalysis = (p: TradeProposal, createdAt = new Dat
 });
 
 /** The PENDING message "Log this trade" appends to the conversation — the
- *  autopilot picks it up by id and drives the SL/TP detection + post-mortem. */
+ *  autopilot picks it up by id and drives the SL/TP detection + post-mortem.
+ *
+ *  A RECEIPT, not a second report: the entry/stop/target/probability numbers
+ *  this plan is made of are already carried by the decision card (the answer's
+ *  own card on this surface, the proposal card in the dock) and by the journal
+ *  row this receipt becomes. Restating them here printed the same four numbers
+ *  twice in one turn — once in prose, once under a card that labels them — so
+ *  the text names the plan (direction, symbol, plan id) and stops there. */
 export const buildProposedTradeMessage = (p: TradeProposal, id: string): Message => ({
     id,
     role: MessageRole.AI,
-    text: `Logged from Chart AI — ${p.direction} ${p.symbol} @ ${p.entry}, SL ${p.stopLoss}, TP ${p.takeProfits.join(' / ')}${p.planId ? ` · plan ${p.planId}` : ''}${p.rationale ? `\n\n${p.rationale}` : ''}`,
+    text: `Logged from Chart AI — ${p.direction} ${p.symbol}${p.planId ? ` · plan ${p.planId}` : ''}`,
     createdAt: new Date().toISOString(),
     analysis: buildProposedTradeAnalysis(p),
     outcome: TradeOutcome.PENDING,

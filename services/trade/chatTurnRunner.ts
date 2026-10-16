@@ -236,6 +236,10 @@ export interface ChatTurnRunnerDeps {
      *  render calls, imported rather than injected so there is no second copy
      *  to drift and no prop a future caller can forget to pass. */
     botThreadRows?: Message[];
+    /** The Chat surface's thread, for a session bound by `conversationId`. Same
+     *  reason as `botThreadRows`: the bot must answer from the conversation the
+     *  trader is looking at, not from a copy. */
+    conversationRows?: Message[];
     /** Composer attachment tray (read at send, cleared after). */
     attachments: Attachment[];
     /** Attached images as the analysis pipeline takes them. */
@@ -258,6 +262,19 @@ export interface ChatTurnRunnerDeps {
     onPlanPresented?: (plan: WatchPlan, turn?: PanelTurnContext) => void;
     /** Commit a bot turn asked HERE into the canonical conversation. */
     onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string, workedMs?: number) => void;
+    /** Commit a SOLO (desk) turn asked HERE into the conversation this session is
+     *  bound to — under the entry's OWN id.
+     *
+     *  The id is the whole contract. `entriesForSession` keys its merge by id, so
+     *  a committed row that reuses the entry id is ONE row seen from two homes,
+     *  while a fresh id would append a second bubble to the very pane that just
+     *  wrote it. `commitDockBotTurn` mints ids because a bot turn has no local
+     *  row to match; a solo turn does.
+     *
+     *  Without this the merge is one-way: the pane reads the conversation but a
+     *  question asked in it never lands there, so flipping the pill back made the
+     *  exchange look like it had never happened. */
+    onSoloTurnCommit?: (row: { id: string; role: 'user' | 'ai'; text: string; workedMs?: number }, conversationId: string) => void;
     /** Launches the FULL ensemble pipeline from this chat (hybrid data in,
      *  debate verdict back as an AI entry). */
     onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) =>
@@ -290,9 +307,9 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
     const {
         symbol, interval, effort, selectedChatModel, chartLevels, allDrawings, trades,
         getChartSnapshot, provider, configForSeat, systemPromptFor, bots, activeId, draft,
-        sessions, botThreadRows, attachments, attachedImages,
+        sessions, botThreadRows, conversationRows, attachments, attachedImages,
         clearAttachments, setDraft, setContextAt, setAnalysisMessageIds, addModelDrawings,
-        clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onRunAnalysis,
+        clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onSoloTurnCommit, onRunAnalysis,
     } = deps;
 
     const mutate = (id: string, fn: (s: LiveSession) => LiveSession): void => {
@@ -862,7 +879,9 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         // conversation, which is the split this merge exists to remove.
         const conversation = entriesForSession(
             session.entries,
-            session.botId && bots.some(b => b.id === session.botId) ? botThreadRows : undefined,
+            session.botId && bots.some(b => b.id === session.botId)
+                ? botThreadRows
+                : (session.conversationId ? conversationRows : undefined),
         );
         const retryIdx = retryEntry ? conversation.findIndex(e => e.id === retryEntry.id) : -1;
         const history = retryIdx >= 0 ? conversation.slice(0, retryIdx) : conversation;
@@ -931,6 +950,9 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             // session, not into `messages`, so unlike the Chat surface there is
             // no trader's row already waiting to be claimed.
             if (bot) onBotTurnCommit?.(bot, text);
+            else if (session.conversationId) {
+                onSoloTurnCommit?.({ id: userEntry.id, role: 'user', text }, session.conversationId);
+            }
             // History carries its images. The user attached a chart two turns
             // ago and asked "what about that pattern?" — the screenshot was
             // stored on the entry all along (StoredChatEntry.image, which is why
@@ -980,15 +1002,22 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 // failed lesson write must never turn a delivered answer into
                 // a failed turn.
                 const usernameNow = getActiveUsername();
+                const settledText = chatStore.getSnapshot().sessions
+                    .find(x => x.id === sid)?.entries.find(en => en.id === aiEntry.id)?.text ?? '';
+                // Only a real answer is committed. The stop placeholder and
+                // the "could not answer" text would put a failed turn into
+                // the conversation as though the seat had said something.
+                const settled = !!settledText.trim() && !/^Running the full ensemble/.test(settledText);
                 if (bot) {
-                    const settledText = chatStore.getSnapshot().sessions
-                        .find(x => x.id === sid)?.entries.find(en => en.id === aiEntry.id)?.text ?? '';
-                    // Only a real answer is committed. The stop placeholder and
-                    // the "could not answer" text would put a failed turn into
-                    // the conversation as though the bot had said something.
-                    if (settledText.trim() && !/^Running the full ensemble/.test(settledText)) {
-                        onBotTurnCommit?.(bot, text, settledText, workedMsFor(soloStartedAt));
-                    }
+                    if (settled) onBotTurnCommit?.(bot, text, settledText, workedMsFor(soloStartedAt));
+                } else if (settled && session.conversationId) {
+                    // Under the id the pane is ALREADY showing this answer by, so
+                    // the Chat thread gains the row and this pane does not double
+                    // it — see `onSoloTurnCommit`.
+                    onSoloTurnCommit?.(
+                        { id: aiEntry.id, role: 'ai', text: settledText, workedMs: workedMsFor(soloStartedAt) },
+                        session.conversationId,
+                    );
                 }
                 if (bot && usernameNow) {
                     const answered = chatStore.getSnapshot().sessions

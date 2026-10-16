@@ -119,4 +119,14 @@ describe('SpeakChip', () => {
         expect(screen.getByRole('button').getAttribute('aria-label')).toBe('Read this answer aloud');
         expect(screen.getByRole('button').getAttribute('title')).toBe('Read this answer aloud');
     });
+
+    it('carries a VISIBLE label — the row must not read "Copy 20731d"', () => {
+        // §1b.7 of ui-ux-target-plan-2026-10-11.md: the action row renders Copy
+        // as text and the speaker as a bare glyph, so the pair read as one
+        // unlabelled smear. An affordance must say on screen what it is; the
+        // aria-label alone leaves sighted users a symbol with no name.
+        stubSpeech();
+        render(<SpeakChip text="x" />);
+        expect(screen.getByRole('button').textContent).toContain('Read aloud');
+    });
 });

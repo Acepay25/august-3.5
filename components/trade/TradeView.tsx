@@ -37,7 +37,6 @@ import { notify, ensureNotifyPermission } from '../../services/infrastructure/no
 import * as chatStore from '../../services/trade/chatStore';
 import { useFuturesLiveFeed } from '../../hooks/useFuturesLiveFeed';
 import { useSymbolUniverse } from '../../hooks/useSymbolUniverse';
-import { useSurfaceEnter, type SurfaceEnterDirection } from '../../hooks/useSurfaceEnter';
 import TradingChart, { toKlineInterval, chartColor, type ChartInterval, type ChartHandle } from './TradingChart';
 import type { MessageLevelLines } from '../../services/trade/keyLevels';
 import { fetchKlines } from '../../services/analysis/KlineService';
@@ -74,6 +73,12 @@ interface TradeViewProps {
      *  answer entry for the gallery's Locate scroll). */
     onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) =>
         Promise<string | { text: string; messageId?: string }>;
+    /** Stop the RUNNING analysis. The composer's Stop button used to abort only
+     *  the chat-session controller, which the pipeline never reads — so a Full
+     *  analysis kept streaming (and spending) after the button reported it had
+     *  stopped. Wired to the pipeline's own cancel; absent ⇒ Stop keeps its old
+     *  chat-only meaning. */
+    onStopRun?: () => void;
     /** Create a group room, and open the Coach inbox — the two Chat-rail
      *  actions the dock was missing. Forwarded to `TradeChatPanel`; App owns
      *  both, the same handlers the Chat rail gets. */
@@ -83,6 +88,13 @@ interface TradeViewProps {
     /** A bot's existing conversation, so a bot opened in the dock inherits it. */
     botThreadRows?: Message[];
     onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string, workedMs?: number) => void;
+    /** A solo turn asked in the dock has to reach the conversation too, or the
+     *  merged thread stays one-way on this surface exactly as it did on Chat. */
+    onSoloTurnCommit?: (row: { id: string; role: 'user' | 'ai'; text: string; workedMs?: number }, conversationId: string) => void;
+    /** The App conversation the dock's bound session stands in for, so the chart
+     *  and the Chat surface show ONE thread rather than two transcripts.
+     *  Read through `entriesForSession`; absent ⇒ the dock is its own chat. */
+    conversationRows?: Message[];
     /** Resolve the analysis message `onRunAnalysis` created, so the dock can
      *  show what its settled verdict was built on. Threaded straight through to
      *  `TradeChatPanel` — the chart surface owns no verdict rendering itself.
@@ -127,9 +139,6 @@ interface TradeViewProps {
     onOpenWatchList?: () => void;
     watchOpenCount?: number;
     watchOpenR?: string;
-    /** Which edge this surface arrived from, for the Chat ⇄ Chart AI hop.
-     *  Consumed by useSurfaceEnter; see hooks/useSurfaceEnter.ts. */
-    surfaceEnterFrom?: SurfaceEnterDirection;
     /** Toggles the 2D debate desk floor projection modal. */
     onToggleDeskScene?: () => void;
     isDeskSceneOpen?: boolean;
@@ -322,13 +331,9 @@ export const useTickFlash = (price: number | undefined): { cls: string; seq: num
 };
 
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, coachCount, botThreadRows, onBotTurnCommit, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, surfaceEnterFrom, onOpenChat, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, onOpenWatchList, watchOpenCount = 0, watchOpenR, pinnedMessageIds }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onStopRun, coachCount, botThreadRows, onBotTurnCommit, onSoloTurnCommit, conversationRows, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, onOpenChat, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, onOpenWatchList, watchOpenCount = 0, watchOpenR, pinnedMessageIds }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
-    // Applies `.surface-enter-left` / `.surface-enter-right` to the surface
-    // root for one cycle. The hook owns nothing else — App keeps the flag so
-    // re-navigating animates again.
-    const surfaceEnterClass = useSurfaceEnter(surfaceEnterFrom);
     // Shared with the Chat surface, which needs the same picker over the same
     // list — two 60s polls for one exchange answer would be waste.
     const symbols = useSymbolUniverse();
@@ -817,6 +822,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         botSessionRequest,
         groupSessionRequest,
         onRunAnalysis,
+        onStopRun,
         getAnalysisMessage,
         onLogProposedTrade,
         onPlanPresented: handlePlanPresented,
@@ -833,7 +839,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     };
 
     return (
-        <div className={`flex h-full min-h-0 flex-col bg-zinc-950 ${surfaceEnterClass}`} data-testid="trade-view">
+        <div className="flex h-full min-h-0 flex-col bg-zinc-950" data-testid="trade-view">
             {/* ROW 1 · identity + hero (prototype's market row): instrument,
                 spark, screener, feed state on the left; the big live price
                 with its 24h delta + MARK caption on the right. */}
@@ -1108,6 +1114,8 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         coachCount={coachCount}
                         botThreadRows={botThreadRows}
                         onBotTurnCommit={onBotTurnCommit}
+                        onSoloTurnCommit={onSoloTurnCommit}
+                        conversationRows={conversationRows}
                         onOpenChat={onOpenChat}
                     />
                 </RightPanel>
