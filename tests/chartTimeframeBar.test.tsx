@@ -28,6 +28,7 @@ vi.mock('../services/analysis/KlineService', () => ({ fetchKlines: vi.fn(async (
 import TradingChart, {
     CHART_INTERVALS, DEFAULT_CHART_INTERVALS, intervalSeconds, readTfBarSelection,
 } from '../components/trade/TradingChart';
+import TimeframeBar from '../components/trade/TimeframeBar';
 
 beforeEach(() => localStorage.clear());
 
@@ -90,5 +91,48 @@ describe('the timeframe bar + ⚙ popover', () => {
         expect(screen.getAllByRole('button', { name: '1M' }).length).toBeGreaterThanOrEqual(1);
         // And it persisted — the real behavior.
         expect(readTfBarSelection()).toContain('1M');
+    });
+});
+
+/**
+ * Compact mode is the composer's shape: the reference's composer is ONE line,
+ * and six interval buttons in it is what made August's read as a toolbar. The
+ * claim pinned here is the one that makes that a regrouping rather than a
+ * removal — every interval the bar can show is still reachable, and the
+ * customize gear still customizes.
+ */
+describe('TimeframeBar in compact mode (the composer)', () => {
+    const pick = vi.fn();
+
+    it('collapses to one chip that carries the active interval', () => {
+        render(<TimeframeBar interval="15m" onIntervalChange={pick} compact />);
+        const chip = screen.getByTestId('tf-compact');
+        expect(chip.textContent).toContain('15m');
+        // The six buttons are gone from the resting view...
+        expect(screen.queryByRole('button', { name: '4h' })).toBeNull();
+        // ...and the gear is still there, so membership is still editable.
+        expect(screen.getByLabelText('Customize timeframes')).toBeTruthy();
+    });
+
+    it('every interval on the bar is still reachable through the chip', () => {
+        render(<TimeframeBar interval="15m" onIntervalChange={pick} compact />);
+        fireEvent.click(screen.getByTestId('tf-compact'));
+        const menu = screen.getByTestId('tf-compact-menu');
+        const names = [...menu.querySelectorAll('button')].map(b => b.textContent?.trim());
+        for (const tf of DEFAULT_CHART_INTERVALS) {
+            expect(names).toContain(tf);
+        }
+        fireEvent.click(screen.getByRole('menuitem', { name: /4h/ }));
+        expect(pick).toHaveBeenCalledWith('4h');
+        // Choosing closes the menu — a menu you cannot get out of is a trap.
+        expect(screen.queryByTestId('tf-compact-menu')).toBeNull();
+    });
+
+    it('Escape closes the menu — the keyboard must be able to undo the keyboard', () => {
+        render(<TimeframeBar interval="15m" onIntervalChange={pick} compact />);
+        fireEvent.click(screen.getByTestId('tf-compact'));
+        expect(screen.getByTestId('tf-compact-menu')).toBeTruthy();
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByTestId('tf-compact-menu')).toBeNull();
     });
 });

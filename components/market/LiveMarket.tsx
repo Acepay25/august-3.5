@@ -29,7 +29,8 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { CloseIcon, ActivityIcon, LoadingIcon, CameraIcon, CheckIcon, ChevronDownIcon, BrainIcon, TrendUpIcon, TrendDownIcon, AlertTriangleIcon } from '../shared/Icons';
+import { CloseIcon, ActivityIcon, LoadingIcon, CameraIcon, CheckIcon, ChevronDownIcon, BrainIcon, TrendUpIcon, TrendDownIcon, AlertTriangleIcon, AlertCircle } from '../shared/Icons';
+import { sanitizeErrorText } from '../../utils/runStatus';
 import { Spinner } from '../ui/Spinner';
 import StatusPill from '../ui/StatusPill';
 import { SelectMenu } from '../shared/SelectMenu';
@@ -78,7 +79,12 @@ const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, 
     // "setInterval is not a function".
     const [chartInterval, setChartInterval] = useState<ChartInterval>('15m');
 
-    const [notification, setNotification] = useState<string | null>(null);
+    /** The one-shot notice over the panel. There is exactly ONE producer today
+     *  — a failed data extraction — so the DEFAULT is 'error'. Both used to be
+     *  impossible: the toast was painted emerald-500 with a checkmark whatever
+     *  it said, so "Insufficient data fetched. Check network connection." was
+     *  announced to the trader as a success. */
+    const [notification, setNotification] = useState<{ text: string; tone: 'error' | 'success' } | null>(null);
     const [analysisProgress, setAnalysisProgress] = useState<string | null>(null);
 
     // AI Analysis state for Binance
@@ -221,8 +227,8 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
         return () => clearTimeout(timeout);
     }, [isVisible, symbol, chartInterval]);
 
-    const showNotification = (msg: string) => {
-        setNotification(msg);
+    const showNotification = (msg: string, tone: 'error' | 'success' = 'error') => {
+        setNotification({ text: msg, tone });
         // Clear previous timeout if exists
         if (notificationTimeoutRef.current) {
             window.clearTimeout(notificationTimeoutRef.current);
@@ -261,7 +267,10 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
 
         } catch (error) {
             console.error('Analysis extraction failed', error);
-            showNotification((error as Error)?.message || 'Failed to extract market data. Please try again.');
+            // sanitizeErrorText, not the raw message: a transport failure can
+            // carry a request URL, and the doctrine forbids surfacing one.
+            const detail = sanitizeErrorText(error) || 'Failed to extract market data. Please try again.';
+            showNotification(detail, 'error');
         } finally {
             setAnalysisProgress(null);
         }
@@ -577,11 +586,19 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
                 </div>
             )}
 
-            {/* Notification Toast */}
+            {/* Notification Toast — tone-bearing, and it says out loud what it
+                draws: an error announces as an alert, a success as a status. */}
             {notification && (
-                <div className="absolute top-28 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-confirm bg-emerald-500/90 text-white px-5 py-3.5 rounded-bubble shadow-2xl flex items-center gap-3 animate-fade-in">
-                    <CheckIcon className="w-5 h-5 shrink-0" aria-hidden="true" />
-                    <span className="font-medium text-ui-base">{notification}</span>
+                <div
+                    role={notification.tone === 'error' ? 'alert' : 'status'}
+                    className={`absolute top-28 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-confirm px-5 py-3.5 rounded-bubble shadow-2xl flex items-center gap-3 animate-fade-in text-white ${
+                        notification.tone === 'error' ? 'bg-rose-500/90' : 'bg-emerald-500/90'
+                    }`}
+                >
+                    {notification.tone === 'error'
+                        ? <AlertCircle className="w-5 h-5 shrink-0" aria-hidden="true" />
+                        : <CheckIcon className="w-5 h-5 shrink-0" aria-hidden="true" />}
+                    <span className="font-medium text-ui-base">{notification.text}</span>
                 </div>
             )}
         </div>

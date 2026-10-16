@@ -9,13 +9,14 @@
  */
 
 import React, { useState } from 'react';
-import {Camera, Check, ChevronDown, FileText, Plus, StarIcon, TriangleAlert, SendIcon, StopIcon} from '../../shared/Icons';
+import {Camera, Check, ChevronDown, FileText, Plus, TriangleAlert, SendIcon, StopIcon} from '../../shared/Icons';
 import type { ProviderConfig } from '../../../types/provider';
 import type { Attachment } from '../../../hooks/useChatAttachments';
 import type { ReasoningEffort } from '../../../services/providers/reasoningControls';
-import { formatModelDisplayName, isFreeModelId, isProviderReady } from '../../../utils/providerUtils';
+import { formatModelDisplayName } from '../../../utils/providerUtils';
 import { DISCLAIMER_SHORT } from '../../../constants/disclaimer';
 
+import ModelChip from '../../shared/ModelChip';
 import ChatAttachmentStrip from './ChatAttachmentStrip';
 import ComposerWorkspaceRow from './ComposerWorkspaceRow';
 import * as chatStore from '../../../services/trade/chatStore';
@@ -60,6 +61,12 @@ interface ChatComposerProps {
     /** Absent ⇒ the Full-analysis option is hidden (no pipeline attached). */
     onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) =>
         Promise<string | { text: string; messageId?: string }>;
+    /** Stop the running pipeline as well as the chat turn. Aborting ONLY the
+     *  chat controller (what this button used to do) left a Full analysis
+     *  streaming — and spending — under a bubble that said it had stopped,
+     *  because the pipeline never reads that controller. Absent ⇒ Stop keeps
+     *  its old chat-only meaning. */
+    onStopRun?: () => void;
     effort: ReasoningEffort | 'auto';
     /** Persists the choice to the session store AND the shell state. */
     changeEffort: (next: ReasoningEffort | 'auto') => void;
@@ -113,49 +120,15 @@ export const ModelFallbackBanner: React.FC<{
 );
 
 const ChatComposer: React.FC<ChatComposerProps> = ({
-    symbol, interval, isPanel, ready, busy, draft, setDraft, send, runFullAnalysis, onRunAnalysis,
+    symbol, interval, isPanel, ready, busy, draft, setDraft, send, runFullAnalysis, onRunAnalysis, onStopRun,
     effort, changeEffort, showEffortMenu, setShowEffortMenu, modelIssue, provider, selectedChatModel,
     changeSoloModel, providers, onRefreshModels, attachments, removeAttachment, fileInputRef,
     attachFiles, showAttachMenu, setShowAttachMenu, captureChart, onCaptureChart, composerRef,
     panelCount, pickerOpen, onTogglePicker, botName, contextAt,
 }) => {
-    // The ONE chip under the card: model + effort as a single quiet control
-    // (the reference's "Sonnet 5.5 · High"). The model section inherits
-    // ModelPicker's CONTRACT, not its flyout: only ready providers (the
-    // shared isProviderReady predicate), grouped per provider, searchable,
-    // and a list that SCROLLS instead of overflowing the viewport.
-    const [modelQuery, setModelQuery] = useState('');
-    const [showModelMenu, setShowModelMenu] = useState(false);
-    // Starred models — the harness picker's favorites. Persisted raw in
-    // localStorage (a tiny per-browser preference, not user data).
-    const [starred, setStarred] = useState<string[]>(() => {
-        try { return JSON.parse(localStorage.getItem('august_starred_models_v1') ?? '[]') as string[]; }
-        catch { return []; }
-    });
-    const toggleStar = (value: string): void => {
-        setStarred(prev => {
-            const next = prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value];
-            try { localStorage.setItem('august_starred_models_v1', JSON.stringify(next)); }
-            catch { /* private mode — stars just do not persist */ }
-            return next;
-        });
-    };
-    const readyProviders = providers.filter(isProviderReady);
-    const q = modelQuery.trim().toLowerCase();
-    const modelSections = readyProviders
-        .map(p => ({
-            provider: p,
-            models: p.models
-                .filter(m => !q || m.toLowerCase().includes(q))
-                .map(m => ({ value: `${p.id}::${m}`, label: formatModelDisplayName(m), free: isFreeModelId(m) }))
-                .sort((a, b) => Number(starred.includes(b.value)) - Number(starred.includes(a.value))),
-        }))
-        .filter(s => s.models.length > 0);
-    const readyModelCount = readyProviders.reduce((n, p) => n + p.models.length, 0);
-    const selectedModelLabel = readyProviders
-        .flatMap(p => p.models.map(m => ({ v: `${p.id}::${m}`, label: `${p.name} · ${formatModelDisplayName(m)}` })))
-        .find(o => o.v === selectedChatModel)?.label
-        ?? provider?.name ?? 'Select model';
+    // The model chip is the shared ModelChip (components/shared/ModelChip.tsx) —
+    // the same control the Chat surface now renders, so the menu contract
+    // (ready providers only, grouped, searchable, starred first) is owned once.
     return (
     <div className="shrink-0 px-3 pb-3 pt-1">
         <ModelFallbackBanner modelIssue={modelIssue} provider={provider} />
@@ -241,7 +214,15 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                 )}
                 <button
                     type="button"
-                    onClick={() => (busy ? chatStore.abortActive() : void send(draft))}
+                    onClick={() => {
+                        if (!busy) { void send(draft); return; }
+                        // Both, and in this order: the chat controller settles
+                        // the bubble as a deliberate stop, the pipeline cancel
+                        // actually ends the run. Either alone leaves half the
+                        // job done — that is the defect this order fixes.
+                        onStopRun?.();
+                        chatStore.abortActive();
+                    }}
                     disabled={!ready && !busy}
                     aria-label={busy ? 'Stop' : 'Send'}
                     /* ml-auto: right-aligned in the toolbar row AND on its own
@@ -260,108 +241,13 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
             popovers scroll or fit, never overflow. */}
         <div className="mt-1.5 flex items-center justify-end gap-1.5 px-2">
             {!isPanel && (
-                <div className="relative">
-                    <button type="button" onClick={() => { setShowModelMenu(v => !v); setShowEffortMenu(false); }}
-                        aria-label={`Model: ${selectedModelLabel}`}
-                        aria-expanded={showModelMenu} aria-haspopup="menu"
-                        title={modelIssue ? 'Model fallback active — re-pick a model' : 'Model'}
-                        data-testid="composer-model-chip"
-                        className="flex max-w-[13rem] items-center gap-1.5 rounded-full border border-white/[0.08] bg-zinc-900/60 px-2.5 py-1 text-ui-dense text-zinc-400 transition-colors hover:border-white/[0.16] hover:text-zinc-200">
-                        <span className="min-w-0 truncate" title={selectedModelLabel}>{selectedModelLabel}</span>
-                        <ChevronDown className={`h-2.5 w-2.5 shrink-0 transition-transform duration-150 ease-[var(--ease-snappy)] ${showModelMenu ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showModelMenu && (
-                        <>
-                            {/* The invisible-backdrop close the attach menu
-                                already uses: a popover you can leave only by
-                                picking an item is a trap. */}
-                            <div className="fixed inset-0 z-20" aria-hidden onClick={() => { setShowModelMenu(false); setModelQuery(''); }} />
-                            <div
-                                className="absolute bottom-8 right-0 z-30 w-64 rounded-bubble border border-white/10 bg-zinc-900 shadow-xl"
-                                data-testid="composer-model-menu"
-                                role="menu"
-                                aria-label="Model"
-                                onKeyDown={(e) => {
-                                    // Contain Escape: unhandled, it bubbles to
-                                    // the app-level shortcut that CANCELS a
-                                    // running analysis (App.tsx) while merely
-                                    // closing this menu.
-                                    e.stopPropagation();
-                                    if (e.key === 'Escape') setShowModelMenu(false);
-                                }}
-                            >
-                                {readyModelCount > 7 && (
-                                    <div className="p-2 pb-1">
-                                        <input
-                                            value={modelQuery}
-                                            onChange={ev => setModelQuery(ev.target.value)}
-                                            onKeyDown={e => {
-                                                // stopPropagation keeps composer/app
-                                                // shortcuts from firing while typing;
-                                                // Escape must still close — handled
-                                                // HERE, or the input swallows it and
-                                                // the open menu blocks the dock.
-                                                e.stopPropagation();
-                                                if (e.key === 'Escape') {
-                                                    setShowModelMenu(false);
-                                                    setModelQuery('');
-                                                }
-                                            }}
-                                            placeholder="Search models…"
-                                            aria-label="Search models"
-                                            className="w-full rounded-control border border-white/10 bg-zinc-800/60 px-2 py-1 text-ui-dense text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
-                                        />
-                                    </div>
-                                )}
-                                <div className="custom-scrollbar max-h-[min(45vh,20rem)] overflow-y-auto px-1 pb-1">
-                                    {modelSections.map(section => (
-                                        <div key={section.provider.id}>
-                                            <p className="sticky top-0 z-10 bg-zinc-900 px-2 pb-1 pt-2 text-ui-2xs uppercase tracking-widest text-zinc-600">{section.provider.name}</p>
-                                            {section.models.map(o => (
-                                                <div key={o.value} className={`flex items-center gap-1 rounded-control pr-1.5 transition-colors hover:bg-white/[0.06] ${o.value === selectedChatModel ? 'bg-white/[0.04]' : ''}`}>
-                                                    <button type="button"
-                                                        onClick={() => toggleStar(o.value)}
-                                                        aria-label={starred.includes(o.value) ? `Unstar ${o.label}` : `Star ${o.label}`}
-                                                        aria-pressed={starred.includes(o.value)}
-                                                        title={starred.includes(o.value) ? 'Unstar' : 'Star'}
-                                                        className={`shrink-0 rounded-full p-1 transition-colors hover:text-amber-300 ${starred.includes(o.value) ? 'text-amber-300' : 'text-zinc-600'}`}>
-                                                        <StarIcon className="h-3 w-3" fill={starred.includes(o.value) ? 'currentColor' : 'none'} aria-hidden="true" />
-                                                    </button>
-                                                    <button type="button"
-                                                        role="menuitemradio"
-                                                        aria-checked={o.value === selectedChatModel}
-                                                        onClick={() => { changeSoloModel(o.value); setShowModelMenu(false); setModelQuery(''); }}
-                                                        title={o.label}
-                                                        className="flex min-w-0 flex-1 items-center gap-2 rounded-control py-1.5 pr-1 text-left text-ui-dense transition-colors hover:bg-white/[0.04]">
-                                                        <Check className={`h-3 w-3 shrink-0 ${o.value === selectedChatModel ? 'text-emerald-400' : 'opacity-0'}`} aria-hidden="true" />
-                                                        <span className="min-w-0 truncate" title={o.label}>{o.label}</span>
-                                                    </button>
-                                                    {o.free && (
-                                                        <span className="shrink-0 rounded-full border border-emerald-500/30 px-1.5 py-px text-ui-2xs uppercase tracking-wider text-emerald-400">free</span>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ))}
-                                    {modelSections.length === 0 && (
-                                        <p className="px-2 py-3 text-ui-dense text-zinc-600">No models match “{modelQuery}”.</p>
-                                    )}
-                                    {onRefreshModels && (
-                                        <button type="button" role="menuitem"
-                                            onClick={() => { void onRefreshModels(); setShowModelMenu(false); }}
-                                            className="mt-1 block w-full rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
-                                            Refresh model list
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </>
-                    )}
-                </div>
+                <ModelChip providers={providers} value={selectedChatModel} onChange={changeSoloModel}
+                    onRefreshModels={onRefreshModels} issue={modelIssue} fallbackLabel={provider?.name}
+                    onOpen={() => setShowEffortMenu(false)} />
             )}
             {!isPanel && (
                 <div className="relative">
-                    <button type="button" onClick={() => { setShowEffortMenu(v => !v); setShowModelMenu(false); }}
+                    <button type="button" onClick={() => setShowEffortMenu(v => !v)}
                         aria-label={`Thinking effort: ${effortChoiceOf(effort).label}`}
                         aria-expanded={showEffortMenu} aria-haspopup="menu"
                         title={`Thinking effort: ${effortChoiceOf(effort).label}`}

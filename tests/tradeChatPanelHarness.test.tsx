@@ -851,3 +851,49 @@ describe('composer badge, proposal double-log, mid-turn retry chips', () => {
         expect(await screen.findByLabelText('Retry this message')).toBeTruthy();
     });
 });
+
+describe('a solo turn asked in the panel commits into its conversation', () => {
+    // The merge is a read model keyed by id, so a turn that never reaches the
+    // conversation stays invisible to the OTHER home: flipping the Chat surface's
+    // pill back showed an exchange that "never happened". The ids below are the
+    // whole contract — a committed row must carry the entry's OWN id, or the pane
+    // that just wrote it renders the answer twice.
+    it('question then answer, each under the id the panel is already showing', async () => {
+        script(yieldText('Bias long above 111,400, stop under the shelf.'));
+        const sid = chatStore.addSession({});
+        act(() => { chatStore.mutate(sid, s => ({ ...s, conversationId: 'conv-7' })); });
+        const committed: Array<{ id: string; role: string; text: string; cid: string }> = [];
+        render(
+            <TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a"
+                onSelectChatModel={() => {}}
+                onSoloTurnCommit={(row, cid) => { committed.push({ ...row, cid }); }} />,
+        );
+        fireEvent.click(screen.getByText('Key levels?'));
+        expect(await screen.findByText(/Bias long above 111,400/)).toBeTruthy();
+
+        expect(committed.map(c => c.role)).toEqual(['user', 'ai']);
+        expect(committed.every(c => c.cid === 'conv-7')).toBe(true);
+        expect(committed[0].text).toBe('Key levels?');
+        expect(committed[1].text).toContain('Bias long above');
+
+        const entries = chatStore.getSnapshot().sessions.find(s => s.id === sid)?.entries ?? [];
+        expect(entries.find(e => e.role === 'user')?.id).toBe(committed[0].id);
+        expect(entries.find(e => e.role === 'ai')?.id).toBe(committed[1].id);
+    });
+
+    it('an unbound session commits nothing, so the dock keeps its own transcript', async () => {
+        // No `conversationId` means there is no conversation to write into.
+        // Firing anyway would drop a dock question into whatever chat the trader
+        // happens to have open on the other surface.
+        script(yieldText('Dock-only answer.'));
+        const committed: unknown[] = [];
+        render(
+            <TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a"
+                onSelectChatModel={() => {}}
+                onSoloTurnCommit={row => { committed.push(row); }} />,
+        );
+        fireEvent.click(screen.getByText('Key levels?'));
+        expect(await screen.findByText(/Dock-only answer/)).toBeTruthy();
+        expect(committed).toEqual([]);
+    });
+});

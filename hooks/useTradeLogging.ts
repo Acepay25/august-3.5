@@ -786,7 +786,11 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         /** What the detector actually measured, carried onto the row instead of
          *  being dropped at the confirm click. */
         resolved?: { at?: string; excursions?: { maePercent: number; mfePercent: number }; realizedR?: number },
-    ) => {
+    /** `true` = a row EXISTS now. `false` = the write was handed to the capture
+     *  modal, so the caller must not report a logged trade, must not consume
+     *  the resolution, and must leave the setup open for the trader to finish
+     *  (or cancel and log from the watch row later). */
+    ): boolean => {
         // pnlPercent is a PERCENT (e.g. +200), not dollars — it must not be
         // written into pnlAmount, which dashboards sum as USD. It is carried
         // on pnlPercent instead; dollar PnL stays unset (Not Captured).
@@ -805,7 +809,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                     realizedR: resolved?.realizedR,
                 },
             });
-            return;
+            return false;
         }
         void logTradeWithFeedback(message, outcome, {
             pnlPercent,
@@ -825,6 +829,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             outcome,
             pnlPercent,
         });
+        return true;
     }, [logTradeWithFeedback, pushTradeClosedEvent, isAutoCapturing]);
 
     const confirmAutopilotEntryNotHit = useCallback((message: Message) => {

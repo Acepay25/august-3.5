@@ -8,7 +8,8 @@
  * other — not a second, parallel preference.
  */
 import React, { useState } from 'react';
-import { Check, Settings } from '../shared/Icons';
+import { Check, ChevronDown, Settings } from '../shared/Icons';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 import {
     CHART_INTERVALS,
     readTfBarSelection,
@@ -22,10 +23,27 @@ export interface TimeframeBarProps {
     /** Rendered after the bar's own controls (the chart puts studies here). */
     children?: React.ReactNode;
     className?: string;
+    /**
+     * Composer mode: the intervals collapse to ONE chip carrying the active
+     * choice, which opens a menu of the same list. On the chart the bar IS the
+     * instrument and every timeframe sits in plain sight; in a composer it is a
+     * setting changed rarely, and six buttons there is what made August's
+     * composer read as a toolbar where the reference's reads as one line.
+     * Nothing is removed — every interval stays reachable, and the customize
+     * gear is unchanged.
+     */
+    compact?: boolean;
 }
 
-const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange, children, className }) => {
+const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange, children, className, compact = false }) => {
     const [open, setOpen] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
+    /* Both popovers dismiss on Escape, not only on the invisible backdrop.
+       Caught by looking at the screen rather than at a test: a menu that the
+       keyboard opens and the keyboard cannot close is a trap, and the compact
+       chip made that reachable from the composer. */
+    useEscapeClose(open, () => setOpen(false));
+    useEscapeClose(menuOpen, () => setMenuOpen(false));
     // The persisted selection is read ONCE on mount (and again on toggle) —
     // not per render: this bar sits on the chart, which re-renders on every
     // live tick (~1s), and a localStorage read + JSON.parse per tick is pure
@@ -47,7 +65,37 @@ const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange,
 
     return (
         <div className={`relative flex shrink-0 flex-wrap items-center gap-0.5 ${className ?? 'border-b border-white/[0.06] px-2 py-1.5'}`}>
-            {shownIntervals.map(tf => (
+            {compact ? (
+                <>
+                    <button type="button" data-testid="tf-compact"
+                        aria-haspopup="menu" aria-expanded={menuOpen}
+                        aria-label={`Timeframe ${interval} — change`}
+                        onClick={() => setMenuOpen(v => !v)}
+                        className="flex items-center gap-1 rounded-control px-2 py-1 text-ui-dense font-semibold text-zinc-200 transition-colors hover:bg-white/[0.05]">
+                        {interval}
+                        <ChevronDown className={`h-3 w-3 text-zinc-500 transition-transform ${menuOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                    </button>
+                    {menuOpen && (
+                        <>
+                            <div className="fixed inset-0 z-20" aria-hidden onClick={() => setMenuOpen(false)} />
+                            <div role="menu" data-testid="tf-compact-menu"
+                                className="absolute left-0 top-8 z-40 w-28 rounded-bubble border border-white/10 bg-zinc-900 p-1 shadow-xl">
+                                {shownIntervals.map(tf => (
+                                    <button key={tf} type="button" role="menuitem"
+                                        onClick={() => { onIntervalChange(tf); setMenuOpen(false); }}
+                                        aria-current={interval === tf ? 'true' : undefined}
+                                        className={`flex w-full items-center justify-between rounded-control px-2 py-1 text-ui-dense transition-colors ${
+                                            interval === tf ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-200'
+                                        }`}>
+                                        {tf}
+                                        {interval === tf && <Check className="h-3 w-3" aria-hidden="true" />}
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                </>
+            ) : shownIntervals.map(tf => (
                 <button
                     key={tf}
                     type="button"

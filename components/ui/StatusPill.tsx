@@ -51,3 +51,27 @@ const StatusPill: React.FC<StatusPillProps> = ({
 );
 
 export default React.memo(StatusPill);
+
+/** The quarantined-verdict badge — ONE home, now that two surfaces draw it.
+ *
+ *  A `verdictReview` stamp means an integrity gate OVERRODE the direction (no
+ *  aligned analyst cited, ungrounded levels, an unparseable or truncated plan),
+ *  so the Neutral on the card is a MEASUREMENT FAILURE, never a deliberate
+ *  no-trade. The Journal's row and the conversation's verdict card each used to
+ *  carry a hand-copied twin; that is how the trade surface shipped a quarantined
+ *  plan as a confident Neutral while the Journal called the same plan out. */
+export const VerdictReviewPill: React.FC<{
+    reason: string;
+    className?: string;
+    'data-testid'?: string;
+}> = ({ reason, className, ...rest }) => (
+    <StatusPill
+        tone="warn"
+        kicker
+        className={className}
+        title={`Quarantined verdict (${reason}) — a parse/integrity failure, not a neutral opinion`}
+        {...rest}
+    >
+        Review
+    </StatusPill>
+);

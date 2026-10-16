@@ -96,6 +96,11 @@ export const SpeakChip: React.FC<{ text: string; className?: string }> = ({ text
             title={speaking ? 'Stop reading aloud' : 'Read this answer aloud'}
             className={`flex items-center hit-target rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500 ${speaking ? 'text-emerald-300' : ''} ${className}`.trim()}>
             {speaking ? <Square className="h-3 w-3" aria-hidden="true" /> : <Volume2 className="h-3 w-3" aria-hidden="true" />}
+            {/* A visible label, same as Copy: the action row used to read
+                "Copy 20731d" because this control was a bare glyph next to a
+                text one. The aria-label alone left sighted users a symbol with
+                no name. */}
+            <span>{speaking ? 'Stop' : 'Read aloud'}</span>
         </button>
     );
 };

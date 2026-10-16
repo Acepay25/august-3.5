@@ -126,7 +126,12 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
             )}
 
             {isUser ? (
-                <div className="max-w-[85%] rounded-bubble bg-zinc-800 px-3 py-2 text-ui-base leading-relaxed text-zinc-100">
+                /* The reference's own bubble caps at roughly 60% of the thread
+                   column, so a long question wraps instead of running edge to
+                   edge. At 85% the bubble read as a full-width band and the
+                   right-hand alignment — the thing that says "this is mine" —
+                   disappeared. */
+                <div className="max-w-[62%] rounded-bubble bg-zinc-800 px-3 py-2 text-ui-base leading-relaxed text-zinc-100">
                     <FadingText text={body} streaming={!!row.streaming} />
                 </div>
             ) : (

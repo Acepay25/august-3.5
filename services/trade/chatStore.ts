@@ -272,6 +272,35 @@ export const mutate = (id: string, fn: (s: LiveSession) => LiveSession): void =>
     emit();
 };
 
+/** Select — or create — the session that stands in for an App conversation, and
+ *  make it the active one.
+ *
+ *  The Chat surface and the Chart AI dock are ONE conversation across two
+ *  surfaces, and `ChatSession.conversationId` is the link. Hopping from a chat
+ *  to the dock therefore has to land on that conversation's session, not on
+ *  whichever session was last used.
+ *
+ *  A session is adopted only when it is genuinely blank: one that already holds
+ *  a transcript of its own must keep its own binding, or "New chat" would answer
+ *  with the previous conversation's rows. */
+export const bindConversation = (conversationId: string): string => {
+    ensureLoaded();
+    const bound = sessions.find(s => s.conversationId === conversationId);
+    if (bound) {
+        activeId = bound.id;
+        emit();
+        return bound.id;
+    }
+    const blank = sessions.find(s => !s.conversationId && s.entries.length === 0);
+    if (blank) {
+        sessions = sessions.map(s => (s.id === blank.id ? { ...s, conversationId } : s));
+        activeId = blank.id;
+        emit();
+        return blank.id;
+    }
+    return addSession({ conversationId });
+};
+
 // ── Logged-trade harness visibility (openTrades, loggedTradeIds) ─────────────
 // The Chart AI dock's chat session is blind to its OWN trade-logging events
 // unless we hand it state. These helpers are the only allowed mutators for

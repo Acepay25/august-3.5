@@ -18,9 +18,12 @@
  * under the conversation Message's id. Same id ⇒ one row here.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 
-import { entriesForSession, liveEntryFromMessage, type StoredChatEntry } from '../services/trade/chatSessions';
+import {
+    createSession, entriesForSession, liveEntryFromMessage, loadSessions, saveSessions,
+    type StoredChatEntry,
+} from '../services/trade/chatSessions';
 import { MessageRole, type Message } from '../types';
 
 const msg = (over: Partial<Message> = {}): Message => ({
@@ -106,5 +109,44 @@ describe('entriesForSession — the one merge', () => {
         // and 0 as noise; a bogus lower bound would pull unrelated injections
         // onto this answer.
         expect(liveEntryFromMessage(msg({ createdAt: 'not a date' })).at).toBeUndefined();
+    });
+});
+
+describe('the conversation link survives persistence', () => {
+    // `chatSessions.ts` documents the trap in the note on `workedMs`: a new
+    // ENTRY field rides `sanitizeEntry`'s spread and survives, but a new SESSION
+    // field is stripped on the next write unless `loadSessions`'s explicit
+    // rebuild carries it. `conversationId` is a session field, so the merged
+    // thread depends on a line in that rebuild that nothing would notice if it
+    // were deleted — the pane would quietly go back to being two transcripts
+    // after a reload, with no failing test anywhere.
+    beforeEach(() => { localStorage.clear(); });
+
+    it('a bound session comes back bound', () => {
+        const session = {
+            ...createSession('solo'),
+            conversationId: 'c-42',
+            entries: [{ id: 'e1', role: 'user' as const, text: 'asked here', tools: [] }],
+        };
+        saveSessions([session]);
+        const [back] = loadSessions();
+        expect(back.conversationId).toBe('c-42');
+    });
+
+    it('and still merges the conversation it points at, after the reload', () => {
+        saveSessions([{ ...createSession('solo'), conversationId: 'c-7', entries: [] }]);
+        const [back] = loadSessions();
+        const rows = entriesForSession(back.entries, [msg({ id: 'm9', text: 'said in Chat' })]);
+        expect(rows.map(r => r.text)).toEqual(['said in Chat']);
+    });
+
+    it('drops an empty or non-string id rather than inventing a binding', () => {
+        saveSessions([
+            { ...createSession('solo'), conversationId: '' },
+            { ...createSession('solo'), conversationId: 42 as unknown as string },
+        ]);
+        const back = loadSessions();
+        expect(back).toHaveLength(2);
+        expect(back.every(s => s.conversationId === undefined)).toBe(true);
     });
 });

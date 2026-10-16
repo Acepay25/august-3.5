@@ -21,7 +21,9 @@ export interface UseWatchAndAutopilotArgs {
     stableHandleSendMessage: (...args: any[]) => any;
     handleLoadConversation: (id: string) => void;
     setIsWatchListVisible: (open: boolean) => void;
-    confirmAutopilotOutcome: (msg: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, pnlPercent?: number, slData?: any, resolved?: { at?: string; excursions?: { maePercent: number; mfePercent: number }; realizedR?: number }) => void;
+    /** Returns whether a row was written NOW (`false` = handed to the capture
+     *  modal; the caller must not report a logged trade). */
+    confirmAutopilotOutcome: (msg: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, pnlPercent?: number, slData?: any, resolved?: { at?: string; excursions?: { maePercent: number; mfePercent: number }; realizedR?: number }) => boolean;
     confirmAutopilotEntryNotHit: (msg: Message) => void;
     handleInitiateLogTrade: (messageId: string, outcome: TradeOutcome.WIN | TradeOutcome.LOSS) => void;
     /** Latest-ref bridge: the pipeline's resolution callbacks read the
@@ -177,15 +179,25 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
         const msg = messages.find(m => m.id === messageId);
         const resolution = OutcomeAutopilotService.getResolution(messageId);
         if (!msg || !resolution || resolution.expiredOpen) return;
+        // A hand-off to the capture modal is NOT a logged trade. This used to
+        // mark the resolution processed and toast "Trade logged" BEFORE the
+        // write — so with auto-capture on, the trader was told a trade had been
+        // logged while the modal still waited for input, and cancelling it lost
+        // the outcome entirely (the resolution was already consumed and the
+        // watch row no longer offered Win/Loss). Only a written row is marked,
+        // cleared and announced; a deferred one stays pending and re-confirmable.
+        let loggedNow: boolean;
         if (resolution.outcome === TradeOutcome.ENTRY_NOT_HIT) {
             confirmAutopilotEntryNotHit(msg);
+            loggedNow = true;
         } else {
-            confirmAutopilotOutcome(msg, resolution.outcome, resolution.pnlPercent, resolution.slOptimizationData, {
+            loggedNow = confirmAutopilotOutcome(msg, resolution.outcome, resolution.pnlPercent, resolution.slOptimizationData, {
                 at: resolution.detectedAt,
                 excursions: resolution.excursions,
                 realizedR: resolution.realizedR,
             });
         }
+        if (!loggedNow) return;
         OutcomeAutopilotService.markProcessed(messageId);
         setAutopilotResolutions(prev => {
             const next = { ...prev };

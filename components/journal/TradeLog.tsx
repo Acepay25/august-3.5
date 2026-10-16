@@ -6,7 +6,7 @@ import { LoggedTrade, TradeOutcome } from '../../types';
 
 import ImageViewerModal from '../modals/ImageViewerModal';
 import { EmptyState } from '../ui/EmptyState';
-import StatusPill, { type PillTone } from '../ui/StatusPill';
+import StatusPill, { VerdictReviewPill, type PillTone } from '../ui/StatusPill';
 import { ReasoningPanel } from './ReasoningPanel';
 import { getThinkingTradeId } from '../../services/infrastructure/ThinkingStoreService';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
@@ -519,13 +519,7 @@ const TradeLogRowImpl: React.FC<{
                         <span className="text-ui-base font-medium text-zinc-100 truncate" title={`${coinName}.md`}>{coinName}.md</span>
                         <OutcomeBadge outcome={outcome} />
                         {analysis?.verdictReview && (
-                            <StatusPill
-                                tone="warn"
-                                kicker
-                                title={`Quarantined verdict (${analysis.verdictReview.reason}) — a parse/integrity failure, not a neutral opinion`}
-                            >
-                                Review
-                            </StatusPill>
+                            <VerdictReviewPill reason={analysis.verdictReview.reason} />
                         )}
                         {isInsight && <span className="text-ui-xs uppercase tracking-widest text-zinc-500">memory</span>}
                     </div>

@@ -12,9 +12,10 @@ import React from 'react';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 
 import AgentsView from '../components/agents/AgentsView';
+import NavRail from '../components/shell/NavRail';
 import type { AgentBot, AgentGroup } from '../services/agents/agentRoster';
 import type { Message } from '../types/message';
-import { MessageRole } from '../types/enums';
+import { MessageRole, TradeOutcome } from '../types/enums';
 
 let seq = 0;
 const bot = (over: Partial<AgentBot> & Pick<AgentBot, 'id'>): AgentBot => ({
@@ -163,6 +164,11 @@ describe('AgentsView composer', () => {
         // The toggle said the same thing the rail already says. A second
         // control for one decision is one more thing to read, and it was the
         // reason the attach button had to explain itself.
+        //
+        // NOT the same thing as `chat-mode-chat` / `chat-mode-desk-ai`
+        // (components/shell/ChatModePill.tsx), which choose which PANE is in
+        // front and never touch the send path. Do not merge the two: this one
+        // forbids a second answer to "where does this message go".
         render(<AgentsView {...base} />);
         expect(screen.queryByTestId('mode-chat')).toBeNull();
         expect(screen.queryByTestId('mode-analyze')).toBeNull();
@@ -320,12 +326,80 @@ describe('WS-6 rail completeness', () => {
         expect(screen.queryByTestId('composer-model')).toBeNull();
     });
 
-    it('collapses the rail at md+ and brings it back', () => {
-        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
-        fireEvent.click(screen.getByTestId('rail-collapse'));
+    /**
+     * The Chat ⇄ Chart AI hop is a MODE switch, so it must not restack the
+     * shell. This column used to keep its own width and its own per-profile
+     * collapse key, which made the sidebar jump when the pill moved you to the
+     * chart — and left the header's "Expand navigation" driving a rail that was
+     * not mounted on this surface at all. Three claims, all measured against
+     * the rail itself rather than against a number this file could copy.
+     */
+    it('is the same width as the rail, so the hop cannot shift the shell', () => {
+        render(
+            <>
+                <NavRail
+                    expanded
+                    onToggleExpanded={() => {}}
+                    activeUsername="rober"
+                    surface="agents"
+                    onSelectSurface={() => {}}
+                    onOpenSettings={() => {}}
+                />
+                <AgentsView {...base} bots={[bot({ id: 'b1' })]} />
+            </>,
+        );
+        const railPx = screen.getByTestId('nav-rail').style.width;
+        const chatPx = screen.getByTestId('agents-rail').style.getPropertyValue('--rail-w');
+        expect(railPx).not.toBe('');
+        expect(chatPx).toBe(railPx);
+        // The mobile drawer keeps its own wider width; only md+ is shared.
+        expect(screen.getByTestId('agents-rail').className).toContain('md:w-[var(--rail-w)]');
+    });
+
+    it('collapses through the state the shell hands in, not a switch of its own', () => {
+        const onToggleRailExpanded = vi.fn();
+        render(
+            <AgentsView
+                {...base}
+                bots={[bot({ id: 'b1' })]}
+                railExpanded={false}
+                onToggleRailExpanded={onToggleRailExpanded}
+            />,
+        );
         expect(screen.getByTestId('agents-rail').className).toContain('md:hidden');
-        fireEvent.click(screen.getByTestId('rail-expand'));
-        expect(screen.getByTestId('agents-rail').className).not.toContain('md:hidden');
+        fireEvent.click(screen.getByTestId('rail-collapse'));
+        expect(onToggleRailExpanded).toHaveBeenCalledTimes(1);
+        // Controlled: pressing put-away cannot un-hide it behind the shell's back.
+        expect(screen.getByTestId('agents-rail').className).toContain('md:hidden');
+    });
+
+    it('draws no put-away control it has nothing to act on', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
+        expect(screen.queryByTestId('rail-collapse')).toBeNull();
+        expect(screen.queryByTestId('rail-expand')).toBeNull();
+    });
+});
+
+describe('the mode switch has exactly one home', () => {
+    // The reference's chat ⇄ code switch sits at the LEFT edge of the sidebar,
+    // which is the same x the rail-less surfaces put it — so the hop moves the
+    // content and not the control. Two homes would be two navigations; no home
+    // would be a surface you cannot leave.
+    const sw = <div data-testid="the-switch" />;
+
+    it('sits in the conversation column while the column is open', () => {
+        render(<AgentsView {...base} railExpanded onToggleRailExpanded={() => {}} surfaceSwitch={sw} />);
+        const hits = screen.getAllByTestId('the-switch');
+        expect(hits.length).toBe(1);
+        expect(hits[0].closest('[data-testid="agents-rail"]')).toBeTruthy();
+        expect(hits[0].closest('[data-testid="chat-header"]')).toBeNull();
+    });
+
+    it('moves to the header when the column is put away, and is never doubled', () => {
+        render(<AgentsView {...base} railExpanded={false} onToggleRailExpanded={() => {}} surfaceSwitch={sw} />);
+        const hits = screen.getAllByTestId('the-switch');
+        expect(hits.length).toBe(1);
+        expect(hits[0].closest('[data-testid="chat-header"]')).toBeTruthy();
     });
 });
 
@@ -399,8 +473,22 @@ describe('WS-6 focus and mobile drawer', () => {
         const composer = screen.getByLabelText('Message');
         composer.focus();
         fireEvent.keyDown(composer, { key: '/' });
-        expect(screen.getByTestId('rail-search')).not.toBe(document.activeElement);
+        // The field is revealed on demand now, so "the shortcut did not fire"
+        // is visible as the field never appearing at all — a stronger claim
+        // than "it exists but is not focused", and the one that matters: the
+        // sidebar must not hijack a `/` typed into a sentence.
+        expect(screen.queryByTestId('rail-search')).toBeNull();
         expect(composer).toBe(document.activeElement);
+    });
+
+    it('the magnifier reveals the field, and Escape on an empty one hides it', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
+        expect(screen.queryByTestId('rail-search')).toBeNull();
+        fireEvent.click(screen.getByTestId('rail-search-toggle'));
+        const field = screen.getByTestId('rail-search');
+        expect(field).toBe(document.activeElement);
+        fireEvent.keyDown(field, { key: 'Escape' });
+        expect(screen.queryByTestId('rail-search')).toBeNull();
     });
 
     it('picking a thread closes the drawer, and the backdrop closes it too', () => {
@@ -467,6 +555,7 @@ describe('AgentsView rail rows (ported from the roster-rail suite)', () => {
         render(<AgentsView {...base}
             bots={[bot({ id: 'b1', name: 'Scout' }), bot({ id: 'b2', name: 'Ledger' })]}
             groups={[group('g1', ['b1', 'b2'], 'Alpha Desk')]} />);
+        fireEvent.click(screen.getByTestId('rail-search-toggle'));
         fireEvent.change(screen.getByTestId('rail-search'), { target: { value: 'ledger' } });
         expect(screen.queryByText('Scout')).toBeNull();
         expect(screen.getByText('Ledger')).toBeTruthy();
@@ -493,14 +582,20 @@ describe('AgentsView rail rows (ported from the roster-rail suite)', () => {
         expect(rowOf('Ledger')).not.toContain('Buy wall');
     });
 
-    it('rings the row of the bot that is working', () => {
+    it('marks the row of the bot that is working', () => {
+        // The row's identity graphic is the bot's own `BotFace`, so "working"
+        // rides on the face — the eyes blink — rather than on an amber ring
+        // around a generic glyph. Same signal, one fewer vocabulary.
         render(<AgentsView {...base}
             bots={[bot({ id: 'b1', name: 'Scout' }), bot({ id: 'b2', name: 'Ledger' })]}
             workingBotId="b1" />);
-        const discOf = (name: string): string =>
-            (screen.getByText(name).closest('button')?.querySelector('span') as HTMLElement).className;
-        expect(discOf('Scout')).toContain('border-amber-500/40');
-        expect(discOf('Ledger')).not.toContain('border-amber-500/40');
+        const blinking = (name: string): boolean => {
+            const row = screen.getByText(name).closest('button') as HTMLElement;
+            return [...row.querySelectorAll('g')]
+                .some(g => /botface-blink/.test(g.getAttribute('style') || ''));
+        };
+        expect(blinking('Scout')).toBe(true);
+        expect(blinking('Ledger')).toBe(false);
     });
 
     it('creates both kinds of thread from the New menu', () => {
@@ -603,5 +698,106 @@ describe('WS-6 §5 row context menu', () => {
         expect(screen.getByRole('menuitem', { name: 'Unpin' })).toBeTruthy();
         fireEvent.click(screen.getByRole('menuitem', { name: 'Delete room' }));
         expect(onDeleteGroup).toHaveBeenCalledWith('g1');
+    });
+});
+
+describe('AgentsView elapsed labels', () => {
+    // §1b.1 of docs/plans/ui-ux-target-plan-2026-10-11.md: `relTime` computed
+    // a DURATION (`Date.now() - Date.parse(iso)`) and handed it to `relTimeMs`,
+    // which subtracted `Date.now()` again — so an 8-day-old row printed
+    // `20731d`, the epoch leaking through a double subtraction. The suite could
+    // not catch it because nothing asserted the string; these pin it.
+    const daysAgo = (d: number): string => new Date(Date.now() - d * 86_400_000).toISOString();
+
+    const pane = (): string => screen.getByTestId('agents-view').textContent ?? '';
+
+    it('an 8-day-old answer reads `8d`, not an epoch-leaked day count', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} selection={{ kind: 'bot', botId: 'b1' }}
+            messages={[
+                msg({ role: MessageRole.USER, text: 'look at BTC', createdAt: daysAgo(8) }),
+                msg({ role: MessageRole.AI, text: 'short it', createdAt: daysAgo(8), botId: 'b1', modelsUsed: { 'p-b1': 'm1' } }),
+            ]} />);
+        expect(pane()).toContain('8d');
+        // The exact defect signature: any 5+ digit day count.
+        expect(pane()).not.toMatch(/\b\d{5,}d\b/);
+    });
+
+    it('an 8-day-old conversation row reads `8d` too', () => {
+        render(<AgentsView {...base} selection={{ kind: 'team' }}
+            conversations={[{
+                id: 'c1', title: 'hello', timestamp: Date.now() - 8 * 86_400_000,
+                messages: [msg({ role: MessageRole.USER, text: 'hello', createdAt: daysAgo(8) })],
+            } as never]}
+            onLoadConversation={vi.fn()} activeConversationId={null} />);
+        const row = screen.getByTestId('conversation-row');
+        expect(row.textContent).toContain('8d');
+        expect(row.textContent).not.toMatch(/\b\d{5,}d\b/);
+    });
+
+    it('fresh, minutes and hours buckets all read as elapsed time', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} selection={{ kind: 'bot', botId: 'b1' }}
+            messages={[
+                msg({ role: MessageRole.AI, text: 'just now', createdAt: new Date().toISOString(),
+                    botId: 'b1', modelsUsed: { 'p-b1': 'm1' } }),
+                msg({ role: MessageRole.USER, text: 'forty five', createdAt: new Date(Date.now() - 45 * 60_000).toISOString() }),
+            ]} />);
+        expect(pane()).toContain('now');
+        expect(pane()).toContain('45m');
+    });
+
+    it('a missing or unparseable stamp prints no label rather than a wrong one', () => {
+        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} selection={{ kind: 'bot', botId: 'b1' }}
+            messages={[msg({ role: MessageRole.AI, text: 'no stamp', botId: 'b1' })]} />);
+        expect(pane()).not.toMatch(/\d+d\b/);
+    });
+});
+
+describe('AgentsView decision card furniture', () => {
+    // §1b.2–§1b.5 of docs/plans/ui-ux-target-plan-2026-10-11.md, all pinned
+    // against the desk pane: one card per turn, a labelled confidence, and a
+    // sentence-case disclosure.
+    const analysisFor = (): Message['analysis'] => ({
+        coinName: 'BTCUSDT', direction: 'Short', confidence: 'Medium',
+        entryPoints: [{ description: 'x', price: '85175' }],
+        stopLoss: '85295', takeProfit: [{ price: '85000' }],
+        probability: 0.62,
+    } as Message['analysis']);
+
+    const pane = (): string => screen.getByTestId('agents-view').textContent ?? '';
+
+    it('renders the card ONCE per turn — the logging receipt is not a second card', () => {
+        // "Log this trade" appends a receipt row carrying a COPY of the plan's
+        // analysis (the journal row and the autopilot read it). Rendering it
+        // drew the identical ENTRY/STOP/TARGET/PROBABILITY card a second time
+        // in the same turn — two rows, one fact.
+        const a = analysisFor();
+        render(<AgentsView {...base} selection={{ kind: 'team' }}
+            messages={[
+                msg({ role: MessageRole.AI, text: 'short it here', modelsUsed: { 'p-1': 'm1' }, analysis: a }),
+                msg({ role: MessageRole.AI, text: 'Logged from Chart AI — Short BTCUSDT · plan btc-abc',
+                    analysis: a, planId: 'btc-abc', outcome: TradeOutcome.PENDING }),
+            ]} />);
+        expect(screen.getAllByTestId('inline-verdict')).toHaveLength(1);
+        // The receipt row itself still renders — only its duplicate card is gone.
+        expect(pane()).toContain('Logged from Chart AI');
+    });
+
+    it('labels the confidence value instead of printing a bare MEDIUM', () => {
+        render(<AgentsView {...base} selection={{ kind: 'team' }}
+            messages={[msg({ role: MessageRole.AI, text: 'short it here', modelsUsed: { 'p-1': 'm1' }, analysis: analysisFor() })]} />);
+        const card = screen.getByTestId('inline-verdict');
+        expect(card.textContent).toContain('confidence');
+        expect(card.textContent).toContain('Medium');
+        // …and it sits beside its label, not floating alone.
+        expect(card.textContent).toMatch(/confidence\s*Medium/i);
+    });
+
+    it('keeps the audit disclosure sentence case — no uppercase shout', () => {
+        // The `uppercase tracking-wider text-ui-2xs` texture the rail headings
+        // lost was still on this summary, so a sentence-case source shouted.
+        render(<AgentsView {...base} selection={{ kind: 'team' }}
+            messages={[msg({ role: MessageRole.AI, text: 'short it here', modelsUsed: { 'p-1': 'm1' }, analysis: analysisFor() })]} />);
+        const summary = screen.getByText('Inspect debate audit & evidence');
+        expect(summary.parentElement?.className).not.toMatch(/uppercase|tracking-wider/);
     });
 });

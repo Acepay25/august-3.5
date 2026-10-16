@@ -104,6 +104,21 @@ export interface ChatSession {
     botId?: string;
     /** Group-room sessions: the dock mirrors this AgentGroup's transcript. */
     groupId?: string;
+    /** The Chat surface's conversation this session IS, when there is one.
+     *
+     *  `botId`/`groupId` already said "this session is a view of that roster
+     *  thread"; a solo or panel session had no counterpart, so the SAME
+     *  conversation opened in the other home was a different conversation.
+     *  This is the id of the App conversation whose rows feed
+     *  {@link entriesForSession} for that session. Unset ⇒ the session's own
+     *  entries are the whole transcript, which is every row stored before this
+     *  existed, so a reload cannot invent a merge the trader never had.
+     *
+     *  A SESSION field, so `loadSessions` must carry it explicitly — see the
+     *  field-level asymmetry note on `workedMs`: the rebuild lists every
+     *  session field on purpose, and a new one it omits is stripped on the next
+     *  write. */
+    conversationId?: string;
     /** Chart setup bound to this session — restored when the session is
      *  re-opened, so each chat keeps the instrument + interval it discussed.
      *  Missing on legacy rows ⇒ restore nothing (keep the current chart). */
@@ -232,6 +247,7 @@ export const loadSessions = (): ChatSession[] => {
                 panelModels: Array.isArray(s.panelModels) ? s.panelModels.filter(validPanelModel).slice(0, PANEL_MAX_MODELS) : undefined,
                 botId: typeof s.botId === 'string' && s.botId ? s.botId : undefined,
                 groupId: typeof s.groupId === 'string' && s.groupId ? s.groupId : undefined,
+                conversationId: typeof s.conversationId === 'string' && s.conversationId ? s.conversationId : undefined,
                 symbol: typeof s.symbol === 'string' && s.symbol.trim() ? s.symbol.toUpperCase() : undefined,
                 interval: typeof s.interval === 'string' && s.interval.trim() ? s.interval : undefined,
                 effort: typeof s.effort === 'string' && VALID_EFFORTS.has(s.effort) ? s.effort : undefined,
@@ -491,8 +507,9 @@ export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
  *    `messages` only once it settles.
  *
  * `canonical` undefined ⇒ the session has no counterpart and its own entries
- * are the whole transcript — a solo or panel chat is a conversation of its own,
- * so a reload can never invent a merge the trader never had.
+ * are the whole transcript. That is a chart-side session with no
+ * `conversationId` — a conversation of its own, with its own tool rounds and
+ * key levels — so a reload can never invent a merge the trader never had.
  */
 export const entriesForSession = (
     local: StoredChatEntry[],
