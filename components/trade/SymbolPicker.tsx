@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom';
 import { ChevronDown, Search } from '../shared/Icons';
 import type { SymbolMeta } from '../../services/analysis/MarketDataService';
 import { display as symbolDisplay } from '../../utils/symbol';
+import { shouldOpenUpward } from '../../utils/popoverPlacement';
 
 export interface SymbolPickerProps {
     symbols: SymbolMeta[];
@@ -69,8 +70,10 @@ export const SymbolPicker: React.FC<SymbolPickerProps> = ({ symbols, value, onCh
     // stats strip is an overflow-x container that would otherwise clip the
     // dropdown to its own box (the later-5 menu-clip bug, again).
     /** The list's own ceiling: `max-h-80` (320px) plus the search row and the
-     *  border. Used only to decide which way to open — the panel is anchored by
-     *  its bottom edge when it flips, so a short result list leaves no gap. */
+     *  border. Used only to decide which way to open — see
+     *  utils/popoverPlacement.ts, the same rule the timeframe chip uses. The
+     *  panel is anchored by its bottom edge when it flips, so a short result
+     *  list leaves no gap. */
     const PANEL_MAX_H = 364;
     const toggle = (): void => {
         const r = triggerRef.current?.getBoundingClientRect();
@@ -79,9 +82,8 @@ export const SymbolPicker: React.FC<SymbolPickerProps> = ({ symbols, value, onCh
             // always opened downward ran off its edge and across the disclaimer
             // line under the card. Flip when the space below cannot hold the
             // list AND there is more room above.
-            const below = window.innerHeight - r.bottom;
             const left = Math.min(r.left, Math.max(8, window.innerWidth - 336));
-            setAnchor(below < PANEL_MAX_H && r.top > below
+            setAnchor(shouldOpenUpward(r, PANEL_MAX_H)
                 ? { left, bottom: window.innerHeight - r.top + 4 }
                 : { left, top: r.bottom + 4 });
         }

@@ -86,7 +86,6 @@ import SkillsLibrary from './components/skills/SkillsLibrary';
 const AgentsView = React.lazy(() => import('./components/agents/AgentsView'));
 import ModelChip from './components/shared/ModelChip';
 import ModelPicker from './components/shared/ModelPicker';
-import AnalysisProgress from './components/analysis/AnalysisProgress';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { computeChatModelFallback, isProviderReady } from './utils/providerUtils';
 import { DEFAULT_LEVERAGE } from './utils/conversationUtils';
@@ -805,8 +804,8 @@ const App: React.FC = () => {
         // that reads it declares a local `const images` that shadows it, which
         // is why no reference resolves back to this destructure member.
         images, setImages,
-        loadingMessage, setLoadingMessage,
-        analysisSteps, setAnalysisSteps,
+        setLoadingMessage,
+        setAnalysisSteps,
         currentVisionData,
 
 
@@ -2394,28 +2393,7 @@ const App: React.FC = () => {
     ), [approvalItems, approvalHandlers, surface, handleLocateMessage, setSurface]);
 
 
-    // ... (Rest of component remains unchanged) ...
-    const isAnalysisProgressVisible = Boolean(
-        loadingMessage || (isAnalysisInProgress && !isPostMortemInProgress),
-    );
 
-    // Pipeline card chrome: the floating card used to be a
-    // fixed, unclosable overlay that sat on top of the debate side panel.
-    // It can now be collapsed to a slim pill and dismissed for the rest of
-    // the run — the Stop control lives in the pill so cancel stays one
-    // click away even when the body is hidden. Dismissal resets when the
-    // next run starts.
-    const [isPipelineCollapsed, setIsPipelineCollapsed] = useState(false);
-    const [isPipelineDismissed, setIsPipelineDismissed] = useState(false);
-    const wasProgressVisibleRef = useRef(false);
-    useEffect(() => {
-        if (isAnalysisProgressVisible && !wasProgressVisibleRef.current) {
-            setIsPipelineDismissed(false);
-            setIsPipelineCollapsed(false);
-        }
-        wasProgressVisibleRef.current = isAnalysisProgressVisible;
-    }, [isAnalysisProgressVisible]);
-    const showPipelineCard = isAnalysisProgressVisible && !isPipelineDismissed;
 
     // The title bar's status cluster, built ONCE. Every surface now has exactly
     // one bar: Trade/Journal/Knowledge get the band — moved INSIDE the content
@@ -2997,98 +2975,6 @@ const App: React.FC = () => {
                         )}
                     </main>
 
-                {/* Desktop activity card: float progress over the
-                    right side so the conversation keeps its width while a run
-                    is live. Collapsible + closable so it never traps content
-                    underneath; the pill keeps Stop one click away.
-                    Breakpoint: md (768px), NOT lg — the Electron window has an
-                    800px minimum width, and at lg (1024px) the whole
-                    800-1023px desktop band ran as a silent black box with no
-                    discoverable Stop. Mobile (<md) keeps the dock's Stop.
-                    NOT on the Chat surface: its reading column is centred, so a
-                    20rem card pinned to the window's right edge landed on top of
-                    the transcript and covered the answer it was waiting for.
-                    There the run's progress is the inline row in the thread and
-                    Stop is the composer's own button. */}
-                {showPipelineCard && surface !== 'agents' && (
-                    <div className="pointer-events-none fixed right-4 top-24 z-40 hidden w-[min(20rem,calc(100vw-2rem))] max-h-[calc(100vh-7rem)] md:block">
-                        {isPipelineCollapsed ? (
-                            /* Collapsed pill: status + expand/dismiss + Stop. */
-                            <div className="pointer-events-auto flex h-fit items-center gap-1.5 rounded-full border border-white/10 bg-zinc-950 px-3 py-1.5 shadow-lg" aria-label="Analysis progress (collapsed)">
-                                <span className="flex items-center gap-1.5 rounded-full bg-cyan-500/10 px-2 py-0.5 text-ui-xs font-medium text-cyan-300">
-                                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
-                                    Running
-                                </span>
-                                <button type="button" onClick={() => setIsPipelineCollapsed(false)} className="text-ui-dense text-zinc-400 transition-colors hover:text-zinc-100" title="Show pipeline steps">Show</button>
-                                <button type="button" onClick={() => setIsPipelineDismissed(true)} className="rounded-control p-1 text-zinc-500 transition-colors hover:text-zinc-200" title="Hide for this run" aria-label="Dismiss analysis progress">
-                                    <CloseIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                                </button>
-                            </div>
-                        ) : (
-                        <div className="pointer-events-auto h-fit max-h-[calc(100vh-7rem)] overflow-y-auto rounded-bubble border border-white/10 bg-zinc-950 p-3 custom-scrollbar" aria-label="Analysis progress">
-                            <div className="flex items-center justify-between px-1 pb-3">
-                                <div>
-                                    <h2 className="text-ui-base font-medium text-zinc-200">Analysis</h2>
-                                    <p className="mt-0.5 text-ui-dense text-zinc-500">Pipeline</p>
-                                </div>
-                                <span className="ml-auto flex shrink-0 items-center gap-1">
-                                    <span className="flex items-center gap-1 rounded-full bg-cyan-500/10 px-2 py-1 text-ui-xs font-medium text-cyan-300">
-                                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
-                                        {isPostMortemInProgress ? 'Post-mortem' : 'Running'}
-                                    </span>
-                                    {/* Collapse / dismiss chrome: the card is no longer
-                                        unclosable — collapse to the pill or hide it for this run.
-                                        The main chat keeps its own Stop control either way. */}
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsPipelineCollapsed(true)}
-                                        className="rounded-control p-1 text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
-                                        title="Collapse"
-                                        aria-label="Collapse analysis progress"
-                                    >
-                                        <ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsPipelineDismissed(true)}
-                                        className="rounded-control p-1 text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
-                                        title="Hide for this run"
-                                        aria-label="Dismiss analysis progress"
-                                    >
-                                        <CloseIcon className="h-4 w-4" aria-hidden="true" />
-                                    </button>
-                                </span>
-                            </div>
-
-                            {analysisSteps && analysisSteps.length > 0 ? (
-                                <AnalysisProgress
-                                    steps={analysisSteps}
-                                    isActive={!!loadingMessage || isAnalysisInProgress}
-                                    onCancel={handleCancelAnalysis}
-                                    embedded
-                                    isPostMortem={isPostMortemInProgress}
-                                    isPostMortemInProgress={isPostMortemInProgress}
-                                    onOpenPostMortem={() => setIsLivePostMortemVisible(true)}
-                                    />
-                            ) : (
-                                <div className="rounded-bubble border border-white/10 bg-zinc-900/60 p-4">
-                                    <div className="flex items-center gap-2 text-ui-base text-zinc-300" aria-live="polite">
-                                        <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" aria-hidden="true" />
-                                        {loadingMessage || 'Analysis in progress'}
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={handleCancelAnalysis}
-                                        className=" mt-4 w-full rounded-control border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-ui-sm font-medium text-rose-300 transition-colors hover:bg-rose-500/20"
-                                    >
-                                        Stop generating
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                        )}
-                    </div>
-                )}
 
                 </div>
 
