@@ -46,18 +46,29 @@ const base = {
 };
 
 beforeEach(() => { localStorage.clear(); seq = 0; });
+
+/** Renders the column and puts it on the BOTS tab. The roster and the
+ *  conversations are no longer one scroll — the column splits them the way
+ *  the reference splits SESSIONS and BOTS — so a test that reaches for a
+ *  bot row has to ask for the tab that shows it. */
+const renderBots = (ui: React.ReactElement): ReturnType<typeof render> => {
+    const r = render(ui);
+    fireEvent.click(screen.getByTestId('rail-tab-bots'));
+    return r;
+};
+
 afterEach(cleanup);
 
 describe('AgentsView layout', () => {
     it('renders the rail, the pane and the pill composer', () => {
-        render(<AgentsView {...base} />);
+        renderBots(<AgentsView {...base} />);
         expect(screen.getByTestId('agents-view')).toBeTruthy();
         expect(screen.getByTestId('agents-rail')).toBeTruthy();
         expect(screen.getByTestId('composer-send')).toBeTruthy();
     });
 
     it('shows a greeting instead of a dead-end when nothing is open', () => {
-        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
         const pane = screen.getByTestId('agents-view').textContent ?? '';
         expect(pane).toMatch(/Morning|Afternoon|Evening|Still up/);
         expect(pane).not.toMatch(/Pick an agent to open it as a Chart AI session/);
@@ -67,7 +78,7 @@ describe('AgentsView layout', () => {
         const bots = [bot({ id: 'b1', name: 'Sweeper' })];
         const onDeleteBot = vi.fn();
         const onRunRoutine = vi.fn();
-        render(<AgentsView {...base} bots={bots} onDeleteBot={onDeleteBot}
+        renderBots(<AgentsView {...base} bots={bots} onDeleteBot={onDeleteBot}
             botRoutines={{ b1: [{ id: 'r1', name: 'Morning brief', enabled: true } as never] }}
             onRunRoutine={onRunRoutine} />);
         fireEvent.click(screen.getByLabelText('Delete Sweeper'));
@@ -77,7 +88,7 @@ describe('AgentsView layout', () => {
     it('opens the routines disclosure and runs one', () => {
         const onRunRoutine = vi.fn();
         const routine = { id: 'r1', name: 'Morning brief', enabled: true, schedule: { cron: '0 9 * * 1-5' } } as never;
-        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]}
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1' })]}
             botRoutines={{ b1: [routine] }} onRunRoutine={onRunRoutine} />);
         // Collapsed by default: the count sits on the row, the schedule list does not.
         const toggle = screen.getByTestId('row-routines');
@@ -92,12 +103,12 @@ describe('AgentsView layout', () => {
     });
 
     it('has no disclosure at all for a bot with no routines', () => {
-        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} botRoutines={{ b1: [] }} />);
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1' })]} botRoutines={{ b1: [] }} />);
         expect(screen.queryByTestId('row-routines')).toBeNull();
     });
 
     it('lists the schedule but offers no Run without the run handler', () => {
-        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]}
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1' })]}
             botRoutines={{ b1: [{ id: 'r1', name: 'Morning brief', enabled: true, schedule: { cron: '0 9 * * 1-5' } } as never] }} />);
         fireEvent.click(screen.getByTestId('row-routines'));
         expect(screen.getByText('Morning brief')).toBeTruthy();
@@ -130,7 +141,9 @@ describe('AgentsView layout', () => {
     });
 
     it('pins reorder the rail and survive a remount', () => {
-        const { unmount } = render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Pinned me' })]} />);
+        // The pin control lives on the roster row, so the first half is on the
+        // Bots tab; the Pinned header it feeds is a Chats-tab section.
+        const { unmount } = renderBots(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Pinned me' })]} />);
         fireEvent.click(screen.getByLabelText('Pin Pinned me'));
         unmount();
         render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Pinned me' })]} />);
@@ -213,7 +226,7 @@ describe('WS-3.4 per-bot learning stats', () => {
     const stats = [{ id: 'b1', name: 'Sweeper', lessons: 4, skillsAuthored: 2, evidence: 9, lastLessonAt: '2026-09-18' }];
 
     it('shows what the active bot has learned in its header', () => {
-        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Sweeper' })]}
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Sweeper' })]}
             selection={{ kind: 'bot', botId: 'b1' }} botStats={stats} />);
         const line = screen.getByTestId('bot-learning-stats');
         expect(line.textContent).toContain('4 lessons');
@@ -223,18 +236,18 @@ describe('WS-3.4 per-bot learning stats', () => {
     });
 
     it('badges the rail row with the skills that bot authored', () => {
-        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} botStats={stats} />);
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1' })]} botStats={stats} />);
         expect(screen.getByTestId('row-skills').textContent).toBe('2');
     });
 
     it('shows no badge for a bot that has authored nothing', () => {
-        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]}
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1' })]}
             botStats={[{ ...stats[0], skillsAuthored: 0 }]} />);
         expect(screen.queryByTestId('row-skills')).toBeNull();
     });
 
     it('says whether the bot is synced with the shared notebook', () => {
-        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]}
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1' })]}
             selection={{ kind: 'bot', botId: 'b1' }} botStats={stats} />);
         const pill = screen.getByTestId('bot-notebook-sync');
         expect(pill.textContent).toBe('notebook');
@@ -242,7 +255,7 @@ describe('WS-3.4 per-bot learning stats', () => {
     });
 
     it('an isolated bot reads as isolated — in the pill and in the empty state', () => {
-        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Sweeper', memoryScope: 'isolated' })]}
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Sweeper', memoryScope: 'isolated' })]}
             selection={{ kind: 'bot', botId: 'b1' }} />);
         expect(screen.getByTestId('bot-notebook-sync').textContent).toBe('own notes');
         expect(screen.getByTestId('agents-view').textContent)
@@ -274,20 +287,20 @@ describe('WS-6 rail completeness', () => {
 
     it('the Chart AI pane shows the shared messages, not an empty launcher', () => {
         const messages = [msg({ role: MessageRole.AI, text: 'Verdict: skip the short.', modelsUsed: { p1: 'm1' } })];
-        render(<AgentsView {...base} messages={messages} selection={{ kind: 'team' }} />);
+        renderBots(<AgentsView {...base} messages={messages} selection={{ kind: 'team' }} />);
         expect(screen.getByTestId('agents-view').textContent).toContain('skip the short');
     });
 
-    it('has no coach pane — the Coach inbox is a Learn tab, reached from the New menu', () => {
-        render(<AgentsView {...base} onOpenCoach={() => {}} coachCount={2} />);
+    it('has no coach pane — the Coach inbox is a Learn tab, reached from its own row', () => {
+        renderBots(<AgentsView {...base} onOpenCoach={() => {}} coachCount={2} />);
         expect(screen.queryByTestId('coach-pane')).toBeNull();
-        fireEvent.click(screen.getByTestId('rail-new'));
-        expect(screen.getByRole('menuitem', { name: /Coach inbox \(2\)/ })).toBeTruthy();
+        // The row replaced the menu item that used to be the only way here.
+        expect(screen.getByTestId('rail-coach-inbox').textContent).toContain('Coach inbox');
     });
 
     it('renames a bot from its own row', () => {
         const onRenameBot = vi.fn();
-        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Macro' })]} onRenameBot={onRenameBot} />);
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Macro' })]} onRenameBot={onRenameBot} />);
         fireEvent.click(screen.getByTestId('rail-rename'));
         fireEvent.change(screen.getByTestId('bot-rename-input'), { target: { value: '  Sweeper  ' } });
         fireEvent.click(screen.getByText('Save'));
@@ -295,7 +308,7 @@ describe('WS-6 rail completeness', () => {
     });
 
     it('sorts by name and back to recency', () => {
-        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Alpha' }), bot({ id: 'b2', name: 'Zeta' })]}
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Alpha' }), bot({ id: 'b2', name: 'Zeta' })]}
             messages={[
                 msg({ role: MessageRole.AI, text: 'a', createdAt: '2026-01-01T00:00:00.000Z', modelsUsed: { 'p-b1': 'm1' } }),
                 msg({ role: MessageRole.AI, text: 'z', createdAt: '2026-09-01T00:00:00.000Z', modelsUsed: { 'p-b2': 'm1' } }),
@@ -321,7 +334,7 @@ describe('WS-6 rail completeness', () => {
     });
 
     it('mounts the model picker App hands in, instead of a chip that leaves the surface', () => {
-        render(<AgentsView {...base} modelPicker={<button data-testid="model-picker">Gemini · flash</button>} />);
+        renderBots(<AgentsView {...base} modelPicker={<button data-testid="model-picker">Gemini · flash</button>} />);
         expect(screen.getByTestId('model-picker')).toBeTruthy();
         expect(screen.queryByTestId('composer-model')).toBeNull();
     });
@@ -358,7 +371,7 @@ describe('WS-6 rail completeness', () => {
 
     it('collapses through the state the shell hands in, not a switch of its own', () => {
         const onToggleRailExpanded = vi.fn();
-        render(
+        renderBots(
             <AgentsView
                 {...base}
                 bots={[bot({ id: 'b1' })]}
@@ -374,7 +387,7 @@ describe('WS-6 rail completeness', () => {
     });
 
     it('draws no put-away control it has nothing to act on', () => {
-        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
         expect(screen.queryByTestId('rail-collapse')).toBeNull();
         expect(screen.queryByTestId('rail-expand')).toBeNull();
     });
@@ -500,6 +513,7 @@ describe('WS-6 focus and mobile drawer', () => {
         expect(screen.queryByTestId('rail-backdrop')).toBeNull();
 
         fireEvent.click(screen.getByTestId('rail-open'));
+        fireEvent.click(screen.getByTestId('rail-tab-bots'));
         fireEvent.click(screen.getByTestId('agent-row'));
         expect(onSelect).toHaveBeenCalledWith({ kind: 'bot', botId: 'b1' });
         expect(screen.queryByTestId('rail-backdrop')).toBeNull();
@@ -532,27 +546,30 @@ describe('WS-6 focus and mobile drawer', () => {
  * transcript to GroupChatView instead of painting one in the row).
  */
 describe('AgentsView rail rows (ported from the roster-rail suite)', () => {
-    it('lists one row per bot and one per room, naming an unnamed room by its members', () => {
+    it('lists the roster on its own tab and the rooms on the chat tab', () => {
         const unnamed: AgentGroup = { id: 'g1', memberIds: ['b1', 'b2'], createdAt: new Date().toISOString() };
-        render(<AgentsView {...base}
+        renderBots(<AgentsView {...base}
             bots={[bot({ id: 'b1', name: 'Scout' }), bot({ id: 'b2', name: 'Ledger' })]}
             groups={[unnamed]} />);
-        expect(screen.getAllByTestId('agent-row')).toHaveLength(3);
+        expect(screen.getAllByTestId('agent-row')).toHaveLength(2);
+        fireEvent.click(screen.getByTestId('rail-tab-chats'));
+        expect(screen.getAllByTestId('agent-row')).toHaveLength(1);
         expect(screen.getByText('Scout, Ledger')).toBeTruthy();
     });
 
     it('marks the open thread and leaves the others idle', () => {
-        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Scout' })]}
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Scout' })]}
             groups={[group('g1', ['b1'], 'War room')]} selection={{ kind: 'group', groupId: 'g1' }} />);
-        const [botRow, roomRow] = screen.getAllByTestId('agent-row');
+        const botRow = screen.getByTestId('agent-row');
         // The active fill is on the row shell, two levels above the button.
         const shellOf = (row: HTMLElement): string => row.parentElement?.parentElement?.className ?? '';
-        expect(shellOf(roomRow)).toContain('bg-zinc-800/70');
         expect(shellOf(botRow)).not.toContain('bg-zinc-800/70');
+        fireEvent.click(screen.getByTestId('rail-tab-chats'));
+        expect(shellOf(screen.getByTestId('agent-row'))).toContain('bg-zinc-800/70');
     });
 
     it('filters the bot and room rows by name from the rail search', () => {
-        render(<AgentsView {...base}
+        renderBots(<AgentsView {...base}
             bots={[bot({ id: 'b1', name: 'Scout' }), bot({ id: 'b2', name: 'Ledger' })]}
             groups={[group('g1', ['b1', 'b2'], 'Alpha Desk')]} />);
         fireEvent.click(screen.getByTestId('rail-search-toggle'));
@@ -563,7 +580,7 @@ describe('AgentsView rail rows (ported from the roster-rail suite)', () => {
     });
 
     it('scopes a row to its bot’s provider + model: two bots on one provider keep separate threads', () => {
-        render(<AgentsView {...base}
+        renderBots(<AgentsView {...base}
             bots={[
                 bot({ id: 'b1', name: 'Scout', providerId: 'p1', modelId: 'model-a' }),
                 bot({ id: 'b2', name: 'Ledger', providerId: 'p1', modelId: 'model-b' }),
@@ -586,7 +603,7 @@ describe('AgentsView rail rows (ported from the roster-rail suite)', () => {
         // The row's identity graphic is the bot's own `BotFace`, so "working"
         // rides on the face — the eyes blink — rather than on an amber ring
         // around a generic glyph. Same signal, one fewer vocabulary.
-        render(<AgentsView {...base}
+        renderBots(<AgentsView {...base}
             bots={[bot({ id: 'b1', name: 'Scout' }), bot({ id: 'b2', name: 'Ledger' })]}
             workingBotId="b1" />);
         const blinking = (name: string): boolean => {
@@ -598,20 +615,19 @@ describe('AgentsView rail rows (ported from the roster-rail suite)', () => {
         expect(blinking('Ledger')).toBe(false);
     });
 
-    it('creates both kinds of thread from the New menu', () => {
+    it('creates both kinds of thread from their own list header', () => {
         const onNewBot = vi.fn();
         const onNewGroup = vi.fn();
-        render(<AgentsView {...base} onNewBot={onNewBot} onNewGroup={onNewGroup} />);
-        fireEvent.click(screen.getByTestId('rail-new'));
-        fireEvent.click(screen.getByRole('menuitem', { name: 'New agent' }));
+        renderBots(<AgentsView {...base} onNewBot={onNewBot} onNewGroup={onNewGroup} />);
+        fireEvent.click(screen.getByTestId('rail-new-bot'));
         expect(onNewBot).toHaveBeenCalledTimes(1);
-        fireEvent.click(screen.getByTestId('rail-new'));
-        fireEvent.click(screen.getByRole('menuitem', { name: 'New room' }));
+        fireEvent.click(screen.getByTestId('rail-tab-chats'));
+        fireEvent.click(screen.getByTestId('rail-new-room'));
         expect(onNewGroup).toHaveBeenCalledTimes(1);
     });
 
     it('says what will appear on an empty desk', () => {
-        render(<AgentsView {...base} />);
+        renderBots(<AgentsView {...base} />);
         expect(screen.getByText(/No agents yet/)).toBeTruthy();
     });
 
@@ -626,7 +642,7 @@ describe('AgentsView rail rows (ported from the roster-rail suite)', () => {
     });
 
     it('shows no trash the surface was not given a handler for', () => {
-        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Scout' })]}
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Scout' })]}
             groups={[group('g1', [], 'War room')]} />);
         expect(screen.queryByLabelText('Delete Scout')).toBeNull();
         expect(screen.queryByLabelText('Delete War room')).toBeNull();
@@ -635,14 +651,12 @@ describe('AgentsView rail rows (ported from the roster-rail suite)', () => {
     it('counts what the Coach hop is waiting on, and jumps to the Learn tab', () => {
         const onOpenCoach = vi.fn();
         const { rerender } = render(<AgentsView {...base} onOpenCoach={onOpenCoach} />);
-        fireEvent.click(screen.getByTestId('rail-new'));
-        expect(screen.getByRole('menuitem', { name: 'Coach inbox' })).toBeTruthy();
-        // Close the toggle before re-rendering, or the next click re-opens a
-        // menu that is already open and the click after that closes it.
-        fireEvent.click(screen.getByTestId('rail-new'));
+        expect(screen.getByTestId('rail-coach-inbox').textContent).toContain('Coach inbox');
         rerender(<AgentsView {...base} coachCount={2} onOpenCoach={onOpenCoach} />);
-        fireEvent.click(screen.getByTestId('rail-new'));
-        fireEvent.click(screen.getByRole('menuitem', { name: /Coach inbox \(2\)/ }));
+        // The count rides in the accessible name, not just the badge, so a
+        // screen reader hears the queue depth rather than a bare row label.
+        expect(screen.getByLabelText('Coach inbox. 2 awaiting your decision')).toBeTruthy();
+        fireEvent.click(screen.getByTestId('rail-coach-inbox'));
         expect(onOpenCoach).toHaveBeenCalledTimes(1);
     });
 });
@@ -653,7 +667,7 @@ describe('WS-6 §5 row context menu', () => {
     it('right-clicking a bot row lists pin, rename, routines and delete', () => {
         const onDeleteBot = vi.fn();
         const onRenameBot = vi.fn();
-        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Sweeper' })]}
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Sweeper' })]}
             onDeleteBot={onDeleteBot} onRenameBot={onRenameBot}
             botRoutines={{ b1: [routine] }} />);
         expect(screen.queryByTestId('row-menu-popover')).toBeNull();
@@ -671,7 +685,7 @@ describe('WS-6 §5 row context menu', () => {
     });
 
     it('the ⋯ trigger reaches the same actions, and Rename opens the inline form', () => {
-        render(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Sweeper' })]}
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1', name: 'Sweeper' })]}
             onRenameBot={vi.fn()} />);
         fireEvent.click(screen.getByTestId('row-menu'));
         fireEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
@@ -679,7 +693,7 @@ describe('WS-6 §5 row context menu', () => {
     });
 
     it('Escape closes it, and a row with no actions gets no trigger', () => {
-        render(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
+        renderBots(<AgentsView {...base} bots={[bot({ id: 'b1' })]} />);
         fireEvent.contextMenu(screen.getByTestId('agent-row'));
         expect(screen.getByTestId('row-menu-popover')).toBeTruthy();
         fireEvent.keyDown(window, { key: 'Escape' });

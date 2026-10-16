@@ -267,17 +267,9 @@ async function main() {
         await shoot('ui-settings-memory', how);
         await page.keyboard.press('Escape');
 
-        // The empty conversation: the reference's hero + composer at rest.
-        await sleep(600);
-        how = await press('[data-testid="rail-new"]', 900);
-        how += await page.evaluate(() => {
-            const hit = [...document.querySelectorAll('button')]
-                .find(b => /^New chat$/i.test((b.textContent || '').trim()));
-            if (!hit) return '';
-            hit.click();
-            return ' / new-chat';
-        });
-        await sleep(1200);
+        // The empty conversation: the reference's hero + composer at rest. One
+        // press now — `New` used to open a menu whose first item was this.
+        how = await press('[data-testid="rail-new-chat"]', 1200);
         await shoot('ui-chat-empty', how);
 
         // The states that exist only after an interaction, and that no numeric
