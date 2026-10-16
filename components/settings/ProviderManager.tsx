@@ -252,6 +252,25 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
         onDirtyChange?.(isDirty);
     }, [isDirty, onDirtyChange]);
 
+    /** Selecting a row re-seeds EVERY draft field from the newly selected
+     *  provider (the effect above), so an unguarded switch silently threw away
+     *  a half-typed key or base URL while the UI implied the edits were safe.
+     *  The close path already asks; this asks the same question with the same
+     *  words, because it is the same loss. Declared after `isDirty` — a deps
+     *  array is evaluated at this line, so hoisting it would be a TDZ crash. */
+    const selectProvider = useCallback(async (id: string) => {
+        if (id !== selected?.id && isDirty) {
+            const ok = await confirm({
+                title: 'Discard unsaved changes?',
+                message: `Your edits to ${selected?.name ?? 'this provider'} have not been saved.`,
+                confirmLabel: 'Discard',
+            });
+            if (!ok) return;
+        }
+        setSelectedId(id);
+        setShowAddProvider(false);
+    }, [confirm, isDirty, selected?.id, selected?.name]);
+
     const handleSave = useCallback(async () => {
         if (!selected || !draftUrlValidation.valid) return;
         setSaveState('saving');
@@ -568,7 +587,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                         return (
                                             <button
                                                 key={c.id}
-                                                onClick={() => { setSelectedId(c.id); setShowAddProvider(false); }}
+                                                onClick={() => { void selectProvider(c.id); }}
                                                 className={`flex w-full items-center justify-between rounded-control px-2 py-2 text-left ${
                                                     isSelectedRow ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
                                                 }`}

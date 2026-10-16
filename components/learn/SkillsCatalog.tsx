@@ -90,9 +90,13 @@ export interface SkillsCatalogProps {
     onOpenSettings?: () => void;
     /** Add — opens the real skill-draft path in the Coach inbox. */
     onAddSkill?: () => void;
+    /** Read — opens this skill's rendered record in the viewer panel. The
+     *  browser's whole job is to make a row readable without leaving the
+     *  surface; without this the catalog is a list of file names. */
+    onOpenSkill?: (fileId: string) => void;
 }
 
-const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onAddSkill }) => {
+const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSkill, onAddSkill }) => {
     const [skills, setSkills] = useState<CatalogSkill[] | null>(null);
     const [query, setQuery] = useState('');
     const [collection, setCollection] = useState<string>('all');
@@ -169,7 +173,7 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onAddSkil
                             onChange={e => setQuery(e.target.value)}
                             placeholder="Search skills"
                             aria-label="Search skills"
-                            className="w-40 bg-transparent text-ui-dense text-zinc-200 outline-none placeholder:text-zinc-600"
+                            className="h-6 w-40 bg-transparent text-ui-dense text-zinc-200 outline-none placeholder:text-zinc-600"
                         />
                     </div>
                     <button type="button" onClick={() => reload(true)} aria-label="Refresh the skill list" title="Refresh"
@@ -242,14 +246,22 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onAddSkil
                                     guard cannot see coming back. */}
                                 <Lightbulb className="h-4 w-4" aria-hidden="true" />
                             </span>
-                            <span className="min-w-0 flex-1">
+                            {/* The row is the opener: a catalog row that cannot be
+                                pressed is a list of file names, and the record
+                                behind it — description, body, outcome ledger —
+                                was unreachable without leaving for the memory
+                                manager. */}
+                            <button type="button"
+                                onClick={() => onOpenSkill?.(s.id)}
+                                aria-label={`Read ${s.name}`}
+                                className="min-w-0 flex-1 rounded-control text-left transition-colors hover:text-zinc-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
                                 <span className="block truncate text-ui-dense font-semibold text-zinc-100" title={s.name}>
                                     {s.name}
                                 </span>
                                 <span className="block truncate text-ui-dense text-zinc-500" title={s.description || undefined}>
                                     {s.description || (s.status === 'retired' ? 'Retired' : 'No description')}
                                 </span>
-                            </span>
+                            </button>
                             {s.enabled ? (
                                 <Check className="h-4 w-4 shrink-0 text-zinc-400" aria-label="Enabled" />
                             ) : (

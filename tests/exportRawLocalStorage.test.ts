@@ -86,7 +86,9 @@ const DELIBERATELY_UNBACKED = new Map<string, string>([
     ['august_trade_mode_v1', 'plain string ("ai" | "grid" | …) — view state, not a record'],
     ['trade_dock_width_v1', 'plain string pixel width — view state'],
     ['learn_tab_v1', 'plain string: which Learn tab is open — view state'],
-    ['agents_rail_collapsed_v1', 'plain string "1"/"0" — view state'],
+    // `agents_rail_collapsed_v1` is gone: the Chat surface's sidebar now shares
+    // the shell's one rail state, which lives in `nav_rail_width_v1` — a key the
+    // export DOES carry, so it left this table instead of needing a new reason.
     ['august_model_picker_free_only_v1', 'plain string "1"/"0" — device-local model-picker filter'],
     ['agent_pins_v1', 'per-user pinned agents — UI layout, rebuildable from the roster'],
     ['skills_grid_pins_v1', 'pinned strategies on the Skills grid — UI layout, rebuilt from the catalog'],
