@@ -67,7 +67,7 @@ jobs:
       # boot-probe asks only "does it start". This is the gate that can see the
       # transcript — it counts rendered rows per conversation, presses every
       # control on the Learn and Journal surfaces and asserts each one does
-      # something, and sweeps all six nav surfaces for pageerrors. Unit tests
+      # something, and sweeps all four nav surfaces for pageerrors. Unit tests
       # mount components in jsdom and cannot catch a row dropped after the
       # second one, which is how two finished panels shipped unmounted.
       # Sequential here, so it is not running alongside a build — the one

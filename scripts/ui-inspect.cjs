@@ -111,10 +111,13 @@ async function seed(page) {
  *  calls can straddle a resize and describe a layout that never existed. */
 const measureShell = () => {
     const box = (el) => el ? el.getBoundingClientRect() : null;
-    const rail = document.querySelector('[data-testid="nav-rail"]');
+    const rail = document.querySelector('[data-testid="agents-rail"]');
     const main = document.querySelector('main');
+    // The thread pane, not <main>: the column now lives INSIDE main, so main's
+    // width is unchanged by a collapse and only the pane beside it grows.
+    const thread = document.querySelector('[data-testid="agents-thread-column"]');
     const header = document.querySelector('header');
-    const rows = [...document.querySelectorAll('[data-testid="surface-menu"] button')];
+    const rows = [...document.querySelectorAll('[data-testid^="surface-switch-"]')];
     // `window.getComputedStyle`, not the bare global: this runs inside
     // page.evaluate, but the file is a Node .cjs and eslint resolves globals
     // from the file's own environment — where the bare name is undefined.
@@ -129,6 +132,7 @@ const measureShell = () => {
             background: cs(rail).backgroundColor,
             borderRight: cs(rail).borderRightWidth,
         } : null,
+        thread: thread ? { width: Math.round(box(thread).width) } : null,
         main: main ? {
             width: Math.round(box(main).width),
             left: Math.round(box(main).left),
@@ -184,7 +188,7 @@ async function main() {
 
         await seed(page);
         await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-        await page.waitForSelector('[data-testid="nav-rail"]', { timeout: 30000 });
+        await page.waitForSelector('[data-testid^="surface-switch-"]', { timeout: 30000 });
         await sleep(1500);
 
         for (const width of WIDTHS) {
@@ -197,12 +201,9 @@ async function main() {
             check('nothing overflows horizontally', m.scrollWidth <= m.viewport.w,
                 `scrollW ${m.scrollWidth} / vw ${m.viewport.w}`);
 
-            check('the nav rail is present at every width', m.rail !== null);
+            check('the destinations are present at every width', m.rows.length === 4, `${m.rows.length} entries`);
             if (m.rail) {
-                note('rail', `${m.rail.width}px, expanded=${m.rail.expanded}, z=${m.rail.zIndex}, bg=${m.rail.background}`);
-                check('rail sits on the expected ladder rung', m.rail.zIndex === '50', `z-index ${m.rail.zIndex}`);
-                check('rail is on the panel surface, not the page ground',
-                    m.rail.background === 'rgb(20, 20, 18)', m.rail.background);
+                note('conversation column', `${m.rail ? m.rail.width : 0}px, visible=${!!m.rail && m.rail.expanded !== 'false'}`);
             }
             if (m.main) {
                 note('main', `${m.main.width}px at left ${m.main.left}, bg=${m.main.background}`);
@@ -212,11 +213,11 @@ async function main() {
                     m.main.width >= width * 0.55,
                     `${m.main.width}px of ${width}px`);
             }
-            check('all six nav rows render', m.rows.length === 6, `${m.rows.length} rows`);
+            check('all four destinations render', m.rows.length === 4, `${m.rows.length} entries`);
             const current = m.rows.filter(r => r.current === 'page');
             check('exactly one row is marked current', current.length === 1,
                 current.map(r => r.label).join(',') || 'none');
-            check('every row still carries an accessible name',
+            check('every destination still carries an accessible name',
                 m.rows.every(r => !!r.label), m.rows.filter(r => !r.label).map(r => r.label).join('|'));
 
             await page.screenshot({ path: path.join(SHOTS, `ui-${width}.png`), fullPage: false });
@@ -224,23 +225,35 @@ async function main() {
         }
 
         // ── Collapse / expand, and what it costs the chart ──────────────────
-        console.log('\n── rail collapse ─────────────────────────────────────');
+        console.log('\n── conversation column collapse ──────────────────────');
         await page.setViewportSize({ width: 1440, height: 900 });
         await sleep(500);
+        // The column that collapses belongs to the Chat surface, and the width
+        // tour above leaves the app on Journal — measuring the wrong surface
+        // makes `rail` null, which reads as a crash rather than as a moved
+        // layout. This is also what Ctrl+B does for a person: it puts away the
+        // column on the surface that has one.
+        await page.evaluate(() => document.querySelector('[data-testid="surface-switch-agents"]')?.click());
+        await sleep(1500);
         const before = await page.evaluate(measureShell);
         await page.keyboard.press('Control+b');
         await sleep(600);
         const after = await page.evaluate(measureShell);
         note('expanded', `${before.rail.width}px, main ${before.main.width}px`);
         note('collapsed', `${after.rail.width}px, main ${after.main.width}px`);
-        check('Ctrl+B hides the rail completely (0px)', after.rail.width === 0, `${after.rail.width}px`);
-        check('the surface gains exactly the width the rail gives up',
-            Math.abs((after.main.width - before.main.width) - (before.rail.width - after.rail.width)) <= 1,
-            `main +${after.main.width - before.main.width}, rail -${before.rail.width - after.rail.width}`);
-        check('rows keep their accessible names when collapsed',
-            after.rows.every(r => !!r.label), `${after.rows.length} rows`);
-        check('the collapsed rows no longer show their text label',
-            after.rows.every(r => r.visibleText === ''), 'glyph-only');
+        check('Ctrl+B hides the column completely (0px)', after.rail.width === 0, `${after.rail.width}px`);
+        check('the thread gains exactly the width the column gives up',
+            !!before.thread && !!after.thread
+                && Math.abs((after.thread.width - before.thread.width) - (before.rail.width - after.rail.width)) <= 1,
+            before.thread && after.thread
+                ? `thread +${after.thread.width - before.thread.width}, column -${before.rail.width - after.rail.width}`
+                : 'no thread pane on this surface');
+        check('the destinations keep their accessible names when collapsed',
+            after.rows.every(r => !!r.label), `${after.rows.length} entries`);
+        // There is no glyph-only collapsed state to assert any more: the column
+        // hides entirely rather than narrowing to icons, so the old
+        // "collapsed rows show no text" check described a rail that no longer
+        // exists and would pass vacuously against the switch.
         await page.screenshot({ path: path.join(SHOTS, 'ui-1440-collapsed.png') });
 
         // A hidden rail whose expand affordance does not work is the trap
@@ -249,15 +262,24 @@ async function main() {
         // surface label, since data-expanded never changes on a click.
         await page.evaluate(() => document.querySelector('[data-testid="nav-rail-toggle-header"]')?.click());
         await sleep(600);
-        const revived = await page.evaluate(() => document.querySelector('[data-testid="nav-rail"]')?.getAttribute('data-expanded'));
-        check('the header toggle revives the hidden rail', revived === 'true', `expanded=${revived}`);
+        const revived = await page.evaluate(() => {
+            const el = document.querySelector('[data-testid="agents-rail"]');
+            return !!el && el.offsetParent !== null;
+        });
+        check('the header toggle revives the hidden column', revived === true, `visible=${revived}`);
         await page.evaluate(() => {
-            [...document.querySelectorAll('[data-testid="surface-menu"] button')]
+            [...document.querySelectorAll('[data-testid^="surface-switch-"]')]
                 .find(b => /^Journal/i.test(b.getAttribute('aria-label') || ''))?.click();
         });
         await sleep(1200);
-        const where = await page.evaluate(() => document.querySelector('[data-testid="header-surface-label"]')?.textContent?.trim());
-        check('the revived rail routes to Journal', where === 'Journal', where);
+        const where = await page.evaluate(() => {
+            const on = [...document.querySelectorAll('[data-testid^="surface-switch-"]')]
+                .find(b => b.getAttribute('aria-current') === 'page');
+            return on ? (on.getAttribute('aria-label') || '').split(',')[0] : null;
+        });
+        // Read off the switch, not a text label: the header's surface label is
+        // only a fallback for when no switch is supplied, and one always is now.
+        check('the revived column routes to Journal', where === 'Journal', String(where));
 
         await page.keyboard.press('Control+b');
         await sleep(500);
@@ -273,7 +295,7 @@ async function main() {
         // routes); the dock lives on Trade, so get back there first or this
         // measures an absent panel and reports it as a layout failure.
         await page.evaluate(() => {
-            [...document.querySelectorAll('[data-testid="surface-menu"] button')]
+            [...document.querySelectorAll('[data-testid^="surface-switch-"]')]
                 .find(b => /^Trade/i.test(b.getAttribute('aria-label') || ''))?.click();
         });
         await sleep(1500);
@@ -324,7 +346,7 @@ async function main() {
         // ── Theme sanity: the palette must still be the dark one ─────────────
         console.log('\n── theme ─────────────────────────────────────────────');
         await page.evaluate(() => {
-            [...document.querySelectorAll('[data-testid="surface-menu"] button')]
+            [...document.querySelectorAll('[data-testid^="surface-switch-"]')]
                 .find(b => /^Trade/i.test(b.getAttribute('aria-label') || ''))?.click();
         });
         await sleep(1000);
