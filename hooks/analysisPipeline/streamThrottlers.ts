@@ -24,6 +24,7 @@
  */
 
 import { useCallback, MutableRefObject } from 'react';
+import { stripLeakedScratchpad } from '../../utils/thinkingSplit';
 import type { Message, DebateTurn, DebateRunEvent, TradeAnalysis } from '../../types';
 import { useRafThrottle } from '../useRafThrottle';
 import { lastCompletedRound, laneDraftsFromTurns } from '../../utils/debateResume';
@@ -167,11 +168,20 @@ export function applyCasualStreamUpdate(
     const messageIndex = prev.findIndex(m => m.id === messageId);
     if (messageIndex === -1) return prev;
     const current = prev[messageIndex];
+    /* Peel the "Here's a thinking process / Analyze User Input" dump out of the
+       LIVE bubble instead of only out of the settled one. The casual wire asks
+       for the low thinking tier, and on the gateways that switch thinking off
+       at that tier the model writes its plan into the content channel — so the
+       trader watched the plan stream past and only the finished message was
+       clean. The plan is not thrown away: it lands in the thinking field, which
+       is the disclosure it belongs in. */
+    const peeled = stripLeakedScratchpad(text);
+    const mergedThinking = [thinking, peeled.leaked].filter(Boolean).join('\n\n');
     const next = {
         ...current,
-        text,
+        text: peeled.visible,
         isStreaming: streaming,
-        thoughtProcesses: thinking ? { [providerId]: thinking } : current.thoughtProcesses,
+        thoughtProcesses: mergedThinking ? { [providerId]: mergedThinking } : current.thoughtProcesses,
     };
     const newMessages = [...prev];
     newMessages[messageIndex] = next;

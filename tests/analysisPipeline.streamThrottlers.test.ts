@@ -162,6 +162,34 @@ describe('applyCasualStreamUpdate', () => {
         const result = applyCasualStreamUpdate(prev, 'missing', 'x', 'y', 'p', true);
         expect(result).toBe(prev);
     });
+
+    it('peels a plan dump out of the LIVE bubble instead of streaming it past the trader', () => {
+        // The casual wire asks for the low thinking tier; on gateways that
+        // switch thinking off there, the model writes its plan into the content
+        // channel. Before this peel ran on every frame, the trader watched
+        // "Here's a thinking process: …" stream by and only the settled message
+        // was clean.
+        const plan = 'Here\'s a thinking process:\n\nAnalyze User Input: The user said "hello".\nDetermine Role: I\'m a helpful assistant.';
+        const prev = [baseMessage({ id: 'bubble' })];
+        const result = applyCasualStreamUpdate(prev, 'bubble', plan, '', 'gemini', true);
+        expect(result[0].text).not.toMatch(/thinking process|Analyze User Input/);
+        // The plan is not discarded — it belongs in the thinking disclosure.
+        expect(JSON.stringify(result[0].thoughtProcesses)).toMatch(/Analyze User Input/);
+    });
+
+    it('shows the answer half as soon as it arrives, with the plan still peeled', () => {
+        const frame = "Here's a thinking process:\n\nAnalyze User Input: greeting.\n\nFinal Output: Hello! What would you like to analyse?";
+        const prev = [baseMessage({ id: 'bubble' })];
+        const result = applyCasualStreamUpdate(prev, 'bubble', frame, '', 'gemini', true);
+        expect(result[0].text).toContain('Hello! What would you like to analyse?');
+        expect(result[0].text).not.toMatch(/Analyze User Input/);
+    });
+
+    it('leaves an ordinary answer untouched', () => {
+        const prev = [baseMessage({ id: 'bubble' })];
+        const result = applyCasualStreamUpdate(prev, 'bubble', 'Long bias, stop below the shelf.', '', 'gemini', true);
+        expect(result[0].text).toBe('Long bias, stop below the shelf.');
+    });
 });
 
 describe('applyOpeningThinkingUpdate', () => {
