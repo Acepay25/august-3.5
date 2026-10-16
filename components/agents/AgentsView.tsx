@@ -37,7 +37,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, MessageSquare, Pencil, PanelLeftClose, Paperclip, Pin, Plus, Search, Timer, Trash2, Users } from '../shared/Icons';
+import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Inbox, MessageSquare, Pencil, PanelLeftClose, Paperclip, Pin, Plus, Search, Timer, Trash2, Users } from '../shared/Icons';
 import { ModelFallbackBanner } from '../trade/panels/ChatComposer';
 import type { ProviderConfig } from '../../types/provider';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
@@ -796,25 +796,14 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     // The + New menu: one creator, four honest verbs. The old chip row made
     // "Agents" and "Rooms" look like navigation when both only opened create
     // dialogs — and "+ New" was the same NewBotDialog a third time.
-    const [newMenuAt, setNewMenuAt] = useState<{ x: number; y: number } | null>(null);
     const [convMenuAt, setConvMenuAt] = useState<{ id: string; x: number; y: number } | null>(null);
-    const newMenuItems: RowMenuItem[] = [
-        ...(onNewChat ? [{ label: 'New chat', onSelect: () => {
-            onNewChat();
-            // Two things the creator itself cannot do. The pane has to FOLLOW
-            // the conversation that was just made — left where it was, a bot's
-            // thread stayed on screen under a "New chat" header and the press
-            // read as a no-op. And the blank-reuse path, where "New" correctly
-            // hands back the unused blank session rather than minting another
-            // empty one, has to land the caret somewhere, or nothing at all
-            // appears to happen.
-            selectThread({ kind: 'team' });
-            composerRef.current?.focus();
-        } }] : []),
-        { label: 'New agent', onSelect: () => onNewBot() },
-        { label: 'New room', onSelect: () => onNewGroup() },
-        ...(onOpenCoach ? [{ label: coachCount > 0 ? `Coach inbox (${coachCount})` : 'Coach inbox', onSelect: () => onOpenCoach() }] : []),
-    ];
+    // Which list the column is showing. The reference's sidebar splits its
+    // sessions from its bots; August's column held both at once, so the roster
+    // scrolled away under the conversations. A third "desk" tab is deliberately
+    // NOT here: the charted form of the desk is a SURFACE, and the switch at the
+    // top of this column already routes to it — a second control claiming the
+    // same jump is the duplication this redesign exists to remove.
+    const [railTab, setRailTab] = useState<'chats' | 'bots'>('chats');
 
     // One switch, one home. The open column's header is its reference position —
     // the same x the rail-less surfaces use — so the hop does not move it.
@@ -875,27 +864,44 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     </div>
                 )}
 
-                <div className="flex shrink-0 items-center px-2 pb-1 pt-0.5">
-                    {/* A row, not a pill. The reference's "New" is the first
-                        entry in the same borderless list as its destinations,
-                        and it is the shape `SurfaceMenuList` already paints — so
-                        this copies those classes rather than inventing a fourth
-                        control shape for the sidebar. The menu it opens is
-                        unchanged; only the box around it went. */}
-                    <button type="button" data-testid="rail-new" aria-haspopup="menu" aria-expanded={!!newMenuAt}
-                        onPointerDown={e => e.stopPropagation()}
-                        onClick={e => {
-                            const r = e.currentTarget.getBoundingClientRect();
-                            setNewMenuAt(m => m ? null : { x: r.left, y: r.bottom + 4 });
+                {/* The reference's nav group: one-click verbs, not a menu. `New`
+                    used to open a four-item menu whose first entry was the thing
+                    everyone was reaching for, so asking for a new chat cost two
+                    clicks and a portal. The other three verbs each have a real
+                    home now — New agent and New room sit on their own section
+                    headers as `+`, Coach inbox is the row below — so nothing is
+                    lost, only the menu. */}
+                <div className="flex shrink-0 flex-col px-2 pb-1 pt-0.5">
+                    <button type="button" data-testid="rail-new-chat" aria-label="New chat"
+                        onClick={() => {
+                            onNewChat?.();
+                            // The pane must FOLLOW the conversation that was just
+                            // made. Left where it was, a selected bot's thread
+                            // stayed on screen and the press read as a dead
+                            // control. Focus is what makes the blank-reuse path —
+                            // where "New" correctly hands back the unused blank
+                            // session rather than minting another — feel like
+                            // something happened.
+                            selectThread({ kind: 'team' });
+                            composerRef.current?.focus();
                         }}
                         className="group flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-ui-caption text-zinc-400 transition-colors duration-[120ms] ease-[var(--ease-snappy)] hover:bg-white/[0.06] hover:text-zinc-100">
                         <Plus className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden="true" />
-                        <span className="flex-1 truncate" title="New">New</span>
-                        <ChevronDown className={`h-3 w-3 shrink-0 text-zinc-600 transition-transform ${newMenuAt ? 'rotate-180' : ''}`} aria-hidden="true" />
+                        <span className="flex-1 truncate" title="New chat">New chat</span>
                     </button>
-                    {newMenuAt && createPortal(
-                        <RowMenu x={newMenuAt.x} y={newMenuAt.y} items={newMenuItems} onClose={() => setNewMenuAt(null)} />,
-                        document.body,
+                    {onOpenCoach && (
+                        <button type="button" data-testid="rail-coach-inbox"
+                            onClick={() => onOpenCoach()}
+                            aria-label={coachCount > 0 ? `Coach inbox. ${coachCount} awaiting your decision` : 'Coach inbox'}
+                            className="group flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-ui-caption text-zinc-400 transition-colors duration-[120ms] ease-[var(--ease-snappy)] hover:bg-white/[0.06] hover:text-zinc-100">
+                            <Inbox className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden="true" />
+                            <span className="flex-1 truncate" title="Coach inbox">Coach inbox</span>
+                            {coachCount > 0 && (
+                                <span className="shrink-0 rounded-full bg-amber-500 px-1.5 font-mono text-ui-2xs tabular-nums text-zinc-950">
+                                    {coachCount > 9 ? '9+' : coachCount}
+                                </span>
+                            )}
+                        </button>
                     )}
                 </div>
 
@@ -909,8 +915,63 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     </div>
                 )}
 
+                {/* The column's two lists, split the way the reference splits
+                    SESSIONS and BOTS. The search handle rides on this row rather
+                    than inside one section, because it filters both lists and
+                    lived in the bot header only by accident. */}
+                <div className="flex shrink-0 items-center gap-1 border-b border-zinc-800/80 px-2 pb-1.5">
+                    <div role="tablist" aria-label="Sidebar lists" className="flex items-center gap-1">
+                        {([['chats', 'Chats'], ['bots', 'Bots']] as const).map(([id, label]) => (
+                            <button key={id} type="button" role="tab" data-testid={`rail-tab-${id}`}
+                                aria-selected={railTab === id}
+                                onClick={() => setRailTab(id)}
+                                className={`hit-target rounded-control px-2 py-1 text-ui-dense uppercase tracking-widest transition-colors duration-[120ms] ease-[var(--ease-snappy)] ${
+                                    railTab === id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
+                                }`}>
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                    <button type="button" data-testid="rail-search-toggle" className="ml-auto shrink-0 rounded-control p-1.5 transition-colors hover:text-zinc-200"
+                        onClick={() => setSearchOpen(v => !v)}
+                        aria-expanded={searching} aria-controls="rail-search-field"
+                        aria-label="Search conversations"
+                        title={searching ? 'Hide the search field' : 'Search conversations (/)'}>
+                        <Search className={`h-3.5 w-3.5 ${searching ? 'text-zinc-200' : 'text-zinc-600'}`} aria-hidden="true" />
+                    </button>
+                    {(activeBots.length > 1 || listedGroups.length > 1) && (
+                        <button type="button" data-testid="rail-sort" aria-label="Sort conversations"
+                            onClick={() => setSortByName(v => !v)}
+                            title={sortByName ? 'Sorted by name — click for most recent' : 'Sorted by most recent — click for name'}
+                            className="hit-target shrink-0 rounded-control p-1.5 text-zinc-600 transition-colors hover:text-zinc-300">
+                            <ArrowUpDown className="h-3 w-3" aria-hidden="true" />
+                        </button>
+                    )}
+                </div>
+
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-3 custom-scrollbar">
-                    <section data-testid="rail-pinned">
+                    {searching && (
+                        <div id="rail-search-field" className="relative mb-1.5 px-1">
+                            <input ref={searchRef} value={query}
+                                onChange={e => setQuery(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key !== 'Escape') return;
+                                    // Hide ≠ close only applies to surfaces;
+                                    // an empty field has nothing to keep.
+                                    if (query) setQuery('');
+                                    else setSearchOpen(false);
+                                }}
+                                placeholder="Search conversations..."
+                                aria-label="Search conversations" data-testid="rail-search"
+                                className="w-full rounded-control border border-zinc-800/80 bg-zinc-950/70 py-1.5 pl-3 pr-7 text-ui-dense text-zinc-200 outline-none placeholder:text-zinc-500 transition-colors focus:border-zinc-700 focus:bg-zinc-950" />
+                            {!query && (
+                                <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-control border border-zinc-800/80 bg-zinc-900/80 px-1 py-0.5 font-mono text-ui-xs leading-none text-zinc-500">
+                                    /
+                                </kbd>
+                            )}
+                        </div>
+                    )}
+                    {railTab === 'chats' && (<section data-testid="rail-pinned">
                         <h4 className="px-1 pb-1 text-ui-sm font-semibold uppercase tracking-widest text-zinc-500">Pinned</h4>
                         {/* WS-6: the desk's own conversation is a first-class row,
                             not only the pane you fall back into. */}
@@ -926,66 +987,22 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 actions={groupActions(g)}
                                 onClick={() => selectThread({ kind: 'group', groupId: g.id })} />
                         ))}
-                    </section>
+                    </section>)}
 
-                    <section>
+                    {railTab === 'bots' && (<section>
                         <div className="flex items-center gap-1 px-1 pb-1">
                             <h4 className="text-ui-sm font-semibold uppercase tracking-widest text-zinc-500">
                                 Bots
                             </h4>
-                            {/* The magnifier is the field's handle, exactly where
-                                the reference puts it — in the list's header, not
-                                as a box permanently above it. */}
-                            <button type="button" data-testid="rail-search-toggle"
-                                onClick={() => setSearchOpen(v => !v)}
-                                aria-expanded={searching}
-                                aria-controls="rail-search-field"
-                                aria-label="Search conversations"
-                                title={searching ? 'Hide the search field' : 'Search conversations (/)'}
-                                className={`ml-auto rounded-control p-1.5 transition-colors hover:text-zinc-200 ${
-                                    searching ? 'text-zinc-200' : 'text-zinc-600'}`}>
-                                <Search className="h-3.5 w-3.5" aria-hidden="true" />
-                            </button>
-                            {(activeBots.length > 1 || listedGroups.length > 1) && (
-                                <button type="button" data-testid="rail-sort"
-                                    onClick={() => setSortByName(v => !v)}
-                                    title={sortByName ? 'Sorted by name — click for most recent' : 'Sorted by most recent — click for name'}
-                                    aria-label="Sort conversations"
-                                    className="rounded-control p-0.5 text-zinc-600 transition-colors hover:text-zinc-300">
-                                    <ArrowUpDown className="h-3 w-3" aria-hidden="true" />
-                                </button>
-                            )}
                             {/* The list's own creator, as the reference's BOTS
-                                header carries one. Same handler the `New` menu's
-                                "New agent" verb calls — a second entry point, not
-                                a second behaviour. */}
+                                header carries one. Search and sort moved up onto
+                                the tab row, because they filter both lists. */}
                             <button type="button" onClick={onNewBot} data-testid="rail-new-bot"
                                 aria-label="New agent" title="New agent"
-                                className="rounded-control p-1.5 text-zinc-600 transition-colors hover:text-zinc-200">
+                                className="ml-auto rounded-control p-1.5 text-zinc-600 transition-colors hover:text-zinc-200">
                                 <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                             </button>
                         </div>
-                        {searching && (
-                            <div id="rail-search-field" className="relative mb-1.5 px-1">
-                                <input ref={searchRef} value={query}
-                                    onChange={e => setQuery(e.target.value)}
-                                    onKeyDown={e => {
-                                        if (e.key !== 'Escape') return;
-                                        // Hide ≠ close only applies to surfaces;
-                                        // an empty field has nothing to keep.
-                                        if (query) setQuery('');
-                                        else setSearchOpen(false);
-                                    }}
-                                    placeholder="Search conversations..."
-                                    aria-label="Search conversations" data-testid="rail-search"
-                                    className="w-full rounded-control border border-zinc-800/80 bg-zinc-950/70 py-1.5 pl-3 pr-7 text-ui-dense text-zinc-200 outline-none placeholder:text-zinc-500 transition-colors focus:border-zinc-700 focus:bg-zinc-950" />
-                                {!query && (
-                                    <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-control border border-zinc-800/80 bg-zinc-900/80 px-1 py-0.5 font-mono text-ui-xs leading-none text-zinc-500">
-                                        /
-                                    </kbd>
-                                )}
-                            </div>
-                        )}
                         {listedBots.length === 0 && (
                             <p className="px-1 py-3 text-ui-dense leading-5 text-zinc-600">
                                 No agents yet. Create one and it appears here with its own thread.
@@ -1004,14 +1021,17 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 {showInactive && inactiveBots.map(renderBotRow)}
                             </>
                         )}
-                        </section>
+                    </section>)}
 
                         {/* Rooms get their own header for the same reason the
                             reference's sidebar splits its lists: a bot row and a
                             room row look identical apart from the icon, so the
                             section name is what tells them apart. */}
-                        {listedGroups.length > 0 && (
-                        <section data-testid="rail-rooms">
+                        {/* Always drawn, even empty: its `+` is the only sidebar
+                            entry point left for making the FIRST room, and a
+                            section that hides until it has something in it has
+                            no place to put the control that creates one. */}
+                    {railTab === 'chats' && (<section data-testid="rail-rooms">
                             <div className="flex items-center gap-1 px-1 pb-1">
                                 <h4 className="text-ui-sm font-semibold uppercase tracking-widest text-zinc-500">
                                     Rooms
@@ -1047,10 +1067,14 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     </>
                                 )} />
                             ))}
-                        </section>
-                        )}
+                            {listedGroups.length === 0 && (
+                                <p className="px-1 py-2 text-ui-dense leading-5 text-zinc-600">
+                                    No rooms yet. A room puts several agents on one thread.
+                                </p>
+                            )}
+                    </section>)}
 
-                    {onLoadConversation && (
+                    {railTab === 'chats' && onLoadConversation && (
                         <section data-testid="rail-conversations">
                             <h4 className="px-1 pb-1 text-ui-sm font-semibold uppercase tracking-widest text-zinc-500">
                                 Conversations

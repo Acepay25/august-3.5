@@ -1462,8 +1462,11 @@ async function main() {
             }, 8000);
             // The bot row click: the thread must be OPEN before asserting on its
             // contents, and the button may not be there yet on a slow render.
+            // The roster is its own tab now, so ask for it first — clicking the
+            // tab that is already selected changes nothing.
             const openedBot = await pollFor(async () => {
                 const clicked = await page.evaluate(() => {
+                    document.querySelector('[data-testid="rail-tab-bots"]')?.click();
                     const b = [...document.querySelectorAll('button')]
                         .find(x => /probe bot/i.test(x.textContent || ''));
                     if (!b) return false;
