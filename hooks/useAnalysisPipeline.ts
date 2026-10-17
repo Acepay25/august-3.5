@@ -3252,6 +3252,12 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                 // Casual chat is a single-model conversation. Do not store the
                 // answer as an individual insight; that creates an oversized
                 // "Individual AI Insights" section under ordinary replies.
+                // Flush BEFORE the settle write, never after. A chunk that
+                // arrived between the last animation frame and here is still
+                // pending; flushing after the settle re-applies it and puts
+                // `isStreaming: true` and the un-stripped live text back onto
+                // the message that was just settled — permanently.
+                throttledCasualStream.flush();
                 updateMessages(prev => prev.map(m => m.id === streamingMessageId ? {
                     ...m,
                     text: casualClean,
@@ -3259,7 +3265,6 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                     modelsUsed: { [provider.config.id]: provider.model },
                     thoughtProcesses: casualSplit.thinking ? { [provider.config.id]: casualSplit.thinking } : undefined,
                 } : m), requestConversationId);
-                throttledCasualStream.flush();
                 // ── Bot Mode: hand the settled reply (raw, markers
                 // included) to the mailbox — it strips [[dm:@…]] markers
                 // from the bubble and delivers the DMs. Fire-and-forget.

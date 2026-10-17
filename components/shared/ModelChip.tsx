@@ -26,7 +26,9 @@ export interface ModelChipProps {
     value: string;
     onChange: (value: string) => void;
     onRefreshModels?: () => void | Promise<void>;
-    /** Why the chip is amber: a stale or unusable pick. */
+    /** Why the chip warns: a stale or unusable pick. It surfaces in the chip's
+     *  `title` only — the amber banner under the composer is a separate
+     *  component (`ModelFallbackBanner`), not this control. */
     issue?: string | null;
     /** What to name the current pick when nothing in the ready list matches it. */
     fallbackLabel?: string;

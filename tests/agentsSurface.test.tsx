@@ -670,12 +670,14 @@ describe('AgentsView rail rows (ported from the roster-rail suite)', () => {
 
     it('counts what the Coach hop is waiting on, and jumps to the Learn tab', () => {
         const onOpenCoach = vi.fn();
-        const { rerender } = render(<AgentsView {...base} onOpenCoach={onOpenCoach} />);
-        expect(screen.getByTestId('rail-coach-inbox').textContent).toContain('Coach inbox');
-        rerender(<AgentsView {...base} coachCount={2} onOpenCoach={onOpenCoach} />);
-        // The count rides in the accessible name, not just the badge, so a
-        // screen reader hears the queue depth rather than a bare row label.
-        expect(screen.getByLabelText('Coach inbox. 2 awaiting your decision')).toBeTruthy();
+        const { rerender } = render(<AgentsView {...base} onOpenCoach={onOpenCoach} coachCount={2} />);
+        const row = screen.getByTestId('rail-coach-inbox');
+        // A route, not a second counter: the queue's number rides the Knowledge
+        // tab that hosts it, so one screen cannot show two figures for one inbox.
+        expect(row.getAttribute('aria-label')).toBe('Coach inbox');
+        expect(row.textContent).not.toMatch(/2|9\+/);
+        rerender(<AgentsView {...base} coachCount={7} onOpenCoach={onOpenCoach} />);
+        expect(screen.getByTestId('rail-coach-inbox').getAttribute('aria-label')).toBe('Coach inbox');
         fireEvent.click(screen.getByTestId('rail-coach-inbox'));
         expect(onOpenCoach).toHaveBeenCalledTimes(1);
     });
