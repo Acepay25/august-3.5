@@ -609,9 +609,19 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 const users = await dbService.getAllUsernames();
                 if (!isMounted) return;
                 setExistingUsernames(users);
-                const sessionUser = sessionStorage.getItem('activeUsername');
-                if (sessionUser && users.includes(sessionUser)) {
-                    void loadUserDataRef.current(sessionUser);
+                // sessionStorage is PER TAB, so a returning trader who simply
+                // opened a new tab or restarted the desktop app had no active
+                // user and was met by the workspace chooser every single time.
+                // `last_active_user` is written to localStorage on every profile
+                // load (:553) and is already what half the services treat as
+                // "who is using this app" — the boot gate was the one place that
+                // ignored it. The chooser still appears when there is nothing to
+                // continue into: a first-ever run, a deleted profile, or an
+                // explicit "switch user".
+                const remembered = sessionStorage.getItem('activeUsername')
+                    || localStorage.getItem('last_active_user');
+                if (remembered && users.includes(remembered)) {
+                    void loadUserDataRef.current(remembered);
                 } else if (!profileSelectionStartedRef.current) {
                     setIsUserModalOpen(true);
                 }
