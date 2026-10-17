@@ -124,10 +124,6 @@ interface AgentsViewProps {
     providerReady?: boolean;
     /** Rename a bot in place (WS-6's row affordances). */
     onRenameBot?: (botId: string, name: string) => void;
-    /** Open this bot's debate-seat overrides (prompt, personality, tool
-     *  allowlist) — the three fields the pipeline reads off the BotRegistry
-     *  record that matches the bot's provider + model. */
-    onEditSeatOverrides?: (bot: AgentBot) => void;
     /** Jump to the Coach inbox, which lives on the Learn surface. Without it
      *  the rail shows no Coach pill — a shortcut to a thread this surface no
      *  longer owns would be a dead end wearing a badge. */
@@ -441,7 +437,6 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     botStats,
     providerReady = false,
     onRenameBot,
-    onEditSeatOverrides,
     onOpenCoach,
     conversations = [], activeConversationId = null, onLoadConversation, onDeleteConversation, onClearConversation, onNewChat,
 }) => {
@@ -733,10 +728,6 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     ...(onRenameBot ? [{
                         label: 'Rename',
                         onSelect: () => { setRenamingId(r.bot.id); setRenameDraft(r.bot.name); },
-                    }] : []),
-                    ...(onEditSeatOverrides ? [{
-                        label: 'Debate overrides',
-                        onSelect: () => onEditSeatOverrides(r.bot),
                     }] : []),
                     ...(routines.length > 0 ? [{
                         label: `Routines (${routines.length})`,

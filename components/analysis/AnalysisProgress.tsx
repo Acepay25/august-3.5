@@ -18,7 +18,6 @@ import {
   CheckIcon,
   CloseIcon,
   CircleIcon,
-  EyeIcon,
   SkipIcon,
 } from '../shared/Icons';
 
@@ -27,18 +26,14 @@ import {
 // is always available alongside it: a step is never identified by hue alone,
 // and a user-initiated Stop is not drawn in failure colours.
 
-const StepStatusIcon: React.FC<{ status: AnalysisStepStatus; isPostMortem?: boolean }> = ({
+const StepStatusIcon: React.FC<{ status: AnalysisStepStatus }> = ({
   status,
-  isPostMortem,
 }) => {
   const { text } = runStatusPresentation(status);
-  // A post-mortem row is not the run itself, so its spinner keeps neutral
-  // chrome rather than the run's accent colour.
-  const running = isPostMortem ? 'text-zinc-300' : text;
 
   switch (status) {
     case 'running':
-      return <LoadingIcon className={`size-4 ${running}`} />;
+      return <LoadingIcon className={`size-4 ${text}`} />;
     case 'complete':
       return <CheckIcon className={`size-4 ${text}`} />;
     case 'error':
@@ -52,9 +47,8 @@ const StepStatusIcon: React.FC<{ status: AnalysisStepStatus; isPostMortem?: bool
 
 // ─── Single Task Block ──────────────────────────────────────────────────────
 
-const StepTaskBlock: React.FC<{ step: AnalysisStep; isPostMortem?: boolean }> = ({
+const StepTaskBlock: React.FC<{ step: AnalysisStep }> = ({
   step,
-  isPostMortem,
 }) => {
   const isRunning = step.status === 'running';
   const hasSubSteps = step.subSteps && step.subSteps.length > 0;
@@ -71,7 +65,7 @@ const StepTaskBlock: React.FC<{ step: AnalysisStep; isPostMortem?: boolean }> = 
     <Task defaultOpen={isRunning || showContent}>
       <TaskTrigger title="">
         <div className="flex items-center gap-2 cursor-pointer group/trigger py-1">
-          <StepStatusIcon status={step.status} isPostMortem={isPostMortem} />
+          <StepStatusIcon status={step.status} />
           <span className={`text-ui-base transition-colors ${presentation.text}`}>
             {step.title}
           </span>
@@ -127,9 +121,8 @@ const StepTaskBlock: React.FC<{ step: AnalysisStep; isPostMortem?: boolean }> = 
 const CompletionSummaryBar: React.FC<{
   steps: AnalysisStep[];
   totalElapsed: number;
-  isPostMortem?: boolean;
   children: React.ReactNode;
-}> = ({ steps, totalElapsed, isPostMortem, children }) => {
+}> = ({ steps, totalElapsed, children }) => {
   const summary = useMemo(() => {
     const parts: string[] = [];
     const analysisStep = steps.find((s) => s.id === 'analysis');
@@ -162,7 +155,7 @@ const CompletionSummaryBar: React.FC<{
     if (errored > 0) {
       const firstFailed = steps.find(s => s.status === 'error');
       return {
-        title: isPostMortem ? 'Post-Mortem failed' : 'Task failed',
+        title: 'Task failed',
         detail: `${firstFailed?.title ?? 'A step'}: ${stepErrorLabel(firstFailed?.errorKind).toLowerCase()}`,
         open: true,
         text: 'text-rose-300' as const,
@@ -171,7 +164,7 @@ const CompletionSummaryBar: React.FC<{
     if (stopped > 0) {
       const firstStopped = steps.find(s => s.status === 'stopped');
       return {
-        title: isPostMortem ? 'Post-Mortem stopped' : 'Task stopped',
+        title: 'Task stopped',
         // For a stop the whole ladder stays collapsed, so this line is the only
         // thing a user reads without reaching for a chevron — and "what had it
         // already got" is exactly the question pressing Stop raises.
@@ -181,12 +174,12 @@ const CompletionSummaryBar: React.FC<{
       };
     }
     return {
-      title: isPostMortem ? 'Post-Mortem completed' : 'Task completed',
+      title: 'Task completed',
       detail: summary,
       open: false,
       text: 'text-zinc-200' as const,
     };
-  }, [steps, summary, isPostMortem]);
+  }, [steps, summary]);
 
   const accent = 'border-white/10';
 
@@ -219,9 +212,6 @@ interface AnalysisProgressProps {
   onCancel: () => void;
   /** Render inside a parent surface, such as the desktop activity rail. */
   embedded?: boolean;
-  isPostMortem?: boolean;
-  isPostMortemInProgress?: boolean;
-  onOpenPostMortem?: () => void;
 }
 
 const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
@@ -229,9 +219,6 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
   isActive,
   onCancel,
   embedded = false,
-  isPostMortem,
-  isPostMortemInProgress,
-  onOpenPostMortem,
 }) => {
   const totalElapsed = useMemo(() => {
     const starts = steps.map((s) => s.startTime).filter(Boolean) as number[];
@@ -250,7 +237,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
   const taskBlocks = (
     <div className="space-y-1">
       {visibleSteps.map((step) => (
-        <StepTaskBlock key={step.id} step={step} isPostMortem={isPostMortem} />
+        <StepTaskBlock key={step.id} step={step} />
       ))}
     </div>
   );
@@ -264,15 +251,6 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
 
           {/* Action buttons row */}
           <div className="flex items-center gap-3 mt-3 pt-3 border-t border-zinc-800">
-            {isPostMortemInProgress && onOpenPostMortem && (
-              <button
-                onClick={onOpenPostMortem}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-control text-ui-sm font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 border border-white/10 transition-colors"
-              >
-                <EyeIcon className="size-3.5" aria-hidden="true" />
-                View Post-Mortem
-              </button>
-            )}
             <button
               onClick={onCancel}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-control text-ui-sm font-medium text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors ml-auto"
@@ -287,7 +265,6 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({
         <CompletionSummaryBar
           steps={steps}
           totalElapsed={totalElapsed}
-          isPostMortem={isPostMortem}
         >
           {taskBlocks}
         </CompletionSummaryBar>

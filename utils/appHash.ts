@@ -12,10 +12,11 @@ export const parseAppHash = (hash: string): AppHashRoute => {
     const [head, rest] = raw.split('/');
     if (head === 'journal') {
         const tab = rest as JournalUIState['tab'] | undefined;
-        // Stale tabs (performance/learning/memory/models/reasoning) fold to
-        // the ledger — a dead tab must never serialize itself back into the
-        // URL or render a blank panel.
-        const allowed: JournalUIState['tab'][] = ['log', 'analytics', 'saved'];
+        // Stale tabs (performance/learning/memory/models/reasoning, and
+        // `saved` since the debate's archive went) fold to the ledger — a dead
+        // tab must never serialize itself back into the URL or render a blank
+        // panel.
+        const allowed: JournalUIState['tab'][] = ['log', 'analytics'];
         return { view: 'journal', tab: tab && allowed.includes(tab) ? tab : 'log' };
     }
     if (head === 'market') return { view: 'market' };

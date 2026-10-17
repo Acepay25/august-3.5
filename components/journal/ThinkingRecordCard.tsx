@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Brain, ChevronDown, MessageSquare } from '../shared/Icons';
+import { Brain, ChevronDown } from '../shared/Icons';
 import { ThinkingRecord } from '../../types/thinking';
 import { TradeOutcome } from '../../types';
 import ThinkingModal from '../analysis/ThinkingModal';
@@ -18,7 +18,7 @@ const PROVIDER_COLORS: Record<string, { bg: string; border: string; text: string
   moderator: { bg: 'bg-cyan-950/20', border: 'border-cyan-500/20', text: 'text-cyan-400' },
 };
 
-export const getProviderColor = (provider: string) => PROVIDER_COLORS[provider.toLowerCase()] || {
+const getProviderColor = (provider: string) => PROVIDER_COLORS[provider.toLowerCase()] || {
   bg: 'bg-zinc-800',
   border: 'border-white/10',
   text: 'text-zinc-400',
@@ -34,7 +34,6 @@ const OUTCOME_BADGE: Record<string, string> = {
 
 const roleLabel = (record: ThinkingRecord): string => {
   if (record.role === 'moderator') return 'Moderator';
-  if (record.role === 'debate_turn') return `Debate Turn ${(record.debateTurnIndex ?? 0) + 1}`;
   return 'Analyst';
 };
 
@@ -56,7 +55,6 @@ const Section: React.FC<{ title: string; children: React.ReactNode; defaultOpen?
  */
 export const ThinkingRecordCard: React.FC<ThinkingRecordCardProps> = ({ record }) => {
   const colors = getProviderColor(record.provider);
-  const isTurn = record.role === 'debate_turn';
   const [isModalOpen, setIsModalOpen] = useState(false);
   const parts = displayThinkingParts(record);
 
@@ -64,14 +62,10 @@ export const ThinkingRecordCard: React.FC<ThinkingRecordCardProps> = ({ record }
     <div className={`rounded-bubble border ${colors.border} ${colors.bg} p-3`}>
       <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
         <div className="flex items-center gap-2">
-          {isTurn ? (
-            <MessageSquare className={`w-3.5 h-3.5 ${colors.text}`} />
-          ) : (
-            <Brain className={`w-3.5 h-3.5 ${colors.text}`} />
-          )}
+          <Brain className={`w-3.5 h-3.5 ${colors.text}`} />
           <span className={`text-ui-sm font-bold ${colors.text} uppercase tracking-wider`}>
             {roleLabel(record)}
-            {!isTurn && record.provider !== 'moderator' && (
+            {record.provider !== 'moderator' && (
               <span className="ml-2 normal-case text-ui-xs font-mono text-zinc-500">{record.provider}</span>
             )}
             {record.modelName && <span className="ml-2 text-ui-xs font-mono text-zinc-500">{record.modelName}</span>}
@@ -91,12 +85,6 @@ export const ThinkingRecordCard: React.FC<ThinkingRecordCardProps> = ({ record }
           )}
         </div>
       </div>
-
-      {isTurn && record.debateTurnSpeaker && (
-        <p className="text-ui-xs font-bold uppercase tracking-wider text-zinc-600 mb-1.5">
-          {record.debateTurnSpeaker}
-        </p>
-      )}
 
       <button type="button" onClick={() => setIsModalOpen(true)} className="mt-3 flex w-full items-center justify-between rounded-control border border-white/10 bg-black/20 px-3 py-2 text-left text-ui-xs font-bold uppercase tracking-wider text-zinc-400 transition-colors hover:border-cyan-400/30 hover:bg-zinc-800 hover:text-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400" aria-haspopup="dialog">
         <span>View full thinking</span>

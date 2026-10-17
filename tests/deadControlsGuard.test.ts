@@ -37,9 +37,13 @@ describe('the bot roster has one owner', () => {
         expect(existsSync('components/shared/Sidebar.tsx')).toBe(false);
     });
 
-    it('the per-seat overrides are edited from the Agents rail', () => {
-        expect(appSrc).toMatch(/onEditSeatOverrides=\{setSeatOverridesBot\}/);
-        expect(agentsSrc).toMatch(/label: 'Debate overrides'/);
+    it('no per-seat override editor survives the debate', () => {
+        // The dialog edited the BotRegistry record a DEBATE seat resolved to
+        // (prompt, personality, tool allowlist). With no seats there is no
+        // override to edit, and a row that opens a form for a dead concept is
+        // exactly the inert control this file exists to catch.
+        expect(appSrc).not.toMatch(/onEditSeatOverrides|seatOverridesBot/);
+        expect(agentsSrc).not.toMatch(/Debate overrides/);
     });
 });
 
@@ -255,7 +259,7 @@ describe('a class the framework does not generate must have a rule behind it', (
     // control draws its own background. jsdom cannot see any of this: it mounts
     // markup without resolving a stylesheet, so the only gate is the source.
     const css = read('index.css');
-    const users = ['components/journal/TradeLog.tsx', 'components/journal/SavedAnalyses.tsx'];
+    const users = ['components/journal/TradeLog.tsx'];
 
     it('the class is really used — this is not a rule written for nothing', () => {
         for (const f of users) expect(read(f)).toMatch(/form-checkbox/);

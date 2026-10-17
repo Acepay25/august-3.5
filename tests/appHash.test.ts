@@ -5,11 +5,13 @@ describe('appHash', () => {
     it('parses journal tabs and round-trips', () => {
         expect(parseAppHash('#/journal')).toEqual({ view: 'journal', tab: 'log' });
         expect(parseAppHash('#/journal/analytics')).toEqual({ view: 'journal', tab: 'analytics' });
-        expect(parseAppHash('#/journal/saved')).toEqual({ view: 'journal', tab: 'saved' });
         // Dead tabs — the old performance/learning/memory/models/reasoning
-        // set — fold to the ledger instead of rendering a blank panel. The
+        // set, and `saved` since the saved-analyses archive went with the
+        // debate that wrote it — fold to the ledger instead of rendering a
+        // blank panel. The
         // #/journal/learning SURFACE redirect keys off the raw hash upstream
         // (useSurfaceRouter), so the fold never strands that bookmark.
+        expect(parseAppHash('#/journal/saved')).toEqual({ view: 'journal', tab: 'log' });
         expect(parseAppHash('#/journal/learning')).toEqual({ view: 'journal', tab: 'log' });
         expect(parseAppHash('#/journal/reasoning')).toEqual({ view: 'journal', tab: 'log' });
         expect(parseAppHash('#/journal/models')).toEqual({ view: 'journal', tab: 'log' });

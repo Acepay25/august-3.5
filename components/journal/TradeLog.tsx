@@ -11,7 +11,6 @@ import { ReasoningPanel } from './ReasoningPanel';
 import { getThinkingTradeId } from '../../services/infrastructure/ThinkingStoreService';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
 import { captureEfficiencyPct } from '../../utils/disciplineAnalytics';
-import { tallyFinCom } from '../../services/providers/debateScience';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
 import MarkdownContent from '../shared/MarkdownContent';
@@ -81,12 +80,9 @@ const TradeDetailView: React.FC<{
     const [pnlDraftPercent, setPnlDraftPercent] = useState<string>(pnlPercent !== undefined ? String(pnlPercent) : '');
 
     const safeDirection = direction || 'Neutral';
-    // Realized share of the best move the tape offered. Null until the
-    // post-mortem measured an excursion window for this trade.
+    // Realized share of the best move the tape offered. Null until the outcome
+    // was recorded with a measured excursion window.
     const capture = captureEfficiencyPct(trade);
-    // Peer disagreement recorded in the debate transcript, or null when the
-    // trade was never logged from a marked debate.
-    const dissent = tallyFinCom(trade.debateTurns);
 
     const handleLeverageBlur = () => {
         let val = parseInt(localLeverage, 10);
@@ -140,12 +136,6 @@ const TradeDetailView: React.FC<{
                     <div className="mb-4">
                         <OutcomeBadge outcome={outcome} />
                     </div>
-
-                    {/* The post-mortem report and the screenshots attached to it
-                        used to be the body of this card. The feature that wrote
-                        them is deleted, so the card now carries the trade and
-                        its setup — an empty "No post-mortem report yet" panel
-                        advertising a button that no longer exists is worse. */}
 
                     <details className="mt-10 group">
                         <summary className="cursor-pointer text-ui-base text-zinc-400 hover:text-zinc-200 list-none flex items-center gap-2">
@@ -311,8 +301,8 @@ const TradeDetailView: React.FC<{
                                     </div>
                                 </div>
 
-                                {/* Execution quality, measured from candles by the
-                                    post-mortem's validation. Rendered only once at
+                                {/* Execution quality, measured from the candles the
+                                    position actually occupied. Rendered only once at
                                     least one side exists, so the (large) population
                                     of pre-feature trades stays clean rather than
                                     showing dashes everywhere. */}
@@ -338,23 +328,6 @@ const TradeDetailView: React.FC<{
                                         <p className="mt-1 text-ui-2xs text-zinc-600">
                                             Leveraged percents over the candles the position actually occupied.
                                         </p>
-                                    </div>
-                                )}
-
-                                {/* Peer disagreement from the debate transcript —
-                                    the stored markers previously had no reader at
-                                    all. A count, not a rate: one trade's dissent
-                                    is context, not evidence about a seat. */}
-                                {dissent && (
-                                    <div className="col-span-2 text-ui-xs text-zinc-500" data-testid="trade-fincom">
-                                        Floor before the verdict:{' '}
-                                        <span className={dissent.dissents > 0 ? 'text-amber-300' : 'text-zinc-400'}>
-                                            {dissent.dissents} dissent{dissent.dissents === 1 ? '' : 's'}
-                                        </span>
-                                        {' · '}{dissent.commits} commit{dissent.commits === 1 ? '' : 's'}
-                                        {dissent.dissenters.length > 0 && (
-                                            <span className="text-zinc-600"> — {dissent.dissenters.join(', ')}</span>
-                                        )}
                                     </div>
                                 )}
 
@@ -477,8 +450,8 @@ const TradeLogRowImpl: React.FC<{
     const alphaLabel = trade.benchmark && Number.isFinite(trade.benchmark.alphaPct)
         ? `α ${trade.benchmark.alphaPct >= 0 ? '+' : ''}${trade.benchmark.alphaPct.toFixed(1)}%`
         : null;
-    // Compact "how much of the move did I keep" tag; only once the post-mortem
-    // has measured an excursion window for this trade.
+    // Compact "how much of the move did I keep" tag; only once the outcome was
+    // recorded with a measured excursion window.
     const capture = captureEfficiencyPct(trade);
     const capLabel = capture !== null ? `cap ${capture.toFixed(0)}%` : null;
 

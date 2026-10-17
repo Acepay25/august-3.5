@@ -104,50 +104,6 @@ export const TraderProfileCards: React.FC<TraderProfileCardsProps> = ({
         return out.sort((a, b) => b.at - a.at).slice(0, 12);
     }, [notebookSkills]);
 
-    // Conviction auction history: scan stored debate transcripts for each
-    // seat's sealed CONVICTION lines and average them.
-    const convictionSummaries = useMemo(() => {
-        const bySeat = new Map<string, { total: number; count: number; last: number; deltas: number[] }>();
-        for (const trade of trades) {
-            const turns = trade.debateTurns;
-            if (!Array.isArray(turns)) continue;
-            // Collect the seat's FULL ordered trajectory in this debate,
-            // not just the first sealed line — the within-debate movement is
-            // the persuasion signal.
-            const trajBySeat = new Map<string, number[]>();
-            for (const t of turns) {
-                if (t.speaker === 'Moderator' || t.speaker === 'System') continue;
-                const mAll = [...t.text.matchAll(/CONVICTION:\s*(\d{1,3})/gi)];
-                if (mAll.length === 0) continue;
-                const v = Math.min(100, Math.max(0, parseInt(mAll[mAll.length - 1][1], 10)));
-                const arr = trajBySeat.get(t.speaker) ?? [];
-                arr.push(v);
-                trajBySeat.set(t.speaker, arr);
-            }
-            for (const [seat, vals] of trajBySeat) {
-                if (vals.length === 0) continue;
-                const cur = bySeat.get(seat) ?? { total: 0, count: 0, last: vals[vals.length - 1], deltas: [] };
-                cur.total += vals[0];
-                cur.count += 1;
-                cur.last = vals[vals.length - 1];
-                if (vals.length >= 2) cur.deltas.push(vals[vals.length - 1] - vals[0]);
-                bySeat.set(seat, cur);
-            }
-        }
-        return [...bySeat.entries()].map(([name, s]) => {
-            const movedCount = s.deltas.filter(d => d !== 0).length;
-            return {
-                name,
-                avgConviction: s.total / Math.max(s.count, 1),
-                debateCount: s.count,
-                lastValue: s.last,
-                // Mean within-debate drift + how often it moves.
-                avgDelta: s.deltas.length > 0 ? s.deltas.reduce((a, b) => a + b, 0) / s.deltas.length : 0,
-                moveRate: s.deltas.length > 0 ? movedCount / s.deltas.length : 0,
-            };
-        }).sort((a, b) => b.avgConviction - a.avgConviction);
-    }, [trades]);
-
     return (
         <div className="grid grid-cols-1 gap-3 sm:gap-4">
             {/* Best Coins */}
@@ -159,7 +115,7 @@ export const TraderProfileCards: React.FC<TraderProfileCardsProps> = ({
                     subtext: meta.status,
                     color: meta.status === 'confirmed' ? 'text-emerald-400' : meta.status === 'retired' ? 'text-zinc-600' : 'text-cyan-300',
                 }))}
-                emptyText="No skills learned yet — close trades with post-mortems to grow skill memory"
+                emptyText="No skills in the notebook yet — a drafted skill appears here once it is approved"
             />
 
             <StatCard
@@ -288,26 +244,6 @@ export const TraderProfileCards: React.FC<TraderProfileCardsProps> = ({
                                 : 'text-zinc-500',
                 }))}
                 emptyText="Close trades to measure whether model confidence means anything — lower Brier = better calibrated (chance ≈ 0.25)"
-            />
-            <StatCard
-                title="Conviction auction"
-                items={convictionSummaries.slice(0, 6).map(c => {
-                    // Show the persuasion signal alongside the level.
-                    const drift = c.debateCount > 0 && c.moveRate > 0
-                        ? ` · ${c.moveRate >= 0.4 ? 'moves' : 'occasional'} (avg Δ${c.avgDelta > 0 ? '+' : ''}${c.avgDelta.toFixed(0)})`
-                        : '';
-                    return {
-                        name: c.name,
-                        value: `${c.avgConviction.toFixed(0)}/100`,
-                        subtext: `avg sealed conviction · ${c.debateCount} debate${c.debateCount === 1 ? '' : 's'} · last ${c.lastValue}${drift}`,
-                        color: c.avgConviction >= 70
-                            ? 'text-emerald-400'
-                            : c.avgConviction >= 45
-                                ? 'text-zinc-300'
-                                : 'text-amber-500',
-                    };
-                })}
-                emptyText="Run debates to see each seat's average sealed conviction (0-100)"
             />
             <StatCard
                 title="Veto accuracy"

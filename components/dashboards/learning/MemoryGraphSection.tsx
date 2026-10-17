@@ -86,7 +86,7 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
             )}
             {graphTab === 'learned' && (
                 notebookSkills.length === 0
-                    ? <p className="text-ui-sm text-zinc-600 italic">Nothing learned yet — close trades with post-mortems to grow skill memory.</p>
+                    ? <p className="text-ui-sm text-zinc-600 italic">Nothing learned yet — a skill lands here once its draft is approved in the inbox.</p>
                     : <div className="space-y-1.5">
                         {notebookSkills.slice(0, 10).map(s => (
                             <div key={s.file.id} className="rounded-control border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-ui-dense">

@@ -30,7 +30,6 @@ const AutomationRunCard: React.FC<{
     onConfirmOutcome?: (run: AutomationRun, outcome: RunOutcomeConfirm) => void;
 }> = ({ run, modelIdToName, onConfirmOutcome }) => {
     const [showReasoning, setShowReasoning] = useState(false);
-    const [showDebate, setShowDebate] = useState(false);
     const [confirmed, setConfirmed] = useState<RunOutcomeConfirm | null>(null);
 
     const analysis = run.message?.analysis;
@@ -113,8 +112,8 @@ const AutomationRunCard: React.FC<{
                     <MarkdownContent content={markdown} />
                 </div>
 
-                {/* Minimal prose toggles — reasoning and debate only (no JSON) */}
-                {(run.message?.thoughtProcesses && Object.keys(run.message.thoughtProcesses).length > 0) || (run.message?.debateTurns && run.message.debateTurns.length > 0) ? (
+                {/* Minimal prose toggles — reasoning only (no JSON) */}
+                {run.message?.thoughtProcesses && Object.keys(run.message.thoughtProcesses).length > 0 ? (
                     <div className="mt-3 pt-3 border-t border-white/5 space-y-1">
                         {run.message?.thoughtProcesses && Object.keys(run.message.thoughtProcesses).length > 0 && (
                             <div>
@@ -126,21 +125,6 @@ const AutomationRunCard: React.FC<{
                                         <div key={key} className="p-2.5 bg-zinc-950 border border-white/5 rounded-control">
                                             <p className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-600 mb-1">{modelIdToName[key] ?? key}</p>
                                             <p className="text-ui-dense text-zinc-400 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto custom-scrollbar">{String(text)}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                        {run.message?.debateTurns && run.message.debateTurns.length > 0 && (
-                            <div>
-                                <button onClick={() => setShowDebate(!showDebate)} className="text-ui-xs uppercase font-bold tracking-widest text-zinc-500 hover:text-cyan-300 flex items-center gap-1 transition-colors">
-                                    Debate ({run.message.debateTurns.length} turns) <ChevronDownIcon className={`w-3 h-3 transition-transform ${showDebate ? 'rotate-180' : ''}`} />
-                                </button>
-                                <div className={`collapsible-content ${showDebate ? 'expanded' : ''} space-y-1.5`}>
-                                    {run.message.debateTurns.map((turn, i) => (
-                                        <div key={i} className="p-2.5 bg-zinc-950 border border-white/5 rounded-control">
-                                            <p className="text-ui-2xs font-bold uppercase tracking-widest text-cyan-400/80 mb-1">{turn.speaker}{turn.round ? ` · Round ${turn.round}` : ''}</p>
-                                            <p className="text-ui-dense text-zinc-400 leading-relaxed whitespace-pre-wrap max-h-40 overflow-y-auto custom-scrollbar">{turn.text}</p>
                                         </div>
                                     ))}
                                 </div>
