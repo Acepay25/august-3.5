@@ -69,6 +69,29 @@ export interface DualScenarioAnalysis {
   confidenceInSelection: number; // 0-100, how confident in the selection
 }
 
+/** How the gate scan bound a presented plan.
+ *
+ *  Lives in `types` (not in the service that produces it) because the stamped
+ *  value must survive onto the journal row, and a persisted record should not
+ *  import from a runtime module to describe itself.
+ *
+ *  `unavailable` is a REAL state, not a zero: the scan fetches market data plus
+ *  an OHLCV pull per timeframe, so it can fail, hang, or be stopped. A plan in
+ *  that state is logged only behind an explicit "Log without gate check"
+ *  confirm, and never with `confidenceCap: 0`, which would report a live idea
+ *  as a worthless one. */
+export interface ProposalGate {
+    status: 'evaluated' | 'unavailable';
+    /** 0-1 when evaluated; 1 (binds nothing) when unavailable. */
+    confidenceCap: number;
+    /** Why — quoted into the tool receipt and the row's validationWarnings. */
+    reason: string;
+    /** When the scan answered. A stamp older than the staleness window is
+     *  re-run at log time, so a plan opened from yesterday's session is not
+     *  logged against a number the market left behind. */
+    stampedAt: string;
+}
+
 export interface TradeAnalysis {
   coinName?: string;
   direction: 'Long' | 'Short' | 'Neutral';
@@ -144,6 +167,9 @@ export interface TradeAnalysis {
    *  pipeline when the gate blocked, the verdict contradicts pattern-memory
    *  direction, or the plan is incomplete (missing SL/TP). */
   riskVeto?: string;
+  /** Set only on a plan that reached the journal through `present_trade`: the
+   *  scan that bounded it, or the honest record that no scan could. */
+  gate?: ProposalGate;
   // Gate Keeper result - two-stage scan data
   gateResult?: {
     passed: boolean;

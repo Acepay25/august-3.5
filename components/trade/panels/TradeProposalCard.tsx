@@ -12,7 +12,7 @@
 import React from 'react';
 import { CheckCircle } from '../../shared/Icons';
 import type { TradeProposal } from '../../../services/trade/proposedTrade';
-import { computeRrRatio } from '../../../services/trade/proposedTrade';
+import { computeRrRatio, buildProposedTradeAnalysis } from '../../../services/trade/proposedTrade';
 import { fmtRiskReward } from '../../../utils/riskReward';
 
 export interface TradeProposalCardProps {
@@ -20,11 +20,21 @@ export interface TradeProposalCardProps {
     /** A journal is attached (App passed onLogProposedTrade) — without it the
      *  Log button is hidden and only Cancel shows. */
     canLog: boolean;
+    /** The log click is awaiting the gate scan. The button is disabled and
+     *  labelled for what it is waiting on, so a slow scan never reads as a dead
+     *  button — the failure mode this whole surface was built to avoid. */
+    awaitingLog?: boolean;
     onLog: () => void;
     onCancel: () => void;
 }
 
-const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog, onLog, onCancel }) => (
+const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog, awaitingLog = false, onLog, onCancel }) => {
+    // The card shows levels the moment the model names them, but the probability,
+    // the confidence tier and any grade come ONLY from the stamped analysis —
+    // the same builder that writes the journal row, so the card can never quote a
+    // number the row disagrees with.
+    const stamped = proposal.gate ? buildProposedTradeAnalysis(proposal) : null;
+    return (
     <div className="mt-1 rounded-control border border-white/[0.04] bg-white/[0.015] p-2.5" data-testid="trade-proposal-card">
         <div className="flex items-center gap-2">
             <span className={`rounded-control px-1.5 py-0.5 text-ui-xs font-bold ${proposal.direction === 'Long' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}>{proposal.direction}</span>
@@ -36,7 +46,15 @@ const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog,
                     {fmtRiskReward(computeRrRatio(proposal), 1)} R:R
                 </span>
             )}
-            <span className="ml-auto font-mono text-ui-xs uppercase tracking-wider text-zinc-500">{proposal.confidence} confidence</span>
+            {stamped ? (
+                <span className="ml-auto font-mono text-ui-xs uppercase tracking-wider text-zinc-500" data-testid="proposal-confidence">
+                    {stamped.probability}% · {stamped.confidence} confidence
+                </span>
+            ) : (
+                <span className="ml-auto font-mono text-ui-xs uppercase tracking-wider text-zinc-600" data-testid="proposal-gate-pending">
+                    gate: checking…
+                </span>
+            )}
         </div>
         <div className="mt-2 grid grid-cols-3 gap-2 rounded-control border border-white/[0.04] bg-white/[0.02] p-2 font-mono text-ui-dense tabular-nums">
             <div>
@@ -53,12 +71,21 @@ const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog,
             </div>
         </div>
         {proposal.rationale && <p className="mt-1.5 text-ui-dense leading-relaxed text-zinc-400">{proposal.rationale}</p>}
+        {proposal.gate?.status === 'unavailable' && (
+            // Fail closed: an unmeasurable plan is never quietly logged. The
+            // handler asks for an explicit confirm, and the row it writes is
+            // stamped `gate:unavailable` — never confidenceCap 0.
+            <p className="mt-1.5 text-ui-dense text-amber-400/90" data-testid="proposal-gate-unavailable">
+                Gate could not be checked ({proposal.gate.reason}) — logging asks you to confirm, and the row is recorded UNCAPPED.
+            </p>
+        )}
         <div className="mt-2.5 flex items-center gap-1.5">
             {canLog && (
                 <button type="button"
                     onClick={onLog}
-                    className="rounded-control bg-emerald-600/90 px-2.5 py-1 text-ui-dense font-medium text-white transition-colors hover:bg-emerald-500">
-                    Log this trade
+                    disabled={awaitingLog}
+                    className="rounded-control bg-emerald-600/90 px-2.5 py-1 text-ui-dense font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-progress disabled:bg-zinc-700 disabled:text-zinc-300">
+                    {awaitingLog ? 'Checking the gate…' : 'Log this trade'}
                 </button>
             )}
             <button type="button"
@@ -68,7 +95,8 @@ const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog,
             </button>
         </div>
     </div>
-);
+    );
+};
 
 /** The settled counterpart: a plan the trader already logged, left in the
  *  transcript so it can never be clicked twice. */

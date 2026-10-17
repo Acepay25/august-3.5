@@ -1441,3 +1441,24 @@ export const clampProbabilityToGate = (
 
     return { probability: Math.round(clamped * 10) / 10, wasClamped, reason };
 };
+
+/** The ONE confidence-string downgrade rule.
+ *
+ * A clamped probability and a confidence WORD that still says "High" is a
+ * verdict that contradicts itself on the same card, so every path that clamps
+ * must re-tier the label on the same thresholds. Both the pipeline's finalizer
+ * and `present_trade`'s gate stamp call this — the two copies used to drift by
+ * one threshold and the journal disagreed with the card.
+ *
+ * `'Avoid'` is a DECISION, not a confidence tier, so it is never rewritten: the
+ * rule only ever walks High→Medium→Low. */
+export type ConfidenceLabel = 'High' | 'Medium' | 'Low' | 'Avoid';
+
+export const downgradeConfidenceForProbability = (
+    probability: number,
+    confidence: ConfidenceLabel,
+): ConfidenceLabel => {
+    if (probability < 70 && confidence === 'High') return 'Medium';
+    if (probability < 55 && confidence === 'Medium') return 'Low';
+    return confidence;
+};

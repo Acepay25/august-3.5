@@ -26,6 +26,7 @@ import {
     parseProseTradePlan,
     sanitizeTradeAnalysis,
     clampProbabilityToGate,
+    downgradeConfidenceForProbability,
 } from '../../utils/analysisUtils';
 import { flagBannedVocabulary } from '../../services/providers/debateScience';
 import { parseKeptAnalyst } from '../../utils/keptAnalyst';
@@ -441,11 +442,10 @@ export async function finalizeVerdict(input: VerdictFinalizerInput): Promise<Ver
             console.warn(`[Gate Enforcement] Clamped probability ${processedAnalysis.probability}% → ${clampResult.probability}% (${clampResult.reason})`);
             processedAnalysis.probability = clampResult.probability;
             // Also downgrade the confidence string if probability was clamped below the threshold
-            if (clampResult.probability < 70 && processedAnalysis.confidence === 'High') {
-                processedAnalysis.confidence = 'Medium';
-            } else if (clampResult.probability < 55 && processedAnalysis.confidence === 'Medium') {
-                processedAnalysis.confidence = 'Low';
-            }
+            processedAnalysis.confidence = downgradeConfidenceForProbability(
+                clampResult.probability,
+                processedAnalysis.confidence,
+            );
             // Record the clamping in validation warnings
             if (!processedAnalysis.validationWarnings) {
                 processedAnalysis.validationWarnings = [];
