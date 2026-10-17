@@ -454,3 +454,45 @@ describe('useUserProfileLoader', () => {
         expect(localStorage.getItem('last_active_user')).toBe('bob');
     });
 });
+
+describe('the boot gate: who meets the workspace chooser', () => {
+    // The chooser is a blocking overlay, so "the app mounted behind it" is not
+    // "the user got in". It used to open on every fresh tab because
+    // `activeUsername` lives in sessionStorage, which dies with the tab, while
+    // `last_active_user` in localStorage was already what the rest of the app
+    // treats as the current trader.
+    const boot = async (sessionUser: string | null, remembered: string | null) => {
+        sessionStorage.clear();
+        localStorage.clear();
+        if (sessionUser) sessionStorage.setItem('activeUsername', sessionUser);
+        if (remembered) localStorage.setItem('last_active_user', remembered);
+        const args = createMockArgs();
+        const { result } = renderHook(() => useUserProfileLoader(args));
+        await act(async () => { await Promise.resolve(); });
+        const opened = (args.setIsUserModalOpen as unknown as ReturnType<typeof vi.fn>)
+            .mock.calls.some(([v]: boolean[]) => v === true);
+        return { opened, result };
+    };
+
+    it('does not intercept a returning trader who opened a new tab', async () => {
+        // getAllUsernames is mocked to ['user1','user2'] — user1 is remembered.
+        const { opened } = await boot(null, 'user1');
+        expect(opened).toBe(false);
+    });
+
+    it('still opens when the remembered workspace was deleted', async () => {
+        const { opened } = await boot(null, 'ghost');
+        expect(opened).toBe(true);
+    });
+
+    it('still opens on a first-ever run with nothing to continue into', async () => {
+        const { opened } = await boot(null, null);
+        expect(opened).toBe(true);
+    });
+
+    it('honours the tab-scoped session when both keys disagree', async () => {
+        // This tab is on user2; localStorage still says user1. The tab wins.
+        const { opened } = await boot('user2', 'user1');
+        expect(opened).toBe(false);
+    });
+});
