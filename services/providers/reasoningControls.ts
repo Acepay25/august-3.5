@@ -97,6 +97,22 @@ export const effortForTask = (
     return p === 'fast' ? stepEffortDown(base) : base;
 };
 
+/**
+ * A composer's stored tier → the tier sent on the wire. `'auto'` (and an
+ * unset value) means "whatever this task defaults to", so the historical
+ * chat behavior; any real tier passes through untouched.
+ *
+ * Both chat transports need exactly this mapping — the dock's seat turn
+ * (`chatTurnRunner`) and the Chat surface's casual turn
+ * (`GenericAnalysisService.streamQuickResponse`) — and they now share ONE
+ * session row for the choice, so the rule lives beside the schedule it
+ * consults rather than in whichever file asked for it first. Two copies is
+ * how one surface starts answering with reasoning and the other without it
+ * while showing the same label.
+ */
+export const resolveComposerEffort = (effort?: ReasoningEffort): ReasoningEffort =>
+    effort && effort !== 'auto' ? effort : effortForTask('chat');
+
 // ─── Capability-class detection ────────────────────────────────────────────
 
 export interface WireCapabilities {

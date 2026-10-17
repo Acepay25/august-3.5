@@ -10,7 +10,7 @@ import {
 import { ProviderConfig } from '../types/provider';
 import { analyzeTradingView, getQuickResponse, streamQuickResponse } from '../services/providers/GenericAnalysisService';
 import type { ToolAction } from '../types/message';
-import { WireAuditEntry } from '../services/providers/reasoningControls';
+import { WireAuditEntry, type ReasoningEffort } from '../services/providers/reasoningControls';
 import * as ensembleService from '../services/providers/ensembleService';
 import { BotRegistry } from '../services/bots/BotRegistry';
 import { defaultToolsForRole } from '../types/bot';
@@ -661,6 +661,13 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
          *  just asked about. */
         symbol?: string;
         interval?: string;
+        /** The composer's thinking tier for a casual (non-debate) turn, read
+         *  off the active chat session by the surface that sent. `'auto'` and
+         *  an omitted value both mean the task default, so every caller that
+         *  never shows a dial keeps exactly the request it was making before.
+         *  The debate ignores it: each seat's effort comes from the role
+         *  schedule (`EFFORT_BY_TASK`), not from a composer. */
+        reasoningEffort?: ReasoningEffort;
     }): Promise<ChatRunOutcome> => {
         const isAutomationRun = !!options?.automation;
         let stopTokenUsage: (() => void) | undefined;
@@ -3238,6 +3245,10 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         visibleContent += delta;
                         throttledCasualStream(requestConversationId, streamingMessageId, visibleContent, reasoningContent, provider.config.id, true);
                     },
+                    // The dial the surface is showing, not the task default: a
+                    // chip that displayed a tier while the request sent `'low'`
+                    // is the dead affordance this argument exists to remove.
+                    options?.reasoningEffort,
                 );
                 if (!isCurrentRequest()) assertCurrentRequest();
                 // Split before display: native CoT and any leaked scratchpad

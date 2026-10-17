@@ -1,21 +1,24 @@
 /**
  * ChatComposer — the dock's composer, extracted from TradeChatPanel.
- * Props-only: the draft, the effort choice and the two popover menus are
- * the SHELL's state (they keep their lifetime across session switches, as
- * before) — only their setters ride in as props. The model selector, the
- * + attach button (files + images + chart screenshot), the scan→skills
- * chip, Full analysis and the thinking-effort toggle all behave exactly as
- * they did inline; the send button doubles as Stop while a run is live.
+ * Props-only: the draft and the attach menu are the SHELL's state (they keep
+ * their lifetime across session switches, as before) — only their setters ride
+ * in as props. The model selector and the thinking-effort dial are shared
+ * controls (components/shared/ModelChip, EffortChip) that own their own open
+ * state, so this file passes a value and a writer and nothing else. The +
+ * attach button (files + images + chart screenshot), the scan→skills chip and
+ * Full analysis behave exactly as they did inline; the send button doubles as
+ * Stop while a run is live.
  */
 
-import React, { useState } from 'react';
-import {Camera, Check, ChevronDown, FileText, Plus, TriangleAlert, SendIcon, StopIcon} from '../../shared/Icons';
+import React from 'react';
+import {Camera, FileText, Plus, TriangleAlert, SendIcon, StopIcon} from '../../shared/Icons';
 import type { ProviderConfig } from '../../../types/provider';
 import type { Attachment } from '../../../hooks/useChatAttachments';
 import type { ReasoningEffort } from '../../../services/providers/reasoningControls';
 import { formatModelDisplayName } from '../../../utils/providerUtils';
 import { DISCLAIMER_SHORT } from '../../../constants/disclaimer';
 
+import EffortChip from '../../shared/EffortChip';
 import ModelChip from '../../shared/ModelChip';
 import ChatAttachmentStrip from './ChatAttachmentStrip';
 import ComposerWorkspaceRow from './ComposerWorkspaceRow';
@@ -26,23 +29,6 @@ import * as chatStore from '../../../services/trade/chatStore';
  *  that wait for approval in the Inbox. Exported because the shell's
  *  screener-prefill listener drops the same prompt into the draft. */
 export const SCAN_SKILLS_PROMPT = 'Scan the full candle history of this chart with scan_chart_skills: study how the price actually moved (regimes, swings, gaps) and which entries have historically worked, then draft your best IF/THEN skill candidates from what the tape proves. Tell me what you found and what is waiting in the Inbox.';
-
-/** Thinking-budget levels. The words are the whole readout: `auto` is not a
- *  budget but "pick per task", so it stays a peer of the tiers, not a bar
- *  count between Off and Low. */
-const EFFORT_CHOICES: { id: ReasoningEffort | 'auto'; label: string }[] = [
-    { id: 'off', label: 'Off' },
-    { id: 'auto', label: 'Auto' },
-    { id: 'low', label: 'Low' },
-    { id: 'medium', label: 'Medium' },
-    { id: 'high', label: 'High' },
-    { id: 'max', label: 'Max' },
-];
-
-/** The trigger and the open menu show the same read for the same id — one
- *  lookup keeps them from drifting. */
-const effortChoiceOf = (id: ReasoningEffort | 'auto'): typeof EFFORT_CHOICES[number] =>
-    EFFORT_CHOICES.find(c => c.id === id) ?? EFFORT_CHOICES[1];
 
 interface ChatComposerProps {
     /** The chart the chat talks about (workspace row + model picker). */
@@ -67,11 +53,10 @@ interface ChatComposerProps {
      *  because the pipeline never reads that controller. Absent ⇒ Stop keeps
      *  its old chat-only meaning. */
     onStopRun?: () => void;
-    effort: ReasoningEffort | 'auto';
-    /** Persists the choice to the session store AND the shell state. */
-    changeEffort: (next: ReasoningEffort | 'auto') => void;
-    showEffortMenu: boolean;
-    setShowEffortMenu: React.Dispatch<React.SetStateAction<boolean>>;
+    effort: ReasoningEffort;
+    /** Writes the tier onto the active chat session — the row the Chat surface
+     *  renders too, so one pick is both homes' pick. */
+    changeEffort: (next: ReasoningEffort) => void;
     /** Visible explanation when the stored model pick went stale. */
     modelIssue: string | null;
     provider: ProviderConfig | null;
@@ -121,7 +106,7 @@ export const ModelFallbackBanner: React.FC<{
 
 const ChatComposer: React.FC<ChatComposerProps> = ({
     symbol, interval, isPanel, ready, busy, draft, setDraft, send, runFullAnalysis, onRunAnalysis, onStopRun,
-    effort, changeEffort, showEffortMenu, setShowEffortMenu, modelIssue, provider, selectedChatModel,
+    effort, changeEffort, modelIssue, provider, selectedChatModel,
     changeSoloModel, providers, onRefreshModels, attachments, removeAttachment, fileInputRef,
     attachFiles, showAttachMenu, setShowAttachMenu, captureChart, onCaptureChart, composerRef,
     panelCount, pickerOpen, onTogglePicker, botName, contextAt,
@@ -236,60 +221,14 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
         </div>
         {/* The reference footer, harness-style: model chip + effort chip on
             one row under the card's right edge, the disclaimer on its own
-            line below. The model popover carries the picker's contract —
-            ready providers only, grouped, searchable, star-able — and both
-            popovers scroll or fit, never overflow. */}
+            line below. Both chips are the shared controls the Chat surface
+            renders too, so neither home can have a dial the other lacks. */}
         <div className="mt-1.5 flex items-center justify-end gap-1.5 px-2">
             {!isPanel && (
                 <ModelChip providers={providers} value={selectedChatModel} onChange={changeSoloModel}
-                    onRefreshModels={onRefreshModels} issue={modelIssue} fallbackLabel={provider?.name}
-                    onOpen={() => setShowEffortMenu(false)} />
+                    onRefreshModels={onRefreshModels} issue={modelIssue} fallbackLabel={provider?.name} />
             )}
-            {!isPanel && (
-                <div className="relative">
-                    <button type="button" onClick={() => setShowEffortMenu(v => !v)}
-                        aria-label={`Thinking effort: ${effortChoiceOf(effort).label}`}
-                        aria-expanded={showEffortMenu} aria-haspopup="menu"
-                        title={`Thinking effort: ${effortChoiceOf(effort).label}`}
-                        data-testid="composer-effort-chip"
-                        className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-zinc-900/60 px-2.5 py-1 text-ui-dense text-zinc-400 transition-colors hover:border-white/[0.16] hover:text-zinc-200">
-                        <span className="whitespace-nowrap">{effortChoiceOf(effort).label}</span>
-                        <ChevronDown className={`h-2.5 w-2.5 shrink-0 transition-transform duration-150 ease-[var(--ease-snappy)] ${showEffortMenu ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showEffortMenu && (
-                        <>
-                            <div className="fixed inset-0 z-20" aria-hidden onClick={() => setShowEffortMenu(false)} />
-                            <div
-                                className="absolute bottom-8 right-0 z-30 w-40 rounded-bubble border border-white/10 bg-zinc-900 p-1 shadow-xl"
-                                data-testid="effort-menu"
-                                role="menu"
-                                aria-label="Thinking effort"
-                                onKeyDown={(e) => {
-                                    // Same containment as the model menu —
-                                    // Escape here must not cancel a run.
-                                    e.stopPropagation();
-                                    if (e.key === 'Escape') setShowEffortMenu(false);
-                                }}
-                            >
-                                {EFFORT_CHOICES.map(c => (
-                                    <button
-                                        key={c.id}
-                                        type="button"
-                                        role="menuitemradio"
-                                        aria-checked={effort === c.id}
-                                        autoFocus={effort === c.id}
-                                        onClick={() => { changeEffort(c.id); setShowEffortMenu(false); }}
-                                        className={`flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left text-ui-dense transition-colors hover:bg-white/[0.06] ${effort === c.id ? 'text-zinc-100' : 'text-zinc-500'}`}
-                                    >
-                                        <Check className={`h-3 w-3 shrink-0 ${effort === c.id ? 'text-emerald-400' : 'opacity-0'}`} aria-hidden="true" />
-                                        {c.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </>
-                    )}
-                </div>
-            )}
+            {!isPanel && <EffortChip value={effort} onChange={changeEffort} />}
         </div>
         <p className="mt-1.5 px-2 text-ui-xs text-zinc-600">
             {DISCLAIMER_SHORT}

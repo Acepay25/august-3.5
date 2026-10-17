@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useSyncExternalStore } from 'react';
 import { reapplyIdleMotionClass } from './services/desk/idleMotion';
 
 // Apply the user's persisted idle-motion preference to <body> on app
@@ -85,6 +85,7 @@ import type { LearnTab } from './components/learn/LearnView';
 import SkillsLibrary from './components/skills/SkillsLibrary';
 const AgentsView = React.lazy(() => import('./components/agents/AgentsView'));
 import ModelChip from './components/shared/ModelChip';
+import EffortChip from './components/shared/EffortChip';
 import ModelPicker from './components/shared/ModelPicker';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { computeChatModelFallback, isProviderReady } from './utils/providerUtils';
@@ -1868,6 +1869,15 @@ const App: React.FC = () => {
         return s?.symbol || s?.interval ? { symbol: s.symbol, interval: s.interval } : {};
     }, []);
 
+    /** The Chat surface's thinking dial: the ACTIVE chat session's tier, read
+     *  through a subscription whose snapshot is the tier itself — so App
+     *  re-renders when the choice changes, not on every streaming patch of the
+     *  session store. ONE row drives both homes: the Chart AI dock derives the
+     *  same field from the snapshot it already subscribes to, so picking a tier
+     *  in either surface is the tier the other shows and sends. A send reads
+     *  it fresh (`getActiveEffort()`), never from this render. */
+    const chatEffort = useSyncExternalStore(chatStore.subscribe, chatStore.getActiveEffort, chatStore.getActiveEffort);
+
     const handleRunAnalysisFromChat = useCallback((prompt: string, chatImages: Array<{ name: string; dataURL: string }>): Promise<string | { text: string; messageId?: string }> => {
         if (isAnalysisInProgress) return Promise.reject(new Error('an analysis is already running — wait for it or stop it first'));
         if (readyProviders.length === 0) return Promise.reject(new Error('no AI providers are configured'));
@@ -1890,6 +1900,7 @@ const App: React.FC = () => {
             let settled = false;
             void handleSendMessage(prompt, images, undefined, {
                 ...activeInstrument(),
+                reasoningEffort: chatStore.getActiveEffort(),
                 automation: {
                     automationId: 'trade-chat',
                     conversation,
@@ -1955,6 +1966,7 @@ const App: React.FC = () => {
             let settled = false;
             void handleSendMessage(prompt, images, undefined, {
                 ...activeInstrument(),
+                reasoningEffort: chatStore.getActiveEffort(),
                 onSettled: (aiMessage) => {
                     if (settled) return;
                     settled = true;
@@ -2931,9 +2943,17 @@ const App: React.FC = () => {
                                            it: one pill naming the model, opening a
                                            searchable, grouped, star-able menu. */
                                         <ModelChip providers={providerConfigs} value={selectedChatModel}
-                                            onChange={setSelectedChatModel} onRefreshModels={refreshModelCatalog}
+                                            onChange={v => { setSelectedChatModel(v); chatStore.setActiveSoloModel(v); }}
+                                            onRefreshModels={refreshModelCatalog}
                                             issue={chatModelFallback.issue}
                                             fallbackLabel={chatModelFallback.providerName} />
+                                    )}
+                                    effortPicker={(
+                                        /* The dock's other chip, on the same row, on
+                                           the same stored value: this tier is what the
+                                           send above reads, so the label and the
+                                           request cannot disagree. */
+                                        <EffortChip value={chatEffort} onChange={chatStore.setActiveEffort} />
                                     )}
                                     modelFallback={chatModelFallback.notice}
                                     railExpanded={isNavRailOpen}

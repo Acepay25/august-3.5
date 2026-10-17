@@ -32,13 +32,10 @@ export interface ModelChipProps {
     issue?: string | null;
     /** What to name the current pick when nothing in the ready list matches it. */
     fallbackLabel?: string;
-    /** Lets the host close its sibling popover first — the dock pairs this chip
-     *  with a thinking-effort chip and only one of them is open at a time. */
-    onOpen?: () => void;
 }
 
 const ModelChip: React.FC<ModelChipProps> = ({
-    providers, value, onChange, onRefreshModels, issue, fallbackLabel, onOpen,
+    providers, value, onChange, onRefreshModels, issue, fallbackLabel,
 }) => {
     const [query, setQuery] = useState('');
     const [open, setOpen] = useState(false);
@@ -75,7 +72,7 @@ const ModelChip: React.FC<ModelChipProps> = ({
     return (
         <div className="relative">
             <button type="button"
-                onClick={() => { onOpen?.(); setOpen(v => !v); }}
+                onClick={() => setOpen(v => !v)}
                 aria-label={`Model: ${selectedLabel}`}
                 aria-expanded={open} aria-haspopup="menu"
                 title={issue ? 'Model fallback active — re-pick a model' : 'Model'}

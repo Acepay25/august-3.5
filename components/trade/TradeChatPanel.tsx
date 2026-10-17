@@ -314,8 +314,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         attachments, fileInputRef, attachFiles, add: addAttachment,
         remove: removeAttachment, clear: clearAttachments, images: attachedImages,
     } = useChatAttachments();
-    const [effort, setEffort] = useState<ReasoningEffort | 'auto'>('auto');
-    const [showEffortMenu, setShowEffortMenu] = useState(false);
     const [showNewMenu, setShowNewMenu] = useState(false);
     /** The reference's Agent-panel header cluster: + / history / ⋯ / ×. The
      *  history button opens a "Past Conversations" palette (search + recent
@@ -343,6 +341,12 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
 
     const activeSession = sessions.find(s => s.id === activeId) ?? sessions[0];
     const isPanel = activeSession.kind === 'panel';
+    /** The composer's thinking tier — read from the SESSION ROW, not component
+     *  state. The dock unmounts when you hop to the Chat surface, so a `useState`
+     *  here died with it and the two homes disagreed about what the chat was
+     *  asking for. Both now render one chip over one field, and a turn sends
+     *  exactly what the chip shows (`chatTurnRunner` → `resolveComposerEffort`). */
+    const effort: ReasoningEffort = activeSession.effort ?? 'auto';
     /** A bot session starts EMPTY, and that is correct: a bot's conversation
      *  belongs to `messages`, which this session renders as a view of
      *  (`entriesForSession`). Seeding the session with a copy of it on open
@@ -552,12 +556,11 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const { send, runFullAnalysis, runHarnessTurn } = runner;
 
     // ── Per-session composer memory ─────────────────────────────────────────
-    // Switching sessions restores THAT chat's thinking-effort and solo-model
-    // choice the same way panel sessions already restore their seats. Reads
-    // the store fresh inside the effect so it fires on SWITCH, not on every
-    // streaming patch; sessions without stored choices keep the current ones.
-    const effortRef = useRef(effort);
-    effortRef.current = effort;
+    // The thinking tier is a session FIELD and is read straight off it above, so
+    // there is nothing to restore here. The solo-model choice still lives in
+    // App's state, so switching sessions still has to rebind it — the same way
+    // panel sessions restore their seats. Reads the store fresh inside the
+    // effect so it fires on SWITCH, not on every streaming patch.
     const soloModelRef = useRef(selectedChatModel);
     soloModelRef.current = selectedChatModel;
     // Composer textarea, so a "Try in chat" skill chip can drop its /slug in
@@ -579,8 +582,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     useEffect(() => {
         const s = chatStore.getSnapshot().sessions.find(x => x.id === activeId);
         if (!s) return;
-        const nextEffort = (s.effort as ReasoningEffort | 'auto' | undefined) ?? 'auto';
-        if (nextEffort !== effortRef.current) setEffort(nextEffort);
         if (s.kind !== 'panel' && !s.botId && s.soloModel && s.soloModel !== soloModelRef.current) {
             onSelectChatModel(s.soloModel);
         }
@@ -633,13 +634,17 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         return () => window.removeEventListener('august:try-skill', onTrySkill);
     }, [applySkillToken]);
     /** Composer model change: keep the app-wide default AND bind it to the
-     *  active session so coming back to this chat reselects it. */
+     *  active session so coming back to this chat reselects it. The per-session
+     *  half goes through the store's own writer, because the Chat surface's chip
+     *  writes the same field and two rules for one row is how the two homes
+     *  start answering with different models. */
     const changeSoloModel = useCallback((value: string): void => {
         onSelectChatModel(value);
-        if (!isPanel) chatStore.mutate(activeId, sess => ({ ...sess, soloModel: value }));
-    }, [onSelectChatModel, isPanel, activeId]);
-    const changeEffort = useCallback((next: ReasoningEffort | 'auto'): void => {
-        setEffort(next);
+        chatStore.setActiveSoloModel(value);
+    }, [onSelectChatModel]);
+    /** One write, on the row both homes read — no component state to keep in
+     *  step, so nothing here can go stale while the Chat surface changes it. */
+    const changeEffort = useCallback((next: ReasoningEffort): void => {
         chatStore.mutate(activeId, sess => ({ ...sess, effort: next }));
     }, [activeId]);
 
@@ -1143,8 +1148,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 onStopRun={onStopRun}
                 effort={effort}
                 changeEffort={changeEffort}
-                showEffortMenu={showEffortMenu}
-                setShowEffortMenu={setShowEffortMenu}
                 modelIssue={modelIssue}
                 provider={provider}
                 selectedChatModel={selectedChatModel}

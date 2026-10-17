@@ -30,7 +30,7 @@ import {
     sendChatRequest, streamChatRequest, ChatMessage, ContentPart, ChatRequestOptions,
 } from './GenericProviderService';
 import { TASK_BUDGETS } from './taskBudgets';
-import { EFFORT_BY_TASK, effortForTask, WireAuditEntry } from './reasoningControls';
+import { EFFORT_BY_TASK, effortForTask, resolveComposerEffort, WireAuditEntry, type ReasoningEffort } from './reasoningControls';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
 import { getMemoryFilesContext } from '../learning/MemoryRetrievalService';
 import { composePrompt } from '../../utils/composePrompt';
@@ -912,6 +912,13 @@ export async function getQuickResponse(
  * after completion. Reasoning deltas still flow through `onReasoning`. The
  * transport already routes think-tag bodies to the reasoning side channel, so
  * the accumulated visible text is clean; a final strip is a safety net.
+ *
+ * `effort` is LAST and optional: every existing caller passes positionals only
+ * and a chat turn that never names a tier must keep sending the task default
+ * (`effortForTask('chat')`), not a new one. It exists because the composer's
+ * dial was previously honored by the dock's seat turn and ignored here, so the
+ * same chip on the Chat surface changed nothing on the wire — and a control
+ * that changes nothing is worse than no control.
  */
 export async function streamQuickResponse(
     config: ProviderConfig,
@@ -920,7 +927,8 @@ export async function streamQuickResponse(
     systemInstruction?: string,
     signal?: AbortSignal,
     onReasoning?: (reasoning: string) => void,
-    onChunk?: (visibleDelta: string) => void
+    onChunk?: (visibleDelta: string) => void,
+    effort?: ReasoningEffort
 ): Promise<string> {
     const messages: ChatMessage[] = (history || []).map(m => ({
         role: m.role === MessageRole.AI ? 'assistant' : m.role === MessageRole.SYSTEM ? 'system' : 'user',
@@ -944,7 +952,7 @@ export async function streamQuickResponse(
     // here guarantees the live bubble never shows scratchpad markup.
     const pump = async (maxTokens: number): Promise<void> => {
         const gate = createThinkingStreamGate();
-        for await (const chunk of streamChatRequest(config, messages, { maxTokens, signal, onReasoning: noteReasoning, reasoningEffort: effortForTask('chat') })) {
+        for await (const chunk of streamChatRequest(config, messages, { maxTokens, signal, onReasoning: noteReasoning, reasoningEffort: resolveComposerEffort(effort) })) {
             if (!chunk) continue;
             const gated = gate.push(chunk);
             if (gated.thinking) noteReasoning(gated.thinking);

@@ -70,7 +70,7 @@ import { isVisionModel } from '../../utils/modelUtils';
 import { splitThinkingFromOutput } from '../../utils/thinkingSplit';
 import { TASK_BUDGETS } from '../providers/taskBudgets';
 import { getHarnessSettings } from '../../utils/harnessSettings';
-import { effortForTask, type ReasoningEffort } from '../providers/reasoningControls';
+import { resolveComposerEffort, type ReasoningEffort } from '../providers/reasoningControls';
 import type { Attachment } from '../../hooks/useChatAttachments';
 
 /** Identity of a RUNNING model turn, captured the moment it starts. Every
@@ -643,7 +643,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             signal: controller.signal,
             maxTokens: TASK_BUDGETS.chat,
             temperature: 0.4,
-            reasoningEffort: effort === 'auto' ? effortForTask('chat') : effort,
+            reasoningEffort: resolveComposerEffort(effort),
             chartInterval: interval,
             chartLevels,
             chartDrawings: allDrawings,

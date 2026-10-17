@@ -67,6 +67,84 @@ describe('chatStore sessions', () => {
     });
 });
 
+describe('the composer values shared by both chat homes', () => {
+    // The Chart AI dock and the Chat surface render the same two chips over the
+    // same session row. The dock unmounts when you hop, so anything kept in its
+    // component state is invisible to the other home — these writers exist so
+    // the row, not the component, is the answer.
+    it('reads auto for a session that never chose a tier', () => {
+        expect(store.getActiveEffort()).toBe('auto');
+    });
+
+    it('setActiveEffort lands on the active row and is what the store now reads', () => {
+        store.setActiveEffort('high');
+        expect(store.getActiveEffort()).toBe('high');
+        expect(active()?.effort).toBe('high');
+    });
+
+    it('is per session, and follows the active one', () => {
+        const first = store.getActiveId();
+        store.setActiveEffort('max');
+        const second = store.addSession({ title: 'B' });
+        // A new chat starts with the composer as it stands — then it is its own
+        // choice, and the two rows must not follow each other.
+        expect(store.getActiveEffort()).toBe('max');
+        store.setActiveEffort('low');
+        store.setActiveId(first);
+        expect(store.getActiveEffort()).toBe('max');
+        store.setActiveId(second);
+        expect(store.getActiveEffort()).toBe('low');
+    });
+
+    it('a tier change notifies subscribers, and a repeat does not write again', () => {
+        const seen: string[] = [];
+        const off = store.subscribe(() => seen.push(store.getActiveEffort()));
+        store.setActiveEffort('high');
+        store.setActiveEffort('high');
+        off();
+        // One emit for one real change: the guard is what keeps App's
+        // subscription from re-rendering on every repeat click.
+        expect(seen).toEqual(['high']);
+    });
+
+    it('setActiveSoloModel binds the pick to a solo session', () => {
+        store.setActiveSoloModel('gemini::gemini-2.5-flash');
+        expect(active()?.soloModel).toBe('gemini::gemini-2.5-flash');
+    });
+
+    it('leaves a panel session alone — its seats are the model choice', () => {
+        store.addSession({ kind: 'panel', title: 'Panel' });
+        store.setActiveSoloModel('x::y');
+        expect(active()?.soloModel).toBeUndefined();
+    });
+
+    it('a chat minted mid-run inherits the composer, not the chart', () => {
+        // The Chat surface's send lands in a fresh App conversation, and
+        // `bindConversation` mints a row for it. A row that inherits nothing
+        // resets the dock's dial to Auto under a trader who just picked High.
+        store.setActiveEffort('high');
+        store.setActiveSoloModel('gemini::gemini-2.5-flash');
+        // Not blank any more, so bindConversation must CREATE a row rather than
+        // adopt this one — creation is the path that used to lose the dial.
+        store.mutate(store.getActiveId(), s => ({ ...s, entries: [{ id: 'u1', role: 'user', text: 'x', tools: [] }] }));
+        const id = store.bindConversation('conv-1');
+        const row = store.getSnapshot().sessions.find(s => s.id === id);
+        expect(row?.conversationId).toBe('conv-1');
+        expect(row?.effort).toBe('high');
+        expect(row?.soloModel).toBe('gemini::gemini-2.5-flash');
+        // The instrument is NOT inherited: only the dock's own New-chat passes a
+        // chart setup, and a bot opened with { botId } must not adopt the coin
+        // that happened to be on screen.
+        expect(row?.symbol).toBeUndefined();
+    });
+
+    it('an explicit choice on the new row beats the inherited one', () => {
+        store.setActiveEffort('high');
+        const id = store.addSession({ effort: 'off' });
+        expect(store.getSnapshot().sessions.find(s => s.id === id)?.effort).toBe('off');
+    });
+});
+
 describe('chatStore run survival (the tab-switch fix)', () => {
     it('switching the active session does NOT abort another session run', () => {
         const a = store.getActiveId();

@@ -28,6 +28,7 @@ import {
 } from './chatSessions';
 import { getActiveUsername, LAST_ACTIVE_USER_KEY } from '../../utils/activeUser';
 import type { TradeProposal } from './proposedTrade';
+import type { ReasoningEffort } from '../providers/reasoningControls';
 
 /** A trade currently open in this session (logged but not yet resolved by
  *  the outcome autopilot). The model context loader in useAnalysisPipeline
@@ -219,6 +220,43 @@ export const getSnapshot = (): ChatSnapshot => {
 
 export const getActiveId = (): string => { ensureLoaded(); return activeId; };
 
+/**
+ * The ACTIVE session's composer thinking tier, read fresh (no subscription).
+ *
+ * One row, two homes: the Chart AI dock and the Chat surface both drive this
+ * dial, so the value a turn sends must come from here rather than from
+ * whichever component last wrote it. A session with no stored tier is
+ * `'auto'` — "whatever this task defaults to" — which is the behavior every
+ * chat had before the dial existed.
+ */
+export const getActiveEffort = (): ReasoningEffort => {
+    ensureLoaded();
+    return sessions.find(s => s.id === activeId)?.effort ?? 'auto';
+};
+
+/** Set it on the ACTIVE session, so the other home sees the same tier the
+ *  moment it re-renders. Writing a row rather than component state is the
+ *  point: the dock unmounts when you hop to the Chat surface, and state that
+ *  died with it is the sync gap this closes. */
+export const setActiveEffort = (next: ReasoningEffort): void => {
+    ensureLoaded();
+    if (getActiveEffort() === next) return;
+    mutate(activeId, s => ({ ...s, effort: next }));
+};
+
+/** The same write-through for the composer's model pick: the app-wide default
+ *  is App's state, the PER-SESSION binding is this row. A Chat surface that set
+ *  only the default left the dock answering with whatever this chat last used —
+ *  the other half of "the two surfaces don't sync". A panel session keeps its
+ *  seats and is left alone. */
+export const setActiveSoloModel = (value: string): void => {
+    ensureLoaded();
+    const sid = activeId;
+    const s = sessions.find(x => x.id === sid);
+    if (!s || s.kind === 'panel' || s.soloModel === value) return;
+    mutate(sid, sess => ({ ...sess, soloModel: value }));
+};
+
 export const setActiveId = (id: string): void => {
     ensureLoaded();
     if (id === activeId) return;
@@ -229,7 +267,24 @@ export const setActiveId = (id: string): void => {
 /** Append a fresh session and (optionally) make it active. Returns its id. */
 export const addSession = (partial: Partial<LiveSession> = {}, activate = true): string => {
     ensureLoaded();
-    const fresh: LiveSession = { ...createSession(), ...partial, entries: capEntries(partial.entries ?? []) };
+    // A new chat starts with the composer AS IT STANDS. The two composer
+    // preferences — thinking tier and solo model — are inherited from the
+    // session being left, because a chat created mid-run is not a new choice:
+    // `bindConversation` mints one the moment the Chat surface's send lands in a
+    // fresh App conversation, and a row that inherits nothing reset the dock's
+    // chip to Auto right under the trader who had just picked High.
+    //
+    // Only these two ride over. The chart setup is deliberately NOT inherited
+    // here: the dock passes it explicitly when the trader presses New chat, and a
+    // bot session opened with `{ botId }` must not adopt the coin of whichever
+    // chat happened to be on screen.
+    const from = sessions.find(s => s.id === activeId);
+    const fresh: LiveSession = {
+        ...createSession(),
+        ...(from ? { effort: from.effort, soloModel: from.soloModel } : {}),
+        ...partial,
+        entries: capEntries(partial.entries ?? []),
+    };
     sessions = capSessions([...sessions, fresh]);
     if (activate) activeId = fresh.id;
     emit();
