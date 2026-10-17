@@ -12,8 +12,6 @@ interface UIStateShape {
     isSettingsMenuVisible: boolean;
     isLiveMarketVisible: boolean;
     isVersionHistoryVisible: boolean;
-    isLivePostMortemVisible: boolean;
-    showMismatchModal: boolean;
     isVisionDataVisible: boolean;
     showAccuracyModal: boolean;
     showScrollDown: boolean;
@@ -23,9 +21,7 @@ interface UIStateShape {
     isLoading: boolean;
     isHybridLoading: boolean;
     isCalculatingAIProbabilities: boolean;
-    isPostMortemTypingComplete: boolean;
     isAnalysisInProgress: boolean;
-    isPostMortemInProgress: boolean;
     isSummaryInProgress: boolean;
     isInsightGenerating: boolean;
     isAutoCapturing: boolean;
@@ -47,8 +43,6 @@ const initialState: UIStateShape = {
     isSettingsMenuVisible: false,
     isLiveMarketVisible: false,
     isVersionHistoryVisible: false,
-    isLivePostMortemVisible: false,
-    showMismatchModal: false,
     isVisionDataVisible: false,
     showAccuracyModal: false,
     showScrollDown: false,
@@ -56,9 +50,7 @@ const initialState: UIStateShape = {
     isLoading: false,
     isHybridLoading: false,
     isCalculatingAIProbabilities: false,
-    isPostMortemTypingComplete: false,
     isAnalysisInProgress: false,
-    isPostMortemInProgress: false,
     isSummaryInProgress: false,
     isInsightGenerating: false,
     isAutoCapturing: false,

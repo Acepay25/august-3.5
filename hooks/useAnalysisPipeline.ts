@@ -38,7 +38,6 @@ import { splitThinkingFromOutput } from '../utils/thinkingSplit';
 import { sanitizeAIResponseLight } from '../utils/sanitizers';
 import { chatModelIdOf, isProviderReady, resolveChatModelSelection } from '../utils/providerUtils';
 import { buildDecisionReflectionContext } from '../services/learning/DecisionReflectionService';
-import { buildCoinLessonsBlock } from '../utils/postMortemLessons';
 import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
 import { archetypeDirectiveLine } from '../constants/prompts/archetypePrompts';
 import { buildModelsUsedRecord } from './analysisPipeline/modelsUsed';
@@ -171,8 +170,6 @@ export interface UseAnalysisPipelineParams {
     setIsHybridLoading: (v: boolean) => void;
     isRateLimited: boolean;
     setIsRateLimited: (v: boolean) => void;
-    setIsPostMortemInProgress: (v: boolean) => void;
-    setIsLivePostMortemVisible: (v: boolean) => void;
 
     // Settings:
     isAccuracyModeEnabled: boolean;
@@ -312,7 +309,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         isAnalysisInProgress, setIsAnalysisInProgress,
         isHybridLoading, setIsHybridLoading,
         isRateLimited, setIsRateLimited,
-        setIsPostMortemInProgress, setIsLivePostMortemVisible,
         isAccuracyModeEnabled, accuracySubMode,
         isGlobalMemoryEnabled, isStrategiesEnabled, customInstructions,
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
@@ -521,10 +517,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         setSteeringNotes([]);
         setLoadingMessage(null);
         setIsAnalysisInProgress(false);
-        setIsPostMortemInProgress(false);
-        setIsLivePostMortemVisible(false);
         setAnalysisSteps([]);
-    }, [activeConversationId, setIsLivePostMortemVisible, setIsPostMortemInProgress]);
+    }, [activeConversationId]);
 
     // Hybrid data and pipeline steps are ensemble-only. Clear any stale visual
     // state immediately when the user switches back to casual chat mode.
@@ -1427,20 +1421,6 @@ ${reflectionBlock}`
                         : reflectionBlock;
                 }
             } catch { /* reflection is best-effort */ }
-
-            // POST-MORTEM LESSONS FOR THIS COIN: the reflection block above
-            // carries raw post-mortem snippets; this adds the EXTRACTED lesson
-            // line per closed trade on the same coin so the floor does not
-            // repeat a mistake it already paid for. Zero AI cost.
-            try {
-                const coinLessonsBlock = buildCoinLessonsBlock(loggedTrades, detectedLearningCoin || detectedSymbol || undefined);
-                if (coinLessonsBlock) {
-                    enhancedPrompt = `${coinLessonsBlock}\n\n${enhancedPrompt}`;
-                    moderatorLearningContext = moderatorLearningContext
-                        ? `${moderatorLearningContext}\n\n${coinLessonsBlock}`
-                        : coinLessonsBlock;
-                }
-            } catch { /* coin lessons are best-effort */ }
 
             let gateInjection = '';
             let capturedGateResult: GateOutput | null = null; // Local variable to avoid state closure issue
@@ -3401,8 +3381,6 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
             analysisAbortController.current.abort();
                 setLoadingMessage(null);
             setIsAnalysisInProgress(false);
-            setIsPostMortemInProgress(false);
-            setIsLivePostMortemVisible(false);
             analysisInFlightRef.current = false;
         }
     };

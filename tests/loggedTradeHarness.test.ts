@@ -3,20 +3,20 @@
  * previously BLIND to its own logged-trade events: when the user accepted a
  * present_trade proposal and the trade was logged, the chat session saw no
  * "trade logged at $X" message and had no openTrades ledger, and when the
- * outcome autopilot resolved the trade the session saw no close-message and
- * never auto-fired the post-mortem. These tests assert the four invariants
- * the fix introduces:
+ * outcome autopilot resolved the trade the session saw no close-message.
+ * These tests assert the three invariants the fix introduces:
  *
  *  (a) logTradeWithFeedback pushes a one-shot chat entry summarising the
  *      trade (symbol · direction · entry · SL · TPs · leverage) AND adds
  *      the trade id to the session's openTrades / loggedTradeIds ledger.
  *  (b) pushTradeClosedEvent drops the trade from openTrades and pushes a
  *      "[HARNESS] Trade closed: …" close-message.
- *  (c) autoStartPostMortemForResolvedTrade is invoked exactly once per
- *      resolution (the harness always runs the post-mortem on resolve,
- *      with no user clicks).
- *  (d) The session-level openTrades invariant survives across helper
+ *  (c) The session-level openTrades invariant survives across helper
  *      calls (add → remove) without leaking into persistence.
+ *
+ * There used to be a fourth: a resolution also auto-ran the post-mortem.
+ * That feature is deleted, so the close-message is the whole of what a
+ * resolution writes into the chat.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -214,10 +214,7 @@ describe('useTradeLogging harness side-effects', () => {
             userPriorCall: userPrior(),
         } as Message;
 
-        // Render the hook with a stub startPostMortemAnalysis so the post-
-        // mortem side-effect of logTradeWithFeedback is a no-op.
         const { useTradeLogging } = await import('../hooks/useTradeLogging');
-        const startPostMortemAnalysis = vi.fn();
         const captured: Message[] = [];
         const messagesRef = { current: captured };
         const { result } = renderHook(() => useTradeLogging({
@@ -238,10 +235,8 @@ describe('useTradeLogging harness side-effects', () => {
             isEntryNotHitCapturing: false,
             setIsInsightGenerating: () => undefined,
             setCurrentHybridData: () => undefined,
-            startPostMortemAnalysis: startPostMortemAnalysis as never,
             handleSendMessage: () => undefined,
             toast: { error: () => undefined, success: () => undefined },
-            setPostMortemCandidate: () => undefined,
             setConfidenceCalibration: () => undefined,
         }));
 
@@ -265,7 +260,7 @@ describe('useTradeLogging harness side-effects', () => {
         expect(loggedLine).toMatch(/100x/);
     });
 
-    it('pushTradeClosedEvent removes from openTrades, pushes close-message, calls startPostMortemAnalysis exactly once', async () => {
+    it('pushTradeClosedEvent removes from openTrades and pushes the close-message', async () => {
         const sid = seedSessionWithAnalysisEntry('msg-trade-2');
         const message = {
             id: 'msg-trade-2',
@@ -276,7 +271,6 @@ describe('useTradeLogging harness side-effects', () => {
         } as Message;
 
         const { useTradeLogging } = await import('../hooks/useTradeLogging');
-        const startPostMortemAnalysis = vi.fn();
         const captured: Message[] = [];
         const messagesRef = { current: captured };
         const { result } = renderHook(() => useTradeLogging({
@@ -297,10 +291,8 @@ describe('useTradeLogging harness side-effects', () => {
             isEntryNotHitCapturing: false,
             setIsInsightGenerating: () => undefined,
             setCurrentHybridData: () => undefined,
-            startPostMortemAnalysis: startPostMortemAnalysis as never,
             handleSendMessage: () => undefined,
             toast: { error: () => undefined, success: () => undefined },
-            setPostMortemCandidate: () => undefined,
             setConfidenceCalibration: () => undefined,
         }));
 
@@ -338,43 +330,5 @@ describe('useTradeLogging harness side-effects', () => {
         // loggedTradeIds still carries it (the model context loader's
         // channel — knowing your last recommendation even after resolve).
         expect(session?.loggedTradeIds).toContain('msg-trade-2');
-
-        // 5. autoStartPostMortemForResolvedTrade fired EXACTLY ONCE:
-        await waitFor(() => expect(startPostMortemAnalysis).toHaveBeenCalledTimes(1));
-        const [arg] = startPostMortemAnalysis.mock.calls[0];
-        expect(arg.outcome).toBe(TradeOutcome.WIN);
-        expect(arg.message.analysis?.coinName).toBe('BTCUSDT');
-    });
-
-    it('autoStartPostMortemForResolvedTrade is a no-op for trades not in the ledger', async () => {
-        const { useTradeLogging } = await import('../hooks/useTradeLogging');
-        const startPostMortemAnalysis = vi.fn();
-        const { result } = renderHook(() => useTradeLogging({
-            messages: [],
-            messagesRef: { current: [] } as { current: Message[] },
-            updateMessages: () => undefined,
-            activeConversationLeverage: 100,
-            moderatorProviderId: 'p1',
-            moderatorModel: 'm1',
-            memoryModel: 'm1',
-            memoryConfig: { id: 'p1', name: 'p1', isEnabled: true, apiKey: 'k', models: ['m1'], selectedModel: 'm1', apiFormat: 'chat_completions', baseUrl: '' } as never,
-            useAlgorithmicInsights: false,
-            onJournalAutoRefresh: undefined,
-            setIsAutoCaptureBusy: () => undefined,
-            setIsHybridLoading: () => undefined,
-            setIsEntryNotHitCaptureBusy: () => undefined,
-            setIsUpdateCaptureBusy: () => undefined,
-            isEntryNotHitCapturing: false,
-            setIsInsightGenerating: () => undefined,
-            setCurrentHybridData: () => undefined,
-            startPostMortemAnalysis: startPostMortemAnalysis as never,
-            handleSendMessage: () => undefined,
-            toast: { error: () => undefined, success: () => undefined },
-            setPostMortemCandidate: () => undefined,
-            setConfidenceCalibration: () => undefined,
-        }));
-
-        act(() => { result.current.autoStartPostMortemForResolvedTrade('not-a-real-id'); });
-        expect(startPostMortemAnalysis).not.toHaveBeenCalled();
     });
 });

@@ -1,35 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { Inbox, Plus, X } from '../shared/Icons';
-import { jobQueue, Job } from '../../services/infrastructure/JobQueueService';
 import { listSkills, type SkillMeta } from '../../services/learning/SkillMemoryService';
 import { EmptyState } from '../ui/EmptyState';
 import type { AutomationConfig } from '../../types/automation';
 import { humanizeCron } from '../../services/automation/cronParser';
 
 /**
- * Activity drawer: the app's autonomous work in one place — the
- * insight-extraction jobs the queue has run or is running, each skill's
- * latest automated-eval verdict, and the scheduled automations with their
- * card feeds. The rail's AUTOMATIONS section landed here (stage 3): one
- * drawer owns "things the app does on its own", and the header's Activity
- * button is its only opener, at every breakpoint.
+ * Activity drawer: the app's autonomous work in one place — each skill's latest
+ * automated-eval verdict, and the scheduled automations with their card feeds.
+ * The rail's AUTOMATIONS section landed here (stage 3): one drawer owns "things
+ * the app does on its own", and the header's Activity button is its only
+ * opener, at every breakpoint.
  *
- * Three sources, deliberately side by side: the JobQueue snapshot is work
- * that went through the queue, the skill audits are read straight from skill
- * meta (an eval never touches the queue), and automations come from the
- * automation store.
+ * It used to show a third source: the background job queue's insight-extraction
+ * runs. The post-mortem that enqueued them is deleted, so the queue had no
+ * producer left and its section went with it.
  */
-
-const JOB_LABEL: Record<string, string> = {
-    EXTRACT_INSIGHTS: 'Insight extraction',
-};
-
-const STATUS_STYLE: Record<Job['status'], string> = {
-    pending: 'bg-zinc-800 text-zinc-400',
-    processing: 'bg-zinc-700 text-zinc-100',
-    completed: 'bg-emerald-950/60 text-emerald-400',
-    failed: 'bg-rose-950/60 text-rose-400/90',
-};
 
 const VERDICT_STYLE: Record<string, string> = {
     helps: 'bg-emerald-950/60 text-emerald-400',
@@ -53,13 +39,11 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
     onOpenAutomation,
     onCreateAutomation,
 }) => {
-    const [jobs, setJobs] = useState<Job[]>([]);
     const [evaluated, setEvaluated] = useState<Array<{ name: string; meta: SkillMeta }>>([]);
 
     useEffect(() => {
         if (!open) return;
         const refresh = (): void => {
-            setJobs(jobQueue.getJobs());
             try {
                 setEvaluated(
                     listSkills()
@@ -73,12 +57,10 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
             }
         };
         refresh();
-        const unsubscribe = jobQueue.onJobComplete(() => refresh());
-        return unsubscribe;
     }, [open]);
 
     const hasContent =
-        jobs.length > 0 || evaluated.length > 0 || automations.length > 0 || !!onCreateAutomation;
+        evaluated.length > 0 || automations.length > 0 || !!onCreateAutomation;
 
     if (!open) return null;
     return (
@@ -134,30 +116,6 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                                     </button>
                                 ))
                             )}
-                        </div>
-                    </>
-                )}
-                {jobs.length > 0 && (
-                    <>
-                        <p className="pb-2 text-ui-2xs font-bold uppercase tracking-widest text-zinc-600">Queued / recent</p>
-                        <div className="space-y-2 pb-4">
-                            {jobs.map(job => (
-                                <div key={job.id} data-job-row className="rounded-control border border-white/5 bg-zinc-900/70 p-2.5">
-                                    <div className="flex items-center gap-2">
-                                        <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-zinc-200" title={JOB_LABEL[job.type] ?? job.type}>
-                                            {JOB_LABEL[job.type] ?? job.type}
-                                        </span>
-                                        <span className={`rounded-control px-1.5 py-0.5 text-ui-2xs font-bold uppercase tracking-wide ${STATUS_STYLE[job.status]}`}>
-                                            {job.status}
-                                        </span>
-                                    </div>
-                                    {job.result?.error && (
-                                        <p className="mt-1 line-clamp-2 text-ui-xs text-rose-400/80" title={String(job.result.error?.message ?? job.result.error)}>
-                                            {String(job.result.error?.message ?? job.result.error).slice(0, 200)}
-                                        </p>
-                                    )}
-                                </div>
-                            ))}
                         </div>
                     </>
                 )}

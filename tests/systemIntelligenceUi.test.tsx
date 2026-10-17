@@ -22,7 +22,6 @@ vi.mock('../services/learning/GlobalLearningService', () => ({ default: { getCal
 vi.mock('../services/infrastructure/StorageService', () => ({ storageService: { getTradeLogs: async (): Promise<unknown[]> => data.tradeLogs } }));
 vi.mock('../services/learning/severityInsights', () => ({ getAttributedInsightsSummary: (): object => ({ topInsights: [], byProvider: {}, totalInsights: data.totalInsights }) }));
 vi.mock('../services/learning/PatternMemorySynthesisService', () => ({ recordInsightFeedback: vi.fn() }));
-vi.mock('../services/infrastructure/JobQueueService', () => ({ jobQueue: { getQueueLength: (): number => 0 } }));
 vi.mock('../services/learning/SkillMemoryService', () => ({ listSkills: (): unknown[] => data.skills }));
 vi.mock('../services/learning/MemoryFilesService', () => ({ getMemoryFilesStats: (): object => ({ enabledCount: 0, charCount: 0 }) }));
 vi.mock('../services/infrastructure/SessionService', () => ({ getSessionContext: (): null => null, getAllSessionsStatus: (): never[] => [] }));
@@ -60,7 +59,12 @@ describe('System Intelligence UI', () => {
         // screen, so these assertions no longer need a click to reach them.
         const storage = screen.getByText('Unified Storage').parentElement!;
         expect(storage).toHaveTextContent('0Items');
-        expect(screen.getByText('Workers Idle')).toBeInTheDocument();
+        // The System tab holds only cards that measure something. The Job
+        // Queue card reported the insight-extraction queue, whose one producer
+        // was the post-mortem, and the two hardcoded cards that used to sit
+        // beside it never measured anything.
+        expect(screen.queryByText(/Workers Idle|Job Queue/)).toBeNull();
+        expect(screen.queryByText(/Schema Version|Rule Engine/)).toBeNull();
     });
 
     it('renders a measured zero percent and counts only recorded storage items', async () => {
@@ -78,9 +82,8 @@ describe('System Intelligence UI', () => {
         // System tab, and the header keeps no second path.
         render(<Header
             saveStatus="SAVED" isAnalysisInProgress={false}
-            isPostMortemInProgress={false} currentVisionData={[]}
+            currentVisionData={[]}
             surface="trade"
-            setIsLivePostMortemVisible={vi.fn()}
         />);
         expect(screen.queryByRole('button', { name: 'System Intelligence' })).toBeNull();
         expect(screen.queryByRole('button', { name: /Changelog/ })).toBeNull();

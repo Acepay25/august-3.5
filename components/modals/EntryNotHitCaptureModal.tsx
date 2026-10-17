@@ -10,7 +10,6 @@ interface EntryNotHitCaptureModalProps {
     correctedEntry?: string;
     onClose: () => void;
     onAutoCapture: () => void;
-    onUploadScreenshot: () => void;
     onSkip: () => void;
     isCapturing?: boolean;
 }
@@ -20,7 +19,6 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
     correctedEntry,
     onClose,
     onAutoCapture,
-    onUploadScreenshot,
     onSkip,
     isCapturing = false
 }) => {
@@ -96,25 +94,6 @@ export const EntryNotHitCaptureModal: React.FC<EntryNotHitCaptureModalProps> = (
                                         ? 'Fetching market data from Binance...'
                                         : 'Instantly fetch current market data to analyze why entry was missed.'
                                     }
-                                </div>
-                            </div>
-                        </div>
-                    </button>
-
-                    {/* Upload Screenshot Option */}
-                    <button
-                        onClick={onUploadScreenshot}
-                        disabled={isCapturing}
-                        className="w-full p-4 rounded-bubble border border-white/10 bg-zinc-800 hover:bg-zinc-800 hover:border-cyan-500/30 transition-colors duration-[150ms] ease-[var(--ease-snappy)] text-left group disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <div className="flex items-start gap-4">
-                            <div className="text-3xl"></div>
-                            <div className="flex-1">
-                                <div className="font-bold text-white group-hover:text-cyan-300 transition-colors">
-                                    Upload Screenshot
-                                </div>
-                                <div className="text-ui-sm text-zinc-500 mt-1 leading-relaxed">
-                                    Manually upload a chart screenshot for detailed analysis.
                                 </div>
                             </div>
                         </div>

@@ -1,7 +1,6 @@
 /**
  * The status half of the shell's title bar: whether the journal saved, whether
- * the network is up, the live post-mortem pulse, and the one opener for the
- * Activity drawer.
+ * the network is up, and the one opener for the Activity drawer.
  *
  * It is a component rather than markup inside `shared/Header` because the Chat
  * surface has its own title bar (the mode pill and the conversation's name live
@@ -11,14 +10,11 @@
  * owner instead of a copy that could drift.
  */
 import React from 'react';
-import { LoadingIcon, CheckIcon, EyeIcon, CloudOffIcon, AlertTriangleIcon } from '../shared/Icons';
+import { LoadingIcon, CheckIcon, CloudOffIcon, AlertTriangleIcon } from '../shared/Icons';
 
 interface StatusClusterProps {
     saveStatus: 'SAVED' | 'SAVING' | 'ERROR';
     isOnline?: boolean;
-    isPostMortemInProgress?: boolean;
-    /** Opens the live post-mortem overlay — the pulse is the entry, not a toy. */
-    onOpenLivePostMortem?: () => void;
     /** Opens the Activity drawer: background jobs, skill audits, automations. */
     onOpenActivity?: () => void;
     /** Whether that drawer is standing open. The button is an OPENER, not a
@@ -31,8 +27,6 @@ interface StatusClusterProps {
 const StatusCluster: React.FC<StatusClusterProps> = ({
     saveStatus,
     isOnline = true,
-    isPostMortemInProgress = false,
-    onOpenLivePostMortem,
     onOpenActivity,
     activityOpen = false,
 }) => (
@@ -79,18 +73,6 @@ const StatusCluster: React.FC<StatusClusterProps> = ({
                     <span>Activity</span>
                 </button>
             </div>
-        )}
-
-        {isPostMortemInProgress && (
-            <button
-                type="button"
-                onClick={onOpenLivePostMortem}
-                className="rounded-control bg-zinc-800 p-2.5 text-zinc-300 animate-pulse"
-                title="Live Post-Mortem"
-                aria-label="View live post-mortem progress"
-            >
-                <EyeIcon />
-            </button>
         )}
     </div>
 );

@@ -1,30 +1,43 @@
 import { describe, it, expect } from 'vitest';
 
 /**
- * E3 — the legacy `aiPatternMemory` string list was a SECOND store for the
- * same detector output that already feeds `insightKnowledgeBase.insights`,
- * so one lesson reached the prompt twice
- * (docs/learning-loop-map.md asymmetry #2, closed here). The write and the
- * index section are gone. These tests pin the three halves of that removal:
- *   1. a fresh memory never gains the string list;
- *   2. a STORED legacy list is left byte-identical — removing a store may
- *      not retract history that a stored profile already carries;
- *   3. the insight KB still grows from the same detector, and it — alone —
- *      is what the index renders.
+ * Two stores held the same detector output, so one lesson reached the prompt
+ * twice — the legacy `aiPatternMemory` string list and
+ * `insightKnowledgeBase.insights` (docs/learning-loop-map.md asymmetry #2).
+ * The string-list write was deleted then; the KB write goes with the
+ * post-mortem, because every detector was a keyword scan of
+ * `trade.postMortem` and nothing writes that field any more.
+ *
+ * So BOTH stores are now frozen, and what these tests pin is that freezing a
+ * store must not rewrite a profile's history:
+ *   1. a fresh memory never gains either list;
+ *   2. entries a stored profile already carries survive byte-identical —
+ *      including `insightKnowledgeBase`, whose empty shell this service still
+ *      initializes;
+ *   3. the index renders the KB and nothing else — never the legacy list, and
+ *      never the same lesson twice.
  */
 
 import { updateGlobalMemoryAlgorithmically } from '../services/learning/AlgorithmicMemoryService';
 import { buildGlobalMemoryIndex } from '../utils/memoryUtils';
-import type { GlobalMemory, LoggedTrade, TradeAnalysis } from '../types';
+import type { GlobalMemory, LoggedTrade, TradeAnalysis, TradeInsight } from '../types';
 import { TradeOutcome } from '../types';
 
 const LEGACY = ['⚠️ RECURRING MISTAKE: old duplicate lesson (3 occurrences in recent batch)'];
 
-/** Post-mortem containing ONLY the 'chased' trigger: it fires the one
- *  detector `Late entry after move started` and none of the other eight
- *  (no 'early', 'stop', 'weak', 'moved stop'… substrings), so five of these
- *  losses yield exactly one recurring mistake at 5 occurrences. */
-const chasedLoss = (id: string): LoggedTrade => ({
+/** A lesson as the deleted detector used to write it: `useCount` was the
+ *  occurrence count at distillation time, and the index labels it
+ *  "pattern strength" precisely because nothing increments it afterwards. */
+const lesson: TradeInsight = {
+    id: 'ins-1',
+    category: 'entry_timing',
+    insight: 'Late entry after move started',
+    sourceTradeId: 't0',
+    createdAt: '2026-08-01T00:00:00.000Z',
+    useCount: 5,
+};
+
+const loss = (id: string): LoggedTrade => ({
     id,
     analysis: {
         coinName: 'BTCUSDT',
@@ -32,7 +45,6 @@ const chasedLoss = (id: string): LoggedTrade => ({
         detectedPatternFamily: 'Family A',
     } as unknown as TradeAnalysis,
     outcome: TradeOutcome.LOSS,
-    postMortem: 'Chased the breakdown entry after it printed.',
     timestamp: '2026-08-09T12:00:00.000Z',
 });
 
@@ -45,32 +57,45 @@ const baseMemory = (): GlobalMemory => ({
     lastUpdated: new Date().toISOString(),
 });
 
-describe('aiPatternMemory is frozen — the insight KB is the one store', () => {
-    const losses = Array.from({ length: 5 }, (_, i) => chasedLoss(`t${i}`));
+const storedKb = (): GlobalMemory => ({
+    ...baseMemory(),
+    insightKnowledgeBase: { insights: [lesson], lastUpdated: '2026-08-01T00:00:00.000Z' },
+});
+
+describe('the memory pass freezes both lesson stores', () => {
+    const losses = Array.from({ length: 5 }, (_, i) => loss(`t${i}`));
 
     it('never grows the legacy string list on a fresh memory', () => {
         const out = updateGlobalMemoryAlgorithmically(losses);
         expect(out.aiPatternMemory).toEqual([]);
     });
 
-    it('leaves a STORED legacy list byte-identical — removal rewrites nothing', () => {
+    it('leaves a STORED legacy list byte-identical — freezing a store rewrites nothing', () => {
         const out = updateGlobalMemoryAlgorithmically(losses, baseMemory());
         expect(out.aiPatternMemory).toEqual(LEGACY);
     });
 
-    it('the same detector still grows the insight KB, which the index alone renders', () => {
-        const out = updateGlobalMemoryAlgorithmically(losses, baseMemory());
-        const insights = out.insightKnowledgeBase?.insights ?? [];
-        expect(insights).toHaveLength(1);
-        expect(insights[0].insight).toBe('Late entry after move started');
-        expect(insights[0].category).toBe('entry_timing');
-        expect(insights[0].useCount).toBe(5); // occurrences, not a use counter
+    it('never grows the insight KB, even though the batch is 5 identical losses', () => {
+        const out = updateGlobalMemoryAlgorithmically(losses);
+        expect(out.insightKnowledgeBase?.insights ?? []).toEqual([]);
+    });
 
-        // The index renders the insight, never the legacy list — and it does
-        // not show the SAME lesson twice under two headings.
-        const idx = buildGlobalMemoryIndex(out);
+    it('leaves a STORED insight KB byte-identical', () => {
+        const out = updateGlobalMemoryAlgorithmically(losses, storedKb());
+        expect(out.insightKnowledgeBase?.insights).toEqual([lesson]);
+    });
+
+    it('still counts the batch into the stats it does own', () => {
+        const out = updateGlobalMemoryAlgorithmically(losses, storedKb());
+        expect(out.totalTradesAnalyzed).toBe(15);
+        expect(out.familyPerformance['Family A']).toBe('0% WR (0/5)');
+    });
+
+    it('the index renders the KB alone — never the legacy list, never twice', () => {
+        const idx = buildGlobalMemoryIndex(updateGlobalMemoryAlgorithmically(losses, storedKb()));
         expect(idx).not.toContain('PATTERN MEMORY');
         expect(idx).not.toContain('old duplicate lesson');
         expect(idx).toContain('Late entry after move started');
+        expect(idx.match(/Late entry after move started/g)).toHaveLength(1);
     });
 });

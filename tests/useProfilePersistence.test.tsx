@@ -31,7 +31,6 @@ const baseArgs = (): UseProfilePersistenceArgs => ({
     memoryConfig: null,
     memoryModel: '',
     isAnalysisInProgress: false,
-    isPostMortemInProgress: false,
     activeFrameworks: ['f1'],
     summaryCharLimit: 4000,
     summarizationProvider: 'p1',

@@ -141,31 +141,11 @@ const TradeDetailView: React.FC<{
                         <OutcomeBadge outcome={outcome} />
                     </div>
 
-                    <div className="rounded-bubble border border-zinc-800 bg-zinc-900 px-8 py-8 lg:px-10 lg:py-10">
-                        {postMortem ? (
-                            <MarkdownContent content={postMortem} className="text-ui-lede text-zinc-200 leading-8" />
-                        ) : (
-                            <EmptyState
-                                compact
-                                iconVariant="subtle"
-                                align="start"
-                                icon={<FileTextIcon className="h-5 w-5" aria-hidden="true" />}
-                                title="No post-mortem report yet"
-                                description="Log a WIN or LOSS with ensemble analysis to generate one."
-                            />
-                        )}
-                    </div>
-
-                    {Array.isArray(postMortemImages) && postMortemImages.length > 0 && (
-                        <div className="mt-8">
-                            <p className="text-ui-base text-zinc-500 mb-3">Evidence</p>
-                            <div className="flex gap-3 overflow-x-auto pb-2">
-                                {(postMortemImages || []).map((img, i) => (
-                                    <img key={i} src={img} className="h-24 w-auto rounded-control border border-zinc-800 cursor-pointer" onClick={() => setViewerImageUrl(img)} alt="" />
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                    {/* The post-mortem report and the screenshots attached to it
+                        used to be the body of this card. The feature that wrote
+                        them is deleted, so the card now carries the trade and
+                        its setup — an empty "No post-mortem report yet" panel
+                        advertising a button that no longer exists is worse. */}
 
                     <details className="mt-10 group">
                         <summary className="cursor-pointer text-ui-base text-zinc-400 hover:text-zinc-200 list-none flex items-center gap-2">

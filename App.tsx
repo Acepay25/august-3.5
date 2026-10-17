@@ -60,10 +60,8 @@ const JobsDrawer = React.lazy(() => import('./components/settings/JobsDrawer'));
 const SettingsMenu = React.lazy(() => import('./components/settings/SettingsMenu'));
 const LiveStreamView = React.lazy(() => import('./components/analysis/LiveStreamView'));
 // (LogTradeModal was removed — the capture flow uses DataCaptureModal.)
-const PostTradeUploadModal = React.lazy(() => import('./components/modals/PostTradeUploadModal').then(m => ({ default: m.PostTradeUploadModal })));
 const DataCaptureModal = React.lazy(() => import('./components/modals/DataCaptureModal').then(m => ({ default: m.DataCaptureModal })));
 const EntryNotHitCaptureModal = React.lazy(() => import('./components/modals/EntryNotHitCaptureModal').then(m => ({ default: m.EntryNotHitCaptureModal })));
-const OutcomeMismatchModal = React.lazy(() => import('./components/modals/OutcomeMismatchModal'));
 const UpdateTradeModal = React.lazy(() => import('./components/journal/UpdateTradeModal').then(m => ({ default: m.UpdateTradeModal })));
 const VisionDataViewer = React.lazy(() => import('./components/analysis/VisionDataViewer'));
 const LiveMarket = React.lazy(() => import('./components/market/LiveMarket'));
@@ -73,7 +71,6 @@ const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay
 const CompareModal = React.lazy(() => import('./components/analysis/CompareModal'));
 const StrategyStudio = React.lazy(() => import('./components/dashboards/StrategyStudio'));
 const TradeView = React.lazy(() => import('./components/trade/TradeView'));
-const MistakeWarningBanner = React.lazy(() => import('./components/shared/MistakeWarningBanner'));
 const DeskScene = React.lazy(() => import('./components/desk/DeskScene'));
 const NewBotDialog = React.lazy(() => import('./components/chat/NewBotDialog'));
 const BotSeatOverridesDialog = React.lazy(() => import('./components/agents/BotSeatOverridesDialog'));
@@ -114,7 +111,6 @@ import { useConversations } from './hooks/useConversations';
 import { useMarketData } from './hooks/useMarketData';
 import { useTradeLogging } from './hooks/useTradeLogging';
 import { useAnalysisPipeline } from './hooks/useAnalysisPipeline';
-import { usePostMortem } from './hooks/usePostMortem';
 import { useUserProfiles } from './hooks/useUserProfiles';
 import { offlineQueue } from './services/infrastructure/OfflineQueueService';
 import { getPreference, setPreference, removePreference, PREF_KEYS } from './services/infrastructure/PreferencesService';
@@ -202,17 +198,13 @@ const App: React.FC = () => {
         isStrategySearchVisible, setIsStrategySearchVisible,
         isSettingsMenuVisible, setIsSettingsMenuVisible,
         isLiveMarketVisible, setIsLiveMarketVisible,
-        isLivePostMortemVisible, setIsLivePostMortemVisible,
-        showMismatchModal, setShowMismatchModal,
         isVisionDataVisible, setIsVisionDataVisible,
         showAccuracyModal, setShowAccuracyModal,
 
 
         isLoading, setIsLoading,
         isHybridLoading, setIsHybridLoading,
- setIsPostMortemTypingComplete,
         isAnalysisInProgress, setIsAnalysisInProgress,
-        isPostMortemInProgress, setIsPostMortemInProgress,
         isSummaryInProgress, setIsSummaryInProgress,
         isInsightGenerating, setIsInsightGenerating,
         isAutoCapturing, setIsAutoCapturing,
@@ -536,27 +528,20 @@ const App: React.FC = () => {
     // deep-link tab/trade-id state is declared with the surface block below.)
     const {
         strategyToView, setStrategyToView,
-
-
- setExpandedPostMortems,
-        postMortemCandidate, setPostMortemCandidate,
     } = useJournalUI();
 
 
     // Refs for functions defined later but needed by useTradeLogging (breaks circular dependency)
     //
-    // Typed from the hooks that DEFINE the functions rather than as
+    // Typed from the hook that DEFINES the function rather than as
     // `(...args: any[]) => any`. The indirection is still needed — the send
-    // path and the post-mortem entry point are declared hundreds of lines
-    // below these hooks are called — but the bridge no longer erases the
-    // signature: if `handleSendMessage` gains or reorders a parameter, this
-    // wrapper stops compiling instead of forwarding the wrong argument at
-    // runtime. Deriving from `ReturnType<typeof hook>` also means the two
-    // cannot drift apart by hand.
+    // path is declared hundreds of lines below the hooks that call it — but the
+    // bridge no longer erases the signature: if `handleSendMessage` gains or
+    // reorders a parameter, this wrapper stops compiling instead of forwarding
+    // the wrong argument at runtime. Deriving from `ReturnType<typeof hook>`
+    // also means the two cannot drift apart by hand.
     type SendMessage = ReturnType<typeof useAnalysisPipeline>['handleSendMessage'];
-    type StartPostMortem = ReturnType<typeof usePostMortem>['startPostMortemAnalysis'];
     const handleSendMessageRef = useRef<SendMessage | null>(null);
-    const startPostMortemAnalysisRef = useRef<StartPostMortem | null>(null);
     const stableHandleSendMessage = useCallback<SendMessage>((...args) => {
         const send = handleSendMessageRef.current;
         // The ref is written during render, further down, on purpose: both
@@ -574,13 +559,6 @@ const App: React.FC = () => {
             throw new Error('handleSendMessage was called before the analysis pipeline was wired');
         }
         return send(...args);
-    }, []);
-    const stableStartPostMortem = useCallback<StartPostMortem>((...args) => {
-        const start = startPostMortemAnalysisRef.current;
-        if (!start) {
-            throw new Error('startPostMortemAnalysis was called before the post-mortem hook was wired');
-        }
-        return start(...args);
     }, []);
 
     // ─── Journal auto-refresh ────────────────────────────────────────────
@@ -618,12 +596,10 @@ const App: React.FC = () => {
         newlyAddedInsightIds, setNewlyAddedInsightIds,
         confirmAutopilotOutcome,
         confirmAutopilotEntryNotHit,
-        handleDataCaptureUpload,
         handleDataCaptureAuto,
         handleDataCaptureSkip,
         handleInitiateLogTrade,
         handleEntryNotHitAutoCapture,
-        handleEntryNotHitUpload,
         handleEntryNotHitSkip,
         handleConfirmUpdateTrade,
         handleUpdateAutoCapture,
@@ -644,10 +620,8 @@ const App: React.FC = () => {
         isEntryNotHitCapturing,
         setIsInsightGenerating,
         setCurrentHybridData,
-        startPostMortemAnalysis: stableStartPostMortem,
         handleSendMessage: stableHandleSendMessage,
         toast,
-        setPostMortemCandidate,
         setConfidenceCalibration,
         onJournalAutoRefresh: handleJournalAutoRefresh,
     });
@@ -855,7 +829,6 @@ const App: React.FC = () => {
         isAnalysisInProgress, setIsAnalysisInProgress,
         isHybridLoading, setIsHybridLoading,
         isRateLimited, setIsRateLimited,
-        setIsPostMortemInProgress, setIsLivePostMortemVisible,
         isAccuracyModeEnabled, accuracySubMode,
         isGlobalMemoryEnabled, isStrategiesEnabled, customInstructions,
         isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
@@ -888,98 +861,18 @@ const App: React.FC = () => {
         if (!enabled) setImages([]);
     }, [setImages]);
 
-    // Mirror the (later-declared) activeUsername into a ref so the
-    // usePostMortem hook — which is instantiated BEFORE useUserProfiles
-    // destructures activeUsername — can observe user switches and cancel
-    // in-flight post-mortem work that would otherwise clobber the new user.
-    //
-    // THE REF HAS TWO WRITERS, and both are load-bearing — this looked like a
-    // duplicate and is not:
-    //
-    //   1. HERE, from sessionStorage. `usePostMortem` is called below, BEFORE
-    //      `useUserProfiles` destructures `activeUsername`, so this write is
-    //      the only thing that makes the ref current for that hook — without
-    //      it usePostMortem reads the PREVIOUS render's value on every render,
-    //      i.e. one render stale, and its run-staleness checks fire against
-    //      the wrong user.
-    //   2. After `activeUsername` is destructured, from that state. Every
-    //      later reader uses this one, because the state is the canonical
-    //      source (sessionStorage is only where it was last mirrored).
-    //
-    // Deleting either one is a bug, not a cleanup. The ordering cannot simply
-    // be reversed: `activeUsername` does not exist yet at the point this hook
-    // is called, which is the entire reason the ref exists.
+    // The active username, mirrored into a ref so callbacks that outlive the
+    // render they were created in still read the CURRENT account. Written from
+    // state right after `activeUsername` is destructured below; the initializer
+    // is all that exists before that, and nothing reads it in between.
     const activeUsernameRef = useRef<string | null>(sessionStorage.getItem('activeUsername'));
-    activeUsernameRef.current = sessionStorage.getItem('activeUsername') || null;
 
-    // Freshest logged-trades array for the post-mortem hook. Capture flows
-    // call setLoggedTrades and startPostMortemAnalysis in the same tick, so
-    // the `loggedTrades` prop closure is stale by the time the post-mortem
+    // Freshest logged-trades array for the callbacks that capture it in a memo
+    // or a timer. Several flows call setLoggedTrades and then read the list in
+    // the same tick, so a `loggedTrades` closure is stale by the time the work
     // resolves — the ref (updated every render) always holds the latest rows.
     const loggedTradesRef = useRef<LoggedTrade[]>(loggedTrades);
     loggedTradesRef.current = loggedTrades;
-
-    // Post-mortem analysis state and handlers (extracted to hooks/usePostMortem.ts)
-    const {
-        mismatchData,
-
-        livePostMortemThoughts,
-        startPostMortemAnalysis,
-        invalidatePostMortemRuns,
-
-        handleAllPostMortemTypingComplete,
-        handleMismatchResolution,
-        handleRetryPostMortem,
-
-
-    } = usePostMortem({
-        messages,
-        activeConversationId,
-        messagesRef,
-        updateMessages,
-        isAccuracyModeEnabled,
-        accuracySubMode,
-        // a ref (not the raw string) is passed because usePostMortem
-        // is called before useUserProfiles destructures activeUsername below.
-        // The ref is kept in sync on every render via the effect right after.
-        activeUsernameRef,
-        providerConfigs: readyProviders,
-        moderatorConfig,
-        moderatorModel,
-        finalTradeSummary,
-        loggedTrades,
-        loggedTradesRef,
-        setLoggedTrades,
-        globalMemory,
-        setGlobalMemory,
-        memoryConfig,
-        memoryModel,
-        useAlgorithmicInsights,
-        tradeSummaries,
-        setTradeSummaries,
-        setIsPostMortemInProgress,
-        setIsLivePostMortemVisible,
-        setLoadingMessage,
-        setIsPostMortemTypingComplete,
-        setShowMismatchModal,
-        setExpandedPostMortems,
-        initAnalysisSteps,
-        startStep,
-        completeStep,
-        setAnalysisSteps,
-        setPostMortemCandidate,
-    });
-
-    // Update ref for useTradeLogging (breaks circular dependency)
-    startPostMortemAnalysisRef.current = startPostMortemAnalysis;
-
-    // Cancel BOTH the analysis pipeline and any in-flight post-mortem — the
-    // "Stop generating" affordance must never be a silent no-op for
-    // post-mortems (the pipeline's controller is null during one).
-    const handleCancelAll = useCallback(() => {
-        handleCancelAnalysis();
-        invalidatePostMortemRuns();
-    }, [handleCancelAnalysis, invalidatePostMortemRuns]);
 
     const currentInsightIds = useMemo(() => tradeSummaries.map(s => s.id), [tradeSummaries]);
     // The Send button must never look active when no provider can actually
@@ -1451,17 +1344,14 @@ const App: React.FC = () => {
                 if (isWatchListVisible) setIsWatchListVisible(false);
                 return;
             }
-            if (isAnalysisInProgress || isPostMortemInProgress) {
-                handleCancelAll();
-                toast.info(
-                    isPostMortemInProgress ? 'Post-mortem cancelled' : 'Analysis cancelled',
-                    isPostMortemInProgress ? 'The trade log was not updated.' : 'The partial debate was preserved in the chat.'
-                );
+            if (isAnalysisInProgress) {
+                handleCancelAnalysis();
+                toast.info('Analysis cancelled', 'The partial debate was preserved in the chat.');
             }
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, isPostMortemInProgress, handleCancelAll, toast, isSettingsMenuVisible, isLiveMarketVisible, isUserModalOpen, isVisionDataVisible, isStrategySearchVisible, isWatchListVisible, isDeskSceneOpen]);
+    }, [isAnalysisInProgress, handleCancelAnalysis, toast, isSettingsMenuVisible, isLiveMarketVisible, isUserModalOpen, isVisionDataVisible, isStrategySearchVisible, isWatchListVisible, isDeskSceneOpen]);
 
     const {
         comparePrimary,
@@ -1563,7 +1453,7 @@ const App: React.FC = () => {
         conversationHistory, loggedTrades, savedAnalyses, tradeSummaries,
         finalTradeSummary, globalMemory, insightKnowledgeBase,
         memoryConfig, memoryModel,
-        isAnalysisInProgress, isPostMortemInProgress,
+        isAnalysisInProgress,
         activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel,
         visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled,
         isAccuracyModeEnabled, accuracySubMode, customInstructions,
@@ -1745,7 +1635,7 @@ const App: React.FC = () => {
     } = useConversationHousekeeping({
         conversationHistory, setConversationHistory,
         activeConversation, activeConversationId, setActiveConversationId,
-        updateMessages, handleCancelAnalysis, invalidatePostMortemRuns,
+        updateMessages, handleCancelAnalysis,
         confirmDialog, toast,
     });
 
@@ -2050,7 +1940,6 @@ const App: React.FC = () => {
         resetAppState: userProfileResetAppState,
     } = useUserProfileLoader({
         handleCancelAnalysis,
-        invalidatePostMortemRuns,
         lensConfig,
         handleSetLensConfig,
         ensembleModelSelection,
@@ -2091,7 +1980,6 @@ const App: React.FC = () => {
         setAutopilotResolutions,
         setInput,
         setImages,
-        setExpandedPostMortems,
         setIsLoading,
         setActiveUsername,
         setExistingUsernames,
@@ -2378,12 +2266,10 @@ const App: React.FC = () => {
         <StatusCluster
             saveStatus={saveStatus}
             isOnline={isOnline}
-            isPostMortemInProgress={isPostMortemInProgress}
-            onOpenLivePostMortem={() => setIsLivePostMortemVisible(true)}
             onOpenActivity={() => setIsJobsDrawerVisible(true)}
             activityOpen={isJobsDrawerVisible}
         />
-    ), [saveStatus, isOnline, isPostMortemInProgress, setIsLivePostMortemVisible, isJobsDrawerVisible]);
+    ), [saveStatus, isOnline, isJobsDrawerVisible]);
 
     /** One read of "the chat's model pick is unusable", shared by the Chat
      *  surface's model chip (which colours itself amber) and its banner. */
@@ -2413,15 +2299,6 @@ const App: React.FC = () => {
             <React.Suspense fallback={null}>
                 <UpdateOverlay />
             </React.Suspense>
-            <LiveStreamView
-                variant="postmortem"
-                isVisible={isLivePostMortemVisible}
-                onClose={() => setIsLivePostMortemVisible(false)}
-                thoughts={livePostMortemThoughts}
-                outputs={livePostMortemThoughts}
-                providers={readyProviders}
-                onAllTypingComplete={handleAllPostMortemTypingComplete}
-            />
             <UserProfileManager isVisible={isUserModalOpen} isLoading={isLoading} onUserSelect={loadUserData} existingUsers={existingUsernames} onImportProfile={handleImportData} onDeleteUser={handleDeleteUser} onClose={() => setIsUserModalOpen(false)} />
             <AccuracyModeModal isOpen={showAccuracyModal} onClose={() => setShowAccuracyModal(false)} onConfirm={handleConfirmAccuracyMode} isEnabling={!isAccuracyModeEnabled} />
             {/* Mounted only while the overlay is open: LiveMarket now runs the
@@ -2438,7 +2315,6 @@ const App: React.FC = () => {
                     message={dataCaptureCandidate.message}
                     outcome={dataCaptureCandidate.outcome}
                     onClose={() => setDataCaptureCandidate(null)}
-                    onUploadScreenshot={handleDataCaptureUpload}
                     onAutoCapture={handleDataCaptureAuto}
                     onSkip={handleDataCaptureSkip}
                     isCapturing={isAutoCaptureBusy}
@@ -2450,12 +2326,10 @@ const App: React.FC = () => {
                     correctedEntry={entryNotHitCandidate.correctedEntry}
                     onClose={() => setEntryNotHitCandidate(null)}
                     onAutoCapture={handleEntryNotHitAutoCapture}
-                    onUploadScreenshot={handleEntryNotHitUpload}
                     onSkip={handleEntryNotHitSkip}
                     isCapturing={isEntryNotHitCaptureBusy}
                 />
             )}
-            {postMortemCandidate && <PostTradeUploadModal candidate={postMortemCandidate} onClose={() => setPostMortemCandidate(null)} onAnalyze={(summaries, urls) => startPostMortemAnalysis(postMortemCandidate, summaries, urls)} visionConfig={visionConfig} onQuotaExceeded={handleQuotaExceeded} />}
             {updateCandidate && <UpdateTradeModal message={updateCandidate} onClose={() => setUpdateCandidate(null)} onConfirm={handleConfirmUpdateTrade} onAutoCapture={handleUpdateAutoCapture} isCapturing={isUpdateCaptureBusy} visionConfig={visionConfig} onQuotaExceeded={handleQuotaExceeded} />}
             {simulatorCandidate && (
                 <ScenarioSimulator
@@ -2651,15 +2525,6 @@ const App: React.FC = () => {
                     onCreateAutomation={() => { setIsJobsDrawerVisible(false); automations.setEditor({ mode: 'create' }); }}
                 />
             </React.Suspense>
-            {showMismatchModal && mismatchData && (
-                <OutcomeMismatchModal
-                    isVisible={showMismatchModal}
-                    onClose={() => setShowMismatchModal(false)}
-                    userOutcome={mismatchData.candidate.outcome === TradeOutcome.WIN ? 'WIN' : 'LOSS'}
-                    priceValidation={mismatchData.validation}
-                    onResolve={handleMismatchResolution}
-                />
-            )}
 
 
             {/* Main row. The NavRail is GONE: its five destination rows were the
@@ -2687,10 +2552,8 @@ const App: React.FC = () => {
                     <Header
                         saveStatus={saveStatus}
                         isAnalysisInProgress={isAnalysisInProgress}
-                        isPostMortemInProgress={isPostMortemInProgress}
                         currentVisionData={currentVisionData}
                         surface={surface}
-                        setIsLivePostMortemVisible={setIsLivePostMortemVisible}
                         isOnline={isOnline}
                         pendingQueueCount={pendingQueueCount}
                         liveMarketConditions={liveMarketConditions}
@@ -2704,14 +2567,6 @@ const App: React.FC = () => {
                         onOpenSettings={() => setIsSettingsMenuVisible(true)}
                         onExpandNavRail={isNavRailOpen ? undefined : toggleNavRail}
                     />
-                    )}
-                    {/* Mistake Warning Banner - Global Risk Reminder */}
-                    {loggedTrades.length > 0 && (
-                        <React.Suspense fallback={null}>
-                        <MistakeWarningBanner
-                            tradeLog={loggedTrades}
-                        />
-                        </React.Suspense>
                     )}
 
                     {/* The first-run onboarding card used to sit here as a
@@ -2856,7 +2711,7 @@ const App: React.FC = () => {
                                         (await mailboxRef.current?.runUserBotTurn(bot, prompt)) ?? false}
                                     onAnalyze={handleRunAnalysisFromChat}
                                     onAnalysisError={(message) => toast.error(message)}
-                                    onStopRun={handleCancelAll}
+                                    onStopRun={handleCancelAnalysis}
                                     analysisRunning={isAnalysisInProgress}
                                     renderGroup={g => renderGroupSurface(g.id)}
                                     coachCount={coachCount}
@@ -2872,7 +2727,6 @@ const App: React.FC = () => {
                                     onEditSeatOverrides={setSeatOverridesBot}
                                     onOpenCoach={openApprovalsInLearn}
                                     onDeleteGroup={deleteGroup}
-                                    onRetryPostMortem={handleRetryPostMortem}
                                     onEditGroup={groupId => {
                                         const target = groups.find(g => g.id === groupId);
                                         if (!target) return;

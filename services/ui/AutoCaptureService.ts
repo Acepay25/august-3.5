@@ -834,12 +834,17 @@ export const extractSymbolFromAnalysis = (analysis: TradeAnalysis): string | nul
 };
 
 /**
- * Auto-capture and generate full comparison for post-mortem
- * Now includes historical TP/SL verification with full indicator snapshots
- * 
+ * Capture the market as it actually moved after an analysis, and build the
+ * comparison block the journal shows: historical TP/SL verification with full
+ * indicator snapshots.
+ *
+ * It used to be named for the post-mortem that consumed its output; the capture
+ * is what feeds the trade record's excursions and benchmark either way, so the
+ * name now says what it does.
+ *
  * @param selectedEntryIndices - Optional array of entry indices selected by user (for multi-entry trades)
  */
-export const captureForPostMortem = async (
+export const captureOutcomeComparison = async (
     originalAnalysis: TradeAnalysis,
     analysisTimestamp?: string,
     selectedEntryIndices?: number[]

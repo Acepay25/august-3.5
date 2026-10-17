@@ -22,7 +22,6 @@ const createArgs = (overrides: Partial<UseConversationHousekeepingArgs> = {}): U
     setActiveConversationId: vi.fn(),
     updateMessages: vi.fn(),
     handleCancelAnalysis: vi.fn(),
-    invalidatePostMortemRuns: vi.fn(),
     confirmDialog: vi.fn().mockResolvedValue(true),
     toast: { success: vi.fn() },
     ...overrides,
@@ -87,7 +86,6 @@ describe('useConversationHousekeeping', () => {
         act(() => result.current.handleLoadConversation('c1'));
         expect(args.setActiveConversationId).toHaveBeenCalledWith('c1');
         expect(args.handleCancelAnalysis).toHaveBeenCalled();
-        expect(args.invalidatePostMortemRuns).toHaveBeenCalled();
     });
 
     it('selected-delete confirmations gate the deletion', async () => {

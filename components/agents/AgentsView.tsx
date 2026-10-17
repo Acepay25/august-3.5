@@ -117,10 +117,6 @@ interface AgentsViewProps {
     onDeleteBot?: (botId: string) => void;
     onDeleteGroup?: (groupId: string) => void;
     onEditGroup?: (groupId: string) => void;
-    /** Re-runs a post-mortem that failed. The failed candidate is stamped on
-     *  the message, so the row only has to name itself. Absent on surfaces
-     *  that never run post-mortems — the CTA then does not render. */
-    onRetryPostMortem?: (messageId: string) => void;
     /** WS-3.4: what each bot has learned — lessons, skills authored, evidence.
      *  Shown on the active bot's header and as a row badge. */
     botStats?: BotLearningStat[];
@@ -271,9 +267,6 @@ const chatRowFrom = (m: Message, username: string, deskName: string): ChatRowVie
         // PROBABILITY card a second time in the same turn. One fact, one
         // carrier: the card belongs to the answer, not to its receipt.
         analysis: m.planId ? undefined : m.analysis,
-        // The harness stamps the failed candidate on the message when a
-        // post-mortem throws; the row exposes it so the CTA can offer the re-run.
-        postMortemFailed: !!m.postMortemFailedCandidate,
     };
 };
 
@@ -444,7 +437,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     onSendBotTurn, onAnalyze, onAnalysisError, onStopRun, analysisRunning = false, renderGroup, coachCount, workingBotId,
     lastOpenedMap = {}, modelPicker, effortPicker, modelFallback = null, destinationMenu, accountRow,
     railExpanded = true, onToggleRailExpanded, statusCluster, surfaceSwitch,
-    attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup, onRetryPostMortem,
+    attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup,
     botStats,
     providerReady = false,
     onRenameBot,
@@ -1324,7 +1317,6 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                             <ChatTranscriptRow
                                                 key={m.id}
                                                 row={row}
-                                                onRetry={onRetryPostMortem ? () => onRetryPostMortem(m.id) : undefined}
                                             >
                                                 {/* The decision card is fed from the ROW MODEL, never from the
                                                     raw message: a "Logged from Chart AI" receipt carries a copy

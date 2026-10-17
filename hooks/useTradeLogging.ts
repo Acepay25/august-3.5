@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Message, MessageRole, TradeOutcome, LoggedTrade, SavedAnalysis, TradeSummary, ImageMetadata, AIProvider, BenchmarkAlpha } from '../types';
-import { PostMortemCandidate } from '../components/modals/PostTradeUploadModal';
-import { captureForPostMortem } from '../services/ui/AutoCaptureService';
+import { captureOutcomeComparison } from '../services/ui/AutoCaptureService';
 import { toLeveragedExcursionPct } from '../services/backtesting/outcomeEngine';
 import * as MemoryService from '../services/learning/MemoryService';
 import { insightTextForTrade } from '../utils/tradeInsightBrief';
@@ -24,6 +23,32 @@ import * as chatStore from '../services/trade/chatStore';
 
 // Maximum number of trade summaries (Recent Insights) to keep - enforces FIFO when limit reached
 export const MAX_TRADE_SUMMARIES = 100;
+
+/**
+ * The trade a capture flow is working on: the analysis message it came from,
+ * the outcome being recorded, and whatever facts the detector or the trader has
+ * already supplied so a second modal cannot lose them.
+ *
+ * This used to live on `PostTradeUploadModal`, which existed only to collect
+ * screenshots for a post-mortem. That feature is deleted; the candidate is the
+ * capture flow's own, so it is declared here.
+ */
+export type CaptureCandidate = {
+    message: Message;
+    outcome: TradeOutcome;
+    feedback?: {
+        pnlAmount?: number;
+        correctedEntry?: string;
+        correctedStopLoss?: string;
+        correctedTakeProfit?: string;
+        /** Facts the outcome detector already measured. They ride the candidate
+         *  so opening a capture modal on top of a detection cannot lose them —
+         *  the modal's own payload carries only what the trader types. */
+        outcomeResolvedAt?: string;
+        excursions?: { maePercent: number; mfePercent: number };
+        realizedR?: number;
+    };
+};
 
 export interface UseTradeLoggingParams {
     messages: Message[];
@@ -59,14 +84,11 @@ export interface UseTradeLoggingParams {
     setIsInsightGenerating: (v: boolean) => void;
     // Market data setters:
     setCurrentHybridData: (v: any) => void;
-    // Post-mortem trigger:
-    startPostMortemAnalysis: (candidate: PostMortemCandidate, summaries?: string[], imageUrls?: string[]) => void;
     // Analysis trigger:
     handleSendMessage: (text?: string, images?: ImageMetadata[], context?: string, options?: any) => void;
     // Toast:
     toast: { error: (title: string, msg?: string) => void; success: (title: string, msg?: string) => void };
     // Additional setters needed by handlers:
-    setPostMortemCandidate: (v: PostMortemCandidate | null) => void;
     setConfidenceCalibration: (v: any) => void;
 }
 
@@ -78,8 +100,8 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         onJournalAutoRefresh,
         setIsAutoCaptureBusy, setIsHybridLoading, setIsEntryNotHitCaptureBusy,
         setIsUpdateCaptureBusy, isEntryNotHitCapturing, isAutoCapturing, setIsInsightGenerating,
-        setCurrentHybridData, startPostMortemAnalysis, handleSendMessage,
-        toast, setPostMortemCandidate, setConfidenceCalibration,
+        setCurrentHybridData, handleSendMessage,
+        toast, setConfidenceCalibration,
     } = params;
 
     // ─── State ────────────────────────────────────────────────────────────
@@ -87,8 +109,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     /** Latest-ref mirror of loggedTrades. The autopilot resolution site
      *  fires pushTradeClosedEvent in the same tick that logTradeWithFeedback
      *  calls setLoggedTrades — the closure-captured `loggedTrades` would still
-     *  hold the PRE-log array, so the trade lookup in
-     *  autoStartPostMortemForResolvedTrade reads the ref instead. */
+     *  hold the PRE-log array, so the trade lookup inside it reads the ref. */
     const loggedTradesRef = useRef<LoggedTrade[]>([]);
     useEffect(() => { loggedTradesRef.current = loggedTrades; }, [loggedTrades]);
     const [savedAnalyses, setSavedAnalyses] = useState<SavedAnalysis[]>([]);
@@ -99,7 +120,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     const [simulatorCandidate, setSimulatorCandidate] = useState<Message | null>(null);
     const [skipReason, setSkipReason] = useState<TradeOutcome.ENTRY_NOT_HIT | TradeOutcome.SKIPPED | null>(null);
     const [correctedEntry, setCorrectedEntry] = useState<string>('');
-    const [dataCaptureCandidate, setDataCaptureCandidate] = useState<PostMortemCandidate | null>(null);
+    const [dataCaptureCandidate, setDataCaptureCandidate] = useState<CaptureCandidate | null>(null);
     const [entryNotHitCandidate, setEntryNotHitCandidate] = useState<{ message: Message; correctedEntry?: string } | null>(null);
     const [newlyAddedInsightIds, setNewlyAddedInsightIds] = useState<Set<string>>(new Set());
 
@@ -502,15 +523,8 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     }, [activeConversationLeverage, moderatorProviderId, moderatorModel, updateMessages, memoryModel, memoryConfig, useAlgorithmicInsights, toast, autoAddRecentInsight]);
 
     // ─── Data Capture Modal Handlers ──────────────────────────────────────
-
-    const handleDataCaptureUpload = (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; journalTags?: CaptureJournalTags; }) => {
-        // User chose to upload screenshot manually - log trade first, then proceed to PostTradeUploadModal
-        if (dataCaptureCandidate) {
-            logTradeWithFeedback(dataCaptureCandidate.message, dataCaptureCandidate.outcome as any, feedback);
-            setPostMortemCandidate({ ...dataCaptureCandidate, feedback });
-            setDataCaptureCandidate(null);
-        }
-    };
+    // No screenshot option: the post-mortem was the only consumer of a
+    // capture's images, so the modal keeps the outcomes it can still record.
 
     // Temporary variable to store feedback during auto-capture
     const handleDataCaptureAuto = async (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; journalTags?: CaptureJournalTags; }) => {
@@ -525,7 +539,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
 
         try {
             // Pass analysis timestamp and selected entry indices for historical TP/SL verification
-            const result = await captureForPostMortem(
+            const result = await captureOutcomeComparison(
                 dataCaptureCandidate.message.analysis,
                 dataCaptureCandidate.message.createdAt, // Original analysis timestamp
                 feedback.selectedEntryIndices // User-selected entry indices for multi-entry trades
@@ -565,23 +579,13 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                     excursions: result.historicalOutcome?.excursions ?? dataCaptureCandidate.feedback?.excursions,
                     realizedR: result.historicalOutcome?.realizedR ?? dataCaptureCandidate.feedback?.realizedR,
                 });
-
-                // Start post-mortem with auto-captured data
-                startPostMortemAnalysis(
-                    { ...dataCaptureCandidate, feedback },
-                    [autoCaptureSummary], // Pass as image summary for prompt injection
-                    undefined // No image URLs
-                );
             } else {
                 console.error('[AutoCapture] Failed:', result.error);
-                toast.error("Auto-Capture Failed", `${result.error || 'Unknown error'}. Please try uploading a screenshot instead.`);
-                // Fallback to upload modal
-                setPostMortemCandidate(dataCaptureCandidate);
+                toast.error("Auto-Capture Failed", `${result.error || 'Unknown error'}. Please try again or skip the capture.`);
             }
         } catch (error) {
             console.error('[AutoCapture] Error:', error);
-            toast.error("Auto-Capture Failed", "Please try uploading a screenshot instead.");
-            setPostMortemCandidate(dataCaptureCandidate);
+            toast.error("Auto-Capture Failed", "Please try again or skip the capture.");
         } finally {
             setIsAutoCaptureBusy(false);
             setIsHybridLoading(false); // Stop loading animation
@@ -590,13 +594,12 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     };
 
     const handleDataCaptureSkip = (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; journalTags?: CaptureJournalTags; }) => {
-        // User chose to skip - log trade and start post-mortem without additional data
+        // User chose to skip - log the trade without additional market capture.
         if (dataCaptureCandidate) {
             logTradeWithFeedback(dataCaptureCandidate.message, dataCaptureCandidate.outcome as any, {
                 ...dataCaptureCandidate.feedback,
                 ...feedback,
             });
-            startPostMortemAnalysis({ ...dataCaptureCandidate, feedback }, undefined, undefined);
             setDataCaptureCandidate(null);
         }
     };
@@ -698,50 +701,18 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     // ─── Auto post-mortem on outcome resolution ───────────────────────────
     // When the outcome autopilot resolves a logged trade (WIN / LOSS) the
     // harness (Chart AI chat session) was previously silent — no close-
-    // message landed on the dock, and the post-mortem only fired when the
-    // user clicked the autopilot confirm button. pushTradeClosedEvent is the
-    // single entry point: it removes the trade from the session's
-    // openTrades ledger, pushes a one-shot "[HARNESS] Trade closed: …" entry,
-    // and auto-calls the post-mortem via autoStartPostMortemForResolvedTrade.
+    // message landed on the dock. pushTradeClosedEvent is the single entry
+    // point: it removes the trade from the session's openTrades ledger and
+    // pushes a one-shot "[HARNESS] Trade closed: …" entry. It used to start a
+    // post-mortem as well; that feature is deleted, so the close line is now
+    // the whole of what a resolution does to the chat.
     // Exported so the resolution site in useWatchAndAutopilot (and any
     // future resolve path) can wire it in directly.
 
-    /** Build the auto-candidate from the trade record and run the
-     *  post-mortem. No-op if the trade isn't in loggedTradesRef yet (which
-     *  happens only when the caller forgets to await logTradeWithFeedback
-     *  before firing the resolver — by design the caller is expected to
-     *  await or otherwise sequence them). */
-    const autoStartPostMortemForResolvedTrade = useCallback((tradeId: string): void => {
-        const trade = loggedTradesRef.current.find(t => t.id === tradeId);
-        if (!trade) {
-            console.warn('[TradeLogging] autoStartPostMortemForResolvedTrade: trade not found', tradeId);
-            return;
-        }
-        if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) {
-            // ENTRY_NOT_HIT has its own post-mortem path; SKIPPED / PENDING
-            // are not resolvable outcomes. Skip silently.
-            return;
-        }
-        const message: Message = {
-            id: trade.id,
-            role: MessageRole.AI,
-            text: trade.moderatorSynthesis || '',
-            createdAt: trade.analysis?.createdAt || trade.timestamp,
-            analysis: trade.analysis,
-            outcome: trade.outcome,
-            isDebating: false,
-        };
-        startPostMortemAnalysis(
-            { message, outcome: trade.outcome, feedback: undefined },
-            undefined,
-            undefined
-        );
-    }, [startPostMortemAnalysis]);
-
-    /** Resolution side-effect: drop the trade from openTrades, push a close
-    //  message into the chat session that presented it, and auto-run the
-    //  post-mortem. Falls back to the active session if the message can't be
-    //  mapped (the manual resolve flow can land in any conversation). */
+    /** Resolution side-effect: drop the trade from openTrades and push a close
+    //  message into the chat session that presented it. Falls back to the
+    //  active session if the message can't be mapped (the manual resolve flow
+    //  can land in any conversation). */
     const pushTradeClosedEvent = useCallback((args: {
         tradeId: string;
         outcome: TradeOutcome.WIN | TradeOutcome.LOSS;
@@ -765,13 +736,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             : '';
         const closeLine = `[HARNESS] Trade closed: ${symbol}${dir} ${outcome}${pnlLine}`;
         if (targetSid) chatStore.addChatSystemEntry(closeLine, targetSid);
-        // 3) Auto-call the post-mortem (idempotent for the report text;
-        //    triggers the learning chain). Doing this last so the chat event
-        //    lands BEFORE the model stream starts typing — the close-line
-        //    reads as "the verdict on the prior recommendation" before the
-        //    post-mortem analysis begins.
-        autoStartPostMortemForResolvedTrade(tradeId);
-    }, [autoStartPostMortemForResolvedTrade]);
+    }, []);
 
     // ─── Outcome Autopilot confirmation ───────────────────────────────────
     // One-click logging of autopilot-detected outcomes. Funnels through the
@@ -834,18 +799,10 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
 
     const confirmAutopilotEntryNotHit = useCallback((message: Message) => {
         logEntryNotHitTrade({ message });
-        // Mirror handleEntryNotHitSkip: a confirmed no-entry also triggers
-        // the entry-not-hit post-mortem (it never did from this path).
-        startPostMortemAnalysis(
-            { message, outcome: TradeOutcome.ENTRY_NOT_HIT, feedback: undefined },
-            undefined,
-            undefined
-        );
-    }, [logEntryNotHitTrade, startPostMortemAnalysis]);
+    }, [logEntryNotHitTrade]);
 
-    // (pushTradeClosedEvent / autoStartPostMortemForResolvedTrade are declared
-    //  above so confirmAutopilotOutcome can reference them in its dep array
-    //  without a TDZ violation.)
+    // (pushTradeClosedEvent is declared above so confirmAutopilotOutcome can
+    //  reference it in its dep array without a TDZ violation.)
 
     const handleEntryNotHitAutoCapture = useCallback(async () => {
         if (!entryNotHitCandidate || !entryNotHitCandidate.message.analysis) {
@@ -860,7 +817,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         setIsHybridLoading(true);
 
         try {
-            const result = await captureForPostMortem(
+            const result = await captureOutcomeComparison(
                 entryNotHitCandidate.message.analysis,
                 entryNotHitCandidate.message.createdAt
             );
@@ -873,56 +830,17 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                     });
                     setCurrentHybridData(result.data);
                 }
-
-                const autoCaptureSummary = result.comparisonBlock;
                 console.log('[EntryNotHitCapture] Successfully captured market data');
-
-                // Start post-mortem with auto-captured data for Entry Not Hit analysis
-                startPostMortemAnalysis(
-                    {
-                        message: entryNotHitCandidate.message,
-                        outcome: TradeOutcome.ENTRY_NOT_HIT,
-                        feedback: { correctedEntry: entryNotHitCandidate.correctedEntry }
-                    },
-                    [autoCaptureSummary],
-                    undefined
-                );
             } else {
                 console.error('[EntryNotHitCapture] Failed:', result.error);
-                toast.error("Auto-Capture Failed", `${result.error || 'Unknown error'}. Please try uploading a screenshot instead.`);
-                // Fallback to upload modal
-                setPostMortemCandidate({
-                    message: entryNotHitCandidate.message,
-                    outcome: TradeOutcome.ENTRY_NOT_HIT,
-                    feedback: { correctedEntry: entryNotHitCandidate.correctedEntry }
-                });
+                toast.error("Auto-Capture Failed", `${result.error || 'Unknown error'}. The trade is logged without the captured market data.`);
             }
         } catch (error) {
             console.error('[EntryNotHitCapture] Error:', error);
-            toast.error("Auto-Capture Failed", "Please try uploading a screenshot instead.");
-            setPostMortemCandidate({
-                message: entryNotHitCandidate.message,
-                outcome: TradeOutcome.ENTRY_NOT_HIT,
-                feedback: { correctedEntry: entryNotHitCandidate.correctedEntry }
-            });
+            toast.error("Auto-Capture Failed", "The trade is logged without the captured market data.");
         } finally {
             setIsEntryNotHitCaptureBusy(false);
             setIsHybridLoading(false);
-            setEntryNotHitCandidate(null);
-        }
-    }, [entryNotHitCandidate, logEntryNotHitTrade]);
-
-    const handleEntryNotHitUpload = useCallback(() => {
-        if (entryNotHitCandidate) {
-            // Log trade NOW since user confirmed their choice
-            logEntryNotHitTrade(entryNotHitCandidate);
-
-            // Open the PostTradeUploadModal for manual screenshot upload
-            setPostMortemCandidate({
-                message: entryNotHitCandidate.message,
-                outcome: TradeOutcome.ENTRY_NOT_HIT,
-                feedback: { correctedEntry: entryNotHitCandidate.correctedEntry }
-            });
             setEntryNotHitCandidate(null);
         }
     }, [entryNotHitCandidate, logEntryNotHitTrade]);
@@ -931,17 +849,6 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         if (entryNotHitCandidate) {
             // Log trade NOW since user confirmed their choice
             logEntryNotHitTrade(entryNotHitCandidate);
-
-            // Start post-mortem without additional data
-            startPostMortemAnalysis(
-                {
-                    message: entryNotHitCandidate.message,
-                    outcome: TradeOutcome.ENTRY_NOT_HIT,
-                    feedback: { correctedEntry: entryNotHitCandidate.correctedEntry }
-                },
-                undefined,
-                undefined
-            );
             setEntryNotHitCandidate(null);
         }
     }, [entryNotHitCandidate, logEntryNotHitTrade]);
@@ -1016,7 +923,7 @@ ${JSON.stringify(originalAnalysis, null, 2)}
             const originalCreatedAt = originalAnalysis.createdAt || updateCandidate.createdAt;
 
             // Capture current market data
-            const result = await captureForPostMortem(
+            const result = await captureOutcomeComparison(
                 originalAnalysis,
                 originalCreatedAt // Pass original analysis timestamp
             );
@@ -1105,20 +1012,17 @@ ${result.comparisonBlock}
         logEntryNotHitTrade,
         confirmAutopilotOutcome,
         confirmAutopilotEntryNotHit,
-        handleDataCaptureUpload,
         handleDataCaptureAuto,
         handleDataCaptureSkip,
         handleInitiateLogTrade,
         handleEntryNotHitAutoCapture,
-        handleEntryNotHitUpload,
         handleEntryNotHitSkip,
         handleConfirmUpdateTrade,
         handleUpdateAutoCapture,
         // Outcome-resolution harness visibility: drops the trade from the
-        // chat session's openTrades ledger, pushes a close-message into the
-        // dock, and auto-runs the post-mortem. Surfaced for the autopilot
-        // resolution site and any future resolve path.
-        autoStartPostMortemForResolvedTrade,
+        // chat session's openTrades ledger and pushes a close-message into
+        // the dock. Surfaced for the autopilot resolution site and any future
+        // resolve path.
         pushTradeClosedEvent,
     };
 };

@@ -17,7 +17,6 @@ import {
     initMemoryFiles,
     syncProfileMemory,
     syncPatternMemory,
-    syncRecurringMistakes,
 } from '../services/learning/MemoryFilesService';
 import { hydrateRegimeLedger } from '../services/learning/regimeLedger';
 import { hydrateStrategyRegimeMatrix, rebuildMatrixFromJournal } from '../services/learning/strategyRegimeMatrix';
@@ -55,7 +54,6 @@ import type { ProviderConfig } from '../types/provider';
 
 export interface UseUserProfileLoaderArgs {
     handleCancelAnalysis: () => void;
-    invalidatePostMortemRuns: () => void;
 
     lensConfig: any;
     handleSetLensConfig: (cfg: any) => void;
@@ -102,7 +100,6 @@ export interface UseUserProfileLoaderArgs {
 
     setInput: React.Dispatch<React.SetStateAction<string>>;
     setImages: React.Dispatch<React.SetStateAction<any[]>>;
-    setExpandedPostMortems: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
     setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
 
     setActiveUsername: (u: string) => void;
@@ -124,7 +121,7 @@ export interface UseUserProfileLoaderResult {
 
 export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserProfileLoaderResult => {
     const {
-        handleCancelAnalysis, invalidatePostMortemRuns,
+        handleCancelAnalysis,
         lensConfig, handleSetLensConfig,
         ensembleModelSelection, handleSetEnsembleModelSelection,
         persistedEnsembleModeRef, ensembleModelCount,
@@ -140,7 +137,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setIsMemoryEnabledInPureAI, setIsHybridIntelligenceEnabled,
         setIsEnsembleEnabled, setIsAutoCapturing,
         setIsEntryNotHitCapturing, setConfidenceCalibration, setAutopilotResolutions,
-        setInput, setImages, setExpandedPostMortems,
+        setInput, setImages,
         setIsLoading, setActiveUsername, setExistingUsernames, setIsUserModalOpen,
         toast, profileReadyRef,
     } = args;
@@ -278,7 +275,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setSummarizationModel(firstReady?.selectedModel || '');
         setInput('');
         setImages([]);
-        setExpandedPostMortems({});
 
         if (usernameToSave) {
             await dbService.saveUserProfile(usernameToSave, {
@@ -315,7 +311,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
     }, [
         handleCancelAnalysis, providerConfigs, setActiveConversationId,
         setActiveFrameworks, setAccuracySubMode, setConversationHistory,
-        setCustomInstructions, setExpandedPostMortems, setFinalTradeSummary,
+        setCustomInstructions, setFinalTradeSummary,
         setGlobalMemory, setImages, setInput, setIsAccuracyModeEnabled,
         setIsAutoCapturing, setIsEntryNotHitCapturing, setIsFamiliesEnabledInPureAI,
         setIsGlobalMemoryEnabled, setIsHybridIntelligenceEnabled,
@@ -330,7 +326,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         const isStale = (): boolean => loadSeqRef.current !== seq;
 
         handleCancelAnalysis();
-        invalidatePostMortemRuns();
         setIsLoading(true);
 
         // SWITCH PATH: drop the outgoing profile's live state before the
@@ -432,7 +427,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 try {
                     await syncProfileMemory(profile, username);
                     await syncPatternMemory(profile.finalTradeSummary, username, profile.tradeLog || []);
-                    await syncRecurringMistakes(profile.tradeLog || [], username);
                 } catch (e) {
                     console.warn('[TraderNotebook] Initial sync failed:', e);
                 }
@@ -586,7 +580,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         applyLoadedProfile,
         ensembleModelSelection, handleCancelAnalysis,
         handleSetEnsembleModelSelection, handleSetLensConfig,
-        invalidatePostMortemRuns, lensConfig,
+        lensConfig,
         resetAppState, setActiveConversationId, setActiveUsername,
         setAutopilotResolutions, setConversationHistory, setIsLoading,
         setIsUserModalOpen, setLoggedTrades, toast, profileReadyRef,
