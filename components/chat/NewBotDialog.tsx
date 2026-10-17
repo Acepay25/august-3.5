@@ -13,7 +13,7 @@ import { PixelAvatarFigure } from './BotAvatar';
 import type { AgentBot } from '../../services/agents/agentRoster';
 import { ProviderConfig } from '../../types/provider';
 import { findProviderById, formatModelDisplayName } from '../../utils/providerUtils';
-import { ROLE_ACCENTS } from '../desk/pixelAvatars';
+import { ROLE_ACCENTS } from './pixelAvatars';
 import { SelectMenu } from '../shared/SelectMenu';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { AnalystRole } from '../../types/enums';

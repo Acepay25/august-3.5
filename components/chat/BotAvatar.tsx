@@ -15,11 +15,11 @@ import {
     PIXEL_GRID_W,
     ROLE_ACCENTS,
     type RolePreset,
-} from '../desk/pixelAvatars';
+} from './pixelAvatars';
 
 /** Our existing pixel avatar, drawn disc-style (accent-tinted). */
 export const PixelAvatarFigure: React.FC<{ role: RolePreset; size: number }> = ({ role, size }) => {
-    const grid = React.useMemo(() => buildGridForRole(role, 'idle'), [role]);
+    const grid = React.useMemo(() => buildGridForRole(role), [role]);
     const cell = size / 26;
     return (
         <span

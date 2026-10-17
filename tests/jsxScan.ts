@@ -243,8 +243,9 @@ export const unclosedFrames = (src: string): number => walk(src).unclosed;
  * rule written against components.
  *
  * The span is walked with the same lexing as `openTags`, because both cheap
- * readings are wrong here: an indentation rule cut `PixelSeat`'s range short,
- * and a bare brace count treats the `(` inside `<span>foo (x</span>` as code.
+ * readings are wrong here: an indentation rule once cut a component's range
+ * short, and a bare brace count treats the `(` inside `<span>foo (x</span>`
+ * as code.
  * A declaration ends at the first of: a `;` at its own depth, another
  * declaration at its depth or shallower, a delimiter that closes around it, or
  * end of file.

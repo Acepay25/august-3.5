@@ -145,16 +145,13 @@ const isWriteSite = (site: CallSite): boolean => site.method !== 'get';
  *   trading_checklist_v1, harness_settings_v1, trade_tf_bar_v1_*
  * FURNITURE / TELEMETRY — plausibly right to stay unbacked:
  *   last_active_user (a plain string pointer), desk_idle_motion_v1_*,
- *   desk_role_overrides_v1_*, desk_room_layout_v1_*_*, thinking_leak_bin_v1,
- *   lastPromiseError, lastGlobalError, lastCrashError
+ *   thinking_leak_bin_v1, lastPromiseError, lastGlobalError, lastCrashError
  *
  * A NEW store cannot be added here by reflex: it has to say which of the two it
  * is, and the test below fails if an entry gets registered for real.
  */
 const AWAITING_BACKUP_DECISION = new Map<string, string>([
     ['desk_idle_motion_v1', 'furniture: reduced-motion preference'],
-    ['desk_role_overrides_v1', 'furniture: per-room role overrides'],
-    ['desk_room_layout_v1', 'furniture: room layout'],
     ['last_active_user', 'a plain string pointer, not a record'],
     // Registered in step 9 (2026-10-05): `trade_watches_v1`,
     // `trade_level_arms_v1`, `trade_level_hits_v1`, `trade_drawings_v1`,

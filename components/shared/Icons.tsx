@@ -23,7 +23,7 @@
  * component from (1).
  *
  * Identity graphics are NOT icons and do not come from here: bot avatars
- * (`BotFace`, `PixelSeat`, `pixelAvatars`), sparklines, donut charts and the
+ * (`BotFace`, `pixelAvatars`), sparklines, donut charts and the
  * brand wordmark are data or identity, governed by their own palettes.
  */
 import React from 'react';

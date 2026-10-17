@@ -38,7 +38,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Activity, Compass, Crosshair, Eye, History, LayoutGrid, MoreHorizontal, PanelRightOpen, Plus, X, Zap } from '../shared/Icons';
+import { Activity, Compass, Crosshair, Eye, History, MoreHorizontal, PanelRightOpen, Plus, X, Zap } from '../shared/Icons';
 import { ProviderConfig } from '../../types/provider';
 import type { LoggedTrade } from '../../types';
 import type { Message } from '../../types/message';
@@ -222,10 +222,6 @@ interface TradeChatPanelProps {
      *  through App's surface select so the directional enter animation
      *  (Chat arrives from the left) fires like every other Chat hop. */
     onOpenChat?: () => void;
-    /** Toggles the 2D debate desk floor projection modal. */
-    onToggleDeskScene?: () => void;
-    isDeskSceneOpen?: boolean;
-    hasDeskSceneMessage?: boolean;
     /** Triggers a fresh discovery of models from configured providers. */
     onRefreshModels?: () => Promise<void>;
     /** Pin / unpin the signal behind an entry. Only entries that carry an
@@ -298,7 +294,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     onToggleCollapsed, expanded, onToggleExpanded, onOpenChat,
     onNewGroup, onOpenCoach, coachCount = 0, botThreadRows, conversationRows, onBotTurnCommit,
     onSoloTurnCommit,
-    onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage,
     onToggleWatch, pinnedMessageIds,
     onRefreshModels,
 }) => {
@@ -863,24 +858,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 })()}
                 <div className="ml-auto flex shrink-0 items-center gap-1">
                     <SupervisorIndicator onOpen={() => setSupervisorOpen(true)} compact />
-                    {/* The overlay needs a debate message to project, so before
-                        the first run this button could only ever do nothing. */}
-                    {onToggleDeskScene && (hasDeskSceneMessage || isDeskSceneOpen) && (
-                        <button
-                            type="button"
-                            onClick={onToggleDeskScene}
-                            aria-label={isDeskSceneOpen ? 'Close desk view' : 'Open 2D desk view'}
-                            title={isDeskSceneOpen ? 'Close 2D debate floor' : 'Open 2D debate floor'}
-                            className={`relative rounded-control p-1.5 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 ${
-                                isDeskSceneOpen ? 'bg-cyan-500/15 text-cyan-400' : 'text-zinc-400'
-                            }`}
-                        >
-                            <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
-                            {hasDeskSceneMessage && !isDeskSceneOpen && (
-                                <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-cyan-400 ring-2 ring-zinc-900 animate-pulse" />
-                            )}
-                        </button>
-                    )}
                     {/* The same switch the Chat surface carries, so the hop is
                         visible from BOTH ends. The ⋯ menu's "Open in Chat" row
                         stays, but a return route nobody can see is exactly the

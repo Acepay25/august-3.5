@@ -204,13 +204,13 @@ describe('interactive elements do not nest', () => {
         // band stopped spanning the window. Its root is a bare <button>, which
         // is precisely what this inventory is for.
         expect([...forbidsRoot].sort().join(',')).toBe(
-            'ActionButton,CheckForUpdatesRow,CopyChip,ExportTray,NavExpandButton,NavTabButton,PinChip,PixelSeat,RailButton,RetryChip,SpeakChip,SupervisorIndicator,ToggleSwitch',
+            'ActionButton,CheckForUpdatesRow,CopyChip,ExportTray,NavExpandButton,NavTabButton,PinChip,RailButton,RetryChip,SpeakChip,SupervisorIndicator,ToggleSwitch',
         );
         // This list is a MEASUREMENT, and it moved when the walker learned to skip a
         // `//` comment sitting between attributes (`CustomInstructionsEditor.tsx:194`
         // writes one): the mis-terminated tag had credited `CustomInstructionsEditor`
         // with a button root it does not have (its own root is the scroll `<div>` at
-        // `:157`) and hid `PixelSeat`, whose root really is a `<button>` (`:167`).
+        // `:157`). `PixelSeat` left this list with the 2D desk view (2026-10-17).
         // `label` roots are interactive content but not forbidden containers, so they
         // must NOT appear above — a button inside a settings label is legal.
         expect(forbidsRoot.has('FieldLabel')).toBe(false);

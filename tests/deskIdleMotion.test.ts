@@ -10,7 +10,7 @@ beforeEach(() => {
     if (typeof window !== 'undefined') {
         window.localStorage.clear();
         window.localStorage.setItem('last_active_user', 'default');
-        document.body.classList.remove('desk-idle-motion-off');
+        document.body.classList.remove('motion-reduced');
     }
 });
 
@@ -18,7 +18,7 @@ afterEach(() => {
     if (typeof window !== 'undefined') {
         window.localStorage.clear();
         window.localStorage.setItem('last_active_user', 'default');
-        document.body.classList.remove('desk-idle-motion-off');
+        document.body.classList.remove('motion-reduced');
     }
 });
 
@@ -38,20 +38,20 @@ describe('idleMotion', () => {
 
     it('setIdleMotionEnabled(true) re-enables and clears the body class', () => {
         setIdleMotionEnabled(false);
-        expect(document.body.classList.contains('desk-idle-motion-off')).toBe(true);
+        expect(document.body.classList.contains('motion-reduced')).toBe(true);
         setIdleMotionEnabled(true);
-        expect(document.body.classList.contains('desk-idle-motion-off')).toBe(false);
+        expect(document.body.classList.contains('motion-reduced')).toBe(false);
     });
 
     it('reapplyIdleMotionClass reads the persisted value and applies the body class', () => {
         // Pre-seed a disabled value in localStorage.
         window.localStorage.setItem('desk_idle_motion_v1_default', '0');
         reapplyIdleMotionClass();
-        expect(document.body.classList.contains('desk-idle-motion-off')).toBe(true);
+        expect(document.body.classList.contains('motion-reduced')).toBe(true);
         // Now flip to enabled and re-apply.
         window.localStorage.setItem('desk_idle_motion_v1_default', '1');
         reapplyIdleMotionClass();
-        expect(document.body.classList.contains('desk-idle-motion-off')).toBe(false);
+        expect(document.body.classList.contains('motion-reduced')).toBe(false);
     });
 
     it('isolates the preference per active user', () => {

@@ -6,8 +6,9 @@ import { join } from 'path';
  * Four finished panels — the run-contract ladder, the verdict evidence card,
  * the why-avoid breakdown and the tooltip primitive — spent time with green
  * tests and no consumer, so nothing the user could see depended on them. They
- * are mounted now (`components/agents/AgentsView.tsx`,
- * `components/desk/DeskScene.tsx`); this is the tripwire against a later
+ * are mounted now — the three verdict panels through `analysis/VerdictAudit.tsx`
+ * (which the agents surface and the dock transcript both render), the tooltip
+ * through `shell/NavRail.tsx`; this is the tripwire against a later
  * refactor dropping an import and the panel quietly returning to being dead.
  *
  * A source scan rather than a render assertion, for the same reason
@@ -73,7 +74,7 @@ const MOUNTED: Array<{ symbol: string; from: string; host: string }> = [
     { symbol: 'EvidencePackCard', from: 'EvidencePackCard', host: 'components/analysis/VerdictAudit.tsx' },
     { symbol: 'WhyAvoidPanel', from: 'WhyAvoidPanel', host: 'components/analysis/VerdictAudit.tsx' },
     { symbol: 'WaitForConfirmationBanner', from: 'WhyAvoidPanel', host: 'components/analysis/VerdictAudit.tsx' },
-    { symbol: 'Tip', from: 'Tip', host: 'components/desk/DeskScene.tsx' },
+    { symbol: 'Tip', from: 'Tip', host: 'components/shell/NavRail.tsx' },
     // The shared decision card is a host too: it is the hop the Chat surface
     // reaches the audit through, and pinning it here is what makes that hop
     // PROOF rather than a name.

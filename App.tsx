@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useSyncExternalStore } from 'react';
 import { reapplyIdleMotionClass } from './services/desk/idleMotion';
 
-// Apply the user's persisted idle-motion preference to <body> on app
-// startup so the desk view mounts with the correct class.
+// Apply the user's persisted stillness preference to <body> on app startup,
+// before the first running row can paint.
 reapplyIdleMotionClass();
 import { Message, MessageRole, TradeOutcome, Conversation, ImageMetadata, AIProvider, LoggedTrade } from './types';
 import { subscribeMemoryFilesChanged } from './services/learning/MemoryFilesService';
@@ -71,7 +71,6 @@ const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay
 const CompareModal = React.lazy(() => import('./components/analysis/CompareModal'));
 const StrategyStudio = React.lazy(() => import('./components/dashboards/StrategyStudio'));
 const TradeView = React.lazy(() => import('./components/trade/TradeView'));
-const DeskScene = React.lazy(() => import('./components/desk/DeskScene'));
 const NewBotDialog = React.lazy(() => import('./components/chat/NewBotDialog'));
 const BotSeatOverridesDialog = React.lazy(() => import('./components/agents/BotSeatOverridesDialog'));
 const NewGroupDialog = React.lazy(() => import('./components/chat/NewGroupDialog'));
@@ -102,7 +101,6 @@ import { readBotSystemMarkdown, readBotMemoryMarkdown } from './services/bots/Bo
 import { takeSkillDraft, tombstoneSkillDraftKey, draftTriggerKey, listSkillDrafts, type SkillDraft } from './utils/skillDrafts';
 import { listLearningProposals } from './utils/learningQueue';
 import { approveSkillDraft, skillApprovalToast } from './services/learning/skillApproval';
-import { isEnsembleMessage, stageActorsForMessage, exchangesForTurns, convictionsFromTurns, livePhaseForMessage } from './utils/debateStageActors';
 import useNetworkStatus from './hooks/useNetworkStatus';
 import { useSupervisorBootstrap } from './hooks/useSupervisorBootstrap';
 import { useLearningHeartbeat } from './hooks/useLearningHeartbeat';
@@ -800,19 +798,10 @@ const App: React.FC = () => {
         setLoadingMessage,
         setAnalysisSteps,
         currentVisionData,
-
-
         initAnalysisSteps, startStep, completeStep,
         handleSendMessage,
         handleCancelAnalysis,
         handleClearChat,
-
-
-
-
-
-        handleSteerSeat,
-
     } = useAnalysisPipeline({
         messages, messagesRef, updateMessages, activeConversation, activeConversationId,
         providerConfigs: readyProviders,
@@ -1120,9 +1109,6 @@ const App: React.FC = () => {
     // Strategy Studio — the browse/annotate surface for the playbook library.
     // Strategy Studio moved to a surface (useSurface) — no overlay flag.
 
-    // ─── Desk view (opt-in overlay projecting the current debate) ──────────
-    const [isDeskSceneOpen, setIsDeskSceneOpen] = useState(false);
-
     // Chat-mode agent roster (extracted to hooks/useAgentThreads.ts):
     // bots/groups state + subscription, thread selection, unread badges,
     // and roster CRUD with confirm dialogs.
@@ -1270,56 +1256,20 @@ const App: React.FC = () => {
     }, [groups, bots, messages, activity, workingBotId, groupRunning, sendGroupThread,
         sendGroupReply, cancelGroupRun, isHybridIntelligenceEnabled, toggleGroupHybrid,
         setIsNewGroupOpen, deleteGroup]);
-    // The debate the desk view projects: the message currently debating, else
-    // the most recent ensemble message. Actors derive through the SAME builder
-    // the transcript uses, so the desk view never drifts from the transcript.
-    const deskSceneMessage = useMemo(() => {
+    // The verdict the Chart AI dock draws on the chart: the message currently
+    // debating, else the most recent run that produced a multi-model answer.
+    const verdictMessage = useMemo(() => {
         const debating = messages.find(m => m.isDebating);
         if (debating) return debating;
         for (let i = messages.length - 1; i >= 0; i--) {
             const m = messages[i];
-            if (isEnsembleMessage(m) || (m.debateTurns?.length ?? 0) > 0) return m;
+            const ensemble = Boolean(m.ensembleProgress)
+                || Object.keys(m.modelsUsed ?? {}).length > 1
+                || (m.debateTurns?.length ?? 0) > 0;
+            if (ensemble) return m;
         }
         return null;
     }, [messages]);
-    const deskSceneActors = useMemo(
-        () => (deskSceneMessage ? stageActorsForMessage(deskSceneMessage) : []),
-        [deskSceneMessage],
-    );
-    // Exchanges, sealed convictions and the live phase for the desk floor,
-    // from the SAME shared builders the transcript rows use. Deriving them
-    // in one place keeps the room and the transcript aligned — one source
-    // of truth.
-    const deskSceneExchanges = useMemo(
-        () => (deskSceneMessage
-            ? exchangesForTurns(deskSceneMessage.debateTurns ?? deskSceneMessage.postMortemDebateTurns ?? [])
-            : []),
-        [deskSceneMessage],
-    );
-    const deskSceneConvictions = useMemo(
-        () => (deskSceneMessage
-            ? convictionsFromTurns(deskSceneMessage.debateTurns ?? deskSceneMessage.postMortemDebateTurns ?? [])
-            : []),
-        [deskSceneMessage],
-    );
-    const deskScenePhase = useMemo(
-        () => (deskSceneMessage ? livePhaseForMessage(deskSceneMessage) : undefined),
-        [deskSceneMessage],
-    );
-    const deskSceneStages = useMemo(
-        () => (deskSceneMessage?.isDebating ? deskSceneMessage.runContract : undefined),
-        [deskSceneMessage],
-    );
-    const deskSceneVerdictDetail = useMemo(() => {
-        const a = deskSceneMessage?.analysis;
-        if (!a) return undefined;
-        return {
-            direction: a.direction,
-            confidence: a.confidence,
-            grade: (a as { grade?: string | null }).grade ?? null,
-            review: a.verdictReview,
-        };
-    }, [deskSceneMessage]);
 
     // Esc cancels an in-progress analysis (including the debate phase). Never
     // fires while the user is typing in an input/textarea/contenteditable, and
@@ -1332,7 +1282,7 @@ const App: React.FC = () => {
             const target = e.target as HTMLElement | null;
             const isTyping = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isTyping) return;
-            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isUserModalOpen || isVisionDataVisible || isStrategySearchVisible || isWatchListVisible || isDeskSceneOpen;
+            const anyOverlayOpen = isSettingsMenuVisible || isLiveMarketVisible || isUserModalOpen || isVisionDataVisible || isStrategySearchVisible || isWatchListVisible;
             if (anyOverlayOpen) {
                 // Overlays with their own document-level Esc handlers
                 // (SettingsMenu, command palette, Journal, LiveMarket, dialogs)
@@ -1351,7 +1301,7 @@ const App: React.FC = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [isAnalysisInProgress, handleCancelAnalysis, toast, isSettingsMenuVisible, isLiveMarketVisible, isUserModalOpen, isVisionDataVisible, isStrategySearchVisible, isWatchListVisible, isDeskSceneOpen]);
+    }, [isAnalysisInProgress, handleCancelAnalysis, toast, isSettingsMenuVisible, isLiveMarketVisible, isUserModalOpen, isVisionDataVisible, isStrategySearchVisible, isWatchListVisible]);
 
     const {
         comparePrimary,
@@ -2599,7 +2549,7 @@ const App: React.FC = () => {
                                     onNewGroup={() => setIsNewGroupOpen(true)}
                                     onOpenCoach={openApprovalsInLearn}
                                     coachCount={coachCount}
-                                    verdict={deskSceneMessage?.analysis}
+                                    verdict={verdictMessage?.analysis}
                                     bots={bots}
                                     trades={loggedTrades}
                                     groups={groups.map(g => ({ id: g.id, name: groupDisplayName(g, bots) }))}
@@ -2611,14 +2561,11 @@ const App: React.FC = () => {
                                     getAnalysisMessage={getAnalysisMessage}
                                     onLogProposedTrade={handleLogProposedTrade}
                                     registerScrollToMessage={registerScrollToMessage}
-                                    onToggleDeskScene={() => setIsDeskSceneOpen(v => !v)}
                                     onToggleWatch={handleToggleWatch}
                                     onOpenWatchList={() => setIsWatchListVisible(true)}
                                     watchOpenCount={watchedSignals.filter(s => !s.outcome || s.outcome === TradeOutcome.PENDING).length}
                                     watchOpenR={watchOpenR}
                                     pinnedMessageIds={pinnedMessageIds}
-                                    isDeskSceneOpen={isDeskSceneOpen}
-                                    hasDeskSceneMessage={!!deskSceneMessage}
                                     renderGroupSurface={renderGroupSurface}
                                 />
                             </React.Suspense>
@@ -2794,34 +2741,6 @@ const App: React.FC = () => {
 
 
                 </div>
-
-            {/* Desk view — opt-in projection of the current debate as a 2D
-                room of pixel-art seats. Toggled from the command palette
-                ("desk view" action); hidden by default. Projects the same
-                debate state the transcript renders. */}
-            {isDeskSceneOpen && deskSceneMessage && (
-                <React.Suspense fallback={null}>
-                    <DeskScene
-                        actors={deskSceneActors}
-                        caption={deskSceneMessage.analysis?.coinName
-                            ? `${deskSceneMessage.analysis.coinName} · ${deskSceneMessage.isDebating ? 'debate in progress' : 'debate floor'}`
-                            : (deskSceneMessage.isDebating ? 'Debate in progress' : 'Debate floor')}
-                        phase={deskScenePhase}
-                        stages={deskSceneStages}
-                        exchanges={deskSceneExchanges}
-                        convictions={deskSceneConvictions}
-                        verdictDetail={deskSceneVerdictDetail}
-                        onSteerSeat={handleSteerSeat}
-                        onOpenActor={() => {
-                            // The per-seat transcript hand-off this used to
-                            // request never shipped, so the click does what it
-                            // has always visibly done: dismiss the floor.
-                            setIsDeskSceneOpen(false);
-                        }}
-                        onClose={() => setIsDeskSceneOpen(false)}
-                    />
-                </React.Suspense>
-            )}
 
             {/* New Bot / New Group Chat dialogs */}
             {isNewBotOpen && (

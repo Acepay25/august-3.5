@@ -205,7 +205,7 @@ const NAV_GROUPS: NavGroup[] = [
     {
         title: 'Analysis',
         entries: [
-            { id: 'general', label: 'Analysis', icon: <SettingsIcon className={NAV_ICON} />, keywords: 'accuracy hybrid desk tools idle motion capture pure ai advanced strict protocol' },
+            { id: 'general', label: 'Analysis', icon: <SettingsIcon className={NAV_ICON} />, keywords: 'accuracy hybrid desk tools reduce motion idle motion capture pure ai advanced strict protocol' },
             { id: 'lenses', label: 'Roles', icon: <Eye className={NAV_ICON} />, keywords: 'lens analyst technical risk macro persona' },
             { id: 'prompts', label: 'Prompts', icon: <CodeIcon className={NAV_ICON} />, keywords: 'template library editing' },
             { id: 'instructions', label: 'Instructions', icon: <FileText className={NAV_ICON} />, keywords: 'custom system instruction rules' },
@@ -251,8 +251,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     });
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
     const [deskToolsEnabled, setDeskToolsEnabled] = useState(() => getHarnessSettings().deskToolsEnabled);
-    // Idle motion (breath / fidget / blink / sway). Default ON. The
-    // toggle is per-user, persisted via services/desk/idleMotion.
+    // Whether the infinite indicators stay still. Default is motion ON.
+    // The toggle is per-user, persisted via services/desk/idleMotion.
     const [idleMotionEnabled, setIdleMotionState] = useState(() => getIdleMotionEnabled());
     useEffect(() => subscribeIdleMotion(setIdleMotionState), []);
     const [activeInstructionTab, setActiveInstructionTab] = useState<InstructionTab>('general');

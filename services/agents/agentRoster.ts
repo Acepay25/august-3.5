@@ -5,12 +5,11 @@
  * 1:1 chat. A group binds several bots into a room where one prompt
  * fans out to the members serially with an activity feed.
  *
- * Persistence mirrors services/desk/roleOverrides: per-user
- * localStorage keys + a tiny pub/sub so open surfaces refresh on
- * edits without a reload.
+ * Persistence: per-user localStorage keys + a tiny pub/sub so open
+ * surfaces refresh on edits without a reload.
  */
 
-import type { RolePreset } from '../../components/desk/pixelAvatars';
+import type { RolePreset } from '../../components/chat/pixelAvatars';
 import type { BotFaceSpec } from '../../components/chat/BotFace';
 import type { BotMemoryScope } from '../../types/bot';
 import { AnalystRole } from '../../types/enums';
