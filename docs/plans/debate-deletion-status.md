@@ -26,6 +26,52 @@ memory, closed-trade skill crafting) stops working with no replacement.
 - `d90095b` Settings: the `lenses` (Roles) tab, `AnalystLensSettings`,
   `LensesTab`, the "Team analysis" switch.
 
+## Stage 20 — APPROVED 2026-10-18 with six changes; task ids 22–32
+
+Owner approved the plan with: (1) the gate cap **and** the `verdictFinalizer` clamps
+move into `present_trade`, running the gate on FRESH data, landing **before** 20b so
+no commit ever leaves an uncapped `PENDING` row; (2) **bots stay chat-only** — do not
+move `useBotMailbox` / `botRoutine` / `groupRounds` onto the tool turn; (3) add a
+trade-shaped-prose-without-`present_trade` detector with a "log this?" chip; (4) add
+max rounds, per-tool timeout, repeat-call detection, Stop-aborts-a-running-tool, and
+a defined fallback when `deskToolsEnabled` is off or the provider can't call tools;
+(5) specify the Chat surface's system prompt and log which skills were injected per
+turn; (6) add reload-persistence and Stop-mid-tool probes. Decisions: Full analysis
+survives as an instruction shortcut **with a required-tools check**; automations get
+the same tool turn through a **third sink** with per-run and per-day trade caps and
+visible failure on tool errors; the automation **characterization test lands before
+stage 19**.
+
+### 20a design fact found while starting it (task 22) — the sink must be event-shaped
+
+The two row types do **not** share the tool transcript's fields, measured 2026-10-18:
+
+- dock row = `LiveEntry` (`services/trade/chatStore.ts:48`, `StoredChatEntry & {…}`):
+  carries `tools: string[]`, `toolIds: string[]`, `actions`
+  (`chatTurnRunner.ts:682` appends the digest line and its id **in the same patch**,
+  because the desk loop's `results` order does not match the rendered lines — pairing
+  by index silently attaches the wrong payload).
+- canonical row = `Message` (`types/message.ts`): has `thoughtProcesses` `:209`,
+  `planId` `:350`, `toolActions?: ToolAction[]` `:355` — **no `tools`, no `toolIds`.**
+
+So an executor that emits one shared state object cannot serve both homes without
+either widening `Message` (a type change) or losing the chip/payload pairing on the
+Chat surface. The extraction therefore takes an **event sink** — the executor calls
+`onText / onReasoning / onToolLine / onToolPayload / onAction / onReset / settle` and
+each home maps them onto its own fields. That is what 20a builds.
+
+Second blocker for the cheaper "just lift the runner" route: the deps are captured
+**at construction** (`chatTurnRunner.ts:201-283`, `useMemo` over 35 fields at
+`TradeChatPanel.tsx:515-551`), including composer state (`draft`, `attachments`,
+`setDraft`, `clearAttachments`, `setContextAt`) and `systemPromptFor`. Two surfaces
+cannot share one instance built per-mount, so 20a converts turn-scoped context into
+parameters and leaves the composer/state hooks with the caller.
+
+**Not started:** no code moved. `runSeatTurn` (`:604-784`) is the extraction source;
+its settle paths (abort `:741`, pure-echo `:765`, peel/leak `:780-783`,
+`stripTextToolCalls` `:728`) must all survive the move unchanged — the dock's suites
+are the proof.
+
 ## Stage 20 — measured contract (2026-10-18, no code written yet)
 
 The goal is one tool-capable turn in **both** chat homes. Facts, so the next
@@ -93,7 +139,13 @@ Open engineering questions to settle while implementing, not before:
    (`get_chart_view`, `draw_on_chart`) — pass a chart-aware subset per home, do not
    let a tool call quietly no-op.
 
-## Stage 19 — a design question that must be answered first
+## Stage 19 — design question: RESOLVED (see the stage-20 ruling above)
+
+**Answer, 2026-10-18: neither option as posed.** The verdict/levels/journal-row
+capabilities are kept, but as **tools the model chooses to call** — so stage 19 is
+still a deletion of the branch and the engine, and what stage 20 must finish first
+is the tool path that replaces them (tasks 22–32). The text below is kept as the
+record of why the order is what it is.
 
 Structured chart analysis exists **only** inside the ensemble branch, and this app
 has no solo-analysis path: `isChartAnalysisRequested`
