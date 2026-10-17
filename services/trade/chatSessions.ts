@@ -16,6 +16,7 @@
 import { getActiveUsername } from '../../utils/activeUser';
 import type { Message, ToolAction } from '../../types/message';
 import { MessageRole } from '../../types/enums';
+import type { ReasoningEffort } from '../providers/reasoningControls';
 
 /** One turn in a session. `role` stays 'user' | 'ai' for storage
  *  compatibility; an ai entry may belong to one panel seat (speaker). */
@@ -124,8 +125,12 @@ export interface ChatSession {
      *  Missing on legacy rows ⇒ restore nothing (keep the current chart). */
     symbol?: string;
     interval?: string;
-    /** The composer's thinking-effort choice for this session. */
-    effort?: string;
+    /** The composer's thinking-effort choice for this session — THE shared
+     *  value, since both chat homes now drive one dial from this row (the dock
+     *  and the Chat surface). Typed as the tier union, not `string`: two
+     *  readers casting the same field is how one surface ends up sending a
+     *  tier the other never heard of. Absent ⇒ `'auto'` (the task default). */
+    effort?: ReasoningEffort;
     /** Solo sessions: the model (providerId:modelId) this chat answers with. */
     soloModel?: string;
     /** Runtime-only open-trade ledger (chat store lives on this in memory,
@@ -222,7 +227,13 @@ const validPanelModel = (m: unknown): m is PanelSeatRef => {
     return !!v && typeof v.providerId === 'string' && typeof v.modelId === 'string';
 };
 
-const VALID_EFFORTS = new Set(['off', 'low', 'medium', 'high', 'max', 'auto']);
+const VALID_EFFORTS = new Set<ReasoningEffort>(['off', 'low', 'medium', 'high', 'max', 'auto']);
+
+/** A stored tier is only usable if it is one of the wire tiers; anything else
+ *  (a future tier written by a newer build) is dropped, which means `'auto'`,
+ *  i.e. the task default — not a knob the transport has never seen. */
+const isEffort = (v: unknown): v is ReasoningEffort =>
+    typeof v === 'string' && VALID_EFFORTS.has(v as ReasoningEffort);
 
 /** Read + validate + bound the stored list; any corruption yields []. */
 export const loadSessions = (): ChatSession[] => {
@@ -250,7 +261,7 @@ export const loadSessions = (): ChatSession[] => {
                 conversationId: typeof s.conversationId === 'string' && s.conversationId ? s.conversationId : undefined,
                 symbol: typeof s.symbol === 'string' && s.symbol.trim() ? s.symbol.toUpperCase() : undefined,
                 interval: typeof s.interval === 'string' && s.interval.trim() ? s.interval : undefined,
-                effort: typeof s.effort === 'string' && VALID_EFFORTS.has(s.effort) ? s.effort : undefined,
+                effort: isEffort(s.effort) ? s.effort : undefined,
                 soloModel: typeof s.soloModel === 'string' && s.soloModel ? s.soloModel : undefined,
                 entries: s.entries.filter(validEntry).slice(-MAX_ENTRIES).map(sanitizeEntry),
             }));

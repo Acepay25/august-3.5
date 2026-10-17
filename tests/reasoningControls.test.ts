@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
     EFFORT_BY_TASK,
     effortForTask,
+    resolveComposerEffort,
     detectWireCapabilities,
     buildReasoningPatch,
     applyReasoningToChatParams,
@@ -56,6 +57,23 @@ describe('EFFORT_BY_TASK schedule (P2)', () => {
         expect(effortForTask('postMortem', 'fast')).toBe('low');
         // Unknown still passes auto through, unscaled.
         expect(effortForTask('nope', 'fast')).toBe('auto');
+    });
+});
+
+// Both chat transports — the dock's seat turn and the Chat surface's casual
+// turn — map a composer tier to a wire tier, and they now share ONE stored
+// value. Two copies of the mapping is how one home ends up reasoning and the
+// other not while both chips read "High".
+describe('resolveComposerEffort (the shared chat mapping)', () => {
+    it('maps unset and auto to the chat task default', () => {
+        expect(resolveComposerEffort()).toBe(EFFORT_BY_TASK.chat);
+        expect(resolveComposerEffort('auto')).toBe(EFFORT_BY_TASK.chat);
+    });
+
+    it('passes every real tier through untouched', () => {
+        for (const tier of ['off', 'low', 'medium', 'high', 'max'] as ReasoningEffort[]) {
+            expect(resolveComposerEffort(tier)).toBe(tier);
+        }
     });
 });
 

@@ -121,3 +121,53 @@ describe('streamQuickResponse (live casual-chat streaming)', () => {
     expect(messages.filter((m: any) => m.content === 'my question')).toHaveLength(1);
   });
 });
+
+// The composer's thinking dial. Both chat homes now show one chip over one
+// stored tier, so the tier has to reach the request — a chip that displays
+// 'High' while the wire is sent the chat default is a control that lies about
+// the reasoning it asked for. Pinned at the transport, not at the chip.
+describe('the composer effort tier reaches the wire', () => {
+  const optionsOf = (call = 0): any => (streamMock.mock.calls[call] as any)[2];
+
+  beforeEach(() => {
+    streamMock.mockReset();
+    streamMock.mockReturnValue(asyncGen(['ok']));
+  });
+
+  it('sends the chat task default when the caller names no tier', async () => {
+    await streamQuickResponse(config, 'question', []);
+    expect(optionsOf().reasoningEffort).toBe('low');
+  });
+
+  it('treats an explicit "auto" as the task default, not as a knob', async () => {
+    await streamQuickResponse(config, 'question', [], undefined, undefined, undefined, undefined, 'auto');
+    expect(optionsOf().reasoningEffort).toBe('low');
+  });
+
+  it('sends the tier the composer chose', async () => {
+    await streamQuickResponse(config, 'question', [], undefined, undefined, undefined, undefined, 'high');
+    expect(optionsOf().reasoningEffort).toBe('high');
+  });
+
+  it('passes "off" through instead of stepping it back to the default', async () => {
+    await streamQuickResponse(config, 'question', [], undefined, undefined, undefined, undefined, 'off');
+    expect(optionsOf().reasoningEffort).toBe('off');
+  });
+
+  it('keeps the chosen tier on the doubled-budget retry', async () => {
+    // Pass 1 thinks its way through the whole budget; pass 2 must not silently
+    // fall back to the default — the user asked for this tier for THIS answer.
+    let call = 0;
+    streamMock.mockImplementation(() => {
+      call += 1;
+      return asyncGen(call === 1
+        ? ['<' + 'think' + '>a very long chain of thought</' + 'think' + '>']
+        : ['The answer is Long.']);
+    });
+    await streamQuickResponse(config, 'question', [], undefined, undefined, undefined, undefined, 'max');
+    expect(streamMock).toHaveBeenCalledTimes(2);
+    expect(optionsOf(0).reasoningEffort).toBe('max');
+    expect(optionsOf(1).reasoningEffort).toBe('max');
+    expect(optionsOf(1).maxTokens).toBe(TASK_BUDGETS.chat * 2);
+  });
+});

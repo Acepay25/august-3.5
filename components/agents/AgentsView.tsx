@@ -129,11 +129,14 @@ interface AgentsViewProps {
      *  the rail shows no Coach pill — a shortcut to a thread this surface no
      *  longer owns would be a dead end wearing a badge. */
     onOpenCoach?: () => void;
-    /** Current provider/model chip in the composer. WS-6 asks that it open the
-     *  model picker, so App hands in a mounted ModelPicker (which renders its
-     *  own trigger labelled with the current selection) rather than a button
-     *  that leaves the surface to reach Settings. */
+    /** The composer's model chip — the dock's own `ModelChip`, handed in as a
+     *  node so this surface gets the identical control (searchable, grouped,
+     *  star-able) instead of a plainer twin of it. */
     modelPicker?: React.ReactNode;
+    /** The composer's thinking-effort chip, mounted from the same session row
+     *  the dock reads — so the tier this surface shows is the tier the send
+     *  hands to the pipeline, on both homes. */
+    effortPicker?: React.ReactNode;
     /** Why the stored chat model cannot answer, and what will instead (stage 3
      *  F4b). The Chat surface runs the same solo pick as the dock, so it must
      *  carry the same amber warning — hidden while a bot is selected, because a
@@ -432,7 +435,7 @@ interface BotRow {
 const AgentsView: React.FC<AgentsViewProps> = ({
     username, bots, groups, messages, selection, onSelect, onNewBot, onNewGroup,
     onSendBotTurn, onAnalyze, onStopRun, analysisRunning = false, renderGroup, coachCount, workingBotId,
-    lastOpenedMap = {}, modelPicker, modelFallback = null, destinationMenu, accountRow,
+    lastOpenedMap = {}, modelPicker, effortPicker, modelFallback = null, destinationMenu, accountRow,
     railExpanded = true, onToggleRailExpanded, statusCluster, surfaceSwitch,
     attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup, onRetryPostMortem,
     botStats,
@@ -1419,7 +1422,15 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 the typed text above it rather than 7px inside. */}
                             <div className="mx-auto mt-2 flex w-full max-w-[55rem] items-center justify-between gap-3 px-2.5 text-ui-xs text-zinc-600">
                                 <span className="min-w-0 truncate" title={contextNote}>{contextNote}</span>
-                                {modelPicker}
+                                {/* Both chips, right-aligned as one group: the tier
+                                    is the model's, so reading them apart invites
+                                    "which of these did the answer use?". Hidden for
+                                    a bot turn, which answers on the bot's own config
+                                    through a transport that never reads this dial. */}
+                                <div className="flex shrink-0 items-center gap-1.5">
+                                    {modelPicker}
+                                    {!activeBot && effortPicker}
+                                </div>
                             </div>
                             <div className="mx-auto mt-1 w-full max-w-[55rem] px-2.5 text-ui-xs text-zinc-600">
                                 <span className="hidden sm:inline">{DISCLAIMER_SHORT}</span>
