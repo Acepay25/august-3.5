@@ -837,15 +837,6 @@ const App: React.FC = () => {
     // state over the journal — drives the composer banner and is injected
     // into the debate context so the moderator weighs it when grading.
 
-    // Toggling Trade on no longer warns about missing setup — incomplete
-    // teams surface as chat bubbles when a run is actually attempted
-    // (useAnalysisPipeline). Toggling off clears attached charts — they are
-    // only analyzed in ensemble mode.
-    const handleSetEnsembleEnabled = useCallback((enabled: boolean) => {
-        setIsEnsembleEnabled(enabled);
-        if (!enabled) setImages([]);
-    }, [setImages]);
-
     // The active username, mirrored into a ref so callbacks that outlive the
     // render they were created in still read the CURRENT account. Written from
     // state right after `activeUsername` is destructured below; the initializer
@@ -2273,8 +2264,6 @@ const App: React.FC = () => {
                 username={activeUsername || undefined}
                 onProfileRestored={(restoredUsername) => { loadUserData(restoredUsername); }}
                 isAccuracyModeEnabled={isAccuracyModeEnabled}
-                isEnsembleEnabled={isEnsembleEnabled}
-                onToggleEnsembleEnabled={() => handleSetEnsembleEnabled(!isEnsembleEnabled)}
                 onToggleAccuracyMode={handleToggleAccuracyMode}
                 accuracySubMode={accuracySubMode}
                 setAccuracySubMode={setAccuracySubMode}
@@ -2299,8 +2288,6 @@ const App: React.FC = () => {
                 setIsMemoryEnabledInPureAI={setIsMemoryEnabledInPureAI}
                 customInstructions={customInstructions}
                 setCustomInstructions={setCustomInstructions}
-                lensConfig={lensConfig}
-                onSetLensConfig={handleSetLensConfig}
                 providerConfigs={providerConfigs}
                 providerConfigsLoaded={providerConfigsLoaded}
                 selectedOcrModel={selectedOcrModel}
