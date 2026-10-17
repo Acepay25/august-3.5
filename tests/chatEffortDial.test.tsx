@@ -120,11 +120,23 @@ describe('both chat homes drive the one stored tier', () => {
     });
 
     it('App mounts the chip on the session value and sends that same value', () => {
-        expect(appSrc).toMatch(/<EffortChip value=\{chatEffort\} onChange=\{chatStore\.setActiveEffort\} \/>/);
-        expect(appSrc).toMatch(/useSyncExternalStore\(chatStore\.subscribe, chatStore\.getActiveEffort/);
-        // Both analysis wrappers, or one surface's send would ignore the dial.
+        expect(appSrc).toMatch(/effortPicker=\{[\s\S]{0,700}<SessionEffortChip \/>/);
         expect(appSrc.match(/reasoningEffort: chatStore\.getActiveEffort\(\)/g)).toHaveLength(2);
-        expect(appSrc).toMatch(/effortPicker=\{/);
+    });
+
+    it('nobody subscribes App itself to the session store', () => {
+        // chatStore latches the username it loaded for on its FIRST touch and
+        // rehashes onto the real one at the first write. App renders before a
+        // profile is chosen, so an App-body subscription initialized the store
+        // against the empty username — then the session id the dock was writing
+        // into stopped existing and sends appended nothing. Measured on position,
+        // not on a comment: the subscription must live in a module-scope
+        // component, which by construction can only run inside a surface.
+        const subscribe = appSrc.indexOf('useSyncExternalStore(chatStore.subscribe');
+        expect(subscribe).toBeGreaterThan(-1);
+        const appBody = appSrc.indexOf('const App: React.FC');
+        expect(appBody).toBeGreaterThan(-1);
+        expect(subscribe).toBeLessThan(appBody);
     });
 
     it('both chat transports map the tier through one shared rule', () => {
