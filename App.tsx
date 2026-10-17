@@ -92,7 +92,6 @@ import { computeChatModelFallback, isProviderReady } from './utils/providerUtils
 import { DEFAULT_LEVERAGE } from './utils/conversationUtils';
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
 import { type ThreadSelection, threadForProvider } from './utils/agentThreads';
-import { deriveMessageDisplayText } from './utils/messageDisplayText';
 import {
     getBots, updateBot, 
     groupDisplayName, 
@@ -115,7 +114,6 @@ import { useConversations } from './hooks/useConversations';
 import { useMarketData } from './hooks/useMarketData';
 import { useTradeLogging } from './hooks/useTradeLogging';
 import { useAnalysisPipeline } from './hooks/useAnalysisPipeline';
-import { ANALYSIS_STOP_TEXT } from './services/trade/analysisTurn';
 import { usePostMortem } from './hooks/usePostMortem';
 import { useUserProfiles } from './hooks/useUserProfiles';
 import { offlineQueue } from './services/infrastructure/OfflineQueueService';
@@ -1889,86 +1887,32 @@ const App: React.FC = () => {
         return s?.symbol || s?.interval ? { symbol: s.symbol, interval: s.interval } : {};
     }, []);
 
-    const handleRunAnalysisFromChat = useCallback((prompt: string, chatImages: Array<{ name: string; dataURL: string }>): Promise<string | { text: string; messageId?: string }> => {
-        if (isAnalysisInProgress) return Promise.reject(new Error('an analysis is already running — wait for it or stop it first'));
-        if (readyProviders.length === 0) return Promise.reject(new Error('no AI providers are configured'));
-        const images: ImageMetadata[] = chatImages.map(img => ({
-            file: new File([], img.name, { type: 'image/png' }),
-            dataURL: img.dataURL,
-            isLoading: false,
-        }));
-        const conversation: Conversation = {
-            id: `trade-chat-${Date.now()}`,
-            title: 'Chart AI analysis',
-            timestamp: Date.now(),
-            messages: [],
-            ocrModel: selectedOcrModel,
-            moderatorProviderId: moderatorProviderId ?? '',
-            moderatorModel: moderatorModel ?? '',
-            leverage: parseInt(leverageInput, 10) || DEFAULT_LEVERAGE,
-        };
-        return new Promise<string | { text: string; messageId?: string }>((resolve, reject) => {
-            let settled = false;
-            void handleSendMessage(prompt, images, undefined, {
-                ...activeInstrument(),
-                reasoningEffort: chatStore.getActiveEffort(),
-                automation: {
-                    automationId: 'trade-chat',
-                    conversation,
-                    onMessage: ({ aiMessage }) => {
-                        if (settled) return;
-                        settled = true;
-                        const display = deriveMessageDisplayText(aiMessage);
-                        const summary = (display.displayContent || aiMessage.text || '').trim();
-                        const a = aiMessage.analysis;
-                        const verdict = a
-                            ? `${a.direction ?? '—'} ${a.coinName ?? ''} · confidence ${a.confidence ?? '—'}${a.entryPoints?.[0]?.price ? ` · entry ${a.entryPoints[0].price}` : ''}${a.stopLoss ? ` · stop ${a.stopLoss}` : ''}`
-                            : '';
-                        // Carry the message id back to the dock: it stamps
-                        // the answer entry's data-message-id so the gallery's
-                        // Locate can scroll straight to it.
-                        resolve({
-                            text: [summary.slice(0, 8000), verdict].filter(Boolean).join('\n\n') || 'The analysis completed with no summary.',
-                            messageId: aiMessage.id,
-                        });
-                    },
-                    onError: (error) => {
-                        if (settled) return;
-                        settled = true;
-                        reject(new Error(error));
-                    },
-                },
-            }).then((outcome) => {
-                // Settlement guard (mirrors useAutomations'): several of the
-                // pipeline's early exits — cancel, 429, quota, offline
-                // re-queue, parked send, blocked pre-flight — call NO
-                // automation callback. Without settling from the awaited
-                // outcome, one cancelled run left the dock's run guard set
-                // forever and every later full-analysis send in that session
-                // was silently swallowed until reload.
-                if (settled) return;
-                settled = true;
-                if (outcome?.ok) resolve(ANALYSIS_STOP_TEXT);
-                else reject(new Error('the analysis ended without a verdict (rate limit, quota, or a pre-run block)'));
-            }, (error: unknown) => {
-                if (settled) return;
-                settled = true;
-                reject(error instanceof Error ? error : new Error(String(error)));
-            });
-        });
-    }, [isAnalysisInProgress, readyProviders, selectedOcrModel, moderatorProviderId, moderatorModel, leverageInput, handleSendMessage]);
-
-    /** The Agents surface's analysis entry — the run on the NORMAL conversation
-     *  path, and nothing else. The dock runs into a private message list (it
-     *  renders the answer out of its own session); the Chat surface renders the
-     *  ACTIVE conversation, which is what the pipeline writes there. So this
-     *  wrapper resolves when the run ENDS and throws when it ended without a
-     *  verdict — it no longer carries a copy of the answer back, because the
-     *  surface already has the row, and a second copy is what made the two homes
-     *  disagree about the same exchange. */
-    const handleRunAnalysisFromAgents = useCallback(async (prompt: string, chatImages: Array<{ name: string; dataURL: string }>): Promise<void> => {
+    /**
+     * ONE analysis entry, for both chat homes.
+     *
+     * The Chart AI dock used to run with the `automation` option, which sends
+     * the run into a private message list built here, so a Full analysis
+     * started on the chart never appeared in the Chat surface's thread or the
+     * rail's list. The Chat surface ran on the active conversation instead.
+     * Two entries for one feature is how the two homes ended up showing
+     * different answers to the same question, so there is now one: the run
+     * writes the active conversation, which is the thread `entriesForSession`
+     * already feeds the dock.
+     *
+     * Resolves when the run ENDS and throws with the reason when it never
+     * started or ended without a verdict — neither has a transcript row to
+     * carry it, which is why both surfaces route this to a toast.
+     */
+    const handleRunAnalysisFromChat = useCallback(async (prompt: string, chatImages: Array<{ name: string; dataURL: string }>): Promise<void> => {
         if (isAnalysisInProgress) throw new Error('an analysis is already running — wait for it or stop it first');
         if (readyProviders.length === 0) throw new Error('no AI providers are configured');
+        // Bind before the run: the session that stands for this conversation is
+        // what the dock renders, and it only merges the conversation's rows
+        // once that link exists. A chart-side session with a transcript of its
+        // own is not blank, so this mints the conversation's session and makes
+        // it active — the analysis lands where the Chat surface can see it, and
+        // the earlier chart-only chat stays in the rail as itself.
+        if (activeConversationId) chatStore.bindConversation(activeConversationId);
         const images: ImageMetadata[] = chatImages.map(img => ({
             file: new File([], img.name, { type: 'image/png' }),
             dataURL: img.dataURL,
@@ -1981,9 +1925,9 @@ const App: React.FC = () => {
         // `ok:false` is the pipeline's own "this attempt produced no completed
         // analysis" verdict (rate limit, quota, a pre-run block). `ok:true`
         // covers a finished run AND a deliberate stop, and a stop is not a
-        // failure worth a toast.
+        // failure worth reporting.
         if (!outcome?.ok) throw new Error('the analysis ended without a verdict (rate limit, quota, or a pre-run block)');
-    }, [isAnalysisInProgress, readyProviders, handleSendMessage]);
+    }, [isAnalysisInProgress, readyProviders, handleSendMessage, activeConversationId]);
 
 
 
@@ -2807,6 +2751,7 @@ const App: React.FC = () => {
                                     botSessionRequest={tradeBotRequest ?? undefined}
                                     groupSessionRequest={tradeGroupRequest ?? undefined}
                                     onRunAnalysis={handleRunAnalysisFromChat}
+                                    onAnalysisError={(message) => toast.error(message)}
                                     onStopRun={handleCancelAnalysis}
                                     getAnalysisMessage={getAnalysisMessage}
                                     onLogProposedTrade={handleLogProposedTrade}
@@ -2909,7 +2854,7 @@ const App: React.FC = () => {
                                     onNewGroup={() => setIsNewGroupOpen(true)}
                                     onSendBotTurn={async (bot, prompt) =>
                                         (await mailboxRef.current?.runUserBotTurn(bot, prompt)) ?? false}
-                                    onAnalyze={handleRunAnalysisFromAgents}
+                                    onAnalyze={handleRunAnalysisFromChat}
                                     onAnalysisError={(message) => toast.error(message)}
                                     onStopRun={handleCancelAll}
                                     analysisRunning={isAnalysisInProgress}

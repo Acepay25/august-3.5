@@ -67,12 +67,14 @@ interface TradeViewProps {
     botSessionRequest?: { botId: string; nonce: number };
     /** Same for group rooms (dock session kinds). */
     groupSessionRequest?: { groupId: string; nonce: number };
-    /** Run the FULL ensemble analysis from the Chart AI composer; resolves
-     *  with the verdict summary text to show back in the chat — optionally
-     *  alongside the created analysis message id (lets the dock stamp the
-     *  answer entry for the gallery's Locate scroll). */
-    onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) =>
-        Promise<string | { text: string; messageId?: string }>;
+    /** Run the FULL ensemble analysis from the Chart AI composer. It resolves
+     *  when the run ends — the pipeline writes its rows into the active
+     *  conversation, which is the thread `TradeChatPanel` renders, so there is
+     *  no verdict text to hand back and no message id to stamp. */
+    onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) => Promise<void>;
+    /** Report a run that never started (the pipeline writes an error bubble only
+     *  once it IS running). Threaded straight to the dock's Full-analysis path. */
+    onAnalysisError?: (message: string) => void;
     /** Stop the RUNNING analysis. The composer's Stop button used to abort only
      *  the chat-session controller, which the pipeline never reads — so a Full
      *  analysis kept streaming (and spending) after the button reported it had
@@ -331,7 +333,7 @@ export const useTickFlash = (price: number | undefined): { cls: string; seq: num
 };
 
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onStopRun, coachCount, botThreadRows, onBotTurnCommit, onSoloTurnCommit, conversationRows, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, onOpenChat, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, onOpenWatchList, watchOpenCount = 0, watchOpenR, pinnedMessageIds }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onAnalysisError, onStopRun, coachCount, botThreadRows, onBotTurnCommit, onSoloTurnCommit, conversationRows, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, onOpenChat, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, onOpenWatchList, watchOpenCount = 0, watchOpenR, pinnedMessageIds }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     // Shared with the Chat surface, which needs the same picker over the same
@@ -822,6 +824,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         botSessionRequest,
         groupSessionRequest,
         onRunAnalysis,
+        onAnalysisError,
         onStopRun,
         getAnalysisMessage,
         onLogProposedTrade,

@@ -79,15 +79,16 @@ describe('TradeView: forwards the bridge to the dock', () => {
     });
 });
 
-describe('TradeChatPanel: renders the ids the bridge looks up', () => {
-    it('entry wrappers carry data-entry-id + data-message-id without layout changes', () => {
-        // The App message id is read once per entry (the Pin chip needs the
-        // same value), and the wrapper still stamps both ids on one attribute
-        // pair — no layout change. The map stays the PRIMARY source; a bound
-        // session may fall back to the entry's own id, because a row projected
-        // from the conversation carries the Message's id by construction.
-        expect(panelSrc).toMatch(/const analysisId = analysisMessageIds\[e\.id\]/);
-        expect(panelSrc).toMatch(/data-entry-id=\{e\.id\} data-message-id=\{analysisId \?\? e\.id\}/);
+describe('the dock transcript renders the ids the bridge looks up', () => {
+    const listSrc = readFileSync('components/trade/panels/ChatTranscriptList.tsx', 'utf8');
+
+    it('entry wrappers carry data-entry-id + data-message-id', () => {
+        // A row projected out of the bound conversation carries the Message's
+        // own id by construction (`liveEntryFromMessage` sets `id: m.id`), so
+        // the entry id IS the analysis id — no side map is consulted, and the
+        // Pin chip reads the same value.
+        expect(listSrc).toMatch(/const analysisId = resolveVerdictByIdentity && e\.role === 'ai' \? e\.id : undefined;/);
+        expect(listSrc).toMatch(/data-entry-id=\{e\.id\} data-message-id=\{analysisId \?\? e\.id\}/);
         expect(panelSrc).toMatch(/registerScrollToMessage\?: \(fn: \(\(messageId: string\) => void\) \| null\) => void/);
         // The registered function centers the target with a smooth scroll,
         // and the cleanup unregisters (null).
@@ -95,90 +96,73 @@ describe('TradeChatPanel: renders the ids the bridge looks up', () => {
         expect(panelSrc).toMatch(/return \(\) => \{ registerScrollToMessage\(null\); \};/);
     });
 
-    it('the ensemble bridge may return { text, messageId } so answers carry the App message id', () => {
-        expect(panelSrc).toMatch(/Promise<string \| \{ text: string; messageId\?: string \}>/);
-        // The dock no longer settles the answer row itself — the shared turn
-        // does, and hands the id back through `onMessageId` so the dock can map
-        // the row it created to the App-side message Locate scrolls to.
-        expect(panelSrc).toMatch(/onMessageId: \(entryId, messageId\) => \{/);
-        expect(panelSrc).toMatch(/setAnalysisMessageIds\(prev => \(\{ \.\.\.prev, \[entryId\]: messageId \}\)\)/);
-        // App's handleRunAnalysisFromChat actually supplies the id.
-        expect(appSrc).toMatch(/messageId: aiMessage\.id,/);
+    it('nothing hands an analysis message id back out of a run', () => {
+        // The bridge used to resolve `{ text, messageId }` and keep an
+        // entryId → messageId map in the panel. The answer row now comes from
+        // the conversation, whose id already IS the message id, so the map, the
+        // hand-back and App's `messageId:` are all gone rather than unused.
+        expect(listSrc).not.toMatch(/analysisMessageIds/);
+        expect(panelSrc).not.toMatch(/analysisMessageIds|setAnalysisMessageIds/);
+        expect(appSrc).not.toMatch(/messageId: aiMessage\.id,/);
     });
 });
 
 /**
- * The Chat surface and the Chart AI dock are one conversation.
+ * The Chat surface and the Chart AI dock are ONE conversation, in both
+ * directions.
  *
- * The Agents surface with no bot selected promises the same thing the dock's
- * "Full analysis" button does, and both call the same pipeline — but only the
- * dock wrote the transcript. A question asked in Chat ran a full ensemble
- * debate and left no trace in the session the dock renders, so the two surfaces
- * looked like separate products.
- *
- * The fix is one shared writer (`services/trade/analysisTurn.ts`), not a second
- * copy: a copy is how they drift again, and the drift is invisible because both
- * copies look correct alone.
+ * A "Full analysis" started on the chart used to run with the `automation`
+ * option — into a private message list App built for it — so it never appeared
+ * in the Chat surface's thread or the rail's list. And a turn asked in Chat
+ * wrote its own copy into the dock's session, which the merge could not
+ * recognise (fresh ids), so the dock showed the question twice with two
+ * different answers. Both were the same defect seen from either side: two
+ * records of one run. There is now one entry, one writer, one thread.
  */
 describe('Chat and Chart AI share one analysis turn', () => {
     const agentsSrc = readFileSync('components/agents/AgentsView.tsx', 'utf8');
-    const turnSrc = readFileSync('services/trade/analysisTurn.ts', 'utf8');
+    const runnerSrc = readFileSync('services/trade/chatTurnRunner.ts', 'utf8');
 
-    it('one turn has one record: the conversation, not a session copy', () => {
-        // The dock reaches a Chat-surface turn through
-        // `entriesForSession(session.entries, conversationRows)`, and that merge
-        // is keyed on the Message id — so the pipeline's own rows ARE the shared
-        // transcript. Writing a second copy from the surface is what split it:
-        // the copy is keyed with fresh ids the merge cannot recognise, so the
-        // dock showed the question twice with two different answers (its own
-        // "The analysis was stopped." beside the model's reply).
-        expect(agentsSrc).not.toMatch(/import \{ runAnalysisAsChatTurn/);
-        expect(agentsSrc).toMatch(/await onAnalyze\(prompt, images\)/);
-        // The writer still serves the one path that needs it: the dock's Full
-        // analysis runs with the `automation` option into a private message list,
-        // so without these rows the turn would leave no trace anywhere.
-        expect(panelSrc).toMatch(/run: \(\) => onRunAnalysis!/);
-        expect(turnSrc).toMatch(/entries: \[\.\.\.s\.entries, userEntry, aiEntry\]/);
-        expect(turnSrc).toMatch(/streaming: false/);
+    /** App's single analysis entry, sliced out so an assertion cannot match a
+     *  neighbouring handler. The end marker has moved twice already (the
+     *  2026-10-03 unwired-batch removal and stage 3's deletion of
+     *  handleCalculateAIProbabilities), so it is located, not assumed. */
+    const analysisEntry = (): string => {
+        const start = appSrc.indexOf('const handleRunAnalysisFromChat = useCallback');
+        expect(start, 'App\'s single analysis entry is gone or renamed').toBeGreaterThan(-1);
+        const end = appSrc.indexOf('const handleCloseJournal', start);
+        expect(end).toBeGreaterThan(start);
+        return appSrc.slice(start, end);
+    };
+
+    it('both surfaces are wired to the SAME analysis entry', () => {
+        expect(appSrc).toMatch(/onRunAnalysis=\{handleRunAnalysisFromChat\}/);
+        expect(appSrc).toMatch(/onAnalyze=\{handleRunAnalysisFromChat\}/);
+        // One entry, not a per-surface twin — the twin is what drifted.
+        expect(appSrc.match(/const handleRunAnalysis\w+ = useCallback/g)).toHaveLength(1);
     });
 
-    it('Chat gets the dock\'s pipeline entry, not a weaker local copy', () => {
-        // The old inline handler `void`ed the pipeline, so a rejection (an
-        // analysis already running, no providers configured) vanished with no
-        // row anywhere. Both surfaces now get a promise they can surface.
-        expect(appSrc).toMatch(/onAnalyze=\{handleRunAnalysisFromAgents\}/);
-        expect(appSrc).not.toMatch(/onAnalyze=\{\(prompt, images\) =>/);
-        expect(turnSrc).toMatch(/ANALYSIS_FAILED_TEXT/);
-    });
-
-    it('Chat runs on the ACTIVE conversation, and records the turn nowhere else', () => {
-        // The dock deliberately runs into a private message list because it
-        // renders the answer out of chatStore. The Chat surface renders the
-        // ACTIVE conversation, so handing it the dock's `automation` entry ran
-        // a full debate into a list it never reads: the probe caught it waiting
-        // forever for a reply that had already been written somewhere else.
-        expect(appSrc).toMatch(/const handleRunAnalysisFromAgents = useCallback/);
-        // The slice ends at the next surviving handler; it has moved twice
-        // already (the 2026-10-03 unwired-batch removal and stage 3's deletion
-        // of handleCalculateAIProbabilities), so it is located, not assumed.
-        const agentsHandler = appSrc.slice(
-            appSrc.indexOf('const handleRunAnalysisFromAgents'),
-            appSrc.indexOf('const handleCloseJournal'),
-        );
-        expect(agentsHandler).toMatch(/await handleSendMessage\(/);
-        expect(agentsHandler).not.toMatch(/automation:/);
-        // And no report-only channel either: the pipeline's rows in `messages`
-        // ARE the record for this surface. Carrying the verdict text back out of
-        // the run existed only to write a second copy into the dock's session,
-        // and that copy is what made the two homes show different answers to
-        // the same question.
-        expect(agentsHandler).not.toMatch(/onSettled/);
+    it('the run writes the ACTIVE conversation: no private list, no second copy', () => {
+        const entry = analysisEntry();
+        expect(entry).toMatch(/await handleSendMessage\(/);
+        expect(entry).not.toMatch(/automation:/);
+        expect(entry).not.toMatch(/onSettled/);
         expect(appSrc).not.toMatch(/onSettled/);
+        // Neither surface keeps a transcript writer for an analysis turn any
+        // more, so the module that held it is gone rather than half-used. The
+        // CALL and the import are measured, not the name: this file's own
+        // comments still have to say what used to happen.
+        expect(agentsSrc).not.toMatch(/import \{ runAnalysisAsChatTurn|runAnalysisAsChatTurn\(/);
+        expect(runnerSrc).not.toMatch(/import \{ runAnalysisAsChatTurn|runAnalysisAsChatTurn\(/);
+        // The dock still claims its session's run slot, or the composer's Stop
+        // and its double-send guard vanish with the wrapper that used to hold it.
+        expect(runnerSrc).toMatch(/const runFullAnalysis = async[\s\S]*?chatStore\.beginRun\(sid, controller\);[\s\S]*?finally \{\s*chatStore\.endRunOwned\(sid, controller\);/);
     });
 
-    it('the run slot is always released, including on an aborted run', () => {
-        // An orphaned streaming:true bubble blocked all session persistence
-        // until reload, so the settle must happen on every exit path.
-        expect(turnSrc).toMatch(/finally \{[\s\S]*?chatStore\.endRunOwned\(sid, controller\);/);
+    it('binds the session to the conversation before the run, so both homes see it', () => {
+        // The dock merges a conversation's rows only for a session carrying the
+        // link, so binding IS the sync: without it the analysis lands where the
+        // other home cannot read it.
+        expect(analysisEntry()).toMatch(/if \(activeConversationId\) chatStore\.bindConversation\(activeConversationId\);/);
     });
 });

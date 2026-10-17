@@ -38,7 +38,7 @@ import { parseTradeProposal, computeRrRatio } from './proposedTrade';
 import { scoreDrawnLevel, levelAccuracy, describeLevelAccuracyForModel } from './tradePlanLevels';
 import * as levelWatch from './levelWatchService';
 import { describePlanForModel, staleLevelsAtArm, type WatchPlan } from './tradePlanLevels';
-import { runAnalysisAsChatTurn } from './analysisTurn';
+
 import { recordBotTurnOutcome } from '../agents/botLearning';
 import * as watchService from './watchService';
 import { parsePriceWatch, parseTimeWake, describeWatchesForModel } from './chartTriggers';
@@ -248,9 +248,6 @@ export interface ChatTurnRunnerDeps {
     setDraft: (value: string) => void;
     /** Last packet fetch stamp (the composer's ctx badge). */
     setContextAt: (atMs: number) => void;
-    /** entryId → App-side analysis message id, recorded when the ensemble
-     *  pipeline hands one back (runFullAnalysis). */
-    setAnalysisMessageIds: (fn: (prev: Record<string, string>) => Record<string, string>) => void;
     /** Desk-tool drawing surface (draw_on_chart / mark_trade_levels). */
     addModelDrawings?: (drawings: ChartDrawing[], turn?: PanelTurnContext) => void;
     /** Clear only the model's own shapes (clear_chart_drawings scope=model). */
@@ -275,10 +272,14 @@ export interface ChatTurnRunnerDeps {
      *  question asked in it never lands there, so flipping the pill back made the
      *  exchange look like it had never happened. */
     onSoloTurnCommit?: (row: { id: string; role: 'user' | 'ai'; text: string; workedMs?: number }, conversationId: string) => void;
-    /** Launches the FULL ensemble pipeline from this chat (hybrid data in,
-     *  debate verdict back as an AI entry). */
-    onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) =>
-        Promise<string | { text: string; messageId?: string }>;
+    /** Launches the FULL ensemble pipeline from this chat. It writes its rows
+     *  into the ACTIVE conversation — the same thread the Chat surface renders —
+     *  so this resolves when the run ends and carries no answer text. */
+    onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) => Promise<void>;
+    /** Where a run that never started says why. The pipeline writes its own
+     *  error bubble once it is running, so the only silent failures left are the
+     *  pre-flight ones, and a button that does nothing reads as broken. */
+    onAnalysisError?: (message: string) => void;
 }
 
 /** The three entry points the shell drives: the composer's send (and the
@@ -308,8 +309,8 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         symbol, interval, effort, selectedChatModel, chartLevels, allDrawings, trades,
         getChartSnapshot, provider, configForSeat, systemPromptFor, bots, activeId, draft,
         sessions, botThreadRows, conversationRows, attachments, attachedImages,
-        clearAttachments, setDraft, setContextAt, setAnalysisMessageIds, addModelDrawings,
-        clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onSoloTurnCommit, onRunAnalysis,
+        clearAttachments, setDraft, setContextAt, addModelDrawings,
+        clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onSoloTurnCommit, onRunAnalysis, onAnalysisError,
     } = deps;
 
     const mutate = (id: string, fn: (s: LiveSession) => LiveSession): void => {
@@ -1179,8 +1180,12 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         }
     };
 
-    /** "Run full analysis" — the ensemble pipeline launched from this chat;
-     *  its verdict comes back as an AI entry in the same transcript. */
+    /** "Run full analysis" — the ensemble pipeline, on the ACTIVE conversation.
+     *  It writes no transcript row here: the pipeline appends the question and
+     *  its streaming answer to the conversation, and the dock renders that
+     *  conversation through `entriesForSession`. What it keeps is the session's
+     *  run slot — that flag is what turns the composer's send into Stop and
+     *  blocks a second send while the first is still in flight. */
     const runFullAnalysis = async (): Promise<void> => {
         const text = draft.trim();
         // Fresh store read, same double-submit defense as send().
@@ -1193,20 +1198,15 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             .map(a => `\n\n[ATTACHED FILE — ${a.name}]\n${a.payload.slice(0, MAX_FILE_CHARS)}`)
             .join('');
         const sid = activeId;
-        // The transcript bookkeeping is shared with the Agents surface, which
-        // runs the same pipeline from the same session — see analysisTurn.ts
-        // for why a second copy of this is how the two surfaces drift apart.
-        await runAnalysisAsChatTurn({
-            sid,
-            text: text + fileNote,
-            image: images[0]?.dataURL,
-            run: () => onRunAnalysis!(text + fileNote, images),
-            // The bridge may hand back the App-side message id alongside the
-            // verdict text — stamp the entry with it so Locate can scroll here.
-            onMessageId: (entryId, messageId) => {
-                setAnalysisMessageIds(prev => ({ ...prev, [entryId]: messageId }));
-            },
-        });
+        const controller = new AbortController();
+        chatStore.beginRun(sid, controller);
+        try {
+            await onRunAnalysis(text + fileNote, images);
+        } catch (e) {
+            onAnalysisError?.(e instanceof Error ? e.message : String(e));
+        } finally {
+            chatStore.endRunOwned(sid, controller);
+        }
     };
 
     /** Run one queued harness signal (a level-watch price event) as a model

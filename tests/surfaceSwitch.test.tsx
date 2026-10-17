@@ -184,7 +184,7 @@ describe('a verdict projected into the dock keeps its decision card', () => {
 
     it('resolves by identity when the host says these are conversation rows', () => {
         render(
-            <ChatTranscriptList entries={entries} send={async () => {}} analysisMessageIds={{}}
+            <ChatTranscriptList entries={entries} send={async () => {}}
                 getAnalysisMessage={get} getMark={() => null} onChatLevels={() => {}}
                 resolveVerdictByIdentity symbol="BTCUSDT" />,
         );
@@ -199,7 +199,7 @@ describe('a verdict projected into the dock keeps its decision card', () => {
         // The id of an entry the dock ran itself is not a message id, so no card
         // is claimed from a conversation it never belonged to.
         render(
-            <ChatTranscriptList entries={entries} send={async () => {}} analysisMessageIds={{}}
+            <ChatTranscriptList entries={entries} send={async () => {}}
                 getAnalysisMessage={get} getMark={() => null} onChatLevels={() => {}}
                 symbol="BTCUSDT" />,
         );

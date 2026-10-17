@@ -51,14 +51,13 @@ interface ChatTranscriptListProps {
      *  interrupted run. Optional: a surface with no composer omits the control
      *  rather than drawing a dead one. */
     setDraftText?: (text: string) => void;
-    /** entryId → App-side analysis message id for ensemble runs launched
-     *  from the dock (Locate's scroll target). */
-    analysisMessageIds: Record<string, string>;
     /** Resolve an analysis message id into the App-side message (the
      *  verdict audit block). Absent ⇒ the audit block does not render. */
     getAnalysisMessage?: (messageId: string) => Message | undefined;
     /** True when this list may hold rows projected from a conversation, i.e. the
-     *  session is bound to one. See the `analysisId` fallback. */
+     *  session is bound to one. Every analysis row is one now — the pipeline
+     *  writes the conversation, both homes render it — so the entry id IS the
+     *  message id and no side map is needed. See the `analysisId` derivation. */
     resolveVerdictByIdentity?: boolean;
     /** The chart the transcript talks about (Key Levels card rows). */
     symbol: string;
@@ -77,7 +76,7 @@ interface ChatTranscriptListProps {
 }
 
 const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
-    entries, send, setDraftText, analysisMessageIds, getAnalysisMessage, resolveVerdictByIdentity, symbol, getMark, onChatLevels,
+    entries, send, setDraftText, getAnalysisMessage, resolveVerdictByIdentity, symbol, getMark, onChatLevels,
     onToggleWatch, pinnedMessageIds, onLogProposedTrade,
 }) => {
     /** Re-render trigger for the module-scope proposal dispositions (see
@@ -121,28 +120,23 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                 // from the bubble too, so the protocol never flashes.
                 const aiLevels = e.role === 'ai' && !e.notice ? parseKeyLevels(e.text) : null;
                 const shownText = aiLevels?.hadBlock ? aiLevels.clean : e.text;
-                const analysisId = analysisMessageIds[e.id]
-                    // A row PROJECTED from the Chat conversation keeps the Message's
-                    // own id (`liveEntryFromMessage` sets `id: m.id`, which is what
-                    // lets the merge treat one turn as one row). So the entry id IS
-                    // the analysis id here, and without this fallback a verdict made
-                    // on the Chat surface arrived in this pane as plain text — the
-                    // same conversation, one home showing the decision card and the
-                    // other not. Gated on the host saying its rows are conversation
-                    // rows: a dock-native entry id must never be looked up as a
-                    // message id, because a collision would hang another run's
-                    // verdict on the wrong bubble.
-                    ?? (resolveVerdictByIdentity && e.role === 'ai' ? e.id : undefined);
+                // A row projected from the conversation keeps the Message's own id
+                // (`liveEntryFromMessage` sets `id: m.id`, which is what lets the
+                // merge treat one turn as one row), so the entry id IS the analysis
+                // id. Gated on the host saying its rows are conversation rows: a
+                // dock-native entry id must never be looked up as a message id,
+                // because a collision would hang another run's verdict on the
+                // wrong bubble.
+                const analysisId = resolveVerdictByIdentity && e.role === 'ai' ? e.id : undefined;
                 // Only a settled answer has a verdict to explain, and only
                 // an entry this dock ran has an id to resolve it from.
                 const verdict = e.streaming || e.notice ? undefined
                     : (analysisId ? getAnalysisMessage?.(analysisId) : undefined);
-                // The id came from the entry itself rather than from this dock's
-                // own run map, so the row was projected out of the Chat
-                // conversation — and that surface draws a verdict as a decision
-                // table, not as a bare audit. `InlineVerdict` is now the one
-                // renderer for both homes.
-                const projected = !!resolveVerdictByIdentity && !analysisMessageIds[e.id];
+                // The row was projected out of the Chat conversation, which draws
+                // a verdict as a decision table rather than a bare audit — and
+                // since both homes now read that one conversation, this IS every
+                // analysis row. `InlineVerdict` is the one renderer for both.
+                const projected = !!resolveVerdictByIdentity;
                 return (
                 <div key={e.id} className="chat-fade-in" data-entry-id={e.id} data-message-id={analysisId ?? e.id} data-testid={`chat-entry-${e.role}`}>
                     {e.role === 'user' ? (

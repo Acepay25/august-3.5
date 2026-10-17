@@ -121,7 +121,10 @@ describe('both chat homes drive the one stored tier', () => {
 
     it('App mounts the chip on the session value and sends that same value', () => {
         expect(appSrc).toMatch(/effortPicker=\{[\s\S]{0,700}<SessionEffortChip \/>/);
-        expect(appSrc.match(/reasoningEffort: chatStore\.getActiveEffort\(\)/g)).toHaveLength(2);
+        // ONE analysis entry for both homes, so exactly one place reads the
+        // stored tier at send time. Two wrappers was the old shape, and they
+        // drifted (one ran into a private message list).
+        expect(appSrc.match(/reasoningEffort: chatStore\.getActiveEffort\(\)/g)).toHaveLength(1);
     });
 
     it('nobody subscribes App itself to the session store', () => {

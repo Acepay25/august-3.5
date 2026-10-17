@@ -21,7 +21,6 @@ const renderList = (entries: LiveEntry[]) => render(
     <ChatTranscriptList
         entries={entries}
         send={async () => {}}
-        analysisMessageIds={{}}
         symbol="BTCUSDT"
         getMark={() => null}
         onChatLevels={() => {}}
