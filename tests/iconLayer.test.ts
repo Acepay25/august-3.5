@@ -28,8 +28,8 @@
  * enforced here — pinning it today would only record the current mess as law.
  *
  * Identity and data graphics are not icons and are not covered: bot avatars
- * (BotFace, PixelSeat, pixelAvatars), sparklines, donut charts, the desk
- * floor grid and the speech-bubble tail are deliberately custom artwork.
+ * (BotFace, pixelAvatars), sparklines and donut charts are deliberately custom
+ * artwork.
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';

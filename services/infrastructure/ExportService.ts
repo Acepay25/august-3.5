@@ -356,9 +356,9 @@ const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
     //   and harnessSettings.ts:79 — which is a RAW owner too, not a Preferences
     //   one: it was assumed "covered via Preferences" and a real export with an
     //   empty Preferences store proved it was not in the backup at all.
-    // Left OUT deliberately: desk_idle_motion_v1, desk_role_overrides_v1,
-    // desk_room_layout_v1, last_active_user, thinking_leak_bin_v1 and the three
-    // crash breadcrumbs — furniture and telemetry, not the trader's data.
+    // Left OUT deliberately: desk_idle_motion_v1, last_active_user,
+    // thinking_leak_bin_v1 and the three crash breadcrumbs — furniture and
+    // telemetry, not the trader's data.
     'trade_watches_v1',
     'trade_level_arms_v1',
     'trade_level_hits_v1',
@@ -743,8 +743,6 @@ const RESTORABLE_PREFERENCE_KEY_PREFIXES: readonly string[] = [
     'agent_threads_opened_v1',
     'desk_tools_forged_v1',
     'desk_idle_motion_v1',
-    'desk_role_overrides_v1',
-    'desk_room_layout_v1',
     // Shell / misc app state
     'harness_settings_v1',
     'book_drafts_seeded_v1',

@@ -67,19 +67,6 @@ describe('one read, one owner', () => {
 });
 
 describe('a control renders only when it can act', () => {
-    it('the desk toggle is gated on a debate existing, not just on the handler', () => {
-        expect(panelSrc).toMatch(
-            /onToggleDeskScene && \(hasDeskSceneMessage \|\| isDeskSceneOpen\) && \(/,
-        );
-    });
-
-    it('the desk toggle keeps its gate after the palette died', () => {
-        // The palette used to gate the same way; it is deleted (stage 3), so
-        // the dock's 2D button — pinned above — is the only toggle left, and
-        // no palette-shaped duplicate may re-arm itself in App.
-        expect(appSrc).not.toMatch(/'desk-view'|Open desk view/);
-    });
-
     it('the expand-over-chart row is gated on its handler', () => {
         expect(panelSrc).toMatch(/\{onToggleExpanded && \(/);
         expect(panelSrc).toMatch(/Expand over chart/);

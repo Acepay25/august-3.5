@@ -141,10 +141,6 @@ interface TradeViewProps {
     onOpenWatchList?: () => void;
     watchOpenCount?: number;
     watchOpenR?: string;
-    /** Toggles the 2D debate desk floor projection modal. */
-    onToggleDeskScene?: () => void;
-    isDeskSceneOpen?: boolean;
-    hasDeskSceneMessage?: boolean;
     /** Pin/unpin a verdict to the Pinned list (App owns the watched flag). */
     onToggleWatch?: (messageId: string) => void;
     pinnedMessageIds?: ReadonlySet<string>;
@@ -333,7 +329,7 @@ export const useTickFlash = (price: number | undefined): { cls: string; seq: num
 };
 
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onAnalysisError, onStopRun, coachCount, botThreadRows, onBotTurnCommit, onSoloTurnCommit, conversationRows, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, onOpenChat, onToggleDeskScene, isDeskSceneOpen, hasDeskSceneMessage, onToggleWatch, onOpenWatchList, watchOpenCount = 0, watchOpenR, pinnedMessageIds }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onAnalysisError, onStopRun, coachCount, botThreadRows, onBotTurnCommit, onSoloTurnCommit, conversationRows, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, onOpenChat, onToggleWatch, onOpenWatchList, watchOpenCount = 0, watchOpenR, pinnedMessageIds }) => {
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [interval, setInterval_] = useState<ChartInterval>('15m');
     // Shared with the Chat surface, which needs the same picker over the same
@@ -832,9 +828,6 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         onChatLevelsChange: handleChatLevels,
         renderGroupSurface,
         groups,
-        onToggleDeskScene,
-        isDeskSceneOpen,
-        hasDeskSceneMessage,
         onToggleWatch,
         pinnedMessageIds,
         onRefreshModels,

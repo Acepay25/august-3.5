@@ -1,13 +1,14 @@
 /**
- * idleMotion — per-user "is the desk breathing" preference.
+ * idleMotion — per-user "keep the screen still" preference.
  *
- * Persists to localStorage under `desk_idle_motion_v1_<user>` and
- * exposes a React-friendly pub/sub so the Settings menu toggle and
- * the desk view (which adds a className to <body>) stay in sync.
+ * Persists to localStorage under `desk_idle_motion_v1_<user>` (the key predates
+ * the 2D desk view that is now gone; renaming it would orphan the stored choice)
+ * and exposes a React-friendly pub/sub so the Settings menu toggle and the
+ * body class stay in sync.
  *
- * The CSS gates the actual animations on this pref via the
- * `.desk-idle-motion-off` body class. prefers-reduced-motion is a
- * separate, OS-level signal; this is the user-tunable equivalent.
+ * The CSS gates the infinite indicators on this pref via the `motion-reduced`
+ * body class. prefers-reduced-motion is a separate, OS-level signal; this is
+ * the user-tunable equivalent.
  */
 
 import { getActiveUsername } from '../../utils/activeUser';
@@ -38,7 +39,7 @@ const write = (value: boolean): void => {
 
 const applyToBody = (enabled: boolean): void => {
     if (typeof document === 'undefined') return;
-    document.body.classList.toggle('desk-idle-motion-off', !enabled);
+    document.body.classList.toggle('motion-reduced', !enabled);
 };
 
 applyToBody(DEFAULT_VALUE);
@@ -63,7 +64,7 @@ export const subscribeIdleMotion = (l: Listener): (() => void) => {
 
 /** Apply the active user's stored preference to the body class.
  *  Call on app startup so the body class reflects the persisted
- *  value before the desk view mounts. */
+ *  value before the first running indicator paints. */
 export const reapplyIdleMotionClass = (): void => {
     applyToBody(read());
 };

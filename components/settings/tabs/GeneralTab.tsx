@@ -1,5 +1,5 @@
-// TAB: Analysis — accuracy/hybrid modes, desk stillness, seat mapping and the
-// advanced capture switches (SettingsMenu "TAB 2").
+// TAB: Analysis — accuracy/hybrid modes, stillness and the advanced capture
+// switches (SettingsMenu "TAB 2").
 //
 // Moved verbatim from the inline body. `deskToolsEnabled`, `idleMotionEnabled`
 // and `isAdvancedOpen` are the parent's state, passed under their local names —
@@ -9,7 +9,6 @@
 import React from 'react';
 import { Activity, ChevronDown, Layers, ShieldCheck, Users, Wrench } from '../../shared/Icons';
 import { ToggleSwitch } from '../../shared/ToggleSwitch';
-import DeskSeatMappingEditor from '../DeskSeatMappingEditor';
 import { HarnessControls } from '../SessionUsagePanel';
 import { SegmentedControl, SettingsGroup, SettingsPageHeader, SettingsRow } from './shared';
 import { setIdleMotionEnabled } from '../../../services/desk/idleMotion';
@@ -81,7 +80,7 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
         <div className="space-y-5 animate-fade-in">
             <SettingsPageHeader
                 title="Analysis"
-                description="How the harness thinks, what it is allowed to call, and how still the desk sits."
+                description="How the harness thinks, what it is allowed to call, and how still the indicators sit."
             />
 
             <SettingsGroup title="Analysis modes">
@@ -155,25 +154,16 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
                 />
                 <SettingsRow
                     icon={<Activity className="h-4 w-4" aria-hidden="true" />}
-                    title="Desk idle motion"
-                    description="Subtle micro-motion on the pixel seats (breath, cap-tilt, eye-blink while thinking, moderator sway). Turning this off makes the desk perfectly still."
+                    title="Reduce motion"
+                    description="Stills the indicators that never stop — the running-turn edge, the live-feed ring, the working dot. On means the screen stays steady."
                     control={
                         <ToggleSwitch
-                            checked={idleMotionEnabled}
+                            checked={!idleMotionEnabled}
                             onChange={() => setIdleMotionEnabled(!idleMotionEnabled)}
-                            label="Toggle desk idle motion"
+                            label="Toggle reduced motion"
                         />
                     }
                 />
-            </SettingsGroup>
-
-            {/* The editor brings its own heading and
-                explanation — the card frames it, it
-                doesn't restate it. */}
-            <SettingsGroup>
-                <div className="p-4">
-                    <DeskSeatMappingEditor />
-                </div>
             </SettingsGroup>
 
             {/* ADVANCED — fine-tuning; most users never touch these. */}
