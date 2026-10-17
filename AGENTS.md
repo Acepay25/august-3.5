@@ -124,7 +124,9 @@ competing for the machine.
 │   ├── tools/              # toolForge (user/model-authored HTTPS tools)
 │   ├── research/           # Fixed 4-stage web research plan
 │   ├── trade/              # Trade journal actions + proposal parsing
-│   ├── desk/               # Desk layout/roles only — no market data lives here
+│   ├── desk/               # The reduce-motion preference only — the 2D desk floor
+│   │                       #   view and its seat layout were deleted (2026-10-18).
+│   │                       #   No market data lives here.
 │   ├── automation/         # Scheduled automations (cron + run history)
 │   ├── validation/         # Accuracy-mode validation, gate scoring
 │   ├── ui/                 # Autopilot, debates, price alerts
@@ -135,7 +137,7 @@ competing for the machine.
 │                           #   imported by renderer, vite dev proxy AND electron main
 ├── types/                  # analysis, trade, provider, progress, message, learning …
 ├── utils/                  # See "Canonical single-source modules" below
-├── tests/                  # Vitest suites (370 files)
+├── tests/                  # Vitest suites (489 files, 4850 tests — measured 2026-10-18)
 └── electron/               # main.cjs + preload.cjs (NOT covered by tsc)
 ```
 
@@ -212,7 +214,7 @@ runtime by the user (Settings → Providers) and stored in Preferences
   `buildModelIdToName`, `buildProviderNameToId`) and `ProviderConfigService.getReadyProviders`.
 - All AI calls go through `services/providers/GenericProviderService.ts` (3 API formats:
   chat_completions / messages / responses; retry + 120s timeout built in) and
-  `services/providers/GenericAnalysisService.ts` (analysis, post-mortem, vision, memory).
+  `services/providers/GenericAnalysisService.ts` (analysis, vision, memory).
 - Analysis/journal data carries `modelsUsed: Record<providerId, modelId>`; legacy
   per-provider fields (`geminiModelUsed`, …) are READ-ONLY fallbacks for historical rows.
 - On desktop, API keys are encrypted at rest via Electron `safeStorage` (bridge in
@@ -358,9 +360,9 @@ Optional build-time variables:
     this" — it will not survive concurrent features.
   - **Two writers to one ref is sometimes correct and always needs a comment.**
     `App.tsx`'s `activeUsernameRef` is written twice on purpose: once from
-    `sessionStorage` at declaration (the only value available to `usePostMortem`,
-    which is called before `activeUsername` is destructured) and once from the
-    canonical state later. Each serves a different set of readers. Before
+    `sessionStorage` at declaration (the only value available before
+    `activeUsername` is destructured) and once from the canonical state later.
+    Each serves a different set of readers. Before
     "de-duplicating" one, check what is CALLED between the two lines.
 - React 19 strict mode; TypeScript strict
 - Electron shell in `electron/` (custom `app://` protocol for production, safeStorage,
