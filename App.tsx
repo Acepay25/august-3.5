@@ -2211,9 +2211,9 @@ const App: React.FC = () => {
         }
         // The number rides the surface that HOLDS the queues. It used to sit on a
         // separate Approvals row in the rail — one destination, two rows, the same
-        // count twice on one screen — and that row is gone now that Approvals is a
-        // tab of Knowledge. The supervisor may already be working through them; a
-        // decision the model has not recorded yet is still something to lose.
+        // count twice on one screen. The Chat sidebar does carry a "Coach inbox"
+        // row now, because the menu that was its only entry point was removed, but
+        // it is a route with no number: this badge stays the single figure.
         if (approvalsWaiting > 0) {
             next.learn = {
                 count: approvalsWaiting,
@@ -2904,6 +2904,7 @@ const App: React.FC = () => {
                                         (await mailboxRef.current?.runUserBotTurn(bot, prompt)) ?? false}
                                     onAnalyze={handleRunAnalysisFromAgents}
                                     onStopRun={handleCancelAll}
+                                    analysisRunning={isAnalysisInProgress}
                                     renderGroup={g => renderGroupSurface(g.id)}
                                     coachCount={coachCount}
                                     workingBotId={workingBotId ?? dmWorkingBotId}

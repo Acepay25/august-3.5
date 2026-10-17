@@ -87,9 +87,15 @@ interface AgentsViewProps {
      *  provider is configured, so both reasons reach the transcript instead of
      *  vanishing into a void-ed promise. */
     onAnalyze: (prompt: string, images: PipelineImage[]) => Promise<AnalysisTurnOutcome>;
-    /** Ends the run this surface started. Absent ⇒ the send button never turns
-     *  into Stop, and the only stop on screen is the floating pipeline card. */
+    /** Ends the run this surface started. Without it the send button never
+     *  turns into Stop and a running analysis cannot be cancelled here. */
     onStopRun?: () => void;
+    /** The pipeline's own run flag. This surface unmounts when you hop to
+     *  Trade, which resets the local `busy` to false mid-run — so Stop is
+     *  derived from the run, not only from this component's state, or a hop
+     *  and a return leaves a live analysis with no Stop and no double-send
+     *  guard. */
+    analysisRunning?: boolean;
     /** App renders the existing room view; this surface only hosts it. */
     renderGroup?: (group: AgentGroup) => React.ReactNode;
     /** Decisions waiting in the Coach inbox — counts the rail's hop pill. */
@@ -425,7 +431,7 @@ interface BotRow {
 
 const AgentsView: React.FC<AgentsViewProps> = ({
     username, bots, groups, messages, selection, onSelect, onNewBot, onNewGroup,
-    onSendBotTurn, onAnalyze, onStopRun, renderGroup, coachCount, workingBotId,
+    onSendBotTurn, onAnalyze, onStopRun, analysisRunning = false, renderGroup, coachCount, workingBotId,
     lastOpenedMap = {}, modelPicker, modelFallback = null, destinationMenu, accountRow,
     railExpanded = true, onToggleRailExpanded, statusCluster, surfaceSwitch,
     attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup, onRetryPostMortem,
@@ -586,15 +592,18 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
     const pinnedIds = new Set(pins);
     const pinnedBots = botRows.filter(r => pinnedIds.has(r.bot.id));
-    const otherBots = botRows.filter(r => !pinnedIds.has(r.bot.id));
     const pinnedGroups = groupRows.filter(g => pinnedIds.has(g.id));
     const unpinnedGroups = groupRows.filter(g => !pinnedIds.has(g.id));
     // Bots flagged by attentionMap cannot do their job (dead provider, missing
     // model, no key). At rest they collapsed under one disclosure — the amber
     // ⚠ stays on each row inside it, but no longer shouts from the resting list.
     const [showInactive, setShowInactive] = useState(false);
+    // The roster lists EVERY agent, pinned or not. It used to subtract the
+    // pinned ones, which was invisible while both lists shared one scroll; once
+    // the roster became its own tab, pinning an agent deleted it from the tab
+    // that is meant to hold the whole roster.
     const listedBots = sortByName
-        ? [...otherBots].sort((a, b) => a.bot.name.localeCompare(b.bot.name)) : otherBots;
+        ? [...botRows].sort((a, b) => a.bot.name.localeCompare(b.bot.name)) : botRows;
     const activeBots = listedBots.filter(r => !attentionMap?.[r.bot.id]);
     const inactiveBots = listedBots.filter(r => !!attentionMap?.[r.bot.id]);
     const listedGroups = sortByName
@@ -652,7 +661,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
     const send = useCallback(async (): Promise<void> => {
         const prompt = text.trim();
-        if (!prompt || busy) return;
+        if (!prompt || busy || analysisRunning) return;
         setText('');
         // The branch the toggle used to make explicit. A bot selected → the
         // bot's own transport; nothing selected → the full analysis pipeline.
@@ -685,7 +694,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         clearAttachments();
         setBusy(true);
         try { await onSendBotTurn(activeBot, prompt); } finally { setBusy(false); }
-    }, [text, busy, onAnalyze, activeBot, onSendBotTurn, attachedImages, clearAttachments]);
+    }, [text, busy, analysisRunning, onAnalyze, activeBot, onSendBotTurn, attachedImages, clearAttachments]);
 
     /** The ⋯/right-click list for a room: pin plus the two roster handlers App
      *  hands in. Pinned rooms gain edit/delete here that the hover icons never
@@ -818,6 +827,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     // same jump is the duplication this redesign exists to remove.
     const [railTab, setRailTab] = useState<'chats' | 'bots'>('chats');
 
+
     // One switch, one home. The open column's header is its reference position —
     // the same x the rail-less surfaces use — so the hop does not move it.
     const belowMd = useIsBelowMd();
@@ -903,17 +913,19 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         <span className="flex-1 truncate" title="New chat">New chat</span>
                     </button>
                     {onOpenCoach && (
+                        /* A route, not a second counter. The queue's number
+                           rides the Knowledge tab that hosts it — this row used
+                           to carry `coachCount` (drafts + proposals) while the
+                           switch badge beside it showed `approvalsWaiting`
+                           (everything pending, permissions included), so one
+                           screen displayed two different figures for one
+                           inbox. */
                         <button type="button" data-testid="rail-coach-inbox"
                             onClick={() => onOpenCoach()}
-                            aria-label={coachCount > 0 ? `Coach inbox. ${coachCount} awaiting your decision` : 'Coach inbox'}
+                            aria-label="Coach inbox"
                             className="group flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-ui-caption text-zinc-400 transition-colors duration-[120ms] ease-[var(--ease-snappy)] hover:bg-white/[0.06] hover:text-zinc-100">
                             <Inbox className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden="true" />
                             <span className="flex-1 truncate" title="Coach inbox">Coach inbox</span>
-                            {coachCount > 0 && (
-                                <span className="shrink-0 rounded-full bg-amber-500 px-1.5 font-mono text-ui-2xs tabular-nums text-zinc-950">
-                                    {coachCount > 9 ? '9+' : coachCount}
-                                </span>
-                            )}
                         </button>
                     )}
                 </div>
@@ -937,6 +949,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         {([['chats', 'Chats'], ['bots', 'Bots']] as const).map(([id, label]) => (
                             <button key={id} type="button" role="tab" data-testid={`rail-tab-${id}`}
                                 aria-selected={railTab === id}
+                                aria-controls="rail-list-panel"
                                 onClick={() => setRailTab(id)}
                                 className={`hit-target rounded-control px-2 py-1 text-ui-dense uppercase tracking-widest transition-colors duration-[120ms] ease-[var(--ease-snappy)] ${
                                     railTab === id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
@@ -953,7 +966,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         <Search className={`h-3.5 w-3.5 ${searching ? 'text-zinc-200' : 'text-zinc-600'}`} aria-hidden="true" />
                     </button>
                     {(activeBots.length > 1 || listedGroups.length > 1) && (
-                        <button type="button" data-testid="rail-sort" aria-label="Sort conversations"
+                        <button type="button" data-testid="rail-sort" aria-label="Sort agents and rooms"
                             onClick={() => setSortByName(v => !v)}
                             title={sortByName ? 'Sorted by name — click for most recent' : 'Sorted by most recent — click for name'}
                             className="hit-target shrink-0 rounded-control p-1.5 text-zinc-600 transition-colors hover:text-zinc-300">
@@ -962,7 +975,8 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     )}
                 </div>
 
-                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-3 custom-scrollbar">
+                <div id="rail-list-panel" role="tabpanel" aria-label="Conversations and agents"
+                    className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-3 custom-scrollbar">
                     {searching && (
                         <div id="rail-search-field" className="relative mb-1.5 px-1">
                             <input ref={searchRef} value={query}
@@ -1380,15 +1394,15 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                         />
                                     </div>
                                     <button type="button"
-                                        onClick={() => { if (busy) { onStopRun?.(); return; } void send(); }}
-                                        disabled={!busy && !text.trim()}
-                                        aria-label={busy ? 'Stop' : 'Send'} data-testid="composer-send"
+                                        onClick={() => { if (busy || analysisRunning) { onStopRun?.(); return; } void send(); }}
+                                        disabled={!busy && !analysisRunning && !text.trim()}
+                                        aria-label={(busy || analysisRunning) ? 'Stop' : 'Send'} data-testid="composer-send"
                                         /* Two states, like the dock's composer. Stop used to live only on the
                                            pipeline card floating over this surface, which covered the answer it
                                            was waiting for; the control now sits where the send did. */
                                         className={`ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-opacity hover:opacity-90 disabled:opacity-30 ${
-                                            busy ? 'bg-rose-500/15 text-rose-300' : 'bg-zinc-100 text-zinc-900'}`}>
-                                        {busy
+                                            (busy || analysisRunning) ? 'bg-rose-500/15 text-rose-300' : 'bg-zinc-100 text-zinc-900'}`}>
+                                        {busy || analysisRunning
                                             ? <StopIcon className="h-3 w-3" fill="currentColor" aria-hidden="true" />
                                             : <ArrowUp className="h-4 w-4" aria-hidden="true" />}
                                     </button>
