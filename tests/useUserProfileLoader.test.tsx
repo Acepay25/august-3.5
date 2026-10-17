@@ -119,7 +119,6 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
 const createMockArgs = (overrides: Partial<UseUserProfileLoaderArgs> = {}): UseUserProfileLoaderArgs => ({
     profileReadyRef: { current: false },
     handleCancelAnalysis: vi.fn(),
-    invalidatePostMortemRuns: vi.fn(),
     lensConfig: null,
     handleSetLensConfig: vi.fn(),
     ensembleModelSelection: null,
@@ -170,7 +169,6 @@ const createMockArgs = (overrides: Partial<UseUserProfileLoaderArgs> = {}): UseU
     setAutopilotResolutions: vi.fn(),
     setInput: vi.fn(),
     setImages: vi.fn(),
-    setExpandedPostMortems: vi.fn(),
     setIsLoading: vi.fn(),
     setActiveUsername: vi.fn(),
     setExistingUsernames: vi.fn(),

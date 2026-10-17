@@ -14,7 +14,6 @@ import GlobalLearningService from '../../services/learning/GlobalLearningService
 import { storageService } from '../../services/infrastructure/StorageService';
 import { getAttributedInsightsSummary } from '../../services/learning/severityInsights';
 import { recordInsightFeedback } from '../../services/learning/PatternMemorySynthesisService';
-import { jobQueue } from '../../services/infrastructure/JobQueueService';
 import { ConfidenceCalibration } from '../../types';
 import { listSkills } from '../../services/learning/SkillMemoryService';
 import { getMemoryFilesStats } from '../../services/learning/MemoryFilesService';
@@ -42,7 +41,6 @@ export const VersionHistoryDashboard: React.FC = () => {
     const [providerStats, setProviderStats] = useState<Record<string, { count: number; avgQuality: number }>>({});
 
     // Real-time System Stats
-    const [queueSize, setQueueSize] = useState<number>(0);
     const [storageCount, setStorageCount] = useState<number>(0);
     const [memoryStats, setMemoryStats] = useState<{ enabledCount: number; charCount: number }>({ enabledCount: 0, charCount: 0 });
 
@@ -83,7 +81,6 @@ export const VersionHistoryDashboard: React.FC = () => {
             setProviderStats(iStats.byProvider || {});
 
             // 2. System Data
-            setQueueSize(jobQueue.getQueueLength());
             setMemoryStats(getMemoryFilesStats());
 
             // Count only records this screen can actually explain.
@@ -351,17 +348,6 @@ export const VersionHistoryDashboard: React.FC = () => {
                             </div>
                             <div className="mt-2 text-ui-sm text-white/40">Across IndexedDB & Local</div>
                         </ModernCard>
-
-                        {/* 3.3 Job Queue - Real Output */}
-                        <ModernCard title="Job Queue" accent="emerald" icon={<Icons.Server className="w-5 h-5" />}>
-                            <div className="mt-1 flex items-baseline">
-                                <span className={`text-3xl font-light ${queueSize > 0 ? 'text-emerald-400 animate-pulse' : 'text-white'}`}>{queueSize}</span>
-                                <span className="text-ui-sm text-emerald-400/60 ml-2">Pending Jobs</span>
-                            </div>
-                            <div className="mt-2 text-ui-sm text-white/40">{queueSize === 0 ? 'Workers Idle' : 'Processing...'}</div>
-                        </ModernCard>
-                        {/* "Schema Version v2.0.0" and "Rule Engine: Unified" cards are
-                            deleted — hardcoded strings that measured nothing. */}
                     </div>
                 );
         }

@@ -2,12 +2,11 @@
 // Replaces AI-based Global Memory Manager with deterministic algorithmic updates
 // Saves significant tokens by processing statistics and patterns locally
 
-import { GlobalMemory, LoggedTrade, TradeOutcome, TradeInsight } from '../../types';
-import { detectRecurringMistakes } from './MistakePatternService';
-// The two consolidation steps, called per write below. `consolidateMemory` is
-// NOT imported here: it is the wrapper over exactly these two calls and has no
-// runtime caller (only the ad-hoc `tests/test-memory-consolidation.ts` script).
-import { pruneOutdatedInsights, aggregateSimilarInsights } from './MemoryConsolidationService';
+import { GlobalMemory, LoggedTrade, TradeOutcome } from '../../types';
+// The two consolidation steps are no longer imported here: their only caller
+// was the recurring-mistake block that went with the post-mortem, so
+// `GlobalMemory.insightKnowledgeBase` no longer grows. The store and its
+// readers stay for profiles that already have entries.
 
 /**
  * Updates Global Memory algorithmically without AI.
@@ -103,52 +102,11 @@ export const updateGlobalMemoryAlgorithmically = (
         memory.familyPerformance[family] = `${wr}% WR (${totalWins}/${totalCount})`;
     }
 
-    // 4. Recurring-mistake detection — the SINGLE source for the lessons
-    // below. The legacy `aiPatternMemory` write that used to live here fed
-    // the same detector into a second store, so every lesson reached the
-    // prompt twice (the index rendered both — docs/learning-loop-map.md
-    // asymmetry #2, now closed). The write is gone: the field stays in the
-    // type/schema so stored profiles load, but it never grows again and
-    // `buildGlobalMemoryIndex` no longer renders it.
-    const recurringMistakes = detectRecurringMistakes(recentTrades);
-
-    // 4b. Structured insights (MemoryConsolidationService).
-    // Convert recurring mistakes to Structured Insights
-    const newInsights: TradeInsight[] = recurringMistakes.map(m => ({
-        id: `insight_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        category: m.type === 'risk' ? 'risk_management' :
-            m.type === 'exit' ? 'exit_strategy' :
-                m.type === 'timing' ? 'entry_timing' : 'general',
-        insight: m.description,
-        sourceTradeId: m.affectedTrades[0] || 'batch_analysis',
-        createdAt: new Date().toISOString(),
-        useCount: m.occurrences
-    }));
-
-    // Add to Knowledge Base
-    if (newInsights.length > 0) {
-        // THIS `if` is the only code in the repo that grows
-        // `GlobalMemory.insightKnowledgeBase.insights`, and the two lines below
-        // are the only consolidation the store ever needs: every write is
-        // immediately pruned (`pruneOutdatedInsights`: age > 90d and
-        // useCount < 3) and merged (`aggregateSimilarInsights`: ≥0.85
-        // similarity). That is why the scheduled hygiene pass
-        // (`memoryHygiene.runMemoryHygiene`) deliberately does NOT schedule
-        // consolidation — the store cannot grow without being maintained.
-        // (`consolidateMemory` is the async wrapper over these same two calls;
-        // nothing on the runtime path invokes it — see docs/learning-loop-map.md.)
-        memory.insightKnowledgeBase.insights.push(...newInsights);
-
-        const pruned = pruneOutdatedInsights(memory.insightKnowledgeBase);
-        const aggregated = aggregateSimilarInsights(pruned);
-
-        memory.insightKnowledgeBase = {
-            insights: aggregated,
-            lastUpdated: new Date().toISOString()
-        };
-
-        console.log(`[AlgorithmicMemory] Consolidated Memory: ${aggregated.length} insights active.`);
-    }
+    // 4. Recurring-mistake detection and the structured insights derived from
+    // it are GONE: every detector was a keyword scan of `trade.postMortem`, and
+    // the post-mortem feature that wrote that field has been deleted. With no
+    // writer, the detectors could only ever report nothing, so the block and the
+    // insight consolidation it drove were removed rather than left to run empty.
 
     // 5. Update User Preferences
 
@@ -168,20 +126,9 @@ export const updateGlobalMemoryAlgorithmically = (
         memory.userPreferences.leverageDefault = Math.round((oldAvg * 0.8) + (recentAvg * 0.2));
     }
 
-    // 6. Global Corrections (Extract IF/THEN rules)
-    const newCorrections: string[] = [];
-    for (const trade of recentTrades) {
-        if (trade.postMortem && trade.postMortem.includes('IF') && trade.postMortem.includes('THEN')) {
-            // Extract the sentence containing IF/THEN
-            const sentences = trade.postMortem.split(/[.!?]/);
-            const rule = sentences.find(s => s.includes('IF') && s.includes('THEN'));
-            if (rule) newCorrections.push(rule.trim());
-        }
-    }
-
-    // Merge corrections (keep latest 10)
-    memory.globalCorrections = [...newCorrections, ...memory.globalCorrections].slice(0, 10);
-
+    // 6. Global corrections used to be mined from each trade's post-mortem
+    // text. That field has no writer any more, so the store keeps whatever a
+    // profile already has and never grows here.
     return memory;
 };
 

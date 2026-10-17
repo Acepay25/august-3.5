@@ -12,7 +12,6 @@ export interface UseConversationHousekeepingArgs {
     setActiveConversationId: React.Dispatch<React.SetStateAction<string | null>>;
     updateMessages: (updater: (prev: Message[]) => Message[], conversationId?: string) => void;
     handleCancelAnalysis: () => void;
-    invalidatePostMortemRuns: () => void;
     confirmDialog: (opts: ConfirmOptions) => Promise<boolean>;
     toast: { success: (title: string, message?: string) => void };
 }
@@ -36,7 +35,7 @@ export const useConversationHousekeeping = (args: UseConversationHousekeepingArg
     const {
         conversationHistory, setConversationHistory,
         activeConversation, activeConversationId, setActiveConversationId,
-        updateMessages, handleCancelAnalysis, invalidatePostMortemRuns,
+        updateMessages, handleCancelAnalysis,
         confirmDialog, toast,
     } = args;
 
@@ -67,7 +66,6 @@ export const useConversationHousekeeping = (args: UseConversationHousekeepingArg
     // "New" from a filled session should return to the unused blank tab.
     const handleNewConversation = useCallback(() => {
         handleCancelAnalysis();
-        invalidatePostMortemRuns();
         const reusable = findReusableEmptyConversation(conversationHistory, activeConversationId);
         if (reusable) {
             if (reusable.id !== activeConversationId) {
@@ -92,7 +90,7 @@ export const useConversationHousekeeping = (args: UseConversationHousekeepingArg
         }
         setConversationHistory(prev => [newConv, ...prev]);
         setActiveConversationId(newConv.id);
-    }, [handleCancelAnalysis, invalidatePostMortemRuns, conversationHistory, activeConversationId, activeConversation, setConversationHistory, setActiveConversationId]);
+    }, [handleCancelAnalysis, conversationHistory, activeConversationId, activeConversation, setConversationHistory, setActiveConversationId]);
 
     // F3: Ctrl/Cmd+N = new conversation. ("/" used to focus the composer; the
     // #chat-composer element it looked up was deleted in 78bc027, so the branch
@@ -112,10 +110,9 @@ export const useConversationHousekeeping = (args: UseConversationHousekeepingArg
     const handleLoadConversation = useCallback((id: string) => {
         if (id !== activeConversationId) {
             handleCancelAnalysis();
-            invalidatePostMortemRuns();
             setActiveConversationId(id);
         }
-    }, [activeConversationId, handleCancelAnalysis, invalidatePostMortemRuns, setActiveConversationId]);
+    }, [activeConversationId, handleCancelAnalysis, setActiveConversationId]);
 
     const handleDeleteConversations = (ids: string[]) => {
         // Single source of truth: filter from the same list we store, so the
@@ -124,7 +121,6 @@ export const useConversationHousekeeping = (args: UseConversationHousekeepingArg
         setConversationHistory(remaining);
         if (activeConversationId && ids.includes(activeConversationId)) {
             handleCancelAnalysis();
-            invalidatePostMortemRuns();
             if (remaining.length > 0) {
                 setActiveConversationId(remaining[0].id);
             } else {

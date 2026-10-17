@@ -22,7 +22,7 @@ const MAX_DELAY_MS = 300000; // 5 minutes max
 
 export interface QueuedRequest {
     id: string;
-    type: 'analysis' | 'postMortem' | 'summary' | 'strategySearch';
+    type: 'analysis' | 'summary' | 'strategySearch';
     payload: any;
     /** Profile that enqueued the item. Populated at enqueue time (callers
      *  may omit it); items written before user-scoping have no field and
@@ -232,7 +232,6 @@ export const clearQueueForUser = async (username: string): Promise<number> => {
 
 export interface QueueProcessingHandlers {
     onAnalysis?: (payload: any) => Promise<void>;
-    onPostMortem?: (payload: any) => Promise<void>;
     onSummary?: (payload: any) => Promise<void>;
     onStrategySearch?: (payload: any) => Promise<void>;
     onItemProcessed?: (id: string, success: boolean) => void;
@@ -309,9 +308,6 @@ export const processQueue = async (handlers: QueueProcessingHandlers): Promise<{
                 switch (item.type) {
                     case 'analysis':
                         await handlers.onAnalysis?.(item.payload);
-                        break;
-                    case 'postMortem':
-                        await handlers.onPostMortem?.(item.payload);
                         break;
                     case 'summary':
                         await handlers.onSummary?.(item.payload);

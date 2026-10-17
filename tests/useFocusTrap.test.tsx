@@ -73,7 +73,6 @@ describe('DataCaptureModal focus-trap wiring', () => {
                 message={{ analysis: { coinName: 'BTCUSDT' } } as never}
                 outcome={TradeOutcome.WIN}
                 onClose={() => {}}
-                onUploadScreenshot={() => {}}
                 onAutoCapture={() => {}}
                 onSkip={() => {}}
             />

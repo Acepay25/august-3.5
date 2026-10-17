@@ -12,7 +12,6 @@ interface DataCaptureModalProps {
     message: Message;
     outcome: TradeOutcome;
     onClose: () => void;
-    onUploadScreenshot: (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; journalTags?: CaptureJournalTags; }) => void;
     onAutoCapture: (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; journalTags?: CaptureJournalTags; }) => void;
     onSkip: (feedback: { pnlAmount: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; journalTags?: CaptureJournalTags; }) => void;
     isCapturing?: boolean;
@@ -22,7 +21,6 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
     message,
     outcome,
     onClose,
-    onUploadScreenshot,
     onAutoCapture,
     onSkip,
     isCapturing = false
@@ -136,12 +134,6 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
     const handleAutoCapture = () => {
         if (isPnlValid) {
             onAutoCapture(buildFeedback());
-        }
-    };
-
-    const handleUpload = () => {
-        if (isPnlValid) {
-            onUploadScreenshot(buildFeedback());
         }
     };
 
@@ -308,25 +300,6 @@ export const DataCaptureModal: React.FC<DataCaptureModalProps> = ({
                                         ? 'Fetching market data from Binance...'
                                         : 'Instantly fetch current market data. Trade will be logged after capture completes.'
                                     }
-                                </div>
-                            </div>
-                        </div>
-                    </button>
-
-                    {/* Upload Screenshot Option */}
-                    <button
-                        onClick={handleUpload}
-                        disabled={isCapturing || !isPnlValid}
-                        className="w-full p-4 rounded-bubble border border-white/10 bg-zinc-800 hover:bg-zinc-800 hover:border-cyan-500/30 transition-colors duration-[150ms] ease-[var(--ease-snappy)] text-left group disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <div className="flex items-start gap-4">
-                            <div className="text-3xl"></div>
-                            <div className="flex-1">
-                                <div className="font-bold text-white group-hover:text-cyan-300 transition-colors">
-                                    Upload Screenshot & Log
-                                </div>
-                                <div className="text-ui-sm text-zinc-500 mt-1 leading-relaxed">
-                                    Manually upload a screenshot. Trade will be logged after upload.
                                 </div>
                             </div>
                         </div>

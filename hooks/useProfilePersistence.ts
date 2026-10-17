@@ -48,7 +48,6 @@ export interface UseProfilePersistenceArgs extends ProfileSettingsState {
     memoryModel: string;
 
     isAnalysisInProgress: boolean;
-    isPostMortemInProgress: boolean;
 
     toast: { error: (title: string, message?: string) => void };
 }
@@ -95,7 +94,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
         conversationHistory, loggedTrades, savedAnalyses, tradeSummaries,
         finalTradeSummary, globalMemory, insightKnowledgeBase,
         memoryConfig, memoryModel,
-        isAnalysisInProgress, isPostMortemInProgress,
+        isAnalysisInProgress,
         activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel,
         visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled,
         isAccuracyModeEnabled, accuracySubMode, customInstructions,
@@ -233,7 +232,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
     const heartbeatSnapshotRef = useRef(buildProfileSnapshot);
     heartbeatSnapshotRef.current = buildProfileSnapshot;
     useEffect(() => {
-        if (!activeUsername || (!isAnalysisInProgress && !isPostMortemInProgress)) return;
+        if (!activeUsername || !isAnalysisInProgress) return;
         const interval = setInterval(async () => {
             try {
                 const last = lastSavedSnapshotRef.current;
@@ -258,7 +257,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
             }
         }, 15000);
         return () => clearInterval(interval);
-    }, [activeUsername, isAnalysisInProgress, isPostMortemInProgress]);
+    }, [activeUsername, isAnalysisInProgress]);
 
     // Flush pending state on tab close / hide. The hook keeps an internal
     // ref to the freshest snapshot (updated every render via getSnapshot)

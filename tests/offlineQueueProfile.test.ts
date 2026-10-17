@@ -101,7 +101,7 @@ describe('OfflineQueueService user stamping + processing gate', () => {
 
     it('honours an explicit username argument over the active marker', async () => {
         setActiveUser('alice');
-        await addToQueue({ type: 'postMortem', payload: {}, username: 'bob' });
+        await addToQueue({ type: 'summary', payload: {}, username: 'bob' });
         const items = await getAllQueued();
         expect(items[0].username).toBe('bob');
     });

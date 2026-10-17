@@ -10,13 +10,11 @@ import type { AppSurface } from '../../hooks/useSurface';
 interface HeaderProps {
     saveStatus: 'SAVED' | 'SAVING' | 'ERROR';
     isAnalysisInProgress: boolean;
-    isPostMortemInProgress: boolean;
     currentVisionData: string[];
     /** The current surface, named in the header. Navigation itself moved to
      *  the persistent NavRail (D2) — this is the label that tells you where
      *  you are, not a control that moves you somewhere. */
     surface: AppSurface;
-    setIsLivePostMortemVisible: (visible: boolean) => void;
     // Network status
     isOnline?: boolean;
     pendingQueueCount?: number;
@@ -61,9 +59,7 @@ interface HeaderProps {
 // with stable props it only renders when something it actually shows changes.
 export const Header: React.FC<HeaderProps> = memo(({
     saveStatus,
-    isPostMortemInProgress,
     surface,
-    setIsLivePostMortemVisible,
     isOnline = true,
     liveMarketConditions,
     liveMarketSymbol,
@@ -323,8 +319,6 @@ export const Header: React.FC<HeaderProps> = memo(({
                     <StatusCluster
                         saveStatus={saveStatus}
                         isOnline={isOnline}
-                        isPostMortemInProgress={isPostMortemInProgress}
-                        onOpenLivePostMortem={() => setIsLivePostMortemVisible(true)}
                         onOpenActivity={onOpenActivity}
                     />
                 )}
