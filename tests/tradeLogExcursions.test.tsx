@@ -1,6 +1,10 @@
 /**
- * Renders the trade detail screen to prove the two blocks added with the
- * excursion work actually appear, and stay silent for legacy rows.
+ * Renders the trade detail screen to prove the excursion block actually
+ * appears, and stays silent for rows that were never measured.
+ *
+ * The block used to be pinned alongside a peer-dissent tally read out of the
+ * debate transcript. That tally went with the debate (2026-10-18); what is
+ * left here is the half the journal still measures.
  *
  * react-virtuoso is stubbed WITH rendering (the other TradeLog test stubs it to
  * an empty div, because it only tests the delete gate): the detail view is only
@@ -49,21 +53,12 @@ const openDetail = (t: LoggedTrade): void => {
     fireEvent.click(screen.getByTestId('virtuoso-list').querySelector('button')!);
 };
 
-describe('trade detail — excursions and dissent', () => {
-    it('shows the measured window, the capture share, and the peer dissent tally', () => {
+describe('trade detail — the measured excursion window', () => {
+    it('shows the window and the capture share, on the row and in the detail', () => {
         const sample = trade({
             pnlPercent: 80,
             maxAdverseExcursion: 12,
             maxFavorableExcursion: 100,
-            debateTurns: [
-                { speaker: 'A', round: 2, text: '', fincom: [{ seat: 'Risk', stance: 'commit', why: '' }] },
-                {
-                    speaker: 'B', round: 2, text: '', fincom: [
-                        { seat: 'Technical', stance: 'dissent', why: '' },
-                        { seat: 'Macro', stance: 'dissent', why: '' },
-                    ],
-                },
-            ],
         });
         // The compact capture tag lives on the LIST row — check it before the
         // detail view replaces the list.
@@ -75,25 +70,18 @@ describe('trade detail — excursions and dissent', () => {
         expect(excursions.textContent).toContain('worst −12.0%');
         expect(excursions.textContent).toContain('best +100.0%');
         expect(excursions.textContent).toContain('80%');       // 80 realized of 100 offered
-
-        const fincom = screen.getByTestId('trade-fincom');
-        expect(fincom.textContent).toContain('2 dissents');
-        expect(fincom.textContent).toContain('1 commit');
-        expect(fincom.textContent).toContain('Technical');
         cleanup();
     });
 
-    it('renders nothing excursion-shaped for a trade the post-mortem never measured', () => {
+    it('renders nothing excursion-shaped for a trade with no measured window', () => {
         renderList(trade({ pnlPercent: 40 }));
         expect(screen.getByTestId('virtuoso-list').textContent).not.toContain('cap ');
         fireEvent.click(screen.getByTestId('virtuoso-list').querySelector('button')!);
         expect(screen.queryByTestId('trade-excursions')).toBeNull();
-        // No markers stored either — absence, not a zero-filled row.
-        expect(screen.queryByTestId('trade-fincom')).toBeNull();
         cleanup();
     });
 
-    it('shows the window without capture when only the adverse side was measured', () => {
+    it('shows the window without capture when only the adverse side exists', () => {
         openDetail(trade({ maxAdverseExcursion: 30 }));
         const excursions = screen.getByTestId('trade-excursions');
         expect(excursions.textContent).toContain('worst −30.0%');

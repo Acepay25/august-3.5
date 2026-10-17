@@ -80,10 +80,11 @@ describe('the move itself (source contract)', () => {
         expect(learnViewSrc).toMatch(/PatternMemoryCard/);
     });
 
-    it('the Journal tabs are the ledger, the stats, and saved — nothing else', () => {
+    it('the Journal tabs are the ledger and the stats — nothing else', () => {
         // The old models/reasoning tabs (and the legacy learning/memory ones)
         // must not come back: resolveTab folds every unknown to the ledger.
-        expect(journalSrc).toMatch(/type TabId = 'log' \| 'analytics' \| 'saved';/);
+        // `saved` left with the saved-analyses archive (2026-10-18).
+        expect(journalSrc).toMatch(/type TabId = 'log' \| 'analytics';/);
         // Match the TABS entries, not prose — the comments naming the dead
         // tabs are the documentation of why they fold to the ledger.
         expect(journalSrc).not.toMatch(/id: '(models|reasoning|learning|memory)'/);

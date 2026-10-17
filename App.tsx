@@ -53,12 +53,11 @@ import { ChevronDownIcon, CloseIcon } from './components/shared/Icons';
 // eager (always-rendered, critical path).
 const StrategySearch = React.lazy(() => import('./components/shared/StrategySearch'));
 const UserProfileManager = React.lazy(() => import('./components/settings/UserProfileManager'));
-const SavedAnalyses = React.lazy(() => import('./components/journal/SavedAnalyses'));
 const WatchListPanel = React.lazy(() => import('./components/analysis/WatchListPanel'));
 const ActionApprovalsPanel = React.lazy(() => import('./components/learn/ActionApprovals'));
 const JobsDrawer = React.lazy(() => import('./components/settings/JobsDrawer'));
 const SettingsMenu = React.lazy(() => import('./components/settings/SettingsMenu'));
-const LiveStreamView = React.lazy(() => import('./components/analysis/LiveStreamView'));
+
 // (LogTradeModal was removed — the capture flow uses DataCaptureModal.)
 const DataCaptureModal = React.lazy(() => import('./components/modals/DataCaptureModal').then(m => ({ default: m.DataCaptureModal })));
 const EntryNotHitCaptureModal = React.lazy(() => import('./components/modals/EntryNotHitCaptureModal').then(m => ({ default: m.EntryNotHitCaptureModal })));
@@ -72,7 +71,6 @@ const CompareModal = React.lazy(() => import('./components/analysis/CompareModal
 const StrategyStudio = React.lazy(() => import('./components/dashboards/StrategyStudio'));
 const TradeView = React.lazy(() => import('./components/trade/TradeView'));
 const NewBotDialog = React.lazy(() => import('./components/chat/NewBotDialog'));
-const BotSeatOverridesDialog = React.lazy(() => import('./components/agents/BotSeatOverridesDialog'));
 const NewGroupDialog = React.lazy(() => import('./components/chat/NewGroupDialog'));
 const GroupChatView = React.lazy(() => import('./components/chat/GroupChatView'));
 const CoachThreadPanel = React.lazy(() => import('./components/chat/CoachThreadPanel'));
@@ -215,7 +213,6 @@ const App: React.FC = () => {
     const [isWatchListVisible, setIsWatchListVisible] = useState(false);
     /** Background-jobs drawer (status-stack pattern). */
     const [isJobsDrawerVisible, setIsJobsDrawerVisible] = useState(false);
-    const [seatOverridesBot, setSeatOverridesBot] = useState<AgentBot | null>(null);
 
     // Lazy-on-demand: only mount the legacy StrategySearch + Analytics side
     // panels once the user opens them at least once. They stay mounted
@@ -232,7 +229,6 @@ const App: React.FC = () => {
         isLoaded: providerConfigsLoaded,
         readyProviders,
         modelIdToName,
-        ocrModelIdToName,
 
         handleUpdateProvider,
         handleAddCustomProvider,
@@ -1324,18 +1320,6 @@ const App: React.FC = () => {
         }
     }, [messages]);
 
-    // Saved-analysis Locate: the transcript lives on the Trade surface, so
-    // from the Journal this is the show-the-trade dance — land on Trade and
-    // scroll only if the dock's bridge is already mounted.
-    const handleLocateSavedAnalysis = useCallback((messageId: string) => {
-        const dockIsMounted = surface === 'trade';
-        setSurface('trade');
-        if (dockIsMounted) {
-            const index = messages.findIndex(m => m.id === messageId);
-            if (index >= 0) scrollToMessageRef.current?.(messageId);
-        }
-    }, [messages, surface]);
-
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
             // Ctrl/Cmd+, opens Settings — the platform convention the activity
@@ -1652,27 +1636,6 @@ const App: React.FC = () => {
 
     const handleRemoveStrategy = (strategyName: string) => {
         setActiveFrameworks(prev => prev.filter(s => s !== strategyName));
-    };
-
-    const handleDeleteSavedAnalyses = (ids: string[]) => {
-        setSavedAnalyses(prev => prev.filter(a => !ids.includes(a.id)));
-    };
-
-    const handleClearAllSavedAnalyses = async () => {
-        const prevAnalyses = savedAnalyses;
-        const ok = await confirmDialog({
-            title: 'Clear all saved analyses?',
-            message: `This will remove ${savedAnalyses.length} saved analysis entry/entries. You can undo this for 5 seconds.`,
-            confirmLabel: 'Clear All',
-            destructive: true,
-            onUndo: () => {
-                setSavedAnalyses(prevAnalyses);
-                toast.success('Saved analyses restored');
-            },
-        });
-        if (ok) {
-            setSavedAnalyses([]);
-        }
     };
 
     // F4: "Re-run debate" — re-dispatches the original prompt + chart images
@@ -2589,11 +2552,6 @@ const App: React.FC = () => {
                 onUpdateTradeType={handleUpdateTradeType}
                                 onUpdateOutcome={handleUpdateTradeOutcome}
                                 onUpdatePnL={handleUpdateTradePnL}
-                                savedAnalyses={savedAnalyses}
-                                onDeleteSavedAnalyses={handleDeleteSavedAnalyses}
-                                onClearAllSavedAnalyses={handleClearAllSavedAnalyses}
-                                onLocateSavedAnalysis={handleLocateSavedAnalysis}
-                                ocrModelIdToName={ocrModelIdToName}
                                 />
                             </React.Suspense>
                         )}
@@ -2671,7 +2629,6 @@ const App: React.FC = () => {
                                     onRunRoutine={runRoutineFromRail}
                                     onDeleteBot={deleteBot}
                                     onRenameBot={(botId, name) => updateBot(botId, { name })}
-                                    onEditSeatOverrides={setSeatOverridesBot}
                                     onOpenCoach={openApprovalsInLearn}
                                     onDeleteGroup={deleteGroup}
                                     onEditGroup={groupId => {
@@ -2793,11 +2750,6 @@ const App: React.FC = () => {
                         onPickSecondary={handlePickSecondary}
                         onClose={closeCompare}
                     />
-                </React.Suspense>
-            )}
-            {seatOverridesBot && (
-                <React.Suspense fallback={null}>
-                    <BotSeatOverridesDialog open bot={seatOverridesBot} onClose={() => setSeatOverridesBot(null)} />
                 </React.Suspense>
             )}
         </div>

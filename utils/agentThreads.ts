@@ -236,7 +236,6 @@ export const previewTextFor = (m: Message): string => {
     const raw = (m.text || '').trim();
     if (raw) return raw.replace(/\s+/g, ' ').slice(0, 90);
     if (m.analysis) return `Analysis · ${m.analysis.coinName ?? 'setup'}`;
-    if (m.isDebating || (m.debateTurns && m.debateTurns.length > 0)) return 'Debate transcript';
     return '';
 };
 

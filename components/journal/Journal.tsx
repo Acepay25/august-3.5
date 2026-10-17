@@ -5,12 +5,10 @@ import WinRateDashboard from '../dashboards/WinRateDashboard';
 import EquityCurveDashboard from '../dashboards/EquityCurveDashboard';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { MonthlyReportCard } from './MonthlyReportCard';
-import {HistoryIcon, ChartBarIcon, BookmarkIcon, FileSpreadsheet, FileText} from '../shared/Icons';
-import SavedAnalyses from './SavedAnalyses';
-import { EmptyState } from '../ui/EmptyState';
+import {HistoryIcon, ChartBarIcon, FileSpreadsheet, FileText} from '../shared/Icons';
 
 import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
-import { LoggedTrade, TradeOutcome, SavedAnalysis } from '../../types';
+import { LoggedTrade, TradeOutcome } from '../../types';
 import { computeJournalStats } from '../../utils/journalAnalytics';
 import { RECENT_TRADES_WINDOW, buildTradeLogBrief } from '../../utils/recentTradesBrief';
 import { phtClock, phtDayKey } from '../../utils/timezone';
@@ -20,11 +18,12 @@ import { useEscapeClose } from '../../hooks/useEscapeClose';
 interface JournalProps {
     isVisible: boolean;
     onClose: () => void;
-    /** The Journal covers all logged trades: the ledger, the stats read over
-     *  it, and the saved analyses. The old models/reasoning/learning/memory
-     *  tabs are gone (2026-10-07) — a stale hash or old bookmark folds to the
+    /** The Journal covers all logged trades: the ledger and the stats read
+     *  over it. The old models/reasoning/learning/memory tabs are gone
+     *  (2026-10-07) and the saved-analyses tab went with the debate that
+     *  wrote them (2026-10-18) — a stale hash or old bookmark folds to the
      *  ledger in resolveTab. */
-    initialTab: 'log' | 'analytics' | 'saved';
+    initialTab: 'log' | 'analytics';
     /** Monotonic counter bumped by App on every openJournal. Re-apply the
      *  requested tab whenever THIS moves — re-opening the SAME tab while
      *  mounted changes no prop and was silently dropped by value-diffing. */
@@ -48,21 +47,10 @@ interface JournalProps {
     onUpdateOutcome?: (id: string, outcome: TradeOutcome) => void;
     /** Edit PnL (dollar + percent) from the expanded card. */
     onUpdatePnL?: (id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => void;
-
-    // Saved-analyses tab. Stage 3: the archive overlay and the Analysis
-    // Gallery had only the command palette as an opener; the journal is now
-    // the one home for bookmarked analyses (delete included) and Locate hops
-    // to the Trade surface, where the transcript lives.
-    savedAnalyses?: SavedAnalysis[];
-    onDeleteSavedAnalyses?: (ids: string[]) => void;
-    onClearAllSavedAnalyses?: () => void;
-    onLocateSavedAnalysis?: (messageId: string) => void;
-    ocrModelIdToName?: Record<string, string>;
-
 }
 
 // Tab configuration
-type TabId = 'log' | 'analytics' | 'saved';
+type TabId = 'log' | 'analytics';
 
 interface TabConfig {
     id: TabId;
@@ -75,12 +63,11 @@ interface TabConfig {
  *  merge; 'models' and 'reasoning' were deleted outright on 2026-10-07 —
  *  a stale hash or old bookmark lands on the trades, never a blank panel. */
 const resolveTab = (tab: string): TabId =>
-    tab === 'analytics' || tab === 'saved' ? (tab as TabId) : 'log';
+    tab === 'analytics' ? (tab as TabId) : 'log';
 
 const TABS: TabConfig[] = [
     { id: 'log', label: 'History', icon: <HistoryIcon className="w-4 h-4 shrink-0" aria-hidden="true" /> },
     { id: 'analytics', label: 'Stats', icon: <ChartBarIcon className="w-4 h-4 shrink-0" aria-hidden="true" /> },
-    { id: 'saved', label: 'Saved', icon: <BookmarkIcon className="w-4 h-4 shrink-0" aria-hidden="true" /> },
 ];
 
 /** CSV + printable-report export. The journal has TWO headers (the embedded
@@ -122,8 +109,6 @@ const JournalInner: React.FC<JournalProps> = ({
     openNonce, username,
     // Trade Log Pass-through
     trades, onDeleteTrades, onClearAllTrades, modelIdToName, onUpdateInsights, isSummarizing, currentInsightIds, onUpdateTradeLeverage, onUpdateTradeType, onUpdateOutcome, onUpdatePnL,
-    // Saved-analyses tab pass-through
-    savedAnalyses, onDeleteSavedAnalyses, onClearAllSavedAnalyses, onLocateSavedAnalysis, ocrModelIdToName = {},
 }) => {
     const [activeTab, setActiveTab] = useState<TabId>(resolveTab(initialTab));
     const [documentOpen, setDocumentOpen] = useState(false);
@@ -212,27 +197,6 @@ const JournalInner: React.FC<JournalProps> = ({
                     <LastTwentyCard trades={trades} />
                     <EquityCurveDashboard trades={trades} />
                     <WinRateDashboard trades={trades} />
-                </div>
-            </div>
-        ) : activeTab === 'saved' ? (
-            <div className="h-full overflow-y-auto">
-                <div className="p-4 sm:p-6">
-                    {savedAnalyses && onDeleteSavedAnalyses && onClearAllSavedAnalyses ? (
-                        <SavedAnalyses
-                            analyses={savedAnalyses}
-                            onDelete={onDeleteSavedAnalyses}
-                            onClearAll={onClearAllSavedAnalyses}
-                            modelIdToName={modelIdToName}
-                            ocrModelIdToName={ocrModelIdToName}
-                            onLocateMessage={onLocateSavedAnalysis}
-                        />
-                    ) : (
-                        <EmptyState
-                            icon={<BookmarkIcon className="w-8 h-8" aria-hidden="true" />}
-                            title="Saved analyses are not wired"
-                            description="App did not hand the journal a saved-analyses store."
-                        />
-                    )}
                 </div>
             </div>
         ) : null
