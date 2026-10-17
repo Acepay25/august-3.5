@@ -72,7 +72,7 @@ interface ChatTranscriptListProps {
     pinnedMessageIds?: ReadonlySet<string>;
     /** "Log this trade" on a model proposal → App records an OPEN trade.
      *  Absent ⇒ the Log button is hidden (no journal attached). */
-    onLogProposedTrade?: (proposal: TradeProposal) => void;
+    onLogProposedTrade?: (proposal: TradeProposal) => void | Promise<boolean>;
 }
 
 const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
@@ -83,6 +83,10 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
      *  proposalDisposition): the disposition itself must SURVIVE a dock
      *  unmount, the state here only makes React repaint the card. */
     const [proposalTick, setProposalTick] = useState(0);
+    /** Which entry's Log click is currently awaiting the gate stamp. Local (not
+     *  the module map) on purpose: it is a transient, and a pending await that
+     *  survived an unmount would disable a button that no longer exists. */
+    const [awaitingLogEntryId, setAwaitingLogEntryId] = useState<string | null>(null);
     /** Proposal card disposition for one entry — read from the MODULE map
      *  (see proposalDisposition), so the 'logged' state survives a dock
      *  unmount/remount and "Log this trade" can never be clicked twice for
@@ -253,14 +257,29 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                                 <TradeProposalCard
                                     proposal={e.proposal}
                                     canLog={!!onLogProposedTrade}
-                                    onLog={() => {
+                                    awaitingLog={awaitingLogEntryId === e.id}
+                                    onLog={async () => {
                                         // Double-log guard: the disposition lives at module
                                         // scope, so it survived even before this fix's second
                                         // half — the map lookup makes a re-click after a dock
                                         // unmount/remount (fresh component, same store entry)
                                         // a NO-OP instead of a second journal row.
-                                        if (proposalDisposition.get(e.id)) return;
-                                        onLogProposedTrade?.(e.proposal!);
+                                        if (proposalDisposition.get(e.id) || awaitingLogEntryId) return;
+                                        const stamped = e.proposal!;
+                                        setAwaitingLogEntryId(e.id);
+                                        // The row is written only once the gate stamp has
+                                        // been awaited (and, if it could not be measured,
+                                        // once the trader has confirmed) — so the card must
+                                        // stay live and clickable-to-cancel through that
+                                        // await instead of being marked logged up front.
+                                        let logged: boolean;
+                                        try { logged = (await onLogProposedTrade?.(stamped)) !== false; }
+                                        // A log that threw is NOT a log: the card
+                                        // stays live so the trader can retry instead
+                                        // of seeing ✓ Logged over a missing row.
+                                        catch { logged = false; }
+                                        finally { setAwaitingLogEntryId(null); }
+                                        if (!logged) return;
                                         setProposalDisposition(e.id, 'logged');
                                         setProposalTick(t => t + 1);
                                     }}

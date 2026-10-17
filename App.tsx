@@ -16,6 +16,7 @@ import { useLensAndEnsembleConfig } from './hooks/useLensAndEnsembleConfig';
 import { useAgentThreads } from './hooks/useAgentThreads';
 import { useWatchAndAutopilot } from './hooks/useWatchAndAutopilot';
 import { buildProposedTradeMessage, type TradeProposal } from './services/trade/proposedTrade';
+import { ensureStamp } from './services/trade/proposalGate';
 import * as chatStore from './services/trade/chatStore';
 import { AnalystRole } from './types/enums';
 import { BotRegistry } from './services/bots/BotRegistry';
@@ -1640,24 +1641,43 @@ const App: React.FC = () => {
     // old Chat surface ran (automation-shaped private run), resolve with the
     // verdict summary so the dock shows the answer in its own transcript.
     // "Log this trade" from a Chart AI proposal → append a PENDING analysis
-    // message. The outcome autopilot (useWatchAndAutopilot) registers it,
-    // watches the SL/TP, and runs the full post-mortem → skill-learning loop
-    // when it resolves — so a chat-proposed trade is scored like any analysis.
-    const handleLogProposedTrade = useCallback((proposal: TradeProposal): void => {
+    // message. The outcome autopilot (useWatchAndAutopilot) registers it and
+    // scores it against the real outcome, so a chat-proposed trade is tracked
+    // like any other logged position.
+    //
+    // It awaits the gate stamp before writing anything. The plan's card and the
+    // level-watch appear instantly (present_trade starts the scan and does not
+    // wait), but the JOURNAL ROW is the one place a probability becomes a record,
+    // so the cap has to be known here — and if the scan could not be measured,
+    // logging fails CLOSED: an explicit confirm, a row stamped `gate:unavailable`,
+    // and never a fabricated confidenceCap of 0.
+    const handleLogProposedTrade = useCallback(async (proposal: TradeProposal): Promise<boolean> => {
+        const gate = await ensureStamp(proposal, loggedTrades);
+        const stamped: TradeProposal = { ...proposal, gate };
+        if (gate.status === 'unavailable') {
+            const ok = await confirmDialog({
+                title: 'The gate could not be checked',
+                message: `${gate.reason}. Logging now records this plan UNCAPPED, stamped gate:unavailable — its probability is NOT measured against fresh data.`,
+                confirmLabel: 'Log without gate check',
+                destructive: true,
+            });
+            if (!ok) return false;
+        }
         updateMessages(prev => {
             // planId dedupe, keyed on the JOURNAL ROW (`LoggedTrade.planId`) and
             // the pending card's own field — never on the headline string. The
             // dock's per-card map stops a double-click on one card; re-presenting
             // the same plan from another surface used to mint a byte-identical
             // second card because the only trace of the plan was prose.
-            if (proposal.planId
-                && (loggedTrades.some(t => t.planId === proposal.planId)
-                    || prev.some(m => m.planId === proposal.planId))) {
+            if (stamped.planId
+                && (loggedTrades.some(t => t.planId === stamped.planId)
+                    || prev.some(m => m.planId === stamped.planId))) {
                 return prev;
             }
-            return [...prev, buildProposedTradeMessage(proposal, `proposed-${Date.now()}`)];
+            return [...prev, buildProposedTradeMessage(stamped, `proposed-${Date.now()}`)];
         });
-    }, [updateMessages, loggedTrades]);
+        return true;
+    }, [updateMessages, loggedTrades, confirmDialog]);
 
     /** The dock holds a settled verdict's message id, not a copy of the
      *  analysis — a persisted chat session would otherwise store a whole

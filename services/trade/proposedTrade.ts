@@ -7,15 +7,24 @@
  * "open trade" type) is reuse: the existing outcome autopilot
  * (`useWatchAndAutopilot` → `OutcomeAutopilotService.register`) already
  * watches any message whose `outcome === PENDING` and whose analysis has a
- * Long/Short direction, an entry and a stop — then auto-detects the SL/TP
- * touch and runs the full post-mortem → skill-learning loop. So "Log this
- * trade" only has to append a PENDING analysis message and the whole learning
- * pipeline takes over unchanged. Pure + dependency-free so it is unit-tested.
+ * Long/Short direction, an entry and a stop — then detects the SL/TP touch and
+ * records the settled outcome. So "Log this trade" only has to append a PENDING
+ * analysis message and the autopilot takes over unchanged.
+ *
+ * The post-mortem this file used to name as the loop's next step was deleted
+ * (2026-10-18) — a logged trade now settles into the journal and stops there.
+ * Pure + dependency-free (bar the shared clamp helpers) so it is unit-tested.
  */
 
-import { TradeAnalysis, TradeOutcome, Message, MessageRole } from '../../types';
+import { TradeAnalysis, TradeOutcome, Message, MessageRole, type ProposalGate } from '../../types';
 import { baseOf, quoteOf } from '../../utils/symbol';
 import { plannedRiskReward } from '../../utils/riskReward';
+import { clampProbabilityToGate, downgradeConfidenceForProbability } from '../../utils/analysisUtils';
+
+/** Re-exported so existing importers keep one name for it; the definition lives
+ *  in `types/analysis.ts`, because a stamped value has to survive onto a
+ *  persisted journal row. */
+export type { ProposalGate };
 
 /** A structured trade the model puts on the table for the user to accept. */
 export interface TradeProposal {
@@ -30,6 +39,9 @@ export interface TradeProposal {
     /** Which model / session presented it — carried onto the trade for
      *  attribution so the model-performance ledger can credit/debit it. */
     proposedBy?: string;
+    /** The gate that bound this plan at present time. Absent only on proposals
+     *  recorded before the stamp existed — never on a fresh present_trade call. */
+    gate?: ProposalGate;
     /** Stable plan id the DOCK generates when the proposal is presented
      *  (not the model): the harness level-watch arms on it and its level
      *  ids (`${planId}:ENTRY|:SL|:TP1..N`), and it rides onto the logged
@@ -94,27 +106,63 @@ export const parseTradeProposal = (args: Record<string, unknown>): { proposal?: 
     };
 };
 
-/** Build the minimal-but-valid TradeAnalysis the autopilot + journal expect. */
-export const buildProposedTradeAnalysis = (p: TradeProposal, createdAt = new Date().toISOString()): TradeAnalysis => ({
-    coinName: p.symbol,
-    direction: p.direction,
-    confidence: p.confidence ?? 'Medium',
-    probability: CONFIDENCE_PROBABILITY[p.confidence ?? 'Medium'],
-    strategy: 'Chart AI proposal',
-    activeStrategies: [],
-    entryPoints: [{ description: p.proposedBy ? `Proposed by ${p.proposedBy}` : 'Chart AI proposal', price: String(p.entry) }],
-    stopLoss: String(p.stopLoss),
-    takeProfit: p.takeProfits.map(tp => ({ price: String(tp) })),
-    marketConditions: {
-        pattern: '—', candleBehavior: '—', timeframeAlignment: '—', rsi: '—', macd: '—', sentiment: '—',
-    },
-    historicalCorrelation: p.rationale ? `Chart AI: ${p.rationale}` : 'Proposed from the live chart in Chart AI.',
-    createdAt,
-    rrRatio: computeRrRatio(p),
-});
+/** Build the minimal-but-valid TradeAnalysis the autopilot + journal expect.
+ *
+ *  The gate cap binds HERE, at the one place a confidence WORD becomes a number:
+ *  a plan stamped `evaluated` with a 0.50 cap cannot reach the journal as 72%,
+ *  and a plan whose gate could not run is recorded UNCAPPED with a warning
+ *  rather than quietly measured zero. Same helper as the pipeline's finalizer, so
+ *  a presented plan and an analysed one are clamped by one rule, not two.
+ *
+ *  No stamp at all is also recorded, not hidden: every log path awaits
+ *  `ensureStamp` first, so an unstamped row here means a caller skipped it. */
+export const buildProposedTradeAnalysis = (p: TradeProposal, createdAt = new Date().toISOString()): TradeAnalysis => {
+    const rr = computeRrRatio(p);
+    let confidence: 'High' | 'Medium' | 'Low' = p.confidence ?? 'Medium';
+    let probability = CONFIDENCE_PROBABILITY[confidence];
+    const validationWarnings: string[] = [];
+
+    if (p.gate?.status === 'evaluated') {
+        const clamp = clampProbabilityToGate(probability, p.gate.confidenceCap, rr);
+        if (clamp.wasClamped) {
+            probability = clamp.probability;
+            // The shared rule returns the full label union because a PIPELINE
+            // verdict can carry 'Avoid'. A proposal cannot (parseTradeProposal
+            // admits three tiers) and the rule cannot produce it, so this arm
+            // exists only to keep one helper for both callers.
+            const next = downgradeConfidenceForProbability(clamp.probability, confidence);
+            confidence = next === 'Avoid' ? confidence : next;
+            validationWarnings.push(`Gate enforcement: ${clamp.reason}`);
+        }
+    } else if (p.gate?.status === 'unavailable') {
+        validationWarnings.push(`Gate unavailable — this plan is UNCAPPED (${p.gate.reason})`);
+    } else {
+        validationWarnings.push('Gate never ran for this plan — logged UNCAPPED');
+    }
+
+    return {
+        coinName: p.symbol,
+        direction: p.direction,
+        confidence,
+        probability,
+        strategy: 'Chart AI proposal',
+        activeStrategies: [],
+        entryPoints: [{ description: p.proposedBy ? `Proposed by ${p.proposedBy}` : 'Chart AI proposal', price: String(p.entry) }],
+        stopLoss: String(p.stopLoss),
+        takeProfit: p.takeProfits.map(tp => ({ price: String(tp) })),
+        marketConditions: {
+            pattern: '—', candleBehavior: '—', timeframeAlignment: '—', rsi: '—', macd: '—', sentiment: '—',
+        },
+        historicalCorrelation: p.rationale ? `Chart AI: ${p.rationale}` : 'Proposed from the live chart in Chart AI.',
+        createdAt,
+        rrRatio: rr,
+        ...(p.gate ? { gate: p.gate } : {}),
+        ...(validationWarnings.length > 0 ? { validationWarnings } : {}),
+    };
+};
 
 /** The PENDING message "Log this trade" appends to the conversation — the
- *  autopilot picks it up by id and drives the SL/TP detection + post-mortem.
+ *  autopilot picks it up by id and drives the SL/TP detection.
  *
  *  A RECEIPT, not a second report: the entry/stop/target/probability numbers
  *  this plan is made of are already carried by the decision card (the answer's

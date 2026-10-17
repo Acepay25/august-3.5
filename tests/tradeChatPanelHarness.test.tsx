@@ -820,6 +820,10 @@ describe('composer badge, proposal double-log, mid-turn retry chips', () => {
         seedProposalEntry();
         fireEvent.click(await screen.findByText('Log this trade'));
         expect(logged).toHaveLength(1);
+        // The log awaits the gate stamp, so the 'logged' disposition is recorded
+        // one microtask later than the click. Let it land before leaving the
+        // surface — which is what a real click, then a real navigation, does.
+        await screen.findByText(/✓ Logged as an open trade/);
         // The user leaves the trade surface (the dock unmounts — component
         // state would die with it) and comes back: the STORE-side disposition
         // persists, so the card shows ✓ Logged with NO second Log button —

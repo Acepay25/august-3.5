@@ -35,6 +35,7 @@ import {
     describeDrawingsForModel, drawingFromChartTool, drawingsFromDetectedPattern, drawingsFromLevelTool, type ChartDrawing,
 } from './chartDrawings';
 import { parseTradeProposal, computeRrRatio } from './proposedTrade';
+import { beginGateScan, cancelGateScan, gateReceiptLine } from './proposalGate';
 import { scoreDrawnLevel, levelAccuracy, describeLevelAccuracyForModel } from './tradePlanLevels';
 import * as levelWatch from './levelWatchService';
 import { describePlanForModel, staleLevelsAtArm, type WatchPlan } from './tradePlanLevels';
@@ -401,14 +402,32 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         if (name === 'present_trade') {
             const { proposal, error } = parseTradeProposal({ ...args, symbol: args.symbol || turn.symbol });
             if (error || !proposal) return receipt(false, `present_trade rejected: ${error ?? 'invalid proposal'}`);
-            // The DOCK generates the stable plan id: the level-watch arms on
-            // it, the receipt names its level ids for the model to quote,
-            // and "Log this trade" carries it onto the journal row.
-            proposal.planId = `${baseOf(proposal.symbol).toLowerCase()}-${Date.now().toString(36)}`;
+            // The DOCK generates the stable plan id first: it keys the level-watch,
+            // the receipt's level ids, "Log this trade" onto the journal row, AND
+            // the one in-flight gate scan for this plan.
+            const planId = `${baseOf(proposal.symbol).toLowerCase()}-${Date.now().toString(36)}`;
+            proposal.planId = planId;
+            // The scan starts NOW but is not awaited here. Awaiting it put a
+            // market-data fetch plus an OHLCV pull per timeframe in front of
+            // drawing the plan, so the card appeared seconds later on a path that
+            // used to touch no network at all. The LOG path awaits the same
+            // promise (`ensureStamp`), which is where the cap actually has to bind.
+            const scan = beginGateScan(planId, proposal, trades);
+            void scan.then(gate => {
+                // Patch only while this exact row still carries this plan. If the
+                // turn was stopped, the session closed, or the user cancelled the
+                // card, the map finds nothing and the late answer is a no-op —
+                // mutate() likewise warns rather than resurrecting a session.
+                chatStore.mutate(turn.sid, s => ({
+                    ...s,
+                    entries: s.entries.map(e => (e.id === turn.entryId && e.proposal?.planId === planId
+                        ? { ...e, proposal: { ...e.proposal, gate } } : e)),
+                }));
+            });
             const { drawings } = drawingsFromLevelTool({ entry: proposal.entry, stopLoss: proposal.stopLoss, takeProfits: proposal.takeProfits }, { drawnPrice });
             addModelDrawings?.(drawings, turn);
             const plan: WatchPlan = {
-                planId: proposal.planId, symbol: proposal.symbol, direction: proposal.direction,
+                planId, symbol: proposal.symbol, direction: proposal.direction,
                 entry: proposal.entry, stopLoss: proposal.stopLoss, takeProfits: proposal.takeProfits,
             };
             // The honest disposition of the watch TradeView is about to arm:
@@ -444,7 +463,17 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             const watchLine = stale.length > 0
                 ? staleWatchLine
                 : `The harness now watches these levels — ids ${levelIds.join(', ')} — and will send you a [HARNESS SIGNAL] when one is reached; refer to levels by those ids and never re-announce one that already fired.`;
-            return receipt(true, `Presented ${proposal.direction} ${proposal.symbol} @ ${proposal.entry}, SL ${proposal.stopLoss}, TP ${proposal.takeProfits.join('/')}, R:R ~${rr}:1. The user sees a "Log this trade" card. ${watchLine}${canvasNote}`);
+            // A Stop on this run kills the scan too: an answer that arrives for a
+            // turn the user already cancelled must not resurrect its card.
+            chatStore.getController(turn.sid)?.signal.addEventListener('abort',
+                () => cancelGateScan(planId), { once: true });
+            // The receipt never states a probability the scan has not yet bounded.
+            // Saying "Recorded as 72%" here and capping it at log time would put
+            // two numbers for the same plan in the model's own context.
+            const gateLine = proposal.gate
+                ? gateReceiptLine(proposal.gate)
+                : 'Gate: scanning now — no probability is shown on the card or recorded on the row until the scan answers, and the logged plan is capped by it.';
+            return receipt(true, `Presented ${proposal.direction} ${proposal.symbol} @ ${proposal.entry}, SL ${proposal.stopLoss}, TP ${proposal.takeProfits.join('/')}, R:R ~${rr}:1. ${gateLine} The user sees a "Log this trade" card. ${watchLine}${canvasNote}`);
         }
         if (name === 'clear_chart_drawings') {
             const scope = args.scope === 'all' ? 'all' : 'model';
