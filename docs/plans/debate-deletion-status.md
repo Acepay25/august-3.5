@@ -26,6 +26,58 @@ memory, closed-trade skill crafting) stops working with no replacement.
 - `d90095b` Settings: the `lenses` (Roles) tab, `AnalystLensSettings`,
   `LensesTab`, the "Team analysis" switch.
 
+## Stage 20 — measured contract (2026-10-18, no code written yet)
+
+The goal is one tool-capable turn in **both** chat homes. Facts, so the next
+session does not re-derive them:
+
+- `streamChatWithDeskTools` is an **async generator** returning text deltas
+  (`services/analysis/DeskToolsService.ts:3684`), and **every option is optional**
+  (`StreamWithDeskToolsOptions`). It self-gates on
+  `getHarnessSettings().deskToolsEnabled`, and `withDeskToolsSystemPrompt` will not
+  double-inject the DESK TOOLS block if the system message already carries it.
+- The dock consumes it at `chatTurnRunner.ts:641` with `allowedTools: TRADE_TOOLS`
+  (`:96`, ~20 names, chart-aware: `get_chart_view`, `mark_trade_levels`,
+  `draw_on_chart`) plus a frozen `PanelTurnContext` so a background turn still
+  writes into its own transcript.
+- The Chat surface's casual turn is the OTHER transport:
+  `streamQuickResponse(...)` at `useAnalysisPipeline.ts:3197` — eight positional
+  args, separate `onReasoning` channel, no tool loop. That is the asymmetry stage 20
+  removes.
+- Swapping the call is small; the three things that are NOT obvious and need
+  deciding while doing it: (1) the reasoning side-channel — the generator yields
+  visible text, so `Message.thoughtProcesses` needs its own route; (2) which tool
+  subset a surface WITHOUT a chart may call — `get_chart_view` / `draw_on_chart`
+  have no target there; (3) whether the Chat surface renders a tool chip (the dock's
+  transcript rows already do).
+- Lifting `createChatTurnRunner` into App is **not** the cheap route: its deps
+  object (`chatTurnRunner.ts:201-283`) is 35 fields, most of them chart state
+  owned by TradeView (`allDrawings`, `getChartSnapshot`, `addModelDrawings`,
+  `onPlanPresented`). Do the transport swap, not the lift.
+
+## Stage 19 — a design question that must be answered first
+
+Structured chart analysis exists **only** inside the ensemble branch, and this app
+has no solo-analysis path: `isChartAnalysisRequested`
+(`useAnalysisPipeline.ts:1474`) lists `isEnsembleEnabled` as a trigger term, so with
+the flag off every send is casual chat. Deleting the branch therefore deletes the
+verdict, the entry/SL/TP, the levels drawn on the chart, the gate scan, and the
+journal row that the autopilot watches — not just the debate.
+
+Two readings of "remove the ensemble debate", and they are not the same product:
+- **(a) convert**: collapse multi-seat debate into ONE analyst pass that still
+  produces a `TradeAnalysis` verdict, keeping stages 1-3 and 7-8 (market data, gate
+  scan, prompt assembly, tool loop, finalizer, Monte Carlo/backtest, journal row).
+  The app keeps doing the thing it is for, with one model instead of a floor of them.
+- **(b) delete**: the branch goes, chat-with-tools is the product, and "analyze this
+  chart" becomes a conversational answer with no structured verdict and no journal
+  proposal from a verdict.
+
+The order of stages so far assumed (b). If (a) is wanted, stage 19 is a rewrite of
+the branch rather than a removal, and the "Full analysis" affordance survives in
+some form. Ask before starting; the diff is ~1,700 lines either way and the wrong
+reading is expensive to undo.
+
 ## Next — order matters
 
 1. **Stage 20 before 19.** Structured chart analysis exists ONLY in the
