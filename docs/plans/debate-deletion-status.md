@@ -55,6 +55,44 @@ session does not re-derive them:
   owned by TradeView (`allDrawings`, `getChartSnapshot`, `addModelDrawings`,
   `onPlanPresented`). Do the transport swap, not the lift.
 
+## OWNER RULING 2026-10-18 — what replaces the analysis branch
+
+Asked which reading of "remove the ensemble debate" was meant, the answer was:
+**one analyst pass, but reached by tool calling, not by a keyword.** In the
+owner's words: *"I want the number 1 but the model should be able to do all that
+using tool call not just when the keyword 'analyze this' it will trigger, we will
+focus on tool calling, skills, and memory."*
+
+So the target is NOT "keep the branch and shrink it to one seat". It is:
+
+- **No keyword routing at all.** `isChartAnalysisRequested`
+  (`useAnalysisPipeline.ts:1474-1484`) tests the prompt text for ANALYZE / CHART /
+  SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
+  turn, always.
+- **One turn path**: the tool-capable transport both homes use —
+  `streamChatWithDeskTools` (`DeskToolsService.ts:3684`), which the dock's solo
+  seat already runs at `chatTurnRunner.ts:641`.
+- **The verdict and the journal row become tools the model chooses to call**, not
+  a pipeline stage it has to earn. What already exists: `present_trade`
+  (proposal → `TradeAnalysis` with outcome PENDING, so the autopilot watches it),
+  `mark_trade_levels`, `run_monte_carlo`, `get_market_packet` /
+  `get_price_snapshot` / `get_order_book` / `get_derivatives` / `get_liquidations`
+  for stage 1's data, `recall` / `get_setup_history_stats` for memory.
+- **Skills and memory are the focus**, per the ruling: the notebook injection and
+  the skill-approval path matter more than any run scaffolding.
+
+Open engineering questions to settle while implementing, not before:
+1. The **gate scan** (`GateKeeperService`, stage 2 today) — does it stay as
+   post-processing inside `present_trade`, or become its own tool? Check whether
+   `processAnalysisResult` already runs it on a presented plan; if it does, the
+   answer is "keep it in the tool".
+2. **`reasoningEffort`**: the tool generator yields visible text only, so the
+   `Message.thoughtProcesses` side-channel needs its own route (the dock has one;
+   the Chat surface currently gets it from `streamQuickResponse`'s `onReasoning`).
+3. Which tools are meaningless on a surface with **no chart**
+   (`get_chart_view`, `draw_on_chart`) — pass a chart-aware subset per home, do not
+   let a tool call quietly no-op.
+
 ## Stage 19 — a design question that must be answered first
 
 Structured chart analysis exists **only** inside the ensemble branch, and this app
