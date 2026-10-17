@@ -9,7 +9,7 @@ import { CustomInstructionsMap } from '../../types/user';
 import { ProviderConfig, ApiFormat } from '../../types/provider';
 import type { JournalUIState } from '../../hooks/useJournalUI';
 import { EmptyState } from '../ui/EmptyState';
-import {AISettingsIcon, HistoryIcon, SettingsIcon, CodeIcon, SearchIcon, CloseIcon, User, FileText, Brain, BookOpen, Database, Eye, Search, ChevronRight} from '../shared/Icons';
+import {AISettingsIcon, HistoryIcon, SettingsIcon, CodeIcon, SearchIcon, CloseIcon, User, FileText, Brain, BookOpen, Database, Search, ChevronRight} from '../shared/Icons';
 import { getIdleMotionEnabled, subscribeIdleMotion } from '../../services/desk/idleMotion';
 import { loadForgedTools } from '../../services/tools/toolForge';
 import { listAmendments } from '../../services/learning/memoryAmendments';
@@ -27,7 +27,6 @@ const JournalTab = lazy(() => import('./tabs/JournalTab'));
 const ModelsTab = lazy(() => import('./tabs/ModelsTab'));
 const ProfileTab = lazy(() => import('./tabs/ProfileTab'));
 const GeneralTab = lazy(() => import('./tabs/GeneralTab'));
-const LensesTab = lazy(() => import('./tabs/LensesTab'));
 const PromptsTab = lazy(() => import('./tabs/PromptsTab'));
 const MemoryTab = lazy(() => import('./tabs/MemoryTab'));
 const StrategiesTab = lazy(() => import('./tabs/StrategiesTab'));
@@ -38,7 +37,7 @@ const TabFallback: React.FC = () => (
     <div className="p-6 text-ui-dense text-zinc-600">Loading…</div>
 );
 
-export type SettingsTab = 'profile' | 'general' | 'models' | 'journal' | 'lenses' | 'instructions' | 'memory' | 'actions' | 'prompts' | 'strategies';
+export type SettingsTab = 'profile' | 'general' | 'models' | 'journal' | 'instructions' | 'memory' | 'actions' | 'prompts' | 'strategies';
 
 /** Tabs whose embedded manager owns the whole scroll container (their own
  *  padding, their own sticky headers) — the workspace adds none. */
@@ -50,9 +49,6 @@ interface SettingsMenuProps {
     // Accuracy Mode
     isAccuracyModeEnabled: boolean;
     onToggleAccuracyMode: () => void;
-    /** Team (ensemble) analysis — the palette's toggle rehomed here (stage 3). */
-    isEnsembleEnabled?: boolean;
-    onToggleEnsembleEnabled?: () => void;
     accuracySubMode: AccuracySubMode;
     setAccuracySubMode?: (subMode: AccuracySubMode) => void;
     // Hybrid & Capturing
@@ -79,9 +75,6 @@ interface SettingsMenuProps {
     // Instructions
     customInstructions: CustomInstructionsMap;
     setCustomInstructions: (instructions: CustomInstructionsMap) => void;
-    // Lenses
-    lensConfig: AnalystLensConfig;
-    onSetLensConfig: (config: AnalystLensConfig) => void;
     // Modals & Navigation triggers from main view
     /** Opens the Learn surface — the one home for the queues, the notebook and
      *  memory health. Settings keeps the provider/model switches and links here.
@@ -206,7 +199,6 @@ const NAV_GROUPS: NavGroup[] = [
         title: 'Analysis',
         entries: [
             { id: 'general', label: 'Analysis', icon: <SettingsIcon className={NAV_ICON} />, keywords: 'accuracy hybrid desk tools reduce motion idle motion capture pure ai advanced strict protocol' },
-            { id: 'lenses', label: 'Roles', icon: <Eye className={NAV_ICON} />, keywords: 'lens analyst technical risk macro persona' },
             { id: 'prompts', label: 'Prompts', icon: <CodeIcon className={NAV_ICON} />, keywords: 'template library editing' },
             { id: 'instructions', label: 'Instructions', icon: <FileText className={NAV_ICON} />, keywords: 'custom system instruction rules' },
         ],
@@ -527,8 +519,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     <GeneralTab tab={{
                                         isAccuracyModeEnabled: props.isAccuracyModeEnabled,
                                         onToggleAccuracyMode: props.onToggleAccuracyMode,
-                                        isEnsembleEnabled: props.isEnsembleEnabled,
-                                        onToggleEnsemble: props.onToggleEnsembleEnabled,
                                         accuracySubMode: props.accuracySubMode,
                                         setAccuracySubMode: props.setAccuracySubMode,
                                         isHybridIntelligenceEnabled: props.isHybridIntelligenceEnabled,
@@ -549,16 +539,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         onToggleAutoCapturing: props.onToggleAutoCapturing,
                                         isEntryNotHitCapturing: props.isEntryNotHitCapturing,
                                         onToggleEntryNotHitCapturing: props.onToggleEntryNotHitCapturing,
-                                    }} />
-                                </Suspense>
-                            )}
-
-                            {activeTab === 'lenses' && (
-                                <Suspense fallback={<TabFallback />}>
-                                    <LensesTab tab={{
-                                        lensConfig: props.lensConfig,
-                                        onSetLensConfig: props.onSetLensConfig,
-                                        providerConfigs,
                                     }} />
                                 </Suspense>
                             )}
