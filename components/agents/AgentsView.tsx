@@ -41,7 +41,6 @@ import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Inbox, MessageSquare,
 import { ModelFallbackBanner } from '../trade/panels/ChatComposer';
 import type { ProviderConfig } from '../../types/provider';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
-import { runAnalysisAsChatTurn, type AnalysisTurnOutcome } from '../../services/trade/analysisTurn';
 import { DISCLAIMER_SHORT } from '../../constants/disclaimer';
 import * as chatStore from '../../services/trade/chatStore';
 import ChatTranscriptRow, { type ChatRowView } from '../shared/ChatTranscriptRow';
@@ -82,11 +81,19 @@ interface AgentsViewProps {
     /** Chat mode: the bot's own DM transport (App's mailbox). */
     onSendBotTurn: (bot: AgentBot, prompt: string) => Promise<boolean>;
     /** The SAME pipeline entry the Chart AI dock runs — not a weaker local copy.
-     *  It resolves to the verdict text (plus the App-side message id the dock's
-     *  Locate button uses) and rejects when a run is already going or no
-     *  provider is configured, so both reasons reach the transcript instead of
-     *  vanishing into a void-ed promise. */
-    onAnalyze: (prompt: string, images: PipelineImage[]) => Promise<AnalysisTurnOutcome>;
+     *  It resolves when the run ENDS and rejects with the reason (a run already
+     *  going, no provider configured, a verdict-less exit). It writes its own
+     *  rows into the active conversation, which is the thread this surface and
+     *  the dock both render — so this component must not also record the turn.
+     *  The rejection is the only thing that never reaches a transcript row, and
+     *  it is reported as a toast for that reason. */
+    onAnalyze: (prompt: string, images: PipelineImage[]) => Promise<void>;
+    /** Where a run that never started says why. The pipeline writes its own rows
+     *  — including its error bubble — once it is running, so the only silent
+     *  failures left are the pre-flight ones ("already running", "no providers"),
+     *  which have no transcript row to carry them. App routes this to a toast;
+     *  this surface holds no notification of its own. */
+    onAnalysisError?: (message: string) => void;
     /** Ends the run this surface started. Without it the send button never
      *  turns into Stop and a running analysis cannot be cancelled here. */
     onStopRun?: () => void;
@@ -434,7 +441,7 @@ interface BotRow {
 
 const AgentsView: React.FC<AgentsViewProps> = ({
     username, bots, groups, messages, selection, onSelect, onNewBot, onNewGroup,
-    onSendBotTurn, onAnalyze, onStopRun, analysisRunning = false, renderGroup, coachCount, workingBotId,
+    onSendBotTurn, onAnalyze, onAnalysisError, onStopRun, analysisRunning = false, renderGroup, coachCount, workingBotId,
     lastOpenedMap = {}, modelPicker, effortPicker, modelFallback = null, destinationMenu, accountRow,
     railExpanded = true, onToggleRailExpanded, statusCluster, surfaceSwitch,
     attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup, onRetryPostMortem,
@@ -680,15 +687,19 @@ const AgentsView: React.FC<AgentsViewProps> = ({
             // surface, so this flag is now the only way to end a run from here.
             setBusy(true);
             try {
-                // The same session the Chart AI dock renders, written by the same
-                // helper — so a question asked here shows up there, with its
-                // answer, instead of running an entire analysis into a void.
-                await runAnalysisAsChatTurn({
-                    sid: chatStore.getActiveId(),
-                    text: prompt,
-                    image: images[0]?.dataURL,
-                    run: () => onAnalyze(prompt, images),
-                });
+                // ONE record of this turn. The pipeline appends the question, the
+                // streaming answer and any error bubble to the active conversation,
+                // and the dock renders that conversation through `entriesForSession`.
+                // This surface used to ALSO write the turn into the chat session via
+                // `runAnalysisAsChatTurn`, and the two copies disagreed: the session
+                // row carried this wrapper's summary ("The analysis was stopped.")
+                // while the conversation carried the model's answer, and because the
+                // wrapper keys its rows with fresh ids, the merge could not recognise
+                // them as the same exchange — so the dock showed the question twice
+                // with two different replies.
+                await onAnalyze(prompt, images);
+            } catch (e) {
+                onAnalysisError?.(e instanceof Error ? e.message : String(e));
             } finally {
                 setBusy(false);
             }
@@ -697,7 +708,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         clearAttachments();
         setBusy(true);
         try { await onSendBotTurn(activeBot, prompt); } finally { setBusy(false); }
-    }, [text, busy, analysisRunning, onAnalyze, activeBot, onSendBotTurn, attachedImages, clearAttachments]);
+    }, [text, busy, analysisRunning, onAnalyze, onAnalysisError, activeBot, onSendBotTurn, attachedImages, clearAttachments]);
 
     /** The ⋯/right-click list for a room: pin plus the two roster handlers App
      *  hands in. Pinned rooms gain edit/delete here that the hover icons never
