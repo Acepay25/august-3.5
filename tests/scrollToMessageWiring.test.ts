@@ -124,16 +124,20 @@ describe('Chat and Chart AI share one analysis turn', () => {
     const agentsSrc = readFileSync('components/agents/AgentsView.tsx', 'utf8');
     const turnSrc = readFileSync('services/trade/analysisTurn.ts', 'utf8');
 
-    it('the Chat surface writes its analysis into the dock\'s session', () => {
-        expect(agentsSrc).toMatch(/runAnalysisAsChatTurn\(\{/);
-        // The SAME session the dock renders — not a parallel one.
-        expect(agentsSrc).toMatch(/sid: chatStore\.getActiveId\(\)/);
-    });
-
-    it('both surfaces run the pipeline through that one writer', () => {
-        expect(agentsSrc).toMatch(/run: \(\) => onAnalyze\(prompt, images\)/);
+    it('one turn has one record: the conversation, not a session copy', () => {
+        // The dock reaches a Chat-surface turn through
+        // `entriesForSession(session.entries, conversationRows)`, and that merge
+        // is keyed on the Message id — so the pipeline's own rows ARE the shared
+        // transcript. Writing a second copy from the surface is what split it:
+        // the copy is keyed with fresh ids the merge cannot recognise, so the
+        // dock showed the question twice with two different answers (its own
+        // "The analysis was stopped." beside the model's reply).
+        expect(agentsSrc).not.toMatch(/import \{ runAnalysisAsChatTurn/);
+        expect(agentsSrc).toMatch(/await onAnalyze\(prompt, images\)/);
+        // The writer still serves the one path that needs it: the dock's Full
+        // analysis runs with the `automation` option into a private message list,
+        // so without these rows the turn would leave no trace anywhere.
         expect(panelSrc).toMatch(/run: \(\) => onRunAnalysis!/);
-        // And neither re-implements the append/settle bookkeeping.
         expect(turnSrc).toMatch(/entries: \[\.\.\.s\.entries, userEntry, aiEntry\]/);
         expect(turnSrc).toMatch(/streaming: false/);
     });
@@ -147,29 +151,29 @@ describe('Chat and Chart AI share one analysis turn', () => {
         expect(turnSrc).toMatch(/ANALYSIS_FAILED_TEXT/);
     });
 
-    it('Chat runs on the ACTIVE conversation, not the dock\'s private list', () => {
+    it('Chat runs on the ACTIVE conversation, and records the turn nowhere else', () => {
         // The dock deliberately runs into a private message list because it
         // renders the answer out of chatStore. The Chat surface renders the
         // ACTIVE conversation, so handing it the dock's `automation` entry ran
         // a full debate into a list it never reads: the probe caught it waiting
         // forever for a reply that had already been written somewhere else.
         expect(appSrc).toMatch(/const handleRunAnalysisFromAgents = useCallback/);
-        // The end marker moved twice: `handleForkDebate` was deleted in the
-        // 2026-10-03 removal of the unwired handler batch, and stage 3 deleted
-        // `handleCalculateAIProbabilities` (its only consumer was the
-        // never-openable AdvancedAnalyticsSidePanel). The slice now ends at
-        // the next surviving handler. The subject —
-        // handleRunAnalysisFromAgents — is unchanged, and the assertions
-        // below still cover exactly it.
+        // The slice ends at the next surviving handler; it has moved twice
+        // already (the 2026-10-03 unwired-batch removal and stage 3's deletion
+        // of handleCalculateAIProbabilities), so it is located, not assumed.
         const agentsHandler = appSrc.slice(
             appSrc.indexOf('const handleRunAnalysisFromAgents'),
             appSrc.indexOf('const handleCloseJournal'),
         );
-        expect(agentsHandler).toMatch(/onSettled: \(aiMessage\) =>/);
+        expect(agentsHandler).toMatch(/await handleSendMessage\(/);
         expect(agentsHandler).not.toMatch(/automation:/);
-        // And the pipeline's report-only channel must not flip the run into an
-        // automation run, or the rows land in the private list all the same.
-        expect(agentsHandler).not.toMatch(/isAutomationRun/);
+        // And no report-only channel either: the pipeline's rows in `messages`
+        // ARE the record for this surface. Carrying the verdict text back out of
+        // the run existed only to write a second copy into the dock's session,
+        // and that copy is what made the two homes show different answers to
+        // the same question.
+        expect(agentsHandler).not.toMatch(/onSettled/);
+        expect(appSrc).not.toMatch(/onSettled/);
     });
 
     it('the run slot is always released, including on an aborted run', () => {

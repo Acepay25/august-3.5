@@ -16,6 +16,13 @@ import NavRail from '../components/shell/NavRail';
 import type { AgentBot, AgentGroup } from '../services/agents/agentRoster';
 import type { Message } from '../types/message';
 import { MessageRole, TradeOutcome } from '../types/enums';
+import * as chatStore from '../services/trade/chatStore';
+
+/** Every transcript row across every chat session. The surface under test does
+ *  not own these rows — the dock does — so "nothing was written here" is only
+ *  observable through the store itself. */
+const sessionEntryCount = (): number =>
+    chatStore.getSnapshot().sessions.reduce((n, s) => n + s.entries.length, 0);
 
 let seq = 0;
 const bot = (over: Partial<AgentBot> & Pick<AgentBot, 'id'>): AgentBot => ({
@@ -171,6 +178,36 @@ describe('AgentsView composer', () => {
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'BTC setup' } });
         fireEvent.click(screen.getByTestId('composer-send'));
         expect(onAnalyze).toHaveBeenCalledWith('BTC setup', []);
+    });
+
+    it('records the turn in the conversation only — no copy in the chat session', async () => {
+        // The dock renders THIS conversation through `entriesForSession`, so the
+        // pipeline's rows are already the shared record. This surface used to
+        // also write the turn into the chat session, and because that copy is
+        // keyed with fresh ids the merge could not recognise it — the dock
+        // showed the question twice with two different answers, the wrapper's
+        // "The analysis was stopped." beside the model's reply.
+        const onAnalyze = vi.fn(async () => {});
+        render(<AgentsView {...base} onAnalyze={onAnalyze} />);
+        const before = sessionEntryCount();
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'what else?' } });
+        fireEvent.click(screen.getByTestId('composer-send'));
+        await waitFor(() => expect(onAnalyze).toHaveBeenCalledTimes(1));
+        // The run has released the composer — the settle pass has run.
+        await waitFor(() => expect(screen.getByTestId('composer-send').getAttribute('aria-label')).toBe('Send'));
+        expect(sessionEntryCount()).toBe(before);
+    });
+
+    it('a run that never started says why, because no transcript row will', async () => {
+        // The pipeline writes its own error bubble once it is running; the
+        // pre-flight rejections have no row to carry them, and a send that
+        // silently does nothing reads as a dead button.
+        const onAnalyze = vi.fn(async () => { throw new Error('no AI providers are configured'); });
+        const onAnalysisError = vi.fn();
+        render(<AgentsView {...base} onAnalyze={onAnalyze} onAnalysisError={onAnalysisError} />);
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'hello' } });
+        fireEvent.click(screen.getByTestId('composer-send'));
+        await waitFor(() => expect(onAnalysisError).toHaveBeenCalledWith('no AI providers are configured'));
     });
 
     it('has no Chat/Analyze switch — the rail is the only selector', () => {

@@ -1,18 +1,18 @@
 /**
- * One analysis turn, written into the chat transcript.
+ * One analysis turn, written into the dock's chat transcript.
  *
- * WHY THIS IS ITS OWN MODULE. Two surfaces can ask the desk a question: the
- * Chart AI dock's "Full analysis", and the Agents surface with no bot selected
- * (which is the same promise, stated in the Chat's own words). Both call the
- * same pipeline — `handleSendMessage` — but only the dock did the transcript
- * bookkeeping around it: append the question, open a streaming answer, settle
- * it, release the run slot. A turn sent from Chat therefore ran the full
- * analysis and left NO trace in the session the dock renders, so the two
- * surfaces looked like separate products even though they were one feature.
+ * Its only caller is the Chart AI dock's "Full analysis"
+ * (`chatTurnRunner.runFullAnalysis`). That path runs the pipeline with the
+ * `automation` option, which writes into a PRIVATE message list because the dock
+ * renders its own session rather than App's conversation — so the transcript
+ * bookkeeping (append the question, open a streaming answer, settle it, release
+ * the run slot) has to happen here, or the run leaves no trace at all.
  *
- * The bookkeeping is extracted rather than copied. A second copy is exactly how
- * the two drift again — and the drift is invisible, because both copies look
- * correct in isolation.
+ * The Chat surface deliberately does NOT use this. It renders the active
+ * conversation, and the pipeline writes the same turn there; a session copy
+ * keyed with fresh ids could not be recognised by `entriesForSession` as the
+ * exchange it duplicated, so the dock ended up showing the question twice with
+ * two different answers — its own summary beside the model's reply.
  *
  * The pipeline call is injected (`run`) so this module owns the TRANSCRIPT and
  * nothing else: it does not know how a market packet is fetched, how a debate

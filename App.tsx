@@ -1958,47 +1958,31 @@ const App: React.FC = () => {
         });
     }, [isAnalysisInProgress, readyProviders, selectedOcrModel, moderatorProviderId, moderatorModel, leverageInput, handleSendMessage]);
 
-    /** The Agents surface's analysis entry — the same promise the dock gets, on
-     *  the NORMAL conversation path. The dock runs into a private message list
-     *  (it renders the answer out of chatStore); the Chat surface renders the
-     *  ACTIVE conversation, so routing it through `automation` left it watching
-     *  an empty thread while a full ensemble debate ran. `onSettled` reports
-     *  the verdict back without moving the run, so this surface ends up with
-     *  its rows in `messages` AND its copy in the shared chat session. */
-    const handleRunAnalysisFromAgents = useCallback((prompt: string, chatImages: Array<{ name: string; dataURL: string }>): Promise<string | { text: string; messageId?: string }> => {
-        if (isAnalysisInProgress) return Promise.reject(new Error('an analysis is already running — wait for it or stop it first'));
-        if (readyProviders.length === 0) return Promise.reject(new Error('no AI providers are configured'));
+    /** The Agents surface's analysis entry — the run on the NORMAL conversation
+     *  path, and nothing else. The dock runs into a private message list (it
+     *  renders the answer out of its own session); the Chat surface renders the
+     *  ACTIVE conversation, which is what the pipeline writes there. So this
+     *  wrapper resolves when the run ENDS and throws when it ended without a
+     *  verdict — it no longer carries a copy of the answer back, because the
+     *  surface already has the row, and a second copy is what made the two homes
+     *  disagree about the same exchange. */
+    const handleRunAnalysisFromAgents = useCallback(async (prompt: string, chatImages: Array<{ name: string; dataURL: string }>): Promise<void> => {
+        if (isAnalysisInProgress) throw new Error('an analysis is already running — wait for it or stop it first');
+        if (readyProviders.length === 0) throw new Error('no AI providers are configured');
         const images: ImageMetadata[] = chatImages.map(img => ({
             file: new File([], img.name, { type: 'image/png' }),
             dataURL: img.dataURL,
             isLoading: false,
         }));
-        return new Promise<string | { text: string; messageId?: string }>((resolve, reject) => {
-            let settled = false;
-            void handleSendMessage(prompt, images, undefined, {
-                ...activeInstrument(),
-                reasoningEffort: chatStore.getActiveEffort(),
-                onSettled: (aiMessage) => {
-                    if (settled) return;
-                    settled = true;
-                    const display = deriveMessageDisplayText(aiMessage);
-                    const summary = (display.displayContent || aiMessage.text || '').trim();
-                    resolve({ text: summary.slice(0, 8000) || 'The analysis completed with no summary.', messageId: aiMessage.id });
-                },
-            }).then((outcome) => {
-                // Same settlement guard as the dock wrapper: the pipeline's
-                // callback-less early exits must still settle this promise,
-                // or the Agents surface's run slot leaks until reload.
-                if (settled) return;
-                settled = true;
-                if (outcome?.ok) resolve(ANALYSIS_STOP_TEXT);
-                else reject(new Error('the analysis ended without a verdict (rate limit, quota, or a pre-run block)'));
-            }, (error: unknown) => {
-                if (settled) return;
-                settled = true;
-                reject(error instanceof Error ? error : new Error(String(error)));
-            });
+        const outcome = await handleSendMessage(prompt, images, undefined, {
+            ...activeInstrument(),
+            reasoningEffort: chatStore.getActiveEffort(),
         });
+        // `ok:false` is the pipeline's own "this attempt produced no completed
+        // analysis" verdict (rate limit, quota, a pre-run block). `ok:true`
+        // covers a finished run AND a deliberate stop, and a stop is not a
+        // failure worth a toast.
+        if (!outcome?.ok) throw new Error('the analysis ended without a verdict (rate limit, quota, or a pre-run block)');
     }, [isAnalysisInProgress, readyProviders, handleSendMessage]);
 
 
@@ -2926,6 +2910,7 @@ const App: React.FC = () => {
                                     onSendBotTurn={async (bot, prompt) =>
                                         (await mailboxRef.current?.runUserBotTurn(bot, prompt)) ?? false}
                                     onAnalyze={handleRunAnalysisFromAgents}
+                                    onAnalysisError={(message) => toast.error(message)}
                                     onStopRun={handleCancelAll}
                                     analysisRunning={isAnalysisInProgress}
                                     renderGroup={g => renderGroupSurface(g.id)}
