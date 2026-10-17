@@ -44,9 +44,10 @@ interface ChatComposerProps {
     /** The runner's send — Enter, the scan chip and the send button. */
     send: (raw: string, retryOf?: string) => Promise<void>;
     runFullAnalysis: () => Promise<void>;
-    /** Absent ⇒ the Full-analysis option is hidden (no pipeline attached). */
-    onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) =>
-        Promise<string | { text: string; messageId?: string }>;
+    /** Absent ⇒ the Full-analysis option is hidden (no pipeline attached). The
+     *  button itself calls `runFullAnalysis`; this is read only for whether a
+     *  pipeline exists at all. */
+    onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) => Promise<void>;
     /** Stop the running pipeline as well as the chat turn. Aborting ONLY the
      *  chat controller (what this button used to do) left a Full analysis
      *  streaming — and spending — under a bubble that said it had stopped,

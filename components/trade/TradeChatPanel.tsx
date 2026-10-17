@@ -128,14 +128,16 @@ interface TradeChatPanelProps {
     /** Same, for group rooms. The Coach inbox is not here — it moved to the
      *  Learn surface when the tabs went into the hamburger menu. */
     groupSessionRequest?: { groupId: string; nonce: number };
-    /** Launches the FULL ensemble pipeline from this chat (hybrid data in,
-     *  debate verdict back as an AI entry). Absent ⇒ the option is hidden.
-     *  May resolve with just the verdict text, or with `{ text, messageId }`
-     *  — the App-side analysis message id lets the dock stamp the answer
-     *  entry with `data-message-id`, so the saved-analyses gallery's Locate
-     *  can scroll straight to it. */
-    onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) =>
-        Promise<string | { text: string; messageId?: string }>;
+    /** Launches the FULL ensemble pipeline from this chat. Absent ⇒ the option
+     *  is hidden. It resolves when the run ENDS: the pipeline writes the
+     *  question and its streaming answer into the ACTIVE conversation, and this
+     *  dock renders that conversation, so nothing is handed back and no entry
+     *  needs an App-side message id stamped on it. */
+    onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) => Promise<void>;
+    /** Where a run that never started says why ("already running", "no
+     *  providers configured") — the failures with no transcript row to carry
+     *  them. Absent ⇒ a rejected run is silent, which reads as a dead button. */
+    onAnalysisError?: (message: string) => void;
     /** Stop the running analysis (the pipeline's own cancel). The composer's
      *  Stop needs both this and the chat controller: a Full analysis is a chat
      *  turn WHOSE WORK is the pipeline, and aborting only the turn's controller
@@ -289,7 +291,7 @@ export const ChartAiDockRail: React.FC<{
 const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     symbol, interval, providers, selectedChatModel, onSelectChatModel, live = false,
     chartLevels, chartDrawings, modelDrawings, addModelDrawings, clearModelDrawings, clearAllDrawings,
-    onCaptureChart, getChartSnapshot, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onStopRun, getAnalysisMessage, onLogProposedTrade, onPlanPresented,
+    onCaptureChart, getChartSnapshot, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onAnalysisError, onStopRun, getAnalysisMessage, onLogProposedTrade, onPlanPresented,
     onChatLevelsChange,
     renderGroupSurface, groups = [],
     registerScrollToMessage,
@@ -326,12 +328,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const [historyShowAll, setHistoryShowAll] = useState(false);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
     const [showNewBot, setShowNewBot] = useState(false);
-    /** entryId → App-side analysis message id for ensemble runs launched
-     *  from this dock (see onRunAnalysis): the answer entry's
-     *  `data-message-id` stamp, so the gallery's Locate can scroll to it.
-     *  Component-scoped by design — after a dock remount the mapping is
-     *  gone and Locate falls back to a no-op scroll (highlight still works). */
-    const [analysisMessageIds, setAnalysisMessageIds] = useState<Record<string, string>>({});
     const [panelPickerFor, setPanelPickerFor] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement | null>(null);
     /** Which Key Levels card currently owns the shared chart-levels channel
@@ -544,7 +540,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         clearAttachments,
         setDraft,
         setContextAt,
-        setAnalysisMessageIds,
         addModelDrawings,
         clearModelDrawings,
         clearAllDrawings,
@@ -552,7 +547,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         onBotTurnCommit,
         onSoloTurnCommit,
         onRunAnalysis,
-    }), [symbol, interval, effort, selectedChatModel, chartLevels, allDrawings, trades, getChartSnapshot, provider, configForSeat, systemPromptFor, bots, activeId, draft, sessions, botThreadRows, conversationRows, attachments, attachedImages, clearAttachments, setDraft, setContextAt, setAnalysisMessageIds, addModelDrawings, clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onSoloTurnCommit, onRunAnalysis]);
+        onAnalysisError,
+    }), [symbol, interval, effort, selectedChatModel, chartLevels, allDrawings, trades, getChartSnapshot, provider, configForSeat, systemPromptFor, bots, activeId, draft, sessions, botThreadRows, conversationRows, attachments, attachedImages, clearAttachments, setDraft, setContextAt, addModelDrawings, clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onSoloTurnCommit, onRunAnalysis, onAnalysisError]);
     const { send, runFullAnalysis, runHarnessTurn } = runner;
 
     // ── Per-session composer memory ─────────────────────────────────────────
@@ -1118,7 +1114,6 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     entries={entries}
                     send={send}
                     setDraftText={setDraft}
-                    analysisMessageIds={analysisMessageIds}
                     getAnalysisMessage={getAnalysisMessage}
                     resolveVerdictByIdentity={!!activeSession.conversationId}
                     symbol={symbol}

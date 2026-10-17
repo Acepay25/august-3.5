@@ -4,9 +4,10 @@
  * were silent no-ops: the old virtuosoRef was never attached (the transcript
  * lives in this dock, a plain scroll container, not a Virtuoso). The dock now
  * hands App a scrollToMessage(id) function via `registerScrollToMessage`
- * (null on unmount); entries carry `data-entry-id` (chatStore entry id) and
- * `data-message-id` (the App-side analysis message id for ensemble answers,
- * falling back to the entry id). This covers the panel half;
+ * (null on unmount); entries carry `data-entry-id` (the chatStore entry id,
+ * which for a row projected out of the bound conversation IS the Message id)
+ * and `data-message-id` (that same id for an AI answer, else the entry id).
+ * This covers the panel half;
  * tests/scrollToMessageWiring.test.ts asserts the App/TradeView wiring.
  *
  * The same App-side message id is what the Pin chip writes, so the Pinned
@@ -15,8 +16,10 @@
 
 import React from 'react';
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, act, fireEvent, waitFor } from '@testing-library/react';
 import type { ProviderConfig } from '../types/provider';
+import type { Message } from '../types/message';
+import { MessageRole } from '../types/enums';
 
 const { streamMock } = vi.hoisted(() => ({
     streamMock: vi.fn() as Mock<(...args: any[]) => any>,
@@ -66,6 +69,19 @@ beforeEach(() => {
 });
 
 type ScrollFn = (messageId: string) => void;
+
+/** A conversation carrying one settled verdict, shaped as App's `messages`. */
+const conversationWithVerdict = (): Message[] => [
+    { id: 'msg-41', role: MessageRole.USER, text: 'give me a full read', createdAt: new Date().toISOString() },
+    { id: 'msg-42', role: MessageRole.AI, text: 'Verdict: Long BTC — the answer.', createdAt: new Date().toISOString() },
+] as unknown as Message[];
+
+/** Make the ACTIVE session a view of a conversation. That link is what
+ *  `entriesForSession` needs before it merges anything, so a test that wants the
+ *  dock to show conversation rows has to bind for the same reason the app does. */
+const bindActiveSession = (conversationId: string): void => {
+    act(() => { chatStore.mutate(chatStore.getActiveId(), s => ({ ...s, conversationId })); });
+};
 
 const renderDock = (extra?: Record<string, unknown>): { getRegistered: () => ScrollFn | null } => {
     let registered: ScrollFn | null = null;
@@ -140,51 +156,65 @@ describe('scroll-to-message bridge', () => {
         expect(scrollSpy).not.toHaveBeenCalled();
     });
 
-    it('an ensemble answer is stamped with its App-side messageId, and Locate scrolls to it', async () => {
-        const onRunAnalysis = vi.fn(async (): Promise<string | { text: string; messageId?: string }> =>
-            ({ text: 'Verdict: Long BTC — the answer.', messageId: 'msg-42' }));
-        const { getRegistered } = renderDock({ onRunAnalysis });
-        const box = await screen.findByPlaceholderText(/Ask anything/);
-        fireEvent.change(box, { target: { value: 'give me a full read' } });
-        fireEvent.click(screen.getByText('Full analysis'));
+    it('a verdict made on the conversation is stamped with its Message id, and Locate scrolls to it', async () => {
+        // The analysis row is no longer written by this dock: the pipeline
+        // writes it into the ACTIVE conversation, and the dock renders that
+        // conversation through `entriesForSession`. A projected row keeps the
+        // Message's own id — which is what the gallery's Locate holds, and what
+        // a pin attaches to.
+        const { getRegistered } = renderDock({ conversationRows: conversationWithVerdict() });
+        bindActiveSession('conv-1');
         const answer = await screen.findByText(/Verdict: Long BTC/);
         const wrapper = answer.closest('[data-entry-id]')!;
-        // The entry id stays the primary key; the App message id rides
-        // data-message-id so the gallery's Locate (which holds message ids)
-        // finds this exact entry.
         expect(wrapper.getAttribute('data-message-id')).toBe('msg-42');
         scrollSpy.mockClear();
         getRegistered()!.call(null, 'msg-42');
         expect(scrollSpy).toHaveBeenCalledTimes(1);
         expect((scrollSpy.mock.instances[0] as Element).getAttribute('data-entry-id'))
-            .toBe(wrapper.getAttribute('data-entry-id'));
-        scrollSpy.mockClear();
-        getRegistered()!.call(null, wrapper.getAttribute('data-entry-id') as string);
-        expect(scrollSpy).toHaveBeenCalledTimes(1);
+            .toBe('msg-42');
     });
 
-    it('a plain-string onRunAnalysis result keeps the entry-id fallback stamp', async () => {
-        const onRunAnalysis = vi.fn(async (): Promise<string | { text: string; messageId?: string }> => 'Just the verdict text.');
+    it('Full analysis runs the pipeline and holds the session run slot, writing no row itself', async () => {
+        // The button used to append a question + placeholder pair to this
+        // session. That copy is what made the two homes disagree about one
+        // exchange; what the dock still owes is the run slot — the flag that
+        // turns the composer's send into Stop and blocks a second send.
+        const onRunAnalysis = vi.fn(async (): Promise<void> => {});
         renderDock({ onRunAnalysis });
+        const box = await screen.findByPlaceholderText(/Ask anything/);
+        fireEvent.change(box, { target: { value: 'give me a full read' } });
+        const before = chatStore.getSnapshot().sessions
+            .reduce((n, s) => n + s.entries.length, 0);
+        fireEvent.click(screen.getByText('Full analysis'));
+        await waitFor(() => expect(onRunAnalysis).toHaveBeenCalledWith('give me a full read', []));
+        expect(chatStore.getSnapshot().sessions
+            .reduce((n, s) => n + s.entries.length, 0)).toBe(before);
+    });
+
+    it('a run that never started is reported, not swallowed', async () => {
+        // The pipeline writes an error bubble only once it IS running, so a
+        // pre-flight rejection has no row anywhere — without this the button
+        // looks dead.
+        const onRunAnalysis = vi.fn(async (): Promise<void> => {
+            throw new Error('an analysis is already running — wait for it or stop it first');
+        });
+        const onAnalysisError = vi.fn();
+        renderDock({ onRunAnalysis, onAnalysisError });
         const box = await screen.findByPlaceholderText(/Ask anything/);
         fireEvent.change(box, { target: { value: 'full read' } });
         fireEvent.click(screen.getByText('Full analysis'));
-        const answer = await screen.findByText(/Just the verdict text/);
-        const wrapper = answer.closest('[data-entry-id]')!;
-        expect(wrapper.getAttribute('data-message-id')).toBe(wrapper.getAttribute('data-entry-id'));
+        await waitFor(() => expect(onAnalysisError).toHaveBeenCalledWith(
+            'an analysis is already running — wait for it or stop it first'));
     });
 });
 
 describe('the Pinned list has an entry point', () => {
-    /** Run a "Full analysis" so the answer carries an App message id — that id
-     *  is the only thing a pin can attach to (the flag lives on the Message). */
+    /** Show a settled verdict the way the dock gets one now: it is a row of the
+     *  bound conversation, not an entry this dock wrote. The message id is the
+     *  only thing a pin can attach to — the flag lives on the Message. */
     const pinFromVerdict = async (extra: Record<string, unknown>): Promise<void> => {
-        const onRunAnalysis = vi.fn(async (): Promise<string | { text: string; messageId?: string }> =>
-            ({ text: 'Verdict: Long BTC — the answer.', messageId: 'msg-42' }));
-        renderDock({ onRunAnalysis, ...extra });
-        const box = await screen.findByPlaceholderText(/Ask anything/);
-        fireEvent.change(box, { target: { value: 'full read' } });
-        fireEvent.click(screen.getByText('Full analysis'));
+        renderDock({ conversationRows: conversationWithVerdict(), ...extra });
+        bindActiveSession('conv-1');
         await screen.findByText(/Verdict: Long BTC/);
     };
 
