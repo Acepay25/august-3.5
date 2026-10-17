@@ -143,6 +143,16 @@ describe('the composer values shared by both chat homes', () => {
         const id = store.addSession({ effort: 'off' });
         expect(store.getSnapshot().sessions.find(s => s.id === id)?.effort).toBe('off');
     });
+
+    it('says so when a write lands on an id the store does not hold', () => {
+        // Silent is the worst shape here: a send into a stale id appends no row,
+        // throws nothing, and leaves a bubble streaming forever. The trader's
+        // only symptom is "it never answered", which blames the provider.
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        store.mutate('session-that-was-never-created', s => ({ ...s, title: 'nope' }));
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('unknown session'));
+        warn.mockRestore();
+    });
 });
 
 describe('chatStore run survival (the tab-switch fix)', () => {

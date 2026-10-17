@@ -174,6 +174,26 @@ const SurfaceSkeleton: React.FC = () => (
  *  on one machine should see the same rail they left behind. */
 const NAV_RAIL_KEY = 'nav_rail_width_v1';
 
+/**
+ * The Chat surface's thinking dial, subscribed HERE rather than in App's body.
+ *
+ * `chatStore` latches the username it loaded for on its FIRST touch and rehashes
+ * onto a different one the next time it writes. App renders before a profile is
+ * chosen, so an App-level `useSyncExternalStore` over that store initialized it
+ * against the empty username; the first persist then rehydrated it onto the real
+ * one, and the session id the dock had been writing into simply stopped existing
+ * — `mutate` no-ops on an unknown id, so a send appended nothing and the run
+ * hung behind a bubble that never settled. Mounting this node is what touches
+ * the store, and that only happens once the Chat surface is on screen.
+ *
+ * The snapshot is the tier itself, so the subscription re-renders on a real
+ * change and not on every streaming patch of the session store.
+ */
+const SessionEffortChip: React.FC = () => {
+    const effort = useSyncExternalStore(chatStore.subscribe, chatStore.getActiveEffort, chatStore.getActiveEffort);
+    return <EffortChip value={effort} onChange={chatStore.setActiveEffort} />;
+};
+
 const App: React.FC = () => {
     const toast = useToastActions();
     const { confirm: confirmDialog, ConfirmDialogComponent } = useConfirmDialog();
@@ -1869,15 +1889,6 @@ const App: React.FC = () => {
         return s?.symbol || s?.interval ? { symbol: s.symbol, interval: s.interval } : {};
     }, []);
 
-    /** The Chat surface's thinking dial: the ACTIVE chat session's tier, read
-     *  through a subscription whose snapshot is the tier itself — so App
-     *  re-renders when the choice changes, not on every streaming patch of the
-     *  session store. ONE row drives both homes: the Chart AI dock derives the
-     *  same field from the snapshot it already subscribes to, so picking a tier
-     *  in either surface is the tier the other shows and sends. A send reads
-     *  it fresh (`getActiveEffort()`), never from this render. */
-    const chatEffort = useSyncExternalStore(chatStore.subscribe, chatStore.getActiveEffort, chatStore.getActiveEffort);
-
     const handleRunAnalysisFromChat = useCallback((prompt: string, chatImages: Array<{ name: string; dataURL: string }>): Promise<string | { text: string; messageId?: string }> => {
         if (isAnalysisInProgress) return Promise.reject(new Error('an analysis is already running — wait for it or stop it first'));
         if (readyProviders.length === 0) return Promise.reject(new Error('no AI providers are configured'));
@@ -2952,8 +2963,9 @@ const App: React.FC = () => {
                                         /* The dock's other chip, on the same row, on
                                            the same stored value: this tier is what the
                                            send above reads, so the label and the
-                                           request cannot disagree. */
-                                        <EffortChip value={chatEffort} onChange={chatStore.setActiveEffort} />
+                                           request cannot disagree. Subscribed inside
+                                           the node — see SessionEffortChip. */
+                                        <SessionEffortChip />
                                     )}
                                     modelFallback={chatModelFallback.notice}
                                     railExpanded={isNavRailOpen}

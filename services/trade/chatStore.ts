@@ -317,13 +317,20 @@ export const removeSession = (id: string): string => {
  *  the same way trimForStorage bounds the persisted blob. */
 export const mutate = (id: string, fn: (s: LiveSession) => LiveSession): void => {
     ensureLoaded();
+    let matched = false;
     sessions = sessions.map(s => {
         if (s.id !== id) return s;
+        matched = true;
         const next = fn(s);
         // capEntries is identity-preserving under the cap, so a title/seat-only
         // update keeps the same entries array reference.
         return { ...next, entries: capEntries(next.entries) };
     });
+    // A miss used to be silent, and silence is the worst shape this can take: a
+    // send that writes into an id the store no longer holds appends no row,
+    // throws nothing, and leaves a bubble streaming forever. The one symptom a
+    // trader sees is "it never answered", which points at the provider.
+    if (!matched) console.warn(`chatStore: mutate on unknown session "${id}" — nothing was written`);
     emit();
 };
 
