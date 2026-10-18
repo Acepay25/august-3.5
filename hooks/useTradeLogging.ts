@@ -348,7 +348,6 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             moderatorModel: moderatorModel,
             // Persist debate transcript for training data
             debateTurns: message.debateTurns,
-            moderatorSynthesis: message.text,
             patternMemoryGate: message.patternMemoryGate,
             promptVersion: message.runStats?.promptVersion,
             promptLane: message.runStats?.promptLane,
