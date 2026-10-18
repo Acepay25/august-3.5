@@ -339,15 +339,6 @@ export interface WatchEpisode {
   detail: string;
 }
 
-export type DebateRunEventKind = 'round' | 'episode' | 'gate' | 'steer' | 'drop' | 'pre_step' | 'verdict' | 'resume' | 'budget' | 'tool';
-
-export interface DebateRunEvent {
-  at: string;
-  kind: DebateRunEventKind;
-  speaker?: string;
-  round?: number;
-  detail: string;
-}
 
 /**
  * One model side-effect on a run — the persisted counterpart of the

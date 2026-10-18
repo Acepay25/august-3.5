@@ -4,7 +4,7 @@ import {
     DebateTurn, Conversation, TradeAnalysis, TradeSummary,
     GlobalMemory, AccuracySubMode, CustomInstructionsMap, CustomInstruction,
     AnalystLensConfig, AnalysisStep, InsightKnowledgeBase, ConfidenceCalibration,
-    ReplacementOffer, PatternMemoryGateView, DebateRunEvent,
+    ReplacementOffer, PatternMemoryGateView,
 } from '../types';
 
 import { ProviderConfig } from '../types/provider';
@@ -65,7 +65,6 @@ import { formatInvokedSkillSection, resolveInvokedSkills } from '../services/lea
 import { recordRegimeDay, marketRegimeToLedger } from '../services/learning/regimeLedger';
 import { EnsembleModelSelection } from '../services/ui/AnalystLensService';
 import { buildHybridEnvelope } from '../utils/debateEnvelopes';
-import { buildRunContractStages } from '../utils/runContract';
 import { extractDebateTemplate, DebateTemplate } from '../utils/debateTemplates';
 import { parseComposerIntent, formatComposerSteer } from '../utils/composerMentions';
 import { beginPromptLane, endPromptLane } from '../services/infrastructure/PromptOverrideService';
@@ -334,21 +333,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const [images, setImages] = useState<ImageMetadata[]>([]);
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
     const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>([]);
-    // Visible content streamed during the opening analysis (keyed by
-    // thoughtsKey) — surfaced live as round-1 turn text before the debate
-    // rounds begin.
-    // Live desk-tool chips: speaker -> latest tool line. Transient — cleared
-    // when the debate concludes (never persisted).
-    const liveToolEventsRef = useRef<Record<string, string>>({});
-    // persisted model side-effects for the CURRENT run — proposal tools
-    // (forge_tool/amend_memory) and custom tools. Reset at run start, merged
-    // into the AI message when it lands (status rows).
-    const debateRunLogRef = useRef<DebateRunEvent[]>([]);
-    /**
-     * Live run-contract view (U1): re-derived from the run log on every push.
-     */
-    const runContractFor = (): Message['runContract'] =>
-        buildRunContractStages(debateRunLogRef.current, true);
     /** Journal mirror for zero-dep callbacks (desk-tool recall on solo runs). */
     const loggedTradesRef = useRef<LoggedTrade[]>(loggedTrades);
     useEffect(() => { loggedTradesRef.current = loggedTrades; }, [loggedTrades]);
