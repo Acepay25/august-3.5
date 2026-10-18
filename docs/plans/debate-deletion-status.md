@@ -1641,3 +1641,36 @@ this one to 30. The floor (`toBeGreaterThan(30)`) was the only thing that
 noticed, and a number inside a comment is checked by nothing. The census in the
 header is now the measured 30 and the floor is 24, both with the reason written
 next to them, so the guard still fails loudly if the extraction ever breaks.
+
+## 2026-10-19 — `debateTurns` is NOT all dead code, and that changes the ruling's meaning
+
+Measured before deleting anything, because "delete fields + readers" reads as one
+action and is actually two.
+
+Nothing produces a transcript any more: the only writes are copies
+(`hooks/useTradeLogging.ts:349`, `utils/watchList.ts:30`) and **no code sets
+`isDebating: true`** — every remaining `isDebating` is a literal `false`, and
+`hooks/useUserProfileLoader.ts:404` forces it false on load. So the failure-path
+guard at `hooks/analysisPipeline/runOutcome.ts:43` is unreachable and the three
+verdict-fallback parameters in `utils/analysisUtils.ts` (the final-verdict text,
+the level hit-odds legacy parse, the signal-card "why") only ever take their
+`analysis.strategy` / stored-`levelProbabilities` branch. That half is safe to
+delete, and the `ensembleProgress` / `activeDebateSpeakers` producers are already
+gone.
+
+The other half is not dead — it is retroactive over existing rows:
+`services/analysis/convictionDrift.ts`, `ensembleLineFromTranscript` in
+`services/learning/monthlyReport.ts`, the round-1 openings the follow-up ticket
+assembles in `hooks/useWatchAndAutopilot.ts:105`, and the transcript count in
+`utils/reportExport.ts:241` all read transcripts already persisted on trades
+made before stage 19. Deleting the field removes those from the monthly report's
+ensemble-line row, the seat conviction-drift analysis, the follow-up prompt's
+context and the export's count — for the journal the owner already has, not for
+future runs. Live app data is in `app://` IndexedDB and cannot be read from here,
+so how many rows still carry a transcript is unknown, not zero.
+
+So #21's transcript item is left standing until the owner chooses: delete only
+the unreachable half (guard + three fallback parameters), or also give up
+analysis over the stored history. This is a feature-shape call, not a bug fix,
+which is why it was not made silently. Everything else ruled in #17 is landed and
+gated; #19 and the `savedAnalyses` / `postMortem` items remain.
