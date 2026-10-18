@@ -1156,7 +1156,9 @@ with the Coach)`. Pinning the wire identifier would encode the opposite of the
 rendered verb AND the title carried in the tool's own arguments — which proves
 the line identifies the call by content instead of printing a generic "tool
 used". Both facts come from run 3's captured string, so the predicate is derived
-from measurement, not guesswork.
+from measurement, not guesswork — and the re-run confirmed it: **RENDER PROBE
+OK, `RENDER_EXIT=0`**, with `0 → 1` tool rows projected, both name assertions
+green, the tool line surviving a reload (`1 → 1`), and zero pageerrors.
 
 What the phase now covers, all browser-measured: a tool round projects a
 `tool-actions-row` (`0 → 1`), the same turn grows the usage ledger the Knowledge
