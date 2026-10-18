@@ -1795,3 +1795,31 @@ belongs only to the Agents surface? Either answer is one word. If DELETE, say so
 two gated passes (the panel surface, then the ensemble flag), not a trim. If KEEP, then #19 is
 closed as scoped and the remaining flow-doc sentences about "the ensemble branch" get reworded
 to name the panel, which is what they now actually refer to.
+
+## 2026-10-19 — gate state at the tip: every local gate has now been run
+
+Earlier entries here carry "lint / boot-probe / e2e remain unrun" caveats from the moment each
+pass finished. Those are superseded. All of the following were run against the tip after #17,
+the `isDebating` deletion, the `savedAnalyses` deletion and the desk-tool cache fix:
+
+- `npm run typecheck` — clean. `npm run typecheck:scripts` — clean, and it had to be: nine probe
+  scripts under `scripts/` were edited when their seeded profile shape lost `savedAnalyses`.
+- `npm run build` — clean (the flow docs' claim that the bundle builds is therefore measured).
+- `npm run lint` — **exits 1, and not on tracked code.** All 95 errors attribute to five files in
+  `docs/analysis/data/` (`_census.cjs` 32, `replicate_bodyonly.cjs` 22, `v8_profile_decode.cjs` 16,
+  `_probe_outcomes.cjs` 16, `_probe_node_v8.cjs` 9) — the owner's untracked scratch scripts, which
+  CI never checks out. Warnings are 689 against the `--max-warnings 889` ratchet. So the local lint
+  failure is pre-existing and structural, not a regression from these passes; ignoring that
+  directory or moving it out of the repo remains an owner decision, not a cleanup.
+- `npm run test` — 476 files / 4710 tests passed, 1 file and 11 tests skipped.
+- `npm run render-probe` — OK, zero pageerrors (run twice: after the flag deletion and after the
+  cache fix). `npm run boot-probe` — OK on the built bundle, which is the proof that the app still
+  boots on a seeded profile that carries no `savedAnalyses` key at all. `npm run e2e` — 5 passed.
+  `npm run skill-approval-probe` — 25/25 checks, `pageErrors=2`, which is this probe's known-good
+  signature (the 2 are its own deliberately-injected notebook quota failures being surfaced).
+- The flow-doc anchor gate — 227 anchors, 0 unattributed, all 9 reach controls passing.
+
+`installer-smoke` stays CI-only on purpose (it needs the packaged exe; a local run would bypass
+the chain that signs the bytes). Nothing here is pushed: `git rev-list --count origin/main..HEAD`
+is **22** local commits, and the owner's earlier push authorization covered the 16 that existed
+when it was given — so the six since then are not covered and stay local until said so.
