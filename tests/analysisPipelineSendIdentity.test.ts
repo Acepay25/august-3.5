@@ -8,7 +8,11 @@
  * the function was rebuilt continuously and dragged every consumer with it.
  *
  * They are now captured once, at the top of the send, which is behaviour
- * identical and leaves the array 36 entries instead of 39.
+ * identical and left the array at 36 entries. Accuracy mode then took its
+ * five flags out, and the settings copy of the confidence-calibration store
+ * (a prop the callback never read) took one more, so the array is 30 today.
+ * The floor below is what notices a change like that: it is lowered on
+ * purpose, with the count written here, rather than left to fail a build.
  *
  * WHY A SOURCE SCAN AND NOT A RENDERED HOOK. Mounting `useAnalysisPipeline`
  * means standing up a 3,400-line hook and its whole prop surface to observe one
@@ -50,7 +54,10 @@ describe('handleSendMessage — composer state is not a dependency', () => {
         // If the extraction above ever breaks, it must fail HERE and loudly,
         // rather than letting the assertions below pass on an empty list.
         const list = deps();
-        expect(list.length).toBeGreaterThan(30);
+        // 30 entries today (was 31 before the dead confidenceCalibration prop
+        // went, 36 before accuracy mode). A floor, not a target: it exists so a
+        // broken extraction fails here instead of passing vacuously.
+        expect(list.length).toBeGreaterThan(24);
         // Spot-check a few names that were always there, so a regex that grabbed
         // some other array in the file cannot masquerade as a pass.
         expect(list).toContain('toast');

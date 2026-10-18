@@ -45,7 +45,6 @@ const baseArgs = (): UseProfilePersistenceArgs => ({
     isEntryNotHitCapturing: false,
     useAlgorithmicSummary: false,
     useAlgorithmicInsights: false,
-    confidenceCalibration: undefined,
 });
 
 /** Both debounced effects arm on mount — drain the initial DATA (1500ms)

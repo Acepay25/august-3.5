@@ -3,7 +3,7 @@ import {
     Message, MessageRole, TradeOutcome, LoggedTrade, ImageMetadata,
     DebateTurn, Conversation, TradeAnalysis, TradeSummary,
     GlobalMemory, CustomInstructionsMap, CustomInstruction,
-    AnalystLensConfig, AnalysisStep, InsightKnowledgeBase, ConfidenceCalibration,
+    AnalystLensConfig, AnalysisStep, InsightKnowledgeBase,
     ReplacementOffer, PatternMemoryGateView,
 } from '../types';
 
@@ -125,7 +125,6 @@ export interface UseAnalysisPipelineParams {
     tradeSummaries: TradeSummary[];
     globalMemory: GlobalMemory | undefined;
     insightKnowledgeBase: InsightKnowledgeBase | undefined;
-    confidenceCalibration: ConfidenceCalibration | undefined;
 
     // From market data:
     currentHybridData: HybridDataPacket | null;
@@ -265,7 +264,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         moderatorConfig, moderatorModel,
         memoryConfig,
         finalTradeSummary, loggedTrades, tradeSummaries,
-        globalMemory, insightKnowledgeBase, confidenceCalibration,
+        globalMemory, insightKnowledgeBase,
         currentHybridData, setCurrentHybridData,
         setHybridConnectionStatus,
         isAnalysisInProgress, setIsAnalysisInProgress,
@@ -1570,7 +1569,7 @@ ${enhancedPrompt}`;
             // sees a replaced controller and skips this cleanup — the new run
             // owns the state from there on.
         }
-    }, [loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, memoryConfig, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, customInstructions,lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, confidenceCalibration, insightKnowledgeBase, tradeSummaries, customEnsemblePrompt, customLensPrompts, ensembleModelSelection, isStrategiesEnabled, confirmDialog, toast]);
+    }, [loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, memoryConfig, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, customInstructions,lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, insightKnowledgeBase, tradeSummaries, customEnsemblePrompt, customLensPrompts, ensembleModelSelection, isStrategiesEnabled, confirmDialog, toast]);
 
     // ─── Cancel Analysis ───────────────────────────────────────────────────
     const handleCancelAnalysis = () => {

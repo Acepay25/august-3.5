@@ -237,7 +237,6 @@ describe('useTradeLogging harness side-effects', () => {
             setCurrentHybridData: () => undefined,
             handleSendMessage: () => undefined,
             toast: { error: () => undefined, success: () => undefined },
-            setConfidenceCalibration: () => undefined,
         }));
 
         await act(async () => {
@@ -293,7 +292,6 @@ describe('useTradeLogging harness side-effects', () => {
             setCurrentHybridData: () => undefined,
             handleSendMessage: () => undefined,
             toast: { error: () => undefined, success: () => undefined },
-            setConfidenceCalibration: () => undefined,
         }));
 
         // 1. Log the trade so the harness ledger sees it as open.

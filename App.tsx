@@ -279,7 +279,6 @@ const App: React.FC = () => {
         ensembleModelSelection, setEnsembleModelSelection,
         customEnsemblePrompt, setCustomEnsemblePrompt,
         customLensPrompts, setCustomLensPrompts,
-        confidenceCalibration, setConfidenceCalibration,
         insightKnowledgeBase, setInsightKnowledgeBase,
         activeFrameworks, setActiveFrameworks,
         summaryCharLimit, setSummaryCharLimit,
@@ -611,7 +610,6 @@ const App: React.FC = () => {
         setCurrentHybridData,
         handleSendMessage: stableHandleSendMessage,
         toast,
-        setConfidenceCalibration,
         onJournalAutoRefresh: handleJournalAutoRefresh,
     });
 
@@ -800,7 +798,7 @@ const App: React.FC = () => {
         moderatorConfig, moderatorModel,
         memoryConfig,
         finalTradeSummary, loggedTrades, tradeSummaries,
-        globalMemory, insightKnowledgeBase, confidenceCalibration,
+        globalMemory, insightKnowledgeBase,
         currentHybridData, setCurrentHybridData,
         setLatestMonteCarloResult, setLatestBacktestResult,
         setPerAIMonteCarloResults, setCurrentSlOptimization,
@@ -1367,7 +1365,6 @@ const App: React.FC = () => {
         customInstructions,
         isHybridIntelligenceEnabled, isAutoCapturing,
         isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights,
-        confidenceCalibration,
     });
 
 
@@ -1874,7 +1871,6 @@ const App: React.FC = () => {
         setIsEnsembleEnabled,
         setIsAutoCapturing,
         setIsEntryNotHitCapturing,
-        setConfidenceCalibration,
         setAutopilotResolutions,
         setInput,
         setImages,
