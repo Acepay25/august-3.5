@@ -2,10 +2,10 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-18** (after the post-mortem, 2D desk floor, saved-analyses and Roles-tab
-deletions **and stages 20a/20a2/20g/20b/20b-B/20t/20c/20s/20d/20f of the debate
+deletions **and stages 20a/20a2/20g/20b/20b-B/20t/20c/20s/20d/20f/20r of the debate
 removal**, which moved
-both chat homes onto one turn executor); if a line moves, fix the line rather than
-deleting the claim.
+both chat homes and the scheduler onto one turn executor); if a line moves, fix the
+line rather than deleting the claim.
 
 Dotted nodes exist in the code but are **never mounted** by the running app.
 
@@ -23,20 +23,20 @@ flowchart TD
     H["index.html"] --> I["index.tsx — error handlers first :23 :43"]
     I --> S["StrictMode › ErrorBoundary › ToastProvider › App :73-79"]
     S --> SP["splash leaves #root :86-92 — what e2e and boot-probe wait on"]
-    SP --> APP["App :188 — surfaces render from :2172 down"]
+    SP --> APP["App :188 — surfaces render from :2504 down"]
     APP --> US["useSurface — august_surface_v1 :15, valid set :16"]
     US --> UR["useSurfaceRouter — openJournal :75, hash read :101, serialize :158-160"]
     UR --> HASH["utils/appHash.ts:10 — hash and state stay equal"]
-    APP --> HD["Header band :2472 — only when surface !== 'agents' :2471"]
-    HD --> SW["SurfaceSwitch :2172 — 4 destinations, list in SurfaceMenuList.tsx:42-51"]
-    APP --> AV["AgentsView gets the same nodes as props :2607-2680"]
-    SW --> T["Trade · trade-view · App:2498"]
-    SW --> J["Journal · journal-view · App:2543"]
-    SW --> C["Chat · agents-view · App:2607"]
-    SW --> K["Knowledge · learn-view · App:2565"]
+    APP --> HD["Header band :2476 — only when surface !== 'agents' :2475"]
+    HD --> SW["SurfaceSwitch :2176 — 4 destinations, list in SurfaceMenuList.tsx:42-51"]
+    APP --> AV["AgentsView gets the same nodes as props :2613-2684"]
+    SW --> T["Trade · trade-view · App:2504"]
+    SW --> J["Journal · journal-view · App:2547"]
+    SW --> C["Chat · agents-view · App:2613"]
+    SW --> K["Knowledge · learn-view · App:2571"]
     K -.-> AP["Approvals is a TAB of Knowledge — components/learn/LearnView.tsx:64"]
-    NR["NavRail — imported App:123, NEVER rendered (see correction 5); its AccountRow export IS, App:2680"]:::dead
-    SM["SurfaceMenuList destination rows :116 — only mount passes hideSurfaces (App:2675; pinned by tests/deadControlsGuard.test.ts:147-150)"]:::dead
+    NR["NavRail — imported App:124, NEVER rendered (see correction 5); its AccountRow export IS, App:2684"]:::dead
+    SM["SurfaceMenuList destination rows :116 — only mount passes hideSurfaces (App:2679; pinned by tests/deadControlsGuard.test.ts:147-150)"]:::dead
     classDef dead stroke-dasharray: 5 5,opacity:.5
 ```
 
@@ -50,9 +50,9 @@ Stored surface values `'chat'`, `'boards'`, `'skills'` all migrate to `'trade'`
 ```mermaid
 flowchart TD
     subgraph CHAT["Chat surface (agents)"]
-        CB["composer textarea — AgentsView.tsx:533 ref, Enter :1424"] --> D1{"send() :689 branches on what is SELECTED"}
-        D1 -->|a bot is selected| BOT["onSendBotTurn :727 → App:2622 → useBotMailbox → runBotTurn"]
-        D1 -->|no bot| AN["onAnalyze(prompt, images) :717 → App:1720 handleRunAnalysisFromChat"]
+        CB["composer textarea — AgentsView.tsx:541 ref, Enter :1474"] --> D1{"send() :697 branches on what is SELECTED"}
+        D1 -->|a bot is selected| BOT["onSendBotTurn :735 → App:2626 → useBotMailbox → runBotTurn"]
+        D1 -->|no bot| AN["onAnalyze(prompt, images) :725 → App:1720 handleRunAnalysisFromChat"]
     end
     subgraph DOCK["Chart AI dock — inside Trade, TradeView.tsx:1115"]
         DC["ChatComposer.tsx:146 :218"] --> D2{"chatTurnRunner.send :774 — branches on seats"}
@@ -64,26 +64,26 @@ flowchart TD
     PN --> TT
     TT --> SCDT["streamChatWithDeskTools — toolTurn.ts:95 → DeskToolsService"]
     BOT --> TR["streamQuickResponse — GenericAnalysisService.ts (bots stay chat-only)"]
-    AN --> HSM["handleSendMessage — useAnalysisPipeline.ts:608"]
+    AN --> HSM["handleSendMessage — useAnalysisPipeline.ts:610"]
     FA --> HSM
-    HSM --> D3{"runEnsembleEnabled :676 — the guard :1497. Nothing tests the wording any more"}
+    HSM --> D3{"runEnsembleEnabled :683 — the guard :1589. Nothing tests the wording (20c) and a schedule's own `runAutomationTurn` arm :1539 is taken before this (20r)"}
     D3 -->|true| ENS["ensemble analysis — section C (stage 19's target)"]
-    D3 -->|false, casual :3162| SPLIT{"a bot thread? :3218"}
+    D3 -->|false, casual :3254| SPLIT{"a bot thread? :3310"}
     SPLIT -->|yes| TR
-    SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:217, tools from CHAT_SURFACE_TOOLS :54, prompt chatSurfaceSystemPrompt :103"]
+    SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:229, tools from CHAT_SURFACE_TOOLS :54, prompt chatSurfaceSystemPrompt :146"]
     CST --> TT
-    TR --> LW["live writer — applyCasualStreamUpdate streamThrottlers.ts:160, peel per frame; flush BEFORE the settle write :3295"]
+    TR --> LW["live writer — applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:160, peel per frame; flush BEFORE the settle write :3387"]
     CST --> LW
     ENS --> MERGE
     LW --> MERGE["entriesForSession — chatSessions.ts:531, parameter literally named canonical :533"]
-    SCDT --> PT["present_trade → runPresentTrade presentTradeTool.ts:76 → the row's card, in EITHER home"]
+    SCDT --> PT["present_trade → runPresentTrade presentTradeTool.ts:75 → the row's card, in EITHER home"]
 ```
 
 The dock's system prompt is assembled by `systemPromptFor`
 ([TradeChatPanel.tsx:453](../components/trade/TradeChatPanel.tsx)) from
 `TRADE_CHAT_SYSTEM_PROMPT` + skills index + strategies + profile memory + persona.
 The Chat surface's prompt is its own now (stage 20s): `chatSurfaceSystemPrompt`
-([services/trade/chatSurfaceTurn.ts:103](../services/trade/chatSurfaceTurn.ts))
+([services/trade/chatSurfaceTurn.ts:146](../services/trade/chatSurfaceTurn.ts))
 leads with `CHAT_SURFACE_SYSTEM_PROMPT`
 ([chatPrompts.ts:40](../constants/prompts/chatPrompts.ts)) — which is
 `CASUAL_CHAT_SYSTEM_PROMPT` with a calling mandate and an explicit "no chart
@@ -98,8 +98,8 @@ to the 30 the index prints — a row naming skills the model never saw would be 
 audit defect, not an audit trail.
 
 **One entry, both homes.** `handleRunAnalysisFromChat` (App.tsx:1720) is the only
-analysis wrapper: the dock passes it as `onRunAnalysis` (App:2528) and the Chat
-surface as `onAnalyze` (App:2624). It was two, and `services/trade/analysisTurn.ts`
+analysis wrapper: the dock passes it as `onRunAnalysis` (App:2532) and the Chat
+surface as `onAnalyze` (App:2628). It was two, and `services/trade/analysisTurn.ts`
 was deleted (2026-10-17) because a second writer keyed rows with ids no canonical
 row could match — that is what made the two homes disagree.
 
@@ -134,8 +134,11 @@ ran the pipeline whatever it said and with it off no wording could make one. The
 one route words controlled was a scheduled run's, contradicting the flag's own
 comment that automations always run the pipeline: the same automation answered
 casually when its prompt read "outlook" and fully when it read "setup". The guard
-is now the mode alone. Consequences worth knowing: a screenshot attached to a
-toggle-off send is still casual chat (it always was), and the structured verdict,
+is now the mode alone — and stage 20r finished what that sentence implies: the
+flag no longer has an automation clause either, so the mode decides for a human
+send and a schedule has its own arm above the fork (section E). Consequences
+worth knowing: a screenshot attached to a toggle-off send is still casual chat (it
+always was), and the structured verdict,
 the levels and the journal row reach a normal send only as TOOLS the seat calls —
 which is why 20b and 20b-B had to land first.
 
@@ -227,24 +230,34 @@ before the next entry, no longer exist.
 
 ```mermaid
 flowchart TD
-    TK["automation tick / runNow / boot catch-up → runAutomation"] --> D{"forks on config.botId"}
-    D -->|has a bot| BR["runBotRoutineTurn botRoutine.ts — prompt, history"]
+    TK["automation tick / runNow / boot catch-up → runAutomation useAutomations.ts:411"] --> D{"forks on config.botId :431"}
+    D -->|has a bot| BR["runBotRoutineTurn useAutomations.ts:343 → botRoutine.ts:80 — prompt, history"]
     BR --> ST["injected stream = streamQuickResponse useAutomations — reuses the bot transport, NOT the debate"]
-    D -->|no bot| PL["handleSendMessage with the automation option — reuses section C"]
-    PL --> PRIV["runs into a private message list, not the open conversation — refs useAnalysisPipeline.ts:466-469, rationale :615-619"]
+    D -->|no bot| AT["automation arm BEFORE the mode fork useAnalysisPipeline.ts:1539 → runAutomationTurn automationTurn.ts:160"]
+    AT --> PRIV["runs into a private message list, not the open conversation — automationMessagesRef useAnalysisPipeline.ts:470, rationale :617-622"]
+    AT --> CAP["plan rationed: MAX_PLANS_PER_RUN :68 · MAX_PLANS_PER_DAY AutomationService.ts:113"]
+    AT --> FAIL["failed tool + refused plan + no-lookup land in notices → row text and a WARNING toast useAutomations.ts:531"]
     GR["useAgentGroups.ts → groupRounds → streamQuickResponse"] --> GV["GroupChatView"]
 ```
 
-An automation run always takes the ensemble path: `runEnsembleEnabled =
-isAutomationRun || isEnsembleEnabled` (useAnalysisPipeline.ts:676). That is why
-stage 19 has to give scheduled runs a new route, not just delete the branch.
+A scheduled run no longer takes the debate path: `runEnsembleEnabled =
+isEnsembleEnabled` (useAnalysisPipeline.ts:683) and the automation arm sits
+ABOVE the mode fork (:1589), so one config has one behaviour whatever the
+trader's toggle says. That is what lets stage 19 delete the engine without
+taking the scheduler down with it.
 
-What that route must keep is written down, not assumed:
-`tests/automationRouteCharacterization.test.tsx` pins the private
-`automation-<id>` thread, the per-config overrides, the continuity read, and the
-fact that the run's product is a verdict row. It also pins one wart the new route
-inherits: `appendRun` never dedupes, so each run is stored twice and the
-last-4-**rows** continuity read only ever reaches the last two completed runs.
+What the schedule keeps, and what it gained, are written down rather than
+assumed. `tests/automationRouteCharacterization.test.tsx` pins the private
+`automation-<id>` thread, the config's own model pick, the continuity read (now
+the last three DELIVERED runs — `MAX_HISTORY_RUNS` useAutomations.ts:199, because
+the old row-count read spent half its budget on `appendRun`'s 'running' stubs),
+and the verdict row. `tests/automationToolTurn.test.ts` pins the two rules a run
+with nobody watching needs: a plan refused past the cap answers with an
+`ok: false` receipt, and a tool that came back with nothing — or a turn that
+called nothing — is stated in the row and changes the toast from success to
+warning. Its tool list is the Chat surface's minus the notebook-writers
+(`AUTOMATION_UNATTENDED_DENY` automationTurn.ts:54): a recurring job that edits
+the trader's memory changes what every later turn sees, with nobody in the loop.
 
 ---
 
@@ -318,14 +331,14 @@ card that forgets it was clicked offers a second journal row.
 | 3 | App → useSurfaceRouter | surface + journalTab + journalOpenNonce |
 | 4 | useSurfaceRouter → useSurface | persisted value, key `august_surface_v1` `:15` |
 | 5 | useSurfaceRouter → appHash | `#/journal\|market\|settings\|watch` ⇄ state `:101 :158` |
-| 6 | App → Header | band, only when `surface !== 'agents'` `:2471` |
-| 7 | App → 4 lazy surfaces | each behind `SurfaceSkeleton` `:2498 :2543 :2565 :2607` |
-| 8 | Header → SurfaceSwitch | the destination set `:2172`, list `SurfaceMenuList.tsx:42-51` |
-| 9 | App → AgentsView props | same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) `:2607-2680` |
+| 6 | App → Header | band, only when `surface !== 'agents'` `:2475` |
+| 7 | App → 4 lazy surfaces | each behind `SurfaceSkeleton` `:2504 :2547 :2571 :2613` |
+| 8 | Header → SurfaceSwitch | the destination set `:2176`, list `SurfaceMenuList.tsx:42-51` |
+| 9 | App → AgentsView props | same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) `:2613-2684` |
 | 10 | TradeView → TradeChatPanel | the dock, inside Trade `:1115` |
-| 11 | AgentsView.send → bot branch | `activeBot` truthy `:727` |
+| 11 | AgentsView.send → bot branch | `activeBot` truthy `:735` |
 | 12 | bot branch → useBotMailbox | `runUserBotTurn` → `runBotTurn` |
-| 13 | AgentsView.send → analysis branch | `onAnalyze` `:717` → App `:1720` — the dock's `onRunAnalysis` reaches the SAME wrapper |
+| 13 | AgentsView.send → analysis branch | `onAnalyze` `:725` → App `:1720` — the dock's `onRunAnalysis` reaches the SAME wrapper |
 | 14 | dock Full analysis → the run slot | `runFullAnalysis :1130` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
 | 15 | ChatComposer → chatTurnRunner.send | Enter `:146` / button `:218` → `:774` |
 | 16 | solo → runSeatTurn | `:919` (definition `:592`) |
@@ -333,13 +346,13 @@ card that forgets it was clicked offers a second journal row.
 | 18 | panel → per-seat + mailbox | `:1068` · `:996` · `:1008` |
 | 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `TradeChatPanel.tsx:453` |
 | 20 | every dock turn → chatStore | `mutate` · `beginRun` |
-| 21 | handleSendMessage → the fork | the mode flag `:676` is the whole decision — guard `:1497`, else `:3162`. Stage 20c deleted the wording predicate |
-| 22 | the casual arms | a bot thread → `streamQuickResponse :3223` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:217` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
-| 23 | casual frames → Message.text | `streamThrottlers.ts:160`; flush precedes the settle write `:3295` |
+| 21 | handleSendMessage → the fork | the mode flag `:683` is the whole decision — guard `:1589`, else `:3254`. Stage 20c deleted the wording predicate |
+| 22 | the casual arms | a bot thread → `streamQuickResponse :3315` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:229` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
+| 23 | casual frames → Message.text | `hooks/analysisPipeline/streamThrottlers.ts:160`; flush precedes the settle write `:3387` |
 | 24 | ensemble → 8 stages | see C — anchors deliberately omitted |
 | 25 | desk tools → what a caller can reach | `executeDeskTool DeskToolsService.ts` (its allow-list is enforced at execution, not only at offer time) |
 | 26 | panel tools → chart echo | `executePanelTool chatTurnRunner.ts` → `onToolAction` |
-| 27 | automation tick → runAutomation | fork on `config.botId`; no-bot path reuses 21 with `automation` → private list `:466-469 :615-619`, characterized in `tests/automationRouteCharacterization.test.tsx` |
+| 27 | automation tick → runAutomation | `useAutomations.ts:411`, forks on `config.botId` `:431`; the no-bot path takes the pipeline's OWN schedule arm `useAnalysisPipeline.ts:1539` → `runAutomationTurn automationTurn.ts:160`, writing the private list `automationMessagesRef :470`, rationale `:617-622` and settling through `onMessage` `useAutomations.ts:531`. Characterized in `tests/automationRouteCharacterization.test.tsx` |
 | 28 | bot routine → injected stream | `botRoutine.ts` ← `useAutomations` (reuses 22's bot arm) |
 | 29 | rooms → groupRounds | `useAgentGroups` → `streamQuickResponse` |
 | 30 | review passes / propose_skill → draft → approval → skill | `draftGates.ts` → `skillApproval` — the post-mortem leg is starved, not deleted (see D) |
@@ -357,9 +370,11 @@ card that forgets it was clicked offers a second journal row.
 | 42 | heartbeat → hygiene + idle sweep | `useLearningHeartbeat` → `memoryHygiene.ts` → `skillIdleLifecycle.ts` |
 | 43 | approval tray → badge | `collectApprovalItems` → `approvalsWaiting` → Knowledge tab only |
 | 44 | the pane filters what it shows | `agentThreads.ts` read at `AgentsView.tsx` |
-| 45 | `present_trade` → a card in either home | `runPresentTrade presentTradeTool.ts:76` ← dock sink `chatTurnRunner.ts` / desk sink `chatSurfaceTurn.ts`; gate scan starts there, the cap binds at log time (`ensureStamp`) |
-| 46 | `chatSurfaceSystemPrompt` → the desk arm's prompt | `chatSurfaceTurn.ts:103` — mandate (`chatPrompts.ts:40`) + skills index + active strategies + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (`types/message.ts:368`) |
+| 45 | `present_trade` → a card in either home | `runPresentTrade presentTradeTool.ts:75` ← dock sink `chatTurnRunner.ts` / desk sink `chatSurfaceTurn.ts`; gate scan starts there, the cap binds at log time (`ensureStamp`) |
+| 46 | `chatSurfaceSystemPrompt` → the desk arm's prompt | `chatSurfaceTurn.ts:146` — mandate (`chatPrompts.ts:40`) + skills index + active strategies + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (`types/message.ts:368`) |
 | 47 | prose that never called the tool → the same decision | `planFromProse` (`services/trade/tradeShapedProse.ts`) reads the labelled entry/stop/target out of the row, `parseTradeProposal` decides whether that is a plan, and the chip mints the ONE plan-id shape (`mintPlanId`) before calling `onLogProposedTrade` — so a spoken plan reaches the journal the same way a presented one does |
+| 48 | a scheduled run → a rationed plan | `MAX_PLANS_PER_RUN` (`automationTurn.ts:68`) counts inside the turn; `MAX_PLANS_PER_DAY` (`AutomationService.ts:113`) is a local-calendar-day ledger keyed per automation (`:130` read, `:143` spend). Past either, `present_trade` gets an `ok: false` receipt naming the limit — a refusal the MODEL reads, not a card that quietly never appears |
+| 49 | a schedule's failure → the row and the toast | the turn's `notices` (`automationTurn.ts:160`) — a tool that came back `ok: false` (from `onToolPayload`, which already carries it), a turn that called nothing, a refused plan — are written into the stored text at `useAnalysisPipeline.ts:1539` and handed to `useAutomations.ts:531`, which downgrades the toast from success to warning. Nobody is watching a schedule live; a success toast over a failed lookup is how an unattended run manufactures confidence |
 
 ---
 
@@ -376,12 +391,12 @@ card that forgets it was clicked offers a second journal row.
    ways on 2026-10-18: `grep -c NavRail App.tsx` = 18 occurrences and **none is a
    JSX element**; `grep '<NavRail'` repo-wide matches only `components/shell/NavRail.tsx:140`
    (its own definition) and `tests/agentsSurface.test.tsx:390` (a test mounting it
-   directly); ESLint reports `App.tsx:123:8 'NavRail' is defined but never used`; and
-   the code says so out loud — `App.tsx:2450` and `:2455` are comments reading "The
+   directly); ESLint reports `App.tsx:124:8 'NavRail' is defined but never used`; and
+   the code says so out loud — `App.tsx:2454` and `:2459` are comments reading "The
    NavRail is GONE: its five destination rows were the tab strip this redesign was
-   asked to remove". Only the `AccountRow` export is rendered, at `App.tsx:2680`.
+   asked to remove". Only the `AccountRow` export is rendered, at `App.tsx:2684`.
    **An earlier pass of this doc asserted the opposite** ("rendered at App:2766") and
-   the mechanism is worth keeping: `App.tsx:2488` passes `onExpandNavRail={…}` and
+   the mechanism is worth keeping: `App.tsx:2492` passes `onExpandNavRail={…}` and
    the rail's expand state is very much alive at `:679-692`, so a grep for `NavRail`
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation.** Every anchor above was
@@ -396,3 +411,12 @@ card that forgets it was clicked offers a second journal row.
    tools, and its `present_trade` receipt says so rather than promising a level-watch
    that cannot exist there). If a future pass restores the old sentence, it is
    describing a bug it just reintroduced.
+
+8. **"Automations always run the ensemble pipeline" was a code comment, and it is
+   now false.** It was true up to stage 20r (2026-10-18), and stage 20c had even
+   made it MORE true by deleting the wording that let one schedule answer casually.
+   A scheduled run now takes its own arm — one tool turn, its own model pick, no
+   canvas, a rationed plan and visible failures — so the ensemble flag answers only
+   the question the trader's switch asks. If the sentence comes back, whoever
+   restores it has also made stage 19 undeletable and given every schedule a debate
+   nobody is watching.

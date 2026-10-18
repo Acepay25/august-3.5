@@ -1,19 +1,22 @@
 /**
- * 20t — what a scheduled run does TODAY, written down before stage 19/20r move it.
+ * 20t wrote this file to pin what a scheduled run did BEFORE stage 19; 20r is
+ * the stage that moved it, so the file now describes the TOOL-TURN route —
+ * rewritten as its own header demanded, not deleted.
  *
- * Automations are the one caller that still REQUIRES the ensemble: the pipeline
- * forces `runEnsembleEnabled = isAutomationRun || isEnsembleEnabled`, so a
- * scheduled run gets the debate even when the trader's ensemble switch is off,
- * it lands in a private `automation-<id>` conversation rather than the open
- * one, and what comes back is a verdict row whose `analysis` becomes the journal
- * card and the success toast. Deleting the debate (stage 19) therefore has to
- * give scheduled runs a NEW route with the same four observable properties —
- * private thread, own-run continuity, per-config model overrides, a loggable
- * verdict — not merely remove a branch.
+ * A schedule is the one send with nobody in front of the screen. That makes four
+ * properties load-bearing and two of them new:
+ *  1. a PRIVATE thread — the run never writes into the trader's open conversation;
+ *  2. its OWN continuity — what it remembers is its own delivered runs;
+ *  3. its OWN model — the config's pick answers, never whatever the desktop
+ *     happens to have selected;
+ *  4. a DELIVERED VERDICT — a row the Journal and the toast can act on.
+ *  5. (20r) a RATIONED plan and (6) a VISIBLE failure, both asserted in
+ *     `tests/automationToolTurn.test.ts` where the turn itself lives; here the
+ *     scheduler side of the contract is the toast: caveats change its LEVEL.
  *
- * This is a CHARACTERIZATION file: every assertion describes current behavior,
- * and the honest signal that stage 19/20r is done is this file being REWRITTEN
- * to describe the tool-turn route — not deleted.
+ * The ensemble leg is now a mode a TRADER opts into (`runEnsembleEnabled =
+ * isEnsembleEnabled`), which is what lets stage 19 delete the engine without
+ * taking the scheduler down with it.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -47,7 +50,9 @@ interface AutomationOption {
     automationId: string;
     conversation: Conversation;
     overrides?: Record<string, unknown>;
-    onMessage: (run: { userMessage: Message; aiMessage: Message }) => void;
+    /** `notices` is stage 20r's caveat channel — a tool failure, a refused plan,
+     *  or a run that looked nothing up. */
+    onMessage: (run: { userMessage: Message; aiMessage: Message; notices?: string[] }) => void;
     onError: (error: string) => void;
 }
 
@@ -142,17 +147,16 @@ describe('a scheduled run keeps its own thread', () => {
         expect(texts).not.toContain(OPEN_ROW);
     });
 
-    it('continuity is capped at the last TWO completed runs, because every run leaves a stub row', async () => {
-        // CHARACTERIZATION, not endorsement. `appendRun` prepends and never
-        // dedupes, so a run is stored twice: once 'running' (no messages) and
-        // once settled. The history read is `slice(0, 4)` of the ROWS, so half
-        // the budget is spent on empty stubs and a long-lived schedule never
-        // remembers more than its last two completed runs. Stage 20r inherits
-        // this until the read counts runs instead of rows.
+    it('continuity is the last THREE delivered runs, not the last four rows', async () => {
+        // `appendRun` prepends a 'running' stub for every attempt and never
+        // dedupes it, so reading the newest N ROWS used to spend half the budget
+        // on rows with no text in them — a schedule remembered two answers. 20r
+        // filters to runs that carry both a prompt and an answer.
         const { h, runPipeline } = setup(verdictRun);
         for (let i = 0; i < 7; i += 1) await runOnce(h, automation({}));
         const last = runPipeline.mock.calls[6] as unknown as [string, unknown, unknown, { automation: AutomationOption }];
-        expect(last[3].automation.conversation.messages.length).toBe(4);
+        expect(last[3].automation.conversation.messages.length).toBe(6);
+        expect(last[3].automation.conversation.messages.map(m => m.text).filter(t => t === 'Long BTC')).toHaveLength(3);
     });
 
     it('applies the config\'s model overrides and keeps standard mode out of accuracy', async () => {
@@ -199,30 +203,70 @@ describe('the product a scheduled run must keep producing', () => {
         expect(body).toContain('Long');
         expect(body).toContain('62');
     });
+
+    it('a run that carries caveats is announced as a WARNING, never as success', async () => {
+        // The visible-failure rule lives in the turn (see automationToolTurn);
+        // this is the SCHEDULER half: the one thing a trader sees for an
+        // unattended run is the toast, so a caveat has to change its LEVEL.
+        const { h, toast } = setup(async (_p, _i, _h, options) => {
+            options.automation.onMessage({
+                userMessage: { id: 'u1', role: 'user', text: 'sweep BTC', createdAt: '' } as unknown as Message,
+                aiMessage: { id: 'm1', role: 'ai', text: 'Long BTC', createdAt: '' } as unknown as Message,
+                notices: ['TOOL FAILURE(S): get_order_book came back with no data.'],
+            });
+            return { ok: true };
+        });
+        await runOnce(h, automation({}));
+        expect(toast.success).not.toHaveBeenCalled();
+        const [title, body] = toast.warning.mock.calls[0] as [string, string];
+        expect(title).toBe('Automation finished with caveats');
+        expect(body).toContain('1 thing(s) to check on the card.');
+    });
+
+    it('a run that announced nothing still reports the plan it presented', async () => {
+        // A tool-turn run has no `analysis`; the card and the toast read the
+        // `proposal`. Without this, the new shape announces "No signal".
+        const { h, toast } = setup(async (_p, _i, _h, options) => {
+            options.automation.onMessage({
+                userMessage: { id: 'u1', role: 'user', text: 'sweep BTC', createdAt: '' } as unknown as Message,
+                aiMessage: {
+                    id: 'm1', role: 'ai', text: 'long here', createdAt: '',
+                    proposal: { symbol: 'BTCUSDT', direction: 'Long', entry: 100, stopLoss: 90, takeProfits: [110] },
+                } as unknown as Message,
+            });
+            return { ok: true };
+        });
+        await runOnce(h, automation({}));
+        expect((toast.success.mock.calls[0] as [string, string])[1]).toContain('Long BTCUSDT');
+    });
 });
 
-describe('the fact stage 19 has to replace rather than delete', () => {
+describe('the route a scheduled run takes now', () => {
     const src = readFileSync('hooks/useAnalysisPipeline.ts', 'utf8');
 
-    it('an automation run is forced onto the ensemble route regardless of the user switch', () => {
-        // Pinned as a source contract because observing it needs the whole
-        // pipeline mounted. When the debate goes away this line must be
-        // REPLACED (a tool turn for scheduled runs), and this test rewritten —
-        // removing it silently is how a schedule starts answering casually and
-        // nobody notices for a week.
-        expect(src).toMatch(/const runEnsembleEnabled = isAutomationRun \|\| isEnsembleEnabled;/);
-        // Stage 20c retired the wording gate: the branch is the MODE's, so the
-        // flag alone decides it. Pinned WITH its first statement, because
-        // `if (runEnsembleEnabled) {` also appears at the data pull — a bare
-        // match would stay green if the fork itself were deleted.
+    it('an automation is no longer forced onto the ensemble, so stage 19 can delete it', () => {
+        expect(src).toMatch(/const runEnsembleEnabled = isEnsembleEnabled;/);
+        expect(src).not.toMatch(/isAutomationRun \|\| isEnsembleEnabled/);
+    });
+
+    it('the schedule has its OWN arm, and it is ordered BEFORE the mode fork', () => {
+        // Ordered, not merely present: if the arm sat inside the ensemble branch
+        // a schedule would answer differently depending on the trader's toggle,
+        // which is the two-behaviours-for-one-config bug 20f/20t both refuse.
+        const arm = src.indexOf('const out = await runAutomationTurn({');
+        const fork = src.indexOf('if (runEnsembleEnabled) {\n                const summaries = [');
+        expect(arm).toBeGreaterThan(-1);
+        expect(fork).toBeGreaterThan(-1);
+        expect(arm).toBeLessThan(fork);
+        // The arm delivers the row AND the caveats through the scheduler's own
+        // callback — the store and the toast must not be able to disagree.
+        expect(src).toMatch(/onMessage\(\{\s*\n?\s*userMessage,\s*\n?\s*aiMessage,\s*\n?\s*\.\.\.\(out\.notices/);
+    });
+
+    it('the ensemble branch is still the mode’s, and the keywords stay dead', () => {
+        // Stage 20c retired the wording gate; nothing here re-adds it. A re-add
+        // would give a schedule two different behaviours for two wordings.
         expect(src).toMatch(/if \(runEnsembleEnabled\) \{\n\s+const summaries = \[/);
-        // And the keywords must stay dead. This is the whole ruling in four
-        // greps: no send may route on its own text, and a re-add would give a
-        // schedule two different behaviours for two different wordings.
-        // And the keywords must stay dead. Pinned as a CALL SHAPE, not as a
-        // word ban — the comment above this gate legitimately names the five
-        // words it removed, and a scan that trips on prose is a false-positive
-        // machine. What may not come back is a string test on the prompt.
         expect(src).not.toMatch(/isChartAnalysisRequested/);
         expect(src).not.toMatch(/upperPrompt/);
         expect(src).not.toMatch(/Prompt\.includes\(/);
@@ -230,8 +274,8 @@ describe('the fact stage 19 has to replace rather than delete', () => {
             expect(src, `the pipeline tests the prompt for ${word} again`)
                 .not.toMatch(new RegExp(`includes\\(\\s*['"\`]${word}['"\`]`));
         }
-        // And the gate scan is part of that route, keyed on the same flag: the
-        // cap a scheduled plan gets today is a gate cap, not a tool cap.
+        // The debate's gate scan is still keyed on the MODE, not on the schedule:
+        // a scheduled plan is capped by present_trade's own gate instead.
         expect(src).toMatch(/if \(finalSymbol && runEnsembleEnabled\) \{/);
     });
 });

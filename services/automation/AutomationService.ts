@@ -102,6 +102,58 @@ export const saveAutomationLastSeen = async (username: string, at: number): Prom
     }
 };
 
+// ─── Plan quota (stage 20r) ────────────────────────────────────────────────
+
+const PLAN_LEDGER_KEY_PREFIX = 'automation_plans_v1_';
+
+/** How many plans ONE automation may present in one local day. The per-RUN cap
+ *  is a turn-local counter (`MAX_PLANS_PER_RUN` in automationTurn); this one is
+ *  the cross-run half, and it needs storage because a schedule fires again after
+ *  a reload, after a crash, and while nobody is watching. */
+export const MAX_PLANS_PER_DAY = 3;
+
+/** A local calendar day, `YYYY-MM-DD`. LOCAL on purpose: a trader who sets a
+ *  schedule for "every morning" means their morning, and a UTC boundary would
+ *  let a 09:00 PHT schedule spend two days' quota in one afternoon. */
+export const automationPlanDay = (at: Date = new Date()): string =>
+    `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+
+interface PlanLedger { day: string; count: number; }
+
+const isPlanLedger = (item: unknown): item is PlanLedger => {
+    const l = item as Partial<PlanLedger> | null;
+    return !!l && typeof l === 'object' && typeof l.day === 'string' && typeof l.count === 'number';
+};
+
+/** Plans presented TODAY by this automation. A ledger from another day reads as
+ *  zero, so the counter cannot be stuck high by a stale blob. */
+export const loadAutomationPlanCount = async (username: string, automationId: string): Promise<number> => {
+    try {
+        const stored = await getPreferenceObject<PlanLedger>(`${PLAN_LEDGER_KEY_PREFIX}${username}_${automationId}`);
+        if (!isPlanLedger(stored) || stored.day !== automationPlanDay()) return 0;
+        return Math.max(0, Math.floor(stored.count));
+    } catch (e) {
+        console.warn('[Automation] Failed to load the plan ledger:', e);
+        return 0;
+    }
+};
+
+/** Spend one of the day's plans. Returns the count AFTER this one, so the
+ *  caller's receipt can name the limit it just consumed against. */
+export const recordAutomationPlan = async (username: string, automationId: string): Promise<number> => {
+    const day = automationPlanDay();
+    const next = await loadAutomationPlanCount(username, automationId) + 1;
+    try {
+        await setPreferenceObject(`${PLAN_LEDGER_KEY_PREFIX}${username}_${automationId}`, { day, count: next });
+    } catch (e) {
+        // A ledger that cannot be written must not lose the run whose plan it
+        // is tracking. The per-run cap still binds inside this turn; only the
+        // cross-run half degrades, and it degrades to the NEXT turn reading 0.
+        console.warn('[Automation] Failed to save the plan ledger:', e);
+    }
+    return next;
+};
+
 // ─── Schedule helpers (pure) ────────────────────────────────────────────────
 
 /** Next fire time after `from`, or null when the cron is invalid/no match. */
