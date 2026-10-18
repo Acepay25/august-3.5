@@ -118,7 +118,7 @@ focus on tool calling, skills, and memory."*
 So the target is NOT "keep the branch and shrink it to one seat". It is:
 
 - **No keyword routing at all.** `isChartAnalysisRequested`
-  (`useAnalysisPipeline.ts:1474-1484`) tests the prompt text for ANALYZE / CHART /
+  (`useAnalysisPipeline.ts:1485-1484`) tests the prompt text for ANALYZE / CHART /
   SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
@@ -155,7 +155,7 @@ record of why the order is what it is.
 
 Structured chart analysis exists **only** inside the ensemble branch, and this app
 has no solo-analysis path: `isChartAnalysisRequested`
-(`useAnalysisPipeline.ts:1474`) lists `isEnsembleEnabled` as a trigger term, so with
+(`useAnalysisPipeline.ts:1485`) lists `isEnsembleEnabled` as a trigger term, so with
 the flag off every send is casual chat. Deleting the branch therefore deletes the
 verdict, the entry/SL/TP, the levels drawn on the chart, the gate scan, and the
 journal row that the autopilot watches — not just the debate.
@@ -177,7 +177,7 @@ reading is expensive to undo.
 ## Next — order matters
 
 1. **Stage 20 before 19.** Structured chart analysis exists ONLY in the
-   ensemble branch: `isChartAnalysisRequested` (hooks/useAnalysisPipeline.ts:1474)
+   ensemble branch: `isChartAnalysisRequested` (hooks/useAnalysisPipeline.ts)
    lists `isEnsembleEnabled` as a trigger term, and the guard at :1488 is
    `isChartAnalysisRequested && runEnsembleEnabled`, with casual chat in the
    `else` at :3153. Delete the branch first and every send becomes casual chat
@@ -336,7 +336,7 @@ Stage 20c made `runEnsembleEnabled` the only guard, so a scheduled run with the
 toggle on was still entering the debate. 20r does not delete that dependency in
 stage 19 — it gives the schedule a route of its own first, so one config has one
 behaviour at every revision. The arm sits in the pipeline at
-`useAnalysisPipeline.ts:1539`, ABOVE the mode fork at `:1589`, and
+`useAnalysisPipeline.ts:1548`, ABOVE the mode fork at `:1598`, and
 `tests/automationRouteCharacterization.test.tsx` pins the order by `indexOf`
 rather than by prose, so moving the arm below the fork is a failing test, not a
 comment.
@@ -806,7 +806,7 @@ three turn owners, fed by `usage`/`usageCalls` that `runToolTurn` folds out of t
 per-request `onUsage`. Pinned in `tests/toolTurn.test.ts` ("the measured usage fold") and
 guarded by a new `featuresAreWired` row; stubbing the fold turns those pins red.
 
-`notify()` now fires on the settled Full-analysis path (`useAnalysisPipeline.ts:1559`),
+`notify()` now fires on the settled Full-analysis path (`useAnalysisPipeline.ts:1568`),
 scoped to `options?.fullAnalysis === true` and excluded on a stopped turn, so an ordinary
 chat line stays quiet and a schedule (which already reports in its own row) is not doubled.
 `CompletionNotifications` therefore has no caller left and dies with the engine.
@@ -850,7 +850,7 @@ reachable from `App.tsx`.
 The three "feature questions" in the previous section all turned out to be
 mechanical, and the proof is that no user-visible output changed:
 
-- `streamThrottlers`: `useAnalysisPipeline.ts:403` destructures **only**
+- `streamThrottlers`: `useAnalysisPipeline.ts:397` destructures **only**
   `throttledCasualStream`. The debate-round, provisional-verdict,
   ensemble-progress and opening-thinking writers had no consumer left, so the
   file is now one updater + one dep, and the `debateResume` edge went with them.
@@ -899,7 +899,7 @@ reload restores the Agents surface).
 The engine is gone, the pipeline's ensemble BRANCH is not. Read from the tree,
 not from the plan:
 
-- `hooks/useAnalysisPipeline.ts:575` still sets `runEnsembleEnabled`, and three
+- `hooks/useAnalysisPipeline.ts:544` still sets `runEnsembleEnabled`, and three
   debate-only refusals still run on it: no-moderator (`:730`), incomplete lens
   roles / two seats sharing a model (`:754-785`), and the seat ceiling
   `TEAM_MAX_SEATS` (`:793`, "Too many providers for a Standard-mode debate").
@@ -1002,7 +1002,7 @@ the store stays. `CalibrationLedgerService` (117 lines) feeds TWO live surfaces:
 not a mechanical one — it removes reporting the trader can currently open.
 
 **2. `ensembleProgress` has no rendering reader but IS load-bearing on the failure path.**
-Census over all `.ts`/`.tsx`: minted at `useAnalysisPipeline.ts:888`→`:912`, patched at
+Census over all `.ts`/`.tsx`: minted at `useAnalysisPipeline.ts:909`→`:912`, patched at
 `runOutcome.ts`'s debating branch, stripped at the SQLite boundary, and
 after `1bd501e` no component reads it (`App.tsx:1254` was the last, and that memo is
 gone). But the `runOutcome` branch keyed on it writes the row's TEXT —
@@ -1284,7 +1284,7 @@ The file lists are recorded here so the next pass starts from evidence, not from
 
 **#19 — the ensemble branch, the hybrid pull, and the prompt A/B lane.**
 `runEnsembleEnabled` is not local to the hook: it is threaded from `App.tsx` through
-`hooks/useAnalysisPipeline.ts:556/:279/:556` and gates `:411` (a UI-muting early return), `:617`,
+`hooks/useAnalysisPipeline.ts:567/:279/:556` and gates `:403` (a UI-muting early return), `:617`,
 `:806` (the coin tip), `:874`, `:923`, `:956`, and appears in the `:1594` dependency array. The
 toggle itself is persisted (`hooks/useProfilePersistence.ts`, `hooks/useUserProfileLoader.ts`,
 `types/user.ts`, `services/learning/MemoryFilesService.ts`, `services/trade/automationTurn.ts`,
@@ -1292,7 +1292,7 @@ toggle itself is persisted (`hooks/useProfilePersistence.ts`, `hooks/useUserProf
 (`tests/analysisPipelineSendIdentity.test.ts`, `tests/automationRouteCharacterization.test.tsx`,
 `tests/useProfilePersistence.test.tsx`). Deleting the hybrid pull also changes which coin the
 learning step receives, because the packet still feeds `assemblePipelineMemoryContext` at
-`hooks/useAnalysisPipeline.ts:1040`.
+`hooks/useAnalysisPipeline.ts:1047`.
 
 **Correction to what this doc and the flow doc currently assert about the A/B lane.** It is not
 "starved with no caller" in the product sense: `beginPromptLane` has no caller, so
@@ -1360,7 +1360,7 @@ grep-and-delete:
   means today's default behaviour, not today's opt-in behaviour — a user who enabled ensemble
   loses the ticker unless it is re-parented. That re-parenting is a feature decision, not a trim.
 - `runEnsembleEnabled` is not only read in the hook: it is passed **as a positional argument** at
-  `hooks/useAnalysisPipeline.ts:617` into a callee alongside `runLensConfig` and
+  `hooks/useAnalysisPipeline.ts:626` into a callee alongside `runLensConfig` and
   `runEnsembleSelection`, so removing it changes that signature and its other callers, and the
   argument order is load-bearing. Each such site drags a second file into the diff, which is how a
   "22-file" task is really 30+ and why it needs a session with room for several typecheck loops
@@ -1428,7 +1428,7 @@ What the attempt measured, which is the value it leaves behind:
 - `services/providers/GenericAnalysisService.ts:361` is a three-way prompt chain;
   deleting the two mode branches means lifting the standard branch out of its
   `else` and dedenting it, which needs a brace-walking flattener, not a regex.
-- `hooks/useProfilePersistence.ts:185` and `hooks/useAnalysisPipeline.ts:1572` list
+- `hooks/useProfilePersistence.ts:185` and `hooks/useAnalysisPipeline.ts:1581` list
   the five fields inside one-line object literals and one very long dependency
   array, so whole-line filtering cannot reach them — they need token strips.
 - The one unsolved blocker is `components/settings/CustomInstructionsEditor.tsx:164`:
@@ -1585,7 +1585,7 @@ history card all still call it directly.
 **#21 — three sub-items, measured, none started.** `debateTurns` is declared at
 `types/message.ts:189` and `types/trade.ts:110`, written at
 `hooks/useTradeLogging.ts:350` and `utils/watchList.ts:30`, and read by
-`hooks/useAnalysisPipeline.ts:777`,
+`hooks/useAnalysisPipeline.ts:786`,
 `hooks/useWatchAndAutopilot.ts:105`, `services/analysis/convictionDrift.ts:82`,
 `services/learning/monthlyReport.ts:220`, `utils/analysisUtils.ts:990` and the
 report's turn count at `utils/reportExport.ts:241`, plus a seeded fixture in
@@ -1733,7 +1733,7 @@ bytes on legacy rows — accepted over keeping a stripper for a key no writer ca
 
 Nine doc citations moved when these lines went. Each was re-measured by matching the HEAD
 line's content, and two were re-pointed at a real symbol instead of the bare `};` they used
-to land on (`useAnalysisPipeline.ts:739` for the automation claim, `:783` for the coin tip).
+to land on (`useAnalysisPipeline.ts:750` for the automation claim, `:783` for the coin tip).
 One failure mode the gate cannot see, recorded because it happened here: a citation that
 drifts onto a DIFFERENT non-blank line passes. The run-failure guard's own number did
 exactly that, so the two ledger sentences citing it were rewritten rather than renumbered.
@@ -1883,3 +1883,29 @@ suspended on the choice was deleted. The `ReplacementOffer` type, the inbox arm 
 import in `useAnalysisPipeline.ts:7` went with it. Nothing user-visible changes, because the card
 could never appear; what changes is that the approvals inbox no longer claims a second
 producer-side flow it cannot have.
+
+## 2026-10-19 — the step tracker was the sixth orphan, and it is user-visible
+
+`useAnalysisPipeline` still minted four progress rows. Three had no writer left:
+`gate-scan` and `debate` were never even started (`getGateAnalysis` was imported and
+called by nothing), and `analysis` was started at the run's head and completed by the
+engine, so a **successful** Full-analysis run left "Analyzing charts" spinning and two
+rows pinned at pending forever. `AnalysisProgress` kept summary clauses for
+`gate-scan`, `debate` and `validation` — the last dead since accuracy mode. No gate saw
+it: the panel tests fabricate their own step lists, and a fabricated row with
+`status: 'complete'` is exactly what a component test needs to stay green while the
+product can never produce it.
+
+Fixed by dropping the two rows for work that no longer happens (and the dead import),
+summarising the two rows that do, and completing the run at the one choke point every
+path reaches — the `finally`, which is now terminal-aware: the catch marks the failing
+step and Stop marks the cancelled one *before* the sweep, so anything still open really
+did succeed. That ordering is the whole difference from the sweep this file used to
+warn about; `currentPhaseRef` (which existed only to pick between analysis and debate)
+is gone, and the Esc-cancel toast no longer claims a debate was preserved.
+
+`tests/analysisStepTracker.test.ts` pins all four claims on the real files, with a
+planted control for each scan. Every `useAnalysisPipeline.ts` citation in the flow docs
+and here shifted by its region delta (-1 / -6 / +9 / +7 / +9) and was re-printed against
+the tree before landing; the 113 bare numbers in this ledger are ports and examples and
+were not touched.
