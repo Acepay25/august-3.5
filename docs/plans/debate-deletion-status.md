@@ -231,6 +231,32 @@ reading is expensive to undo.
   `tests/chartFollowsChatSession.test.tsx` (6). render-probe's check now also
   waits for convergence and prints the first paint, so a chart that merely
   lags is distinguishable from one that never follows.
+- **20b (#27)** — the Chat surface's non-bot branch runs a tool turn:
+  `services/trade/chatSurfaceTurn.ts` (tools from `CHAT_SURFACE_TOOLS`, no
+  canvas tools), split from the bot arm at `useAnalysisPipeline.ts:3211`.
+  Bots stay chat-only by ruling: `useBotMailbox` / `botRoutine` / `groupRounds`
+  keep `streamQuickResponse`.
+- **20b-B (#35)** — `present_trade` lifted out of the dock into
+  `services/trade/presentTradeTool.ts`, called through a sink by both homes, so
+  a plan presented from Chat lands a decision card on its own row; the
+  logged/dismissed disposition map moved to `proposalDisposition.ts` so one
+  store serves both. `watchable` is an explicit flag, not an inferred one — the
+  dock arms a level-watch, the Chat surface honestly says it cannot.
+- **20t (#29)** — `tests/automationRouteCharacterization.test.tsx` (8) pins the
+  automation route BEFORE stage 19: private conversation, run continuity, the
+  7-run cap, the overrides, the bot fork, the persisted direction, and the
+  source shape of `runEnsembleEnabled`.
+- **The flow docs re-measured.** A peer review scored the previous pass 61/66
+  anchors and named 6 defects; all 6 were fixed, and defect 3 (anchor drift)
+  recurs with every stage-20 commit, so both `docs/app-flow.md` and
+  `docs/app-flow.html` were rewritten against the tree, not patched. The check
+  is scripted: every `file.ext:NN` anchor in each doc is resolved and printed
+  with the line it cites (`ANCHORS_CHECKED=30 PROBLEMS=0` for each). Two rules
+  came out of it: a number lands only where it was measured THIS pass — the
+  html previously carried ~100 numbers from an older revision, so nodes that
+  name a file without a line were left without one rather than corrected by
+  guess — and section C carries NO numbers by design, because those are exactly
+  the lines stage 19 deletes.
 
 ## Deviations from the approved manifest (say so before repeating them)
 
