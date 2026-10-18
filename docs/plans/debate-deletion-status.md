@@ -1594,3 +1594,24 @@ market-polling coupling and the positional-argument site recorded above.
 **Gate chain each of these owes before commit:** typecheck, eslint on the changed
 files, the flow-docs anchor gate, the full suite, the render probe. Run them one
 at a time, never alongside the probe.
+
+## 2026-10-19 — last check before parking: the calibration dashboards are NOT test-pinned, but a scanner gate bounds them
+
+Re-read this pass, because it decides how the next one is sequenced:
+
+- `grep -rln "confidenceAccuracy" tests` returns nothing. No suite asserts the
+  dashboard field, so deleting `components/dashboards/learning/CalibrationSection.tsx`,
+  `components/dashboards/learning/CalibrationBar.tsx`, their mount at
+  `components/dashboards/LearningDashboard.tsx:203` and the producer at
+  `services/learning/SelfLearningService.ts:248` breaks no assertion directly.
+- But `tests/calibrationSurface.test.ts` is a scanner gate, not a UI test: its
+  block at `tests/calibrationSurface.test.ts:155` asserts that the calibration
+  feature publishes only what is consumed, and
+  `tests/calibrationSurface.test.ts:158` requires it to have "found the three
+  modules and a plausible number of exports". That is a population floor over
+  the module set. Deleting modules therefore needs the floor lowered on purpose,
+  in the same commit, with the census named in the test title — not deleted, and
+  not left failing.
+
+Turn budget ends here; nothing was started on this. The working tree is clean at
+this commit and the seven landed commits are gated as recorded above.
