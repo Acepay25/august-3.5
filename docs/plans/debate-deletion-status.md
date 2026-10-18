@@ -978,3 +978,39 @@ Order to resume in, cheapest risk first:
    useAnalysisPipeline (read :900-1470 before cutting; run render-probe after).
 3. Task #32's three observations on the non-settling tool turn.
 4. Stage 21 field census, then AGENTS.md counts.
+
+## Resumed 2026-10-18: stage 17's scope was wrong, and `ensembleProgress` is not dead code
+
+Two measurements that change what the next cut should be. Do these reads before
+deleting anything in either area.
+
+**1. Accuracy mode is fully wired, and the calibration store is infrastructure, not part of the stage.**
+`AccuracyModeModal` looked orphaned to a `from '…'` grep — it is imported through
+`React.lazy` at `App.tsx:69` and mounted at `App.tsx:2222`. The
+`accuracySubMode` / `isAccuracyModeEnabled` flags reach App, GeneralTab,
+useAppSettings, useLensAndEnsembleConfig, useProfilePersistence, useAnalysisPipeline,
+GenericAnalysisService, HybridIntelligenceService, TradeLog and 4 types files. And
+`services/validation/calibrationStore.ts` is imported by `useTradeLogging`,
+`HybridIntelligenceService`, `GlobalLearningService`, `SelfLearningService`,
+`AlgorithmicSummaryService`, `TradeValidationGate`, `VersionHistoryDashboard` plus
+5 suites — so relocating `ConfidenceLevel` / `detectTradingSession` unblocks nothing;
+the store stays. `CalibrationLedgerService` (117 lines) feeds TWO live surfaces:
+`WinRateDashboard` (`buildCalibrationLedger`, `ledgerFramingLine`, `brierQuality`) and
+`monthlyReport`'s panel grades. Deleting the ledger is therefore a feature decision,
+not a mechanical one — it removes reporting the trader can currently open.
+
+**2. `ensembleProgress` has no rendering reader but IS load-bearing on the failure path.**
+Census over all `.ts`/`.tsx`: minted at `useAnalysisPipeline.ts:888`→`:912`, patched at
+`runOutcome.ts:41-53`, stripped at the SQLite boundary (`SqliteService.ts:499`), and
+after `1bd501e` no component reads it (`App.tsx:1254` was the last, and that memo is
+gone). But the `runOutcome` branch keyed on it writes the row's TEXT —
+"The analysis was cancelled." / "The ensemble could not continue before the debate
+started." — so deleting the mint without re-keying that guard strands an empty row on
+every cancelled staged send. It is an identity check wearing a data field's clothes.
+
+**Open question worth measuring before any of this is "fixed":** the staged placeholder
+is created with `text: ''` and `isDebating: false`, and nothing renders
+`ensembleProgress`. What does the trader see on a staged (`runEnsembleEnabled` + >1
+provider) send between the send and the settle — a live row, an empty row, or nothing?
+That decides whether the ensemble-branch removal is one change or two, and it is only
+answerable in the browser: `npm run render-probe` does not assert it today.
