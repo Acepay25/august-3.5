@@ -650,3 +650,36 @@ sweep and a never-touch-a-veto case).
 `NODE_OPTIONS=--no-experimental-webstorage`, one heavy gate at a time. Read the
 log's own verdict line (`RENDER PROBE OK`, `Test Files …`), never a background
 task's exit code. Lint has a `--max-warnings 889` ratchet (now 818).
+
+## Stage 19 tranche 2 — re-measured, and the blocker is bigger than one label
+
+`verdictFinalizer.ts` (709 lines) has **no production importer**: the only file
+that imports `finalizeVerdict` is `tests/verdictFinalizer.test.ts`. `autoplayParser.ts`
+(174 lines) has zero references anywhere, including its own test.
+
+It is still not deletable yet, and the reason generalises past the scalp label. The
+finalizer is the **only application site** for roughly fifteen behaviours it imports —
+`withDetectedTradeType`, `clampProbabilityToGate`, `downgradeConfidenceForProbability`,
+`flagBannedVocabulary`, `buildRecommendationContract`, `buildRunContractStages`,
+`buildVerdictEvidencePack`, `annotateVerdictCitations`, `maybeQueueVerdictSkillDraft`,
+`appendSessionUsage`, `notifyAnalysisComplete`, `VetoLedgerService`, `shouldSkillHoldout`,
+`estimateCostUsd`, `peekTruncations`. A zero-importer file can therefore still be the
+place a capability is applied — exactly the prompt-lane trap, one level up. Tranche 2
+must decide, per behaviour: re-home it into the tool path (`runPresentTrade` already
+hosts the gate stamp since 20a2, `logTradeWithFeedback` hosts the row), or prove the
+tool path applies it already. Only then does the `rm` become honest.
+
+## Docs (this pass, mechanical)
+
+Both flow docs re-audited against the post-19 tree: **167/167 anchors land**, and all
+six peer-review defects verified fixed by grep (no dangling hashes, `plans/` cross-link,
+`services/infrastructure/messageImageStore.ts`, `ChatComposer.tsx:146`, Section D says
+starved-not-deleted). Two defects my own scanner found that the reviewer's did not: a
+stale `streamQuickResponse :3315` (the debate arm's copy — it is `:1449` now) and a
+**fabricated citation**, `rationale :617-622`, in three places — the word `rationale`
+does not appear in `automationTurn.ts`, `useAnalysisPipeline.ts` or `useAutomations.ts`
+at all. It described the notices that 20r assembles, so it now names `notices`.
+
+Blind spot worth keeping: an anchor written as a bare `:NNNN` inherits its filename
+from a *different table cell*, so a scanner that only matches `file.ts:NNNN` reports a
+clean doc while every bare ref goes unchecked. Name the file in every anchor.

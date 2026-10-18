@@ -127,7 +127,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <div class="down">↓ true = ensemble (section C) · false, casual :1469 = a branch on the thread ↓</div>
 <div class="cols">
  <div class="col"><h3>a bot thread? :1449 — yes</h3><div class="flow">
-  <div class="n run"><b>streamQuickResponse</b><i>:3315 → GenericAnalysisService, tier via resolveComposerEffort</i></div>
+  <div class="n run"><b>streamQuickResponse</b><i>:1449 → GenericAnalysisService, tier via resolveComposerEffort</i></div>
  </div></div>
  <div class="col"><h3>no — the desk, WITH its tools</h3><div class="flow">
   <div class="n run"><b>runChatSurfaceTurn</b><i>chatSurfaceTurn.ts:229 · tools from CHAT_SURFACE_TOOLS :54</i></div>
@@ -208,7 +208,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
  <div class="col"><h3>no bot — 20r</h3><div class="flow">
   <div class="n run"><b>the pipeline's OWN schedule arm</b><i>useAnalysisPipeline.ts:1339 — claimed by the schedule guard :827, before any flag-gated block</i></div>
   <div class="n run"><b>runAutomationTurn</b><i>automationTurn.ts:160 — the same runToolTurn both chat homes run, with a third sink: no bubble, no live row, the run's row written once</i></div>
-  <div class="n"><b>its own model, its own thread</b><i>automationSeatFor automationTurn.ts:93 · history = this schedule's last 3 delivered runs (MAX_HISTORY_RUNS useAutomations.ts:199) · private list <code>automationMessagesRef useAnalysisPipeline.ts:382</code>, rationale <code>:617-622</code></i></div>
+  <div class="n"><b>its own model, its own thread</b><i>automationSeatFor automationTurn.ts:93 · history = this schedule's last 3 delivered runs (MAX_HISTORY_RUNS useAutomations.ts:199) · private list <code>automationMessagesRef useAnalysisPipeline.ts:382</code>, its <code>notices</code> (a failed tool, a turn that called nothing, a refused plan)</i></div>
   <div class="n dec"><b>plan rationed</b><i>MAX_PLANS_PER_RUN :68 in the turn · MAX_PLANS_PER_DAY AutomationService.ts:113 in storage; past either, present_trade gets an ok:false receipt that names the limit</i></div>
   <div class="n store"><b>failure is written down</b><i>a tool with ok:false, a turn that called nothing, a refused plan → notices in the row text + a WARNING toast useAutomations.ts:531</i></div>
   <div class="n dec"><b>no notebook writes</b><i>AUTOMATION_UNATTENDED_DENY automationTurn.ts:54 — a cron that edits the trader's memory changes every later turn, with nobody watching</i></div>
@@ -286,15 +286,15 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>16</td><td>solo → runSeatTurn</td><td><code>:919</code> (definition <code>:592</code>)</td></tr>
 <tr><td>17</td><td>runSeatTurn → the ONE turn executor</td><td><code>runToolTurn toolTurn.ts:89</code> → <code>streamChatWithDeskTools :95</code> → <code>DeskToolsService</code> → <code>streamChatRequest</code></td></tr>
 <tr><td>18</td><td>panel → per-seat + mailbox</td><td><code>:1068</code> · <code>:996</code> · <code>:1008</code></td></tr>
-<tr><td>19</td><td>systemPromptFor → prompt</td><td><code>TRADE_CHAT_SYSTEM_PROMPT</code> + skills + strategies + profile + persona <code>TradeChatPanel.tsx:453</code></td></tr>
+<tr><td>19</td><td>systemPromptFor → prompt</td><td><code>TRADE_CHAT_SYSTEM_PROMPT</code> + skills + strategies + profile + persona <code>TradeChatPanel.tsx:453</code>, assembled <code>:475</code></td></tr>
 <tr><td>20</td><td>every dock turn → chatStore</td><td><code>mutate</code> · <code>beginRun</code></td></tr>
-<tr><td>21</td><td>handleSendMessage → the fork</td><td>the fork is gone (19): a bot thread streams <code>:1449</code>, anything else runs the tool turn <code>:1475</code>; the mode flag <code>:584</code> now only gates the hybrid pull <code>:1022</code></td></tr>
-<tr><td>22</td><td>the casual arms</td><td>a bot thread → <code>streamQuickResponse :3315</code> (plain transport); the desk → <code>runChatSurfaceTurn chatSurfaceTurn.ts:229</code> → arrow 17. Tier on both via <code>resolveComposerEffort</code>; a Full-analysis send also sets <code>requireTools</code></td></tr>
-<tr><td>23</td><td>casual frames → Message.text</td><td><code>hooks/analysisPipeline/streamThrottlers.ts:160</code>; flush precedes the settle write <code>:1521</code></td></tr>
+<tr><td>21</td><td>handleSendMessage → the fork</td><td>the fork is gone (19): a bot thread streams <code>useAnalysisPipeline.ts:1449</code>, anything else runs the tool turn <code>:1475</code>; the mode flag <code>:584</code> now only gates the hybrid pull <code>:1022</code></td></tr>
+<tr><td>22</td><td>the casual arms</td><td>a bot thread → <code>streamQuickResponse useAnalysisPipeline.ts:1449</code> (plain transport); the desk → <code>runChatSurfaceTurn chatSurfaceTurn.ts:229</code> → arrow 17. Tier on both via <code>resolveComposerEffort</code>; a Full-analysis send also sets <code>requireTools</code></td></tr>
+<tr><td>23</td><td>casual frames → Message.text</td><td><code>hooks/analysisPipeline/streamThrottlers.ts:160</code>; flush precedes the settle write <code>useAnalysisPipeline.ts:1521</code></td></tr>
 <tr><td>24</td><td>ensemble → 8 stages</td><td>see C — anchors deliberately omitted</td></tr>
 <tr><td>25</td><td>desk tools → what a caller can reach</td><td><code>executeDeskTool DeskToolsService.ts</code> (its allow-list is enforced at execution, not only at offer time)</td></tr>
 <tr><td>26</td><td>panel tools → chart echo</td><td><code>executePanelTool chatTurnRunner.ts</code> → <code>onToolAction</code></td></tr>
-<tr><td>27</td><td>automation tick → runAutomation</td><td><code>useAutomations.ts:411</code>, fork on <code>config.botId</code> <code>:431</code>; the no-bot path takes the pipeline’s OWN schedule arm <code>useAnalysisPipeline.ts:1339</code> → <code>runAutomationTurn automationTurn.ts:160</code>, writing the private list <code>automationMessagesRef :382</code> and settling through <code>onMessage useAutomations.ts:531</code> — characterized in <code>tests/automationRouteCharacterization.test.tsx</code></td></tr>
+<tr><td>27</td><td>automation tick → runAutomation</td><td><code>useAutomations.ts:411</code>, fork on <code>config.botId</code> <code>:431</code>; the no-bot path takes the pipeline’s OWN schedule arm <code>useAnalysisPipeline.ts:1339</code> → <code>runAutomationTurn automationTurn.ts:160</code>, writing the private list <code>automationMessagesRef useAnalysisPipeline.ts:382</code> and settling through <code>onMessage useAutomations.ts:531</code> — characterized in <code>tests/automationRouteCharacterization.test.tsx</code></td></tr>
 <tr><td>28</td><td>bot routine → injected stream</td><td><code>botRoutine.ts</code> ← <code>useAutomations</code> (reuses 22's bot arm)</td></tr>
 <tr><td>29</td><td>rooms → groupRounds</td><td><code>useAgentGroups</code> → <code>streamQuickResponse</code></td></tr>
 <tr><td>30</td><td>review passes / propose_skill → draft → approval → skill</td><td><code>draftGates.ts</code> → <code>skillApproval</code> — the post-mortem leg is <b>starved, not deleted</b> (see D)</td></tr>
