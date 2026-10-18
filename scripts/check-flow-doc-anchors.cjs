@@ -363,8 +363,8 @@ const rep = check(all);
 const unique = new Set(all.map(a => `${a.file}:${a.line}`));
 const problems = [...rep.missingFile, ...rep.outOfRange, ...rep.blank];
 // Two newer checks measure rather than refuse, on purpose. Both found real
-// weakness the moment they were written: undefined
-// 23 name a symbol that is not on the cited line (several are genuinely wrong —
+// weakness the moment they were written: 61 citations land on a comment line, and
+// 23 named a symbol that was not on the cited line (several were genuinely wrong —
 // a run of arrow-table rows cites the previous row's line, so `planPanelTurn`
 // points at `createDebateMailbox`). A gate that goes red on the day it ships gets
 // deleted, not fixed, so each starts at its measured count, ratchets down only,
