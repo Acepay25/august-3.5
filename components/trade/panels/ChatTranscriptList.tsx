@@ -21,25 +21,18 @@ import VerdictAudit from '../../analysis/VerdictAudit';
 import InlineVerdict from '../../analysis/InlineVerdict';
 import MemoryProvenanceStrip from '../../chat/MemoryProvenanceStrip';
 import KeyLevelsCard from '../KeyLevelsCard';
+import { proposalStateOf as sharedProposalStateOf, rememberProposalState } from '../../../services/trade/proposalDisposition';
 import { CopyChip, FadingText, PinChip, RetryChip } from '../../shared/chatChips';
 
-/** Per-entry disposition of a model proposal card ('logged' / 'dismissed').
- *  Lives at MODULE scope keyed by entry id, NOT in component state: the
- *  dock unmounts whenever the user leaves the trade surface, and a remount
- *  reset the flag — a second click on "Log this trade" then logged the
- *  SAME plan a second time. Bounded: proposal cards are rare; drop the
- *  oldest insertions when the cap is reached. */
-const PROPOSAL_STATE_MAX = 500;
-const proposalDisposition = new Map<string, 'logged' | 'dismissed'>();
-const setProposalDisposition = (entryId: string, state: 'logged' | 'dismissed'): void => {
-    if (proposalDisposition.size >= PROPOSAL_STATE_MAX) {
-        const oldest = proposalDisposition.keys().next();
-        if (!oldest.done) proposalDisposition.delete(oldest.value);
-    }
-    proposalDisposition.set(entryId, state);
-};
-/** Test hook: forget every recorded proposal disposition. */
-export const __clearProposalStateForTests = (): void => { proposalDisposition.clear(); };
+/** Per-entry disposition of a model proposal card ('logged' / 'dismissed')
+ *  moved to `services/trade/proposalDisposition` when the Chat surface grew a
+ *  card of its own. It is STILL module scope, so a 'logged' plan survives a dock
+ *  unmount exactly as before — the difference is that both homes now read one
+ *  map keyed by the row id `entriesForSession` already shares between them, so
+ *  logging a plan on the chart marks it logged in Chat rather than leaving a
+ *  second clickable card behind. Re-exported: existing test hooks import this
+ *  name from here. */
+export { __clearProposalStateForTests } from '../../../services/trade/proposalDisposition';
 
 interface ChatTranscriptListProps {
     /** The merged conversation rows (a bot session is a VIEW of the
@@ -93,7 +86,7 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
      *  the same plan. proposalTick is the repaint trigger. */
     const proposalStateOf = (id: string): 'logged' | 'dismissed' | undefined => {
         void proposalTick;
-        return proposalDisposition.get(id);
+        return sharedProposalStateOf(id);
     };
     // "Is any LATER entry still streaming?" — the retry/copy chips on a USER
     // bubble stay hidden while the whole following generation runs (a PANEL
@@ -264,7 +257,7 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                                         // half — the map lookup makes a re-click after a dock
                                         // unmount/remount (fresh component, same store entry)
                                         // a NO-OP instead of a second journal row.
-                                        if (proposalDisposition.get(e.id) || awaitingLogEntryId) return;
+                                        if (sharedProposalStateOf(e.id) || awaitingLogEntryId) return;
                                         const stamped = e.proposal!;
                                         setAwaitingLogEntryId(e.id);
                                         // The row is written only once the gate stamp has
@@ -280,10 +273,10 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                                         catch { logged = false; }
                                         finally { setAwaitingLogEntryId(null); }
                                         if (!logged) return;
-                                        setProposalDisposition(e.id, 'logged');
+                                        rememberProposalState(e.id, 'logged');
                                         setProposalTick(t => t + 1);
                                     }}
-                                    onCancel={() => { if (proposalDisposition.get(e.id)) return; setProposalDisposition(e.id, 'dismissed'); setProposalTick(t => t + 1); }}
+                                    onCancel={() => { if (sharedProposalStateOf(e.id)) return; rememberProposalState(e.id, 'dismissed'); setProposalTick(t => t + 1); }}
                                 />
                             )}
                             {e.proposal && proposalStateOf(e.id) === 'logged' && <TradeProposalLoggedRow />}

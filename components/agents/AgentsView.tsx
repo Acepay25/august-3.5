@@ -68,6 +68,9 @@ import StatusPill from '../ui/StatusPill';
 import { NAV_RAIL_EXPANDED_PX } from '../shell/NavRail';
 import NavExpandButton from '../shell/NavExpandButton';
 import InlineVerdict from '../analysis/InlineVerdict';
+import TradeProposalCard, { TradeProposalLoggedRow } from '../trade/panels/TradeProposalCard';
+import { proposalStateOf, rememberProposalState } from '../../services/trade/proposalDisposition';
+import type { TradeProposal } from '../../services/trade/proposedTrade';
 
 interface AgentsViewProps {
     username: string;
@@ -88,6 +91,11 @@ interface AgentsViewProps {
      *  The rejection is the only thing that never reaches a transcript row, and
      *  it is reported as a toast for that reason. */
     onAnalyze: (prompt: string, images: PipelineImage[]) => Promise<void>;
+    /** Log a plan the model PRESENTED on this surface — the same journal entry
+     *  the Chart AI dock writes, through the same App handler. Without it the
+     *  card still shows (the plan is the model's, not the journal's), but its
+     *  Log button is hidden rather than clicking into nothing. */
+    onLogProposedTrade?: (proposal: TradeProposal) => void | Promise<boolean>;
     /** Where a run that never started says why. The pipeline writes its own rows
      *  — including its error bubble — once it is running, so the only silent
      *  failures left are the pre-flight ones ("already running", "no providers"),
@@ -430,7 +438,7 @@ interface BotRow {
 
 const AgentsView: React.FC<AgentsViewProps> = ({
     username, bots, groups, messages, selection, onSelect, onNewBot, onNewGroup,
-    onSendBotTurn, onAnalyze, onAnalysisError, onStopRun, analysisRunning = false, renderGroup, coachCount, workingBotId,
+    onSendBotTurn, onAnalyze, onLogProposedTrade, onAnalysisError, onStopRun, analysisRunning = false, renderGroup, coachCount, workingBotId,
     lastOpenedMap = {}, modelPicker, effortPicker, modelFallback = null, destinationMenu, accountRow,
     railExpanded = true, onToggleRailExpanded, statusCluster, surfaceSwitch,
     attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup,
@@ -497,6 +505,20 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     // rehomed): the pill shows only when the trader has scrolled away from
     // the newest row, and one click returns.
     const [showJump, setShowJump] = useState(false);
+    /** Re-render trigger for the module-scope proposal dispositions: the
+     *  decision itself lives in `services/trade/proposalDisposition` so it
+     *  survives a surface switch AND is shared with the Chart AI dock, which
+     *  reads the same map for the same row id. This only makes React repaint
+     *  the card. */
+    const [proposalTick, setProposalTick] = useState(0);
+    /** Which row's Log click is awaiting the gate stamp. Local on purpose: it is
+     *  transient, and a pending await that outlived the surface would disable a
+     *  button that no longer exists. */
+    const [awaitingProposalRowId, setAwaitingProposalRowId] = useState<string | null>(null);
+    const proposalStateFor = (id: string): 'logged' | 'dismissed' | undefined => {
+        void proposalTick;
+        return proposalStateOf(id);
+    };
     const onScrollerScroll = useCallback((): void => {
         const el = scroller.current;
         if (!el) return;
@@ -1324,6 +1346,39 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                                     `chatRowFrom` is the one place that decides. */}
                                                 {!isUser && <InlineVerdict analysis={row.analysis}
                                                     evidencePack={m.evidencePack} runContract={m.runContract} />}
+                                                {/* A plan the model PRESENTED here gets the SAME decision card the
+                                                    dock renders, fed off the canonical row. One disposition store,
+                                                    keyed by the row id both homes share: logging on the chart marks
+                                                    this card logged, and a re-click is a no-op rather than a second
+                                                    journal row. */}
+                                                {!isUser && m.proposal && proposalStateFor(m.id) === undefined && (
+                                                    <TradeProposalCard
+                                                        proposal={m.proposal}
+                                                        canLog={!!onLogProposedTrade}
+                                                        awaitingLog={awaitingProposalRowId === m.id}
+                                                        onLog={async () => {
+                                                            if (!onLogProposedTrade) return;
+                                                            if (proposalStateOf(m.id) || awaitingProposalRowId) return;
+                                                            const stamped = m.proposal!;
+                                                            setAwaitingProposalRowId(m.id);
+                                                            let logged: boolean;
+                                                            // A log that threw is NOT a log: the card stays live so the
+                                                            // trader can retry instead of seeing ✓ Logged over a missing row.
+                                                            try { logged = (await onLogProposedTrade(stamped)) !== false; }
+                                                            catch { logged = false; }
+                                                            finally { setAwaitingProposalRowId(null); }
+                                                            if (!logged) return;
+                                                            rememberProposalState(m.id, 'logged');
+                                                            setProposalTick(t => t + 1);
+                                                        }}
+                                                        onCancel={() => {
+                                                            if (proposalStateOf(m.id)) return;
+                                                            rememberProposalState(m.id, 'dismissed');
+                                                            setProposalTick(t => t + 1);
+                                                        }}
+                                                    />
+                                                )}
+                                                {!isUser && m.proposal && proposalStateFor(m.id) === 'logged' && <TradeProposalLoggedRow />}
                                             </ChatTranscriptRow>
                                         );
                                     })}

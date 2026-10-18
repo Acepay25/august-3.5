@@ -287,21 +287,39 @@ describe('desk tool loop — model chart actions', () => {
         expect(chunks.join('')).toBe('Marking the range. Done — the line is on your chart.');
     });
 
-    it('offers the chart-action definitions only when an executor is wired', async () => {
-        scriptStream([{ text: 'no tools needed here.' }]);
-        // No executePanelTool → draw_on_chart is NOT among the offered tools.
-        await collect(streamChatWithDeskTools(config, [...baseMessages], { enabled: true, defaultSymbol: 'BTCUSDT', allowedTools: ['get_price_snapshot'] }));
-        const offered = (streamMock.mock.calls[0][2] as { tools?: Array<{ function: { name: string } }> }).tools ?? [];
-        expect(offered.map(t => t.function.name)).not.toContain('draw_on_chart');
+    it('offers a chart-action tool only when a canvas dispatches it AND the seat lists it', async () => {
+        const offeredNames = async (opts: Record<string, unknown>): Promise<string[]> => {
+            streamMock.mockClear();
+            scriptStream([{ text: 'no tools needed here.' }]);
+            await collect(streamChatWithDeskTools(config, [...baseMessages], {
+                enabled: true, defaultSymbol: 'BTCUSDT', ...opts,
+            } as never));
+            const offered = (streamMock.mock.calls[0][2] as { tools?: Array<{ function: { name: string } }> }).tools ?? [];
+            return offered.map(t => t.function.name);
+        };
 
-        streamMock.mockClear();
-        scriptStream([{ text: 'no tools needed here.' }]);
-        await collect(streamChatWithDeskTools(config, [...baseMessages], {
-            enabled: true, defaultSymbol: 'BTCUSDT', allowedTools: ['get_price_snapshot'],
+        // No executor wired → the canvas tools are not on the menu at all.
+        expect(await offeredNames({ allowedTools: ['get_price_snapshot'] })).not.toContain('draw_on_chart');
+
+        // Executor AND the seat's own allow-list name it — the dock's shape
+        // (`TRADE_TOOLS` lists all eight), so a canvas turn is unchanged.
+        expect(await offeredNames({
+            allowedTools: ['get_price_snapshot', 'draw_on_chart'],
             executePanelTool: async () => null,
-        }));
-        const offeredWithPanel = (streamMock.mock.calls[0][2] as { tools?: Array<{ function: { name: string } }> }).tools ?? [];
-        expect(offeredWithPanel.map(t => t.function.name)).toContain('draw_on_chart');
+        })).toContain('draw_on_chart');
+
+        // Executor wired but the allow-list does NOT name it: the Chat surface
+        // presents a plan and nothing else. The executor enforces the same list
+        // (`executeDeskTool` refuses what is not on it), so offering it here
+        // would hand the model a tool whose every call comes back refused —
+        // the dead affordance, moved one layer down into the prompt.
+        const chatShaped = await offeredNames({
+            allowedTools: ['get_price_snapshot', 'present_trade'],
+            executePanelTool: async () => null,
+        });
+        expect(chatShaped).toContain('present_trade');
+        expect(chatShaped).not.toContain('draw_on_chart');
+        expect(chatShaped).not.toContain('mark_trade_levels');
     });
 });
 

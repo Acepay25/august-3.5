@@ -10,15 +10,16 @@
  * canonical `Message` — the record the rail, the Journal and the learning loop
  * read. The sink below is that difference and nothing else.
  *
- * Tools are the canvas-free half of the dock's set: market lookups, indicator
- * studies, the journal, past sessions, the notebook, skills, search, the
- * screener. The eight `CHART_ACTION_TOOL_DEFS` (draw / draw_detected /
- * mark_trade_levels / clear_chart_drawings / present_trade / watch_price /
- * wake_me / cancel_watch) are NOT offered here, and that is not a shortcut:
- * `streamChatWithDeskTools` puts those definitions in front of a seat only when
- * the caller passes `executePanelTool`, and this surface has no canvas, no live
- * mark and no level-watch to arm. Offering a tool the executor cannot honour is
- * the dead-affordance bug moved one layer down into the prompt.
+ * Tools are the canvas-free half of the dock's set plus `present_trade`: market
+ * lookups, indicator studies, the journal, past sessions, the notebook, skills,
+ * search, the screener, and a plan the trader can log. The other seven
+ * `CHART_ACTION_TOOL_DEFS` (draw / draw_detected / mark_trade_levels /
+ * clear_chart_drawings / watch_price / wake_me / cancel_watch) are NOT offered
+ * here, and that is not a shortcut: `streamChatWithDeskTools` lists a
+ * chart-action definition only when the caller dispatches it AND the seat's own
+ * allow-list names it, and this surface has no canvas to draw on and no chart to
+ * arm a level-watch against. Offering a tool the executor would have to refuse
+ * is the dead-affordance bug moved one layer down into the prompt.
  *
  * BOTS ARE NOT HERE. A bot-bound thread in this surface keeps
  * `streamQuickResponse` (stage 20 owner ruling): the roster answers with its
@@ -35,6 +36,7 @@ import { CASUAL_CHAT_SYSTEM_PROMPT } from '../../constants/prompts/chatPrompts';
 import { TASK_BUDGETS } from '../providers/taskBudgets';
 import { resolveComposerEffort, type ReasoningEffort } from '../providers/reasoningControls';
 import { runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
+import { runPresentTrade } from './presentTradeTool';
 import { userContentWithImage } from './chatTurnRunner';
 import { saveToolPayload } from './toolPayloadStore';
 import { appendToolActions } from '../../utils/toolActions';
@@ -59,6 +61,11 @@ export const CHAT_SURFACE_TOOLS = [
     'write_memory_note', 'get_notebook_map', 'propose_skill', 'revise_skill', 'propose_strategy',
     'amend_memory', 'forge_tool',
     'remember', 'read_memory', 'forget',
+    // The verdict IS a tool call in the post-debate app (stage 20's premise), so
+    // the desk must be able to present a plan wherever the trader asks. The
+    // shared executor draws nothing and arms no watch for this sink — and says
+    // so in the receipt rather than promising a [HARNESS SIGNAL] that cannot come.
+    'present_trade',
     // Anything that can be clipped must be able to be re-read.
     'read_tool_output',
 ];
@@ -174,6 +181,38 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
         reasoningEffort: resolveComposerEffort(req.effort),
         chartInterval: req.interval,
         trades: req.trades,
+        // The desk CAN present a plan here, and this is the only chart-action
+        // tool it may do: anything else returns null and falls through to the
+        // core executor, whose allow-list refuses it. The sink writes the
+        // canonical row and owns NEITHER a canvas NOR the level-watch, so the
+        // receipt the model reads says exactly that instead of promising a
+        // [HARNESS SIGNAL] that would never arrive.
+        executePanelTool: async (call: Parameters<NonNullable<ToolTurnRequest['transport']['executePanelTool']>>[0]) => {
+            if (call.name !== 'present_trade') return null;
+            return runPresentTrade(
+                {
+                    call,
+                    symbol: req.symbol || call.arguments?.symbol?.toString() || 'BTCUSDT',
+                    trades: req.trades,
+                    drawnPrice: null,
+                    crossCanvas: false,
+                    canvasNote: '',
+                    // This home has no chart to arm a level-watch against, so the
+                    // receipt says "NO level-watch is armed" instead of promising
+                    // a [HARNESS SIGNAL]. Explicit, not inferred from a missing
+                    // callback: the watch is unavailable HERE, not unwired.
+                    watchable: false,
+                },
+                {
+                    setProposal: proposal => req.patch(m => ({ ...m, proposal })),
+                    setGate: gate => req.patch(m => (m.proposal ? { ...m, proposal: { ...m.proposal, gate } } : m)),
+                    // A Stop on this turn cancels its own gate scan: a verdict
+                    // that arrives for a run the trader cut must not resurrect
+                    // the card it was capped for.
+                    onAbort: fn => req.signal.addEventListener('abort', fn, { once: true }),
+                },
+            );
+        },
     };
 
     return runToolTurn({

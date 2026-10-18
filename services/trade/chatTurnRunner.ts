@@ -34,12 +34,11 @@ import { buildTradeChatContext, describeChartSnapshotForModel } from './tradeCha
 import {
     describeDrawingsForModel, drawingFromChartTool, drawingsFromDetectedPattern, drawingsFromLevelTool, type ChartDrawing,
 } from './chartDrawings';
-import { parseTradeProposal, computeRrRatio } from './proposedTrade';
+import { runPresentTrade } from './presentTradeTool';
 import { runToolTurn, type ToolTurnEvents, type ToolTurnRequest } from './toolTurn';
-import { beginGateScan, cancelGateScan, gateReceiptLine } from './proposalGate';
 import { scoreDrawnLevel, levelAccuracy, describeLevelAccuracyForModel } from './tradePlanLevels';
 import * as levelWatch from './levelWatchService';
-import { describePlanForModel, staleLevelsAtArm, type WatchPlan } from './tradePlanLevels';
+import { describePlanForModel, type WatchPlan } from './tradePlanLevels';
 
 import { recordBotTurnOutcome } from '../agents/botLearning';
 import * as watchService from './watchService';
@@ -397,84 +396,44 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 ? `Cancelled ${n} watch${n === 1 ? '' : 'es'}. Still armed: ${left.join(', ') || 'none'}.`
                 : `Nothing to cancel (ids: ${ids.join(', ') || '—'}). Still armed: ${left.join(', ') || 'none'}.`);
         }
-        // present_trade: draw the plan, ARM the harness level-watch on it,
-        // AND surface a Log-this-trade card on the streaming entry.
+        // present_trade: draw the plan, arm the harness level-watch, and surface a
+        // "Log this trade" card on the streaming entry. The TRANSITION lives in
+        // services/trade/presentTradeTool — the Chat surface presents the same plan
+        // through the same rules — so everything below is the DOCK'S SINK: four
+        // writes onto the running entry, plus the canvas and the watch only this
+        // surface owns.
         if (name === 'present_trade') {
-            const { proposal, error } = parseTradeProposal({ ...args, symbol: args.symbol || turn.symbol });
-            if (error || !proposal) return receipt(false, `present_trade rejected: ${error ?? 'invalid proposal'}`);
-            // The DOCK generates the stable plan id first: it keys the level-watch,
-            // the receipt's level ids, "Log this trade" onto the journal row, AND
-            // the one in-flight gate scan for this plan.
-            const planId = `${baseOf(proposal.symbol).toLowerCase()}-${Date.now().toString(36)}`;
-            proposal.planId = planId;
-            // The scan starts NOW but is not awaited here. Awaiting it put a
-            // market-data fetch plus an OHLCV pull per timeframe in front of
-            // drawing the plan, so the card appeared seconds later on a path that
-            // used to touch no network at all. The LOG path awaits the same
-            // promise (`ensureStamp`), which is where the cap actually has to bind.
-            const scan = beginGateScan(planId, proposal, trades);
-            void scan.then(gate => {
-                // Patch only while this exact row still carries this plan. If the
-                // turn was stopped, the session closed, or the user cancelled the
-                // card, the map finds nothing and the late answer is a no-op —
-                // mutate() likewise warns rather than resurrecting a session.
-                chatStore.mutate(turn.sid, s => ({
-                    ...s,
-                    entries: s.entries.map(e => (e.id === turn.entryId && e.proposal?.planId === planId
-                        ? { ...e, proposal: { ...e.proposal, gate } } : e)),
-                }));
-            });
-            const { drawings } = drawingsFromLevelTool({ entry: proposal.entry, stopLoss: proposal.stopLoss, takeProfits: proposal.takeProfits }, { drawnPrice });
-            addModelDrawings?.(drawings, turn);
-            const plan: WatchPlan = {
-                planId, symbol: proposal.symbol, direction: proposal.direction,
-                entry: proposal.entry, stopLoss: proposal.stopLoss, takeProfits: proposal.takeProfits,
-            };
-            // The honest disposition of the watch TradeView is about to arm:
-            // arm() REFUSES a plan already through its SL/target at the live
-            // mark (staleLevelsAtArm is the same gate), so the receipt must
-            // not promise a watch that will never ping. CROSS-CANVAS MIRROR
-            // OF TradeView.handlePlanPresented: off-view the viewed mark is
-            // NOT the turn's coin's live price, so arm() gets a null anchor
-            // (plain first-tick touch test, never a stale-refuse) — the
-            // receipt must evaluate the gate with the SAME null, or it lies
-            // "REFUSED… no HARNESS SIGNAL will come" about a watch that arms
-            // fine in the background-turn case this refactor exists for.
-            const armPrice = crossCanvas ? null : (typeof drawnPrice === 'number' && Number.isFinite(drawnPrice) && drawnPrice > 0 ? drawnPrice : null);
-            const stale = staleLevelsAtArm(plan, armPrice);
-            onPlanPresented?.(plan, turn);
-            // THE TURN's entry — not "whatever is streaming in the viewed
-            // session": the card must land in this run's transcript even if
-            // the user switched sessions mid-stream.
-            if (turn.entryId) chatStore.mutate(turn.sid, s => ({ ...s, entries: s.entries.map(e => (e.id === turn.entryId ? { ...e, proposal } : e)) }));
-            // Planned R:R comes from utils/riskReward — the nearest target, not
-            // whatever the model happened to list first. Reading takeProfits[0]
-            // here made the receipt disagree with the card and the journal on
-            // any plan whose targets came back out of order, and the model then
-            // repeated the receipt's number to the trader.
-            const ratio = computeRrRatio(proposal);
-            const rr = ratio > 0 ? ratio.toFixed(1) : '—';
-            const levelIds = [`${proposal.planId}:ENTRY`, `${proposal.planId}:SL`,
-                ...proposal.takeProfits.map((_, i) => `${proposal.planId}:TP${i + 1}`)];
-            // Only reachable on the VIEWED canvas (crossCanvas ⇒ armPrice is
-            // null ⇒ stale is empty), so the price named here is genuinely
-            // the coin's live mark.
-            const staleWatchLine = `WARNING: the harness REFUSED to watch this plan — price ${drawnPrice} is already through a stop/target, so every level (${stale.join(', ')}) latched as already-reached and NO [HARNESS SIGNAL] will come for them. Do not claim a watch is live; if the user still wants one, re-present a plan whose levels sit ahead of price.`;
-            const watchLine = stale.length > 0
-                ? staleWatchLine
-                : `The harness now watches these levels — ids ${levelIds.join(', ')} — and will send you a [HARNESS SIGNAL] when one is reached; refer to levels by those ids and never re-announce one that already fired.`;
-            // A Stop on this run kills the scan too: an answer that arrives for a
-            // turn the user already cancelled must not resurrect its card.
-            chatStore.getController(turn.sid)?.signal.addEventListener('abort',
-                () => cancelGateScan(planId), { once: true });
-            // The receipt never states a probability the scan has not yet bounded.
-            // Saying "Recorded as 72%" here and capping it at log time would put
-            // two numbers for the same plan in the model's own context.
-            const gateLine = proposal.gate
-                ? gateReceiptLine(proposal.gate)
-                : 'Gate: scanning now — no probability is shown on the card or recorded on the row until the scan answers, and the logged plan is capped by it.';
-            return receipt(true, `Presented ${proposal.direction} ${proposal.symbol} @ ${proposal.entry}, SL ${proposal.stopLoss}, TP ${proposal.takeProfits.join('/')}, R:R ~${rr}:1. ${gateLine} The user sees a "Log this trade" card. ${watchLine}${canvasNote}`);
+            let mintedPlanId = '';
+            return runPresentTrade(
+                { call, symbol: turn.symbol, trades, drawnPrice, crossCanvas, canvasNote, watchable: true },
+                {
+                    setProposal: p => {
+                        mintedPlanId = p.planId ?? '';
+                        // THE turn's entry — not "whatever is streaming in the viewed
+                        // session": the card must land in this run's transcript even if
+                        // the user switched sessions mid-stream.
+                        if (turn.entryId) chatStore.mutate(turn.sid, s => ({ ...s, entries: s.entries.map(en => (en.id === turn.entryId ? { ...en, proposal: p } : en)) }));
+                    },
+                    setGate: gate => {
+                        // Patch only while this exact row still carries this plan. If the
+                        // turn was stopped, the session closed, or the user cancelled the
+                        // card, the map finds nothing and the late answer is a no-op.
+                        if (!mintedPlanId) return;
+                        chatStore.mutate(turn.sid, s => ({
+                            ...s,
+                            entries: s.entries.map(en => (en.id === turn.entryId && en.proposal?.planId === mintedPlanId
+                                ? { ...en, proposal: { ...en.proposal, gate } } : en)),
+                        }));
+                    },
+                    ...(addModelDrawings ? { addDrawings: (list: ChartDrawing[]) => addModelDrawings(list, turn) } : {}),
+                    ...(onPlanPresented ? { armPlan: (plan: WatchPlan) => onPlanPresented(plan, turn) } : {}),
+                    // A Stop on this run kills the scan too: an answer that arrives for a
+                    // turn the user already cancelled must not resurrect its card.
+                    onAbort: fn => { chatStore.getController(turn.sid)?.signal.addEventListener('abort', fn, { once: true }); },
+                },
+            );
         }
+
         if (name === 'clear_chart_drawings') {
             const scope = args.scope === 'all' ? 'all' : 'model';
             if (!clearModelDrawings && !clearAllDrawings) return receipt(false, 'clear_chart_drawings: no chart is attached to this session.');

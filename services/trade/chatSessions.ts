@@ -474,6 +474,12 @@ export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
         speaker: undefined,
         reasoning: traces.length > 0 ? traces.join('\n\n') : undefined,
         actions: m.toolActions,
+        // `proposal` is deliberately NOT projected. The dock keeps its card on the
+        // RUNTIME entry only (`chatStore.LiveEntry`, not `StoredChatEntry`) so a
+        // presented plan never rides the byte-capped session blob — and a plan
+        // presented on the Chat surface renders from its canonical
+        // `Message.proposal` THERE. One card per plan, in the home that asked for
+        // it; the disposition both homes consult is keyed by the shared row id.
         image: m.images?.[0],
         // The pipeline path's frozen work time, so a dock row built from a
         // pipeline Message still shows its "Analyzed for Ns" after a reload.
