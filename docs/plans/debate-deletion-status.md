@@ -1746,3 +1746,52 @@ heaviest in `components/trade/TradeChatPanel.tsx` (21), `App.tsx` (13),
 `services/trade/chatTurnRunner.ts`, the persisted ensemble choice and the seat pickers are
 one unit — removing part of it leaves a picker that selects a roster nothing consumes. Not
 started here rather than left half-deleted.
+
+## 2026-10-19 — #19's referent moved: what survives is a live multi-seat chat, not the debate branch
+
+Measured before deleting anything, because "the ensemble branch" no longer names what it did
+when it was ruled on.
+
+**The panel is reachable and working.** `components/trade/TradeChatPanel.tsx:937` renders a
+**"New panel · up to 5 models"** control, and a local `addSession(kind)` creates the session;
+`chatTurnRunner.ts:989` builds the seats, refuses below two usable seats (`:990`), opens a
+`createDebateMailbox` (`:1006`), plans each turn with `planPanelTurn` (`:1018`), gives every
+seat its own mandate ("You are \"X\" on a 5-seat chart panel", `:1058`), streams each seat into
+its own bubble, and parses `@Name` mentions so a seat can pull another in mid-turn (`:1118`).
+The picker's own copy says it plainly: "pick up to 5 models or agents; **they answer together
+and talk to each other**". Nothing about that is starved, unreachable or vestigial: no
+production code calls `createSession('panel', …)`, but the UI does it through the panel's own
+`addSession`, and the trader can start one with two clicks.
+
+So the ruling "delete the ensemble branch, I want this to be a normal chat" was given against
+the ensemble *analysis* debate — the engine, the moderator, the consensus pass, the seat
+completeness refusals — and all of that is already gone. What is left under the same name is a
+different product surface: a multi-agent room on the chart dock, built on the Agents mailbox
+that the owner has not ruled on, sharing machinery with the `group` session kind that stays.
+
+Why this is not the same call as `savedAnalyses`: that store had no writer and no UI, so
+deleting it removed plumbing around data nothing could reach. This one has a control, a picker,
+a streaming renderer and a working turn. Deleting it removes the ability to have several models
+or agents answer one question together on the chart — which is the "they answer together"
+feature, not a leftover of the debate. Recorded here rather than executed silently, per
+"feature shape is theirs", and because the ledger's earlier census ("132 refs across 27 files")
+described the size of the job, not what the job costs the trader.
+
+**What deleting it would actually take, now measured:** `SessionKind` loses `'panel'`
+(`services/trade/chatSessions.ts:84`) plus `panelModels`/`PanelSeatRef` and their load-time
+sanitiser (`:258`); `services/trade/chatPanel.ts` dies whole (its only consumer is the seat
+loop); the seat arm of `chatTurnRunner.send` (`:989`–`:1140`) and both `kind === 'panel'`
+supervisor/seat-model reads (`:820`, `:1179`); `TradeChatPanel`'s `isPanel`, the picker overlay
+(`:1016`–`:1044`), `ready`'s two-seat rule (`:823`), `panelCount` (`:1138`) and the "New panel"
+button (`:937`); the ◆ marker in `ChatHistoryPalette.tsx:81`; the persisted ensemble flag across
+`App.tsx`, `useProfilePersistence`, `useUserProfileLoader`, `useMarketData`,
+`useCatalogReconcile`, `useLensAndEnsembleConfig`, `types/user.ts` and `automationTurn.ts`; and
+three suites that pin it (`tests/chatSessions.test.ts`, `tests/chatPanel.test.ts`,
+`tests/analysisPipelineSendIdentity.test.ts`).
+
+**Decision wanted, in product terms:** does the chart's chat keep the ability to have several
+models or agents answer together, or is the dock a one-model chat and multi-agent conversation
+belongs only to the Agents surface? Either answer is one word. If DELETE, say so and this is
+two gated passes (the panel surface, then the ensemble flag), not a trim. If KEEP, then #19 is
+closed as scoped and the remaining flow-doc sentences about "the ensemble branch" get reworded
+to name the panel, which is what they now actually refer to.
