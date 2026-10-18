@@ -1040,3 +1040,24 @@ re-run for this change — it asserts row counts per conversation, and this remo
 a row.
 
 Gate re-run after 336c887 (the placeholder removal): render-probe OK, PROBE_EXIT=0, zero pageerrors — the probe counts rendered rows per conversation, which is exactly what this change alters, so the removal is browser-verified, not just suite-verified. tsc and the full suite were green before it (477 files / 4713 tests).
+
+## The ensemble refusals are gone (this commit)
+
+Measured before cutting: exactly ONE model answers a send (`provider`, resolved from
+the composer selection and falling back to `enabledProviders[0]`), so the
+lens-role completeness check, the "two seats share a model" check and the
+`TEAM_MAX_SEATS` ceiling all refused runs over seats the run never used. The
+moderator readiness check was NOT deleted — a scheduled run really does take its
+seat from that config — it was scoped to `isAutomationRun` and reworded away from
+"The debate cannot start", which described a debate that cannot exist.
+
+Side effects, all verified: `missingAnalystRoles` / `hasCompleteAnalystAssignments`
+had no other consumer, so the destructure narrowed; `ANALYST_ROLE_DEFINITIONS` and
+`TEAM_MAX_SEATS` imports went; `buildModelsUsedRecord` (one record per SEAT) lost its
+last production caller, so the module and its two unit tests were deleted — no
+test asserted any of the removed refusals, which is worth noting: three
+user-visible blocks shipped with no pin on them.
+
+No suite pinned the removed blocks; tsc clean after the cut, targeted suites
+(analysisPipelineStages, automationRouteCharacterization, automationToolTurn,
+featuresAreWired) 55 tests green.
