@@ -277,8 +277,16 @@ const problems = [...rep.missingFile, ...rep.outOfRange, ...rep.blank];
 // deleted, not fixed, so each starts at its measured count, ratchets down only,
 // and prints its list on every run — the same shape as UNATTRIBUTED_CEILING below.
 // Both targets are 0. Never raise either number; fix the citation.
+// Seven of the original 23 WERE wrong and are now fixed (`onRunAnalysis`
+// App:2532→2485, `onAnalyze` 2628→2581, `runEnsembleEnabled` 556→535,
+// `MAX_HISTORY_RUNS` 199→191, `AccountRow` 2675→2637, `allowedTools` 641→634,
+// `streamChatWithDeskTools` 3684→3754), which is the proof the rule fires on the
+// drift it was written for. The 16 left are a known FALSE-POSITIVE class, not doc
+// errors: when one sentence wraps, the symbol sits on the neighbour of its number,
+// so pairing by line is unsound. Fix that by zipping symbols to anchors per
+// paragraph, and only then drive this to 0.
 const COMMENT_CEILING = 68;
-const SYMMISS_CEILING = 23;
+const SYMMISS_CEILING = 16;
 
 console.log(`flow docs: ${all.length} anchor references, ${unique.size} unique, across ${DOCS.join(' + ')}`);
 console.log(`cited-line quality: ${rep.comment.length} land on a comment line (ceiling ${COMMENT_CEILING}), ${rep.symMiss.length} miss the symbol their own line names (ceiling ${SYMMISS_CEILING}) — both ratchet to 0`);
