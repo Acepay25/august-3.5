@@ -22,7 +22,7 @@ sections B and C moved again when stage 19 deleted the engine.
 flowchart TD
     H["index.html"] --> I["index.tsx — error handlers first :23 :43"]
     I --> S["StrictMode › ErrorBoundary › ToastProvider › App :73-79"]
-    S --> SP["splash leaves #root :86-92 — what e2e and boot-probe wait on"]
+    S --> SP["splash leaves #root index.tsx:86-92 — boot-probe.cjs:120 waits for it gone, smoke.spec.ts:55 :141 assert count 0"]
     SP --> APP["App :188 — surfaces render from :2493 down"]
     APP --> US["useSurface — august_surface_v1 :15, valid set :16"]
     US --> UR["useSurfaceRouter — openJournal :75, hash read :101, serialize :158-160"]
