@@ -92,7 +92,6 @@ describe('dbService message-image GC wiring', () => {
             username: 'alice',
             conversations: [{ id: 'restored', messages: [] }],
             tradeLog: [],
-            savedAnalyses: [],
             tradeSummaries: [],
             finalTradeSummary: null,
             settings: { activeFrameworks: [] },

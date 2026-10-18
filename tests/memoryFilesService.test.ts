@@ -71,7 +71,6 @@ const makeProfile = (overrides: Partial<UserProfile> = {}): UserProfile => ({
   username: 'rober',
   conversations: [],
   tradeLog: [makeTrade(), makeTrade({ id: 'trade-2', outcome: TradeOutcome.LOSS, pnlPercent: -2.1 })],
-  savedAnalyses: [],
   tradeSummaries: [],
   finalTradeSummary: null,
   settings: { activeFrameworks: [], isHybridIntelligenceEnabled: true },

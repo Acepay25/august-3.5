@@ -683,10 +683,6 @@ export const validateImportData = (data: any): { valid: boolean; errors: string[
         errors.push('tradeLog must be an array');
     }
 
-    if (data.savedAnalyses && !Array.isArray(data.savedAnalyses)) {
-        errors.push('savedAnalyses must be an array');
-    }
-
     if (data.settings && typeof data.settings !== 'object') {
         errors.push('settings must be an object');
     }
@@ -717,7 +713,6 @@ export const getImportPreview = (data: any): {
     conversationCount: number;
     messageCount: number;
     tradeCount: number;
-    savedAnalysesCount: number;
 } => {
     const messageCount = data.conversations?.reduce((sum: number, conv: any) =>
         sum + (conv.messages?.length || 0), 0) || 0;
@@ -726,8 +721,7 @@ export const getImportPreview = (data: any): {
         username: data.username || 'Unknown',
         conversationCount: data.conversations?.length || 0,
         messageCount,
-        tradeCount: data.tradeLog?.length || 0,
-        savedAnalysesCount: data.savedAnalyses?.length || 0
+        tradeCount: data.tradeLog?.length || 0
     };
 };
 

@@ -23,7 +23,6 @@ const baseArgs = (): UseProfilePersistenceArgs => ({
     toast: { error: vi.fn() },
     conversationHistory: [],
     loggedTrades: [],
-    savedAnalyses: [],
     tradeSummaries: [],
     finalTradeSummary: null,
     globalMemory: undefined,

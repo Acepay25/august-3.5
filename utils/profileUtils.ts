@@ -8,7 +8,6 @@ export const isValidUserProfile = (obj: any): obj is UserProfile => {
         typeof obj.username === 'string' &&
         Array.isArray(obj.conversations) &&
         Array.isArray(obj.tradeLog) &&
-        Array.isArray(obj.savedAnalyses) &&
         typeof obj.settings === 'object' &&
         obj.settings !== null &&
         Array.isArray(obj.settings.activeFrameworks);
@@ -29,12 +28,6 @@ export const isValidUserProfile = (obj: any): obj is UserProfile => {
         }
     }
 
-    if (obj.savedAnalyses.length > 0) {
-        const firstAnalysis = obj.savedAnalyses[0];
-        if (!firstAnalysis || typeof firstAnalysis.id !== 'string' || typeof firstAnalysis.userPrompt !== 'string' || typeof firstAnalysis.analysis !== 'object') {
-            return false;
-        }
-    }
 
     return true;
 };

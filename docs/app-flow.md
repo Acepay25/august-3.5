@@ -22,7 +22,7 @@ sections B and C moved again when stage 19 deleted the engine.
 flowchart TD
     H["index.html"] --> I["index.tsx — error handlers first :23 :43"]
     I --> S["StrictMode › ErrorBoundary › ToastProvider › App :73-79"]
-    S --> SP["splash leaves #root index.tsx:86-92 — boot-probe.cjs:120 waits for it gone, smoke.spec.ts:55 :141 assert count 0"]
+    S --> SP["splash leaves #root index.tsx:86-92 — boot-probe.cjs:120 waits for it gone, smoke.spec.ts:55 :140 assert count 0"]
     SP --> APP["App.tsx:189 — surfaces render from App.tsx:2493 down"]
     APP --> US["useSurface hooks/useSurface.ts:15 key, :16 valid set"]
     US --> UR["useSurfaceRouter hooks/useSurfaceRouter.ts:75 openJournal, :101 hash read, :159 serialize"]
@@ -343,9 +343,12 @@ keeps what it already carries, but nothing grows them (`03fc0d5`).
 | screenshots · reasoning traces | IDB store `images` (`services/infrastructure/messageImageStore.ts`) · own db (`services/infrastructure/ThinkingStoreService.ts`) |
 | reduce-motion preference | `desk_idle_motion_v1_&lt;user&gt;` — the desk floor is deleted, the key is not, renaming it silently resets every profile |
 
-`savedAnalyses` still travels through profile persistence, SQLite and backups, but
-**has no writer** — the Journal's Saved tab and `SavedAnalyses.tsx` were deleted
-(`591f735`), and clearing the store itself is stage 21.
+`savedAnalyses` is deleted outright (stage 21): the `UserProfile` field, its state, the
+SQLite column read and write section, the backup validation and the `savedAnalysesCount`
+preview. The Journal's Saved tab and `SavedAnalyses.tsx` had already gone (`591f735`), and
+nothing had written the field since. The `saved_analyses` **table** is still created and
+still holds whatever rows history wrote — dropping a table is a migration on the owner's
+live journal, which is a different act from deleting the code that read it.
 
 A presented plan is remembered on its row, not in a store of its own: the dock keeps
 `proposal` on the runtime `LiveEntry` only, the Chat surface on `Message.proposal`

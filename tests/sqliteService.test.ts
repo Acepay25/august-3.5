@@ -170,7 +170,6 @@ const baseProfile = (username: string): UserProfile => ({
   conversations: [],
   tradeLog: [],
   tradeSummaries: [],
-  savedAnalyses: [],
   finalTradeSummary: null,
 });
 
@@ -204,12 +203,11 @@ beforeEach(async () => {
 });
 
 describe('SqliteService profile persistence', () => {
-  it('round-trips a profile with trades, summaries and saved analyses', async () => {
+  it('round-trips a profile with trades and summaries', async () => {
     const profile: UserProfile = {
       ...baseProfile('bob'),
       tradeLog: [trade('t1', 'WIN') as any, trade('t2', 'LOSS') as any],
       tradeSummaries: [{ id: 's1', summaryText: 'good setup', timestamp: new Date().toISOString() }],
-      savedAnalyses: [{ id: 'a1', analysis: trade('t1', 'WIN').analysis as any, userPrompt: 'chart', timestamp: new Date().toISOString() }],
     };
 
     await sqlite.sqliteSaveUserProfile(profile);
@@ -218,7 +216,6 @@ describe('SqliteService profile persistence', () => {
     expect(loaded?.tradeLog).toHaveLength(2);
     expect(loaded?.tradeLog.find(t => t.id === 't1')?.outcome).toBe('WIN');
     expect(loaded?.tradeSummaries[0].summaryText).toBe('good setup');
-    expect(loaded?.savedAnalyses[0].userPrompt).toBe('chart');
   });
 
   it('deletes rows absent from the saved profile (deletion sync)', async () => {

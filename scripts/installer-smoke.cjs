@@ -275,7 +275,6 @@ async function seedProfile(page) {
                 username: 'Probe User',
                 conversations: [],
                 tradeLog: [],
-                savedAnalyses: [],
                 tradeSummaries: [],
                 finalTradeSummary: null,
                 settings: {

@@ -70,7 +70,6 @@ interface SectionFingerprints {
     trades?: string;
     conversations?: string;
     tradeSummaries?: string;
-    savedAnalyses?: string;
 }
 
 const lastSavedSections = new Map<string, SectionFingerprints>();
@@ -457,22 +456,6 @@ export const sqliteGetUserProfile = async (username: string): Promise<UserProfil
         timestamp: row.timestamp
     }));
 
-    // Get saved analyses
-    const analysesResult = await db.query(
-        'SELECT * FROM saved_analyses WHERE username = ?',
-        [username]
-    );
-    const savedAnalyses = (analysesResult.values || []).map(row => {
-        const meta = safeParseJson(row.meta, {});
-
-        return {
-            id: row.id,
-            analysis: safeParseJson(row.analysis, null),
-            userPrompt: row.userPrompt || '',
-            timestamp: row.timestamp,
-            ...meta // Restore extended fields (models used, etc)
-        }
-    });
 
     return {
         username: userData.username,
@@ -487,8 +470,7 @@ export const sqliteGetUserProfile = async (username: string): Promise<UserProfil
         lastActiveConversationId: userData.lastActiveConversationId, // Restore state
         tradeLog: trades,
         conversations,
-        tradeSummaries,
-        savedAnalyses
+        tradeSummaries
     };
 };
 
@@ -681,32 +663,6 @@ const saveUserProfileUnlocked = async (profile: UserProfile): Promise<void> => {
             staged.tradeSummaries = summariesJson;
         }
 
-        const analysesJson = JSON.stringify(profile.savedAnalyses || []);
-        if (prev.savedAnalyses !== analysesJson) {
-            // Sync saved analyses
-            for (const analysis of profile.savedAnalyses || []) {
-                // Extract meta (everything not in core columns)
-                const { id, analysis: content, userPrompt, timestamp, ...meta } = analysis;
-
-                await db.run(`
-                    INSERT OR REPLACE INTO saved_analyses (id, username, analysis, userPrompt, timestamp, meta)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                `, [
-                    id,
-                    profile.username,
-                    JSON.stringify(content),
-                    userPrompt,
-                    timestamp,
-                    JSON.stringify(meta) // Save extended fields like modelUsed
-                ]);
-            }
-            await deleteAbsentRows(
-                'saved_analyses',
-                profile.username,
-                (profile.savedAnalyses || []).map(a => a.id)
-            );
-            staged.savedAnalyses = analysesJson;
-        }
 
         await db.execute('COMMIT');
         transactionOpen = false;

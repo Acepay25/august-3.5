@@ -574,7 +574,6 @@ const App: React.FC = () => {
     // it. Thirteen dead bindings were removed when this surface shrank.
     const {
         loggedTrades, setLoggedTrades,
-        savedAnalyses, setSavedAnalyses,
         tradeSummaries, setTradeSummaries,
         finalTradeSummary, setFinalTradeSummary,
         updateCandidate, setUpdateCandidate,
@@ -1356,7 +1355,7 @@ const App: React.FC = () => {
     // heavy DATA save, light SETTINGS save, mid-run heartbeat, unload flush.
     useProfilePersistence({
         activeUsername, activeConversationId, setSaveStatus, toast, profileReadyRef,
-        conversationHistory, loggedTrades, savedAnalyses, tradeSummaries,
+        conversationHistory, loggedTrades, tradeSummaries,
         finalTradeSummary, globalMemory, insightKnowledgeBase,
         memoryConfig, memoryModel,
         isAnalysisInProgress,
@@ -1850,7 +1849,6 @@ const App: React.FC = () => {
         setConversationHistory,
         setActiveConversationId,
         setLoggedTrades,
-        setSavedAnalyses,
         setTradeSummaries,
         setFinalTradeSummary,
         setGlobalMemory,

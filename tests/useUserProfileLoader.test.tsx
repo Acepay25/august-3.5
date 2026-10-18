@@ -139,7 +139,6 @@ const createMockArgs = (overrides: Partial<UseUserProfileLoaderArgs> = {}): UseU
     setConversationHistory: vi.fn(),
     setActiveConversationId: vi.fn(),
     setLoggedTrades: vi.fn(),
-    setSavedAnalyses: vi.fn(),
     setTradeSummaries: vi.fn(),
     setFinalTradeSummary: vi.fn(),
     setGlobalMemory: vi.fn(),
@@ -192,12 +191,10 @@ describe('useUserProfileLoader', () => {
 
         expect(args.handleCancelAnalysis).toHaveBeenCalled();
         expect(args.setLoggedTrades).toHaveBeenCalledWith([]);
-        expect(args.setSavedAnalyses).toHaveBeenCalledWith([]);
         expect(args.setTradeSummaries).toHaveBeenCalledWith([]);
         expect(args.setFinalTradeSummary).toHaveBeenCalledWith(null);
         expect(dbService.saveUserProfile).toHaveBeenCalledWith('new_user', expect.objectContaining({
             tradeLog: [],
-            savedAnalyses: [],
         }));
     });
 
@@ -206,7 +203,6 @@ describe('useUserProfileLoader', () => {
             username: 'alice',
             conversations: [{ id: 'c1', title: 'Conv 1', messages: [] }],
             tradeLog: [{ id: 't1', symbol: 'BTCUSDT' }],
-            savedAnalyses: [],
             tradeSummaries: [],
             finalTradeSummary: 'Good performance',
             settings: {
@@ -285,7 +281,6 @@ describe('useUserProfileLoader', () => {
             username: 'user1',
             conversations: [],
             tradeLog: [],
-            savedAnalyses: [],
             tradeSummaries: [],
             settings: {},
         } as any);
@@ -319,7 +314,7 @@ describe('useUserProfileLoader', () => {
 
     it("switch path drops the outgoing profile's live singletons before loading the incoming one", async () => {
         vi.mocked(dbService.getUserProfile).mockResolvedValue({
-            username: 'bob', conversations: [], tradeLog: [], savedAnalyses: [],
+            username: 'bob', conversations: [], tradeLog: [],
             tradeSummaries: [], settings: {},
         } as any);
         const args = createMockArgs();
@@ -348,14 +343,14 @@ describe('useUserProfileLoader', () => {
             username: 'bob',
             conversations: [{ id: 'bob-conv', title: 'Bob', messages: [] }],
             tradeLog: [{ id: 'bob-t1', symbol: 'BTCUSDT' }],
-            savedAnalyses: [], tradeSummaries: [], settings: {},
+            tradeSummaries: [], settings: {},
             lastActiveConversationId: 'bob-conv',
         };
         const aliceProfile = {
             username: 'alice',
             conversations: [{ id: 'alice-conv', title: 'Alice', messages: [] }],
             tradeLog: [{ id: 'alice-t1', symbol: 'ETHUSDT' }],
-            savedAnalyses: [], tradeSummaries: [], settings: {},
+            tradeSummaries: [], settings: {},
             lastActiveConversationId: 'alice-conv',
         };
         let releaseAlice: (p: unknown) => void = () => {};
@@ -406,7 +401,7 @@ describe('useUserProfileLoader', () => {
         // remaining two inits run for 'alice' (they would re-init the
         // OUTGOING profile over Bob's).
         vi.mocked(dbService.getUserProfile).mockResolvedValue({
-            username: 'bob', conversations: [], tradeLog: [], savedAnalyses: [],
+            username: 'bob', conversations: [], tradeLog: [],
             tradeSummaries: [], settings: {},
         } as any);
         let releaseAliceOverrides: () => void = () => {};

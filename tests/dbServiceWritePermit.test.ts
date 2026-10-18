@@ -59,7 +59,6 @@ const profile = (username: string): UserProfile => ({
     conversations: [],
     tradeLog: [],
     tradeSummaries: [],
-    savedAnalyses: [],
     finalTradeSummary: null,
 });
 

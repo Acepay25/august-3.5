@@ -159,7 +159,6 @@ const baseProfile = (username: string, extra: Partial<UserProfile> = {}): UserPr
     conversations: [],
     tradeLog: [],
     tradeSummaries: [],
-    savedAnalyses: [],
     finalTradeSummary: null,
     ...extra,
 });

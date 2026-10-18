@@ -47,7 +47,7 @@ const MODELS = [
         });
         const tx = db.transaction('userProfiles', 'readwrite');
         tx.objectStore('userProfiles').put({
-            username: 'Probe User', conversations: [], tradeLog: [], savedAnalyses: [],
+            username: 'Probe User', conversations: [], tradeLog: [],
             tradeSummaries: [], finalTradeSummary: null, settings: { activeFrameworks: [] },
         });
         await new Promise((resolve) => { tx.oncomplete = () => resolve(); });

@@ -47,7 +47,7 @@ async function seed(page) {
         });
         const tx = db.transaction('userProfiles', 'readwrite');
         tx.objectStore('userProfiles').put({
-            username: 'Probe User', conversations: [], tradeLog: [], savedAnalyses: [],
+            username: 'Probe User', conversations: [], tradeLog: [],
             tradeSummaries: [], finalTradeSummary: null, settings: { activeFrameworks: [] },
         });
         await new Promise((resolve) => { tx.oncomplete = () => resolve(); });
@@ -95,7 +95,7 @@ async function seed(page) {
                 row('t3', 260, 'WIN', 'swing', 'Long', 'ETHUSDT'),
                 row('t4', 240, 'ENTRY_NOT_HIT', 'swing', 'Short', 'SOLUSDT'),
             ],
-            savedAnalyses: [], tradeSummaries: [], finalTradeSummary: null,
+            tradeSummaries: [], finalTradeSummary: null,
             settings: { activeFrameworks: [] },
         });
         await new Promise((resolve) => { setTimeout(resolve, 200); });
