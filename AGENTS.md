@@ -6,7 +6,7 @@ This file contains guidelines and commands for agentic coding agents working in 
 
 August Trading is a React + TypeScript trading analysis application that uses multiple AI
 providers to deliver trading insights, pattern recognition, and post-trade analysis.
-The app features ensemble AI debates, accuracy mode validation, hybrid intelligence with
+The app features ensemble-style multi-seat analysis, trade-plan validation, hybrid intelligence with
 real-time market data, comprehensive trade logging with learning capabilities, and an
 Electron desktop shell (with Capacitor for mobile). Code lives at the repository root
 (no `src/` directory).
@@ -114,8 +114,8 @@ competing for the machine.
 ├── hooks/                  # Custom hooks (useAnalysisPipeline, useTradeLogging, …)
 ├── services/               # AI provider integration & business logic
 │   ├── providers/          # GenericProviderService + GenericAnalysisService (the only
-│   │                       #   provider clients — legacy per-provider services were removed),
-│   │                       #   ensembleService (the debate engine)
+│   │                       #   provider clients — legacy per-provider services and the
+│   │                       #   debate engine were removed)
 │   ├── analysis/           # Technical analysis, Monte Carlo (+ web worker), desk tools
 │   ├── backtesting/        # Backtesting, model performance, live backtest, outcomeEngine
 │   ├── learning/           # Skills, pattern memory, rules, insights, global memory
@@ -128,7 +128,8 @@ competing for the machine.
 │   │                       #   view and its seat layout were deleted (2026-10-18).
 │   │                       #   No market data lives here.
 │   ├── automation/         # Scheduled automations (cron + run history)
-│   ├── validation/         # Accuracy-mode validation, gate scoring
+│   ├── validation/         # Trade-plan validation + gate scoring (the service
+│   │                       #   keeps its Accuracy* name; the Accuracy Mode toggle is gone)
 │   ├── ui/                 # Autopilot, debates, price alerts
 │   └── infrastructure/     # SQLite, Preferences, ProviderConfigService, backups
 ├── constants/              # models, prompts (per-domain files), promptRegistry
@@ -298,7 +299,6 @@ import { sanitizeAIResponse } from './utils/sanitizers';
 ## Testing Notes
 
 `npm run test` (Vitest, jsdom). Key suites:
-- `tests/debateFlow.test.ts` — ensemble debate generators with a mocked transport
 - `tests/financialMath.test.ts` — leverage math, probability clamping
 - `tests/tradeAnalysisSchema.test.ts` — AI-boundary schema coercion
 - `tests/outcomeAutopilot.test.ts` — TP/SL auto-detection
