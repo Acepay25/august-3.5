@@ -2,8 +2,8 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**248 unique anchors verified, 0 unattributed** — plus two quality ceilings, 61 citations
-that land on a comment line and 12 whose named symbol is not on the cited line (16 before the arrow list's symbols were paired with the citation on the next line), which
+**251 unique anchors verified, 0 unattributed** — plus two quality ceilings, 61 citations
+that land on a comment line and 9 whose named symbol is not on the cited line (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
 carrying more than one citation, and a sentence that wraps puts its number out of reach of
 its symbol, so four copies of one wrong number were fixed by hand after the gate called it

@@ -443,7 +443,7 @@ deleted (`verdictFinalizer.test.ts`, `harnessFeatures.test.ts`,
 `lensPipelineValidation.test.ts`); (3) the settings surface and the five Preference keys
 (`ENSEMBLE_MODEL_SELECTION`, `LAST_MODERATOR_PICK`, `CUSTOM_ENSEMBLE_PROMPT`,
 `CUSTOM_LENS_PROMPTS`, `ANALYST_LENS_CONFIG`) and the `isEnsembleEnabled` flag itself,
-`scripts/installer-smoke.cjs:289` and `scripts/render-probe.cjs`'s `lens` chunk; (4) the
+`scripts/installer-smoke.cjs:289` and the `lens` chunk in `scripts/render-probe.cjs`; (4) the
 debate-only `Message` fields. Item counts in (2) came from a research agent and are
 **not yet verified by me line-by-line** — check each before deleting.
 
@@ -850,7 +850,7 @@ reachable from `App.tsx`.
 The three "feature questions" in the previous section all turned out to be
 mechanical, and the proof is that no user-visible output changed:
 
-- `streamThrottlers`: `useAnalysisPipeline.ts:397` destructures **only**
+- `streamThrottlers`: `useAnalysisPipeline.ts:34` destructures **only**
   `throttledCasualStream`. The debate-round, provisional-verdict,
   ensemble-progress and opening-thinking writers had no consumer left, so the
   file is now one updater + one dep, and the `debateResume` edge went with them.
@@ -1292,7 +1292,7 @@ toggle itself is persisted (`hooks/useProfilePersistence.ts`, `hooks/useUserProf
 (`tests/analysisPipelineSendIdentity.test.ts`, `tests/automationRouteCharacterization.test.tsx`,
 `tests/useProfilePersistence.test.tsx`). Deleting the hybrid pull also changes which coin the
 learning step receives, because the packet still feeds `assemblePipelineMemoryContext` at
-`hooks/useAnalysisPipeline.ts:1047`.
+`hooks/useAnalysisPipeline.ts:1021` (the call; the import sits at :33).
 
 **Correction to what this doc and the flow doc currently assert about the A/B lane.** It is not
 "starved with no caller" in the product sense: `beginPromptLane` has no caller, so
@@ -1360,7 +1360,7 @@ grep-and-delete:
   means today's default behaviour, not today's opt-in behaviour — a user who enabled ensemble
   loses the ticker unless it is re-parented. That re-parenting is a feature decision, not a trim.
 - `runEnsembleEnabled` is not only read in the hook: it is passed **as a positional argument** at
-  `hooks/useAnalysisPipeline.ts:626` into a callee alongside `runLensConfig` and
+  `hooks/useAnalysisPipeline.ts:602` into a callee alongside `runLensConfig` and
   `runEnsembleSelection`, so removing it changes that signature and its other callers, and the
   argument order is load-bearing. Each such site drags a second file into the diff, which is how a
   "22-file" task is really 30+ and why it needs a session with room for several typecheck loops
