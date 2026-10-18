@@ -1595,6 +1595,28 @@ size. `savedAnalyses` carried a real table
 (`services/infrastructure/SqliteService.ts:214`, still created), a read, a
 write-and-diff and an id list — a persisted-schema deletion, which is why the
 table was kept and only the code removed. See the stage-21 note above.
+
+## 2026-10-19 — a fourth orphan from stage 19: the desk-tool cache lost its invalidation
+
+`AGENTS.md` claimed `clearDeskToolCache()` was "called at each debate start". Grepped: the only
+call sites left were its own definition and ~30 test files — no production caller at all. That
+was the debate start's deletion taking the invalidation with it and no gate noticing. The
+consequence is not cosmetic: the cache holds the market reads (order book, liquidations,
+derivatives, market packet, all timeframes) for 30s, so with no per-run clear a run could be
+answered with the PREVIOUS run's order book whenever the gap between them exceeded the TTL —
+which is unbounded. A live reader with a dead writer, the same class as the two writes and the
+chart verdict found earlier in this stage.
+
+Fixed at the choke point instead of the boundary: `streamChatWithDeskTools` now clears before it
+runs the loop, so no caller has to remember. Two assertions pin it in `tests/deskToolCache.test.ts`
+— the clear appears in that generator before `runDeskToolLoop(`, and no production caller clears it
+instead (the second half is what stops the wiring drifting back to a forgettable site). RED PROOF:
+stripping the call makes the first index `-1`, which the test asserts greater than `-1`. Verified
+against the file itself, not by argument. `AGENTS.md` and the `toolArtifactStore` comment now say
+"every tool turn" rather than "every debate".
+
+Gates: typecheck, eslint 0 errors, vitest 476 files / **4710** tests (the two new ones),
+render-probe zero pageerrors.
 with backup validation and the SQLite round-trip test to update. `postMortem` is
 the largest reader set.
 

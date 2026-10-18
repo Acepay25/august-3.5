@@ -3762,6 +3762,15 @@ export async function* streamChatWithDeskTools(
         return;
     }
 
+    // One tool turn, one cache. The reads this caches are market reads a seat
+    // re-checks inside a single run; a NEW run must not be handed the previous
+    // run's order book. The clear used to sit at the debate start and went with
+    // the engine, leaving a live cache with no invalidation — which silently
+    // widened the 30s TTL to "any time between two runs". It lives here because
+    // every tool turn passes through this generator, and a caller-side clear is
+    // a clear a future caller can forget.
+    clearDeskToolCache();
+
     const nativeTools = config.apiFormat === 'chat_completions';
     const enriched = withDeskToolsSystemPrompt(messages, nativeTools);
     const {
