@@ -1030,10 +1030,9 @@ bubble in the transcript. That is the fourth user-visible consequence of this
 stage; the other three (journal label, usage ledger, chart verdict) are earlier in
 this file.
 
-Also measured: `options.resumeMessageId` has NO caller in the tree, so the resume
-branch is the only writer of `isDebating: true` and is unreachable plumbing — left
-in place deliberately, because deleting the option is an API change this commit
-does not need. The three refusals (:731, :761, :794) still stand and
+Also measured: the resume branch was the ONLY writer of `isDebating: true`, and
+`options.resumeMessageId` has no caller anywhere in the tree — so it went with the
+placeholder, and nothing in the app can now mark a row as debating. The three refusals (:731, :761, :794) still stand and
 are the next cut.
 
 Gates: tsc clean; full vitest 477 files / 4713 tests green. render-probe to be
