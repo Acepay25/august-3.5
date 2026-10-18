@@ -683,3 +683,17 @@ at all. It described the notices that 20r assembles, so it now names `notices`.
 Blind spot worth keeping: an anchor written as a bare `:NNNN` inherits its filename
 from a *different table cell*, so a scanner that only matches `file.ts:NNNN` reports a
 clean doc while every bare ref goes unchecked. Name the file in every anchor.
+
+## Tranche 2, first slice landed
+
+`hooks/analysisPipeline/autoplayParser.ts` (174 lines) is deleted: zero references
+anywhere — no importer of the module, no caller of `parseAutoplayTranscriptChunk`,
+no test. Nothing to re-home, so it went ahead of the decision. `tsc --noEmit` clean
+and `featuresAreWired`, `harnessFeatures`, `scalpDetection`,
+`automationRouteCharacterization`, `analysisPipelineSendIdentity` green.
+
+Still blocked: `verdictFinalizer.ts` (the ~15 application sites above), and the engine
+cluster it feeds. Also two comments now make a false claim — `components/agents/AgentsView.tsx:245`
+and `components/shared/ChatTranscriptRow.tsx:18` both cite `verdictFinalizer.ts` as where a
+verdict payload is written, and it has no production caller. Not edited this pass (no turn to
+verify the sentence around them); fix with the re-home.
