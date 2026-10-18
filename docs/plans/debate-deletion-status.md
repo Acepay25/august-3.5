@@ -92,7 +92,8 @@ session does not re-derive them:
   `draw_on_chart`) plus a frozen `PanelTurnContext` so a background turn still
   writes into its own transcript.
 - The Chat surface's casual turn is the OTHER transport:
-  `streamQuickResponse(...)` at `useAnalysisPipeline.ts:3197` — eight positional
+  `streamQuickResponse(...)` at `useAnalysisPipeline.ts` line 3197 (pre-deletion
+numbering; the file is shorter now) — eight positional
   args, separate `onReasoning` channel, no tool loop. That is the asymmetry stage 20
   removes.
 - Swapping the call is small; the three things that are NOT obvious and need
@@ -233,7 +234,8 @@ reading is expensive to undo.
   lags is distinguishable from one that never follows.
 - **20b (#27)** — the Chat surface's non-bot branch runs a tool turn:
   `services/trade/chatSurfaceTurn.ts` (tools from `CHAT_SURFACE_TOOLS`, no
-  canvas tools), split from the bot arm at `useAnalysisPipeline.ts:3211`.
+  canvas tools), split from the bot arm at `useAnalysisPipeline.ts` line 3211
+(pre-deletion numbering).
   Bots stay chat-only by ruling: `useBotMailbox` / `botRoutine` / `groupRounds`
   keep `streamQuickResponse`.
 - **20b-B (#35)** — `present_trade` lifted out of the dock into
@@ -1233,7 +1235,8 @@ is the design constraint:
 Requirements for whoever rebuilds it, all measured: attribute a bare `:NNN` to
 the nearest filename on the SAME line, and only fall back to the paragraph when
 the line has none; resolve `App:NNNN` as an alias for App.tsx; ignore numbers
-inside a quoted withdrawn claim (`App.tsx:2766` at docs/app-flow.md:425 is
+inside a quoted withdrawn claim (`App.tsx` line 2766, cited at
+docs/app-flow.md:425 as a mistake this doc already retracted, is
 correctly cited as a mistake this doc already retracted); floor the parsed
 population so a dead regex fails loudly; and carry a reach control that must
 catch both an out-of-range and a blank-line anchor before "0 problems" counts.

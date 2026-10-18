@@ -22,7 +22,10 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const DOCS = ['docs/app-flow.md', 'docs/app-flow.html'];
+// The stage ledger is scanned too: it carries file:line claims about the code it
+// is deleting, and an unchecked one ages faster than the flow doc's because the
+// ledger is written the same day the code moves.
+const DOCS = ['docs/app-flow.md', 'docs/app-flow.html', 'docs/plans/debate-deletion-status.md'];
 const SKIP_DIRS = ['node_modules', '.git', 'dist', 'dist_electron', 'android', 'ios', 'coverage', '.probe-artifacts', '.github'];
 // The printable view cites the root component as `App:2445`.
 const ALIAS = { App: 'App.tsx' };
@@ -169,7 +172,13 @@ const problems = [...rep.missingFile, ...rep.outOfRange, ...rep.blank];
 console.log(`flow docs: ${all.length} anchor references, ${unique.size} unique, across ${DOCS.join(' + ')}`);
 console.log(`reach controls: ${controls.length ? 'FAILED — ' + controls.join('; ') : 'all 9 passed'}`);
 problems.forEach(m => console.log(`  STALE ${m}`));
-unattributed.forEach(m => console.log(`  UNATTRIBUTED ${m}`));
+// The stage ledger is checked for ACCURACY (its anchors must still land on a real,
+// non-blank line) but not for ATTRIBUTION: a run log cites TCP ports (`:3000`) and
+// planted example numbers (`:1234`) that are not file:line claims at all.
+const attributable = unattributed.filter(m => m.startsWith('docs/app-flow.'));
+const ledgerBare = unattributed.length - attributable.length;
+attributable.forEach(m => console.log(`  UNATTRIBUTED ${m}`));
+if (ledgerBare) console.log(`  (${ledgerBare} bare numbers in the stage ledger are ports or examples, not anchors — not counted)`);
 
 // Ratchet, not a cliff. Every line number in the flow docs now names its file,
 // so the ceiling is zero: a bare `:NNN` with no path on its line is unverifiable
@@ -178,11 +187,13 @@ unattributed.forEach(m => console.log(`  UNATTRIBUTED ${m}`));
 // qualifying them is what found six of them pointing at the wrong line.
 const UNATTRIBUTED_CEILING = 0;
 
-if (unique.size < 120) { console.log(`FAIL — only ${unique.size} unique anchors parsed; the scanner is broken, not the docs`); process.exit(1); }
+// 180, not 120: the flow docs alone measure 145, so a floor under that would let
+// the stage ledger silently drop out of the scan and still report "OK".
+if (unique.size < 180) { console.log(`FAIL — only ${unique.size} unique anchors parsed; the scanner is broken, not the docs`); process.exit(1); }
 if (controls.length) { console.log('FAIL — the gate cannot see its own planted defects'); process.exit(1); }
 if (problems.length) { console.log(`FLOW DOC ANCHORS FAIL — ${problems.length} stale anchor(s)`); process.exit(1); }
-if (unattributed.length > UNATTRIBUTED_CEILING) {
-    console.log(`FLOW DOC ANCHORS FAIL — ${unattributed.length} unattributed numbers, ceiling ${UNATTRIBUTED_CEILING}. Lower the ceiling as you qualify them; never raise it.`);
+if (attributable.length > UNATTRIBUTED_CEILING) {
+    console.log(`FLOW DOC ANCHORS FAIL — ${attributable.length} unattributed numbers, ceiling ${UNATTRIBUTED_CEILING}. Lower the ceiling as you qualify them; never raise it.`);
     process.exit(1);
 }
-console.log(`FLOW DOC ANCHORS OK — ${unique.size} anchors verified, ${unattributed.length} unattributed (ceiling ${UNATTRIBUTED_CEILING}, ratchets down only)`);
+console.log(`FLOW DOC ANCHORS OK — ${unique.size} anchors verified, ${attributable.length} unattributed (ceiling ${UNATTRIBUTED_CEILING}, ratchets down only)`);
