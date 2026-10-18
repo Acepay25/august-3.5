@@ -139,27 +139,6 @@ export interface RunAnalystStats {
   completionTokens?: number;
 }
 
-/** A candidate provider the user can pick to replace an analyst that dropped
- *  mid-debate. Transient UI state — never persisted. */
-export interface ReplacementCandidate {
-  providerId: string;
-  displayName: string;
-  modelId: string;
-}
-
-/** Mid-debate analyst-replacement offer: the debate generator suspends and
- *  shows this banner until the user picks a candidate or skips. */
-export interface ReplacementOffer {
-  /** Analyst that dropped out mid-debate. */
-  droppedName: string;
-  /** Round during which the drop happened. */
-  round: number;
-  /** Ready providers that can step in (active + moderator excluded). */
-  candidates: ReplacementCandidate[];
-  /** providerId the user picked; undefined until a choice is made. */
-  chosenProviderId?: string;
-}
-
 export interface Message {
   id: string;
   role: MessageRole;
@@ -174,7 +153,6 @@ export interface Message {
   postMortem?: string;
   postMortemCreatedAt?: string; // Timestamp for post-mortem analysis
   postMortemImages?: string[]; // To store screenshots from the post-mortem upload
-  postMortemDebateTurns?: DebateTurn[]; // NEW: Holds the debate for the post-mortem
   outcome?: TradeOutcome;
   ocrModelUsed?: string;
   correctedEntry?: string; // To store the user-provided correct entry price
@@ -197,20 +175,6 @@ export interface Message {
   // Mode Tracking
   isLensMode?: boolean; // Was this analysis created with Analyst Lenses enabled?
   tradingStyle?: Exclude<TradingStyle, 'auto'>; // Trading style used for this analysis
-  isPostMortem?: boolean; // Flag to identify if this message is a Post-Mortem Analysis bubble
-  // Data for retrying a failed post-mortem analysis
-  postMortemFailedCandidate?: {
-    message: Message;
-    outcome: TradeOutcome;
-    feedback?: {
-      pnlAmount?: number;
-      correctedEntry?: string;
-      correctedStopLoss?: string;
-      correctedTakeProfit?: string;
-    };
-    summaries?: string[];
-    imageUrls?: string[];
-  };
   /** Failed-run retry: id of the user message whose prompt + charts can
    *  rebuild and re-dispatch the run (renders a Retry button on the error
    *  bubble). Undefined on successful runs. */
@@ -225,9 +189,6 @@ export interface Message {
   /** The composer slash-mode chip that produced this reply (persisted
    *  provenance: 'research' replies are pipeline reports, not chat). */
   composerMode?: 'research' | 'visualize';
-  /** Transient mid-debate analyst-replacement offer (generator suspends until
-   *  the user chooses). Cleared when the debate ends or is cancelled. */
-  replacementOffer?: ReplacementOffer;
   /** User pinned this setup — the header tray's "Pinned" list. The field keeps
    *  its legacy `watched` name because it is persisted in stored conversations.
    *  Autopilot still tracks every PENDING Long/Short the same way. */
