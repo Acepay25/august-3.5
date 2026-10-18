@@ -65,13 +65,13 @@ flowchart TD
     BOT --> TR["streamQuickResponse — GenericAnalysisService.ts (bots stay chat-only)"]
     AN --> HSM["handleSendMessage — useAnalysisPipeline.ts:608"]
     FA --> HSM
-    HSM --> D3{"isChartAnalysisRequested :1476 AND runEnsembleEnabled, guard :1490"}
+    HSM --> D3{"runEnsembleEnabled :671 — the guard :1492. Nothing tests the wording any more"}
     D3 -->|true| ENS["ensemble analysis — section C (stage 19's target)"]
-    D3 -->|false, casual :3155| SPLIT{"a bot thread? :3211"}
+    D3 -->|false, casual :3157| SPLIT{"a bot thread? :3213"}
     SPLIT -->|yes| TR
     SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:145, tools from CHAT_SURFACE_TOOLS :50, prompt CASUAL_CHAT_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:24"]
     CST --> TT
-    TR --> LW["live writer — applyCasualStreamUpdate streamThrottlers.ts:160, peel per frame; flush BEFORE the settle write :3287"]
+    TR --> LW["live writer — applyCasualStreamUpdate streamThrottlers.ts:160, peel per frame; flush BEFORE the settle write :3289"]
     CST --> LW
     ENS --> MERGE
     LW --> MERGE["entriesForSession — chatSessions.ts:531, parameter literally named canonical :533"]
@@ -111,6 +111,20 @@ The card a presented plan draws lives on whichever row presented it — the dock
 entry or `Message.proposal` — and the logged/dismissed disposition is one module
 map for both ([proposalDisposition.ts:22](../services/trade/proposalDisposition.ts)),
 keyed by the row id `entriesForSession` already shares.
+
+**The wording gate is gone (stage 20c).** `isChartAnalysisRequested` used to test
+the prompt for `LIVE MARKET` / `STRATEGY` / `ANALYZE` / `CHART` / `SETUP` — plus the
+image and update facts — and `useAnalysisPipeline.ts` branched on it. It was already
+a dead decision for a human send: the predicate was ANDed with `runEnsembleEnabled`
+and `isEnsembleEnabled` appeared on both sides, so with the toggle on every send
+ran the pipeline whatever it said and with it off no wording could make one. The
+one route words controlled was a scheduled run's, contradicting the flag's own
+comment that automations always run the pipeline: the same automation answered
+casually when its prompt read "outlook" and fully when it read "setup". The guard
+is now the mode alone. Consequences worth knowing: a screenshot attached to a
+toggle-off send is still casual chat (it always was), and the structured verdict,
+the levels and the journal row reach a normal send only as TOOLS the seat calls —
+which is why 20b and 20b-B had to land first.
 
 ---
 
@@ -295,9 +309,9 @@ card that forgets it was clicked offers a second journal row.
 | 18 | panel → per-seat + mailbox | `:1068` · `:996` · `:1008` |
 | 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `TradeChatPanel.tsx:453` |
 | 20 | every dock turn → chatStore | `mutate` · `beginRun` |
-| 21 | handleSendMessage → the fork | `:1476`, guard `:1490`, else `:3155` |
-| 22 | the casual arms | a bot thread → `streamQuickResponse :3216` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:145` → arrow 17. Tier on both via `resolveComposerEffort` |
-| 23 | casual frames → Message.text | `streamThrottlers.ts:160`; flush precedes the settle write `:3287` |
+| 21 | handleSendMessage → the fork | the mode flag `:671` is the whole decision — guard `:1492`, else `:3157`. Stage 20c deleted the wording predicate |
+| 22 | the casual arms | a bot thread → `streamQuickResponse :3218` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:145` → arrow 17. Tier on both via `resolveComposerEffort` |
+| 23 | casual frames → Message.text | `streamThrottlers.ts:160`; flush precedes the settle write `:3289` |
 | 24 | ensemble → 8 stages | see C — anchors deliberately omitted |
 | 25 | desk tools → what a caller can reach | `executeDeskTool DeskToolsService.ts` (its allow-list is enforced at execution, not only at offer time) |
 | 26 | panel tools → chart echo | `executePanelTool chatTurnRunner.ts` → `onToolAction` |
