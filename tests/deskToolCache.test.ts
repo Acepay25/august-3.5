@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 // Market data fetchers are mocked so the cache behavior is observable
 // without network calls.
@@ -195,5 +197,34 @@ describe('Desk tool cache + result budget', () => {
     // +24 for the truncation marker (same tolerance as the cap test above).
     expect(result.content.length).toBeLessThanOrEqual(6000 + 24);
     expect(result.content).toContain('…[truncated get_market_packet:');
+  });
+});
+
+describe('a tool turn invalidates its own cache', () => {
+  // The clear used to be called at each debate start. Stage 19 deleted the
+  // engine, the call site went with it, and no gate noticed: the cache stayed
+  // live, so a run could be served the PREVIOUS run's order book for as long as
+  // it liked rather than 30s. That is a live reader with a dead writer, and the
+  // only way to see it is to pin the wiring rather than the method.
+  it('streamChatWithDeskTools clears before running the loop', () => {
+    const src = readFileSync(join(process.cwd(), 'services/analysis/DeskToolsService.ts'), 'utf8');
+    const entry = src.slice(src.indexOf('export async function* streamChatWithDeskTools'));
+    expect(entry).not.toBe('');
+    const clearAt = entry.indexOf('clearDeskToolCache();');
+    const loopAt = entry.indexOf('runDeskToolLoop({');
+    expect(clearAt).toBeGreaterThan(-1);
+    expect(loopAt).toBeGreaterThan(-1);
+    expect(clearAt).toBeLessThan(loopAt);
+  });
+
+  it('no production caller is trusted to clear it instead', () => {
+    // A second clear site is how the first one got deleted without a notice:
+    // the run boundary looked responsible, so the engine's start owned it.
+    const callers = ['services/trade/toolTurn.ts', 'services/trade/chatSurfaceTurn.ts',
+      'services/providers/GenericAnalysisService.ts', 'hooks/useAnalysisPipeline.ts', 'App.tsx'];
+    const found = callers
+      .map(f => readFileSync(join(process.cwd(), f), 'utf8'))
+      .filter(text => /clearDeskToolCache\s*\(/.test(text));
+    expect(found).toEqual([]);
   });
 });

@@ -288,8 +288,12 @@ import { sanitizeAIResponse } from './utils/sanitizers';
 - Desk-tool results are cached within a run in
   `services/analysis/DeskToolsService.ts` (30s TTL, exported as
   `TOOL_CACHE_TTL_MS`; the cache write path itself is module-private).
-  The only import surface is `clearDeskToolCache()`, called at each debate
-  start. There is no generic AI-response cache (do not assume one exists)
+  The only import surface is `clearDeskToolCache()`, called at the start of every
+  tool turn from inside `streamChatWithDeskTools` — not by its callers. It used to
+  be called at each debate start; when the engine was deleted the call site went
+  with it and nothing warned, so the clear now lives at the one choke point every
+  run passes. `tests/deskToolCache.test.ts` pins that wiring by source.
+  There is no generic AI-response cache (do not assume one exists)
 
 ### Security Best Practices
 - Never commit API keys; `.env.local` is gitignored (and no longer read at runtime —

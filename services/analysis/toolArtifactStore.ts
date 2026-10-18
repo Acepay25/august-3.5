@@ -172,8 +172,8 @@ export const readToolArtifact = (
 /** How much of a payload is currently addressable, for diagnostics/tests. */
 export const artifactCount = (): number => artifacts.size;
 
-/** Drop everything. Called from `clearDeskToolCache`, i.e. at every debate
- *  start, so an id can never resolve across runs. */
+/** Drop everything. Called from `clearDeskToolCache`, i.e. at every tool turn,
+ *  so an id can never resolve across runs. */
 export const clearToolArtifacts = (): void => {
     artifacts.clear();
 };
