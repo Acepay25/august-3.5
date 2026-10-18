@@ -93,10 +93,23 @@ root; and **a check whose measurement is identical across two different states
 is measuring the wrong thing.** Run it on an idle machine — alongside a build or
 the full suite it reports blank surfaces that the app was seconds from filling.
 
-CI (`.github/workflows/ci.yml`) runs `tsc`, `vitest`, `eslint`, the Playwright
-smoke suite, `vite build`, `boot-probe` and `render-probe`. The release gate
-(`.github/workflows/release.yml`) runs the same static + probe chain, adds
-`installer-smoke` on the packaged exe, and only then builds and publishes.
+CI (`.github/workflows/ci.yml`) runs `tsc`, `vitest`, `eslint`, the flow-doc
+anchor gate, the Playwright smoke suite, `vite build`, `boot-probe`,
+`render-probe` and `skill-approval-probe`, plus a second job that re-runs the
+suite with console interception on. The release gate
+(`.github/workflows/release.yml`) runs the same chain MINUS two of its steps —
+no `check-flow-doc-anchors`, no `skill-approval-probe` — and adds
+`installer-smoke` on the packaged exe plus the signing, source-map, signature
+and updater-manifest checks, and only then builds and publishes. So a doc edit
+that breaks the flow docs' line numbers fails CI but not the tag push.
+Measured, not assumed — this set-difference prints the whole asymmetry:
+`comm -13 <(grep -ohE "npm run [a-z0-9:._-]+" .github/workflows/release.yml | sort -u)`
+`<(grep -ohE "npm run [a-z0-9:._-]+" .github/workflows/ci.yml | sort -u)`
+→ `check-flow-doc-anchors`, `skill-approval-probe`, `test`, `typecheck`;
+flip `comm -23` → `installer-smoke` is the only command release has and CI
+lacks. `test:coverage`, `lint`, `typecheck:scripts`, `typecheck:electron`,
+`build`, `e2e`, `boot-probe` and `render-probe` are in both. Release has no
+bare `typecheck` step because `npm run build` starts with `tsc --noEmit`
 A `v*` tag push runs `release.yml`, which builds ONCE with
 `--publish never`, verifies the installer, and only then uploads the
 manifest-named bytes with `gh release upload --clobber` (one build, one
@@ -138,7 +151,7 @@ competing for the machine.
 │                           #   imported by renderer, vite dev proxy AND electron main
 ├── types/                  # analysis, trade, provider, progress, message, learning …
 ├── utils/                  # See "Canonical single-source modules" below
-├── tests/                  # Vitest suites (477 files, 4719 tests — measured 2026-10-18, after the debate-engine deletion removed 24 of them)
+├── tests/                  # Vitest suites — 4726 tests in 478 files: 4715 pass in 477 and 11 skip in `tests/lensWordCount.measure.test.ts`. Read from vitest's own summary block 2026-10-19, after the debate-engine deletion removed 24 of them.
 └── electron/               # main.cjs + preload.cjs (NOT covered by tsc)
 ```
 
