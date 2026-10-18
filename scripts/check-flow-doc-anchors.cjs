@@ -150,11 +150,21 @@ function collect(doc, text) {
     const found = [];
     const spanned = [];
     const unattributed = [];
+    let carrySym = null;
     const lines = text.split('\n');
     for (let i = 0; i < lines.length; i++) {
         const line = strip(lines[i]);
-        if (!line.trim()) continue;
-        const sym = symbolOf(lines[i]);
+        if (!line.trim()) { carrySym = null; continue; }
+        // The arrow list is written "`path:NNN`, `symbol` at" and puts the
+        // symbol's own citation on the NEXT line. So a line that ENDS on a
+        // connector owns no symbol for its own number: its number belongs to the
+        // previous line's symbol, and its symbol is carried forward. The
+        // connector test must allow the closing backtick that sits before "at" —
+        // requiring a word character there is what made the first attempt inert.
+        const symOwn = symbolOf(lines[i]);
+        const dangling = !!symOwn && /\S[ \t]*(?:at|is|to|→|->|–|:)[ \t]*$/i.test(line.trim());
+        const sym = dangling ? carrySym : (symOwn ?? carrySym);
+        carrySym = dangling ? symOwn : null;
         const owners = [];
         for (const t of [...line.matchAll(FILE_TOKEN_RE)]) {
             const r = resolve(t[0]);
@@ -263,6 +273,29 @@ function selfTest() {
     const spRep = check(sp.map((a, k) => ({ ...a, doc: 't', docLine: k + 1 })));
     need('a planted wrong span pairing is caught', spRep.symMiss.length === 1 && spRep.symMiss[0].includes(':' + badLine));
     need('the correct half of that planted pair is not reported', !spRep.symMiss.some(m => m.includes(':' + goodLine)));
+
+    // Forward binding, in both directions, because "the count did not move" is
+    // how an inert rule hides: the arrow list writes "`path:X`, `SYM` at" with the
+    // symbol in its OWN span, and puts that symbol's real citation on the NEXT
+    // line. So a row pairing X with SYM is wrong and must not be reported, while
+    // the next line's number inherits SYM and must be checked against it. The
+    // fixtures are written the way the docs are written: a symbol sharing a span
+    // with a path is not a symbol claim at all, and an earlier draft of this
+    // control used exactly that, so its "accurate row" arm passed vacuously.
+    const fwdTrue = [
+        '`hooks/useAnalysisPipeline.ts:' + badLine + '` runs first, and `' + symTok + '` at',
+        '`hooks/useAnalysisPipeline.ts:' + goodLine + '`, which is where it is declared.',
+    ].join('\n');
+    const fwdWrong = [
+        '`hooks/useAnalysisPipeline.ts:' + goodLine + '` runs first, and `' + symTok + '` at',
+        '`hooks/useAnalysisPipeline.ts:' + badLine + '`, which is somewhere else entirely.',
+    ].join('\n');
+    const fwdBound = collect('t', fwdTrue).found;
+    need('the forward fixture does pair the symbol with the NEXT line', fwdBound.some(a => a.sym === symTok && a.line === goodLine));
+    const fwdRep = check(fwdBound.map((a, k) => ({ ...a, doc: 't', docLine: k + 1 })));
+    need('a forward-bound row that is accurate reports nothing', fwdRep.symMiss.length === 0);
+    const wrRep = check(collect('t', fwdWrong).found.map((a, k) => ({ ...a, doc: 't', docLine: k + 1 })));
+    need('a forward-bound row that is wrong is caught', wrRep.symMiss.length === 1 && wrRep.symMiss[0].includes(':' + badLine));
     const blankInApp = linesOf('App.tsx').findIndex((l, i) => i > 0 && !l.trim() && linesOf('App.tsx')[i - 1].trim()) + 1;
     const r = check([
         { file: 'App.tsx', line: 999999, doc: 't', docLine: 1 },
@@ -330,7 +363,7 @@ const rep = check(all);
 const unique = new Set(all.map(a => `${a.file}:${a.line}`));
 const problems = [...rep.missingFile, ...rep.outOfRange, ...rep.blank];
 // Two newer checks measure rather than refuse, on purpose. Both found real
-// weakness the moment they were written: 61 citations land on a comment line and
+// weakness the moment they were written: undefined
 // 23 name a symbol that is not on the cited line (several are genuinely wrong —
 // a run of arrow-table rows cites the previous row's line, so `planPanelTurn`
 // points at `createDebateMailbox`). A gate that goes red on the day it ships gets
@@ -354,7 +387,7 @@ const problems = [...rep.missingFile, ...rep.outOfRange, ...rep.blank];
 // defect count, and do not answer a doubt about a wrapped sentence by trusting
 // this ceiling: re-measure the anchor by hand.
 const COMMENT_CEILING = 61;
-const SYMMISS_CEILING = 16;
+const SYMMISS_CEILING = 12;
 
 console.log(`flow docs: ${all.length} anchor references, ${unique.size} unique, across ${DOCS.join(' + ')}`);
 console.log(`cited-line quality: ${rep.comment.length} land on a comment line (ceiling ${COMMENT_CEILING}), ${rep.symMiss.length} miss the symbol their own line names (ceiling ${SYMMISS_CEILING}) — both ratchet to 0`);
