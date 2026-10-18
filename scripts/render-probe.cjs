@@ -596,6 +596,121 @@ async function main() {
             afterThird.user === 3 && afterThird.ai === 3,
             JSON.stringify(afterThird));
         check('trade surface still mounted', afterThird.treeAlive === 1);
+        // ── 20p: a tool round in the transcript, across a reload, and stopped ──
+        // Desk tools are the app's only way to look anything up and every send now
+        // runs through them, yet nothing above asserts a tool LINE is projected at
+        // all — every row-count check passes with the projection missing, and a
+        // card that renders live but not after a reload is invisible to jsdom.
+        // The marker below is what arms the mock's tool scenario for THIS request
+        // only: a second mock instance was tried first and rejected, because it
+        // answers boot-time calls too and the app never reaches the trade screen.
+        const toolLineCount = () => page.locator('[data-testid="tool-actions-row"]').count();
+        const toolLineText = () => page.locator('[data-testid="tool-actions-row"]').allTextContents()
+            .then(a => a.join(' | ').replace(/\s+/g, ' ').slice(0, 220));
+        // Any key carrying the ledger's name: Preferences owns the exact spelling on
+        // web, and the native store may prefix it.
+        const usageBytes = () => page.evaluate(() => {
+            let n = 0;
+            for (const k of Object.keys(localStorage)) {
+                if (k.includes('session_usage_v1')) n += (localStorage.getItem(k) || '').length;
+            }
+            return n;
+        });
+
+        // The sweep before this one ends on Settings with an overlay open, and a
+        // The sweep before this one leaves the browser on Settings (an overlay
+        // may still be open) at phone width, so a send here has nothing to land
+        // in. Reload first and let the app restore its own surface — the earlier
+        // assertion here waited for the TRADE surface's [data-testid="trade-view"]
+        // after a reload that restores the surface the app persisted, which made
+        // the phase time out on navigation, not on the app.
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(() => !document.querySelector('#splash'), null, { timeout: 25000 });
+        await sleep(1500);
+        // Then ROUTE to the dock. Reload alone is not navigation: the app
+        // restores the surface the sweep left it on (Settings has no composer),
+        // and that failed as "no enabled Send button and no Stop button" — a
+        // probe that forgot to navigate, reported as a broken app. Waiting for
+        // trade-view without clicking it was the earlier wrong half of the same
+        // mistake, so both halves are here now: click, then wait for the mount.
+        const navTrade = await page.evaluate(() => {
+            const sw = document.querySelector('[data-testid="surface-switch-trade"]');
+            if (!sw) return 'not found';
+            sw.click();
+            return 'clicked';
+        });
+        check('the dock surface is reachable again after a reload', navTrade === 'clicked', navTrade);
+        await page.waitForSelector('[data-testid="trade-view"]', { timeout: 25000 });
+        await sleep(800);
+
+        const aiBefore = (await counts(page, null)).ai;
+        const linesBefore = await toolLineCount();
+        const ledgerBefore = await usageBytes();
+        await sendInDock(page, 'PROBE_TOOL_ROUND report the price', netIssues, aiBefore + 1);
+        await sleep(1500);
+        const linesAfter = await toolLineCount();
+        check('a tool round is projected as a tool line, not only as prose',
+            linesAfter > linesBefore, `${linesBefore} tool line(s) before, ${linesAfter} after`);
+        // The row is labelled in the app's own voice, never by the wire name:
+        // `Skill draft proposed — <the title the model asked for>`. Asserting
+        // `propose_skill` here would pin the identifier the UI deliberately
+        // hides, so the check is on the verb the harness renders PLUS the title
+        // carried in the tool's own arguments — which proves the call was
+        // identified by content, not by a generic "tool used" line.
+        const namesTheCall = (t) => /skill draft proposed/i.test(t) && /Session-open fade short/.test(t);
+        const firstText = await toolLineText();
+        check('the tool line names the call the model actually made',
+            namesTheCall(firstText), `rendered: ${firstText || '(none)'}`);
+        const ledgerAfter = await usageBytes();
+        check('the settled turn grew the usage ledger the Knowledge panel reads',
+            ledgerAfter > ledgerBefore, `ledger bytes ${ledgerBefore} -> ${ledgerAfter}`);
+
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(() => !document.querySelector('#splash'), null, { timeout: 25000 });
+        await page.waitForSelector('[data-testid="trade-view"]', { timeout: 25000 });
+        await sleep(1500);
+        const aiTabB = page.locator('[role="tab"]', { hasText: /^AI$/ }).first();
+        if (await aiTabB.count()) await aiTabB.click();
+        await sleep(900);
+        const linesReloaded = await toolLineCount();
+        const reloadedText = await toolLineText();
+        check('the tool line survives a reload', linesReloaded >= linesAfter,
+            `${linesAfter} before the reload, ${linesReloaded} after`);
+        check('it still names the same call after the reload',
+            namesTheCall(reloadedText), `rendered: ${reloadedText || '(none)'}`);
+
+        // Stop while a round is in flight: the abort has to reach the tool call and
+        // the row must settle instead of streaming forever.
+        const stopBefore = await page.locator('[data-testid="chat-entry-ai"]').count();
+        await page.evaluate((needle) => {
+            const ta = document.querySelector('textarea');
+            if (!ta || ta.disabled) return;
+            Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')
+                .set.call(ta, needle);
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+            const btn = [...document.querySelectorAll('button')].find(b => !b.disabled && /send/i.test(
+                `${b.getAttribute('aria-label') || ''} ${b.title || ''} ${b.textContent || ''}`));
+            if (btn) btn.click();
+        }, 'PROBE_TOOL_ROUND stop me mid tool');
+        let clickedStop = false;
+        for (let i = 0; i < 15 && !clickedStop; i++) {
+            clickedStop = await page.evaluate(() => {
+                const b = [...document.querySelectorAll('button')].find(x => !x.disabled
+                    && /stop/i.test(`${x.getAttribute('aria-label') || ''} ${x.title || ''}`));
+                if (!b) return false;
+                b.click();
+                return true;
+            });
+            if (!clickedStop) await sleep(120);
+        }
+        check('an in-flight tool turn offers a working Stop', clickedStop,
+            'no enabled Stop button appeared within ~1.8s of sending');
+        const settled = await waitSendable(page, 20000);
+        check('the stopped turn settles instead of streaming forever', settled,
+            'the composer never became sendable again after Stop');
+        const stopAfter = await page.locator('[data-testid="chat-entry-ai"]').count();
+        check('a stopped turn leaves one row, not a placeholder beside an answer',
+            stopAfter <= stopBefore + 1, `${stopBefore} -> ${stopAfter} answer rows`);
 
         // The expanded dock is the one layout in the app whose widths are
         // mutually exclusive as roles but ADDITIVE as math (chart fraction +
@@ -2219,6 +2334,7 @@ async function main() {
         }
         check('no surface scrolls the page sideways at phone width',
             wideAtPhone.length === 0, wideAtPhone.join(' | '));
+
 
         check('zero pageerrors across the whole run', pageErrors.length === 0,
             pageErrors.length ? `\n---\n${pageErrors.join('\n---\n').slice(0, 3000)}` : '');

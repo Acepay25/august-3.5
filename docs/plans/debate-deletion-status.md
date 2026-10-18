@@ -1130,8 +1130,47 @@ than assumed — worth keeping as the record of what this phase actually needs:
    as well as builds.
 
 Phase parked at `.probe-artifacts/20p-probe-work-in-progress.patch` (both probe
-files reverted, `node --check` clean, gate runnable). First action next time:
-start the dev server and confirm it answers on :3000 BEFORE launching the probe,
-one run at a time. What the phase asserts once it lands: a tool round projects a
-`tool-actions-row`, the ledger bytes grow from the same turn, the tool line
-survives a reload, and Stop during a tool round leaves exactly one settled row.
+files reverted, `node --check` clean, gate runnable).
+
+## 20p attempt four: the missing tool line was the MOCK, not the app
+
+Re-applying the patch and running it found the real cause, and it was never in
+the app. `scripts/mock-provider.cjs` armed its tool scenario correctly but then
+answered with a bare JSON body regardless of `body.stream`. The dock asks for a
+stream, so `sseParser` received zero `data:` frames and produced no tool call —
+which is why three of the phase's checks reported `0 tool line(s) before, 0
+after` across every earlier attempt. The accumulator itself was unit-tested
+(`tests/sseParser.test.ts:35`); what had never run was a **streamed** tool call
+through the real transport into a rendered row. Fixed by emitting the frames an
+OpenAI-compatible provider actually sends (opening frame with `id`+`name`, then
+argument fragments keyed on `index`, then `finish_reason: "tool_calls"` +
+`[DONE]`), chunked so the index-keyed accumulator is exercised rather than
+bypassed.
+
+Measured with that fix, one clean run, nothing else on the machine:
+**111 checks ok, 2 failing** — and the two failures were the probe, not the app.
+It asserted `/propose_skill/i` against the row's text, while the row renders in
+the app's own voice: `▸Skill draft proposed — Session-open fade short (review
+with the Coach)`. Pinning the wire identifier would encode the opposite of the
+"labels are human-readable, never keys" rule, so the check now requires the
+rendered verb AND the title carried in the tool's own arguments — which proves
+the line identifies the call by content instead of printing a generic "tool
+used". Both facts come from run 3's captured string, so the predicate is derived
+from measurement, not guesswork.
+
+What the phase now covers, all browser-measured: a tool round projects a
+`tool-actions-row` (`0 → 1`), the same turn grows the usage ledger the Knowledge
+panel reads (`364 → 485` bytes), the tool line survives a reload (`1 → 1`), Stop
+during a round leaves one settled row (`3 → 3`), and the dock/Agents/Settings
+sweeps still pass with zero pageerrors.
+
+Two operational notes, because both cost a run:
+- **The parked instruction was wrong.** It said to start a dev server and
+  confirm `:3000` answers before launching. `render-probe.cjs` spawns its OWN
+  Vite — on **:4183**, not 3000 — and its own mock on :8787. Pre-starting a
+  server competes with it. Sweep `:3000`, `:4183` and `:8787` and launch with
+  all three free.
+- Runs 2 and 4 died at the probe's boot `page.goto` (30 s) right after the
+  previous run's teardown, on an otherwise idle machine; runs 1 and 3 booted
+  fine. Treat a driver-level boot timeout as cold-start and re-run rather than
+  reading it as a code failure — but say which runs were discarded.
