@@ -514,8 +514,8 @@ describe('finalizeVerdict — veto ledger', () => {
 
 describe('finalizeVerdict — automation dispatch', () => {
     it('selects the automation-private messages at the hook call site', () => {
-        expect(pipelineSource).toMatch(/const verdictMessages = isAutomationRun \? automationMessagesRef\.current : messagesRef\.current;/);
-        expect(pipelineSource).toMatch(/existingVerdictMessage = verdictMessages\.find/);
+        expect(pipelineSource).toMatch(/runAutomationTurn\(\{[\s\S]{0,800}history: currentMessages,/);
+        expect(pipelineSource).toMatch(/updateRequestMessages\(prev => \[\.\.\.prev, aiMessage\]\);/);
     });
     beforeEach(() => {
         Object.values(mocks).forEach(m => (m as { mockClear?: () => void }).mockClear?.());

@@ -8,43 +8,33 @@ import {
 } from '../types';
 
 import { ProviderConfig } from '../types/provider';
-import { analyzeTradingView, getQuickResponse, streamQuickResponse } from '../services/providers/GenericAnalysisService';
+import { analyzeTradingView, streamQuickResponse } from '../services/providers/GenericAnalysisService';
 import type { ToolAction } from '../types/message';
 import { WireAuditEntry, type ReasoningEffort } from '../services/providers/reasoningControls';
-import * as ensembleService from '../services/providers/ensembleService';
-import { BotRegistry } from '../services/bots/BotRegistry';
 import { defaultToolsForRole } from '../types/bot';
 import { getActiveUsername } from '../utils/activeUser';
 import { getBots, getGroups, AgentTeamSeat } from '../services/agents/agentRoster';
-import { seatPersonaPrompt, generalSeatMandate } from '../services/agents/seatPersonas';
 import { TEAM_MAX_SEATS } from '../utils/teamRoster';
 
 // Analysis / validation / backtesting services
-import { tryFetchHybridDataFromPromptWithCalibration, generateHybridPromptInjection, HybridDataPacket, runMonteCarloForSetupAsync } from '../services/analysis/HybridIntelligenceService';
+import { tryFetchHybridDataFromPromptWithCalibration, generateHybridPromptInjection, HybridDataPacket } from '../services/analysis/HybridIntelligenceService';
 import { extractSymbolFromPrompt } from '../services/analysis/MarketDataService';
 import { LabeledMonteCarloResult } from '../services/analysis/MonteCarloService';
-import { processAnalysisResult } from '../services/analysis/analysisResultProcessor';
-import { backtestSimilarSetups, type LiveBacktestResult } from '../services/backtesting/LiveBacktestService';
+import { type LiveBacktestResult } from '../services/backtesting/LiveBacktestService';
 import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperService';
 
 // Utils
-import { recalculateAnalysisMetrics, parsePrice } from '../utils/analysisUtils';
-import { subscribeTokenUsage, mergeTokenUsage, emptyTokenUsage, estimateCostUsd, TokenUsage } from '../utils/tokenUsage';
-import { saveThinkingBatch, buildThinkingRecordId, getThinkingTradeId, getThinkingExemplars } from '../services/infrastructure/ThinkingStoreService';
+import { TokenUsage } from '../utils/tokenUsage';
+import { saveThinkingBatch } from '../services/infrastructure/ThinkingStoreService';
 import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { ThinkingRecord } from '../types/thinking';
-import { lensFromAnalystRole, lensFromSpeakerName } from '../utils/thinkingLens';
 import { splitThinkingFromOutput } from '../utils/thinkingSplit';
-import { sanitizeAIResponseLight } from '../utils/sanitizers';
 import { chatModelIdOf, isProviderReady, resolveChatModelSelection } from '../utils/providerUtils';
 import { buildDecisionReflectionContext } from '../services/learning/DecisionReflectionService';
 import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
-import { archetypeDirectiveLine } from '../constants/prompts/archetypePrompts';
 import { buildModelsUsedRecord } from './analysisPipeline/modelsUsed';
 import { assemblePipelineMemoryContext } from './analysisPipeline/memoryContext';
 import { useStreamThrottlers } from './analysisPipeline/streamThrottlers';
-import { finalizeVerdict } from './analysisPipeline/verdictFinalizer';
-import { buildAutoplaySpeakerRegex, parseAutoplayTranscriptChunk } from './analysisPipeline/autoplayParser';
 import { isNotebookQuickSaveRequest, runNotebookQuickSave } from './analysisPipeline/notebookQuickSave';
 import { classifyRunFailure, mapRunFailureMessages, resolveQuotaFlaggedModel, sanitizeFallbackErrorMessage } from './analysisPipeline/runOutcome';
 import { runChatSurfaceTurn } from '../services/trade/chatSurfaceTurn';
@@ -63,7 +53,6 @@ const devLog = (...args: unknown[]) => { if ((import.meta as any).env?.DEV) cons
 // dedupe/cache CONCURRENT near-identical requests (the three openings share
 // ~99% of their payload once the hybrid envelope is in); staggering breaks
 // the simultaneous-identical window those caches key on.
-const SEAT_LAUNCH_STAGGER_MS = 700;
 /** How stale a prior run's packet may be and still be reused instead of
  *  re-fetched. `dataTimestamp` is when the assembly ran, so this is a FLOOR on
  *  the real age — every cell inside it additionally carries up to its own REST
@@ -73,34 +62,18 @@ const HYBRID_REUSE_MAX_AGE_MS = 60_000;
 
 // Learning services
 import { generateWeightedVotingContext } from '../services/backtesting/ModelPerformanceService';
-import { PriceAlertService } from '../services/ui/PriceAlertService';
-import { extractLessonFromPostMortem, slugifyName } from '../services/learning/MemoryFilesService';
-import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
-import { listRetrievedMemorySources } from '../services/learning/MemoryRetrievalService';
 import { threadForProvider } from '../utils/agentThreads';
-import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../services/learning/SetupMemoryService';
-import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext } from '../services/learning/PatternMemorySynthesisService';
-import { confirmedAvoidForSetup, titleFromMeta, skillFileNameFor, formatInvokedSkillSection, resolveInvokedSkills } from '../services/learning/SkillMemoryService';
-import { sortByFitness, recordPreflightResult } from '../services/learning/providerFitness';
-import { buildPreflightBlock, applyPreflightGate } from '../services/learning/preflight';
+import { formatInvokedSkillSection, resolveInvokedSkills } from '../services/learning/SkillMemoryService';
 import { recordRegimeDay, marketRegimeToLedger } from '../services/learning/regimeLedger';
-import { VetoLedgerService } from '../services/ui/VetoLedgerService';
-import { ANALYST_ROLE_DEFINITIONS, getLensPromptForStyle, getRoleForProvider, appendLensMemoryToPrompt, EnsembleModelSelection } from '../services/ui/AnalystLensService';
-import { buildHybridEnvelope, buildOcrEnvelope, envelopeKindForRole } from '../utils/debateEnvelopes';
+import { ANALYST_ROLE_DEFINITIONS, EnsembleModelSelection } from '../services/ui/AnalystLensService';
+import { buildHybridEnvelope } from '../utils/debateEnvelopes';
 import { buildRunContractStages } from '../utils/runContract';
-import { applyReplyTo } from '../utils/debateReplyTo';
-import { parseProvisionalVerdict, parsePartialVerdictFields } from '../utils/provisionalVerdict';
 import { extractDebateTemplate, DebateTemplate } from '../utils/debateTemplates';
-import { debateTurnsToRoundTexts, lastCompletedRound, laneDraftsFromTurns, reconstructOpenings } from '../utils/debateResume';
 import { parseComposerIntent, formatComposerSteer } from '../utils/composerMentions';
-import { withFinComMetadata } from '../services/providers/debateScience';
-import { assessSession, formatGuardContextBlock } from '../services/validation/SessionGuardService';
-import { getHarnessSettings, getSessionGuardConfig } from '../utils/harnessSettings';
 import { beginPromptLane, endPromptLane } from '../services/infrastructure/PromptOverrideService';
-import { buildEnsembleAnalysts, buildAnalystFailureReport, findDuplicateAnalystOutputs, AnalystOutputSample } from '../services/ui/EnsembleAnalystService';
+import { buildEnsembleAnalysts } from '../services/ui/EnsembleAnalystService';
 import { getEffectiveStyle } from '../services/ui/TradingStyleDetector';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
-import { CLARIFICATION_MARKERS_RE, DEBATE_END_MARKERS_RE, MODERATOR_ERROR_BLOCK_RE, MODERATOR_RETRY_MARKER, MODERATOR_RETRY_RE, REPLACEMENT_TIMEOUT_MARKER } from '../constants/debateMarkers';
 import { parseDmMarkers } from '../services/agents/botMailbox';
 import { classifyStepError, describeStepError } from '../utils/runStatus';
 
@@ -260,11 +233,6 @@ const MAX_INITIAL_ANALYSIS_RETRIES = 1;
 /** Stable per-seat temperature (0.55–0.85) so Normal-mode ensemble seats that
  *  share one prompt sample differently. Deterministic per key — not random —
  *  so a seat keeps the same temperature across re-runs/replacements. */
-const seatTemperature = (key: string): number => {
-    let h = 0;
-    for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) | 0;
-    return 0.55 + (Math.abs(h) % 4) * 0.1;
-};
 
 async function analyzeTradingViewWithTransientRetry(
     config: ProviderConfig,
@@ -306,9 +274,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         finalTradeSummary, loggedTrades, tradeSummaries,
         globalMemory, insightKnowledgeBase, confidenceCalibration,
         currentHybridData, setCurrentHybridData,
-        setLatestMonteCarloResult, setLatestBacktestResult,
-        setPerAIMonteCarloResults, setCurrentSlOptimization,
-        setCurrentSuggestedEntryPrice, setCurrentEntryTimingScore,
         setHybridConnectionStatus,
         isAnalysisInProgress, setIsAnalysisInProgress,
         isHybridLoading, setIsHybridLoading,
@@ -364,74 +329,21 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         onToolAction?: (action: ToolAction) => void;
     }
 
-    const runAnalyzeTradingView = useCallback(async (
-        config: ProviderConfig,
-        model: string,
-        prompt: string,
-        imageFiles: File[],
-        dataURLs: string[],
-        signal: AbortSignal | undefined,
-        params: AnalysisRequestParams,
-    ): Promise<{ thoughtProcess: string; finalOutput: string; analysis: any; sources?: any[] }> => {
-        // The seat model is authoritative. Provider configs can be stale after
-        // a Team/Lens selection or replacement choice, and the generic client
-        // reads config.selectedModel when constructing the API request. Clone
-        // only when necessary so the request cannot silently run on a prior
-        // model while the UI labels it as another seat.
-        const requestConfig = config.selectedModel === model
-            ? config
-            : { ...config, selectedModel: model };
-        const result = await analyzeTradingViewWithTransientRetry(requestConfig, {
-            prompt,
-            images: (params.imageSummaries?.length ?? 0) > 0 ? [] : imageFiles,
-            imageSummaries: params.imageSummaries ?? [],
-            chatHistory: params.chatHistory ?? [],
-            finalTradeSummary: params.finalTradeSummary ?? null,
-            recentInsights: params.recentInsights ?? null,
-            activeFrameworks: params.activeFrameworks ?? [],
-            deepenAnalysis: params.deepenAnalysis ?? false,
-            globalMemory: params.globalMemory,
-            threadSummary: params.threadSummary,
-            subMode: params.subMode,
-            customInstructions: params.customInstructions,
-            isPlaybookEnabledInPureAI: params.isPlaybookEnabledInPureAI,
-            isFamiliesEnabledInPureAI: params.isFamiliesEnabledInPureAI,
-            isMemoryEnabledInPureAI: params.isMemoryEnabledInPureAI,
-            rolePrompt: params.rolePrompt,
-            signal,
-            systemPromptOverride: params.systemPromptOverride,
-            seatDirective: params.seatDirective,
-            userStrategies: params.userStrategies,
-            temperature: params.temperature,
-            trades: loggedTradesRef.current.length > 0 ? loggedTradesRef.current : undefined,
-            onReasoning: params.onReasoning,
-            onPartialOutput: params.onPartialOutput,
-            onWireAudit: params.onWireAudit,
-            onToolAction: params.onToolAction,
-        });
-        return result;
-}, []);
-
+    
     // ─── State ─────────────────────────────────────────────────────────────
     const [input, setInput] = useState('');
         const [images, setImages] = useState<ImageMetadata[]>([]);
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
     const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>([]);
-    const reasoningMapRef = useRef<Record<string, string>>({});
-    const turnReasoningRef = useRef<Record<string, string>>({});
     // Visible content streamed during the opening analysis (keyed by
     // thoughtsKey) — surfaced live as round-1 turn text before the debate
     // rounds begin.
-    const openingTextRef = useRef<Record<string, string>>({});
-    const activeDebateSpeakersRef = useRef<Record<string, number>>({});
     // Live desk-tool chips: speaker -> latest tool line. Transient — cleared
     // when the debate concludes (never persisted).
     const liveToolEventsRef = useRef<Record<string, string>>({});
     // persisted model side-effects for the CURRENT run — proposal tools
     // (forge_tool/amend_memory) and custom tools. Reset at run start, merged
     // into the AI message when it lands (status rows).
-    const toolActionsRef = useRef<ToolAction[]>([]);
-    const debateTurnsRef = useRef<DebateTurn[]>([]);
     const debateRunLogRef = useRef<DebateRunEvent[]>([]);
     /**
      * Live run-contract view (U1): re-derived from the run log on every push.
@@ -493,12 +405,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // the phase ref), so a single hook invocation replaces five hand-rolled
     // inline closures. See the new module for per-writer semantics.
     const {
-        throttledDebateUpdate,
-        throttledProvisionalVerdict,
-        throttledEnsembleProgress,
-        throttledCasualStream,
-        throttledOpeningThinking,
-    } = useStreamThrottlers({
+                                throttledCasualStream,
+            } = useStreamThrottlers({
         updateMessages,
         liveToolEventsRef,
         debateRunLogRef,
@@ -600,12 +508,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
     // ─── Helper: persist thinking records (best-effort, non-blocking) ──────
     // A failed reasoning write must never fail the analysis run itself.
-    const persistThinkingRecords = (records: ThinkingRecord[]): void => {
-        saveThinkingBatch(records).catch(err => {
-            console.warn('[ThinkingStore] Failed to save thinking records:', err);
-        });
-    };
-
+    
     // ─── Main Analysis Handler ─────────────────────────────────────────────
     const handleSendMessage = useCallback(async (customPrompt?: string, customImages?: ImageMetadata[], hiddenContext?: string, options?: {
         isUpdate?: boolean;
@@ -662,8 +565,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         fullAnalysis?: boolean;
     }): Promise<ChatRunOutcome> => {
         const isAutomationRun = !!options?.automation;
-        let stopTokenUsage: (() => void) | undefined;
-        const tokenByProvider = new Map<string, TokenUsage>();
         // Run-scoped mode/model overrides — automation runs may specify
         // their own accuracy mode, lens config, analyst picks and moderator
         // (fall back to the global settings when absent).
@@ -736,7 +637,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // Build the analyst list (model-level entries). Extracted to a pure
         // helper so the N-1 failure path is unit-testable; stale lens-assignment
         // model ids are resolved against each provider's current model list.
-        const { analysts: enabledProviders, missingAnalystRoles, hasCompleteAnalystAssignments, resolvedAssignments } = buildEnsembleAnalysts(
+        const { analysts: enabledProviders, missingAnalystRoles, hasCompleteAnalystAssignments, } = buildEnsembleAnalysts(
             providerConfigs,
             runLensConfig,
             runEnsembleSelection,
@@ -750,33 +651,13 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // composer's Talk-to selector writes); a bot that moved on gets the
         // general-analyst default rather than a stale persona. Read at fire
         // time — persona edits apply to the next send.
-        const runGroupMemberPersonas: AgentTeamSeat[] = (() => {
-            try {
-                const groups = getGroups();
-                const memberIds = new Set(groups.flatMap(g => g.memberIds));
-                return getBots()
-                    .filter(b => memberIds.has(b.id) && b.providerId && b.modelId)
-                    .map(b => ({ providerId: b.providerId, modelId: b.modelId, role: b.role, customPrompt: b.customPrompt }));
-            } catch {
-                return [];
-            }
-        })();
-        const teamSeatFor = (configId: string, model: string): AgentTeamSeat | undefined =>
-            runGroupMemberPersonas.find(s => s.providerId === configId && s.modelId === model);
-        // Role-scoped desk tools: a seat with a built-in team role inherits
+                        // Role-scoped desk tools: a seat with a built-in team role inherits
         // that role's tool preset (macro/technical/risk) on its opening;
         // unroled seats, teamless runs, and Lens mode keep the FULL toolset
         // (undefined) — personas never mix with the Lens engine.
-        const seatToolsFor = (seat?: AgentTeamSeat): string[] | undefined =>
-            !runLensConfig.enabled && runGroupMemberPersonas.length > 0 && seat?.role ? defaultToolsForRole(seat.role) : undefined;
-        // Legacy mandate rotation (ad-hoc ensembles, no active team). Hoisted
+                // Legacy mandate rotation (ad-hoc ensembles, no active team). Hoisted
         // so the mid-debate replacement path can mirror the initial seats.
-        const seatMandates = [
-            'market structure, trend context, and the dominant directional bias — anchor on higher-timeframe structure first',
-            'entry mechanics, key levels, and confirmation triggers — pinpoint the entry, stop, and take-profit levels',
-            'risk, invalidation, and failure scenarios — stress-test the trade and argue where it breaks',
-        ];
-
+        
         // Accuracy mode runs the same per-analyst analysis phase, so the
         // staged analyst cards (status + live reasoning) apply there too —
         // previously the user only saw the single moderator stream.
@@ -790,21 +671,17 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         }
         // Debate template marker ([[Scalp check]] etc.) — extract before the
         // composer-intent parse so the marker never reaches the models.
-        let runDebateTemplate: DebateTemplate | null = null;
-        // /slug skill invocations, captured before the steer-rewrite folds
+                // /slug skill invocations, captured before the steer-rewrite folds
         // the message into prose — resolved into actual skill content below
         // (a name alone teaches the seats nothing).
-        let invokedSkillSlugs: string[] = [];
-        {
+                {
             const extracted = extractDebateTemplate(effectiveInput);
             if (extracted.template) {
-                runDebateTemplate = extracted.template;
                 effectiveInput = extracted.cleanText;
             }
         }
         if (effectiveInput.trim()) {
             const intent = parseComposerIntent(effectiveInput);
-            invokedSkillSlugs = intent.skills;
             const steered = formatComposerSteer(intent);
             if (steered) effectiveInput = steered;
         }
@@ -929,10 +806,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             return { ok: false };
         }
 
-        const runStartedAt = Date.now();
         // Live-backtest summary (block-scoped result is captured here so the
         // final message update below can persist it on runStats).
-        let liveBtResult: LiveBacktestResult | undefined;
         setIsRateLimited(false);
         analysisAbortController.current?.abort();
         const currentAbortController = new AbortController();
@@ -978,7 +853,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             setCurrentVisionData(visionData);
         }
 
-        const imageFiles = imagesToUse.map(meta => meta.file);
         const dataURLs = imagesToUse.map(meta => meta.dataURL);
         // UI displays the user input, but API may receive enhanced context
         const originalPrompt = effectiveInput;
@@ -1067,13 +941,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             setImages([]);
         }
 
-        const updateEnsembleProgress = (updater: (progress: NonNullable<Message['ensembleProgress']>) => NonNullable<Message['ensembleProgress']>): void => {
-            if (!ensemblePlaceholder) return;
-            updateRequestMessages(prev => prev.map(message => message.id === ensemblePlaceholder.id
-                ? { ...message, ensembleProgress: updater(message.ensembleProgress ?? ensembleProgress!) }
-                : message));
-        };
-
+        
         // Only claim the hybrid fetch when the feature is ON — the old
         // condition spun the HybridDataPanel for the whole run even with the
         // toggle off (the skip path never reset it).
@@ -1117,8 +985,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         }
 
         // eslint-disable-next-line no-useless-assignment -- consumed by the verdictFinalizer input below; the cluster owns the lane attribution now.
-        let promptLane: 'live' | 'control' = 'live';
-        // Id of the live-streaming casual-chat bubble (if this run is a casual
+                // Id of the live-streaming casual-chat bubble (if this run is a casual
         // reply) so the catch block can settle it on cancel/error instead of
         // leaving a stuck isStreaming placeholder.
         let casualMessageId: string | null = null;
@@ -1136,30 +1003,17 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         automationSilentRef.current = isAutomationRun;
         if (isAutomationRun) automationMessagesRef.current = [];
         try {
-            promptLane = beginPromptLane();
             const currentMessages = isAutomationRun
                 ? [...(options?.automation?.conversation.messages ?? []), userMessage]
                 : [...messagesRef.current, userMessage];
-            const currentThreadSummary = isAutomationRun
-                ? options?.automation?.conversation.threadSummary
-                : activeConversation?.threadSummary;
-            const memoryToInject = isGlobalMemoryEnabled ? globalMemory : undefined;
-            // Debate template steering rides the custom instructions so every
+                        // Debate template steering rides the custom instructions so every
             // seat + the moderator see the framing (Scalp / Swing / Devil's
             // advocate / Risk-only).
             // Invoked notebook skills (/slug) resolve to their ACTUAL content
             // and ride the same lane — OpenBot's skills-as-system-turn shape:
             // "apply skill X" without skill X's text is a wish, not an
             // instruction. Missing slugs are stated, never silently dropped.
-            const invokedSkillsSection = formatInvokedSkillSection(
-                invokedSkillSlugs.length > 0 ? resolveInvokedSkills(invokedSkillSlugs) : [],
-            );
-            const instructionsToUse = [
-                getActiveCustomInstructions(),
-                runDebateTemplate?.steering,
-                invokedSkillsSection,
-            ].filter(Boolean).join('\n\n');
-
+                        
             // These steps describe the ensemble analysis pipeline only. Casual
             // chat must not render analysis/fetching progress at all.
             // Set loading immediately so the empty-chat hero and progress UI
@@ -1187,8 +1041,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // Bayesian confidence cap computed by the hybrid fetch (calibration
             // pipeline) — enforced in processNewAnalysis below. Hoisted so the
             // nested function can read it (hybridResult is block-scoped).
-            let bayesianConfidenceCap: 'High' | 'Medium' | 'Low' | 'Avoid' | undefined;
-
+            
             // Skip fetching if preset data was already passed (from auto-capture)
             let hybridDataInjection = '';
             devLog('[Hybrid Intelligence] ======= START =======');
@@ -1211,7 +1064,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     if (!isCurrentRequest()) assertCurrentRequest();
                     if (!isAutomationRun) setIsHybridLoading(false);
                     if (hybridResult) {
-                        bayesianConfidenceCap = hybridResult.adjustedConfidence;
                         // Use enhanced injection which includes calibration data
                         hybridDataInjection = hybridResult.enhancedInjection || hybridResult.promptInjection;
                         if (!isAutomationRun) setCurrentHybridData(hybridResult.data); // Store for UI display
@@ -1266,13 +1118,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // are injected into every analyst prompt AND bundled with the
             // hybrid chart block for every moderator surface — the ensemble
             // trades like a human following the uploaded book.
-            const strategiesBlock = isStrategiesEnabled
-                ? (() => {
-                    const text = getEnabledStrategiesText();
-                    return text ? `\n**USER STRATEGIES (from uploaded books — follow these when they apply):**\n${text}` : '';
-                })()
-                : '';
-
+            
             // Coin detection for learning context: match only uppercase
             // tickers (no /i flag, which would match any word) and exclude
             // common command words, mirroring the GateKeeper commonWords
@@ -1281,18 +1127,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // TRADER NOTEBOOK stage (extracted): notebook slices, bot
             // memory, similar-setups record, regime weighting, loss priming.
             const {
-                memoryQuery,
-                detectedLearningCoin,
+                                detectedLearningCoin,
                 pendingDirection,
                 pendingPattern,
                 memoryFilesContext,
-                moderatorMemoryContext,
-                rebuttalMemoryContext,
-                memoryRetrieved,
-                similarSetupsContext,
-                regimeWeightingContext,
-                lossPrimingRows,
-                asOfMs: memoryAsOfMs,
+                                                                similarSetupsContext,
+                                                asOfMs: memoryAsOfMs,
             } = await assemblePipelineMemoryContext(
                 effectiveInput,
                 loggedTrades,
@@ -1341,16 +1181,13 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // One context bundle for every moderator surface (autoplay debate,
             // real debate, accuracy verification, compact retry): the same
             // chart/pattern block the analysts see + the user strategies.
-            const moderatorHybrid = buildHybridEnvelope(freshHybridData, 'moderator') || hybridDataInjection;
-            const moderatorContextBundle = [moderatorMemoryContext, similarSetupsContext, regimeWeightingContext, moderatorHybrid, strategiesBlock, predicateGate?.note].filter(Boolean).join('\n\n');
-
+            
             // 'auto' trading style was hardcoded to 'swing' at every call
             // site — the market-data detector (ADX/regime/volume/session)
             // was never invoked. Resolve the effective style ONCE from the
             // live data so the lens prompts, the rebuttal personas and the
             // card's tradingStyle field all agree. Falls back to swing when
             // no hybrid data exists (hybrid off / fetch failed).
-            const effectiveTradingStyle = getEffectiveStyle(runLensConfig.tradingStyle, freshHybridData ?? undefined).style;
 
             // AI LEARNING: the old UnifiedLearningBuilder channel is
             // RETIRED — its six overlapping profile/mistake/insight injections
@@ -1361,7 +1198,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // to BOTH the analysts and the moderator. Gated on a real closed
             // trade sample so fresh installs get clean prompts.
             let learningInjection = '';
-            let moderatorLearningContext = ''; // Separate context for moderator surfaces
+            // Separate context for moderator surfaces
 
             const closedSample = loggedTrades.filter(
                 t => t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS,
@@ -1372,7 +1209,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                         enabledProviders.map(p => p.config.id),
                         pendingPattern || undefined,
                     );
-                    moderatorLearningContext = learningInjection;
                     if (learningInjection) {
                         devLog('[AI Learning] Weighted-voting context generated:', learningInjection.length, 'chars');
                     }
@@ -1383,7 +1219,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
             // Retrieved harness context already carries similar trades + skills.
             // Do not also dump the pattern-memory essay or raw insight list.
-            const enhancedFinalTradeSummary = memoryFilesContext ? null : finalTradeSummary;
 
             let recentInsightsString: string | null = null;
             if (!memoryFilesContext && tradeSummaries && tradeSummaries.length > 0) {
@@ -1425,47 +1260,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                     enhancedPrompt = `${reflectionBlock}
 
 ${enhancedPrompt}`;
-                    // Shared harness memory: the moderator must weigh the same
-                    // recent decisions the analysts see — its verdict grounds
-                    // in the same memory, not a condensed subset.
-                    moderatorLearningContext = moderatorLearningContext
-                        ? `${moderatorLearningContext}
-
-${reflectionBlock}`
-                        : reflectionBlock;
                 }
             } catch { /* reflection is best-effort */ }
 
-            let gateInjection = '';
-            let capturedGateResult: GateOutput | null = null; // Local variable to avoid state closure issue
-            if (finalSymbol && runEnsembleEnabled) {
-                try {
-                    devLog(`[GateKeeper] Running Gate check for ${finalSymbol}...`);
-                    if (!isAutomationRun) setLoadingMessage('Running Gate Scan...');
-                    completeStep('market-data'); startStep('gate-scan');
-
-                    const gateResult = await getGateAnalysis(finalSymbol, loggedTrades);
-                    capturedGateResult = gateResult.gateOutput; // Capture locally for processNewAnalysis
-
-                    if (gateResult.shouldProceed) {
-                        gateInjection = gateResult.promptPrefix;
-                        devLog(`[GateKeeper] ✅ Gate PASSED: Confidence cap ${(gateResult.gateOutput.confidenceCap * 100).toFixed(0)}%`);
-                        if (gateResult.gateOutput.suggestedDirection) {
-                            devLog(`[GateKeeper] Pattern Memory suggests: ${gateResult.gateOutput.suggestedDirection}`);
-                        }
-                    } else {
-                        devLog(`[GateKeeper] ⚠️ Gate BLOCKED: ${gateResult.rejectionReason}`);
-                        // Even if blocked, still proceed but with max penalty applied
-                        gateInjection = `\n⚠️ GATE WARNING: ${gateResult.rejectionReason}\n`;
-                    }
-                } catch (gateError) {
-                    console.error('[GateKeeper] Gate check failed:', gateError);
-                    // Fail-open: proceed without Gate constraints
-                    failStep('gate-scan', gateError);
-                    if (!isAutomationRun) toast.warning('Gate check skipped', 'Quality constraints could not be applied — analysis will proceed without gate validation.');
-                }
-            }
-
+            const gateInjection = '';
+            // Local variable to avoid state closure issue
+            
             // No symbol → the gate block never ran, so the market-data step
             // (completed inside it) would stay 'pending' for the whole run.
             if (!finalSymbol) completeStep('market-data');
@@ -1586,1837 +1386,170 @@ ${reflectionBlock}`
                 });
                 return { ok: true };
             }
-            if (runEnsembleEnabled) {
-                const summaries = [
-                    ...imagesToUse.map(meta => meta.fullAnalysisText).filter((t): t is string => Boolean(t)),
-                    ...(userMessage.ocrCache?.texts ?? []),
-                ].filter((t, i, arr) => arr.indexOf(t) === i);
-                const processNewAnalysis = (analysis: TradeAnalysis): TradeAnalysis => processAnalysisResult(analysis, {
-                    runId: userMessage.id,
-                    capturedGateResult,
-                    update: options?.isUpdate ? {
-                        isUpdate: options.isUpdate,
-                        updateInterval: options.updateInterval,
-                        priorAnalysis: options.priorAnalysis,
-                        priorMessageId: options.priorMessageId,
-                    } : undefined,
-                    freshHybridData,
-                    // The send-time snapshot, under the context's own field
-                    // name — the shape is shared with other callers that read
-                    // live state, so only the VALUE here is snapshotted.
-                    currentHybridData: hybridAtSend,
-                    bayesianConfidenceCap,
-                    loggedTrades,
-                    sessionLoggedTrades: loggedTradesRef.current,
-                    getCalibration: () => GlobalLearningService.getCalibration(),
-                    getActiveUsername,
-                    getHarnessSettings,
-                    getSessionGuardConfig,
-                    activeLeverage: activeConversation?.leverage,
-                    isAccuracyModeEnabled,
-                    accuracySubMode,
-                    isHybridIntelligenceEnabled,
-                    isAutomationRun,
-                    onMonteCarlo: (finalAnalysis, hybridData) => {
-                        runMonteCarloForSetupAsync({
-                            direction: finalAnalysis.direction,
-                            entryPoints: finalAnalysis.entryPoints,
-                            stopLoss: finalAnalysis.stopLoss,
-                            takeProfit: finalAnalysis.takeProfit
-                        }, hybridData).then(mcResult => {
-                            if (!isCurrentRequest()) return;
-                            if (mcResult) {
-                                setLatestMonteCarloResult(mcResult);
-                                setPerAIMonteCarloResults(current => [
-                                    ...current.filter(r => !r.isModeratorFinal),
-                                    {
-                                        provider: 'MODERATOR (Final)',
-                                        result: mcResult,
-                                        isModeratorFinal: true
-                                    }
-                                ]);
-                                devLog(`[MonteCarlo] Simulation complete: WinRate=${mcResult.winRate}%, EV=${mcResult.expectedValue}%`);
-                            } else {
-                                devLog('[MonteCarlo] Simulation returned null - insufficient trade data');
-                            }
-                        }).catch(mcError => {
-                            console.error('[MonteCarlo] Simulation failed:', mcError);
-                        });
+            // Casual chat: use the user-selected model when it maps to a
+            // ready provider; otherwise fall back to the first ready
+            // provider (previous behavior).
+            // ── Bot Mode: inside a bot's 1:1 thread, the send runs
+            // AS the bot — its exact provider+model, its persona system
+            // prompt, and only its own thread's history (threads are
+            // derived views; threadForProvider is the same slice the
+            // rail renders). Outside bot threads activeBot is null and
+            // behavior is unchanged.
+            const activeBot = getActiveBot?.() ?? null;
+            const botProvider = activeBot
+                ? providerConfigs.find(c => c.id === activeBot.providerId && c.isEnabled && c.apiKey.trim().length > 0 && c.models.includes(activeBot.modelId))
+                : undefined;
+            const useBotThread = Boolean(activeBot && botProvider);
+            // The composer selection is provider-qualified
+            // (`providerId::modelId`) so a model name offered by two
+            // providers answers from the one the user actually picked.
+            // Legacy bare ids resolve heuristically (see providerUtils).
+            const chosen = useBotThread && activeBot && botProvider
+                ? botProvider
+                : resolveChatModelSelection(providerConfigs, selectedChatModel) ?? undefined;
+            const chatModel = useBotThread && activeBot ? activeBot.modelId : chatModelIdOf(selectedChatModel);
+            const provider = chosen
+                ? { config: { ...chosen, selectedModel: chatModel }, name: chosen.name, model: chatModel, useImages: false, thoughtsKey: chosen.id }
+                : enabledProviders[0];
+                setLoadingMessage("Thinking...");
+            setIsAnalysisInProgress(true);
+            startStep('analysis');
+            // Stream the reply into the bubble as it generates (perceived
+            // speed) instead of appending it once after completion.
+            const streamingMessageId = `ai-${Date.now()}`;
+            casualMessageId = streamingMessageId;
+            casualErrorAttribution = { [provider.config.id]: provider.model };
+            updateRequestMessages(prev => [...prev, {
+                id: streamingMessageId,
+                role: MessageRole.AI,
+                text: '',
+                createdAt: new Date().toISOString(),
+                modelsUsed: { [provider.config.id]: provider.model },
+                isStreaming: true,
+            }]);
+            let reasoningContent = '';
+            let visibleContent = '';
+            // ONE live writer for both shapes of this branch: the
+            // RAF-coalesced casual updater, so a tool turn's per-token paint
+            // costs one Message write per frame exactly like the plain one.
+            const paint = (text: string, thinking: string): void => {
+                throttledCasualStream(requestConversationId, streamingMessageId, text, thinking, provider.config.id, true);
+            };
+            // The bubble's own stamp: a Stop, a failure and a clean finish
+            // must all report the same "worked for Ns", not each measure from
+            // their own `Date.now()`.
+            const turnStartedAt = Date.now();
+            let toolTurn: ToolTurnOutcome | null = null;
+            let responseText = '';
+            if (useBotThread && activeBot) {
+                // BOTS STAY CHAT-ONLY (stage 20 ruling). The roster
+                // answers with its persona over the plain transport;
+                // `useBotMailbox`, `botRoutine` and `groupRounds` are
+                // deliberately NOT moved onto the tool turn.
+                responseText = await streamQuickResponse(
+                    provider.config,
+                    promptToSend,
+                    // Bot threads see ONLY their own thread (derived view).
+                    threadForProvider(currentMessages, activeBot.providerId, activeBot.modelId, activeBot.id),
+                    activeBot.systemPrompt,
+                    currentAbortController.signal,
+                    reasoning => {
+                        reasoningContent += reasoning;
+                        paint(visibleContent, reasoningContent);
                     },
-                    onBacktest: (finalAnalysis, tradeHistory, regime) => {
-                        try {
-                            const btResult = backtestSimilarSetups(
-                                finalAnalysis,
-                                tradeHistory,
-                                regime
-                            );
-                            liveBtResult = btResult ?? undefined;
-
-                            if (btResult && btResult.totalMatches > 0) {
-                                setLatestBacktestResult(btResult);
-                                devLog(`[LiveBacktest] ✅ Found ${btResult.totalMatches} matches: WinRate=${btResult.winRate.toFixed(1)}%, EV=${btResult.expectedValue.toFixed(2)}%`);
-                            } else {
-                                devLog('[LiveBacktest] ⚠️ No similar trades found in history');
-                            }
-                            return liveBtResult;
-                        } catch (btError) {
-                            console.error('[LiveBacktest] ❌ Backtest failed:', btError);
-                            return undefined;
-                        }
+                    delta => {
+                        visibleContent += delta;
+                        paint(visibleContent, reasoningContent);
                     },
-                    onSetCurrentEntryTimingScore: setCurrentEntryTimingScore,
-                    onSetCurrentSuggestedEntryPrice: setCurrentSuggestedEntryPrice,
-                    onSetCurrentSlOptimization: setCurrentSlOptimization,
-                    onWarning: (title, message) => {
-                        if (!isAutomationRun) toast.warning(title, message);
-                    },
-                });
-
-                if (enabledProviders.length > 1) {
-                    if (!isAutomationRun) setLoadingMessage("Thinking...");
-                    completeStep('gate-scan'); startStep('analysis');
-                    currentPhaseRef.current = 'analysis';
-                    setAnalysisSteps(prev => prev.map(s => s.id === 'analysis' ? { ...s, title: `Analyzing with ${enabledProviders.map(p => p.name).join(', ')}` } : s));
-                    setIsAnalysisInProgress(true);
-                    // Clear previous Monte Carlo results for fresh analysis
-                    if (!isAutomationRun) {
-                        setPerAIMonteCarloResults([]);
-                        setLatestMonteCarloResult(null);
-                        setLatestBacktestResult(null);
-                    }
-                    reasoningMapRef.current = {};
-                    turnReasoningRef.current = {};
-                    openingTextRef.current = {};
-                    activeDebateSpeakersRef.current = {};
-                    liveToolEventsRef.current = {};
-                    toolActionsRef.current = [];
-                    const resumeSeeds = canResume && resumeTarget ? reconstructOpenings(resumeTarget.debateTurns || []) : [];
-                    const useResume = resumeSeeds.filter(s => enabledProviders.some(p => p.name === s.name)).length >= 2;
-                    if (useResume && resumeTarget) {
-                        debateTurnsRef.current = resumeTarget.debateTurns || [];
-                        debateRunLogRef.current = resumeTarget.debateRunLog || [];
-                    } else {
-                        debateTurnsRef.current = [];
-                        debateRunLogRef.current = [];
-                    }
-
-                    // Captured before the promise map: ensemblePlaceholder is
-                    // non-null for staged ensembles, but closures see the
-                    // declared Message | null type.
-                    const placeholderId = ensemblePlaceholder?.id ?? '';
-                    // Per-analyst cost & latency ledger: measure each analyst's
-                    // initial-analysis wall time + output size as they run.
-                    const analystTimings = new Map<string, { durationMs: number; charsOut: number }>();
-                    stopTokenUsage = subscribeTokenUsage(event => {
-                        tokenByProvider.set(
-                            event.providerId,
-                            mergeTokenUsage(tokenByProvider.get(event.providerId) ?? emptyTokenUsage(), event.usage),
-                        );
-                    });
-                    // Shared analysis options for the initial analysts AND any
-                    // mid-debate replacement (the replacement must see the exact
-                    // same prompt/images/context as the analysts it steps in for —
-                    // otherwise the moderator gets an incomparable position).
-                    const buildAnalystParams = (provider: { config: ProviderConfig; name: string; model: string; thoughtsKey: string }): AnalysisRequestParams => ({
-                        imageSummaries: summaries,
-                        chatHistory: currentMessages,
-                        finalTradeSummary: enhancedFinalTradeSummary,
-                        recentInsights: recentInsightsString,
-                        activeFrameworks,
-                        deepenAnalysis: isDeepAnalysis,
-                        globalMemory: memoryToInject,
-                        threadSummary: currentThreadSummary,
-                        subMode: runAccuracyMode ? runAccuracySubMode : undefined,
-                        customInstructions: instructionsToUse,
-                        isPlaybookEnabledInPureAI,
-                        isFamiliesEnabledInPureAI,
-                        isMemoryEnabledInPureAI,
-                        // Analyst Lens: pass role-specific prompt based on trading style.
-                        // Custom overrides from the prompt editor win over built-ins.
-                        // resolvedAssignments (not lensConfig.assignments): a stale
-                        // persisted model id would otherwise make the role lookup
-                        // return UNASSIGNED and drop the persona silently.
-                        // appendLensMemoryToPrompt then prepends this seat's OWN
-                        // memory file (lens/*.md) + seat extras (regime line for
-                        // Macro, in-scope skill supplement) so each lens reads its
-                        // own record before answering. buildPreflightBlock goes
-                        // FIRST: the seat must open with DATA / SOURCE /
-                        // FALSIFICATION or its claim is substituted (validated
-                        // in the .then below, recorded to provider fitness).
-                        rolePrompt: runLensConfig.enabled && provider.thoughtsKey
-                            ? `${buildPreflightBlock()}\n\n${appendLensMemoryToPrompt(
-                                `${provider.config.id}::${provider.model}`,
-                                resolvedAssignments,
-                                customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments)]
-                                || getLensPromptForStyle(
-                                    `${provider.config.id}::${provider.model}`,
-                                    resolvedAssignments,
-                                    effectiveTradingStyle
-                                ),
-                                { coin: finalSymbol ?? undefined, memoryQuery },
-                            )}`
-                            : undefined,
-                        // Normal mode (Lenses off): custom base prompt override.
-                        systemPromptOverride: runLensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
-                        // User-uploaded strategy summaries (Settings → Strategies).
-                        userStrategies: strategiesBlock || undefined,
-                        // Per-seat temperature: Lenses ON → each seat has a
-                        // distinct persona (prompts already differ), so keep
-                        // the disciplined default. Lenses OFF → the three
-                        // seats share one prompt, so a stable per-seat
-                        // temperature keeps them genuinely independent
-                        // instead of near-identical at 0.35.
-                        temperature: runLensConfig.enabled ? undefined : seatTemperature(provider.thoughtsKey || provider.name),
-                        // Streamed chain-of-thought deltas accumulate — the
-                        // latest full string is pushed to the live cards.
-                        onReasoning: (reasoning: string) => {
-                             // Key reasoning by the SAME thoughtsKey used
-                             // everywhere else (provider::model). Keying by
-                             // provider.name here produced a duplicate entry
-                             // per analyst — 6 rows/tabs for 3 analysts — and
-                             // the name-keyed copy resolved to UNASSIGNED.
-                             const reasoningKey = provider.thoughtsKey || provider.name;
-                             reasoningMapRef.current[reasoningKey] = (reasoningMapRef.current[reasoningKey] || '') + reasoning;
-                             if (isStagedEnsemble && provider.thoughtsKey) {
-                                 // Coalesced to one update per animation frame —
-                                 // per-token updates re-render the whole chat.
-                                 throttledEnsembleProgress(
-                                     requestConversationId,
-                                     placeholderId,
-                                     provider.thoughtsKey,
-                                     reasoningMapRef.current[reasoningKey],
-                                 );
-                                 // Stream the analysis thinking into the transcript
-                                 // as live round-1 turns (see throttledOpeningThinking).
-                                 throttledOpeningThinking(
-                                     requestConversationId,
-                                     placeholderId,
-                                     enabledProviders,
-                                     reasoningMapRef.current,
-                                     openingTextRef.current,
-                                 );
-                             }
-                         },
-                        // Visible content deltas (the answer — and any thinking the
-                        // model writes directly into content — forming live). Mirrors
-                        // the reasoning channel: accumulate + surface as round-1 text.
-                        onPartialOutput: (chunk: string) => {
-                            if (!isStagedEnsemble || !provider.thoughtsKey) return;
-                            const reasoningKey = provider.thoughtsKey || provider.name;
-                            openingTextRef.current[reasoningKey] = (openingTextRef.current[reasoningKey] || '') + chunk;
-                            throttledOpeningThinking(
-                                requestConversationId,
-                                placeholderId,
-                                enabledProviders,
-                                reasoningMapRef.current,
-                                openingTextRef.current,
-                            );
-                        },
-                        // P5: the openings' wire labels ride the same
-                        // debateRunLog the engine writes — one "budget" line
-                        // per seat explaining which reasoning route applied.
-                        onWireAudit: (entry: WireAuditEntry) => {
-                            const event: DebateRunEvent = {
-                                at: new Date().toISOString(),
-                                kind: 'budget',
-                                detail: `wire: ${provider.name} opening ${entry.applied ? 'applied' : 'no-op'} — ${entry.reason}`,
-                            };
-                            debateRunLogRef.current = [...debateRunLogRef.current, event].slice(-100);
-                        },
-                    });
-                    const analysisPromises = enabledProviders.map((provider, analystIndex) => {
-                        if (useResume) {
-                            const seed = resumeSeeds.find(s => s.name === provider.name);
-                            if (!seed) {
-                                return Promise.reject(new Error('Resume seed missing'));
-                            }
-                            return Promise.resolve({
-                                thoughtProcess: seed.opening,
-                                finalOutput: seed.opening,
-                                analysis: seed.analysis,
-                            });
-                        }
-                        if (isStagedEnsemble) {
-                            updateEnsembleProgress(progress => ({
-                                ...progress,
-                                analysts: progress.analysts.map(analyst => analyst.key === provider.thoughtsKey
-                                    ? { ...analyst, status: 'analyzing' }
-                                    : analyst),
-                            }));
-                        }
-                        const runStartedAtMs = performance.now();
-                        // Thinking-corpus exemplars: this model's own past
-                        // WINNING reasoning (few-shot) — the corpus was
-                        // write-only before; reading it back is what lets a
-                        // deployed model improve. Non-fatal: a slow store
-                        // must never delay or fail an analysis.
-                        return (async () => {
-                            // Thinking-corpus read starts immediately; the
-                            // stagger below hides its latency for seats > 0.
-                            const exemplarsPromise = getThinkingExemplars(provider.thoughtsKey || provider.config.id, 1)
-                                .catch(() => []);
-                            // Staggered seat launches: free-tier gateways
-                            // dedupe/cache CONCURRENT near-identical requests
-                            // (the three openings share ~99% of their payload
-                            // once the hybrid envelope is in). Launching each
-                            // seat SEAT_LAUNCH_STAGGER_MS apart breaks the
-                            // simultaneous-identical window those caches key on.
-                            if (analystIndex > 0) {
-                                await new Promise<void>(resolve => setTimeout(resolve, SEAT_LAUNCH_STAGGER_MS * analystIndex));
-                                if (currentAbortController.signal.aborted) {
-                                    throw new DOMException('Analysis cancelled', 'AbortError');
-                                }
-                            }
-                            let exemplarBlock = '';
-                            try {
-                                const exemplars = await exemplarsPromise;
-                                if (exemplars.length > 0 && exemplars[0].reasoning.trim()) {
-                                    const ex = exemplars[0];
-                                    // Untagged pre-scoping records fall back as
-                                    // source 'legacy' — presenting them as THIS
-                                    // profile's own history re-opens the very
-                                    // attribution leak the scoping closed.
-                                    exemplarBlock = `
-
- ${ex.source === 'legacy'
-    ? '**A PAST WINNING REASONING FROM THIS APP\'S HISTORY (EXEMPLAR — not this profile\'s own record; study the reasoning pattern, do not copy the numbers):**'
-    : '**YOUR OWN PAST WINNING REASONING (EXEMPLAR — study the reasoning pattern, do not copy the numbers):**'}
-${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` | Confidence: ${ex.confidence}` : ''}${typeof ex.probability === 'number' ? ` | Probability: ${ex.probability}%` : ''}
-> ${ex.reasoning.replace(/\n/g, '\n> ')}`;
-                                }
-                            } catch { /* corpus read is best-effort */ }
-                            const assignedRole = getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments);
-                            const envelopeKind = envelopeKindForRole(assignedRole);
-                            const envelope = [
-                                buildHybridEnvelope(freshHybridData, envelopeKind),
-                                buildOcrEnvelope(summaries, envelopeKind),
-                            ].filter(Boolean).join('\n\n');
-                            // seatMandates (hoisted above) feeds the legacy
-                            // rotation here when no team drives the run.
-                            // Team-seat persona (G-roles): when an ACTIVE team
-                            // drives the run, its seat record wins — built-in
-                            // role prompt (optionally refined by trader
-                            // instructions) or, with nothing set, the
-                            // general-analyst default (full-scope market
-                            // analysis, desk tools + web search grounded).
-                            // Without an active team the legacy 3-rotation
-                            // mandate stays so ad-hoc ensembles behave
-                            // exactly as before.
-                            const teamSeat = teamSeatFor(provider.config.id, provider.model);
-                            // Strategy archetype (Kakushadze & Serur style
-                            // taxonomy): in the flat floor, seats differ by
-                            // mandate AND by strategy style — a trend-follower
-                            // and a mean-reverter disagree structurally, which
-                            // is what the conviction auction feeds on. Team
-                            // personas and lens mode already differentiate
-                            // seats deliberately, so they win and skip rotation.
-                            const persona = !runLensConfig.enabled && runGroupMemberPersonas.length > 0
-                                ? seatPersonaPrompt(teamSeat)
-                                : `Your specialty: ${seatMandates[analystIndex % seatMandates.length]}. ${archetypeDirectiveLine(analystIndex)}`;
-                            // Seat differentiation lives in the SYSTEM prompt
-                            // (rendered near the front by GenericAnalysisService),
-                            // NOT as a suffix on the shared user message — a
-                            // differing tail does not break bulk/prefix-keyed
-                            // upstream prompt caches, a differing head does.
-                            const seatDirective = !runLensConfig.enabled
-                                ? `You are INDEPENDENT ANALYST SEAT ${analystIndex + 1} of several independent analysts looking at the same chart. Recompute it from scratch — do not copy another seat's conclusion or a stock script. ${persona} Form your own view in your own words; where your read differs from the other seats, say so explicitly.`
-                                : '';
-                            return runAnalyzeTradingView(
-                                provider.config,
-                                provider.model,
-                                `${envelope ? `${envelope}\n\n` : ''}${enhancedPrompt}${exemplarBlock}`,
-                                imageFiles,
-                                dataURLs,
-                                currentAbortController.signal,
-                                { ...buildAnalystParams(provider), seatDirective: seatDirective || undefined, allowedTools: seatToolsFor(teamSeat),
-                                  onToolAction: action => { toolActionsRef.current = [...toolActionsRef.current, { ...action, speaker: provider.name }].slice(-50); } },
-                            );
-                        })()
-                                 .then(result => {
-                                     analystTimings.set(provider.thoughtsKey, {
-                                         durationMs: Math.round(performance.now() - runStartedAtMs),
-                                         charsOut: (result.finalOutput?.length ?? 0) + (result.thoughtProcess?.length ?? 0),
-                                     });
-                                     // Preflight gate (lens mode): the seat's prompt
-                                     // demanded DATA / SOURCE / FALSIFICATION. Validate
-                                     // the opening claim; on failure substitute a NO
-                                     // CLAIM placeholder so the debate argues with the
-                                     // seat's actual (missing) evidence instead of a
-                                     // hallucinated call, and record the outcome to
-                                     // provider fitness (best-effort, never throws).
-                                     let gated = result;
-                                     if (runLensConfig.enabled && provider.thoughtsKey) {
-                                         const gate = applyPreflightGate(result.finalOutput);
-                                         void recordPreflightResult(getActiveUsername(), provider.config.id, gate.passed);
-                                         if (!gate.passed) {
-                                             gated = { ...result, finalOutput: gate.output };
-                                         }
-                                     }
-                                     if (isStagedEnsemble) {
-                                         const split = splitThinkingFromOutput(
-                                             reasoningMapRef.current[provider.thoughtsKey || provider.name] || gated.thoughtProcess || '',
-                                             gated.finalOutput || '',
-                                         );
-                                         updateEnsembleProgress(progress => ({
-                                             ...progress,
-                                             analysts: progress.analysts.map(analyst => analyst.key === provider.thoughtsKey
-                                                 ? {
-                                                     ...analyst,
-                                                     status: 'complete',
-                                                     finalOutput: split.output,
-                                                     thoughtProcess: split.thinking || gated.thoughtProcess,
-                                                     reasoning: split.thinking,
-                                                 }
-                                                 : analyst),
-                                         }));
-                                     }
-                                     return gated;
-                                 })
-                                 .catch((err: any) => {
-                                     const errorMsg = err instanceof Error ? err.message : String(err);
-                                     if (isStagedEnsemble) {
-                                         updateEnsembleProgress(progress => ({
-                                             ...progress,
-                                             analysts: progress.analysts.map(analyst => analyst.key === provider.thoughtsKey
-                                                 ? { ...analyst, status: 'error', error: errorMsg }
-                                                 : analyst),
-                                         }));
-                                     }
-                                     throw err;
-                                 });
-                    });
-
-                    const settledResults = await Promise.allSettled(analysisPromises);
-                    if (!isCurrentRequest()) assertCurrentRequest();
-                    // Commit the last opening-phase frame before the message
-                    // changes ownership from the analyst progress view to the
-                    // debate view. The snapshot below is still built from the
-                    // refs because React state updates are asynchronous.
-                    throttledOpeningThinking.flush();
-                    if (isStagedEnsemble) {
-                        updateEnsembleProgress(progress => ({
-                                ...progress,
-                                moderator: { status: 'reviewing' },
-                        }));
-                    }
-                    setLoadingMessage(null);
-                    completeStep('analysis');
-
-                    // Log analysts that failed; downstream consumers iterate
-                    // settledResults ALIGNED BY ORIGINAL PROVIDER INDEX so a
-                    // failed analyst can never shift another provider's data.
-                    // (The old re-indexed `results` array caused exactly that.)
-                    settledResults.forEach((settled, index) => {
-                        if (settled.status === 'rejected') {
-                                console.warn(`[Ensemble] Analyst "${enabledProviders[index]?.name || `#${index}`}" failed:`, settled.reason);
-                        }
-                    });
-
-                    // Duplicate-generation guard: near-identical openings across
-                    // two different models mean an upstream gateway served ONE
-                    // generation to several seats (free-tier routers dedupe/
-                    // cache concurrent near-identical prompts). Surface it —
-                    // the "debate" would otherwise argue with its own echo.
-                    const duplicatePairs = findDuplicateAnalystOutputs(
-                        settledResults.map((settled, index): AnalystOutputSample => ({
-                            name: enabledProviders[index]?.name || `Seat ${index + 1}`,
-                            model: enabledProviders[index]?.model || '',
-                            finalOutput: settled.status === 'fulfilled' ? settled.value.finalOutput : undefined,
-                            thoughtProcess: settled.status === 'fulfilled' ? settled.value.thoughtProcess : undefined,
-                        })),
-                    );
-                    if (duplicatePairs.length > 0) {
-                        console.warn(`[Ensemble] Upstream duplicated generations across seats:\n${duplicatePairs.join('\n')}`);
-                        if (!isAutomationRun) {
-                            toast.warning(
-                                'Duplicated analyst generations',
-                                `The provider returned the same text to multiple seats (${duplicatePairs[0]}). Its free tier is collapsing near-identical requests — results may not be independent.`,
-                            );
-                        }
-                    }
-
-                    // Keep the opening trace visible when the debate object is
-                    // created. Previously this handoff replaced the staged
-                    // placeholder with `debateTurns: []`, which erased the
-                    // live opening thinking/output immediately before the real
-                    // debate stream began.
-                    const openingTurns: DebateTurn[] = settledResults
-                        .map((settled, index): DebateTurn | null => {
-                            if (settled.status !== 'fulfilled') return null;
-                            const provider = enabledProviders[index];
-                            const key = provider.thoughtsKey || provider.name;
-                            const streamedThinking = reasoningMapRef.current[key] || settled.value.thoughtProcess || '';
-                            const streamedOutput = openingTextRef.current[key] || '';
-                            const rawOutput = settled.value.finalOutput || streamedOutput;
-                            const split = splitThinkingFromOutput(streamedThinking, rawOutput);
-                            const text = split.output || streamedOutput.trim();
-                            const reasoning = split.thinking || streamedThinking;
-                            if (!text.trim() && !reasoning.trim()) return null;
-                            return {
-                                speaker: provider.name,
-                                round: 1,
-                                text,
-                                reasoning,
-                                createdAt: new Date().toISOString(),
-                            };
-                        })
-                        .filter((turn): turn is DebateTurn => Boolean(turn));
-
-                    const thoughtMap: Record<string, string> = {};
-                    // iterate settledResults, NOT the
-                    // re-indexed `results` array — otherwise a failed provider
-                    // at index 0 would cause results[0] (actually provider #1's
-                    // data) to be attributed to enabledProviders[0].thoughtsKey.
-                    settledResults.forEach((settled, index) => {
-                        if (settled.status === 'fulfilled') {
-                                const providerKey = enabledProviders[index].thoughtsKey;
-                                thoughtMap[providerKey] = settled.value.thoughtProcess;
-                        }
-                    });
-
-                    // ========== PER-AI MONTE CARLO ==========
-                    // Run Monte Carlo on each AI's proposed setup BEFORE moderation
-                    const perAIMC: LabeledMonteCarloResult[] = [];
-                    const hybridDataForMC = freshHybridData || {
-                        indicators: {},
-                        regime: { detected: 'unknown', trendDirection: 'neutral' }
-                    } as any;
-
-                    // Align per-analyst Monte Carlo by settled-result index (NOT
-                    // the re-indexed `results` array): if an analyst at index 0
-                    // fails, results[0] would be provider #1's data labeled as
-                    // provider #0. Same bug class as the earlier thoughtMap fix.
-                    // Runs off the main thread via a Web Worker pool (with a
-                    // synchronous fallback) so 1000 simulations per analyst
-                    // never block the debate UI. The seats are dispatched
-                    // concurrently — a single worker would serialize them —
-                    // and collected in settled-result order, so the labels
-                    // stay index-aligned exactly as the serial loop had them.
-                    const mcTasks = settledResults.map(async (settled, index): Promise<LabeledMonteCarloResult | null> => {
-                        if (settled.status !== 'fulfilled') return null; // failed analyst has no analysis
-                        const providerName = enabledProviders[index]?.name || `Unknown-${index}`;
-                        const analysis = settled.value?.analysis;
-
-                        if (!analysis) {
-                                console.warn(`[PerAI-MonteCarlo] ${providerName} - Missing analysis object`);
-                                return null;
-                        }
-
-                        // Validate specific fields
-                        const hasEntry = analysis.entryPoints && analysis.entryPoints.length > 0;
-                        const hasSL = !!analysis.stopLoss;
-                        const hasTP = analysis.takeProfit && analysis.takeProfit.length > 0;
-
-                        if (!(hasEntry && hasSL && hasTP)) {
-                                console.warn(`[PerAI-MonteCarlo] ${providerName} - Skipped (Missing components: Entry=${hasEntry}, SL=${hasSL}, TP=${hasTP})`);
-                                return null;
-                        }
-                        try {
-                            const mcResult = await runMonteCarloForSetupAsync({
-                                direction: analysis.direction,
-                                entryPoints: analysis.entryPoints,
-                                stopLoss: analysis.stopLoss,
-                                takeProfit: analysis.takeProfit
-                            }, hybridDataForMC);
-                            if (mcResult) {
-                                devLog(`[PerAI-MonteCarlo] ${providerName}: Success (WinRate=${mcResult.winRate}%)`);
-                                return { provider: providerName, result: mcResult, isModeratorFinal: false };
-                            }
-                            return null;
-                        } catch (err) {
-                            // A user cancel must abort the whole run, not
-                            // just this simulation — swallowing it wrote
-                            // partial post-cancel state (per-AI results +
-                            // an isDebating placeholder) before the debate
-                            // loop noticed the aborted signal.
-                            if ((err as { name?: string })?.name === 'AbortError') throw err;
-                            console.error(`[PerAI-MonteCarlo] ${providerName} failed execution:`, err);
-                            return null;
-                        }
-                    });
-                    const mcSettled = await Promise.allSettled(mcTasks);
-                    if (!isCurrentRequest()) assertCurrentRequest();
-                    for (const s of mcSettled) {
-                        if (s.status === 'rejected') throw s.reason; // cancels propagate
-                        if (s.value) perAIMC.push(s.value);
-                    }
-
-                    // Store per-AI Monte Carlo results
-                    if (perAIMC.length > 0) {
-                        setPerAIMonteCarloResults(perAIMC);
-                        devLog(`[PerAI-MonteCarlo] Completed ${perAIMC.length} simulations`);
-                    }
-                    // ========== END PER-AI MONTE CARLO ==========
-
-                    const debateMessageId = ensemblePlaceholder?.id || `debate-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-                    const debatePlaceholder: Message = {
-                        ...(ensemblePlaceholder || {
-                                id: debateMessageId,
-                                role: MessageRole.AI,
-                                text: '',
-                                createdAt: new Date().toISOString(),
-                        }),
-                        isDebating: true,
-                        debateTurns: useResume && resumeTarget
-                            ? (resumeTarget.debateTurns || [])
-                            : openingTurns,
-                        // Non-staged runs never carried modelsUsed — the chat's
-                        // per-bubble model line was blank for them.
-                        modelsUsed: ensemblePlaceholder?.modelsUsed
-                                || buildModelsUsedRecord(enabledProviders),
-                        thoughtProcesses: { ...(ensemblePlaceholder?.thoughtProcesses || {}), ...thoughtMap },
-                        reasoningProcesses: { ...(ensemblePlaceholder?.reasoningProcesses || {}), ...reasoningMapRef.current },
-                        activeDebateSpeakers: {},
-                        memoryRetrieved,
-                    };
-
-                    updateRequestMessages(prev => ensemblePlaceholder
-                        ? prev.map(message => message.id === debateMessageId ? debatePlaceholder : message)
-                        : [...prev, debatePlaceholder]);
-                    startStep('debate');
-                    currentPhaseRef.current = 'debate';
-
-                    // --- ENSEMBLE ROUTING ---
-                    let debateStream;
-                    // Assigned in the standard-mode branch below: rebuilds the
-                    // visible turns from the accumulated lanes (text AND
-                    // thinking) and flushes them to the message. Reasoning
-                    // callbacks invoke it so thinking-only turns appear live —
-                    // before a seat's first output delta. Null in accuracy mode.
-                    const rebuildDebateTurnsRef: { current: (() => void) | null } = { current: null };
-
-                    const activeModModel = moderatorModel;
-
-                    // STRICT ALL-OR-NOTHING GATE — a debate with a missing seat
-                    // is not a debate: rebuttals answer specific arguments, so
-                    // one dropped analyst poisons the whole transcript. The old
-                    // behavior silently continued with whoever survived and let
-                    // only the <2 guard catch total collapse. Now ANY failure
-                    // aborts before the moderator is invoked, with the per-seat
-                    // reason surfaced in the chat bubble.
-                    const failedAnalysts = settledResults
-                        .map((settled, i) => ({ settled, provider: enabledProviders[i] }))
-                        .filter((x): x is { settled: PromiseRejectedResult; provider: NonNullable<typeof enabledProviders[number]> } => x.settled.status === 'rejected');
-                    if (failedAnalysts.length > 0) {
-                        const reasons = failedAnalysts.map(({ settled, provider }) =>
-                            `• ${provider?.name || 'Unknown seat'}: ${String((settled as PromiseRejectedResult).reason?.message || (settled as PromiseRejectedResult).reason || 'unknown error')}`
-                        ).join('\n');
-                        throw new Error(
-                            `Debate aborted: ${failedAnalysts.length} of ${enabledProviders.length} analysts failed to deliver an opening. All seats must be working for the debate to run.\n${reasons}`
-                        );
-                    }
-                    // Align analysts with their results by ticker index. The
-                    // re-indexed `results` array shifts when an analyst fails,
-                    // silently mislabeling provider #2's analysis as #1's (and
-                    // passing `undefined` when fewer analysts succeed than the
-                    // enabledProviders count — crashing the n-way debaters).
-                    // With the strict gate above this list always matches
-                    // enabledProviders 1:1.
-                    const fulfilledAnalysts = settledResults
-                        .map((settled, i) => settled.status === 'fulfilled' ? { provider: enabledProviders[i], result: settled.value } : null)
-                        .filter((x): x is { provider: (typeof enabledProviders)[number]; result: { thoughtProcess: string; finalOutput: string; analysis: any } } => x !== null);
-                    // Mutable superset of fulfilledAnalysts: a mid-debate
-                    // replacement analyst is appended here so the run ledger,
-                    // the consensus explainability panel, and the analyst count
-                    // reflect everyone who actually delivered, not just the
-                    // initial roster.
-                    const allFulfilledAnalysts: ensembleService.RealDebateAnalyst[] = [...fulfilledAnalysts];
-
-                    // PATTERN-MEMORY GATE (visibility + enforcement) — the
-                    // HALT/REDUCE_SIZE/WARNING check only ever ran inside the
-                    // legacy 3-way generator: invisible to the user and absent
-                    // from the live debate paths. Run it here — surface the
-                    // outcome on the card AND fold the enforcement text into
-                    // the moderator's learning context so live debates enforce
-                    // it the same way the legacy path did.
-                    let patternMemoryGate: PatternMemoryGateView | null = null;
-                    const gateSource = fulfilledAnalysts[0]?.result;
-                    if (gateSource?.analysis && loggedTrades.length > 0) {
-                        try {
-                            const gateSetupContext = {
-                                coin: gateSource.analysis.coinName,
-                                direction: gateSource.analysis.direction as 'Long' | 'Short' | undefined,
-                                pattern: gateSource.analysis.marketConditions?.pattern,
-                                family: gateSource.analysis.detectedPatternFamily || undefined,
-                                confidence: gateSource.analysis.confidence as 'High' | 'Medium' | 'Low' | undefined,
-                            };
-                            const gate = generateMandatoryPatternCheck(gateSetupContext, loggedTrades);
-                            if (gate.gateResult !== 'PASS') {
-                                patternMemoryGate = {
-                                    gateResult: gate.gateResult,
-                                    reason: gate.reason,
-                                    mandatoryQuestions: gate.mandatoryQuestions,
-                                    historicalFailures: gate.historicalFailures.map(t => ({
-                                        coinName: t.coin,
-                                        direction: t.direction,
-                                        outcome: t.outcome,
-                                        keyLesson: t.keyLesson,
-                                    })),
-                                };
-                                const enforcementText = generatePatternMemoryEnforcementContext(gateSetupContext, loggedTrades);
-                                moderatorLearningContext = moderatorLearningContext
-                                    ? `${moderatorLearningContext}\n\n${enforcementText}`
-                                    : enforcementText;
-                                updateRequestMessages(prev => prev.map(m =>
-                                    (m.id === debateMessageId || m.id === ensemblePlaceholder?.id)
-                                        ? { ...m, patternMemoryGate: patternMemoryGate! }
-                                        : m
-                                ));
-                            }
-                        } catch (gateError) {
-                            console.warn('[Pipeline] Pattern memory gate failed:', gateError);
-                            // Fail-open, but never silently — enforcement is
-                            // weaker this run and the user should know.
-                            if (!isAutomationRun) {
-                                toast.warning('Pattern-memory gate skipped', 'Historical-failure enforcement could not run for this debate.');
-                            }
-                        }
-                    }
-
-                    const skillVetoMeta = confirmedAvoidForSetup({
-                        coin: fulfilledAnalysts[0]?.result?.analysis?.coinName || finalSymbol,
-                        direction: fulfilledAnalysts[0]?.result?.analysis?.direction,
-                        family: fulfilledAnalysts[0]?.result?.analysis?.detectedPatternFamily,
-                        pattern: fulfilledAnalysts[0]?.result?.analysis?.marketConditions?.pattern,
-                        // Regime-conditional enforcement.
-                        regime: freshHybridData?.regime?.regime,
-                    }, userMessage.id);
-                    const skillVeto = skillVetoMeta ? titleFromMeta(skillVetoMeta) : undefined;
-
-                    // ── Veto falsification ledger ──
-                    // A vetoed setup produces no trade outcome, so an avoid
-                    // skill can never be refuted by evidence. Build the veto
-                    // record now (the blocked setup's TP/SL targets come from
-                    // the analyst's preliminary plan) but DEFER the stamp to
-                    // the verdict commit below — only a verdict that actually
-                    // stays blocked belongs in the ledger. If the floor defies
-                    // the veto end-to-end and ships an actionable Long/Short,
-                    // nothing was blocked and the trade takes the normal
-                    // evidence path instead of a phantom ledger entry.
-                    let vetoRecordParams: Parameters<typeof VetoLedgerService.recordVeto>[0] | null = null;
-                    if (skillVetoMeta) {
-                        const vetoAnalysis = fulfilledAnalysts[0]?.result?.analysis;
-                        // Key the ledger by the skill's REAL file name — a
-                        // title-derived slug drifts from fileNameFromMeta's
-                        // [coin, direction, family, kind] ordering and would
-                        // never match the file the dashboard links to.
-                        const vetoSkillName = skillFileNameFor(skillVetoMeta)
-                            ?? `${slugifyName([
-                                skillVetoMeta.coin,
-                                skillVetoMeta.direction,
-                                skillVetoMeta.family,
-                                skillVetoMeta.kind,
-                            ].filter(Boolean).join(' ')) || 'skill'}.md`;
-                        vetoRecordParams = {
-                            username: getActiveUsername(),
-                            skill: skillVetoMeta,
-                            skillName: vetoSkillName,
-                            coinName: vetoAnalysis?.coinName || finalSymbol,
-                            direction: vetoAnalysis?.direction === 'Long' || vetoAnalysis?.direction === 'Short'
-                                ? vetoAnalysis.direction
-                                : 'Neutral',
-                            entryPrice: parseFloat(String(vetoAnalysis?.entryPoints?.[0]?.price ?? '').replace(/[^0-9.]/g, '')) || 0,
-                            takeProfits: (vetoAnalysis?.takeProfit ?? []).map((t: { price: number | string }) => ({
-                                price: parseFloat(String(t.price).replace(/[^0-9.]/g, '')) || 0,
-                            })).filter((t: { price: number }) => t.price > 0),
-                            stopLoss: parseFloat(String(vetoAnalysis?.stopLoss ?? '').replace(/[^0-9.]/g, '')) || 0,
-                            regime: freshHybridData?.regime?.regime,
-                            reason: titleFromMeta(skillVetoMeta),
-                        };
-                    }
-
-                    if (runAccuracyMode) {
-                        // ACCURACY MODE — the moderator autoplays the whole
-                        // simulated transcript. Guard: with zero fulfilled
-                        // analysts the moderator would be invoked with an
-                        // empty analyst list and fabricate a Neutral card
-                        // (standard mode has the ≥2 guard; this one was missing).
-                        if (fulfilledAnalysts.length < 1) {
-                                const failureReport = buildAnalystFailureReport(settledResults, enabledProviders);
-                                const detail = failureReport
-                                    ? `\n\nFailed analysts:\n${failureReport}`
-                                    : '\n\nNo analyst succeeded. Enable at least one model (Settings → AI Models or the Debate Models picker) to run the debate.';
-                                throw new Error(`Accuracy-mode debate requires at least 1 analyst (${fulfilledAnalysts.length} provided).${detail}`);
-                        }
-                        debateStream = ensembleService.conductDebate(
-                                fulfilledAnalysts.map(a => a.result),
-                                fulfilledAnalysts.map(a => a.provider.name),
-                                enhancedPrompt,
-                                enhancedFinalTradeSummary,
-                                runAccuracySubMode,
-                                instructionsToUse,
-                                runModeratorConfig,
-                                runModeratorModel,
-                                isFamiliesEnabledInPureAI,
-                                isMemoryEnabledInPureAI,
-                                capturedGateResult, // Gate result for reconciliation (local, not stale state)
-                                tradeSummaries, // Recent Insights
-                                moderatorLearningContext, // Unified learning context for moderator
-                                currentAbortController.signal, // Cancellation for the moderator stream
-                                (reasoning: string) => {
-                                    // Streamed moderator chain-of-thought accumulates
-                                    // (deltas replace nothing — they append).
-                                    reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
-                                    reasoningMapRef.current.Moderator = reasoningMapRef.current.moderator;
-                                    thoughtMap.moderator = reasoningMapRef.current.moderator;
-                                    // Accuracy/autoplay has no per-speaker
-                                    // status callback. Push the global
-                                    // moderator trace immediately so the Floor
-                                    // and the debate floor can show thinking before
-                                    // the transcript parser sees public text.
-                                    throttledDebateUpdate(
-                                        requestConversationId,
-                                        debateMessageId,
-                                        debateTurnsRef.current,
-                                        thoughtMap,
-                                        reasoningMapRef.current,
-                                        activeDebateSpeakersRef.current, runContractFor(),
-                                    );
-                                },
-                                // Provider IDs for Bayesian calibration (keyed by id)
-                                fulfilledAnalysts.map(a => a.provider.config.id),
-                                // Full chart/pattern context + user strategies —
-                                // the moderator sees the same chart the analysts see.
-                                moderatorContextBundle,
-                                // Analyst Lens config — the accuracy-mode
-                                // moderator previously got NO role context
-                                // (lenses silently inert in accuracy mode).
-                                // Assignments are resolved so stale model ids
-                                // still resolve to the right persona.
-                                runLensConfig.enabled ? { ...runLensConfig, assignments: resolvedAssignments } : undefined,
-                                // model side-effects — same ledger as standard mode.
-                                { onToolAction: action => { toolActionsRef.current = [...toolActionsRef.current, action].slice(-50); } },
-                        );
-                    } else {
-                        // STANDARD MODE — REAL inter-model debate. Each analyst
-                        // is re-invoked on its own provider for the rebuttal
-                        // rounds; only the moderator produces the JSON plan.
-                        if (fulfilledAnalysts.length < 2) {
-                                // Enrich the bare engine error with the per-analyst
-                                // failure reasons (or the enabled count) so the user
-                                // can see exactly why the debate could not start
-                                // instead of a cryptic "1 provided".
-                                const failureReport = buildAnalystFailureReport(settledResults, enabledProviders);
-                                const detail = failureReport
-                                    ? `\n\nFailed analysts:\n${failureReport}`
-                                    : `\n\nOnly ${fulfilledAnalysts.length} analyst${fulfilledAnalysts.length === 1 ? ' was' : 's were'} enabled and all of them succeeded. Enable at least 2 models (Settings → AI Models or the Debate Models picker) to run the debate.`;
-                                throw new Error(`Real debate requires at least 2 analysts (${fulfilledAnalysts.length} provided).${detail}`);
-                        }
-                        // Mid-debate replacement: the generator suspends after an
-                        // analyst drops; the UI shows the offer banner and the
-                        // user's pick (or skip) settles this promise. The fresh
-                        // analyst runs with the exact same options as the initial
-                        // roster and joins the remaining debate.
-                        const requestReplacement = async (
-                            droppedName: string,
-                            round: number,
-                        ): Promise<ensembleService.RealDebateAnalyst | null> => {
-                            // Candidates: every ready provider except the ones
-                            // already in this debate (initial + dropped +
-                            // already-replaced) and the moderator.
-                            const usedProviderIds = new Set<string>();
-                            for (const a of allFulfilledAnalysts) usedProviderIds.add(a.provider.config.id);
-                            usedProviderIds.add(runModeratorConfig.id);
-                            let replacementPool = providerConfigs
-                                .filter(p => p.isEnabled !== false && !usedProviderIds.has(p.id) && (p.selectedModel || p.models?.[0]));
-                            // Fittest first: outcome record + preflight pass
-                            // rate order the offer, so the user's top pick is
-                            // the provider with the best recent evidence.
-                            try {
-                                replacementPool = await sortByFitness(replacementPool, getActiveUsername());
-                            } catch { /* fitness read is best-effort */ }
-                            const candidates = replacementPool
-                                .map(p => ({
-                                    providerId: p.id,
-                                    displayName: p.name,
-                                    modelId: p.selectedModel || p.models?.[0] || '',
-                                }));
-                            if (candidates.length === 0) return null;
-
-                            const offer: ReplacementOffer = { droppedName, round, candidates };
-                            updateRequestMessages(prev => prev.map(m => m.id === debateMessageId ? { ...m, replacementOffer: offer } : m));
-
-                            // Suspend until the user picks a candidate or skips
-                            // (bounded by the generator's replacement timeout;
-                            // a user cancel aborts the whole debate).
-                            const choice = await new Promise<string | null>((resolve) => {
-                                replacementChoiceRef.current = { messageId: debateMessageId, resolve };
-                            });
-                            if (choice) {
-                                updateRequestMessages(prev => prev.map(m => m.id === debateMessageId
-                                    ? { ...m, replacementOffer: { ...offer, chosenProviderId: choice } }
-                                    : m));
-                            } else {
-                                updateRequestMessages(prev => prev.map(m => m.id === debateMessageId ? { ...m, replacementOffer: undefined } : m));
-                            }
-                            if (!choice) return null;
-
-                            const candidate = providerConfigs.find(p => p.id === choice);
-                            if (!candidate) return null;
-                            const model = candidate.selectedModel || candidate.models?.[0] || '';
-                            const replacementProvider = { config: candidate, name: candidate.name, model, thoughtsKey: `${candidate.id}:${model}` };
-                            // The replacement STEPS INTO the dropped seat: it
-                            // runs with that seat's persona (team role /
-                            // instructions) and tool scope so the debate
-                            // keeps a comparable position. Without an active
-                            // team, fall back to the legacy mandate rotation.
-                            const dropped = allFulfilledAnalysts.find(a => a.provider.name === droppedName);
-                            const droppedSeat = dropped ? teamSeatFor(dropped.provider.config.id, dropped.provider.model) : undefined;
-                            const seatIdx = dropped
-                                ? enabledProviders.findIndex(p => p.config.id === dropped.provider.config.id && p.model === dropped.provider.model)
-                                : -1;
-                            const replacementSeatDirective = !runLensConfig.enabled
-                                ? `You are INDEPENDENT ANALYST SEAT ${seatIdx >= 0 ? seatIdx + 1 : enabledProviders.length + 1} of several independent analysts looking at the same chart. Recompute it from scratch — do not copy another seat's conclusion or a stock script. ${!runLensConfig.enabled && runGroupMemberPersonas.length > 0 ? seatPersonaPrompt(droppedSeat) : `Your specialty: ${seatMandates[seatIdx >= 0 ? seatIdx % seatMandates.length : 0]}. ${archetypeDirectiveLine(seatIdx >= 0 ? seatIdx : 0)}`} Form your own view in your own words; where your read differs from the other seats, say so explicitly.`
-                                : undefined;
-                            const runStartedAtMs = performance.now();
-                            const result = await runAnalyzeTradingView(
-                                candidate,
-                                model,
-                                enhancedPrompt,
-                                imageFiles,
-                                dataURLs,
-                                currentAbortController.signal,
-                                { ...buildAnalystParams(replacementProvider), seatDirective: replacementSeatDirective, allowedTools: seatToolsFor(droppedSeat) },
-                            );
-                            analystTimings.set(replacementProvider.thoughtsKey, {
-                                durationMs: Math.round(performance.now() - runStartedAtMs),
-                                charsOut: (result.finalOutput?.length ?? 0) + (result.thoughtProcess?.length ?? 0),
-                            });
-                            const record: ensembleService.RealDebateAnalyst = {
-                                provider: replacementProvider,
-                                result: {
-                                    thoughtProcess: result.thoughtProcess,
-                                    finalOutput: result.finalOutput || '',
-                                    analysis: result.analysis,
-                                },
-                            };
-                            allFulfilledAnalysts.push(record);
-                            // Persona follows the floor slot: the replacement
-                            // inherits the dropped seat's persona under its
-                            // OWN name (the engine keys personas by seat name,
-                            // and the replacement keeps the name it joined with).
-                            if (seatPersonasBySeatName && droppedSeat) {
-                                seatPersonasBySeatName[replacementProvider.name] =
-                                    seatPersonasBySeatName[droppedName]
-                                    ?? `You are INDEPENDENT ANALYST SEAT ${seatIdx >= 0 ? seatIdx + 1 : enabledProviders.length + 1} of ${enabledProviders.length}. ${seatPersonaPrompt(droppedSeat)}`;
-                            }
-                            // Model line for the replacement's transcript
-                            // bubbles — keyed by thoughtsKey so a replacement
-                            // sharing the dropped analyst's provider cannot
-                            // overwrite the original's attribution.
-                            updateRequestMessages(prev => prev.map(m => m.id === debateMessageId
-                                ? { ...m, modelsUsed: { ...m.modelsUsed, [replacementProvider.thoughtsKey]: model } }
-                                : m));
-                            return record;
-                        };
-                        // Per-bot prompt/tool overrides + centralized market snapshot for the debate.
-                        let botByThoughtsKey: Record<string, import('../types/bot').HermesBot> | undefined;
-                        let centralizedSnapshot: string | undefined;
-                        // Team-seat personas keyed by SEAT NAME (the engine's
-                        // roster key — thoughtsKey would miss a replacement).
-                        // Mutable: a mid-debate replacement registers under
-                        // its own name, inheriting the dropped seat's persona.
-                        const seatPersonasBySeatName: Record<string, string> | undefined =
-                            !runLensConfig.enabled && runGroupMemberPersonas.length > 0
-                                ? Object.fromEntries(enabledProviders.map((p, i) => {
-                                      const seat = teamSeatFor(p.config.id, p.model);
-                                      // Unroled seats rotate a focus dimension so
-                                      // N general seats diverge instead of echoing.
-                                      const persona = seat?.role || (seat?.customPrompt ?? '').trim()
-                                          ? seatPersonaPrompt(seat)
-                                          : `${seatPersonaPrompt(seat)}\n\n${generalSeatMandate(i)}`;
-                                      return [p.name, `You are INDEPENDENT ANALYST SEAT ${i + 1} of ${enabledProviders.length}. ${persona}`];
-                                  }))
-                                : undefined;
-                        try {
-                            const bots = await BotRegistry.list();
-                            if (bots.length > 0) {
-                                botByThoughtsKey = {};
-                                for (const p of fulfilledAnalysts) {
-                                    const match = bots.find(b => b.providerId === p.provider.config.id && b.model === p.provider.model)
-                                        || bots.find(b => b.providerId === p.provider.config.id);
-                                    if (match) botByThoughtsKey[p.provider.thoughtsKey] = match;
-                                }
-                                if (Object.keys(botByThoughtsKey).length === 0) botByThoughtsKey = undefined;
-                            }
-                        } catch { /* best-effort */ }
-                        if (hybridDataInjection) {
-                            centralizedSnapshot = hybridDataInjection.slice(0, 2400);
-                        } else if (freshHybridData) {
-                            try {
-                                const { generateHybridPromptInjection } = await import('../services/analysis/HybridIntelligenceService');
-                                centralizedSnapshot = generateHybridPromptInjection(freshHybridData as any).slice(0, 2400);
-                            } catch { /* ignore */ }
-                        }
-                        // The protocol lane is hashed from THIS
-                        // setup's identity — identical trade ideas always run
-                        // the same debate structure, so verdicts stay
-                        // comparable across reruns. Unseeded engine calls
-                        // (tests) deterministically take the control lane.
-                        ensembleService.setProtocolSeed(
-                            `${finalSymbol || 'unknown'}|${enhancedPrompt.slice(0, 200)}|${fulfilledAnalysts.map(a => a.provider.name).join(',')}`,
-                        );
-                        debateStream = ensembleService.conductRealDebate({
-                            analysts: fulfilledAnalysts.map(a => ({
-                                provider: a.provider,
-                                result: a.result,
-                            })),
-                            userPrompt: enhancedPrompt,
-                            finalTradeSummary: enhancedFinalTradeSummary,
-                            moderatorConfig: runModeratorConfig,
-                            moderatorModel: runModeratorModel,
-                            customInstructions: instructionsToUse,
-                            monteCarloResults: perAIMC,
-                            // lensConfig (resolved)
-                            lensConfig: runLensConfig.enabled ? { ...runLensConfig, assignments: resolvedAssignments } : undefined,
-                            analystProviders: runLensConfig.enabled ? fulfilledAnalysts.map(a => a.provider.config.id) : undefined,
-                            activeFrameworks, // playbook
-                            tradeSummaries, // recent insights for pattern matching
-                            gateResult: capturedGateResult, // current run, not stale state
-                            learningContext: moderatorLearningContext,
-                            signal: currentAbortController.signal, // cancellation for the moderator stream
-                            onReasoning: (reasoning: string) => {
-                                // Streamed moderator chain-of-thought accumulates
-                                // (deltas replace nothing — they append).
-                                reasoningMapRef.current.moderator = (reasoningMapRef.current.moderator || '') + reasoning;
-                                reasoningMapRef.current.Moderator = reasoningMapRef.current.moderator;
-                                thoughtMap.moderator = reasoningMapRef.current.moderator;
-                                // Push immediately (rAF-coalesced) so the Floor
-                                // shows the moderator THINKING live — before the
-                                // first visible text delta lands. Previously this
-                                // only flushed when a turn text chunk arrived.
-                                throttledDebateUpdate(
-                                    requestConversationId,
-                                    debateMessageId,
-                                    debateTurnsRef.current,
-                                    thoughtMap,
-                                    reasoningMapRef.current,
-                                    activeDebateSpeakersRef.current, runContractFor(),
-                                );
-                            },
-                            onAnalystReasoning: (speaker: string, reasoning: string, round?: number) => {
-                                // Rebuttal and clarification reasoning is keyed by speaker
-                                // so the debate chat can show it live. Deltas ACCUMULATE
-                                // (same as the analyst/moderator callbacks) — replacing
-                                // wiped everything but the last delta of the last round.
-                                // The moderator's GLOBAL channel (.moderator / .Moderator)
-                                // is owned by the moderator callback above — it mirrors the
-                                // full accumulated trace, so appending here too would
-                                // double-count every chunk. Analysts keep accumulating.
-                                if (speaker !== 'Moderator') {
-                                    reasoningMapRef.current[speaker] = (reasoningMapRef.current[speaker] || '') + reasoning;
-                                }
-                                if (round && round > 0) {
-                                    const key = `${round}::${speaker}`;
-                                    turnReasoningRef.current[key] = (turnReasoningRef.current[key] || '') + reasoning;
-                                }
-                                if (rebuildDebateTurnsRef.current) {
-                                    // Rebuild the lanes — this CREATES thinking-only
-                                    // turns before any output text exists — then flush
-                                    // (rAF-coalesced), so thinking streams live.
-                                    rebuildDebateTurnsRef.current();
-                                } else {
-                                    throttledDebateUpdate(
-                                        requestConversationId,
-                                        debateMessageId,
-                                        debateTurnsRef.current,
-                                        thoughtMap,
-                                        reasoningMapRef.current,
-                                        activeDebateSpeakersRef.current, runContractFor(),
-                                    );
-                                }
-                            },
-                            onSpeakerStatus: (speaker: string, round: number, active: boolean) => {
-                                if (active) {
-                                    activeDebateSpeakersRef.current[speaker] = round;
-                                } else if (activeDebateSpeakersRef.current[speaker] === round) {
-                                    delete activeDebateSpeakersRef.current[speaker];
-                                }
-                                throttledDebateUpdate(
-                                    requestConversationId,
-                                    debateMessageId,
-                                    debateTurnsRef.current,
-                                    thoughtMap,
-                                    reasoningMapRef.current,
-                                    activeDebateSpeakersRef.current, runContractFor(),
-                                );
-                            },
-                            // Full chart/pattern context + user strategies —
-                            // the moderator sees the same chart the analysts see.
-                            hybridContext: moderatorContextBundle,
-                            onReplacementRequested: requestReplacement,
-                            // Live-price refresh between rounds: the debate
-                            // re-anchors each round on TODAY's price (from the
-                            // live feed's cache — zero extra network calls).
-                            // Null symbol / unknown price → graceful no-op.
-                            getLivePrice: () => (finalSymbol ? PriceAlertService.getCurrentPrice(finalSymbol) ?? null : null),
-                            getSteeringNotes: () => {
-                                const notes = steeringQueueRef.current;
-                                steeringQueueRef.current = [];
-                                setSteeringNotes([]);
-                                return notes.join('\n');
-                            },
-                            // Per-seat steering: notes addressed to one seat
-                            // ("@Technical …") ride only that seat's prompt.
-                            getSeatSteeringNote: (seatName: string) => {
-                                const note = seatSteeringRef.current[seatName];
-                                if (!note) return '';
-                                delete seatSteeringRef.current[seatName];
-                                return note;
-                            },
-                            // Per-seat stop: benched seats leave at the next
-                            // round boundary; the debate continues without them.
-                            shouldDropSeat: (seatName: string) => stoppedSeatsRef.current.has(seatName),
-                            onRunEvent: (event) => {
-                                debateRunLogRef.current = [...debateRunLogRef.current, event].slice(-100);
-                            },
-                            memoryGate: patternMemoryGate || skillVeto
-                                ? { ...(patternMemoryGate ?? {}), skillVeto }
-                                : null,
-                            resumeState: useResume && resumeTarget ? {
-                                lastCompletedRound: resumeTarget.debateCheckpoint?.lastCompletedRound
-                                    || lastCompletedRound(resumeTarget.debateTurns || [], resumeTarget.debateCheckpoint?.analystNames),
-                                seedRoundTexts: debateTurnsToRoundTexts(resumeTarget.debateTurns || []),
-                                laneDrafts: resumeTarget.debateCheckpoint?.laneDrafts,
-                            } : undefined,
-                            shouldSkipRemaining: () => {
-                                const cap = getHarnessSettings().debateCostCapUsd;
-                                if (cap <= 0) return false;
-                                let spent = 0;
-                                for (const [id, usage] of tokenByProvider) {
-                                    const cfg = providerConfigs.find(p => p.id === id);
-                                    spent += estimateCostUsd(usage, {
-                                        inputUsdPer1k: cfg?.inputUsdPer1k,
-                                        outputUsdPer1k: cfg?.outputUsdPer1k,
-                                    }) ?? 0;
-                                }
-                                return spent >= cap;
-                            },
-                            // Live desk-tool chips — the Floor shows what each
-                            // seat is looking up instead of a silent bot.
-                            // Keep a short ROLLING FEED per seat
-                            // (newest first, capped) so the side panel can
-                            // render stacked tool rows instead of
-                            // a single overwriting chip.
-                            // Each line carries a wall-clock prefix
-                            // (HH:MM:SS) so the panel rows can render an
-                            // elapsed/when stamp per row.
-                            onToolEvent: (speaker: string, _round: number, line: string) => {
-                                const stamp = new Date().toLocaleTimeString([], { hour12: false });
-                                const stamped = `${stamp} · ${line}`;
-                                const prev = liveToolEventsRef.current[speaker];
-                                const merged = prev ? `${stamped}\n${prev}` : stamped;
-                                liveToolEventsRef.current[speaker] = merged.split('\n').slice(0, 8).join('\n');
-                                throttledDebateUpdate(
-                                    requestConversationId,
-                                    debateMessageId,
-                                    debateTurnsRef.current,
-                                    thoughtMap,
-                                    reasoningMapRef.current,
-                                    activeDebateSpeakersRef.current, runContractFor(),
-                                );
-                            },
-                            // Risk-only template: straight to the verdict.
-                            forceSkipRebuttals: runDebateTemplate?.skipToVerdict,
-                            botByThoughtsKey,
-                            centralizedSnapshot,
-                            similarTrades: lossPrimingRows,
-                            fullTradesForRecall: loggedTrades,
-                            // Team-seat personas: seatName → directive, so a
-                            // team seat's role/instructions survive into the
-                            // rebuttal/clarification/verdict rounds too.
-                            seatPersonas: seatPersonasBySeatName,
-                            // Session-guard facts (Batch 2): the moderator weighs
-                            // "trader is at the daily-loss limit" when grading.
-                            sessionGuardBlock: formatGuardContextBlock(assessSession(
-                                loggedTrades,
-                                getHarnessSettings().equityUsd,
-                                getSessionGuardConfig(),
-                            )),
-                            // model side-effects — proposals + custom tools
-                            // land on the message as ToolAction status rows.
-                            opts: {
-                                onToolAction: action => { toolActionsRef.current = [...toolActionsRef.current, action].slice(-50); },
-                                // Rebuttal rounds otherwise carry no retrieved
-                                // memory at all. Same runId slice as the openings,
-                                // so the per-run holdout applies here too.
-                                rebuttalMemoryContext,
-                            },
-                        });
-                    }
-
-                    let fullResponseText = '';
-                    if (runAccuracyMode) {
-                        // ACCURACY MODE — the moderator autoplays the whole
-                        // simulated transcript as one stream; parse `Speaker:`
-                        // lines out of it with the established regex.
-                        const turnRegex = buildAutoplaySpeakerRegex(enabledProviders.map(provider => provider.name));
-
-                        for await (const chunk of debateStream as AsyncGenerator<string, void, unknown>) {
-                            if (!isCurrentRequest()) assertCurrentRequest();
-                            fullResponseText += chunk;
-
-                            const normalizedTurns = parseAutoplayTranscriptChunk(fullResponseText, turnRegex);
-                            debateTurnsRef.current = normalizedTurns;
-                            throttledDebateUpdate(requestConversationId, debateMessageId, normalizedTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current, runContractFor());
-                        }
-                    } else {
-                        // STANDARD MODE — REAL debate: the pipeline receives
-                        // structured turn events (delta chunks per speaker +
-                        // round) instead of a transcript to regex-parse.
-                        const turnTexts: Record<string, string> = {}; // `${round}::${speaker}` → accumulated text
-                        const turnTimes: Record<string, string> = {};   // first-delta timestamp per turn (replay)
-                        // Per-turn speed metrics: provider-call launch time
-                        // (rides the first delta) + last-delta time.
-                        const turnLaunchTimes: Record<string, number> = {};
-                        const turnLastDeltaAt: Record<string, number> = {};
-                        let moderatorRound = 0;
-
-                        const peelDebateTurn = (speaker: string, raw: string, key: string): { text: string; reasoning?: string } => {
-                            const cot = turnReasoningRef.current[key]
-                                || reasoningMapRef.current[speaker]
-                                || (speaker === 'Moderator' ? reasoningMapRef.current.moderator : '')
-                                || '';
-                            const split = splitThinkingFromOutput(cot, raw);
-                            return {
-                                text: sanitizeAIResponseLight(split.output),
-                                reasoning: split.thinking || undefined,
-                            };
-                        };
-
-                        // Single rebuild path shared by the text-event loop AND the
-                        // reasoning callbacks. Turns are assembled from BOTH lanes —
-                        // accumulated text AND accumulated thinking — so a seat that
-                        // is still thinking (no output deltas yet) already has a
-                        // live turn whose Thinking row streams.
-                        const rebuildDebateTurns = (): void => {
-                            const turnKeys = new Set<string>(Object.keys(turnTexts));
-                            for (const k of Object.keys(turnReasoningRef.current)) {
-                                if (turnReasoningRef.current[k]) turnKeys.add(k);
-                            }
-                            const currentTurns: DebateTurn[] = [...turnKeys]
-                                .map((k) => {
-                                    const sep = k.indexOf('::');
-                                    const speaker = k.slice(sep + 2) as DebateTurn['speaker'];
-                                    const text = turnTexts[k] || '';
-                                    const cleanedText = speaker === 'Moderator'
-                                        ? text
-                                            .replace(CLARIFICATION_MARKERS_RE, '')
-                                            .replace(MODERATOR_RETRY_RE, '')
-                                            .replace(MODERATOR_ERROR_BLOCK_RE, '')
-                                            .replace(/<JSON_PLAN>[\s\S]*/i, '')
-                                            .replace(DEBATE_END_MARKERS_RE, '')
-                                            .trim()
-                                        : text.trim();
-                                    const peeled = peelDebateTurn(speaker, cleanedText, k);
-                                    // Per-turn speed metrics:
-                                    // TTFT from provider-launch → first delta,
-                                    // output rate from first → last delta.
-                                    const launch = turnLaunchTimes[k];
-                                    const firstAt = turnTimes[k] ? Date.parse(turnTimes[k]) : NaN;
-                                    const lastAt = turnLastDeltaAt[k];
-                                    const ttftMs = launch && Number.isFinite(firstAt) && firstAt >= launch
-                                        ? Math.max(0, firstAt - launch)
-                                        : undefined;
-                                    const chars = (turnTexts[k] || '').length;
-                                    const streamSec = Number.isFinite(firstAt) && lastAt && lastAt > firstAt
-                                        ? (lastAt - firstAt) / 1000
-                                        : 0;
-                                    const tokensPerSec = streamSec >= 0.5 && chars > 0
-                                        ? Math.round(chars / 4 / streamSec)
-                                        : undefined;
-                                    return {
-                                        speaker,
-                                        round: parseInt(k.slice(0, sep), 10) || undefined,
-                                        createdAt: turnTimes[k],
-                                        text: peeled.text,
-                                        reasoning: peeled.reasoning,
-                                        metrics: ttftMs !== undefined || tokensPerSec !== undefined
-                                            ? { ttftMs, tokensPerSec }
-                                            : undefined,
-                                    };
-                                })
-                                .filter(turn => Boolean(turn.text) || Boolean(turn.reasoning))
-                                .sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
-
-                            // REPLY-TO markers become `to`; FinCom COMMIT/DISSENT
-                            // lines parse into `fincom` metadata (Batch 4 g).
-                            const normalizedTurns = currentTurns.map(t => withFinComMetadata(applyReplyTo(t)));
-                            debateTurnsRef.current = normalizedTurns;
-                            throttledDebateUpdate(requestConversationId, debateMessageId, normalizedTurns, thoughtMap, reasoningMapRef.current, activeDebateSpeakersRef.current, runContractFor());
-                        };
-                        rebuildDebateTurnsRef.current = rebuildDebateTurns;
-
-                        // ─── Progressive verdict ───────────────────────────────
-                        // Re-parse the moderator's stream as it grows so the
-                        // TradingSignalCard fills while the verdict is still
-                        // being written. Guarded by a growth threshold so the
-                        // parser doesn't run on every token; the authoritative
-                        // parse still runs once the debate concludes.
-                        let progressiveParsedLen = 0;
-                        let lastProvisionalJson = '';
-                        const tryProgressiveVerdict = (): void => {
-                            if (moderatorRound <= 0) return;
-                            const hasEndMarker = /<\/?DEBATE_END>/i.test(fullResponseText);
-                            if (!hasEndMarker && fullResponseText.length - progressiveParsedLen < 160) return;
-                            progressiveParsedLen = fullResponseText.length;
-                            const moderatorTurn = turnTexts[`${moderatorRound}::Moderator`] || '';
-                            const provisional = parseProvisionalVerdict(fullResponseText, moderatorTurn);
-                            // Skeleton-fill: publish whatever labeled fields have
-                            // arrived so far, even before the plan is binding.
-                            const planFields = parsePartialVerdictFields(fullResponseText, moderatorTurn) ?? undefined;
-                            const json = JSON.stringify({ provisional, planFields });
-                            if (json === lastProvisionalJson) return;
-                            lastProvisionalJson = json;
-                            throttledProvisionalVerdict(requestConversationId, debateMessageId, provisional ?? undefined, planFields);
-                        };
-
-                        for await (const event of debateStream as AsyncGenerator<ensembleService.RealDebateTurnEvent, void, unknown>) {
-                            if (!isCurrentRequest()) assertCurrentRequest();
-                            if (!event || typeof event.text !== 'string') continue;
-
-                            const key = `${event.round}::${event.speaker}`;
-                            // The engine emits this marker before a moderator
-                            // verdict retry — discard the failed attempt's
-                            // partial prose so it never glues onto the verdict.
-                            if (event.text.includes(MODERATOR_RETRY_MARKER)) {
-                                // Discard the failed attempt entirely — text, the
-                                // first-delta timestamp, AND the streamed thinking
-                                // (the retried verdict must not carry the failed
-                                // attempt's start time or chain-of-thought).
-                                turnTexts[key] = '';
-                                delete turnTimes[key];
-                                delete turnLaunchTimes[key];
-                                delete turnLastDeltaAt[key];
-                                delete turnReasoningRef.current[key];
-                                continue;
-                            }
-                            // The engine abandoned the replacement wait — the
-                            // suspended requestReplacement must be unblocked so
-                            // a late click on the banner can never resolve into
-                            // a phantom analyst (a full paid re-analysis call
-                            // injected into consensus/runStats).
-                            if (event.text.includes(REPLACEMENT_TIMEOUT_MARKER)) {
-                                const pending = replacementChoiceRef.current;
-                                if (pending) handleReplacementChoice(pending.messageId, null);
-                            }
-                            if (!turnTimes[key]) turnTimes[key] = new Date().toISOString();
-                            if (event.startedAt && !turnLaunchTimes[key]) {
-                                turnLaunchTimes[key] = Date.parse(event.startedAt);
-                            }
-                            turnLastDeltaAt[key] = Date.now();
-                            turnTexts[key] = (turnTexts[key] || '') + event.text;
-                            if (event.speaker === 'Moderator') {
-                                fullResponseText += event.text;
-                                moderatorRound = event.round;
-                                tryProgressiveVerdict();
-                            }
-
-                            rebuildDebateTurns();
-                        }
-
-                        // The moderator's verdict prose lives before the
-                        // </DEBATE_END> / <JSON_PLAN> markers — strip them so
-                        // the transcript shows clean verdict text.
-                        if (moderatorRound > 0) {
-                            const modKey = `${moderatorRound}::Moderator`;
-                            if (turnTexts[modKey]) {
-                                const cleaned = turnTexts[modKey]
-                                    .replace(MODERATOR_RETRY_RE, '')
-                                    .replace(DEBATE_END_MARKERS_RE, '')
-                                    .replace(MODERATOR_ERROR_BLOCK_RE, '')
-                                    .replace(/<JSON_PLAN>[\s\S]*/i, '')
-                                    .trim();
-                                if (cleaned) {
-                                    turnTexts[modKey] = cleaned;
-                                    rebuildDebateTurns();
-                                }
-                            }
-                        }
-                    }
-                    // Flush the final pending update synchronously so the
-                    // last chunk's state is committed before downstream parsing.
-                    throttledDebateUpdate.flush();
-                    throttledProvisionalVerdict.flush();
-                    if (!isCurrentRequest()) assertCurrentRequest();
-
-                    const verdictMessages = isAutomationRun ? automationMessagesRef.current : messagesRef.current;
-                    const existingVerdictMessage = verdictMessages.find(m => m.id === debateMessageId);
-                    if (!existingVerdictMessage) {
-                        // The placeholder AI row was lost (conversation switch / race);
-                        // bail — without a row to mutate, side-effects can't be wired.
-                        return { ok: true };
-                    }
-                    const verdictResult = await finalizeVerdict({
-                        userMessage,
-                        existingMessage: existingVerdictMessage,
-                        fullResponseText,
-                        debateTurnsRef,
-                        debateRunLogRef,
-                        reasoningMapRef,
-                        toolActionsRef,
-                        automationMessagesRef,
-                        isCurrentRequest,
-                        abortSignal: currentAbortController.signal,
-                        getActiveUsername,
-                        effectiveInput,
-                        freshHybridData,
-                        moderatorContextBundle,
-                        effectiveTradingStyle,
-                        finalSymbol,
-                        capturedGateResult,
-                        // A fired AVOID predicate caps the verdict in code, the
-                        // same way the gate does — prose alone left it optional.
-                        predicateCeiling: predicateGate?.ceiling,
-                        teamSeatFor,
-                        runGroupMemberPersonas,
-                        memoryQuery,
-                        memoryRetrieved,
-                        memoryAsOfMs,
-                        loggedTrades,
-                        analystTimings,
-                        tokenByProvider,
-                        providerConfigs,
-                        get liveBtResult() { return liveBtResult; },
-                        perAIMC,
-                        debateMessageId,
-                        thoughtMap,
-                        vetoRecordParams,
-                        allFulfilledAnalysts,
-                        runAccuracyMode,
-                        runLensConfig,
-                        runModeratorConfig,
-                        runModeratorModel,
-                        runEnsembleEnabled,
-                        runStartedAt,
-                        isHybridIntelligenceEnabled,
-                        lensConfig,
-                        isPlaybookEnabledInPureAI,
-                        isFamiliesEnabledInPureAI,
-                        isMemoryEnabledInPureAI,
-                        customEnsemblePrompt,
-                        promptLane,
-                        isAutomationRun,
-                        options,
-                        processNewAnalysis,
-                        applyUpdate: (updater) => updateRequestMessages(updater),
-                    });
-
-                    const finalAnalysis = verdictResult.processedAnalysis;
-
-                    // === ThinkingStore: Save reasoning for training & analysis ===
-                    // Persist per-analyst reasoning, moderator synthesis, and debate turns
-                    // so they can be correlated with outcomes and exported for model training.
-                    try {
-                        const tradeId = getThinkingTradeId(finalAnalysis.createdAt, debateMessageId);
-                        const username = getActiveUsername();
-                        const now = new Date().toISOString();
-                        const thinkingRecords: ThinkingRecord[] = [];
-                        const lensEnabled = Boolean(runLensConfig?.enabled && hasCompleteAnalystAssignments);
-
-                        // Save each analyst's reasoning + analysis JSON. Aligned
-                        // by settled-result index so a failed analyst doesn't shift
-                        // attribution (same bug class as the earlier thoughtMap fix),
-                        // and the unreliable name-vs-id string matching is removed.
-                        settledResults.forEach((settled, idx) => {
-                            if (settled.status !== 'fulfilled') return;
-                            const provider = enabledProviders[idx];
-                            if (!provider) return;
-                            const providerKey = provider.thoughtsKey;
-                            const analystResult = settled.value;
-                            const assignedRole = getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments);
-                            const analystSplit = splitThinkingFromOutput(
-                                reasoningMapRef.current[provider.name] || analystResult.thoughtProcess || '',
-                                analystResult.finalOutput || '',
-                            );
-                            thinkingRecords.push({
-                                id: buildThinkingRecordId(tradeId, providerKey, 'analyst'),
-                                tradeId,
-                                username,
-                                provider: providerKey,
-                                role: 'analyst',
-                                modelName: provider.model,
-                                reasoning: analystSplit.thinking,
-                                finalOutput: analystSplit.output || undefined,
-                                rawReasoning: reasoningMapRef.current[provider.name] || undefined,
-                                messageId: debateMessageId,
-                                analysisJson: analystResult.analysis ? JSON.stringify(analystResult.analysis) : undefined,
-                                confidence: analystResult.analysis?.confidence,
-                                probability: analystResult.analysis?.probability,
-                                analystLens: lensFromAnalystRole(assignedRole, lensEnabled),
-                                createdAt: now,
-                            });
-                        });
-
-                        // Save moderator synthesis (the full debate response)
-                        const cleanedVerdict = fullResponseText
-                                .replace(CLARIFICATION_MARKERS_RE, '')
-                                .replace(MODERATOR_RETRY_RE, '')
-                                .replace(MODERATOR_ERROR_BLOCK_RE, '')
-                                .replace(DEBATE_END_MARKERS_RE, '')
-                                .replace(/<JSON_PLAN>[\s\S]*/i, '')
-                                .replace(/<\/?DEBATE_START>/gi, '')
-                                .trim();
-                        const moderatorSplit = splitThinkingFromOutput(
-                            reasoningMapRef.current.moderator || '',
-                            cleanedVerdict,
-                        );
-                        thinkingRecords.push({
-                            id: buildThinkingRecordId(tradeId, 'moderator', 'moderator'),
-                            tradeId,
-                            username,
-                            provider: 'moderator',
-                            role: 'moderator',
-                            modelName: activeModModel,
-                            reasoning: moderatorSplit.thinking,
-                            finalOutput: moderatorSplit.output || undefined,
-                            rawReasoning: reasoningMapRef.current.moderator || undefined,
-                            messageId: debateMessageId,
-                            analysisJson: JSON.stringify(finalAnalysis),
-                            confidence: finalAnalysis.confidence,
-                            probability: finalAnalysis.probability,
-                            createdAt: now,
-                        });
-
-                        // Save debate turns (if any were parsed). Read from the
-                        // stream ref (the final flush already committed it) —
-                        // messagesRef only refreshes in a useEffect and can lag
-                        // behind the just-written message, dropping the last
-                        // moderator turn from the persisted thinking records.
-                        const debateTurns = debateTurnsRef.current;
-
-                        debateTurns.forEach((turn, idx) => {
-                            const turnProvider = turn.speaker.toLowerCase().includes('moderator') ? 'moderator' : turn.speaker.toLowerCase();
-                            const matchedAnalyst = enabledProviders.find(p => p.name === turn.speaker);
-                            const matchedRole = matchedAnalyst
-                                ? getRoleForProvider(`${matchedAnalyst.config.id}::${matchedAnalyst.model}`, resolvedAssignments)
-                                : undefined;
-                            thinkingRecords.push({
-                                id: buildThinkingRecordId(tradeId, turnProvider, 'debate_turn', idx),
-                                tradeId,
-                                username,
-                                provider: turnProvider,
-                                role: 'debate_turn',
-                                debateTurnIndex: idx,
-                                debateTurnSpeaker: turn.speaker,
-                                reasoning: (turn.reasoning || '').trim(),
-                                finalOutput: turn.text,
-                                messageId: debateMessageId,
-                                analystLens: lensFromSpeakerName(turn.speaker)
-                                    ?? (matchedRole !== undefined ? lensFromAnalystRole(matchedRole, lensEnabled) : 'normal'),
-                                createdAt: now,
-                            });
-                        });
-
-                        // Save asynchronously (non-blocking)
-                        persistThinkingRecords(thinkingRecords);
-                    } catch (thinkingError) {
-                        console.warn('[ThinkingStore] Error preparing thinking records:', thinkingError);
-                    }
-
-                } else if (enabledProviders.length === 1) {
-                    const provider = enabledProviders[0];
-                    if (!isAutomationRun) setLoadingMessage(runAccuracyMode ? `Running High-Precision Analysis...` : `Analyzing with ${provider.name}...`);
-                    completeStep('gate-scan'); startStep('analysis');
-                    // Guard flag for the solo path too — without it Esc couldn't
-                    // cancel solo runs and the re-entrancy guard was inert
-                    // (a second send was only blocked by the loadingMessage check).
-                    setIsAnalysisInProgress(true);
-                    setAnalysisSteps(prev => prev.map(s => s.id === 'analysis' ? { ...s, title: `Analyzing with ${provider.name}` } : s));
-                            // Solo path: capture streamed raw reasoning via the
-                            // same onReasoning slot as the multi path so the
-                            // thinking record carries the chain-of-thought.
-                            let soloRawReasoning = '';
-                            const result = await runAnalyzeTradingView(
-                            provider.config,
-                            provider.model,
-                            `${buildHybridEnvelope(freshHybridData, 'general') ? `${buildHybridEnvelope(freshHybridData, 'general')}\n\n` : ''}${enhancedPrompt}`,
-                            imageFiles,
-                            dataURLs,
-                            currentAbortController.signal,
-                            {
-                                imageSummaries: summaries,
-                                chatHistory: currentMessages,
-                                finalTradeSummary,
-                                recentInsights: recentInsightsString,
-                                activeFrameworks,
-                                deepenAnalysis: isDeepAnalysis,
-                                globalMemory: memoryToInject,
-                                threadSummary: currentThreadSummary,
-                                subMode: runAccuracyMode ? runAccuracySubMode : undefined,
-                                customInstructions: instructionsToUse,
-                                isPlaybookEnabledInPureAI,
-                                isFamiliesEnabledInPureAI,
-                                isMemoryEnabledInPureAI,
-                                // Analyst Lens: pass role-specific prompt based on trading style
-                                // (custom prompt overrides from the prompt editor win), then
-                                // prepend this seat's own lens memory (see multi-path note).
-                                // Preflight block first, as in the multi path — solo runs
-                                // record the same pass/fail telemetry but never substitute
-                                // the output (there is no debate to absorb a NO CLAIM).
-                                rolePrompt: runLensConfig.enabled && provider.thoughtsKey
-                                    ? `${buildPreflightBlock()}\n\n${appendLensMemoryToPrompt(
-                                        `${provider.config.id}::${provider.model}`,
-                                        resolvedAssignments,
-                                        customLensPrompts?.[getRoleForProvider(`${provider.config.id}::${provider.model}`, resolvedAssignments)]
-                                        || getLensPromptForStyle(
-                                            `${provider.config.id}::${provider.model}`,
-                                            resolvedAssignments,
-                                            effectiveTradingStyle
-                                        ),
-                                        { coin: finalSymbol ?? undefined, memoryQuery },
-                                    )}`
-                                    : undefined,
-                                // Normal mode (Lenses off): custom base prompt override.
-                                systemPromptOverride: runLensConfig.enabled ? undefined : (customEnsemblePrompt || undefined),
-                                // User-uploaded strategy summaries (Settings → Strategies).
-                                userStrategies: strategiesBlock || undefined,
-                                // Streamed chain-of-thought deltas accumulate — the
-                                // multi path uses the same append pattern.
-                                onReasoning: (reasoning: string) => { soloRawReasoning += reasoning; },
-                                // Solo path has no Floor/transcript — nothing to surface.
-                                onPartialOutput: () => {},
-                            },
-                        );
-                    if (!isCurrentRequest()) assertCurrentRequest();
-                    // Preflight telemetry (lens mode): the solo run is validated
-                    // exactly like a debate seat and its pass/fail is recorded
-                    // to provider fitness, but its output is never substituted —
-                    // a solo transcript has no debate to absorb a NO CLAIM.
-                    if (runLensConfig.enabled && provider.thoughtsKey) {
-                        const soloGate = applyPreflightGate(result.finalOutput);
-                        void recordPreflightResult(getActiveUsername(), provider.config.id, soloGate.passed);
-                    }
-                    const soloAiMessage: Message = {
-                        id: `ai-${Date.now()}`, role: MessageRole.AI, text: result.finalOutput || result.thoughtProcess, createdAt: new Date().toISOString(), analysis: processNewAnalysis(result.analysis), sources: result.sources || [], outcome: TradeOutcome.PENDING, ocrModelUsed: userMessage.ocrModelUsed,
-                        imageSummaries: userMessage.imageSummaries,
-                        modelsUsed: { [provider.config.id]: provider.model },
-                        thoughtProcesses: { [provider.config.id]: result.thoughtProcess },
-                        isAccuracyMode: runAccuracyMode,
-                        isLensMode: runLensConfig?.enabled ?? false,
-                        // Always set tradingStyle regardless of Lens mode
-                        tradingStyle: effectiveTradingStyle,
-                        accuracySubMode: runAccuracyMode ? runAccuracySubMode : undefined,
-                        // Multi-Timeframe Confluence from Hybrid Intelligence
-                        confluenceData: freshHybridData?.confluence ? {
-                            score: freshHybridData.confluence.score,
-                            direction: freshHybridData.confluence.direction,
-                            strength: freshHybridData.confluence.strength,
-                            alignedSignals: freshHybridData.confluence.alignment,
-                            conflictingSignals: freshHybridData.confluence.conflicts,
-                            timeframeCount: 4 // 5m, 15m, 1h, 4h
-                        } : undefined,
-                    };
-                    // Inject snapshot if available
-                    if (freshHybridData) {
-                        soloAiMessage.analysis!.marketSnapshot = freshHybridData;
-                    }
-                        updateRequestMessages(prev => [...prev, soloAiMessage]);
-
-                    // Automation run: deliver the completed solo card. Every
-                    // other surface renders the ACTIVE conversation, which is
-                    // where the row above already landed — so there is nothing
-                    // to hand back, and a second copy of the answer is what
-                    // made the Chat surface and the dock disagree.
-                    if (isAutomationRun) {
-                        options?.automation?.onMessage({ userMessage, aiMessage: soloAiMessage });
-                    }
-
-                    // === ThinkingStore: Persist the solo analysis reasoning ===
-                    // Same training-data contract as the debate path (one
-                    // analyst record per card) so the Think view and outcome
-                    // correlation work for single-provider runs too.
-                    try {
-                        const username = getActiveUsername();
-                        const now = new Date().toISOString();
-                        const soloSplit = splitThinkingFromOutput(soloRawReasoning || result.thoughtProcess || '', result.finalOutput || '');
-                        persistThinkingRecords([{
-                            id: buildThinkingRecordId(getThinkingTradeId(soloAiMessage.analysis?.createdAt, soloAiMessage.id), provider.thoughtsKey, 'analyst'),
-                            tradeId: getThinkingTradeId(soloAiMessage.analysis?.createdAt, soloAiMessage.id),
-                            username,
-                            provider: provider.thoughtsKey,
-                            role: 'analyst',
-                            modelName: provider.model,
-                            reasoning: soloSplit.thinking,
-                            finalOutput: soloSplit.output || undefined,
-                            rawReasoning: soloRawReasoning || undefined,
-                            messageId: soloAiMessage.id,
-                            analysisJson: result.analysis ? JSON.stringify(result.analysis) : undefined,
-                            confidence: result.analysis?.confidence,
-                            probability: result.analysis?.probability,
-                            analystLens: 'normal',
-                            createdAt: now,
-                        }]);
-                    } catch (thinkingError) {
-                        console.warn('[ThinkingStore] Error preparing thinking records:', thinkingError);
-                    }
-                }
+                    // The dial the surface is showing, not the task default: a
+                    // chip that displayed a tier while the request sent `'low'`
+                    // is the dead affordance this argument exists to remove.
+                    options?.reasoningEffort,
+                );
             } else {
-                // Casual chat: use the user-selected model when it maps to a
-                // ready provider; otherwise fall back to the first ready
-                // provider (previous behavior).
-                // ── Bot Mode: inside a bot's 1:1 thread, the send runs
-                // AS the bot — its exact provider+model, its persona system
-                // prompt, and only its own thread's history (threads are
-                // derived views; threadForProvider is the same slice the
-                // rail renders). Outside bot threads activeBot is null and
-                // behavior is unchanged.
-                const activeBot = getActiveBot?.() ?? null;
-                const botProvider = activeBot
-                    ? providerConfigs.find(c => c.id === activeBot.providerId && c.isEnabled && c.apiKey.trim().length > 0 && c.models.includes(activeBot.modelId))
-                    : undefined;
-                const useBotThread = Boolean(activeBot && botProvider);
-                // The composer selection is provider-qualified
-                // (`providerId::modelId`) so a model name offered by two
-                // providers answers from the one the user actually picked.
-                // Legacy bare ids resolve heuristically (see providerUtils).
-                const chosen = useBotThread && activeBot && botProvider
-                    ? botProvider
-                    : resolveChatModelSelection(providerConfigs, selectedChatModel) ?? undefined;
-                const chatModel = useBotThread && activeBot ? activeBot.modelId : chatModelIdOf(selectedChatModel);
-                const provider = chosen
-                    ? { config: { ...chosen, selectedModel: chatModel }, name: chosen.name, model: chatModel, useImages: false, thoughtsKey: chosen.id }
-                    : enabledProviders[0];
-                    setLoadingMessage("Thinking...");
-                setIsAnalysisInProgress(true);
-                startStep('analysis');
-                // Stream the reply into the bubble as it generates (perceived
-                // speed) instead of appending it once after completion.
-                const streamingMessageId = `ai-${Date.now()}`;
-                casualMessageId = streamingMessageId;
-                casualErrorAttribution = { [provider.config.id]: provider.model };
-                updateRequestMessages(prev => [...prev, {
-                    id: streamingMessageId,
-                    role: MessageRole.AI,
-                    text: '',
-                    createdAt: new Date().toISOString(),
-                    modelsUsed: { [provider.config.id]: provider.model },
-                    isStreaming: true,
-                }]);
-                let reasoningContent = '';
-                let visibleContent = '';
-                // ONE live writer for both shapes of this branch: the
-                // RAF-coalesced casual updater, so a tool turn's per-token paint
-                // costs one Message write per frame exactly like the plain one.
-                const paint = (text: string, thinking: string): void => {
-                    throttledCasualStream(requestConversationId, streamingMessageId, text, thinking, provider.config.id, true);
-                };
-                // The bubble's own stamp: a Stop, a failure and a clean finish
-                // must all report the same "worked for Ns", not each measure from
-                // their own `Date.now()`.
-                const turnStartedAt = Date.now();
-                let toolTurn: ToolTurnOutcome | null = null;
-                let responseText = '';
-                if (useBotThread && activeBot) {
-                    // BOTS STAY CHAT-ONLY (stage 20 ruling). The roster
-                    // answers with its persona over the plain transport;
-                    // `useBotMailbox`, `botRoutine` and `groupRounds` are
-                    // deliberately NOT moved onto the tool turn.
-                    responseText = await streamQuickResponse(
-                        provider.config,
-                        promptToSend,
-                        // Bot threads see ONLY their own thread (derived view).
-                        threadForProvider(currentMessages, activeBot.providerId, activeBot.modelId, activeBot.id),
-                        activeBot.systemPrompt,
-                        currentAbortController.signal,
-                        reasoning => {
-                            reasoningContent += reasoning;
-                            paint(visibleContent, reasoningContent);
-                        },
-                        delta => {
-                            visibleContent += delta;
-                            paint(visibleContent, reasoningContent);
-                        },
-                        // The dial the surface is showing, not the task default: a
-                        // chip that displayed a tier while the request sent `'low'`
-                        // is the dead affordance this argument exists to remove.
-                        options?.reasoningEffort,
-                    );
-                } else {
-                    // THE DESK ANSWERS WITH ITS TOOLS — the one executor the
-                    // Chart AI dock runs, writing this canonical row instead of
-                    // a dock entry. Ordinary conversation on this surface used
-                    // to be answered from the model's training data while the
-                    // dock looked the same question up.
-                    toolTurn = await runChatSurfaceTurn({
-                        config: provider.config,
-                        history: currentMessages,
-                        prompt: promptToSend,
-                        // An attached screenshot is SENT, not mentioned: before
-                        // this the camera on this surface painted a bubble the
-                        // model never received.
-                        image: dataURLs[0],
-                        symbol: finalSymbol ?? options?.symbol ?? null,
-                        interval: options?.interval,
-                        trades: loggedTrades,
-                        effort: options?.reasoningEffort,
-                        requireTools: options?.fullAnalysis === true,
-                        signal: currentAbortController.signal,
-                        startedAt: turnStartedAt,
-                        patch: fn => updateMessages(
-                            prev => prev.map(m => (m.id === streamingMessageId ? fn(m) : m)),
-                            requestConversationId,
-                        ),
-                        paint,
-                    });
-                    responseText = toolTurn.text;
-                }
-                if (!isCurrentRequest()) assertCurrentRequest();
-                // Split before display: native CoT and any leaked scratchpad
-                // belong in the bubble's Thinking row, never in the reply. The
-                // tool turn already did this on its own accumulator (`runToolTurn`
-                // owns the peel so both homes settle the same way), so re-splitting
-                // its output would be a second opinion about the same text.
-                const casualSplit = toolTurn
-                    ? { output: toolTurn.text, thinking: toolTurn.reasoning }
-                    : splitThinkingFromOutput(reasoningContent, responseText);
-                // Strip [[dm:@…]] markers BEFORE the first persisted update:
-                // the mailbox delivery below is fire-and-forget, so without
-                // this the bubble shows raw marker text until the mailbox's
-                // own patch lands (and forever if it throws). The mailbox
-                // still receives the RAW text — it needs the markers to route.
-                const casualClean = parseDmMarkers(casualSplit.output).clean.trim();
-                // Casual chat is a single-model conversation. Do not store the
-                // answer as an individual insight; that creates an oversized
-                // "Individual AI Insights" section under ordinary replies.
-                // Flush BEFORE the settle write, never after. A chunk that
-                // arrived between the last animation frame and here is still
-                // pending; flushing after the settle re-applies it and puts
-                // `isStreaming: true` and the un-stripped live text back onto
-                // the message that was just settled — permanently.
-                throttledCasualStream.flush();
-                updateMessages(prev => prev.map(m => m.id === streamingMessageId ? {
-                    ...m,
-                    // A deliberate Stop keeps the half-written answer the trader
-                    // chose to cut; a clean turn keeps the settled text.
-                    text: toolTurn?.interrupted ? (m.text || casualClean) : casualClean,
-                    isStreaming: false,
-                    modelsUsed: { [provider.config.id]: provider.model },
-                    thoughtProcesses: casualSplit.thinking ? { [provider.config.id]: casualSplit.thinking } : undefined,
-                    ...(toolTurn && !toolTurn.interrupted ? {
-                        runStats: {
-                            runId: `desk-${streamingMessageId}`,
-                            startedAt: new Date(turnStartedAt).toISOString(),
-                            finishedAt: new Date(turnStartedAt + toolTurn.workedMs).toISOString(),
-                            durationMs: toolTurn.workedMs,
-                        },
-                    } : {}),
-                    // The tools-off / reasoning-only truth belongs IN the
-                    // transcript, beside the lines that claim it — not in a toast
-                    // that disappears while the answer stays on screen.
-                    ...(toolTurn?.notice ? {
-                        liveToolEvents: {
-                            ...m.liveToolEvents,
-                            desk: [m.liveToolEvents?.desk, toolTurn.notice].filter(Boolean).join('\n'),
-                        },
-                    } : {}),
-                } : m), requestConversationId);
-                // ── Bot Mode: hand the settled reply (raw, markers
-                // included) to the mailbox — it strips [[dm:@…]] markers
-                // from the bubble and delivers the DMs. Fire-and-forget.
-                if (useBotThread && activeBot && onBotReply) {
-                    try { onBotReply(streamingMessageId, casualSplit.output || responseText); } catch { /* mailbox must never break the reply */ }
-                }
+                // THE DESK ANSWERS WITH ITS TOOLS — the one executor the
+                // Chart AI dock runs, writing this canonical row instead of
+                // a dock entry. Ordinary conversation on this surface used
+                // to be answered from the model's training data while the
+                // dock looked the same question up.
+                toolTurn = await runChatSurfaceTurn({
+                    config: provider.config,
+                    history: currentMessages,
+                    prompt: promptToSend,
+                    // An attached screenshot is SENT, not mentioned: before
+                    // this the camera on this surface painted a bubble the
+                    // model never received.
+                    image: dataURLs[0],
+                    symbol: finalSymbol ?? options?.symbol ?? null,
+                    interval: options?.interval,
+                    trades: loggedTrades,
+                    effort: options?.reasoningEffort,
+                    requireTools: options?.fullAnalysis === true,
+                    signal: currentAbortController.signal,
+                    startedAt: turnStartedAt,
+                    patch: fn => updateMessages(
+                        prev => prev.map(m => (m.id === streamingMessageId ? fn(m) : m)),
+                        requestConversationId,
+                    ),
+                    paint,
+                });
+                responseText = toolTurn.text;
+            }
+            if (!isCurrentRequest()) assertCurrentRequest();
+            // Split before display: native CoT and any leaked scratchpad
+            // belong in the bubble's Thinking row, never in the reply. The
+            // tool turn already did this on its own accumulator (`runToolTurn`
+            // owns the peel so both homes settle the same way), so re-splitting
+            // its output would be a second opinion about the same text.
+            const casualSplit = toolTurn
+                ? { output: toolTurn.text, thinking: toolTurn.reasoning }
+                : splitThinkingFromOutput(reasoningContent, responseText);
+            // Strip [[dm:@…]] markers BEFORE the first persisted update:
+            // the mailbox delivery below is fire-and-forget, so without
+            // this the bubble shows raw marker text until the mailbox's
+            // own patch lands (and forever if it throws). The mailbox
+            // still receives the RAW text — it needs the markers to route.
+            const casualClean = parseDmMarkers(casualSplit.output).clean.trim();
+            // Casual chat is a single-model conversation. Do not store the
+            // answer as an individual insight; that creates an oversized
+            // "Individual AI Insights" section under ordinary replies.
+            // Flush BEFORE the settle write, never after. A chunk that
+            // arrived between the last animation frame and here is still
+            // pending; flushing after the settle re-applies it and puts
+            // `isStreaming: true` and the un-stripped live text back onto
+            // the message that was just settled — permanently.
+            throttledCasualStream.flush();
+            updateMessages(prev => prev.map(m => m.id === streamingMessageId ? {
+                ...m,
+                // A deliberate Stop keeps the half-written answer the trader
+                // chose to cut; a clean turn keeps the settled text.
+                text: toolTurn?.interrupted ? (m.text || casualClean) : casualClean,
+                isStreaming: false,
+                modelsUsed: { [provider.config.id]: provider.model },
+                thoughtProcesses: casualSplit.thinking ? { [provider.config.id]: casualSplit.thinking } : undefined,
+                ...(toolTurn && !toolTurn.interrupted ? {
+                    runStats: {
+                        runId: `desk-${streamingMessageId}`,
+                        startedAt: new Date(turnStartedAt).toISOString(),
+                        finishedAt: new Date(turnStartedAt + toolTurn.workedMs).toISOString(),
+                        durationMs: toolTurn.workedMs,
+                    },
+                } : {}),
+                // The tools-off / reasoning-only truth belongs IN the
+                // transcript, beside the lines that claim it — not in a toast
+                // that disappears while the answer stays on screen.
+                ...(toolTurn?.notice ? {
+                    liveToolEvents: {
+                        ...m.liveToolEvents,
+                        desk: [m.liveToolEvents?.desk, toolTurn.notice].filter(Boolean).join('\n'),
+                    },
+                } : {}),
+            } : m), requestConversationId);
+            // ── Bot Mode: hand the settled reply (raw, markers
+            // included) to the mailbox — it strips [[dm:@…]] markers
+            // from the bubble and delivers the DMs. Fire-and-forget.
+            if (useBotThread && activeBot && onBotReply) {
+                try { onBotReply(streamingMessageId, casualSplit.output || responseText); } catch { /* mailbox must never break the reply */ }
             }
             // End of the try — the run completed (or, for automation runs,
             // delivered through its own onMessage callback). Success.
@@ -3515,7 +1648,6 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
             return { ok: false };
         } finally {
             endPromptLane();
-            stopTokenUsage?.();
             automationSilentRef.current = false;
             if (analysisAbortController.current === currentAbortController) {
                 setLoadingMessage(null);
