@@ -12,6 +12,11 @@ export default defineConfig({
     testDir: './e2e',
     timeout: 60_000,
     retries: 0,
+    // One browser at a time. Every spec boots the whole app against a single
+    // `npm run dev`; four parallel Chromium instances on one Vite server is how
+    // the first two specs timed out in `page.goto` while the later ones passed.
+    // Contention here manufactures failures, and a flaky gate gets ignored.
+    workers: 1,
     use: {
         baseURL: 'http://localhost:3000',
         headless: true,

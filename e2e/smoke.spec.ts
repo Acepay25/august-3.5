@@ -51,8 +51,7 @@ const seedMessages = async (page: import('@playwright/test').Page, username: str
     // interception is on the context — even when no pattern matches it. Measured:
     // registering before this line fails with net::ERR_ABORTED, after it passes.
     if (beforeAppLoad) await beforeAppLoad(page);
-    await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#splash')).toHaveCount(0, { timeout: 15_000 });
     await expect(page.getByRole('dialog', { name: 'User profile selection' })).toHaveCount(0, { timeout: 15_000 });
 };
@@ -131,8 +130,7 @@ test('app boots and shows the user modal on first run', async ({ page }) => {
         if (message.type() === 'error') errors.push(message.text());
     });
 
-    await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     // Splash → React mounts → user modal or chat appears.
     await expect(page.locator('body')).toContainText(/August Trading|Trading|Journal|Select|Profile|User/i, {
@@ -195,8 +193,17 @@ test('the title-bar switch reaches the journal and back to the trade chart', asy
     await page.getByTestId('surface-switch-agents').click();
     await expect(page.getByTestId('agents-view')).toBeVisible({ timeout: 15_000 });
     const column = page.getByTestId('agents-rail');
-    await expect(column.getByRole('button', { name: /^Journal/ })).toHaveCount(0);
-    await expect(column.getByRole('button', { name: /^Customize/ })).toBeVisible();
+    // Scoped to the LIST's own root, not to a button name. On this surface the
+    // title-bar switch renders INSIDE the rail (AgentsView's `switchInRail`),
+    // so a bare /^Journal/ query matches the switch that is meant to be there
+    // and can no longer see the destination rows that were deleted. What the
+    // contract is about: SurfaceMenuList (`surface-menu`) renders Customize and
+    // nothing else.
+    await expect(column.getByTestId('surface-menu').getByRole('button', { name: /^Journal/ })).toHaveCount(0);
+    await expect(column.getByTestId('surface-switch-journal')).toBeVisible();
+    // Same root, opposite answer — without this the count above would pass
+    // vacuously if the list were not in the rail at all.
+    await expect(column.getByTestId('surface-menu').getByRole('button', { name: /^Customize/ })).toBeVisible();
 });
 
 test('the title-bar switch navigates on a phone, and the conversation column is a drawer', async ({ page }) => {
@@ -223,7 +230,7 @@ test('the title-bar switch navigates on a phone, and the conversation column is 
     await expect(page.getByTestId('rail-backdrop')).toBeVisible();
     const column = page.getByTestId('agents-rail');
     await expect(column.getByRole('button', { name: /^Customize/ })).toBeVisible();
-    await expect(column.getByRole('button', { name: /^New/ })).toBeVisible();
+    await expect(column.getByTestId('rail-new-chat')).toBeVisible();
 
     // Geometry, not visibility. A drawer portaled behind a backdrop-filtered
     // ancestor reported visible while clipped to one row, so the panel has to
