@@ -1,5 +1,25 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["scripts/**/*.ts"],
+  // The root config EXCLUDES `scripts`, so this file exists to put the probe and
+  // tooling scripts under a typecheck at all. But overriding `include` also
+  // dropped the ambient declarations those scripts reach through the services
+  // they import: `vite-env.d.ts` (vite's `import.meta.env`), and the
+  // `declare global { interface Window { … } }` block that lives inside
+  // services/providers/GenericProviderService.ts, which is what types the preload
+  // bridge `window.electronAPI`. Neither is imported by the files under check, so
+  // the gate reported 4 errors at HEAD, all of them in
+  // services/infrastructure/ProviderConfigService.ts, and could not be used as
+  // evidence for or against any change.
+  //
+  // Naming both makes this a second view of the SAME program rather than a
+  // narrower one. Nothing is excluded and no assertion is weakened. The durable
+  // fix is to move that augmentation into an ambient .d.ts, where a global type
+  // does not depend on which module happened to be compiled — tracked as the
+  // follow-up in docs/plans/debate-deletion-status.md.
+  "include": [
+    "scripts/**/*.ts",
+    "vite-env.d.ts",
+    "services/providers/GenericProviderService.ts"
+  ],
   "exclude": []
 }
