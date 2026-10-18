@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { assignDebateProtocol } from '../services/providers/ensembleService';
 import { summarizeDebateProtocols } from '../utils/promptVersionStats';
 import { collectApprovalItems } from '../utils/approvalInbox';
 import type { LoggedTrade } from '../types';
@@ -7,11 +6,6 @@ import { TradeOutcome } from '../types';
 import type { Message } from '../types/message';
 
 describe('Protocol A/B lanes', () => {
-    it('assigns only valid protocols', () => {
-        for (let i = 0; i < 50; i++) {
-            expect(['standard', 'extended', 'efficient']).toContain(assignDebateProtocol());
-        }
-    });
 
     it('summarizes per-protocol outcomes', () => {
         const trade = (outcome: TradeOutcome): LoggedTrade =>

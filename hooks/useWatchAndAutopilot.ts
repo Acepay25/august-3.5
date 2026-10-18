@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { collectWatchedSignals, toggleWatchOnMessage } from '../utils/watchList';
 import { buildRiskBook, formatRiskBookBadge } from '../utils/riskBook';
-import { reconstructOpenings } from '../utils/debateResume';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
 import { OutcomeAutopilotService, type AutopilotResolution } from '../services/ui/OutcomeAutopilotService';
 import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
@@ -100,8 +99,16 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
         const msg = messagesRef.current.find(m => m.id === messageId);
         const analysis = msg?.analysis;
         const ocr = (msg?.ocrCache?.texts || []).join('\n').slice(0, 800);
-        const openings = reconstructOpenings(msg?.debateTurns || [])
-            .map(s => `${s.name}: ${s.opening.slice(0, 280)}`)
+        // Round-1 openings exist only on rows written before the ensemble debate
+        // was deleted, so the follow-up reads the stored transcript directly.
+        const openingsBySpeaker = new Map<string, string>();
+        for (const turn of (msg?.debateTurns || [])) {
+            if (!turn.text || turn.speaker === 'System' || turn.speaker === 'Moderator') continue;
+            if ((turn.round || 1) !== 1) continue;
+            openingsBySpeaker.set(turn.speaker, (openingsBySpeaker.get(turn.speaker) || '') + turn.text);
+        }
+        const openings = [...openingsBySpeaker.entries()]
+            .map(([name, opening]) => `${name}: ${opening.slice(0, 280)}`)
             .join('\n');
         const hidden = analysis
             ? `Follow-up on ${analysis.coinName || 'setup'} ${analysis.direction} SL ${analysis.stopLoss || '—'}. Do not re-open the tape; answer the user only.\n${openings ? `Prior openings:\n${openings}\n` : ''}${ocr ? `OCR:\n${ocr}` : ''}`

@@ -21,7 +21,6 @@ import { getPreferenceObject, setPreferenceObject } from '../infrastructure/Pref
 import { MIN_CLOSED_TRADES_FOR_REVIEW } from './weeklyReview';
 import { buildDisciplineAnalytics, effectiveRMultiple } from '../../utils/disciplineAnalytics';
 import { rowPnlUsd } from '../validation/SessionGuardService';
-import { computeEnsembleLine, SeatConviction } from '../providers/debateScience';
 import { brierQuality } from '../validation/CalibrationLedgerService';
 import { computeAllSkillLifts } from './MemoryProvenanceService';
 import { computeSkillEconomics, worstBudgetOffender } from '../../utils/skillEconomics';
@@ -150,8 +149,15 @@ export const ensembleLineFromTranscript = (turns: DebateTurn[] | undefined): num
         lastBySeat.set(turn.speaker, Math.min(100, Math.max(0, parseInt(m[1], 10))));
     }
     if (lastBySeat.size === 0) return null;
-    const convictions: SeatConviction[] = [...lastBySeat.entries()].map(([seat, conviction]) => ({ seat, conviction }));
-    return computeEnsembleLine(convictions)?.probabilityPct ?? null;
+    // The engine's deterministic line, kept here because the journal rows that
+    // carry a transcript still have to be graded: the mean of the seats' sealed
+    // convictions in log-odds space, mapped back to a percentage. Weights and
+    // `alpha` were always 1 in the transcripts this reads.
+    const meanLogit = [...lastBySeat.values()].reduce((sum, conviction) => {
+        const p = Math.min(99, Math.max(1, conviction)) / 100;
+        return sum + Math.log(p / (1 - p));
+    }, 0) / lastBySeat.size;
+    return (1 / (1 + Math.exp(-meanLogit))) * 100;
 };
 
 /** Deterministic month-stats assembly + grade-the-panel over the window. */

@@ -398,22 +398,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // failures marked the wrong step and the finally force-completed everything).
     const currentPhaseRef = useRef<'analysis' | 'debate'>('analysis');
 
-    // ─── RAF-throttled stream updates (debate + provisional verdict + ensemble
-    // reasoning + casual chat + opening-phase thinking) ─────────────────────
-    // Extracted to hooks/analysisPipeline/streamThrottlers.ts. All five writers
-    // share the same `useRafThrottle` primitive and the same shared deps
-    // (updateMessages + the live-tool/run-log refs + the run-contract view +
-    // the phase ref), so a single hook invocation replaces five hand-rolled
-    // inline closures. See the new module for per-writer semantics.
+    // ─── RAF-throttled casual-chat stream update ──────────────────────────
+    // The four debate writers this call used to hand back died with the
+    // ensemble engine; see hooks/analysisPipeline/streamThrottlers.ts.
     const {
                                 throttledCasualStream,
-            } = useStreamThrottlers({
-        updateMessages,
-        liveToolEventsRef,
-        debateRunLogRef,
-        runContractFor,
-        currentPhaseRef,
-    });
+            } = useStreamThrottlers({ updateMessages });
 
     useEffect(() => {
         const requestConversationId = analysisConversationIdRef.current;

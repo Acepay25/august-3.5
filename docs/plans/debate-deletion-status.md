@@ -842,3 +842,52 @@ Method note, so this does not happen again: the first candidate sweep was wrong 
 added each candidate's *production importers* to the delete list — which silently included
 three live files. A bulk delete must intersect the reachability walk and refuse any file
 reachable from `App.tsx`.
+
+## Stage 19 tranche 2 — the engine island is GONE (this commit)
+
+The three "feature questions" in the previous section all turned out to be
+mechanical, and the proof is that no user-visible output changed:
+
+- `streamThrottlers`: `useAnalysisPipeline.ts:403` destructures **only**
+  `throttledCasualStream`. The debate-round, provisional-verdict,
+  ensemble-progress and opening-thinking writers had no consumer left, so the
+  file is now one updater + one dep, and the `debateResume` edge went with them.
+- `useWatchAndAutopilot`: the caller used `reconstructOpenings` for
+  `name` + `opening` only. Inlined as a round-1 group-by-speaker over
+  `msg.debateTurns` — identical output, and the transcript it reads only ever
+  exists on rows written before the debate was deleted.
+- `monthlyReport`: `ensembleLineFromTranscript` needed the weighted log-odds
+  mean, which is `computeEnsembleLine` at alpha=1 and weight=1. Inlined. The
+  card's ensemble cell still renders for historical rows; for new rows it was
+  already absent, because nothing writes a transcript any more.
+
+Deleted 26 production files and 24 suites (`ensembleService`,
+`ensembleConsensus`, `debateScience`, `debateResume`, `debateLevels`,
+`debateDiff`, `debateEpisodes`, `debatePreStep`, `debateReplyTo`,
+`debateTranscript`, `provisionalVerdict`, `keptAnalyst`,
+`recommendationContract`, `verdictSkillDraft`, `analysisResultProcessor`,
+`CompletionNotifications`, `archetypePrompts`, `analysisReport`,
+`analysisTrace`, `runGantt`, `hybridChartDrift`, `levelEvidence`,
+`ungroundedGate`, `levelKeywords`, `services/learning/preflight`,
+`lensMemoryRecord`), plus their tests.
+
+Two of those suites were NOT engine tests and were restored, then trimmed to
+their live halves: `tests/trustSurface.test.ts` (funding carry, claim sweep,
+calibration ledger, plan-amendment diff) and
+`tests/protocolAndInlineApprovals.test.ts` (inline approval cards). Matched by
+IMPORT, a suite is an engine suite; two of them only reached through one.
+
+Gate lesson, second occurrence: `tests/featuresAreWired.test.ts` named two dead
+files as its reachability controls, and stage 19 deleted them — the control
+rotted the moment it was useful. It now computes the unreachable set from the
+walk instead of naming files. `tests/harnessMarks.test.ts` likewise read
+`ensembleService.ts` to prove the harness never says `**USER STEERING`; the
+label lives in `constants/prompts/debatePrompts.ts` and the read now points
+there.
+
+Measured after the cut: `tsc --noEmit` clean; vitest 477 files / 4702 tests
+green (11 skipped); anchors in both flow docs re-measured. NOT run for this
+commit: render-probe, eslint, boot-probe (the 20p phase is parked in
+`.probe-artifacts/20p-probe-work-in-progress.patch` — its preamble waited for
+`[data-testid="trade-view"]`, which is the TRADE surface, while the probe's
+reload restores the Agents surface).
