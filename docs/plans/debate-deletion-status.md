@@ -1997,3 +1997,41 @@ progress panel now mints two rows (`market-data`, `analysis`), completed by
 origin/main..HEAD`, which is the only honest way to state it — the count grows with
 every commit, so re-measure rather than trust this number), nothing pushed this
 session; the earlier authorization covered only the first 16.
+
+## 2026-10-19 — a seventh orphan, turned up by re-measuring the census this doc quotes
+
+The flow doc's field census is reproducible **only with the word boundary**:
+`grep -rE "\.postMortem\b"` over `.ts/.tsx` gives 34 lines in 23 files. Drop the `\b` and it
+gives **38**, and the four extras are a different field — `postMortemCreatedAt`, the
+timestamp twin. Counting it is not pedantry: it is the difference between a census of the
+dead field and a census that quietly includes a live-looking one.
+
+All 11 mentions of `postMortemCreatedAt`, enumerated rather than sampled: two are the
+declarations at `types/message.ts:154` and `types/trade.ts:60`; four are
+`tests/pointInTime.test.ts:30` and its neighbours, which are the **only writers anywhere in
+the repository**; the remaining five are production reads at
+`hooks/analysisPipeline/memoryContext.ts:183`,
+`services/learning/DecisionReflectionService.ts:24`, and
+`services/ui/AlgorithmicSummaryService.ts:50`. No quoted-key or shorthand write exists, so
+nothing has set this field since the post-mortem writer went.
+
+Two consequences, and they are different in kind:
+
+1. The two fallback readers still work but measure the wrong thing.
+   `memoryContext.ts:183` and `DecisionReflectionService.ts:24` both read
+   `x ?? t.timestamp`, so lesson age and the point-in-time memory slice are now computed
+   from the trade's own time rather than from when the reflection was written. Nothing
+   errors; the meaning is gone and the number keeps coming out.
+2. `AlgorithmicSummaryService.ts:50` gates on
+   `if (trade.timestamp && trade.postMortemCreatedAt)` with no fallback, so its
+   "reflected N minutes after close" line **can never appear for a trade closed after
+   2026-10-18** — while it still appears for older rows from the journal. Dark on new data,
+   alive on the museum.
+
+This widens the #21 question, and in the direction that matters to the trader: the stored
+history has one more visible surface than the five readers counted, and it is a line in the
+monthly summary, not an internal field. Choosing "keep it readable" means restoring a
+producer or accepting the summary's silence going forward; choosing "delete it" means this
+gate and its fallback readers go with the fields. Deliberately NOT fixed here — removing
+the dead branch is the decision, not a cleanup, and the fallback readers would change what
+every later learning turn measures.
