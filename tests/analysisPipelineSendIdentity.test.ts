@@ -138,3 +138,22 @@ describe('handleSendMessage — the casual send carries the composer tier', () =
         expect(src).not.toMatch(/reasoningEffort:\s*options\?\.reasoningEffort/);
     });
 });
+
+/**
+ * The completion notice. Before stage 19 this fired from the verdict finalizer;
+ * with the finalizer out of the send path a Full analysis could finish in the
+ * background and say nothing — so the trader sat in a tab waiting for an answer
+ * that had already landed. Scoped to the explicit request, and a stopped turn
+ * does not announce itself.
+ */
+describe('the run settles with a completion notice', () => {
+    it('notifies only for an explicit Full analysis that was not stopped', () => {
+        expect(src).toMatch(/options\?\.fullAnalysis === true && toolTurn && !toolTurn\.interrupted/);
+        expect(src).toMatch(/void notify\(/);
+    });
+
+    it('routes it through the one notifier, not a native-only duplicate', () => {
+        expect(src).toMatch(/from '\.\.\/services\/infrastructure\/notify'/);
+        expect(src).not.toMatch(/notifyAnalysisComplete/);
+    });
+});

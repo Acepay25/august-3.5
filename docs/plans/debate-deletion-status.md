@@ -796,3 +796,19 @@ an anti-drift aggregation, both row components must be read to confirm neither l
 only mention is a comment saying the handlers "used to" come from it) and
 `useTypingEffect` are deleted: zero importers in production or tests,
 501 files / 4981 tests green.
+
+## Task #36 closed — both dark writes are live again
+
+`recordToolTurnUsage` (20p-adjacent fix, `utils/sessionUsage.ts`) is now called by all
+three turn owners, fed by `usage`/`usageCalls` that `runToolTurn` folds out of the wire's
+per-request `onUsage`. Pinned in `tests/toolTurn.test.ts` ("the measured usage fold") and
+guarded by a new `featuresAreWired` row; stubbing the fold turns those pins red.
+
+`notify()` now fires on the settled Full-analysis path (`useAnalysisPipeline.ts:1559`),
+scoped to `options?.fullAnalysis === true` and excluded on a stopped turn, so an ordinary
+chat line stays quiet and a schedule (which already reports in its own row) is not doubled.
+`CompletionNotifications` therefore has no caller left and dies with the engine.
+Pinned in `tests/analysisPipelineSendIdentity.test.ts`, including the negative
+(`not.toMatch(/notifyAnalysisComplete/)`) so the duplicate cannot creep back.
+
+Gates: `tsc --noEmit` clean, 501 files / 4988 tests green, docs 171/171 anchors land.

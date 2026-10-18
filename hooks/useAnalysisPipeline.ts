@@ -76,6 +76,7 @@ import { getEffectiveStyle } from '../services/ui/TradingStyleDetector';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { parseDmMarkers } from '../services/agents/botMailbox';
 import { classifyStepError, describeStepError } from '../utils/runStatus';
+import { notify } from '../services/infrastructure/notify';
 
 // ─── Run Outcome ──────────────────────────────────────────────────────────────
 
@@ -1545,6 +1546,23 @@ ${enhancedPrompt}`;
                     },
                 } : {}),
             } : m), requestConversationId);
+            // ── Completion notice for a run the trader asked for by name.
+            // Before stage 19 this fired from the verdict finalizer; with the
+            // finalizer out of the send path a Full analysis could finish in the
+            // background and say nothing, which is how an unattended 40-second
+            // turn becomes a tab the trader waits in. Scoped to the explicit
+            // request and to turns that were not stopped, so an ordinary chat
+            // line stays quiet and a cancelled one does not announce itself.
+            // Schedules are excluded — nobody is watching them live, and 20r
+            // already lands their outcome in the run's own row.
+            if (options?.fullAnalysis === true && toolTurn && !toolTurn.interrupted) {
+                void notify(
+                    'Analysis complete',
+                    `${provider.config.name} · ${provider.model} answered in `
+                        + `${(toolTurn.workedMs / 1000).toFixed(1)}s — open the app to read it.`,
+                    { tag: streamingMessageId },
+                );
+            }
             // ── Bot Mode: hand the settled reply (raw, markers
             // included) to the mailbox — it strips [[dm:@…]] markers
             // from the bubble and delivers the DMs. Fire-and-forget.
