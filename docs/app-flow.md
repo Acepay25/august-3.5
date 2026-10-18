@@ -171,10 +171,12 @@ flowchart LR
 **Stages 2, 5, 6, 7 and 8 of the old list are gone from the call path**: the gate
 scan (`GateKeeperService`) — the gate now runs inside `present_trade` (20a2); the
 analyst openings and the debate (`conductDebate` / `conductRealDebate`); the
-moderator pass; `verdictFinalizer`; the pipeline-side Monte Carlo and backtest.
-The engine FILES still exist and are still unit-tested — stage 19's second tranche
-deletes them, so a name above marked "gone" means *nothing in the app reaches it*,
-not *it was erased*.
+moderator pass; the finalizer (its file and suite are now DELETED); the
+pipeline-side Monte Carlo and backtest. The other engine FILES still exist and are
+still unit-tested — three reachable modules still import debate helpers, so the
+island goes only after those edges are cut (the table is in
+[docs/plans/debate-deletion-status.md](plans/debate-deletion-status.md)); a name
+above marked "gone" means *nothing in the app reaches it*, not *it was erased*.
 
 Why the deletion is safe rather than a loss: the thing section C existed to produce
 — a grounded verdict with a journal row — is what a tool-bearing turn produces now
