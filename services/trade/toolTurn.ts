@@ -29,6 +29,8 @@ import type { ProviderConfig } from '../../types/provider';
 import type { ChatMessage } from '../providers/GenericProviderService';
 import { streamChatWithDeskTools, stripTextToolCalls } from '../analysis/DeskToolsService';
 import type { StreamWithDeskToolsOptions } from '../analysis/DeskToolsService';
+import { emptyTokenUsage, mergeTokenUsage } from '../../utils/tokenUsage';
+import type { TokenUsage } from '../../utils/tokenUsage';
 import { splitThinkingFromOutput } from '../../utils/thinkingSplit';
 import { getHarnessSettings } from '../../utils/harnessSettings';
 import type { ReasoningEffort } from '../providers/reasoningControls';
@@ -63,6 +65,13 @@ export interface ToolTurnOutcome {
     /** A line the caller should append to its own notice list: this turn had no
      *  separate answer, only its reasoning. */
     notice?: string;
+    /** Token counts the PROVIDER reported for this turn, merged across every
+     *  round it made. Measured, never inferred: it stays zero when the provider
+     *  sent no usage frame, and a zero is a gap rather than a small number. */
+    usage: TokenUsage;
+    /** How many usage frames arrived — so a caller can tell one round from four
+     *  without re-deriving it from tool lines. */
+    usageCalls: number;
 }
 
 export interface ToolTurnRequest {
@@ -84,9 +93,38 @@ export interface ToolTurnRequest {
     keepTextHidden?: (accumulated: string) => boolean;
 }
 
-/** Run the turn. Transport errors propagate: the caller owns what a failed turn
- *  looks like, because only it knows whether a toast or a row note is right. */
+/** What the turn produced before usage is folded in. */
+type InnerOutcome = Omit<ToolTurnOutcome, 'usage' | 'usageCalls'>;
+
+/**
+ * The one turn executor, with token accounting measured rather than inferred.
+ *
+ * `streamChatWithDeskTools` forwards `onUsage` to the wire, and the wire calls it
+ * with whatever the provider reported for THAT request — so this collects per
+ * request, with no shared bus. A global subscriber would have attributed an
+ * automation run's tokens to whichever interactive turn happened to be streaming
+ * beside it. A turn whose provider sent no usage frame reports zeroes, and the
+ * panel shows a gap instead of a number nobody measured.
+ */
 export const runToolTurn = async (req: ToolTurnRequest): Promise<ToolTurnOutcome> => {
+    let usage = emptyTokenUsage();
+    let usageCalls = 0;
+    const callerOnUsage = req.transport.onUsage;
+    const outcome = await runToolTurnInner({
+        ...req,
+        transport: {
+            ...req.transport,
+            onUsage: (frame: TokenUsage) => {
+                usage = mergeTokenUsage(usage, frame);
+                usageCalls += 1;
+                callerOnUsage?.(frame);
+            },
+        },
+    });
+    return { ...outcome, usage, usageCalls };
+};
+
+const runToolTurnInner = async (req: ToolTurnRequest): Promise<InnerOutcome> => {
     const { events, signal, startedAt } = req;
     let raw = '';
     let reasoning = '';

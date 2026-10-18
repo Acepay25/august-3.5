@@ -1,4 +1,6 @@
 import { getPreferenceObject, setPreferenceObject } from '../services/infrastructure/PreferencesService';
+import { estimateCostUsd } from './tokenUsage';
+import type { TokenUsage } from './tokenUsage';
 
 export interface SessionUsageModelSlice {
     modelId: string;
@@ -45,8 +47,51 @@ export const appendSessionUsage = async (entry: SessionUsageEntry): Promise<void
     });
 };
 
-export const clearSessionUsage = async (): Promise<void> => {
-    await enqueue(async () => {
+/**
+ * The tool turn's writer. One mapping, so every run that answers — Chat surface,
+ * Chart AI dock, or a schedule — lands the same shape, and the Session Usage
+ * panel stops depending on a verdict finalizer that stage 19 took out of the send
+ * path (with that gone the panel had a reader and no writer: it rendered an empty
+ * ledger for every run the trader made).
+ *
+ * `promptTokens`/`completionTokens` are what the PROVIDER reported, summed over
+ * the turn's rounds. They stay 0 when the provider sent no usage frame — that is
+ * a gap in the measurement, not a cheap run, and `usageCalls` says which.
+ * `costUsd` is left undefined unless the caller has real rates: an invented price
+ * is worse than no price. `tokensEst` is the volume this app itself saw.
+ */
+export const recordToolTurnUsage = (args: {
+    startedAt: number;
+    workedMs: number;
+    modelId: string;
+    usage: TokenUsage;
+    usageCalls: number;
+    answer: string;
+    seats?: number;
+    coin?: string;
+    direction?: string;
+    rates?: { inputUsdPer1k?: number; outputUsdPer1k?: number };
+}): void => {
+    const { usage, usageCalls, modelId } = args;
+    void appendSessionUsage({
+        at: new Date(args.startedAt + args.workedMs).toISOString(),
+        durationMs: args.workedMs,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        tokensEst: Math.round((args.answer || '').length / 4),
+        analystCount: args.seats ?? 1,
+        costUsd: estimateCostUsd(usage, args.rates),
+        coin: args.coin,
+        direction: args.direction,
+        models: usageCalls > 0 ? [{ modelId, tokens: usage.totalTokens || usage.promptTokens + usage.completionTokens }] : undefined,
+    }).catch(error => {
+        // Fire-and-forget, but never silently: the finalizer's own note says a
+        // quota rejection here once surfaced as an unhandled rejection.
+        console.error('[SessionUsage] Could not record turn usage:', error);
+    });
+};
+
+export const clearSessionUsage = async (): Promise<void> => {    await enqueue(async () => {
         await setPreferenceObject(STORAGE_KEY, []);
     });
 };

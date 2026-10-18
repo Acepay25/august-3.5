@@ -72,6 +72,7 @@ import { TASK_BUDGETS } from '../providers/taskBudgets';
 import { getHarnessSettings } from '../../utils/harnessSettings';
 import { resolveComposerEffort, type ReasoningEffort } from '../providers/reasoningControls';
 import type { Attachment } from '../../hooks/useChatAttachments';
+import { recordToolTurnUsage } from '../../utils/sessionUsage';
 
 /** Identity of a RUNNING model turn, captured the moment it starts. Every
  *  side-effect of a panel tool (proposal card attach, drawing persistence,
@@ -704,6 +705,15 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             keepTextHidden: hidePass ? panelCouldStillBePass : undefined,
             transport,
             events,
+        });
+        recordToolTurnUsage({
+            startedAt: turnStartedAt,
+            workedMs: outcome.workedMs,
+            modelId: config.selectedModel,
+            usage: outcome.usage,
+            usageCalls: outcome.usageCalls,
+            answer: outcome.text,
+            seats: 1,
         });
         patch(e => ({
             ...e,
