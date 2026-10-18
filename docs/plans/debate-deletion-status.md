@@ -1327,9 +1327,23 @@ framing was wrong in two ways that both matter before anyone edits:
 
 Not attempted this session, deliberately: with the full gate chain costing ~10 minutes per pass and
 the remaining budget in single-digit turns, a 22-file feature removal with a stored-config migration
-would have landed half-finished on a `main` that is pushed. Two decisions unblock it: whether the
-800-token truncation survives as the only path, and whether `AutomationConfig.mode` is dropped with
-a migration or collapsed to `'standard'` while the field stays.
+would have landed half-finished on a `main` that is pushed.
+
+**The two sub-decisions are now answered (2026-10-18, second ruling round).**
+1. *Which memory path survives*: the owner's words were "I want this to be a normal chat", so the
+   ordinary branch wins — `services/providers/GenericAnalysisService.ts:335` keeps the 800-token
+   truncation as the only behaviour and the whole-context branch goes with the feature. Everyday
+   sends are byte-identical to what they are today; only accuracy-mode sends change.
+2. *Stored schedules*: `AutomationConfig.mode` collapses to `'standard'` **on the reader side** —
+   the field stays in the type, anything not `'standard'` coerces to `'standard'`, the picker in
+   `components/automation/AutomationEditorModal.tsx:515` and the label at
+   `components/automation/AutomationView.tsx:68` go away. A saved schedule keeps running instead
+   of failing validation on load, which is the whole reason not to drop the field outright.
+3. *Calibration*: the owner chose **delete the dashboards too**, after being told in plain terms
+   that this removes the Learn tab's calibration bar, trader profile cards and monthly report — not
+   just a hidden store. It stays a separate gated pass; it is the largest of the four.
+Also agreed: anything the user typed into the two accuracy instruction boxes is deleted with them,
+with an offer to migrate that text into the general list before the tabs go.
 
 **#21 — `postMortem`, `savedAnalyses`, `Message.debateTurns`.** Deleting the fields removes ~25
 readers (EvidencePackService, DoctrineConsolidation, SkillMemoryService, memoryContext,
