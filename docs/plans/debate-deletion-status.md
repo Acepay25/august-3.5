@@ -445,6 +445,59 @@ deleted (`verdictFinalizer.test.ts`, `harnessFeatures.test.ts`,
 debate-only `Message` fields. Item counts in (2) came from a research agent and are
 **not yet verified by me line-by-line** — check each before deleting.
 
+**Second attempt, same day — the cut re-applied and gated.** The excision was
+replayed from a saved copy and measured again, and the numbers are better than the
+first pass suggested:
+
+- **The suite says 3 files / 4 tests fail — not ~86.** `4974 passed` with the branch
+  gone, because the ensemble-only suites (`debateFlow`, `ensembleConsensus`,
+  `debatePods`, `debateScience`, …) unit-test the ENGINE, which still exists. They
+  break when stage 19 deletes the engine files, NOT when the branch goes. The
+  agent-supplied inventory that predicted ~86 affected suites conflated those two
+  tranches; it is over-broad and was wrong as a plan for this cut.
+- The 4 real failures are all source-shape pins of the deleted arm, and each has a
+  post-deletion contract to re-anchor to rather than a deletion:
+  `tests/analysisPipelineSendIdentity.test.ts` / *keeps the hybrid snapshot OUT of a
+  ref* pinned `currentHybridData: hybridAtSend,` — the snapshot's consumer is gone,
+  and the seat now fetches the tape inside the turn, so the invariant worth pinning is
+  that NO stale pre-captured packet is threaded into a model call, plus that
+  `runChatSurfaceTurn({` is the answering path.
+  `tests/automationRouteCharacterization.test.tsx` / *the schedule has its OWN arm, and
+  it is ordered BEFORE the mode fork* — `indexOf` of the fork is now `-1`, so the
+  ordering test must become "the arm exists AND there is no mode fork". Same file's
+  *the ensemble branch is still the mode's, and the keywords stay dead* — the positive
+  half inverts to "the branch is gone"; the keyword bans stay exactly as they are.
+  `tests/verdictFinalizer.test.ts` / *selects the automation-private messages at the
+  hook call site* pinned `const verdictMessages = isAutomationRun ? …` — re-anchor to
+  `runAutomationTurn({ … history: currentMessages, …})` plus the single
+  `updateRequestMessages(prev => [...prev, aiMessage])` write.
+- **The dead-local pass must be hand-edited, not scripted.** A range-exciser driven by
+  eslint's 46 flagged names removed 41 statements / 132 lines and `tsc` then reported
+  syntax errors at six sites (`:8`, `:403`, `:418`, `:1277`, `:1286`, `:1294`) — the
+  extent finder ended a statement at a brace inside a nested arrow or template. It also
+  reported `statementsRemoved: 41` happily while doing it, which is the lesson: a bulk
+  edit's own count is not evidence. The surviving check is `tsc` after EVERY group of
+  deletions, in chunks small enough to read. The flagged sites, by committed position:
+  `:56 SEAT_LAUNCH_STAGGER_MS`, `:237 seatTemperature`, `:341 runAnalyzeTradingView`,
+  `:394/395/399/400/407/408` the six debate refs, `:470-474` four throttlers,
+  `:577 persistThinkingRecords`, `:639 stopTokenUsage` (the run's only lint ERROR),
+  `:640 tokenByProvider`, `:738/744/748 teamSeatFor/seatToolsFor/seatMandates`,
+  `:906 runStartedAt`, `:909 liveBtResult`, `:955 imageFiles`,
+  `:1044 updateEnsembleProgress`, `:1113 promptLane = beginPromptLane()` (deleting the
+  assignment must delete the CALL — a begun lane that never ends is a leak),
+  `:1117 currentThreadSummary`, `:1120 memoryToInject`, `:1131 instructionsToUse`,
+  `:1188 bayesianConfidenceCap`, `:1258/1264/1265/1268` four learning-context members,
+  `:1319 moderatorContextBundle`, `:1327 effectiveTradingStyle`,
+  `:1360 enhancedFinalTradeSummary`, `:1405 moderatorLearningContext`,
+  `:1422 capturedGateResult`. Five more are single specifiers inside a LIVE destructure
+  and must be shed without touching the call: `:7` two type names, `:283/284/285` four
+  App setters, `:713 resolvedAssignments` (the same destructure yields
+  `enabledProviders`, which the surviving casual arm still reads).
+- Arithmetic for the ratchet: this file carried 23 warnings at HEAD and 57 after the
+  cut (56 + the 1 error), so the repo total would sit near 851 under the 889 cap. The
+  error is what blocks CI, not the warnings — but leaving 41 dead prompt-assembly
+  statements in the send path is the half-finished state this stage refuses.
+
 ## #33 — the confidence WORD now follows the number
 
 `downgradeConfidenceForProbability` walked ONE step, so a verdict whose
