@@ -65,12 +65,21 @@ const DEFAULT_SKILL_ARGS = {
  *  `MOCK_SKILL_ARGS` overrides the payload as a JSON object, which is how a
  *  caller tests the rejection paths (e.g. a 6-character if_condition). */
 function toolScenario(body) {
-    if (!TOOL_SCENARIO) return null;
+    // A request-scoped arming marker: the render probe sends one message
+    // containing PROBE_TOOL_ROUND. A second mock instance with MOCK_TOOL_CALL=1 was
+    // tried first and rejected, because it answers boot-time calls too and the app
+    // then never reaches the trade screen.
+    const marked = JSON.stringify((body && body.messages) || []).includes("PROBE_TOOL_ROUND");
+    if (!TOOL_SCENARIO && !marked) return null;
     if (!Array.isArray(body.tools) || body.tools.length === 0) return null;
     const msgs = Array.isArray(body.messages) ? body.messages : [];
-    // One shot only. After the app runs the tool it calls back with the result,
-    // and re-emitting the same call would loop the turn forever.
-    if (msgs.some(m => m && m.role === 'tool')) return null;
+    // One shot per TURN. After the app runs the tool it calls back with the
+    // result, and re-emitting would loop forever. Keyed on the LAST user message,
+    // not on any tool message in the history, or a second tool-bearing turn in the
+    // same conversation could never get one — which is what the Stop-mid-tool
+    // check needs.
+    const lastUser = msgs.map(x => (x && x.role) || '').lastIndexOf('user');
+    if (msgs.slice(lastUser + 1).some(x => x && x.role === 'tool')) return null;
     let args = DEFAULT_SKILL_ARGS;
     if (process.env.MOCK_SKILL_ARGS) {
         try { args = JSON.parse(process.env.MOCK_SKILL_ARGS); } catch { /* keep the default */ }
@@ -151,6 +160,29 @@ const stream = (res, text) => {
     tick();
 };
 
+/** The scripted call as the frames a real OpenAI-compatible transport sends:
+ *  one opening frame with the id + function name, then argument fragments,
+ *  then `finish_reason: "tool_calls"` and the [DONE] sentinel. Chunked on
+ *  purpose — the parser keys its slots on `index` and concatenates, so one fat
+ *  frame would answer the question without exercising the accumulator. */
+const streamToolCall = (res, call) => {
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+    });
+    const frame = (o) => res.write(`data: ${JSON.stringify(o)}\n\n`);
+    frame({ choices: [{ index: 0, delta: { role: 'assistant', tool_calls: [{ index: 0, id: call.id, type: 'function', function: { name: call.function.name, arguments: '' } }] } }] });
+    const args = String(call.function.arguments || '');
+    const SIZE = 24;
+    for (let i = 0; i < args.length; i += SIZE) {
+        frame({ choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: args.slice(i, i + SIZE) } }] } }] });
+    }
+    frame({ choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] });
+    res.write('data: [DONE]\n\n');
+    res.end();
+};
+
 const server = http.createServer((req, res) => {
     cors(res, req);
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -177,7 +209,17 @@ const server = http.createServer((req, res) => {
         // flag-off run never reaches past the first statement.
         const scripted = toolScenario(body);
         if (scripted) {
-            console.log(`[mock-provider] scripted ${scripted.choices[0].message.tool_calls[0].function.name} call`);
+            const call = scripted.choices[0].message.tool_calls[0];
+            console.log(`[mock-provider] scripted ${call.function.name} call`);
+            // A real OpenAI-compatible transport never answers `stream: true`
+            // with a JSON body: the call arrives as index-keyed `delta.tool_calls`
+            // fragments closed by `finish_reason: "tool_calls"`. The dock asks for
+            // a stream, so replying with a bare object gave the SSE parser zero
+            // frames — which is why the render probe could not see a tool line at
+            // all. The accumulator itself was unit-tested
+            // (tests/sseParser.test.ts:35); what had never run was a streamed call
+            // through the real transport into a rendered row.
+            if (body.stream) { streamToolCall(res, call); return; }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(scripted));
             return;
