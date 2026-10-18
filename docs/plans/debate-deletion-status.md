@@ -1198,3 +1198,18 @@ Two operational notes, because both cost a run:
   handles it. Unlike `render-probe`, this gate does not assert zero page errors,
   so "25/25 passed" here is not evidence of a clean page. Either assert
   `pageErrors === 0` outside the injected scenario or label the count expected.
+
+## The review's two remaining "not verified" items, closed by measurement
+
+- **"Do e2e/boot-probe wait on the splash node?"** Yes, both, with different
+  mechanics: `scripts/boot-probe.cjs:120` blocks on
+  `waitForFunction(() => !document.querySelector('#splash'))`, while the e2e
+  specs assert ABSENCE with a count-0 expectation (`e2e/smoke.spec.ts:55` in the
+  shared seed path, `:141` in the first-run spec). `index.tsx:86-92` is
+  `dismissSplash` plus its double `requestAnimationFrame`. Both flow docs now
+  say which gate does which, and cite the lines.
+- **"One service replacing nine" (called unfalsifiable).** That phrasing no
+  longer appears in either doc (`grep -n "nine\|replacing" docs/app-flow.md
+  docs/app-flow.html` → no matches). The falsifiable form lives in AGENTS.md:
+  `GenericProviderService` + `GenericAnalysisService` are the only provider
+  clients, and the legacy per-provider services were removed.
