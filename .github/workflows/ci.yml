@@ -36,7 +36,7 @@ jobs:
         run: npm run typecheck:scripts
 
       # tsc and vitest cannot see a doc line number, and the flow docs carry 110 of
-      // them; they have gone stale three times during this deletion.
+      # them; they have gone stale three times during this deletion.
       - name: Flow docs cite real lines
         run: npm run check-flow-doc-anchors
 
