@@ -576,6 +576,32 @@ while the `finally` still calls `endPromptLane()` — the prompt A/B lane is sta
 not deleted, and re-wiring it onto the tool turn versus removing it is an owner
 call, not a mechanical one.
 
+**Correction to the section above, measured by attempting it.** `verdictFinalizer.ts`
+and `autoplayParser.ts` have zero IMPORTERS, and I deleted both plus
+`tests/verdictFinalizer.test.ts`. `tsc` stayed clean — and two suites failed, for a
+reason neither the import graph nor this document predicted:
+
+- `tests/featuresAreWired.test.ts` → **`withDetectedTradeType` loses its consumer**.
+  `verdictFinalizer.ts:425` is
+  `withDetectedTradeType(processNewAnalysis(finalAnalysis))` — the file applies the
+  journal's scalp/swing label, so it is a live capability carrier, not dead code.
+  `hooks/analysisPipeline/autoplayParser.ts` likewise went quietly.
+- `tests/liveMarketTrendlines.test.tsx` failed on the same removal.
+
+So a zero-importer count is NOT proof a module is dead: it can be the only place a
+capability is APPLIED, and the wiring gate counts application, not importation. This
+is the same starved-vs-deleted distinction defect #1 of the peer review turned on
+its head — here the gate caught me before I shipped it. The deletion was reverted;
+the tree is exactly `HEAD`.
+
+Tranche 2 therefore starts with a re-homing decision, not a deletion: where do
+`withDetectedTradeType` and whatever `liveMarketTrendlines` asserts get applied once
+the finalizer goes — `present_trade`/`runPresentTrade` (where plans are minted, like
+the gate stamp in 20a2) or `logTradeWithFeedback` (where the journal row is
+written)? Re-home first, then delete, then let both gates fall out naturally. Do not
+edit those two suites to pass the deletion; that would be loosening the gate to make
+it agree with me.
+
 ## #33 — the confidence WORD now follows the number
 
 `downgradeConfidenceForProbability` walked ONE step, so a verdict whose
