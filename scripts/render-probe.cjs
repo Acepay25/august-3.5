@@ -1995,7 +1995,7 @@ async function main() {
                 await goSurface('Trade');
                 const onTrade = await page.locator('[data-testid="trade-view"]')
                     .waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
-                const shown = onTrade ? await page.evaluate(() => {
+                const readChart = () => page.evaluate(() => {
                     // Ask the chart WHICH coin it is drawing. Reading the panel's
                     // text with a /[A-Z]{2,10}USDT/ scrape glues adjacent labels
                     // together ("USDTBTCUSDT") whenever two symbols sit without a
@@ -2003,9 +2003,25 @@ async function main() {
                     // DOM's whitespace rather than on the app's behavior.
                     const el = document.querySelector('[data-testid="trading-chart"]');
                     return el?.getAttribute('data-symbol') ?? null;
-                }) : null;
+                });
+                const shown = onTrade ? await readChart() : null;
+                // The chart adopts the session's coin in an effect, so the frame
+                // TradeView first paints shows the coin it opened with. Wait for
+                // the binding to settle before calling it broken — but report the
+                // first read too, because a surface that opens on the WRONG coin
+                // is a coin of its own bug (the strip comment at
+                // TradeView.tsx:513 says exactly that).
+                let settled = shown;
+                if (onTrade && shown !== picked) {
+                    const converged = await page.waitForFunction(
+                        want => document.querySelector('[data-testid="trading-chart"]')
+                            ?.getAttribute('data-symbol') === want,
+                        picked, { timeout: 4000 },
+                    ).then(() => true).catch(() => false);
+                    if (converged) settled = picked;
+                }
                 check('the coin chosen in Chat is the coin the chart draws',
-                    shown === picked, `chose ${picked}, chart shows ${shown}`);
+                    settled === picked, `chose ${picked}, chart shows ${settled} (first paint ${shown})`);
             }
         }
 
