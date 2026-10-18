@@ -697,3 +697,19 @@ cluster it feeds. Also two comments now make a false claim — `components/agent
 and `components/shared/ChatTranscriptRow.tsx:18` both cite `verdictFinalizer.ts` as where a
 verdict payload is written, and it has no production caller. Not edited this pass (no turn to
 verify the sentence around them); fix with the re-home.
+
+## The consequence, stated plainly (measured 2026-10-18)
+
+`withDetectedTradeType(` is called in exactly one file, and that file has no production
+importer. So **today the journal's scalp/swing filter has no live producer** — every new row
+reaches it unlabelled, and the one exception is history written before stage 19. Two things
+follow:
+
+1. `tests/featuresAreWired.test.ts:84` is satisfied by an application site inside an
+   unreachable file. The gate exists to catch a capability that stopped being applied, and a
+   dead module's call body passes it. That is the vacuous-measurement shape again: the check
+   passes for a reason unrelated to what it claims.
+2. Tranche 2's first edit is therefore not the finalizer's removal — it is a call in a live
+   path. Until that lands, the filter is broken by data, not by a bug, and `useTradeJournalActions`'s
+   comment ("the classifier labels every verdict on finalization") describes a path that no
+   longer runs. Both need fixing in the re-home, not before it.
