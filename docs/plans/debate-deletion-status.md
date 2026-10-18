@@ -1506,3 +1506,22 @@ and zero warnings.
 Still owed by #17: the calibration store with the Learn dashboards (the owner's
 second DELETE ruling inside this decision) — untouched, and larger than this
 file's surface. #19 and #21 remain unbuilt.
+
+## 2026-10-19 — #17 is now verified by the whole local chain, not a subset
+
+The two commits were re-checked against the gates they had not yet faced:
+
+- full suite: 476 files passed / 1 skipped, 4708 tests passed / 11 skipped, zero
+  `FAIL` lines, exit 0 — measured by `vitest run` in `npm run test`'s own log, not
+  by a wrapper exit code.
+- render probe: `RENDER PROBE OK`, every exchange renders, settled verdicts and
+  malformed persisted audit data drop no row, all four nav surfaces mount, the
+  Learn and Journal sweeps find no inert control, and zero pageerrors.
+
+That is the point: the deletion removed a Settings row, a journal badge and an
+automation label, and the surface that could have silently dropped a row is the
+one jsdom tests cannot see.
+
+Not run locally, still CI-only: `installer-smoke` (needs the packaged exe) and
+`npm run build`'s bundle path. #17's second ruling — the calibration store with
+the Learn dashboards — is still untouched, as are #19 and #21.
