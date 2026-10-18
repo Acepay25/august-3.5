@@ -138,6 +138,17 @@ toggle-off send is still casual chat (it always was), and the structured verdict
 the levels and the journal row reach a normal send only as TOOLS the seat calls —
 which is why 20b and 20b-B had to land first.
 
+**A plan the seat only *said* still gets the card (stage 20d).** A tool is only as
+good as the model's choice to call it, and the ledger's whole problem is rows that
+never arrive. So a Chat row whose prose carries a labelled entry, stop and target
+offers the same decision the card offers: `planFromProse` extracts the numbers and
+hands them to `parseTradeProposal` — there is no second validator, which is why a
+long whose stop sits above its entry grows no chip — and the chip mints the plan id
+through `mintPlanId`, the one shape `present_trade` uses, so the two paths dedupe
+against each other. It requires a coin, one direction (a reply that hedges "long
+above X, short below Y" is not one plan), and it stays out of the way of a row that
+already has a proposal.
+
 ---
 
 ## C · The analysis pipeline, in call order
@@ -347,6 +358,7 @@ card that forgets it was clicked offers a second journal row.
 | 44 | the pane filters what it shows | `agentThreads.ts` read at `AgentsView.tsx` |
 | 45 | `present_trade` → a card in either home | `runPresentTrade presentTradeTool.ts:76` ← dock sink `chatTurnRunner.ts` / desk sink `chatSurfaceTurn.ts`; gate scan starts there, the cap binds at log time (`ensureStamp`) |
 | 46 | `chatSurfaceSystemPrompt` → the desk arm's prompt | `chatSurfaceTurn.ts:103` — mandate (`chatPrompts.ts:40`) + skills index + active strategies + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (`types/message.ts:368`) |
+| 47 | prose that never called the tool → the same decision | `planFromProse` (`services/trade/tradeShapedProse.ts`) reads the labelled entry/stop/target out of the row, `parseTradeProposal` decides whether that is a plan, and the chip mints the ONE plan-id shape (`mintPlanId`) before calling `onLogProposedTrade` — so a spoken plan reaches the journal the same way a presented one does |
 
 ---
 

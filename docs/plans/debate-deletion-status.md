@@ -295,6 +295,22 @@ reading is expensive to undo.
   surface was live. The assertion itself is unchanged — a real missing header
   still fails the gate. Two consecutive OK runs after the fix.
 
+## 20d — trade-shaped prose gets the same decision (landed after the probe fix)
+
+`services/trade/tradeShapedProse.ts` extracts a labelled entry/stop/target out of a
+Chat row and hands the numbers to `parseTradeProposal` — no second validator, so the
+geometry refusal ("a long whose stop sits above its entry") is inherited rather than
+re-derived. The chip mints its id through `mintPlanId`, pulled out of
+`presentTradeTool` so the prose path and the tool path cannot become two objects to
+the `planId` dedupe, and then calls the existing `onLogProposedTrade`, so the gate
+stamp and the journal row are the same path as a card. It requires one direction (a
+reply hedging "long above X, short below Y" is not one plan) and a coin, and never
+shadows a row that already has a proposal. `tests/tradeShapedProse.test.ts` (9, five
+of them refusals) caught a real bug in the first pass: prices assembled by string
+concatenation matched "entry 90" and silently refused "entry 111,000", so the
+patterns are literals now. Gates: tsc clean, 497 files / 4931 tests, lint 818/0,
+RENDER PROBE OK.
+
 ## Deviations from the approved manifest (say so before repeating them)
 
 - **WatchListPanel kept.** "Watch becomes a chat tool only" named the list, but
