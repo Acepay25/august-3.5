@@ -5,7 +5,8 @@
  */
 
 import { Kline } from '../analysis/MarketDataService';
-import { TradeAnalysis } from '../../types';
+import { TradeAnalysis, Message } from '../../types';
+import { buildProposedTradeAnalysis } from './proposedTrade';
 import { parsePrice as parsePriceCanonical } from '../../utils/analysisUtils';
 import { baseOf } from '../../utils/symbol';
 
@@ -74,4 +75,24 @@ export const verdictLevels = (analysis: TradeAnalysis | null | undefined, symbol
         if (p) levels.push({ label: `TP${i + 1}`, price: p, color: '#07b56a', dashed: true });
     });
     return levels;
+};
+/**
+ * The verdict the chart overlays its Entry/SL/TP lines with: the newest row that
+ * settled a plan.
+ *
+ * Keyed on Message.proposal — what a tool-bearing turn stamps on its own row
+ * (useAnalysisPipeline.ts:1360, chatSurfaceTurn.ts:293). It used to key on the
+ * DEBATE shapes (ensembleProgress, more than one modelsUsed entry, debateTurns)
+ * and read analysis off the row the verdict finalizer had just settled. That
+ * finalizer is deleted and a tool turn never mints a TradeAnalysis, so every new
+ * run went quiet while the chart kept reading the prop: a live reader with no
+ * live writer. analysis stays as the fallback for rows written before the cut.
+ */
+export const latestChartVerdict = (messages: Message[]): TradeAnalysis | null => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (m.proposal) return buildProposedTradeAnalysis(m.proposal);
+        if (m.analysis) return m.analysis;
+    }
+    return null;
 };

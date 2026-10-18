@@ -18,6 +18,7 @@ import { useWatchAndAutopilot } from './hooks/useWatchAndAutopilot';
 import { buildProposedTradeMessage, type TradeProposal } from './services/trade/proposedTrade';
 import { ensureStamp } from './services/trade/proposalGate';
 import * as chatStore from './services/trade/chatStore';
+import { latestChartVerdict } from './services/trade/chartData';
 import { AnalystRole } from './types/enums';
 import { BotRegistry } from './services/bots/BotRegistry';
 
@@ -1244,20 +1245,10 @@ const App: React.FC = () => {
     }, [groups, bots, messages, activity, workingBotId, groupRunning, sendGroupThread,
         sendGroupReply, cancelGroupRun, isHybridIntelligenceEnabled, toggleGroupHybrid,
         setIsNewGroupOpen, deleteGroup]);
-    // The verdict the Chart AI dock draws on the chart: the message currently
-    // debating, else the most recent run that produced a multi-model answer.
-    const verdictMessage = useMemo(() => {
-        const debating = messages.find(m => m.isDebating);
-        if (debating) return debating;
-        for (let i = messages.length - 1; i >= 0; i--) {
-            const m = messages[i];
-            const ensemble = Boolean(m.ensembleProgress)
-                || Object.keys(m.modelsUsed ?? {}).length > 1
-                || (m.debateTurns?.length ?? 0) > 0;
-            if (ensemble) return m;
-        }
-        return null;
-    }, [messages]);
+    // The verdict whose Entry/SL/TP the chart draws: the newest row that settled
+    // a plan. Keyed on the proposal a tool turn stamps on its own row, with the
+    // legacy analysis field as the fallback for pre-debate history.
+    const chartVerdict = useMemo(() => latestChartVerdict(messages), [messages]);
 
     // Esc cancels an in-progress analysis (including the debate phase). Never
     // fires while the user is typing in an input/textarea/contenteditable, and
@@ -2523,7 +2514,7 @@ const App: React.FC = () => {
                                     onNewGroup={() => setIsNewGroupOpen(true)}
                                     onOpenCoach={openApprovalsInLearn}
                                     coachCount={coachCount}
-                                    verdict={verdictMessage?.analysis}
+                                    verdict={chartVerdict}
                                     bots={bots}
                                     trades={loggedTrades}
                                     groups={groups.map(g => ({ id: g.id, name: groupDisplayName(g, bots) }))}

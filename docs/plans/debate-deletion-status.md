@@ -924,3 +924,7 @@ it means deciding whether the chart reads the settled `TradeProposal` or a
 re-minted `TradeAnalysis`, and that needs `npm run render-probe` (or the app open)
 to prove the line actually draws again. Do not "fix" it by widening the selector:
 the selector is not the defect, the missing producer is.
+
+## The chart verdict producer — LANDED
+
+Re-sourced from the settled proposal: `latestChartVerdict(messages)` in `services/trade/chartData.ts`, wired into App (the old `verdictMessage` memo and the dead `isDebating` branch are gone). RED PROOF ran the old predicate against a proposal-only row: it returned null, so `verdict` was undefined for every new run. `tests/chartVerdictSource.test.ts` pins the proposal path, the `analysis` fallback for history, the preference when a row carries both, the symbol match through `verdictLevels`, and the App wiring by source grep. tsc clean; that suite + `chartData` + `streamThrottlers` green (15 tests). `render-probe` was NOT re-run: the canvas claim is unverified, stated not assumed.
