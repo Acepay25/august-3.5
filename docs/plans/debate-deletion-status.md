@@ -786,7 +786,7 @@ The reachability walk found the label was not the only orphaned write:
    20r removed for scheduled runs.
 2. **Completion notification for an analysis run is gone.** Its only caller is the
    finalizer. `services/infrastructure/notify.ts` is live (price alerts,
-   `TradeView.tsx:716`), and its own header calls `CompletionNotifications` a
+   `TradeView.tsx:716`), and its own header calls the completion-notifier component (named in a comment in `services/infrastructure/notify.ts`, no component of that name remains) a
    "native-only copy" — so the fix is one `notify()` call on the settled Full-analysis
    path, and `CompletionNotifications` then dies with stage 19.
 
@@ -828,7 +828,7 @@ mechanical cut:
 | live importer | imports | the question it forces |
 |---|---|---|
 | `hooks/analysisPipeline/streamThrottlers.ts:30` | `lastCompletedRound`, `laneDraftsFromTurns` from `utils/debateResume` | the live writer's lane-draft display was built around rounds a single-seat turn does not have |
-| `hooks/useWatchAndAutopilot.ts:4` | `reconstructOpenings` from `utils/debateResume` | what a watch arms an opening FROM, now that no debate produces one |
+| `hooks/useWatchAndAutopilot.ts` | `reconstructOpenings` from `utils/debateResume` — WRITTEN BEFORE THIS WAS DELETED: as of 2026-10-19 neither name occurs anywhere in the tree, so there is no line to cite | what a watch arms an opening FROM, now that no debate produces one |
 | `services/learning/monthlyReport.ts:24` | `computeEnsembleLine`, `SeatConviction` from `services/providers/debateScience` | what the monthly report's ensemble line says when there is no ensemble — a gap, or the single analyst's own conviction |
 
 Answer those three (or say "delete the display half") and the island goes in one commit:
@@ -1567,14 +1567,14 @@ numbers I had attributed to a bare `BackupService.ts` are actually
 And the settings field `confidenceCalibration` is not what the Learn dashboards
 read: `components/dashboards/learning/CalibrationSection.tsx:28` renders
 `profile.confidenceAccuracy`, produced at
-`services/learning/SelfLearningService.ts:248`. Those are two different stores,
+`services/learning/SelfLearningService.ts`. Those are two different stores,
 and the owner's "delete the dashboards too" ruling is about the second one.
 
 **Remaining ruling inside #17 — the calibration dashboards.** Delete
 `components/dashboards/learning/CalibrationSection.tsx` and
 `components/dashboards/learning/CalibrationBar.tsx`, their mount at
 `components/dashboards/LearningDashboard.tsx:203`, and the
-`confidenceAccuracy` producer at `services/learning/SelfLearningService.ts:248`.
+`confidenceAccuracy` producer at `services/learning/SelfLearningService.ts`.
 Separately, the `confidenceCalibration` settings field is now deleted too. It
 was plumbed through `App.tsx`, the profile persistence and the pipeline's props
 and dependency array, but the pipeline never read it — a prop that is only ever
