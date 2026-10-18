@@ -284,7 +284,7 @@ reading is expensive to undo.
   free seat was being told to match a chart it cannot see — it now takes a `where`
   argument and the dock's default is byte-identical (pinned as a control); and the
   slugs that travelled are recorded on the row (`Message.injectedSkills`,
-  `types/message.ts:368`) bounded to the 30 the index printed, so the record cannot
+  `types/message.ts:280`) bounded to the 30 the index printed, so the record cannot
   claim skills the model never saw. Tests: `tests/chatSurfacePrompt.test.ts` (10).
   Full suite: 496 files / 4922 tests, lint back on the 818/0 baseline after four
   `no-useless-assignment` errors from initialized-then-overwritten locals.
@@ -1866,3 +1866,20 @@ this deletion.
 Held rather than executed: with the turns left, a 35-file pass over the learning and skill-craft
 path is exactly the work that either finishes or gets left half-deleted, and a half-deleted
 learning path fails silently the way the desk-tool cache did.
+
+**Executed since that sentence — the part that needed no owner decision.** Three `Message` fields
+had zero references anywhere outside their own declaration: `postMortemDebateTurns`,
+`isPostMortem` and the `postMortemFailedCandidate` retry object with its nested `feedback` shape.
+Proved by grep, not by typecheck: an unread optional field typechecks forever. Deleted from
+`types/message.ts` only — the trade-side fields the owner's history question covers are untouched.
+The collision warning paid for itself immediately: the four token hits in
+`hooks/useTradeJournalActions.ts` are capitalised `PostMortem…` names belonging to the validation
+engine, and a case-sensitive grep for the field finds none there.
+
+**Also found and removed: `Message.replacementOffer`, the fifth orphan from stage 19.** Its only two
+references both *read* it — `utils/approvalInbox.ts:76/:80` build a "…dropped — pick a replacement
+analyst or skip" inbox card from it — and nothing has written it since the debate generator that
+suspended on the choice was deleted. The `ReplacementOffer` type, the inbox arm and an unused
+import in `useAnalysisPipeline.ts:7` went with it. Nothing user-visible changes, because the card
+could never appear; what changes is that the approvals inbox no longer claims a second
+producer-side flow it cannot have.
