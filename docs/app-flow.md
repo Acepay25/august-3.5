@@ -191,13 +191,23 @@ Why the deletion is safe rather than a loss: the thing section C existed to prod
 verdict-shaped rows come from `proposal` cards, and the surviving readers were
 re-pointed in 20b-B and 20r rather than left reading a field nothing writes.
 
-**One known residue, not a bug I hid.** The hybrid data pull at
-`hooks/useAnalysisPipeline.ts:874` and `:956` still runs
-for a human send with the toggle on, and its packet reaches no model any more — the
-turn fetches the tape through tools. Deleting it is the next tranche's first job,
-and `beginPromptLane` now has zero callers while the `finally` still calls
-`endPromptLane()`, so the prompt A/B lane is starved rather than deleted; whether it
-should be re-wired onto the tool turn or removed is an owner decision.
+**One known residue, stated as measured.** With Hybrid Intelligence on, a human
+send still fetches real-time data: the gate is `hooks/useAnalysisPipeline.ts:956`
+and the fetch is `hooks/useAnalysisPipeline.ts:961`. What no longer happens is the
+part that made it worth the round trip — the injection string it builds
+(`hooks/useAnalysisPipeline.ts:969`, or `:1010` for preset data) is read afterwards
+only by `devLog` at `hooks/useAnalysisPipeline.ts:994`, `:995` and `:1182`. It is
+never handed to the turn, because the analyst and moderator prompts it used to ride
+are the files stage 19 deleted. The packet object does still have one consumer:
+`hooks/useAnalysisPipeline.ts:1040` passes it into
+`assemblePipelineMemoryContext`, which is where the learning coin and the notebook
+slice come from, so dropping the fetch is NOT a byte-preserving cleanup — that is
+why it is an owner decision rather than something I removed silently. The loading
+state at `hooks/useAnalysisPipeline.ts:874` still flips for a send whose result
+only the coin picker reads. Separately, `beginPromptLane` now has zero callers
+while the `finally` still calls `endPromptLane()`, so the prompt A/B lane is
+starved rather than deleted; re-wiring it onto the tool turn or removing it is
+likewise the owner's call.
 
 **The node that used to hang off stage 8 is gone.** `usePostMortem.ts` and
 `GenericAnalysisService.conductPostMortem` were deleted (2026-10-18, `03fc0d5`);

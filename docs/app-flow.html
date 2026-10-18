@@ -154,7 +154,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <p class="note">Stage 19 deleted the debate from this path <b>and its engine files</b>: what one send does now is a data pull, prompt assembly, and ONE tool-bearing turn that answers with <code>present_trade</code>, whose own tool runs the gate scan (20a2). The second tranche removed 26 production files (<code>ensembleService</code>, <code>debateScience</code>, <code>debateResume</code>, <code>provisionalVerdict</code>, <code>CompletionNotifications</code> and the rest) with their suites; the three reachable modules that still imported debate helpers were cut by inlining the slice each used, so no displayed number moved. <code>runEnsembleEnabled</code> (<code>useAnalysisPipeline.ts:557</code>) survives as a switch with fewer things to switch between, and <code>Message.debateTurns</code> stays as a read-only legacy field for rows written before the cut.</p>
 <div class="flow">
 <div class="tier">
- <div class="n"><b>1 data pull</b><i>HybridIntelligenceService — still gated on runEnsembleEnabled useAnalysisPipeline.ts:939, and its packet now reaches no model</i></div>
+ <div class="n"><b>1 data pull</b><i>HybridIntelligenceService — gated on runEnsembleEnabled at hooks/useAnalysisPipeline.ts:956, fetched at :961. The injection string it builds (:969, preset :1010) is read only by devLog at :994, :995, :1182 — it never reaches a turn. The packet still decides the learning coin via :1040, so removing the fetch is an owner call, not a cleanup.</i></div>
  <div class="n"><b>3 prompt assembly</b><i>memoryContext.ts</i></div>
  <div class="n run"><b>4 one turn</b><i>runChatSurfaceTurn services/trade/chatSurfaceTurn.ts, called at useAnalysisPipeline.ts:1392 → executeDeskTool</i></div>
 </div>
