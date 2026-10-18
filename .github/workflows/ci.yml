@@ -35,6 +35,11 @@ jobs:
       - name: Type check scripts
         run: npm run typecheck:scripts
 
+      # tsc and vitest cannot see a doc line number, and the flow docs carry 110 of
+      // them; they have gone stale three times during this deletion.
+      - name: Flow docs cite real lines
+        run: npm run check-flow-doc-anchors
+
       # tsc excludes electron/*.cjs and vitest never imports the main process,
       # so a syntax break in the desktop shell is invisible to every other gate
       # here — and it only shows up when a user launches the packaged app.
