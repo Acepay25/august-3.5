@@ -496,7 +496,7 @@ export const sqliteGetUserProfile = async (username: string): Promise<UserProfil
  * Save user profile (upsert)
  */
 const serializeConversationMessages = (messages: Message[]): string => JSON.stringify(
-    messages.map(({ activeDebateSpeakers, ensembleProgress, ...message }) => message)
+    messages.map(({ activeDebateSpeakers, ...message }) => message)
 );
 
 /**

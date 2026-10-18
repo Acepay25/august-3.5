@@ -63,30 +63,6 @@ export interface ConfluenceData {
   timeframeCount: number;
 }
 
-export type EnsembleAnalystProgressStatus = 'waiting' | 'analyzing' | 'complete' | 'error';
-
-export interface EnsembleAnalystProgress {
-  key: string;
-  providerId: string;
-  providerName: string;
-  modelId: string;
-  modelName: string;
-  displayName: string;
-  status: EnsembleAnalystProgressStatus;
-  finalOutput?: string;
-  thoughtProcess?: string;
-  reasoning?: string;
-  error?: string;
-}
-
-export interface EnsembleProgress {
-  analysts: EnsembleAnalystProgress[];
-  moderator: {
-    status: 'waiting' | 'reviewing' | 'error';
-    waitingFor?: string[];
-    error?: string;
-  };
-}
 
 /** Lightweight per-run summary — durations, gate cap, Monte Carlo snapshot. */
 export interface RunStats {
@@ -215,27 +191,11 @@ export interface Message {
    *  Cleared when the stream settles — drives live markdown rendering and the
    *  Thinking row's running state (perceived speed). */
   isStreaming?: boolean;
-  /** Provisional verdict parsed from the moderator's stream WHILE it is still
-   *  writing (progressive rendering). Replaced by the final `analysis` when
-   *  the debate concludes — never persisted as the source of truth. */
-  provisionalAnalysis?: TradeAnalysis;
-  /** Partial labeled plan fields seen so far in the moderator's stream —
-   *  skeleton-fills the verdict card before the plan is binding. */
-  provisionalPlanFields?: {
-    coin?: string;
-    direction?: string;
-    entry?: string;
-    stopLoss?: string;
-    takeProfits?: string[];
-    confidence?: string;
-  };
   /** Transient speaker -> round map for the live debate indicator. */
   activeDebateSpeakers?: Record<string, number>;
   /** Transient live desk-tool chips: speaker -> latest tool line ("calling
    *  order book…" / "buy wall $1.2M @ 94.8k"). Cleared when the debate ends. */
   liveToolEvents?: Record<string, string>;
-  /** Transient pre-debate analyst outputs and moderator waiting state. */
-  ensembleProgress?: EnsembleProgress;
 
   // Mode Tracking
   isAccuracyMode?: boolean;
@@ -280,8 +240,6 @@ export interface Message {
   watchedAt?: string;
   /** NAC-style watch-thread episodes (pin, autopilot, log) — not a new outcome path. */
   watchEpisodes?: WatchEpisode[];
-  /** Append-only debate run log (model-visible facts for replay). */
-  debateRunLog?: DebateRunEvent[];
   /** ── Bot Mode ──
    *  A user-role row that is a teammate DM (rendered as an envelope, not a
    *  user bubble). The target's turn runs from it; the reply wakes the
@@ -332,8 +290,6 @@ export interface Message {
   /** Run contract: the run's stage ladder with honest skip
    *  notes, persisted for replay audit. */
   runContract?: Array<{ id: string; label: string; state: 'pending' | 'running' | 'done' | 'skipped' | 'failed'; note?: string }>;
-  /** Crash-resume: last completed debate round (cleared when a verdict lands). */
-  debateCheckpoint?: DebateCheckpoint;
   /** "What would I do today?" — fresh forward-looking re-assessment of the
    *  closed trade's setup against the current market price. */
   todayReassessment?: TodayReassessment;
@@ -381,14 +337,6 @@ export interface WatchEpisode {
   at: string;
   kind: 'watched' | 'unwatched' | 'autopilot' | 'logged' | 'price' | 'invalidation' | 'expired';
   detail: string;
-}
-
-export interface DebateCheckpoint {
-  lastCompletedRound: number;
-  savedAt: string;
-  analystNames: string[];
-  /** In-flight lane text for the next incomplete round (resume mid-rebuttal). */
-  laneDrafts?: Record<string, { round: number; text: string }>;
 }
 
 export type DebateRunEventKind = 'round' | 'episode' | 'gate' | 'steer' | 'drop' | 'pre_step' | 'verdict' | 'resume' | 'budget' | 'tool';
