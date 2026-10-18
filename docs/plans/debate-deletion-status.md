@@ -1909,3 +1909,35 @@ planted control for each scan. Every `useAnalysisPipeline.ts` citation in the fl
 and here shifted by its region delta (-1 / -6 / +9 / +7 / +9) and was re-printed against
 the tree before landing; the 113 bare numbers in this ledger are ports and examples and
 were not touched.
+
+## 2026-10-19 — the peer review's six defects, re-checked against the tree, and the gate chain closed
+
+Each review finding was re-opened in the CURRENT files rather than assumed closed:
+
+| # | finding | state today, with the check that says so |
+|---|---|---|
+| 1 | Section D hid that the post-mortem route was **starved**, not deleted | closed — the doc now says so at `docs/app-flow.md` §D, and the guard it quotes is real: `if (pm.length < 40) return null` is `services/learning/SkillCraftService.ts:145` |
+| 2 | dangling hashes `e2b3965` / `2095864` | closed — neither string appears in either flow doc any more; the only hashes cited are `03fc0d5` and `591f735`, and `git merge-base --is-ancestor` says both are ancestors of HEAD |
+| 3 | stale anchors | closed by the gate, not by hand: 248 anchors verified, 0 unattributed, ceilings 61 comment-line / 16 symbol |
+| 4 | cross-link resolved to `docs/debate-deletion-status.md` | closed — the link is now `(plans/debate-deletion-status.md)`, relative to `docs/`, and the broken form has 0 occurrences |
+| 5 | `messageImageStore.ts` filed under `utils/` | closed — the table row names `services/infrastructure/messageImageStore.ts`, which is where the file is |
+| 6 | `ChatComposer.tsx:160` for the Enter key | closed — the doc cites `:146`, and line 146 is `if (ev.key === 'Enter' && !ev.shiftKey)`. The doc no longer cites an AgentsView Enter line at all |
+
+Two review items stay honestly open. "One service replacing nine" is unfalsifiable as
+written and no gate can settle it. Section C's eight-stage ordering is deliberately
+unanchored: those are the lines stage 19 deleted, so an anchor there would have aged
+within hours — the page says this in its own header.
+
+Gate chain now run against this tree, each read from its own marker rather than a
+piped exit code: typecheck, typecheck:scripts, eslint on changed files (0 errors),
+vitest (477 files passed, 1 skipped), the flow-doc anchor gate (14 reach controls),
+`vite build` (BUILD_EXIT=0), boot-probe on the built bundle (BOOT_EXIT=0, zero
+pageerrors), render-probe (RENDER_EXIT=0, zero pageerrors), Playwright e2e
+(5 passed, E2E_EXIT=0). `installer-smoke` remains CI-only on purpose — it is the
+gate that measures the signed artifact.
+
+Open engineering on the gate itself: a citation whose symbol is named on the PREVIOUS
+line (the "`sym` at / `path:NNN`" list shape) is still unpaired, because telling that
+from "`path:NNN`, `sym` at" needs the sentence's tail, not the line's contents. Measured
+attempt made it worse (17 findings to 24) and was reversed; the arrow table's own
+line-level claims are the adjacent form and all of them check out.
