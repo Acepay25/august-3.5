@@ -1434,3 +1434,38 @@ it aborts before writing. After it succeeds, run `npm run typecheck` and expect
 to hand-repair the lines it deliberately skips (any line with unbalanced braces,
 e.g. an `if` opener left without its body). #19 and #21 are unchanged above and
 still unbuilt.
+
+## 2026-10-19 — #17 executed and reverted to a patch; here is the exact resume state
+
+Accuracy mode was deleted for real this time, in the working tree, and the pass
+reached: `npm run typecheck` 0 errors; the six suites that read the deleted fields
+green (95 passed, 11 skipped); zero surviving mode identifiers anywhere in the
+tracked source. It is NOT committed, because the flow-docs anchor gate went red on
+4 drifted citations and eslint could not be run (the changed-file list included the
+deleted `components/modals/AccuracyModeModal.tsx`, which makes eslint exit 2).
+Committing a red gate was refused; the tree was restored from
+`acc17_full.patch` under the Windows `%TEMP%` dir (1,655 lines, applies with
+`git apply`), and `hooks/useProfilePersistence.ts` etc. are back at HEAD.
+
+Restoring the tree swept one file that was not mine — the owner's uncommitted
+`package-lock.json` edit rode into the same diff. It was re-applied from a
+pre-pass snapshot and verified byte-identical. The rule this pass learned: build
+the revert patch from the same pathspecs the pass touched, never from `git diff`
+over the whole tree.
+
+What remains before #17 can be committed, in order:
+1. Re-measure 4 doc citations that shifted when the deleted lines moved the files:
+   `docs/app-flow.md` line 39 and `docs/app-flow.html` line 76 both cite
+   App.tsx:2670, and `docs/plans/debate-deletion-status.md` cites
+   `hooks/useAnalysisPipeline.ts` twice (its ledger entries about the props
+   destructure and the dependency array) at numbers that now land on blank lines
+   because those lines got shorter or were deleted. A range-aware re-measure
+   (`acc_reanchor2.mjs` under the same TEMP dir) fixed 8 of the original 12 and is
+   the thing to extend.
+2. Run eslint with the deleted modal excluded from the file list.
+3. Then the full suite and render-probe, and only then commit.
+
+Residual design note the pass confirmed: two prompt-registry entries
+(`analysis.accuracy`, `analysis.pure_ai`) survive the mode and are now editable by
+the Prompts tab but consumed by nothing, and the calibration store plus the Learn
+dashboards — the owner's second DELETE ruling inside this decision — are untouched.
