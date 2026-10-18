@@ -1176,3 +1176,25 @@ Two operational notes, because both cost a run:
   previous run's teardown, on an otherwise idle machine; runs 1 and 3 booted
   fine. Treat a driver-level boot timeout as cold-start and re-run rather than
   reading it as a code failure — but say which runs were discarded.
+
+## Two gate findings from the final sweep (2026-10-18)
+
+- **`npm run typecheck:scripts` was red at HEAD and CI runs it** (`ci.yml:36`,
+  `release.yml:103`). Cause: the root config excludes `scripts`, so
+  `tsconfig.scripts.json` exists to re-add them — and overriding `include` also
+  dropped the two ambient sources the scripts need: `vite-env.d.ts` (vite's
+  `import.meta.env`) and the `declare global { interface Window }` block that
+  lives inside `services/providers/GenericProviderService.ts`, which is what
+  types `window.electronAPI`. Neither is imported by a file under check, so the
+  program never saw them and reported 4 errors, all in
+  `services/infrastructure/ProviderConfigService.ts`. Fixed by naming both in
+  `include`: **4 errors before, 0 after; the main typecheck stays 0.** Follow-up
+  worth doing: move that augmentation into an ambient `.d.ts`, where a global
+  type does not depend on which module happened to be compiled.
+- **`npm run skill-approval-probe` passes 25/25 while reporting `pageErrors=2`**
+  and exits 0. The two are the quota rejection this probe injects on purpose
+  (`[MemoryFiles] notebook write FAILED (quota, 1…2 in a row)`), so a memory
+  write that fails surfaces as an *uncaught* page error even though the UI
+  handles it. Unlike `render-probe`, this gate does not assert zero page errors,
+  so "25/25 passed" here is not evidence of a clean page. Either assert
+  `pageErrors === 0` outside the injected scenario or label the count expected.
