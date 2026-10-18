@@ -10,8 +10,6 @@
 
 import {
     MASTER_ANALYSIS_PROMPT,
-    ACCURACY_MODE_PROMPT,
-    PURE_AI_MODE_PROMPT,
     LENS_MODE_BASE_PROMPT,
     COMPACT_ANALYSIS_PROMPT,
     RISK_MANAGEMENT_RULES,
@@ -60,22 +58,8 @@ export const PROMPT_REGISTRY: PromptRegistryEntry[] = [
         id: 'analysis.master',
         name: 'Master Analysis Prompt',
         description: 'Standard-mode system prompt: desk-trader scan (structure, liquidity, volume, session, playbooks if they fit). Prose output follows the findings — no section template.',
-        usage: ['Standard-mode analysis (analyzeTradingView)', 'Accuracy-mode base (combined with the accuracy protocol)'],
+        usage: ['Standard-mode analysis (analyzeTradingView)'],
         fallback: MASTER_ANALYSIS_PROMPT,
-    },
-    {
-        id: 'analysis.accuracy',
-        name: 'Accuracy Protocol',
-        description: 'Accuracy-mode checklist: run extra verification in Thinking, then the same public reply contract as master analysis.',
-        usage: ['Accuracy-mode analysis system prompt'],
-        fallback: ACCURACY_MODE_PROMPT,
-    },
-    {
-        id: 'analysis.pure_ai',
-        name: 'Pure AI Mode Prompt',
-        description: 'Unrestricted reasoning mode: drops playbooks/families and instructs free-form analysis with a prose output contract.',
-        usage: ['Pure-AI-mode analysis system prompt'],
-        fallback: PURE_AI_MODE_PROMPT,
     },
     {
         id: 'analysis.lens',
