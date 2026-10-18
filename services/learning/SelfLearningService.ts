@@ -1,12 +1,11 @@
 /**
  * SelfLearningService
  * Meta-learning over trade outcomes: computes the personalized learning
- * profile (strengths/weaknesses, per-dimension win rates, confidence
- * calibration) consumed by the learning dashboard and the debate context.
+ * profile (strengths/weaknesses, per-dimension win rates) consumed by the
+ * learning dashboard and the desk agents.
  */
 
 import { LoggedTrade, TradeOutcome } from '../../types';
-import { ConfidenceLevel } from '../validation/calibrationStore';
 
 /**
  * Personalized learning profile computed from trade history
@@ -22,8 +21,6 @@ export interface PersonalizedLearningProfile {
     // Worst performing setups
     worstSetups: { description: string; winRate: number; count: number }[];
 
-    // Confidence calibration insights
-    confidenceAccuracy: { level: ConfidenceLevel; winRate: number; count: number }[];
 
     // Overall stats
     totalAnalyzedTrades: number;
@@ -211,7 +208,6 @@ export const computeLearningProfile = (trades: LoggedTrade[]): PersonalizedLearn
             bestDirections: [],
             bestRegimes: [],
             worstSetups: [],
-            confidenceAccuracy: [],
             totalAnalyzedTrades: 0,
             overallWinRate: 0,
             lastUpdated: new Date().toISOString()
@@ -222,7 +218,6 @@ export const computeLearningProfile = (trades: LoggedTrade[]): PersonalizedLearn
     const coinStats = aggregateStats(relevantTrades, extractCoinName);
     const patternStats = aggregateStats(relevantTrades, extractPatternFamily);
     const directionStats = aggregateStats(relevantTrades, extractDirection);
-    const confidenceStats = aggregateStats(relevantTrades, t => t.analysis?.confidence || 'UNKNOWN');
 
     // Detect regime using robust extraction
     const regimeStats = aggregateStats(relevantTrades, extractRegime);
@@ -245,15 +240,7 @@ export const computeLearningProfile = (trades: LoggedTrade[]): PersonalizedLearn
         bestDirections: filterSignificant(directionStats).sort(sortByWinRate),
         bestRegimes: filterSignificant(regimeStats).sort(sortByWinRate),
         worstSetups: worstSetups.slice(0, 5),
-        confidenceAccuracy: confidenceStats
-            // 'UNKNOWN' (trades without a recorded confidence) is not a real
-            // ConfidenceLevel — casting it poisons downstream calibration math.
-            .filter(c => c.name !== 'UNKNOWN')
-            .map(c => ({
-            level: c.name as ConfidenceLevel,
-            winRate: c.winRate,
-            count: c.count
-        })),
+
         totalAnalyzedTrades: relevantTrades.length,
         overallWinRate,
         lastUpdated: new Date().toISOString()

@@ -16,7 +16,6 @@ import { MemoryGraphSection } from './learning/MemoryGraphSection';
 import { ProfileHeader } from './learning/ProfileHeader';
 import { ReviewActionsSection } from './learning/ReviewActionsSection';
 import { TraderProfileCards } from './learning/TraderProfileCards';
-import { CalibrationSection } from './learning/CalibrationSection';
 import type { Notebook } from './learning/shared';
 
 interface LearningDashboardProps {
@@ -200,7 +199,6 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
                 skillReview={skillReview}
                 skillLifts={skillLifts}
             />
-            <CalibrationSection profile={profile} />
         </div>
     );
 };

@@ -1595,23 +1595,35 @@ market-polling coupling and the positional-argument site recorded above.
 files, the flow-docs anchor gate, the full suite, the render probe. Run them one
 at a time, never alongside the probe.
 
-## 2026-10-19 — last check before parking: the calibration dashboards are NOT test-pinned, but a scanner gate bounds them
+## 2026-10-19 — the calibration dashboards are deleted; one claim of mine was wrong
 
-Re-read this pass, because it decides how the next one is sequenced:
+The owner's second ruling inside #17 is now executed. The Confidence Calibration
+card and its bar are gone from the Learn surface, the profile no longer computes
+a per-confidence win-rate list, and the card that shared the file with them kept
+its own name: the surviving component is
+`components/dashboards/learning/AvoidSetupsSection.tsx`, because it renders
+"Setups to Avoid" and nothing else. A file called CalibrationSection that no
+longer shows calibration is exactly the kind of name that misleads the next
+reader, so the rename is part of the deletion, not decoration.
 
-- `grep -rln "confidenceAccuracy" tests` returns nothing. No suite asserts the
-  dashboard field, so deleting `components/dashboards/learning/CalibrationSection.tsx`,
-  `components/dashboards/learning/CalibrationBar.tsx`, their mount at
-  `components/dashboards/LearningDashboard.tsx:203` and the producer at
-  `services/learning/SelfLearningService.ts:248` breaks no assertion directly.
-- But `tests/calibrationSurface.test.ts` is a scanner gate, not a UI test: its
-  block at `tests/calibrationSurface.test.ts:155` asserts that the calibration
-  feature publishes only what is consumed, and
-  `tests/calibrationSurface.test.ts:158` requires it to have "found the three
-  modules and a plausible number of exports". That is a population floor over
-  the module set. Deleting modules therefore needs the floor lowered on purpose,
-  in the same commit, with the census named in the test title — not deleted, and
-  not left failing.
+**A claim in the section this one replaces was false, and it is withdrawn.**
+`tests/calibrationSurface.test.ts` does not scan the dashboard modules: its
+MODULES list is the three `services/validation` calibration modules, so the
+"module floor to lower" instruction it gave was aimed at the wrong gate. No test
+change was needed here — `grep -rln confidenceAccuracy tests` was already empty,
+and the full suite ran unchanged at 476 files passed / 1 skipped.
 
-Turn budget ends here; nothing was started on this. The working tree is clean at
-this commit and the seven landed commits are gated as recorded above.
+Gates for this change: typecheck, eslint on the three touched files (0 errors;
+5 pre-existing `no-explicit-any` warnings, none introduced), the flow-docs
+anchor gate, the full suite, and the render probe. The probe's first run failed
+with "user row rendered, no settled reply" — that was contention: a background
+run I had killed earlier still owned the probe's vite port, so the browser
+talked to a server whose mock child was gone. Re-run with the script's own
+`PROBE_PORT` and `MOCK_PORT` overrides it passed, Learn and Journal sweeps and
+all, zero pageerrors.
+
+Still open: #17's other calibration half — the `confidenceCalibration` settings
+field and its persistence/loader plumbing — where the field is plumbed through
+`App.tsx` and `hooks/useAnalysisPipeline.ts` but has no renderer, so it needs a
+reader check before it can be called dead. And #19, and #21's three remaining
+sub-items.
