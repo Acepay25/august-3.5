@@ -23,12 +23,12 @@ flowchart TD
     H["index.html"] --> I["index.tsx — error handlers first :23 :43"]
     I --> S["StrictMode › ErrorBoundary › ToastProvider › App :73-79"]
     S --> SP["splash leaves #root index.tsx:86-92 — boot-probe.cjs:120 waits for it gone, smoke.spec.ts:55 :141 assert count 0"]
-    SP --> APP["App :188 — surfaces render from :2493 down"]
+    SP --> APP["App.tsx:189 — surfaces render from App.tsx:2493 down"]
     APP --> US["useSurface — august_surface_v1 :15, valid set :16"]
     US --> UR["useSurfaceRouter — openJournal :75, hash read :101, serialize :158-160"]
     UR --> HASH["utils/appHash.ts:10 — hash and state stay equal"]
     APP --> HD["Header band :2476 — only when surface !== 'agents' :2466"]
-    HD --> SW["SurfaceSwitch :2176 — 4 destinations, list in SurfaceMenuList.tsx:42-51"]
+    HD --> SW["SurfaceSwitch App.tsx:2167 — 4 destinations, list in SurfaceMenuList.tsx:42-51"]
     APP --> AV["AgentsView gets the same nodes as props :2613-2684"]
     SW --> T["Trade · trade-view · App:2493"]
     SW --> J["Journal · journal-view · App:2547"]
@@ -422,7 +422,7 @@ card that forgets it was clicked offers a second journal row.
    the code says so out loud — `App.tsx:2445` is the comment reading "The
    NavRail is GONE: its five destination rows were the tab strip this redesign was
    asked to remove". Only the `AccountRow` export is rendered, at `App.tsx:2675`.
-   **An earlier pass of this doc asserted the opposite** ("rendered at App:2766") and
+   **An earlier pass of this doc asserted the opposite** ("rendered at App.tsx line 2766") and
    the mechanism is worth keeping: `App.tsx:2483` passes `onExpandNavRail={…}` and
    the rail's expand state is very much alive at `App.tsx:657` and `:680-692`, so a grep for `NavRail`
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
