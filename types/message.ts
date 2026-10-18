@@ -185,14 +185,11 @@ export interface Message {
   thoughtProcesses?: Record<string, string>; // providerId → thought process text
   reasoningProcesses?: Record<string, string>; // provider/model → provider reasoning content
 
-  isDebating?: boolean; // Flag for showing the debate UI
   debateTurns?: DebateTurn[]; // Holds the live debate conversation
   /** True while a single-model reply is actively streaming into the bubble.
    *  Cleared when the stream settles — drives live markdown rendering and the
    *  Thinking row's running state (perceived speed). */
   isStreaming?: boolean;
-  /** Transient speaker -> round map for the live debate indicator. */
-  activeDebateSpeakers?: Record<string, number>;
   /** Transient live desk-tool chips: speaker -> latest tool line ("calling
    *  order book…" / "buy wall $1.2M @ 94.8k"). Cleared when the debate ends. */
   liveToolEvents?: Record<string, string>;

@@ -50,7 +50,7 @@ Stored surface values `'chat'`, `'boards'`, `'skills'` all migrate to `'trade'`
 ```mermaid
 flowchart TD
     subgraph CHAT["Chat surface (agents)"]
-        CB["composer textarea — AgentsView.tsx:541 ref, Enter :1474"] --> D1{"send() :697 branches on what is SELECTED"}
+        CB["composer textarea — AgentsView.tsx:538 ref, Enter :1474"] --> D1{"send() :697 branches on what is SELECTED"}
         D1 -->|a bot is selected| BOT["onSendBotTurn components/agents/AgentsView.tsx:735 → App:2617 → useBotMailbox → runBotTurn"]
         D1 -->|no bot| AN["onAnalyze(prompt, images) components/agents/AgentsView.tsx:725 → App:1711 handleRunAnalysisFromChat"]
     end
@@ -66,7 +66,7 @@ flowchart TD
     BOT --> TR["streamQuickResponse — GenericAnalysisService.ts (bots stay chat-only)"]
     AN --> HSM["handleSendMessage — useAnalysisPipeline.ts:486"]
     FA --> HSM
-    HSM --> D3{"the debate branch is GONE (19): a send answers through the tool turn hooks/useAnalysisPipeline.ts:556. runEnsembleEnabled hooks/useAnalysisPipeline.ts:556 survives only as a gate on the hybrid pull :874 — a schedule is claimed earlier, by its own arm hooks/useAnalysisPipeline.ts:761"}
+    HSM --> D3{"the debate branch is GONE (19): a send answers through the tool turn hooks/useAnalysisPipeline.ts:556. runEnsembleEnabled hooks/useAnalysisPipeline.ts:556 survives only as a gate on the hybrid pull :874 — a schedule is claimed earlier, by its own arm hooks/useAnalysisPipeline.ts:739"}
     D3 -->|true| ENS["ensemble branch — section C (ENGINE DELETED; the branch answers with ONE tool turn and no longer refuses over seats)"]
     D3 -->|false: the desk else-arm hooks/useAnalysisPipeline.ts:1370| SPLIT{"a bot thread? :1345"}
     SPLIT -->|yes| TR
@@ -275,7 +275,7 @@ flowchart TD
 
 A scheduled run no longer takes the debate path: `runEnsembleEnabled =
 isEnsembleEnabled` (useAnalysisPipeline.ts:556) and every remaining flag-gated block also tests `!isAutomationRun`
-(`hooks/useAnalysisPipeline.ts:710` gates ON the run, the ensemble-only tip `:806` gates OFF it), so one config has one behaviour whatever the
+(`hooks/useAnalysisPipeline.ts:710` gates ON the run, the ensemble-only tip `:783` gates OFF it), so one config has one behaviour whatever the
 trader's toggle says. That is what lets stage 19 delete the engine without
 taking the scheduler down with it.
 
@@ -472,7 +472,7 @@ card that forgets it was clicked offers a second journal row.
 
 ## Measured after stage 19: what the deletion did NOT remove
 
-The engine files are gone, and most of the branch with them. What was removed this pass: the seat-completeness refusals ("Your analyst team is incomplete", "Analysts must use different models", "Two debate seats share a model") and the `TEAM_MAX_SEATS` ceiling — only ONE model answers a send (`provider`, `hooks/useAnalysisPipeline.ts:556` falls back to `enabledProviders[0]`), so those blocked a run over a roster the run never uses, and the ceiling guarded a fan-out that no longer exists. The moderator readiness check survives but now applies only to a scheduled run (`:728`), because a schedule really does take its seat from that config; the human-send version of it refused a click over an unused pick. `runEnsembleEnabled` (`:556`) is now down to `buildEnsembleAnalysts` and the "include a coin" tip, and `isDebating: true` has no writer at all.
+The engine files are gone, and most of the branch with them. What was removed this pass: the seat-completeness refusals ("Your analyst team is incomplete", "Analysts must use different models", "Two debate seats share a model") and the `TEAM_MAX_SEATS` ceiling — only ONE model answers a send (`provider`, `hooks/useAnalysisPipeline.ts:556` falls back to `enabledProviders[0]`), so those blocked a run over a roster the run never uses, and the ceiling guarded a fan-out that no longer exists. The moderator readiness check survives but now applies only to a scheduled run (`:728`), because a schedule really does take its seat from that config; the human-send version of it refused a click over an unused pick. `runEnsembleEnabled` (`:556`) is now down to `buildEnsembleAnalysts` and the "include a coin" tip; `isDebating` and `activeDebateSpeakers` are deleted outright — every writer set a literal `false`, so the one branch that read the flag could not run.
 
 
 The user-visible consequence, now FIXED: the chart used to pick its verdict row by the DEBATE shapes (`ensembleProgress`, >1 `modelsUsed`, `debateTurns`) and passed `verdict={verdictMessage?.analysis}` — while nothing writes `Message.analysis` for a new run any more. `verdictFinalizer` was the writer; a tool turn answers with a `TradeProposal` in the tool payload (`services/trade/presentTradeTool.ts`, `proposedTrade.ts`, `tradeShapedProse.ts`). Reader without a writer, the third time in this stage (session usage, the completion notice). Fixed by `latestChartVerdict` in `services/trade/chartData.ts` (`App.tsx:1251`, passed to the chart at `:2517`): it keys on the settled proposal through the existing `buildProposedTradeAnalysis` and keeps `analysis` as the fallback for old rows; `tests/chartVerdictSource.test.ts` pins the proposal path, the fallback, the preference when a row carries both, the symbol match through `verdictLevels`, and the App wiring. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate

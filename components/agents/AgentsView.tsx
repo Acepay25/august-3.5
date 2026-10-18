@@ -256,10 +256,7 @@ const chatRowFrom = (m: Message, username: string, deskName: string): ChatRowVie
         text: m.text || '',
         speaker: m.role === MessageRole.USER ? username : (m.botId ? deskName : 'desk'),
         timeLabel: relTime(m.createdAt),
-        // The solo reply stream sets isStreaming; the ensemble run signals
-        // through isDebating. Both mean "still working", so both drive the
-        // work-in-progress state rather than only the cheap one.
-        streaming: !!(m.isStreaming || m.isDebating),
+        streaming: !!m.isStreaming,
         images: m.images,
         reasoning: traces.length > 0 ? traces.join('\n\n') : undefined,
         toolLines: Object.values(m.liveToolEvents ?? {}).flat(),
