@@ -928,3 +928,31 @@ the selector is not the defect, the missing producer is.
 ## The chart verdict producer — LANDED
 
 Re-sourced from the settled proposal: `latestChartVerdict(messages)` in `services/trade/chartData.ts`, wired into App (the old `verdictMessage` memo and the dead `isDebating` branch are gone). RED PROOF ran the old predicate against a proposal-only row: it returned null, so `verdict` was undefined for every new run. `tests/chartVerdictSource.test.ts` pins the proposal path, the `analysis` fallback for history, the preference when a row carries both, the symbol match through `verdictLevels`, and the App wiring by source grep. tsc clean; that suite + `chartData` + `streamThrottlers` green (15 tests). `render-probe` was NOT re-run: the canvas claim is unverified, stated not assumed.
+
+## 20p, second attempt: the navigation is fixed, the tool turn does not settle
+
+Run 4 and run 5 of the probe isolate two different faults, and only the first
+one was mine:
+
+- Run 4 failed with "the composer never became sendable" because a reload
+  restores the surface the sweep last visited (Settings — no composer). Fixed by
+  clicking: the phase now calls the probe's own `navTo('Trade')` and waits for
+  `[data-testid="trade-view"]`. Run 5 printed
+  `ok   the dock surface is reachable again after a reload (clicked)`, and the
+  send landed its user row. That half is proven.
+- Run 5 then failed at the next step: "user row rendered, no settled reply"
+  (30s). `wire: no failing request on the mock port`, and the transcript dump
+  shows the earlier dock turns settled normally. So the marked turn
+  (`PROBE_TOOL_ROUND`, which switches the mock's tool scenario on by content)
+  starts and never finishes, with no transport error.
+
+That is the behaviour 20p was written to catch, and it is a candidate real
+defect: a tool call the desk cannot honour may leave the row streaming instead
+of settling with a visible failure. Unproven — nothing else was measured,
+because the phase ends there. Kept as the next experiment: send the marked turn
+and read whether Stop is offered, whether a tool line appears before the hang,
+and whether the mock ever received the follow-up request after the tool frame.
+
+The phase is parked again at `.probe-artifacts/20p-probe-work-in-progress.patch`
+(both files `node --check` clean after revert, so the gate is runnable for
+everyone else in the meantime).
