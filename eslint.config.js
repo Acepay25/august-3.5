@@ -18,6 +18,12 @@ export default tseslint.config(
       'tests/test-rule-extraction.cjs',
       // Desk tooling — one-off CJS scripts, never shipped.
       'scripts/**/*.cjs',
+      // Same category, and a second problem: this directory is untracked, so CI
+      // never sees it, yet `npm run lint` swept it and reported 95 errors from it
+      // on top of the warning ratchet — which made CI's own Lint step impossible
+      // to reproduce locally (the tracked tree is 0 errors). Ignoring it changes
+      // no verdict about shipped code; it removes a blind fold over the result.
+      'docs/analysis/**',
     ],
   },
   {
