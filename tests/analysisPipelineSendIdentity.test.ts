@@ -85,16 +85,23 @@ describe('handleSendMessage — composer state is not a dependency', () => {
 });
 
 describe('handleSendMessage — the casual send carries the composer tier', () => {
-    /** The casual-path call, sliced from its own start to its closing paren.
-     *  Scoped to the call rather than the whole file so a `reasoningEffort`
-     *  mentioned in a comment somewhere else cannot fake the pass. */
-    const casualCall = (): string => {
-        const at = src.indexOf('const responseText = await streamQuickResponse(');
-        expect(at, 'the casual-chat call is gone or renamed').toBeGreaterThan(-1);
-        const close = src.indexOf('\n                );', at);
-        expect(close, 'the casual-chat call no longer ends where this scan expects').toBeGreaterThan(at);
-        return src.slice(at, close);
+    /** A call slice, from its own start to its closing bracket. Scoped to the
+     *  call rather than the whole file so a `reasoningEffort` mentioned in a
+     *  comment somewhere else cannot fake the pass. The end bracket is found by
+     *  shape, not by indentation: stage 20b wrapped this call in the bot-arm
+     *  `if`, and a gate that breaks because a line moved is a gate that follows
+     *  the layout instead of the contract. */
+    const callSlice = (start: string, end: RegExp): string => {
+        const at = src.indexOf(start);
+        expect(at, `${start} is gone or renamed`).toBeGreaterThan(-1);
+        const close = src.slice(at).search(end);
+        expect(close, `${start} no longer ends where this scan expects`).toBeGreaterThan(-1);
+        return src.slice(at, at + close);
     };
+    const casualCall = (): string => callSlice(
+        'responseText = await streamQuickResponse(',
+        /\n\s*\);/,
+    );
 
     it('passes the tier the surface sent, after the stream callbacks', () => {
         const call = casualCall();
@@ -110,6 +117,15 @@ describe('handleSendMessage — the casual send carries the composer tier', () =
         // Declared on the options bag, or the argument reads a field no caller
         // is allowed to set.
         expect(src).toMatch(/reasoningEffort\?: ReasoningEffort;/);
+    });
+
+    it('carries the same tier into the desk arm, which is a tool turn now', () => {
+        // 20b split this branch: a bot answers over the plain transport and the
+        // desk over `runChatSurfaceTurn`. The dial is one control over both, so
+        // a chip that only reaches one of them is half a chip — and the desk arm
+        // is the one a trader actually uses.
+        const call = callSlice('toolTurn = await runChatSurfaceTurn({', /\n\s*\}\);/);
+        expect(call).toMatch(/effort: options\?\.reasoningEffort,/);
     });
 
     it('does not let the dial reach the debate', () => {

@@ -20,9 +20,16 @@ describe('the casual chat prompt', () => {
         expect(CASUAL_CHAT_SYSTEM_PROMPT).toMatch(/helpful and concise AI assistant specializing in futures trading/);
     });
 
-    it('is read from one constant at both casual call sites, not retyped', () => {
+    it('is read from one constant at every casual call site, not retyped', () => {
         const src = readFileSync('services/providers/GenericAnalysisService.ts', 'utf8');
         expect(src.match(/systemInstruction \|\| CASUAL_CHAT_SYSTEM_PROMPT/g)).toHaveLength(2);
         expect(src).not.toMatch(/helpful and concise AI assistant specializing/);
+        // Stage 20b gave the Chat surface a second casual transport (the desk
+        // turn). A third copy of this prompt is how two homes start answering
+        // the same question with different discipline, so the new site must
+        // import the constant too.
+        const surface = readFileSync('services/trade/chatSurfaceTurn.ts', 'utf8');
+        expect(surface).toMatch(/systemPrompt \|\| CASUAL_CHAT_SYSTEM_PROMPT/);
+        expect(surface).not.toMatch(/helpful and concise AI assistant specializing/);
     });
 });
