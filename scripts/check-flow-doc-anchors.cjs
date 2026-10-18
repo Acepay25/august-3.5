@@ -69,22 +69,19 @@ function collect(doc, text) {
     const found = [];
     const unattributed = [];
     const lines = text.split('\n');
-    let paragraphFile = null;
     for (let i = 0; i < lines.length; i++) {
         const line = strip(lines[i]);
-        if (!line.trim()) { paragraphFile = null; continue; }
+        if (!line.trim()) continue;
         const owners = [];
         for (const t of [...line.matchAll(FILE_TOKEN_RE)]) {
             const r = resolve(t[0]);
             if (r) owners.push({ end: t.index + t[0].length, file: r });
-            if (r) paragraphFile = r;
         }
         // Aliases are owners too. A line reading `App:2167 · App:2493 …` then a
         // bare `:2466` must bind to App.tsx; if only file tokens were collected,
         // the bare number fell back to some other file named in the paragraph.
         for (const t of [...line.matchAll(new RegExp(`\\b(${Object.keys(ALIAS).join('|')})\\s*:`, 'g'))]) {
             owners.push({ end: t.index + t[0].length, file: ALIAS[t[1]] });
-            paragraphFile = ALIAS[t[1]];
         }
         owners.sort((a, b) => a.end - b.end);
         // Spans already answered by a qualified owner. Without this a bare scan
