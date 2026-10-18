@@ -1492,3 +1492,17 @@ Design residue left standing, deliberately: the prompt registry still offers the
 two mode prompts the analysis path no longer consumes, and the calibration store
 with the Learn dashboards — the owner's second DELETE ruling inside this
 decision — has not been touched. #19 and #21 remain unbuilt.
+
+## 2026-10-19 — the named residue is gone too
+
+`constants/promptRegistry.ts` no longer offers the two prompts nothing consumes,
+so the Prompts tab cannot present an entry whose text reaches no request, and the
+`analysis.master` usage line stopped advertising the deleted mode. The prompt
+bodies themselves were removed from `constants/prompts/analysisPrompts.ts`. A
+whole-tree scan for the two constant names and the two ids reports zero
+references, typecheck is clean, and the two changed files lint with zero errors
+and zero warnings.
+
+Still owed by #17: the calibration store with the Learn dashboards (the owner's
+second DELETE ruling inside this decision) — untouched, and larger than this
+file's surface. #19 and #21 remain unbuilt.
