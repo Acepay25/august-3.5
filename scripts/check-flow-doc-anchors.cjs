@@ -244,6 +244,25 @@ function selfTest() {
     need('same-line bare number inherits that line’s file', got.includes('hooks/useSurface.ts:16'));
     need('no leak across a blank line', !got.some(x => x.startsWith('hooks/useSurface.ts:999999')));
     need('App: alias resolves to App.tsx', got.includes('App.tsx:189') && got.includes('App.tsx:2167'));
+
+    // The span view needs its own reach control: a pairing regex that stopped
+    // matching would report zero symbol findings on the arrow table and look
+    // identical to a pass. Lines are located by measurement, not hardcoded, so
+    // this control cannot go stale the way the citations it guards do.
+    const pipeSrc = linesOf('hooks/useAnalysisPipeline.ts');
+    const symTok = 'streamQuickResponse';
+    const goodLine = pipeSrc.findIndex(l => l.includes(symTok + '(')) + 1;
+    let badLine = goodLine + 3;
+    // The cited line's window is [line-2, line], so a "wrong" line one step below
+    // the real one still reads as correct. Plant where NO line in the window
+    // carries the token, or the control proves nothing.
+    const cleanAt = (n) => n >= 3 && [0, 1, 2].every(o => pipeSrc[n - 1 - o] && pipeSrc[n - 1 - o].trim() && !pipeSrc[n - 1 - o].includes(symTok) && !/^\s*(\/\/|\*|\/\*)/.test(pipeSrc[n - 1 - o]));
+    while (badLine < pipeSrc.length && !cleanAt(badLine)) badLine++;
+    const sp = collect('t', '`' + symTok + ' hooks/useAnalysisPipeline.ts:' + goodLine + '` streams it, and `' + symTok + ' hooks/useAnalysisPipeline.ts:' + badLine + '` does not.').spanned;
+    need('span view pairs a symbol with its own citation', sp.filter(a => a.sym === symTok).length === 2);
+    const spRep = check(sp.map((a, k) => ({ ...a, doc: 't', docLine: k + 1 })));
+    need('a planted wrong span pairing is caught', spRep.symMiss.length === 1 && spRep.symMiss[0].includes(':' + badLine));
+    need('the correct half of that planted pair is not reported', !spRep.symMiss.some(m => m.includes(':' + goodLine)));
     const blankInApp = linesOf('App.tsx').findIndex((l, i) => i > 0 && !l.trim() && linesOf('App.tsx')[i - 1].trim()) + 1;
     const r = check([
         { file: 'App.tsx', line: 999999, doc: 't', docLine: 1 },
