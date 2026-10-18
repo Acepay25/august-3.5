@@ -204,6 +204,12 @@ export interface ChatSurfaceTurnRequest {
      *  far. Writing `thoughtProcesses` here too would fight the throttled
      *  casual updater that already owns that field. */
     paint: (text: string, thinking: string) => void;
+    /** When true this turn is a FULL ANALYSIS, an instruction the trader gave on
+     *  purpose (stage 20f) — so the seat is told to look things up, and the turn
+     *  that ends without calling anything says so on the row. Explicit, because
+     *  "no tool ran" is also what a text-only model does on an ordinary chat
+     *  line, and a casual turn must not be shamed for answering a question. */
+    requireTools?: boolean;
 }
 
 /** Run the turn. Transport errors propagate to the caller's catch: only it
@@ -289,13 +295,34 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
         : chatSurfaceSystemPrompt();
     if (prompt.skills.length > 0) req.patch(m => ({ ...m, injectedSkills: prompt.skills }));
 
-    return runToolTurn({
+    // A FULL ANALYSIS (stage 20f) is an instruction, not a keyword: the trader
+    // pressed the button, so the seat is told to check the tape, and the turn is
+    // checked afterwards for whether it actually did.
+    const systemText = req.requireTools
+        ? `${prompt.text}\n\nFULL ANALYSIS REQUESTED: this turn is not a conversation, it is a reading. Call the market tools (price, book, derivatives, indicators, the trader's own log) before you state a number, and finish with present_trade if you have a plan. If you call nothing, say plainly that you did not look anything up.`
+        : prompt.text;
+    let sawTool = false;
+    const tracked: ToolTurnEvents = {
+        ...events,
+        addToolLine: line => { sawTool = true; events.addToolLine?.(line); },
+    };
+    const out = await runToolTurn({
         config: req.config,
-        messages: chatSurfaceTurnMessages(req.history, req.prompt, req.image, req.config.selectedModel, prompt.text),
+        messages: chatSurfaceTurnMessages(req.history, req.prompt, req.image, req.config.selectedModel, systemText),
         signal: req.signal,
         startedAt: req.startedAt,
         effort: resolveComposerEffort(req.effort),
         transport,
-        events,
+        events: tracked,
     });
+    if (req.requireTools && !sawTool && !out.interrupted) {
+        // The honest notice, on the row it belongs to: an answer that looked up
+        // nothing must not read like one that looked something up. A stopped
+        // turn is excluded — the trader cut it, the seat did not skip the tape.
+        return {
+            ...out,
+            notice: 'FULL ANALYSIS, NOTHING LOOKED UP: this turn called no tool, so every number in it is the model’s own memory. Re-ask, or check the chart.',
+        };
+    }
+    return out;
 };

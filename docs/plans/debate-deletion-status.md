@@ -311,6 +311,23 @@ concatenation matched "entry 90" and silently refused "entry 111,000", so the
 patterns are literals now. Gates: tsc clean, 497 files / 4931 tests, lint 818/0,
 RENDER PROBE OK.
 
+## 20f — Full analysis is an instruction, and the turn is checked for obeying it
+
+20c deleted the keyword gate, which left the dock's "Full analysis" button with two
+possible meanings: a run that is TOLD to look things up, or nothing. It is the first
+now. `handleRunAnalysisFromChat` takes `fullAnalysis` as a third argument and only
+the dock's binding passes `true` (the Chat surface's ordinary send keeps the plain
+wrapper, so an every-turn mandate never shames a definition question). The flag
+rides the options bag → `requireTools` on the turn → the seat is told to call the
+tape before it states a number, and the settled turn carries
+`FULL ANALYSIS, NOTHING LOOKED UP` on the row when no tool line appeared. A stopped
+turn is excluded: the trader cut it, the seat did not skip the market.
+
+`tests/fullAnalysisRequiredTools.test.ts` (6) is mostly about the false-positive
+direction, plus source contracts on the plumbing — the invariant in
+`scrollToMessageWiring.test.ts` (one wrapper, both homes) is kept while its pin now
+reads the arrow-function binding, because the wiring gained an argument, not a twin.
+
 ## Deviations from the approved manifest (say so before repeating them)
 
 - **WatchListPanel kept.** "Watch becomes a chat tool only" named the list, but
