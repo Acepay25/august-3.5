@@ -377,6 +377,12 @@ const UNATTRIBUTED_CEILING = 0;
 
 // 180, not 120: the flow docs alone measure 145, so a floor under that would let
 // the stage ledger silently drop out of the scan and still report "OK".
+// Both quality lists print on EVERY run, not only when they breach: a counted
+// number whose evidence is invisible is not a measurement, and at exactly the
+// ceiling the list used to print nothing at all.
+rep.symMiss.slice(0, 15).forEach(m => console.log(`  SYMBOL MISS ${m}`));
+rep.comment.slice(0, 15).forEach(m => console.log(`  COMMENT LINE ${m}`));
+
 if (unique.size < 180) { console.log(`FAIL — only ${unique.size} unique anchors parsed; the scanner is broken, not the docs`); process.exit(1); }
 if (controls.length) { console.log('FAIL — the gate cannot see its own planted defects'); process.exit(1); }
 if (problems.length) { console.log(`FLOW DOC ANCHORS FAIL — ${problems.length} stale anchor(s)`); process.exit(1); }
