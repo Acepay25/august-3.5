@@ -1351,7 +1351,7 @@ with an offer to migrate that text into the general list before the tabs go.
 **Attempted #19's tail in an isolated worktree on 2026-10-18 and stopped at the third site — with
 two couplings the list above did not contain.** They are the reason this is a design pass and not a
 grep-and-delete:
-- `isEnsembleEnabled` also gates **live market polling**: `App.tsx:503` passes it to
+- `isEnsembleEnabled` also gates **live market polling**: `App.tsx:495` passes it to
   `hooks/useMarketData.ts`, which uses it at `:41` (clears `liveMarketConditions` when off), `:125`
   and `:159` (the Binance reachability check) and `:116`/`:190` (effect deps). So deleting the
   toggle silently kills the market ticker the header shows, unless the polling is re-parented onto

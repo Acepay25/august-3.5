@@ -115,9 +115,40 @@ function symbolOf(rawLine) {
     return cands.length === 1 ? cands[0] : null;
 }
 
+/**
+ * Anchors inside a `backtick` / <code> span, each paired with the identifier
+ * written immediately before its file token.
+ *
+ * This is the coverage the line-level rule could not have: the docs cite in the
+ * shape `symbol path:NNN`, several per line, and `symbolOf` returns null for any
+ * line naming more than one symbol — so section H's 55 arrow rows were checked
+ * for resolution and never for content, which is exactly the blind spot the
+ * review called "not verified". Pairing inside the span follows the SHAPE (the
+ * symbol is the token the author put beside the path) instead of the layout, so
+ * a wrapped paragraph or a crowded table row cannot disarm it, and prose words
+ * outside a span are not mistaken for claims.
+ */
+function spanAnchors(rawLine) {
+    const out = [];
+    for (const sp of rawLine.matchAll(/`([^`\n]+)`|<code>([^<]+)<\/code>/g)) {
+        const txt = sp[1] ?? sp[2];
+        for (const a of txt.matchAll(OWNER_RE)) {
+            const file = a[1] ? resolve(a[1]) : ALIAS[a[2]];
+            if (!file) continue;
+            const t = txt.slice(0, a.index).match(/([A-Za-z_$][A-Za-z0-9_$]*)\s*$/);
+            const sym = t && t[1].length > 2 && !/\.(tsx?|jsx?|cjs|mjs)$/.test(t[1]) ? t[1] : null;
+            for (const n of [parseInt(a[3], 10)].concat(a[4] ? [parseInt(a[4], 10)] : [])) {
+                out.push({ file, line: n, sym, doc: null, docLine: 0 });
+            }
+        }
+    }
+    return out;
+}
+
 /** Anchors in one doc: `{file,line,doc,docLine,sym}` plus anything unattributable. */
 function collect(doc, text) {
     const found = [];
+    const spanned = [];
     const unattributed = [];
     const lines = text.split('\n');
     for (let i = 0; i < lines.length; i++) {
@@ -162,8 +193,9 @@ function collect(doc, text) {
                 else if (n > 0 && n < 10000) unattributed.push(`${doc}:${i + 1}  :${n} — this line never names a file: ${line.trim().slice(0, 90)}`);
             }
         }
+        for (const a of spanAnchors(lines[i])) spanned.push({ ...a, doc, docLine: i + 1 });
     }
-    return { found, unattributed };
+    return { found, spanned, unattributed };
 }
 
 function check(anchors) {
@@ -251,10 +283,12 @@ function selfTest() {
 const controls = selfTest();
 const TOTAL_CONTROLS = selfTest.ran();
 const all = [];
+const spanIndex = new Map();
 const unattributed = [];
 for (const d of DOCS) {
-    const { found, unattributed: u } = collect(d, fs.readFileSync(path.join(ROOT, d), 'utf8'));
+    const { found, spanned, unattributed: u } = collect(d, fs.readFileSync(path.join(ROOT, d), 'utf8'));
     all.push(...found);
+    for (const s of spanned) spanIndex.set(s.doc+":"+s.docLine+":"+s.file+":"+s.line, s.sym);
     unattributed.push(...u);
 }
 // A symbol is only attributed to a citation when its doc line carries exactly one
@@ -264,7 +298,14 @@ for (const d of DOCS) {
 {
     const perLine = new Map();
     for (const a of all) perLine.set(`${a.doc}:${a.docLine}`, (perLine.get(`${a.doc}:${a.docLine}`) || 0) + 1);
-    for (const a of all) if (perLine.get(`${a.doc}:${a.docLine}`) > 1) a.sym = null;
+    for (const a of all) {
+        if (perLine.get(`${a.doc}:${a.docLine}`) === 1) continue;
+        // The line view gives up on a crowded line, but a citation written as
+        // `symbol path:NNN` inside one backtick span is unambiguous by SHAPE, so the
+        // span view rescues it. That is what finally covers section H arrow rows —
+        // without it, a 55-row table of citations is checked for resolution only.
+        a.sym = spanIndex.get(a.doc+":"+a.docLine+":"+a.file+":"+a.line) ?? null;
+    }
 }
 const rep = check(all);
 const unique = new Set(all.map(a => `${a.file}:${a.line}`));
