@@ -6,14 +6,14 @@ const row = (over: Record<string, unknown> = {}) => ({ id: 'm1', role: 'ai', tex
 /** A transcript with something beside the addressed row: the writer must not
  *  touch the neighbours. The row under test is always index 1. */
 const list = (over: Record<string, unknown> = {}) => [row({ id: 'user', text: 'asked' }), row({ id: 'm1', ...over } as never)];
-const ai = (out: readonly unknown[]) => (out as Array<Record<string, never>>)[1];
+const ai = (out: readonly unknown[]): Record<string, any> => (out as unknown as Array<Record<string, any>>)[1];
 
 describe('applyCasualStreamUpdate', () => {
     it('patches the addressed row and leaves the others alone', () => {
         const prev = [row({ id: 'a', text: 'old' }), row({ id: 'm1', text: 'old' })];
         const out = applyCasualStreamUpdate(prev, 'm1', 'new', '', 'gemini', true);
         expect(ai(out).text).toBe('new');
-        expect((out as Array<Record<string, never>>)[0].text).toBe('old');
+        expect((out as unknown as Array<Record<string, any>>)[0].text).toBe('old');
     });
 
     it('returns the same array when the row is not there', () => {
