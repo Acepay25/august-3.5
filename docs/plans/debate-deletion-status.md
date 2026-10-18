@@ -1038,3 +1038,5 @@ are the next cut.
 Gates: tsc clean; full vitest 477 files / 4713 tests green. render-probe to be
 re-run for this change — it asserts row counts per conversation, and this removes
 a row.
+
+Gate re-run after 336c887 (the placeholder removal): render-probe OK, PROBE_EXIT=0, zero pageerrors — the probe counts rendered rows per conversation, which is exactly what this change alters, so the removal is browser-verified, not just suite-verified. tsc and the full suite were green before it (477 files / 4713 tests).
