@@ -1,6 +1,5 @@
 // User profile, settings, and custom instruction types
 
-import { AccuracySubMode } from './enums';
 import { ConfidenceCalibration } from './calibration';
 import { Conversation, LoggedTrade, SavedAnalysis, TradeSummary } from './trade';
 import { GlobalMemory, InsightKnowledgeBase, LearningRule, TradingWeaknesses } from './learning';
@@ -14,8 +13,6 @@ export interface CustomInstruction {
 
 export interface CustomInstructionsMap {
   general: CustomInstruction[];
-  accuracyOriginal: CustomInstruction[];
-  accuracyPure: CustomInstruction[];
 }
 
 export interface UserSettings {
@@ -26,12 +23,7 @@ export interface UserSettings {
   /** Global vision model (bare model id) — one model for every vision feature. */
   visionModel?: string;
   isGlobalMemoryEnabled?: boolean; // Layer 3 Toggle
-  isAccuracyModeEnabled?: boolean; // Accuracy Mode Toggle
-  accuracySubMode?: AccuracySubMode; // Sub-mode selection
   customInstructions?: CustomInstructionsMap; // User-defined behavior overrides per mode
-  isPlaybookEnabledInPureAI?: boolean; // Toggle playbook in Pure AI mode
-  isFamiliesEnabledInPureAI?: boolean; // Toggle Market Families in Pure AI mode
-  isMemoryEnabledInPureAI?: boolean; // Toggle trade log in Pure AI mode
   isHybridIntelligenceEnabled?: boolean; // Hybrid Intelligence: Real-time data + programmatic TA
   isEnsembleEnabled?: boolean; // Ensemble debate mode (off = casual chat)
   isStrategiesEnabled?: boolean; // Master switch: inject uploaded strategy books into analysis prompts

@@ -73,7 +73,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <div class="tier">
  <div class="n"><b>&lt;Header&gt; band</b><i>App.tsx:2467 band, guard surface !== 'agents' App.tsx:2466</i></div>
  <div class="n run"><b>SurfaceSwitch — 4 destinations</b><i>App:2167 · list SurfaceMenuList.tsx:42-51</i></div>
- <div class="n dead"><b>NavRail + its destination rows</b><i>imported App:125, never rendered · "NavRail is GONE" App:2445 · rows SurfaceMenuList.tsx:116 (only mount passes hideSurfaces, App:2670)</i></div>
+ <div class="n dead"><b>NavRail + its destination rows</b><i>imported App:125, never rendered · "NavRail is GONE" App:2445 · rows SurfaceMenuList.tsx:116 (only mount passes hideSurfaces, App:2638)</i></div>
  <div class="n dead"><b>onExpandNavRail is a prop, not a render</b><i>App:2483 · rail state App:679-692 · only the AccountRow export is mounted, App:2675</i></div>
 </div>
 <div class="down">↓ lazy + Suspense(SurfaceSkeleton) ↓</div>
@@ -131,7 +131,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
  </div></div>
  <div class="col"><h3>no — the desk, WITH its tools</h3><div class="flow">
   <div class="n run"><b>runChatSurfaceTurn</b><i>services/trade/chatSurfaceTurn.ts:230 · tools from CHAT_SURFACE_TOOLS :55</i></div>
-  <div class="n"><b>prompt — services/trade/chatSurfaceTurn.ts:147 chatSurfaceSystemPrompt</b><i>CHAT_SURFACE_SYSTEM_PROMPT chatPrompts.ts:40 (the casual prompt + a calling mandate + "NO CHART HERE") + skills index + active strategies + memory index, read fresh per turn; the 30 slugs printed are the 30 recorded on the row (types/message.ts:324)</i></div>
+  <div class="n"><b>prompt — services/trade/chatSurfaceTurn.ts:147 chatSurfaceSystemPrompt</b><i>CHAT_SURFACE_SYSTEM_PROMPT chatPrompts.ts:40 (the casual prompt + a calling mandate + "NO CHART HERE") + skills index + active strategies + memory index, read fresh per turn; the 30 slugs printed are the 30 recorded on the row (types/message.ts:322)</i></div>
   <div class="n"><b>→ back into runToolTurn</b><i>arrow 17</i></div>
  </div></div>
  <div class="col"><h3>true → the ensemble branch (ENGINE deleted; one tool turn answers, no seat refusals)</h3><div class="flow">
@@ -154,7 +154,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <p class="note">Stage 19 deleted the debate from this path <b>and its engine files</b>: what one send does now is a data pull, prompt assembly, and ONE tool-bearing turn that answers with <code>present_trade</code>, whose own tool runs the gate scan (20a2). The second tranche removed 26 production files (<code>ensembleService</code>, <code>debateScience</code>, <code>debateResume</code>, <code>provisionalVerdict</code>, <code>CompletionNotifications</code> and the rest) with their suites; the three reachable modules that still imported debate helpers were cut by inlining the slice each used, so no displayed number moved. <code>runEnsembleEnabled</code> (<code>useAnalysisPipeline.ts:557</code>) survives as a switch with fewer things to switch between, and <code>Message.debateTurns</code> stays as a read-only legacy field for rows written before the cut.</p>
 <div class="flow">
 <div class="tier">
- <div class="n"><b>1 data pull</b><i>HybridIntelligenceService — gated on runEnsembleEnabled at hooks/useAnalysisPipeline.ts:956, fetched at :961. The injection string it builds (:969, preset :1010) is read only by devLog at :994, :995, :1182 — it never reaches a turn. The packet still decides the learning coin via :1040, so removing the fetch is an owner call, not a cleanup.</i></div>
+ <div class="n"><b>1 data pull</b><i>HybridIntelligenceService — gated on runEnsembleEnabled at hooks/useAnalysisPipeline.ts:935, fetched at :961. The injection string it builds (:969, preset :1010) is read only by devLog at :994, :995, :1182 — it never reaches a turn. The packet still decides the learning coin via :1040, so removing the fetch is an owner call, not a cleanup.</i></div>
  <div class="n"><b>3 prompt assembly</b><i>memoryContext.ts</i></div>
  <div class="n run"><b>4 one turn</b><i>runChatSurfaceTurn services/trade/chatSurfaceTurn.ts, called at useAnalysisPipeline.ts:1392 → executeDeskTool</i></div>
 </div>
@@ -313,7 +313,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>43</td><td>approval tray → badge</td><td><code>collectApprovalItems</code> → <code>approvalsWaiting</code> → Knowledge tab only</td></tr>
 <tr><td>44</td><td>the pane filters what it shows</td><td><code>agentThreads.ts</code> read at <code>AgentsView.tsx</code></td></tr>
 <tr><td>45</td><td><code>present_trade</code> → a card in either home</td><td><code>runPresentTrade presentTradeTool.ts:75</code> ← dock sink <code>chatTurnRunner.ts</code> / desk sink <code>chatSurfaceTurn.ts</code>; gate scan starts there, the cap binds at log time (<code>ensureStamp</code>)</td></tr>
-<tr><td>46</td><td><code>chatSurfaceSystemPrompt</code> → the desk arm's prompt</td><td><code>chatSurfaceTurn.ts:147</code> — mandate (<code>chatPrompts.ts:40</code>) + skills index + active strategies + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (<code>types/message.ts:324</code>)</td></tr>
+<tr><td>46</td><td><code>chatSurfaceSystemPrompt</code> → the desk arm's prompt</td><td><code>chatSurfaceTurn.ts:147</code> — mandate (<code>chatPrompts.ts:40</code>) + skills index + active strategies + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (<code>types/message.ts:322</code>)</td></tr>
 <tr><td>47</td><td>prose that never called the tool → the same decision</td><td><code>planFromProse tradeShapedProse.ts</code> reads the labelled entry/stop/target out of the row, <code>parseTradeProposal</code> decides whether that is a plan, and the chip mints the ONE plan-id shape (<code>mintPlanId</code>) before calling <code>onLogProposedTrade</code></td></tr>
 <tr><td>48</td><td>a scheduled run → a rationed plan</td><td><code>MAX_PLANS_PER_RUN</code> (<code>automationTurn.ts:69</code>) counts inside the turn; <code>MAX_PLANS_PER_DAY</code> (<code>AutomationService.ts:113</code>) is a local-calendar-day ledger keyed per automation (<code>:130</code> read, <code>:143</code> spend). Past either, <code>present_trade</code> gets an <code>ok: false</code> receipt naming the limit — a refusal the MODEL reads, not a card that quietly never appears</td></tr>
 <tr><td>49</td><td>a schedule’s failure → the row and the toast</td><td>the turn’s <code>notices</code> (<code>automationTurn.ts:160</code>) — a tool that came back <code>ok: false</code> (from <code>onToolPayload</code>, which already carries it), a turn that called nothing, a refused plan — are written into the stored text at <code>useAnalysisPipeline.ts:1240</code> and handed to <code>useAutomations.ts:531</code>, which downgrades the toast from success to warning. Nobody watches a schedule live</td></tr>

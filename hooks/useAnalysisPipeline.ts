@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
     Message, MessageRole, TradeOutcome, LoggedTrade, ImageMetadata,
     DebateTurn, Conversation, TradeAnalysis, TradeSummary,
-    GlobalMemory, AccuracySubMode, CustomInstructionsMap, CustomInstruction,
+    GlobalMemory, CustomInstructionsMap, CustomInstruction,
     AnalystLensConfig, AnalysisStep, InsightKnowledgeBase, ConfidenceCalibration,
     ReplacementOffer, PatternMemoryGateView,
 } from '../types';
@@ -147,15 +147,10 @@ export interface UseAnalysisPipelineParams {
     setIsRateLimited: (v: boolean) => void;
 
     // Settings:
-    isAccuracyModeEnabled: boolean;
-    accuracySubMode: AccuracySubMode;
     isGlobalMemoryEnabled: boolean;
     /** Master switch for user-uploaded strategy books (Settings → Strategies). */
     isStrategiesEnabled: boolean;
     customInstructions: CustomInstructionsMap;
-    isPlaybookEnabledInPureAI: boolean;
-    isFamiliesEnabledInPureAI: boolean;
-    isMemoryEnabledInPureAI: boolean;
     isHybridIntelligenceEnabled: boolean;
     lensConfig: AnalystLensConfig;
     /**
@@ -276,9 +271,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         isAnalysisInProgress, setIsAnalysisInProgress,
         isHybridLoading, setIsHybridLoading,
         isRateLimited, setIsRateLimited,
-        isAccuracyModeEnabled, accuracySubMode,
         isGlobalMemoryEnabled, isStrategiesEnabled, customInstructions,
-        isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
         isHybridIntelligenceEnabled, lensConfig, activeFrameworks,
         ensembleModelSelection,
         customEnsemblePrompt,
@@ -303,11 +296,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         deepenAnalysis: boolean;
         globalMemory: GlobalMemory | undefined;
         threadSummary: string | undefined;
-        subMode: AccuracySubMode | undefined;
         customInstructions: string;
-        isPlaybookEnabledInPureAI: boolean;
-        isFamiliesEnabledInPureAI: boolean;
-        isMemoryEnabledInPureAI: boolean;
         rolePrompt: string | undefined;
         systemPromptOverride: string | undefined;
         /** Per-seat independence directive — rendered into the system prompt head. */
@@ -465,13 +454,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
     // ─── Helper: active custom instructions ────────────────────────────────
     const getActiveCustomInstructions = () => {
-        let instructionsList: CustomInstruction[];
-
-        if (isAccuracyModeEnabled) {
-            instructionsList = accuracySubMode === 'pure_ai' ? customInstructions.accuracyPure : customInstructions.accuracyOriginal;
-        } else {
-            instructionsList = customInstructions.general;
-        }
+        const instructionsList = customInstructions.general;
 
         return instructionsList
             .filter(inst => inst.isActive)
@@ -502,8 +485,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             conversation: Conversation;
             /** Per-run overrides; absent fields fall back to global settings. */
             overrides?: {
-                accuracyMode?: boolean;
-                accuracySubMode?: AccuracySubMode;
                 lensConfig?: AnalystLensConfig;
                 ensembleModelSelection?: EnsembleModelSelection;
                 moderatorConfig?: ProviderConfig;
@@ -541,8 +522,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // Run-scoped mode/model overrides — automation runs may specify
         // their own accuracy mode, lens config, analyst picks and moderator
         // (fall back to the global settings when absent).
-        const runAccuracyMode = options?.automation?.overrides?.accuracyMode ?? isAccuracyModeEnabled;
-        const runAccuracySubMode = options?.automation?.overrides?.accuracySubMode ?? accuracySubMode;
         const runLensConfig = options?.automation?.overrides?.lensConfig ?? lensConfig;
         const runEnsembleSelection = options?.automation?.overrides?.ensembleModelSelection ?? ensembleModelSelection;
         const runModeratorConfig = options?.automation?.overrides?.moderatorConfig ?? moderatorConfig;
@@ -1591,7 +1570,7 @@ ${enhancedPrompt}`;
             // sees a replaced controller and skips this cleanup — the new run
             // owns the state from there on.
         }
-    }, [loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, memoryConfig, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, isAccuracyModeEnabled, accuracySubMode, customInstructions, isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI, lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, confidenceCalibration, insightKnowledgeBase, tradeSummaries, customEnsemblePrompt, customLensPrompts, ensembleModelSelection, isStrategiesEnabled, confirmDialog, toast]);
+    }, [loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, memoryConfig, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, customInstructions,lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, confidenceCalibration, insightKnowledgeBase, tradeSummaries, customEnsemblePrompt, customLensPrompts, ensembleModelSelection, isStrategiesEnabled, confirmDialog, toast]);
 
     // ─── Cancel Analysis ───────────────────────────────────────────────────
     const handleCancelAnalysis = () => {

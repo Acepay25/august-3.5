@@ -18,7 +18,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Conversation, ImageMetadata, Message, MessageRole } from '../types';
 import { ProviderConfig } from '../types/provider';
-import { AnalystLensConfig, AnalystRole, AccuracySubMode } from '../types';
+import { AnalystLensConfig, AnalystRole } from '../types';
 import { AutomationConfig, AutomationRun } from '../types/automation';
 import {
     loadAutomationConfigs,
@@ -48,8 +48,6 @@ import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 
 /** Per-run mode/model overrides (absent fields fall back to global settings). */
 export interface AutomationRunOverrides {
-    accuracyMode?: boolean;
-    accuracySubMode?: AccuracySubMode;
     lensConfig?: AnalystLensConfig;
     ensembleModelSelection?: { providerId: string; model: string }[];
     moderatorConfig?: ProviderConfig;
@@ -151,14 +149,10 @@ export const buildAutomationOverrides = (
     providerConfigs: ProviderConfig[]
 ): AutomationRunOverrides => {
     const moderatorConfig = providerConfigs.find(p => p.id === config.moderatorModel.providerId);
-    const accuracyMode = config.mode !== 'standard';
-    const accuracySubMode: AccuracySubMode = config.mode === 'pure_ai' ? 'pure_ai' : 'original';
 
     if (config.useLenses && config.analystModels.length === 3) {
         const [macro, technical, risk] = config.analystModels;
         return {
-            accuracyMode,
-            accuracySubMode,
             lensConfig: {
                 enabled: true,
                 // The run's own trading style — 'swing' was hardcoded here,
@@ -176,8 +170,6 @@ export const buildAutomationOverrides = (
     }
 
     return {
-        accuracyMode,
-        accuracySubMode,
         ensembleModelSelection: config.analystModels.map(m => ({ providerId: m.providerId, model: m.modelId })),
         moderatorConfig: moderatorConfig ?? undefined,
         moderatorModel: config.moderatorModel.modelId,

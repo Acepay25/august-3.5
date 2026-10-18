@@ -10,7 +10,6 @@
  * exactly like manual runs.
  */
 
-import { AccuracySubMode } from './enums';
 import { Message } from './message';
 
 /** One analyst slot: a provider + model pair. */
@@ -29,7 +28,7 @@ export interface AutomationSchedule {
 
 export type AutomationInputSource = 'template' | 'last_analysis';
 
-export type AutomationMode = 'standard' | AccuracySubMode;
+export type AutomationMode = 'standard';
 
 export interface AutomationConfig {
     id: string;
@@ -40,7 +39,7 @@ export interface AutomationConfig {
     inputSource: AutomationInputSource;
     /** The fixed prompt template (inputSource === 'template'). */
     promptTemplate?: string;
-    /** Analysis mode: 'standard' | 'original' (accuracy) | 'pure_ai'. */
+    /** Legacy field: every run analyzes in 'standard' mode. */
     mode: AutomationMode;
     /** Lens mode: the 3 analyst picks map to the Macro/Technical/Risk roles. */
     useLenses: boolean;

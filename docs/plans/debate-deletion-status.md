@@ -1284,7 +1284,7 @@ The file lists are recorded here so the next pass starts from evidence, not from
 
 **#19 — the ensemble branch, the hybrid pull, and the prompt A/B lane.**
 `runEnsembleEnabled` is not local to the hook: it is threaded from `App.tsx` through
-`hooks/useAnalysisPipeline.ts:173/:286/:557` and gates `:411` (a UI-muting early return), `:617`,
+`hooks/useAnalysisPipeline.ts:279/:279/:557` and gates `:411` (a UI-muting early return), `:617`,
 `:806` (the coin tip), `:874`, `:923`, `:956`, and appears in the `:1594` dependency array. The
 toggle itself is persisted (`hooks/useProfilePersistence.ts`, `hooks/useUserProfileLoader.ts`,
 `types/user.ts`, `services/learning/MemoryFilesService.ts`, `services/trade/automationTurn.ts`,
@@ -1413,13 +1413,13 @@ What the attempt measured, which is the value it leaves behind:
   `scripts/installer-smoke.cjs:290-295` carries a profile fixture with all five
   settings fields. Leaving any of them produces an inert control or a stale
   packaged-exe fixture.
-- The Pure-AI trio cannot outlive the mode: `components/settings/tabs/GeneralTab.tsx:169`
-  renders those three switches only while the sub-mode is `pure_ai`, so they go
-  in the same pass as the toggle, not after it.
-- `services/providers/GenericAnalysisService.ts:380` is a three-way prompt chain;
+- The Pure-AI trio cannot outlive the mode: its three switches were rendered
+  only while the sub-mode was `pure_ai`, so they went in the same pass as the
+  toggle, not after it.
+- `services/providers/GenericAnalysisService.ts:361` is a three-way prompt chain;
   deleting the two mode branches means lifting the standard branch out of its
   `else` and dedenting it, which needs a brace-walking flattener, not a regex.
-- `hooks/useProfilePersistence.ts:185` and `hooks/useAnalysisPipeline.ts:1594` list
+- `hooks/useProfilePersistence.ts:185` and `hooks/useAnalysisPipeline.ts:1573` list
   the five fields inside one-line object literals and one very long dependency
   array, so whole-line filtering cannot reach them — they need token strips.
 - The one unsolved blocker is `components/settings/CustomInstructionsEditor.tsx:164`:
@@ -1453,19 +1453,42 @@ pre-pass snapshot and verified byte-identical. The rule this pass learned: build
 the revert patch from the same pathspecs the pass touched, never from `git diff`
 over the whole tree.
 
-What remains before #17 can be committed, in order:
-1. Re-measure 4 doc citations that shifted when the deleted lines moved the files:
-   `docs/app-flow.md` line 39 and `docs/app-flow.html` line 76 both cite
-   App.tsx:2670, and `docs/plans/debate-deletion-status.md` cites
-   `hooks/useAnalysisPipeline.ts` twice (its ledger entries about the props
-   destructure and the dependency array) at numbers that now land on blank lines
-   because those lines got shorter or were deleted. A range-aware re-measure
-   (`acc_reanchor2.mjs` under the same TEMP dir) fixed 8 of the original 12 and is
-   the thing to extend.
-2. Run eslint with the deleted modal excluded from the file list.
-3. Then the full suite and render-probe, and only then commit.
+The commit-blocking sequence, in order: re-measure the doc citations that moved
+when the deleted lines shrank the files — the two `App:` alias rows in
+`docs/app-flow.md` and `docs/app-flow.html`, and this file's two
+`hooks/useAnalysisPipeline.ts` numbers (the props-destructure triple and the
+dependency-array bullet) — then re-run eslint with the deleted modal kept out of
+the file list, then the full suite and render-probe, and only then commit. Every
+re-measure here moved a citation by locating the identical line text in the
+post-deletion file; none was shifted by arithmetic, because the deletions were
+not uniform across a file.
 
 Residual design note the pass confirmed: two prompt-registry entries
 (`analysis.accuracy`, `analysis.pure_ai`) survive the mode and are now editable by
 the Prompts tab but consumed by nothing, and the calibration store plus the Learn
 dashboards — the owner's second DELETE ruling inside this decision — are untouched.
+
+## 2026-10-19 — #17 second pass: committed locally, two gates still owed
+
+Re-applied the saved patch (excluding the owner's `package-lock.json` edit this
+time, by pathspec) and finished the sequence the previous section described.
+
+Green before committing: `npm run typecheck` with zero errors; the flow-docs
+anchor gate; eslint over the 28 changed files that still exist (one error, a
+`prefer-const` on the journal row's container class, which the deleted badge
+branch had been the only writer for); and the six suites that read the removed
+fields. The citations the deletions moved were re-measured by locating the
+identical line text in the post-deletion file — the two `App:` alias rows in
+`docs/app-flow.md` and `docs/app-flow.html`, and this file's two
+`hooks/useAnalysisPipeline.ts` numbers — never by shifting arithmetic, because
+the deletions are not uniform within a file.
+
+Owed, and the reason this is a local commit only: the full vitest run and
+`npm run render-probe` were still in flight when the last turn expired. CI runs
+both, plus boot-probe and the installer smoke. Nothing was pushed, and a
+`git revert` of this one commit restores the mode exactly.
+
+Design residue left standing, deliberately: the prompt registry still offers the
+two mode prompts the analysis path no longer consumes, and the calibration store
+with the Learn dashboards — the owner's second DELETE ruling inside this
+decision — has not been touched. #19 and #21 remain unbuilt.

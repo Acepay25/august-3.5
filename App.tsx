@@ -66,7 +66,6 @@ const EntryNotHitCaptureModal = React.lazy(() => import('./components/modals/Ent
 const UpdateTradeModal = React.lazy(() => import('./components/journal/UpdateTradeModal').then(m => ({ default: m.UpdateTradeModal })));
 const VisionDataViewer = React.lazy(() => import('./components/analysis/VisionDataViewer'));
 const LiveMarket = React.lazy(() => import('./components/market/LiveMarket'));
-const AccuracyModeModal = React.lazy(() => import('./components/modals/AccuracyModeModal').then(m => ({ default: m.AccuracyModeModal })));
 const ScenarioSimulator = React.lazy(() => import('./components/modals/ScenarioSimulator'));
 const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay'));
 const CompareModal = React.lazy(() => import('./components/analysis/CompareModal'));
@@ -197,7 +196,6 @@ const App: React.FC = () => {
         isSettingsMenuVisible, setIsSettingsMenuVisible,
         isLiveMarketVisible, setIsLiveMarketVisible,
         isVisionDataVisible, setIsVisionDataVisible,
-        showAccuracyModal, setShowAccuracyModal,
 
 
         isLoading, setIsLoading,
@@ -268,19 +266,14 @@ const App: React.FC = () => {
 
     // UI and other state
 
-    // AI analysis settings (memory, accuracy, instructions, summarization, lens)
+    // AI analysis settings (memory, instructions, summarization, lens)
     const {
         globalMemory, setGlobalMemory,
         memoryConfig, setMemoryConfig,
         memoryModel, setMemoryModel,
         isGlobalMemoryEnabled, setIsGlobalMemoryEnabled,
         isStrategiesEnabled, setIsStrategiesEnabled,
-        isAccuracyModeEnabled, setIsAccuracyModeEnabled,
-        accuracySubMode, setAccuracySubMode,
         customInstructions, setCustomInstructions,
-        isPlaybookEnabledInPureAI, setIsPlaybookEnabledInPureAI,
-        isFamiliesEnabledInPureAI, setIsFamiliesEnabledInPureAI,
-        isMemoryEnabledInPureAI, setIsMemoryEnabledInPureAI,
         isHybridIntelligenceEnabled, setIsHybridIntelligenceEnabled,
         lensConfig, setLensConfig,
         ensembleModelSelection, setEnsembleModelSelection,
@@ -816,9 +809,7 @@ const App: React.FC = () => {
         isAnalysisInProgress, setIsAnalysisInProgress,
         isHybridLoading, setIsHybridLoading,
         isRateLimited, setIsRateLimited,
-        isAccuracyModeEnabled, accuracySubMode,
         isGlobalMemoryEnabled, isStrategiesEnabled, customInstructions,
-        isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
         isHybridIntelligenceEnabled, lensConfig, activeFrameworks,
         isEnsembleEnabled,
         ensembleModelSelection,
@@ -854,7 +845,7 @@ const App: React.FC = () => {
 
     const currentInsightIds = useMemo(() => tradeSummaries.map(s => s.id), [tradeSummaries]);
     // The Send button must never look active when no provider can actually
-    // run — accuracy mode doesn't conjure providers out of thin air (the
+    // run — a mode toggle can't conjure providers out of thin air (the
     // pipeline toasts "No AI Providers Enabled" on send).
 
     const familyWinRates = useMemo(() => {
@@ -1373,8 +1364,7 @@ const App: React.FC = () => {
         isAnalysisInProgress,
         activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel,
         visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled,
-        isAccuracyModeEnabled, accuracySubMode, customInstructions,
-        isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
+        customInstructions,
         isHybridIntelligenceEnabled, isAutoCapturing,
         isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights,
         confidenceCalibration,
@@ -1389,11 +1379,8 @@ const App: React.FC = () => {
             appRef.current.classList.remove('bg-zinc-950', 'bg-[#000000]', 'bg-[#000000]');
             appRef.current.classList.add('bg-zinc-950');
         }
-    }, [isAccuracyModeEnabled, accuracySubMode]);
+    }, []);
 
-    const handleToggleAccuracyMode = () => {
-        setShowAccuracyModal(true);
-    };
 
 
     // Lens / ensemble / moderator configuration (extracted to
@@ -1403,7 +1390,6 @@ const App: React.FC = () => {
         handleSetModeratorProvider,
         handleSetModeratorModel,
         handleSetLensConfig,
-        handleConfirmAccuracyMode,
         handleSetEnsembleModelSelection,
 
 
@@ -1413,8 +1399,6 @@ const App: React.FC = () => {
         setLensConfig, lensConfig,
         setEnsembleModelSelection, ensembleModelSelection,
         setCustomEnsemblePrompt, setCustomLensPrompts,
-        isAccuracyModeEnabled, setIsAccuracyModeEnabled,
-        accuracySubMode, setAccuracySubMode, setShowAccuracyModal,
         providerConfigs, providerConfigsLoaded,
     });
 
@@ -1885,12 +1869,7 @@ const App: React.FC = () => {
         setUseAlgorithmicSummary,
         setUseAlgorithmicInsights,
         setIsStrategiesEnabled,
-        setIsAccuracyModeEnabled,
-        setAccuracySubMode,
         setCustomInstructions,
-        setIsPlaybookEnabledInPureAI,
-        setIsFamiliesEnabledInPureAI,
-        setIsMemoryEnabledInPureAI,
         setIsHybridIntelligenceEnabled,
         setIsEnsembleEnabled,
         setIsAutoCapturing,
@@ -2219,7 +2198,6 @@ const App: React.FC = () => {
                 <UpdateOverlay />
             </React.Suspense>
             <UserProfileManager isVisible={isUserModalOpen} isLoading={isLoading} onUserSelect={loadUserData} existingUsers={existingUsernames} onImportProfile={handleImportData} onDeleteUser={handleDeleteUser} onClose={() => setIsUserModalOpen(false)} />
-            <AccuracyModeModal isOpen={showAccuracyModal} onClose={() => setShowAccuracyModal(false)} onConfirm={handleConfirmAccuracyMode} isEnabling={!isAccuracyModeEnabled} />
             {/* Mounted only while the overlay is open: LiveMarket now runs the
                 app's shared live feed (a combined futures socket PLUS a kline
                 socket), so leaving the panel mounted-but-hidden would hold two
@@ -2278,10 +2256,6 @@ const App: React.FC = () => {
                 onExportData={handleExportData}
                 username={activeUsername || undefined}
                 onProfileRestored={(restoredUsername) => { loadUserData(restoredUsername); }}
-                isAccuracyModeEnabled={isAccuracyModeEnabled}
-                onToggleAccuracyMode={handleToggleAccuracyMode}
-                accuracySubMode={accuracySubMode}
-                setAccuracySubMode={setAccuracySubMode}
                 isHybridIntelligenceEnabled={isHybridIntelligenceEnabled}
                 setIsHybridIntelligenceEnabled={setIsHybridIntelligenceEnabled}
                 isAutoCapturing={isAutoCapturing}
@@ -2295,12 +2269,6 @@ const App: React.FC = () => {
                     setMemoryConfig(config);
                     setMemoryModel(config?.selectedModel || '');
                 }}
-                isPlaybookEnabledInPureAI={isPlaybookEnabledInPureAI}
-                setIsPlaybookEnabledInPureAI={setIsPlaybookEnabledInPureAI}
-                isFamiliesEnabledInPureAI={isFamiliesEnabledInPureAI}
-                setIsFamiliesEnabledInPureAI={setIsFamiliesEnabledInPureAI}
-                isMemoryEnabledInPureAI={isMemoryEnabledInPureAI}
-                setIsMemoryEnabledInPureAI={setIsMemoryEnabledInPureAI}
                 customInstructions={customInstructions}
                 setCustomInstructions={setCustomInstructions}
                 providerConfigs={providerConfigs}

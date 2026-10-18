@@ -920,7 +920,6 @@ export const syncProfileMemoryUnlocked = async (profile: UserProfile | null, use
     const prefs = profile.globalMemory?.userPreferences;
     const s = profile.settings ?? {};
     const flags = [
-        s.isAccuracyModeEnabled ? 'Accuracy Mode' : null,
         s.isHybridIntelligenceEnabled ? 'Hybrid Intelligence' : null,
         s.isEnsembleEnabled ? 'Ensemble debate' : null,
         s.isStrategiesEnabled ? 'Strategy books' : null,

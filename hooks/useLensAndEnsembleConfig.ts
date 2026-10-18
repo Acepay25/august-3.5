@@ -11,7 +11,6 @@ import { useCatalogReconcile } from './useCatalogReconcile';
 import { getFirstReadyProvider } from '../utils/providerUtils';
 import type { AnalystLensConfig } from '../types/lens';
 import type { ProviderConfig } from '../types/provider';
-import type { AccuracySubMode } from '../types/enums';
 
 export interface UseLensAndEnsembleConfigArgs {
     // Conversation-level moderator wiring
@@ -30,11 +29,6 @@ export interface UseLensAndEnsembleConfigArgs {
     setCustomLensPrompts: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 
     // Accuracy-mode confirm dialog state
-    isAccuracyModeEnabled: boolean;
-    setIsAccuracyModeEnabled: React.Dispatch<React.SetStateAction<boolean>>;
-    accuracySubMode: AccuracySubMode;
-    setAccuracySubMode: React.Dispatch<React.SetStateAction<AccuracySubMode>>;
-    setShowAccuracyModal: (open: boolean) => void;
 
     // Provider catalog (drives the seed + reconcile effects)
     providerConfigs: ProviderConfig[];
@@ -45,7 +39,6 @@ export interface UseLensAndEnsembleConfigResult {
     handleSetModeratorProvider: (providerId: string) => void;
     handleSetModeratorModel: (model: string) => void;
     handleSetLensConfig: (newConfig: AnalystLensConfig) => void;
-    handleConfirmAccuracyMode: () => void;
     handleSetEnsembleModelSelection: (selection: EnsembleModelSelection) => void;
     handleSetCustomEnsemblePrompt: (prompt: string | null) => void;
     handleSetCustomLensPrompts: (prompts: Record<string, string>) => void;
@@ -66,8 +59,6 @@ export const useLensAndEnsembleConfig = (args: UseLensAndEnsembleConfigArgs): Us
         setLensConfig, lensConfig,
         setEnsembleModelSelection, ensembleModelSelection,
         setCustomEnsemblePrompt, setCustomLensPrompts,
-        isAccuracyModeEnabled, setIsAccuracyModeEnabled,
-        accuracySubMode, setAccuracySubMode, setShowAccuracyModal,
         providerConfigs, providerConfigsLoaded,
     } = args;
 
@@ -87,22 +78,6 @@ export const useLensAndEnsembleConfig = (args: UseLensAndEnsembleConfigArgs): Us
         saveLensConfig(newConfig);
     }, [setLensConfig]);
 
-    const handleConfirmAccuracyMode = () => {
-        setIsAccuracyModeEnabled(!isAccuracyModeEnabled);
-        setShowAccuracyModal(false);
-
-        if (!isAccuracyModeEnabled) { // Enabling Accuracy Mode
-            // Default moderator/vision to the first ready provider instead of a hardcoded brand.
-            const firstReady = getFirstReadyProvider(providerConfigs);
-            updateActiveConversation(conv => ({
-                ...conv,
-                moderatorProviderId: firstReady?.id || conv.moderatorProviderId || '',
-                moderatorModel: firstReady?.selectedModel || conv.moderatorModel || '',
-                ocrModel: firstReady?.selectedModel || conv.ocrModel || ''
-            }));
-            if (!accuracySubMode) setAccuracySubMode('original');
-        }
-    };
 
     // Ordinary ensemble model selection (Lenses off) handler — persists the
     // picked models that drive the cards and the debate (2–5 flat floor,
@@ -167,7 +142,6 @@ export const useLensAndEnsembleConfig = (args: UseLensAndEnsembleConfigArgs): Us
         handleSetModeratorProvider,
         handleSetModeratorModel,
         handleSetLensConfig,
-        handleConfirmAccuracyMode,
         handleSetEnsembleModelSelection,
         handleSetCustomEnsemblePrompt,
         handleSetCustomLensPrompts,

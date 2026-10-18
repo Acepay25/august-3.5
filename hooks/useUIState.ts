@@ -13,7 +13,6 @@ interface UIStateShape {
     isLiveMarketVisible: boolean;
     isVersionHistoryVisible: boolean;
     isVisionDataVisible: boolean;
-    showAccuracyModal: boolean;
     showScrollDown: boolean;
     showScrollUp: boolean;
 
@@ -44,7 +43,6 @@ const initialState: UIStateShape = {
     isLiveMarketVisible: false,
     isVersionHistoryVisible: false,
     isVisionDataVisible: false,
-    showAccuracyModal: false,
     showScrollDown: false,
     showScrollUp: false,
     isLoading: false,

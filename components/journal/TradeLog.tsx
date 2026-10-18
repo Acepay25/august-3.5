@@ -70,7 +70,7 @@ const TradeDetailView: React.FC<{
     onUpdatePnL?: (id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => void;
     username?: string;
 }> = ({ trade, onBack, modelIdToName, onUpdateLeverage, onUpdateType, onUpdateOutcome, onUpdatePnL, username }) => {
-    const { analysis, outcome, timestamp, postMortem, postMortemImages, correctedEntry, correctedStopLoss, correctedTakeProfit, pnlAmount, pnlPercent, modelsUsed, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, groqAlt2ModelUsed, openrouterModelUsed, moderatorModel, leverage, isAccuracyMode, accuracySubMode } = trade;
+    const { analysis, outcome, timestamp, postMortem, postMortemImages, correctedEntry, correctedStopLoss, correctedTakeProfit, pnlAmount, pnlPercent, modelsUsed, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, groqAlt2ModelUsed, openrouterModelUsed, moderatorModel, leverage } = trade;
     const { direction, stopLoss, stopLossPercentage, entryPoints, takeProfit, activeStrategies, coinName, invalidationCriteria } = analysis;
     const [viewerImageUrl, setViewerImageUrl] = useState<string | null>(null);
     const [localLeverage, setLocalLeverage] = useState<string>(String(leverage || DEFAULT_LEVERAGE));
@@ -101,17 +101,7 @@ const TradeDetailView: React.FC<{
     };
 
     // --- Dynamic Mode Styling ---
-    let containerClass = "bg-zinc-900/50 border border-zinc-800";
-    let modeBadge = null;
-
-    if (isAccuracyMode) {
-        containerClass = "bg-zinc-900 border border-zinc-700";
-        modeBadge = (
-            <span className="text-ui-xs font-semibold uppercase tracking-widest px-2 py-0.5 rounded-control border border-zinc-600 bg-zinc-800 text-zinc-300 ml-1">
-                {accuracySubMode === 'pure_ai' ? 'Pure AI' : 'Strict Mode'}
-            </span>
-        );
-    }
+    const containerClass = "bg-zinc-900/50 border border-zinc-800";
 
     return (
         <div className="flex flex-col h-full bg-surface-page">
@@ -130,7 +120,6 @@ const TradeDetailView: React.FC<{
                         {safeDirection}
                         {' · '}
                         {phtDayYear(timestamp)}
-                        {modeBadge}
                     </p>
 
                     <div className="mb-4">

@@ -16,8 +16,8 @@ import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import StatusPill from '../ui/StatusPill';
 
-// Instruction tabs (Standard / Strict Mode / Pure AI)
-export type InstructionTab = 'general' | 'accuracyOriginal' | 'accuracyPure';
+// The one instruction list the harness reads (Settings -> Instructions).
+export type InstructionTab = 'general';
 
 const MAX_WORD_COUNT = 3000;
 const MAX_ITEMS = 5;
@@ -167,18 +167,6 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
                     className={`flex-1 py-1.5 text-ui-xs font-bold uppercase tracking-wider rounded-control transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'general' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
                 >
                     Standard
-                </button>
-                <button
-                    onClick={() => onTabChange('accuracyOriginal')}
-                    className={`flex-1 py-1.5 text-ui-xs font-bold uppercase tracking-wider rounded-control transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'accuracyOriginal' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
-                >
-                    Strict Mode
-                </button>
-                <button
-                    onClick={() => onTabChange('accuracyPure')}
-                    className={`flex-1 py-1.5 text-ui-xs font-bold uppercase tracking-wider rounded-control transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${activeTab === 'accuracyPure' ? 'bg-cyan-900/40 text-cyan-200 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
-                >
-                    Pure AI
                 </button>
             </div>
 

@@ -1,4 +1,4 @@
-// TAB: Analysis — accuracy/hybrid modes, stillness and the advanced capture
+// TAB: Analysis — hybrid mode, stillness and the advanced capture
 // switches (SettingsMenu "TAB 2").
 //
 // Moved verbatim from the inline body. `deskToolsEnabled`, `idleMotionEnabled`
@@ -7,21 +7,15 @@
 // the tab. The service setter `setIdleMotionEnabled` is imported here because
 // only this body writes through it.
 import React from 'react';
-import { Activity, ChevronDown, Layers, ShieldCheck, Wrench } from '../../shared/Icons';
+import { Activity, ChevronDown, Wrench } from '../../shared/Icons';
 import { ToggleSwitch } from '../../shared/ToggleSwitch';
 import { HarnessControls } from '../SessionUsagePanel';
-import { SegmentedControl, SettingsGroup, SettingsPageHeader, SettingsRow } from './shared';
+import { SettingsGroup, SettingsPageHeader, SettingsRow } from './shared';
 import { setIdleMotionEnabled } from '../../../services/desk/idleMotion';
 import { saveHarnessSettings } from '../../../utils/harnessSettings';
-import type { AccuracySubMode } from '../../../types';
 import type { SettingsTabProps } from './types';
 
 export interface GeneralTabProps extends SettingsTabProps {
-    // Accuracy Mode
-    isAccuracyModeEnabled: boolean;
-    onToggleAccuracyMode: () => void;
-    accuracySubMode: AccuracySubMode;
-    setAccuracySubMode?: (subMode: AccuracySubMode) => void;
     // Hybrid & Capturing
     isHybridIntelligenceEnabled: boolean;
     onToggleHybridIntelligence?: () => void;
@@ -36,21 +30,10 @@ export interface GeneralTabProps extends SettingsTabProps {
     idleMotionEnabled: boolean;
     isAdvancedOpen: boolean;
     setIsAdvancedOpen: React.Dispatch<React.SetStateAction<boolean>>;
-    // Pure AI options
-    isPlaybookEnabledInPureAI?: boolean;
-    setIsPlaybookEnabledInPureAI?: (enabled: boolean) => void;
-    isFamiliesEnabledInPureAI?: boolean;
-    setIsFamiliesEnabledInPureAI?: (enabled: boolean) => void;
-    isMemoryEnabledInPureAI?: boolean;
-    setIsMemoryEnabledInPureAI?: (enabled: boolean) => void;
 }
 
 const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
     const {
-        isAccuracyModeEnabled,
-        onToggleAccuracyMode,
-        accuracySubMode,
-        setAccuracySubMode,
         isHybridIntelligenceEnabled,
         onToggleHybridIntelligence,
         deskToolsEnabled,
@@ -58,12 +41,6 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
         idleMotionEnabled,
         isAdvancedOpen,
         setIsAdvancedOpen,
-        isPlaybookEnabledInPureAI,
-        setIsPlaybookEnabledInPureAI,
-        isFamiliesEnabledInPureAI,
-        setIsFamiliesEnabledInPureAI,
-        isMemoryEnabledInPureAI,
-        setIsMemoryEnabledInPureAI,
         isAutoCapturing,
         onToggleAutoCapturing,
         isEntryNotHitCapturing,
@@ -78,34 +55,6 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
             />
 
             <SettingsGroup title="Analysis modes">
-                <SettingsRow
-                    icon={<ShieldCheck className="h-4 w-4" aria-hidden="true" />}
-                    title="Accuracy Mode"
-                    description={isAccuracyModeEnabled
-                        ? (accuracySubMode === 'original'
-                            ? 'On — Strict Protocol: validated multi-step analysis with consensus checks.'
-                            : 'On — Pure AI: faster, unfiltered reasoning with fewer formatting checks.')
-                        : 'Off — standard speed. Debate runs without the strict validation pass.'}
-                    control={<ToggleSwitch checked={isAccuracyModeEnabled} onChange={onToggleAccuracyMode} label="Toggle Accuracy Mode" />}
-                />
-                {isAccuracyModeEnabled && setAccuracySubMode && (
-                    <SettingsRow
-                        icon={<Layers className="h-4 w-4" aria-hidden="true" />}
-                        title="Strictness"
-                        description="Which protocol runs while Accuracy Mode is on."
-                        control={
-                            <SegmentedControl
-                                ariaLabel="Accuracy protocol"
-                                value={accuracySubMode}
-                                onChange={id => setAccuracySubMode(id as AccuracySubMode)}
-                                options={[
-                                    { id: 'original', label: 'Strict', title: 'Validated multi-step analysis with consensus checks. Slower but more thorough.' },
-                                    { id: 'pure_ai', label: 'Pure AI', title: 'Faster, unfiltered reasoning with fewer formatting checks.' },
-                                ]}
-                            />
-                        }
-                    />
-                )}
                 <SettingsRow
                     icon={<Activity className="h-4 w-4" aria-hidden="true" />}
                     title="Hybrid Intelligence"
@@ -166,31 +115,6 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
                 </button>
                 {isAdvancedOpen && (
                     <div className="mt-3 space-y-3 animate-fade-in">
-                        {isAccuracyModeEnabled && accuracySubMode === 'pure_ai' && (setIsPlaybookEnabledInPureAI || setIsFamiliesEnabledInPureAI || setIsMemoryEnabledInPureAI) && (
-                            <SettingsGroup title="Pure AI context" description="Structured context injected during Pure AI analysis. All default: off.">
-                                {setIsPlaybookEnabledInPureAI && (
-                                    <SettingsRow
-                                        title="Strategy Playbook"
-                                        description="The uploaded strategy books."
-                                        control={<ToggleSwitch checked={!!isPlaybookEnabledInPureAI} onChange={() => setIsPlaybookEnabledInPureAI(!isPlaybookEnabledInPureAI)} label="Toggle Strategy Playbook in Pure AI" />}
-                                    />
-                                )}
-                                {setIsFamiliesEnabledInPureAI && (
-                                    <SettingsRow
-                                        title="Pattern Families"
-                                        description="Learned pattern-family classifications."
-                                        control={<ToggleSwitch checked={!!isFamiliesEnabledInPureAI} onChange={() => setIsFamiliesEnabledInPureAI(!isFamiliesEnabledInPureAI)} label="Toggle Pattern Families in Pure AI" />}
-                                    />
-                                )}
-                                {setIsMemoryEnabledInPureAI && (
-                                    <SettingsRow
-                                        title="Historical Memory"
-                                        description="Past-trade lessons from the notebook."
-                                        control={<ToggleSwitch checked={!!isMemoryEnabledInPureAI} onChange={() => setIsMemoryEnabledInPureAI(!isMemoryEnabledInPureAI)} label="Toggle Historical Memory in Pure AI" />}
-                                    />
-                                )}
-                            </SettingsGroup>
-                        )}
 
                         {/* The harness's model-behavior dials — effort, guard,
                             cost caps, checklist — moved here from the Data tab

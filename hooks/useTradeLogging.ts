@@ -346,8 +346,6 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             ocrModelUsed: message.ocrModelUsed,
             moderatorProvider: moderatorProviderId,
             moderatorModel: moderatorModel,
-            isAccuracyMode: message.isAccuracyMode,
-            accuracySubMode: message.accuracySubMode,
             // Persist debate transcript for training data
             debateTurns: message.debateTurns,
             moderatorSynthesis: message.text,
@@ -675,8 +673,6 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             leverage: activeConversationLeverage || DEFAULT_LEVERAGE,
             correctedEntry: candidate.correctedEntry,
             modelsUsed: candidate.message.modelsUsed,
-            isAccuracyMode: candidate.message.isAccuracyMode,
-            accuracySubMode: candidate.message.accuracySubMode,
             patternMemoryGate: candidate.message.patternMemoryGate,
             promptVersion: candidate.message.runStats?.promptVersion,
         };

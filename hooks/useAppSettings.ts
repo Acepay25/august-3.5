@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { AccuracySubMode, CustomInstructionsMap, AnalystLensConfig, GlobalMemory, ConfidenceCalibration, InsightKnowledgeBase, AIProvider } from '../types';
+import { CustomInstructionsMap, AnalystLensConfig, GlobalMemory, ConfidenceCalibration, InsightKnowledgeBase, AIProvider } from '../types';
 import { ProviderConfig } from '../types/provider';
 import { DEFAULT_FRAMEWORKS } from '../constants/models';
 import { loadLensConfig, loadEnsembleModelSelection, EnsembleModelSelection, loadCustomEnsemblePrompt, loadCustomLensPrompts } from '../services/ui/AnalystLensService';
@@ -23,18 +23,11 @@ export function useAppSettings() {
     const [isStrategiesEnabled, setIsStrategiesEnabled] = useState<boolean>(false);
 
     // Accuracy Mode State
-    const [isAccuracyModeEnabled, setIsAccuracyModeEnabled] = useState<boolean>(false);
-    const [accuracySubMode, setAccuracySubMode] = useState<AccuracySubMode>('original');
 
     // Custom AI Behavior
     const [customInstructions, setCustomInstructions] = useState<CustomInstructionsMap>({
         general: [],
-        accuracyOriginal: [],
-        accuracyPure: []
     });
-    const [isPlaybookEnabledInPureAI, setIsPlaybookEnabledInPureAI] = useState<boolean>(false);
-    const [isFamiliesEnabledInPureAI, setIsFamiliesEnabledInPureAI] = useState<boolean>(false);
-    const [isMemoryEnabledInPureAI, setIsMemoryEnabledInPureAI] = useState<boolean>(false);
     const [isHybridIntelligenceEnabled, setIsHybridIntelligenceEnabled] = useState<boolean>(false);
 
     // Analyst Lens Configuration
@@ -90,12 +83,7 @@ export function useAppSettings() {
         memoryModel, setMemoryModel,
         isGlobalMemoryEnabled, setIsGlobalMemoryEnabled,
         isStrategiesEnabled, setIsStrategiesEnabled,
-        isAccuracyModeEnabled, setIsAccuracyModeEnabled,
-        accuracySubMode, setAccuracySubMode,
         customInstructions, setCustomInstructions,
-        isPlaybookEnabledInPureAI, setIsPlaybookEnabledInPureAI,
-        isFamiliesEnabledInPureAI, setIsFamiliesEnabledInPureAI,
-        isMemoryEnabledInPureAI, setIsMemoryEnabledInPureAI,
         isHybridIntelligenceEnabled, setIsHybridIntelligenceEnabled,
         lensConfig, setLensConfig,
         ensembleModelSelection, setEnsembleModelSelection,

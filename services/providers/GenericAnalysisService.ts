@@ -9,7 +9,7 @@
  */
 
 import { ProviderConfig } from '../../types/provider';
-import { Message, GroundingChunk, TradeAnalysis, GlobalMemory, AccuracySubMode, TradeOutcome, LoggedTrade, StrategySearchResult, TradeSummary, MessageRole } from '../../types';
+import { Message, GroundingChunk, TradeAnalysis, GlobalMemory, TradeOutcome, LoggedTrade, StrategySearchResult, TradeSummary, MessageRole } from '../../types';
 import { extractAndParseJson, extractLastJson } from '../../utils/jsonUtils';
 import { sanitizeAIResponse, sanitizeAIResponseLight, sanitizeJSONString } from '../../utils/sanitizers';
 import { sanitizeTradeAnalysis, truncateTextToTokens, formatAnalysisForDisplay, parsePrice } from '../../utils/analysisUtils';
@@ -17,13 +17,7 @@ import { splitThinkingFromOutput, extractAndStripThinkBlocks, createThinkingStre
 import { CASUAL_CHAT_SYSTEM_PROMPT } from '../../constants/prompts/chatPrompts';
 import { buildTradeInsightBrief, compactInsightForPatternMemory } from '../../utils/tradeInsightBrief';
 import { parseGlobalMemory, parseStrategySearchResults } from '../../schemas/learning';
-import {
-    MASTER_ANALYSIS_PROMPT,
-    LENS_MODE_BASE_PROMPT, COMPACT_ANALYSIS_PROMPT, ACCURACY_MODE_PROMPT, PURE_AI_MODE_PROMPT,
-    RISK_MANAGEMENT_RULES, TRADING_FAMILIES_PROMPT, AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT,
-    ENTRY_NOT_HIT_ANALYSIS_PROMPT, ENTRY_NOT_HIT_ANALYSIS_QUESTIONS,
-    HARNESS_CONTRACT_PROMPT,
-} from '../../constants/prompts';
+import { MASTER_ANALYSIS_PROMPT, LENS_MODE_BASE_PROMPT, COMPACT_ANALYSIS_PROMPT, RISK_MANAGEMENT_RULES, AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT, HARNESS_CONTRACT_PROMPT } from '../../constants/prompts';
 import { constructOptimizedContext } from '../../utils/memoryUtils';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import {
@@ -245,11 +239,7 @@ export interface AnalyzeTradingViewParams {
     deepenAnalysis: boolean;
     globalMemory?: GlobalMemory;
     threadSummary?: string;
-    subMode?: AccuracySubMode;
     customInstructions?: string;
-    isPlaybookEnabledInPureAI?: boolean;
-    isFamiliesEnabledInPureAI?: boolean;
-    isMemoryEnabledInPureAI?: boolean;
     rolePrompt?: string;                    // Analyst Lens: specialized role prompt
     /**
      * Summaries of the user's uploaded strategy books (Settings → Strategies),
@@ -302,15 +292,12 @@ export async function analyzeTradingView(
 ): Promise<{ analysis: TradeAnalysis; thoughtProcess: string; finalOutput: string; sources: GroundingChunk[] }> {
     const {
         prompt, images, imageSummaries, chatHistory, finalTradeSummary, recentInsights,
-        activeFrameworks, globalMemory, threadSummary, subMode, customInstructions,
-        isPlaybookEnabledInPureAI, isFamiliesEnabledInPureAI, isMemoryEnabledInPureAI,
+        activeFrameworks, globalMemory, threadSummary, customInstructions,
         rolePrompt, systemPromptOverride, seatDirective, userStrategies, signal, temperature, onReasoning, onPartialOutput, onWireAudit,
     } = params;
 
     const modelName = config.selectedModel;
     const hasImages = images.length > 0;
-    const isAccuracyMode = subMode !== undefined && subMode !== 'original';
-    const isPureAiMode = subMode === 'pure_ai';
 
     // --- LIVE MARKET DATA PARSING & INJECTION ---
     const parsedMarketData = parseLiveMarketData(prompt);
@@ -328,13 +315,7 @@ export async function analyzeTradingView(
         `;
     }
 
-    const memoryToUse = (isPureAiMode && !isMemoryEnabledInPureAI) ? undefined : globalMemory;
-    // Both branches must honor the Pure-AI memory-off gate (memoryToUse) —
-    // the non-accuracy path used to read `globalMemory` directly, silently
-    // injecting memory the user had disabled.
-    const memoryContext = isAccuracyMode
-        ? constructOptimizedContext(chatHistory, threadSummary, memoryToUse)
-        : truncateTextToTokens(constructOptimizedContext(chatHistory, threadSummary, memoryToUse), 800);
+    const memoryContext = truncateTextToTokens(constructOptimizedContext(chatHistory, threadSummary, globalMemory), 800);
 
     const frameworksList = activeFrameworks.map((fw, index) => `${index + 1}. **${fw}**`).join('\n');
     const userStrategiesBlock = userStrategies
@@ -378,66 +359,23 @@ export async function analyzeTradingView(
         : '';
 
     let systemPrompt: string;
-    if (isPureAiMode) {
-        const playbookContext = isPlaybookEnabledInPureAI
-            ? `**PLAYBOOK REFERENCE (ENABLED BY USER):**\nAlthough this is Pure AI Mode, the user has enabled access to the following frameworks as a reference:\n${frameworksList}\nYou may use these if they align with your reasoning.`
-            : '';
-        const familiesContext = isFamiliesEnabledInPureAI
-            ? `**MARKET CLASSIFICATION FAMILIES (ENABLED BY USER):**\nAlthough this is Pure AI Mode, the user has explicitly requested that you classify the setup into one of the following Families:\n${getPrompt('analysis.families', TRADING_FAMILIES_PROMPT)}\nYou MUST assign a 'detectedPatternFamily' (Family A, B, C, or Omega) based on your reasoning.`
-            : '';
-        const memoryContextPrompt = isMemoryEnabledInPureAI
-            ? `**PATTERN MEMORY REFERENCE (ENABLED BY USER):** Use retrieved history only when it matches this coin, direction, or regime.`
-            : '';
-        systemPrompt = composePrompt([
-            { id: 'contract', text: HARNESS_CONTRACT_PROMPT },
-            { id: 'seat', text: seatBlock },
-            { id: 'role', text: roleBlock },
-            { id: 'job', text: getPrompt('analysis.pure_ai', PURE_AI_MODE_PROMPT) },
-            { id: 'vision', text: visionDeepDive },
-            { id: 'override', text: userOverride },
-            { id: 'playbook', text: playbookContext },
-            { id: 'families', text: familiesContext },
-            { id: 'memory', text: memoryContextPrompt },
-            { id: 'strategies', text: userStrategiesBlock },
-            { id: 'desk_tools', text: deskToolsBlock },
-            { id: 'risk', text: getPrompt('analysis.risk_rules', RISK_MANAGEMENT_RULES) },
-            { id: 'output', text: outputContract },
-        ]);
-    } else if (isAccuracyMode) {
-        systemPrompt = composePrompt([
-            { id: 'contract', text: HARNESS_CONTRACT_PROMPT },
-            { id: 'seat', text: seatBlock },
-            { id: 'role', text: roleBlock },
-            { id: 'accuracy', text: getPrompt('analysis.accuracy', ACCURACY_MODE_PROMPT) },
-            { id: 'job', text: getPrompt('analysis.master', MASTER_ANALYSIS_PROMPT) },
-            { id: 'vision', text: visionDeepDive },
-            { id: 'override', text: userOverride },
-            { id: 'playbook', text: playbookBlock },
-            { id: 'strategies', text: userStrategiesBlock },
-            { id: 'memory', text: getPrompt('analysis.memory_enforcement', AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT) },
-            { id: 'desk_tools', text: deskToolsBlock },
-            { id: 'risk', text: getPrompt('analysis.risk_rules', RISK_MANAGEMENT_RULES) },
-            { id: 'output', text: outputContract },
-        ]);
-    } else {
-        const basePrompt = rolePrompt
-            ? getPrompt('analysis.lens', LENS_MODE_BASE_PROMPT)
-            : (systemPromptOverride || getPrompt('analysis.master', MASTER_ANALYSIS_PROMPT));
-        systemPrompt = composePrompt([
-            { id: 'contract', text: HARNESS_CONTRACT_PROMPT },
-            { id: 'seat', text: seatBlock },
-            { id: 'role', text: roleBlock },
-            { id: 'job', text: basePrompt },
-            { id: 'vision', text: rolePrompt ? '' : visionDeepDive },
-            { id: 'memory', text: getPrompt('analysis.memory_enforcement', AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT) },
-            { id: 'override', text: userOverride },
-            { id: 'playbook', text: playbookBlock },
-            { id: 'strategies', text: userStrategiesBlock },
-            { id: 'desk_tools', text: deskToolsBlock },
-            { id: 'risk', text: getPrompt('analysis.risk_rules', RISK_MANAGEMENT_RULES) },
-            { id: 'output', text: outputContract },
-        ]);
-    }
+    const basePrompt = rolePrompt
+        ? getPrompt('analysis.lens', LENS_MODE_BASE_PROMPT)
+        : (systemPromptOverride || getPrompt('analysis.master', MASTER_ANALYSIS_PROMPT));
+    systemPrompt = composePrompt([
+        { id: 'contract', text: HARNESS_CONTRACT_PROMPT },
+        { id: 'seat', text: seatBlock },
+        { id: 'role', text: roleBlock },
+        { id: 'job', text: basePrompt },
+        { id: 'vision', text: rolePrompt ? '' : visionDeepDive },
+        { id: 'memory', text: getPrompt('analysis.memory_enforcement', AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT) },
+        { id: 'override', text: userOverride },
+        { id: 'playbook', text: playbookBlock },
+        { id: 'strategies', text: userStrategiesBlock },
+        { id: 'desk_tools', text: deskToolsBlock },
+        { id: 'risk', text: getPrompt('analysis.risk_rules', RISK_MANAGEMENT_RULES) },
+        { id: 'output', text: outputContract },
+    ]);
 
 
     // --- BUILD USER PROMPT ---
@@ -447,49 +385,44 @@ export async function analyzeTradingView(
         ? `User's request:\n${prompt}\n\n`
         : `User's request: "${prompt}"\n\n`;
 
-    // Standard mode uses pattern memory + recent insights blocks; accuracy mode relies on global memory context.
     let userPromptText: string;
-    if (isAccuracyMode) {
-        userPromptText = `${formattedPrompt}${marketDataOverride}\n\n${imageSummaryContext}\n\n${memoryContext}\n\nPresent your readable trade proposal.`;
+    const patternMemoryContext = finalTradeSummary
+        ? truncateTextToTokens(`\n\n**PATTERN MEMORY (SYNTHESIS):**\nUse this only if it matches this coin, direction, or regime:\n${finalTradeSummary}\n`, 600)
+        : "\n\n** PATTERN MEMORY:** Use the retrieved harness memory in the user request (skills + similar trades). Do not invent a personal track record.\n";
+    const recentInsightsContext = recentInsights
+        ? truncateTextToTokens(`\n\n**RECENT INSIGHTS:**\nUse matching closed trades only. Ignore unrelated coins/regimes:\n${recentInsights}\n`, 600)
+        : "\n\n** RECENT INSIGHTS:** No recent trade insights available.\n";
+
+    /** One clip for every context block that rides this prompt. The old
+     *  form appended a bare "...[truncated]", which let a model read 200
+     *  chars of trade history as the whole record — naming what was dropped
+     *  and how much is what turns "I have nothing on this setup" into "I
+     *  have an excerpt of it". */
+    const clipContext = (text: string, kept: number, source: string): string =>
+        text.length > kept
+            ? `${text.slice(0, kept)} ${clipNote({ source, kept, total: text.length })}`
+            : text;
+
+    if (isSmallContextModel(modelName)) {
+        const effectiveSystemPrompt = composePrompt([
+            { id: 'contract', text: HARNESS_CONTRACT_PROMPT },
+            { id: 'job', text: getPrompt('analysis.compact', COMPACT_ANALYSIS_PROMPT) },
+        ]);
+        const minimalPattern = clipContext(patternMemoryContext, 400, 'pattern memory');
+        const minimalInsights = clipContext(recentInsightsContext, 200, 'recent insights');
+        const minimalImages = clipContext(imageSummaryContext, 500, 'chart image summaries');
+        systemPrompt = effectiveSystemPrompt;
+        userPromptText = `${formattedPrompt}\n\n${marketDataOverride}\n\n${minimalImages}\n\n${minimalPattern}\n\n${minimalInsights}\n\nPresent your readable trade proposal.`;
     } else {
-        const patternMemoryContext = finalTradeSummary
-            ? truncateTextToTokens(`\n\n**PATTERN MEMORY (SYNTHESIS):**\nUse this only if it matches this coin, direction, or regime:\n${finalTradeSummary}\n`, 600)
-            : "\n\n** PATTERN MEMORY:** Use the retrieved harness memory in the user request (skills + similar trades). Do not invent a personal track record.\n";
-        const recentInsightsContext = recentInsights
-            ? truncateTextToTokens(`\n\n**RECENT INSIGHTS:**\nUse matching closed trades only. Ignore unrelated coins/regimes:\n${recentInsights}\n`, 600)
-            : "\n\n** RECENT INSIGHTS:** No recent trade insights available.\n";
-
-        /** One clip for every context block that rides this prompt. The old
-         *  form appended a bare "...[truncated]", which let a model read 200
-         *  chars of trade history as the whole record — naming what was dropped
-         *  and how much is what turns "I have nothing on this setup" into "I
-         *  have an excerpt of it". */
-        const clipContext = (text: string, kept: number, source: string): string =>
-            text.length > kept
-                ? `${text.slice(0, kept)} ${clipNote({ source, kept, total: text.length })}`
-                : text;
-
-        if (isSmallContextModel(modelName)) {
-            const effectiveSystemPrompt = composePrompt([
-                { id: 'contract', text: HARNESS_CONTRACT_PROMPT },
-                { id: 'job', text: getPrompt('analysis.compact', COMPACT_ANALYSIS_PROMPT) },
-            ]);
-            const minimalPattern = clipContext(patternMemoryContext, 400, 'pattern memory');
-            const minimalInsights = clipContext(recentInsightsContext, 200, 'recent insights');
-            const minimalImages = clipContext(imageSummaryContext, 500, 'chart image summaries');
-            systemPrompt = effectiveSystemPrompt;
-            userPromptText = `${formattedPrompt}\n\n${marketDataOverride}\n\n${minimalImages}\n\n${minimalPattern}\n\n${minimalInsights}\n\nPresent your readable trade proposal.`;
-        } else {
-            // Capable models get the LARGER budgets — this was inverted (they
-            // were cut harder than the small-context branch, defeating the
-            // token-level truncation above). Pattern memory & insights are the
-            // highest-value context for the trade proposal.
-            const truncatedImages = clipContext(imageSummaryContext, 800, 'chart image summaries');
-            const truncatedPattern = clipContext(patternMemoryContext, 600, 'pattern memory');
-            const truncatedInsights = clipContext(recentInsightsContext, 300, 'recent insights');
-            const truncatedMemory = clipContext(memoryContext, 600, 'harness memory');
-            userPromptText = `${formattedPrompt}${marketDataOverride}\n\n${truncatedImages}\n\n${truncatedPattern}\n\n${truncatedInsights}\n\n${truncatedMemory}\n\nPresent your readable trade proposal.`;
-        }
+        // Capable models get the LARGER budgets — this was inverted (they
+        // were cut harder than the small-context branch, defeating the
+        // token-level truncation above). Pattern memory & insights are the
+        // highest-value context for the trade proposal.
+        const truncatedImages = clipContext(imageSummaryContext, 800, 'chart image summaries');
+        const truncatedPattern = clipContext(patternMemoryContext, 600, 'pattern memory');
+        const truncatedInsights = clipContext(recentInsightsContext, 300, 'recent insights');
+        const truncatedMemory = clipContext(memoryContext, 600, 'harness memory');
+        userPromptText = `${formattedPrompt}${marketDataOverride}\n\n${truncatedImages}\n\n${truncatedPattern}\n\n${truncatedInsights}\n\n${truncatedMemory}\n\nPresent your readable trade proposal.`;
     }
 
     // --- BUILD MESSAGES (with optional vision content) ---
