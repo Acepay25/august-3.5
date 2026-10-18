@@ -204,7 +204,6 @@ gated('P3: lens role-variant word counts (27 live calls)', () => {
               recentInsights: null,
               activeFrameworks: ['Breakout Trading', 'SMC', 'Trend Following'],
               deepenAnalysis: false,
-              subMode: undefined, // standard mode → lens path
               rolePrompt,
             });
 

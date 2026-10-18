@@ -49,7 +49,7 @@ import { recalculateAnalysisMetrics } from '../utils/analysisUtils';
 import { getFirstReadyProvider } from '../utils/providerUtils';
 import { DEFAULT_FRAMEWORKS } from '../constants/models';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
-import type { Message, Conversation, LoggedTrade, CustomInstructionsMap, AccuracySubMode, TradeSummary, UserProfile } from '../types';
+import type { Message, Conversation, LoggedTrade, CustomInstruction, CustomInstructionsMap, TradeSummary, UserProfile } from '../types';
 import type { ProviderConfig } from '../types/provider';
 
 export interface UseUserProfileLoaderArgs {
@@ -85,12 +85,7 @@ export interface UseUserProfileLoaderArgs {
     setUseAlgorithmicSummary: React.Dispatch<React.SetStateAction<boolean>>;
     setUseAlgorithmicInsights: React.Dispatch<React.SetStateAction<boolean>>;
     setIsStrategiesEnabled: React.Dispatch<React.SetStateAction<boolean>>;
-    setIsAccuracyModeEnabled: React.Dispatch<React.SetStateAction<boolean>>;
-    setAccuracySubMode: React.Dispatch<React.SetStateAction<AccuracySubMode>>;
     setCustomInstructions: React.Dispatch<React.SetStateAction<CustomInstructionsMap>>;
-    setIsPlaybookEnabledInPureAI: React.Dispatch<React.SetStateAction<boolean>>;
-    setIsFamiliesEnabledInPureAI: React.Dispatch<React.SetStateAction<boolean>>;
-    setIsMemoryEnabledInPureAI: React.Dispatch<React.SetStateAction<boolean>>;
     setIsHybridIntelligenceEnabled: React.Dispatch<React.SetStateAction<boolean>>;
     setIsEnsembleEnabled: React.Dispatch<React.SetStateAction<boolean>>;
     setIsAutoCapturing: React.Dispatch<React.SetStateAction<boolean>>;
@@ -132,9 +127,9 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setInsightKnowledgeBase, setActiveFrameworks, setSummaryCharLimit,
         setSummarizationProvider, setSummarizationModel, setVisionModel,
         setUseAlgorithmicSummary, setUseAlgorithmicInsights,
-        setIsStrategiesEnabled, setIsAccuracyModeEnabled, setAccuracySubMode,
-        setCustomInstructions, setIsPlaybookEnabledInPureAI, setIsFamiliesEnabledInPureAI,
-        setIsMemoryEnabledInPureAI, setIsHybridIntelligenceEnabled,
+        setIsStrategiesEnabled,
+        setCustomInstructions,
+        setIsHybridIntelligenceEnabled,
         setIsEnsembleEnabled, setIsAutoCapturing,
         setIsEntryNotHitCapturing, setConfidenceCalibration, setAutopilotResolutions,
         setInput, setImages,
@@ -185,41 +180,25 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setUseAlgorithmicInsights(profile.settings?.useAlgorithmicInsights ?? false);
         setIsGlobalMemoryEnabled(profile.settings?.isGlobalMemoryEnabled ?? false);
         setIsStrategiesEnabled(profile.settings?.isStrategiesEnabled ?? false);
-        setIsAccuracyModeEnabled(profile.settings?.isAccuracyModeEnabled ?? false);
-        setAccuracySubMode(profile.settings?.accuracySubMode || 'original');
 
-        // Legacy: `customInstructions` used to be three plain strings and is
-        // now a map of titled entries. One legacy shape, one migration — and
-        // the three branches all end in the same setter, so the default below
-        // is the "nothing stored" answer rather than a fourth case.
-        const loadedInstructions = profile.settings?.customInstructions;
-        const defaultMap: CustomInstructionsMap = { general: [], accuracyOriginal: [], accuracyPure: [] };
-
-        if (loadedInstructions) {
-            if (typeof (loadedInstructions as any).general === 'string') {
-                const legacyGeneral = (loadedInstructions as any).general;
-                const legacyOriginal = (loadedInstructions as any).accuracyOriginal;
-                const legacyPure = (loadedInstructions as any).accuracyPure;
-
-                if (legacyGeneral) defaultMap.general.push({ id: 'migrated-gen', title: 'Legacy General', content: legacyGeneral, isActive: true });
-                if (legacyOriginal) defaultMap.accuracyOriginal.push({ id: 'migrated-orig', title: 'Legacy Accuracy', content: legacyOriginal, isActive: true });
-                if (legacyPure) defaultMap.accuracyPure.push({ id: 'migrated-pure', title: 'Legacy Pure', content: legacyPure, isActive: true });
-
-                setCustomInstructions(defaultMap);
-            } else {
-                setCustomInstructions({
-                    general: loadedInstructions.general || [],
-                    accuracyOriginal: loadedInstructions.accuracyOriginal || [],
-                    accuracyPure: loadedInstructions.accuracyPure || [],
-                });
+        // Accuracy mode is gone: its two instruction lists fold into Standard on
+        // load so typed rules survive instead of vanishing from the notebook.
+        const loadedInstructions = profile.settings?.customInstructions as
+            { general?: CustomInstruction[] | string; accuracyOriginal?: CustomInstruction[] | string; accuracyPure?: CustomInstruction[] | string } | undefined;
+        const merged: CustomInstructionsMap = { general: [] };
+        const absorb = (list: CustomInstruction[] | string | undefined, title: string) => {
+            if (!list) return;
+            if (typeof list === 'string') {
+                if (list.trim()) merged.general.push({ id: 'migrated-' + title, title, content: list, isActive: true });
+                return;
             }
-        } else {
-            setCustomInstructions(defaultMap);
-        }
+            list.forEach(inst => { if (!merged.general.some(g => g.id === inst.id)) merged.general.push(inst); });
+        };
+        absorb(loadedInstructions?.general, 'Legacy General');
+        absorb(loadedInstructions?.accuracyOriginal, 'Legacy Accuracy');
+        absorb(loadedInstructions?.accuracyPure, 'Legacy Pure');
+        setCustomInstructions(merged);
 
-        setIsPlaybookEnabledInPureAI(profile.settings?.isPlaybookEnabledInPureAI ?? false);
-        setIsFamiliesEnabledInPureAI(profile.settings?.isFamiliesEnabledInPureAI ?? false);
-        setIsMemoryEnabledInPureAI(profile.settings?.isMemoryEnabledInPureAI ?? false);
         setIsHybridIntelligenceEnabled(profile.settings?.isHybridIntelligenceEnabled ?? false);
 
         persistedEnsembleModeRef.current = profile.settings?.isEnsembleEnabled ?? null;
@@ -239,9 +218,8 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setActiveFrameworks, setSummaryCharLimit, setSummarizationProvider,
         setSummarizationModel, setVisionModel, setUseAlgorithmicSummary,
         setUseAlgorithmicInsights, setIsGlobalMemoryEnabled, setIsStrategiesEnabled,
-        setIsAccuracyModeEnabled, setAccuracySubMode, setCustomInstructions,
-        setIsPlaybookEnabledInPureAI, setIsFamiliesEnabledInPureAI,
-        setIsMemoryEnabledInPureAI, setIsHybridIntelligenceEnabled, setIsEnsembleEnabled,
+        setCustomInstructions,
+        setIsHybridIntelligenceEnabled, setIsEnsembleEnabled,
         setIsAutoCapturing, setIsEntryNotHitCapturing,
         setConfidenceCalibration, setMemoryConfig, setMemoryModel, setInsightKnowledgeBase,
     ]);
@@ -259,12 +237,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setIsGlobalMemoryEnabled(false);
         setMemoryConfig(null);
         setMemoryModel('');
-        setIsAccuracyModeEnabled(false);
-        setAccuracySubMode('original');
-        setCustomInstructions({ general: [], accuracyOriginal: [], accuracyPure: [] });
-        setIsPlaybookEnabledInPureAI(false);
-        setIsFamiliesEnabledInPureAI(false);
-        setIsMemoryEnabledInPureAI(false);
+        setCustomInstructions({ general: [] });
         setIsHybridIntelligenceEnabled(false);
         setIsAutoCapturing(false);
         setIsEntryNotHitCapturing(false);
@@ -291,12 +264,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                     summarizationModel: firstReady?.selectedModel || '',
                     visionModel: '',
                     isGlobalMemoryEnabled: false,
-                    isAccuracyModeEnabled: false,
-                    accuracySubMode: 'original',
-                    customInstructions: { general: [], accuracyOriginal: [], accuracyPure: [] },
-                    isPlaybookEnabledInPureAI: false,
-                    isFamiliesEnabledInPureAI: false,
-                    isMemoryEnabledInPureAI: false,
+                    customInstructions: { general: [] },
                     isHybridIntelligenceEnabled: false,
                     isAutoCapturing: false,
                     isEntryNotHitCapturing: false,
@@ -310,12 +278,11 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         }
     }, [
         handleCancelAnalysis, providerConfigs, setActiveConversationId,
-        setActiveFrameworks, setAccuracySubMode, setConversationHistory,
+        setActiveFrameworks, setConversationHistory,
         setCustomInstructions, setFinalTradeSummary,
-        setGlobalMemory, setImages, setInput, setIsAccuracyModeEnabled,
-        setIsAutoCapturing, setIsEntryNotHitCapturing, setIsFamiliesEnabledInPureAI,
+        setGlobalMemory, setImages, setInput,
+        setIsAutoCapturing, setIsEntryNotHitCapturing,
         setIsGlobalMemoryEnabled, setIsHybridIntelligenceEnabled,
-        setIsMemoryEnabledInPureAI, setIsPlaybookEnabledInPureAI,
         setLoggedTrades, setMemoryConfig,
         setMemoryModel, setSavedAnalyses, setSummarizationModel,
         setSummarizationProvider, setSummaryCharLimit, setTradeSummaries,

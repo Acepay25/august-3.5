@@ -74,7 +74,7 @@ const makeProfile = (overrides: Partial<UserProfile> = {}): UserProfile => ({
   savedAnalyses: [],
   tradeSummaries: [],
   finalTradeSummary: null,
-  settings: { activeFrameworks: [], isAccuracyModeEnabled: true, isHybridIntelligenceEnabled: true },
+  settings: { activeFrameworks: [], isHybridIntelligenceEnabled: true },
   globalMemory: { totalTradesAnalyzed: 2, familyPerformance: {}, aiPatternMemory: [], userPreferences: { leverageDefault: 5, favoriteAssets: ['BTCUSDT'], preferredSetup: 'swing' }, globalCorrections: [], lastUpdated: '' },
   ...overrides,
 });

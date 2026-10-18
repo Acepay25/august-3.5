@@ -510,19 +510,6 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                     <>
                     {/* Mode */}
                     <div>
-                        <span className="text-ui-xs font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Mode</span>
-                        <div className="flex gap-2">
-                            {([['standard', 'Standard'], ['original', 'Accuracy'], ['pure_ai', 'Pure AI']] as [AutomationMode, string][]).map(([value, label]) => (
-                                <button
-                                    key={value}
-                                    type="button"
-                                    onClick={() => setMode(value)}
-                                    className={`flex-1 px-3 py-2 rounded-control border text-ui-xs font-bold uppercase tracking-widest transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${mode === value ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
-                                >
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
                     </div>
 
                     {/* Lenses toggle */}

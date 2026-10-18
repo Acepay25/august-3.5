@@ -3,7 +3,7 @@ import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { APP_NAME, APP_VERSION } from '../../constants/version';
-import { AIProvider, AccuracySubMode, LoggedTrade } from '../../types';
+import { AIProvider, LoggedTrade } from '../../types';
 import { AnalystLensConfig } from '../../types/lens';
 import { CustomInstructionsMap } from '../../types/user';
 import { ProviderConfig, ApiFormat } from '../../types/provider';
@@ -47,10 +47,6 @@ interface SettingsMenuProps {
     isVisible: boolean;
     onClose: () => void;
     // Accuracy Mode
-    isAccuracyModeEnabled: boolean;
-    onToggleAccuracyMode: () => void;
-    accuracySubMode: AccuracySubMode;
-    setAccuracySubMode?: (subMode: AccuracySubMode) => void;
     // Hybrid & Capturing
     isHybridIntelligenceEnabled: boolean;
     onToggleHybridIntelligence?: () => void;
@@ -66,12 +62,6 @@ interface SettingsMenuProps {
     memoryConfig?: ProviderConfig | null;
     onMemoryConfigChange?: (config: ProviderConfig | null) => void;
     // Pure AI options
-    isPlaybookEnabledInPureAI?: boolean;
-    setIsPlaybookEnabledInPureAI?: (enabled: boolean) => void;
-    isFamiliesEnabledInPureAI?: boolean;
-    setIsFamiliesEnabledInPureAI?: (enabled: boolean) => void;
-    isMemoryEnabledInPureAI?: boolean;
-    setIsMemoryEnabledInPureAI?: (enabled: boolean) => void;
     // Instructions
     customInstructions: CustomInstructionsMap;
     setCustomInstructions: (instructions: CustomInstructionsMap) => void;
@@ -198,7 +188,7 @@ const NAV_GROUPS: NavGroup[] = [
     {
         title: 'Analysis',
         entries: [
-            { id: 'general', label: 'Analysis', icon: <SettingsIcon className={NAV_ICON} />, keywords: 'accuracy hybrid desk tools reduce motion idle motion capture pure ai advanced strict protocol' },
+            { id: 'general', label: 'Analysis', icon: <SettingsIcon className={NAV_ICON} />, keywords: 'hybrid desk tools reduce motion idle motion capture advanced' },
             { id: 'prompts', label: 'Prompts', icon: <CodeIcon className={NAV_ICON} />, keywords: 'template library editing' },
             { id: 'instructions', label: 'Instructions', icon: <FileText className={NAV_ICON} />, keywords: 'custom system instruction rules' },
         ],
@@ -517,10 +507,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             {activeTab === 'general' && (
                                 <Suspense fallback={<TabFallback />}>
                                     <GeneralTab tab={{
-                                        isAccuracyModeEnabled: props.isAccuracyModeEnabled,
-                                        onToggleAccuracyMode: props.onToggleAccuracyMode,
-                                        accuracySubMode: props.accuracySubMode,
-                                        setAccuracySubMode: props.setAccuracySubMode,
                                         isHybridIntelligenceEnabled: props.isHybridIntelligenceEnabled,
                                         onToggleHybridIntelligence: props.onToggleHybridIntelligence,
                                         setIsHybridIntelligenceEnabled: props.setIsHybridIntelligenceEnabled,
@@ -529,12 +515,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         idleMotionEnabled,
                                         isAdvancedOpen,
                                         setIsAdvancedOpen,
-                                        isPlaybookEnabledInPureAI: props.isPlaybookEnabledInPureAI,
-                                        setIsPlaybookEnabledInPureAI: props.setIsPlaybookEnabledInPureAI,
-                                        isFamiliesEnabledInPureAI: props.isFamiliesEnabledInPureAI,
-                                        setIsFamiliesEnabledInPureAI: props.setIsFamiliesEnabledInPureAI,
-                                        isMemoryEnabledInPureAI: props.isMemoryEnabledInPureAI,
-                                        setIsMemoryEnabledInPureAI: props.setIsMemoryEnabledInPureAI,
                                         isAutoCapturing: props.isAutoCapturing,
                                         onToggleAutoCapturing: props.onToggleAutoCapturing,
                                         isEntryNotHitCapturing: props.isEntryNotHitCapturing,

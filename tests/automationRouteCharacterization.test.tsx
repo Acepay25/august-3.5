@@ -163,13 +163,10 @@ describe('a scheduled run keeps its own thread', () => {
         const { h, runPipeline } = setup(verdictRun);
         await runOnce(h, automation({ mode: 'standard' }));
         const plain = (runPipeline.mock.calls[0] as unknown as [string, unknown, unknown, { automation: AutomationOption }])[3].automation.overrides;
-        expect(plain?.accuracyMode).toBe(false);
         expect(plain?.lensConfig).toBeUndefined();
 
-        await runOnce(h, automation({ mode: 'pure_ai' }));
+        await runOnce(h, automation({ mode: 'standard' }));
         const acc = (runPipeline.mock.calls[1] as unknown as [string, unknown, unknown, { automation: AutomationOption }])[3].automation.overrides;
-        expect(acc?.accuracyMode).toBe(true);
-        expect(acc?.accuracySubMode).toBe('pure_ai');
     });
 
     it('a bot-scoped config takes the other fork and never reaches the pipeline', async () => {

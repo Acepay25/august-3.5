@@ -1,6 +1,6 @@
 // Trade logging, conversation, and dashboard types
 
-import { AccuracySubMode, TradeOutcome } from './enums';
+import { TradeOutcome } from './enums';
 import { TradeAnalysis } from './analysis';
 import { Message, DebateTurn, PatternMemoryGateView } from './message';
 import { RootCauseClass } from './learning';
@@ -111,8 +111,6 @@ export interface LoggedTrade {
   moderatorSynthesis?: string;
 
   // Mode Tracking
-  isAccuracyMode?: boolean;
-  accuracySubMode?: AccuracySubMode;
   /**
    * Indicates if this trade hit the 150% extended SL zone.
    * true = hit 150% zone (REAL LOSS in live trading)

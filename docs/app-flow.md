@@ -36,7 +36,7 @@ flowchart TD
     SW --> K["Knowledge · learn-view · App:2560"]
     K -.-> AP["Approvals is a TAB of Knowledge — components/learn/LearnView.tsx:64"]
     NR["NavRail — imported App:125, NEVER rendered (see correction 5); its AccountRow export IS, App:2675"]:::dead
-    SM["SurfaceMenuList components/shell/SurfaceMenuList.tsx:116 destination rows — only mount passes hideSurfaces (App:2670; pinned by tests/deadControlsGuard.test.ts:147-150)"]:::dead
+    SM["SurfaceMenuList components/shell/SurfaceMenuList.tsx:116 destination rows — only mount passes hideSurfaces (App:2638; pinned by tests/deadControlsGuard.test.ts:147-150)"]:::dead
     classDef dead stroke-dasharray: 5 5,opacity:.5
 ```
 
@@ -93,7 +93,7 @@ the active strategy plans and the profile memory index, each read FRESH per turn
 the way the dock reads them. Its skills heading says *what the trader asks
 about*, not *this chart*: `buildSkillsIndexForPrompt` took a `where` argument so
 the dock's default stays byte-identical. The slugs that actually travelled are
-recorded on the row (`Message.injectedSkills`, `types/message.ts:324`), bounded
+recorded on the row (`Message.injectedSkills`, `types/message.ts:322`), bounded
 to the 30 the index prints — a row naming skills the model never saw would be an
 audit defect, not an audit trail.
 
@@ -192,7 +192,7 @@ verdict-shaped rows come from `proposal` cards, and the surviving readers were
 re-pointed in 20b-B and 20r rather than left reading a field nothing writes.
 
 **One known residue, stated as measured.** With Hybrid Intelligence on, a human
-send still fetches real-time data: the gate is `hooks/useAnalysisPipeline.ts:956`
+send still fetches real-time data: the gate is `hooks/useAnalysisPipeline.ts:935`
 and the fetch is `hooks/useAnalysisPipeline.ts:961`. What no longer happens is the
 part that made it worth the round trip — the injection string it builds
 (`hooks/useAnalysisPipeline.ts:969`, or `:1010` for preset data) is read afterwards
@@ -404,7 +404,7 @@ card that forgets it was clicked offers a second journal row.
 | 43 | approval tray → badge | `collectApprovalItems` → `approvalsWaiting` → Knowledge tab only |
 | 44 | the pane filters what it shows | `agentThreads.ts` read at `AgentsView.tsx` |
 | 45 | `present_trade` → a card in either home | `runPresentTrade presentTradeTool.ts:75` ← dock sink `chatTurnRunner.ts` / desk sink `chatSurfaceTurn.ts`; gate scan starts there, the cap binds at log time (`ensureStamp`) |
-| 46 | `chatSurfaceSystemPrompt` → the desk arm's prompt | `chatSurfaceTurn.ts:147` — mandate (`chatPrompts.ts:40`) + skills index + active strategies + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (`types/message.ts:324`) |
+| 46 | `chatSurfaceSystemPrompt` → the desk arm's prompt | `chatSurfaceTurn.ts:147` — mandate (`chatPrompts.ts:40`) + skills index + active strategies + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (`types/message.ts:322`) |
 | 47 | prose that never called the tool → the same decision | `planFromProse` (`services/trade/tradeShapedProse.ts`) reads the labelled entry/stop/target out of the row, `parseTradeProposal` decides whether that is a plan, and the chip mints the ONE plan-id shape (`mintPlanId`) before calling `onLogProposedTrade` — so a spoken plan reaches the journal the same way a presented one does |
 | 48 | a scheduled run → a rationed plan | `MAX_PLANS_PER_RUN` (`automationTurn.ts:69`) counts inside the turn; `MAX_PLANS_PER_DAY` (`AutomationService.ts:113`) is a local-calendar-day ledger keyed per automation (`:130` read, `:143` spend). Past either, `present_trade` gets an `ok: false` receipt naming the limit — a refusal the MODEL reads, not a card that quietly never appears |
 | 49 | a schedule's failure → the row and the toast | the turn's `notices` (`automationTurn.ts:160`) — a tool that came back `ok: false` (from `onToolPayload`, which already carries it), a turn that called nothing, a refused plan — are written into the stored text at `useAnalysisPipeline.ts:1240` and handed to `useAutomations.ts:531`, which downgrades the toast from success to warning. Nobody is watching a schedule live; a success toast over a failed lookup is how an unattended run manufactures confidence |

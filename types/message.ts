@@ -1,6 +1,6 @@
 // Message and conversation display types
 
-import { AccuracySubMode, MessageRole, TradeOutcome, DebateSpeaker } from './enums';
+import { MessageRole, TradeOutcome, DebateSpeaker } from './enums';
 import { TradingStyle } from './lens';
 import { TradeAnalysis } from './analysis';
 
@@ -198,10 +198,8 @@ export interface Message {
   liveToolEvents?: Record<string, string>;
 
   // Mode Tracking
-  isAccuracyMode?: boolean;
   isLensMode?: boolean; // Was this analysis created with Analyst Lenses enabled?
   tradingStyle?: Exclude<TradingStyle, 'auto'>; // Trading style used for this analysis
-  accuracySubMode?: AccuracySubMode;
   isPostMortem?: boolean; // Flag to identify if this message is a Post-Mortem Analysis bubble
   // Data for retrying a failed post-mortem analysis
   postMortemFailedCandidate?: {

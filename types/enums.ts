@@ -57,4 +57,3 @@ export enum AnalystRole {
   UNASSIGNED = 'unassigned',               // No special role, default behavior
 }
 
-export type AccuracySubMode = 'original' | 'pure_ai';
