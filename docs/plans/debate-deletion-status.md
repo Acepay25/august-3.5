@@ -498,6 +498,42 @@ first pass suggested:
   error is what blocks CI, not the warnings — but leaving 41 dead prompt-assembly
   statements in the send path is the half-finished state this stage refuses.
 
+## Stage 19 — third attempt got it to tsc-clean; still reverted, and why
+
+Restricting the dead-statement pass to **single bracket-balanced lines that end in
+`;`** worked: 20 statements gone, file at 1,944 lines (from 3,657 — both `wc -l` measured,
+not arithmetic), and
+**`tsc --noEmit` reported 0 errors**. Every multi-line extent was refused and listed
+(`470-474` throttler import members, `577 persistThinkingRecords`, `738/744/748`,
+`1044`, `1117`, `1131`, `1258/1264/1265/1268`, `1405`, `341 runAnalyzeTradingView`,
+`713 resolvedAssignments`). Four facts the next session must not re-derive:
+
+1. **Two lint ERRORS appeared, both `prefer-const`, both created by my own deletes**:
+   `let promptLane` (`:1082`) and `let capturedGateResult` (`:1396`) lost their only
+   reassignment. They are dead declarations — delete the lines, don't convert them to
+   `const`. One `no-useless-assignment` disable comment sits above `promptLane` and
+   goes with it. Repo-wide the pass measured **847 problems (2 errors, 845 warnings)**
+   against a 818/0 baseline: warnings ROSE because deleting suppressed code turns the
+   `eslint-disable` directives above it into "Unused eslint-disable directive"
+   warnings. Expect that signature; it is not a regression in code quality.
+2. **The Gate Keeper scan is still live and still costs a network call per send.**
+   `if (finalSymbol && runEnsembleEnabled) { … }` (`:1397`) writes
+   `gateInjection`/`capturedGateResult`, and the cut made `capturedGateResult`
+   unread. Deleting that block is the single highest-value remaining removal — it is
+   latency and quota spent on a verdict nobody receives.
+3. **`beginPromptLane` now has zero callers** (`PromptOverrideService.ts:24`), while
+   the `finally` still calls `endPromptLane()` (`:1805`), which only resets a module
+   flag to `false`. The prompt A/B / pinned-lane feature is therefore **starved, not
+   deleted** — the exact defect class the peer review's #1 flagged for `postMortem`.
+   This is an owner decision, not a mechanical one: either begin the lane in the
+   surviving tool-turn path (so the pin/AB still steers prompts) or delete the
+   override lane deliberately. Do not let a revert silently keep it broken.
+4. Reverted again for the same reason as attempt two: **the remaining budget could not
+   finish the pins + the multi-line pass + the full gate chain**, and a half-deleted
+   send path is worse than a green tree with a written plan. Resume from
+   `%TEMP%\pipe-19d-singledrop.ts` (excision + import trim + single-line dead pass
+   applied) rather than re-running the scripts.
+
 ## #33 — the confidence WORD now follows the number
 
 `downgradeConfidenceForProbability` walked ONE step, so a verdict whose
