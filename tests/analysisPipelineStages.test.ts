@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { buildModelsUsedRecord } from '../hooks/analysisPipeline/modelsUsed';
 import { minePatternFromPrompt, assemblePipelineMemoryContext } from '../hooks/analysisPipeline/memoryContext';
 import { initMemoryFiles } from '../services/learning/MemoryFilesService';
 import { serializeSkill, titleFromMeta } from '../services/learning/SkillMemoryService';
@@ -9,27 +8,8 @@ import type { LoggedTrade } from '../types';
 
 // Pipeline stage modules extracted out of useAnalysisPipeline — pure units
 // that are now testable without mounting the 3k-line send hook.
-
-describe('buildModelsUsedRecord', () => {
-    it('falls back to thoughtsKey when two lens roles share one provider', () => {
-        const rec = buildModelsUsedRecord([
-            { config: { id: 'p1' }, model: 'm-a', thoughtsKey: 'p1:m-a' },
-            { config: { id: 'p1' }, model: 'm-b', thoughtsKey: 'p1:m-b' },
-            { config: { id: 'p2' }, model: 'm-c', thoughtsKey: 'p2:m-c' },
-        ]);
-        // The provider key names BOTH models. It used to keep only the first, so
-        // every read that goes by provider dropped the second seat's trades.
-        expect(rec).toEqual({ p1: 'm-a, m-b', 'p1:m-b': 'm-b', p2: 'm-c' });
-    });
-
-    it('does not invent a second key when two roles ran the same model', () => {
-        const rec = buildModelsUsedRecord([
-            { config: { id: 'p1' }, model: 'm-a', thoughtsKey: 'p1:m-a' },
-            { config: { id: 'p1' }, model: 'm-a', thoughtsKey: 'p1:m-a-2' },
-        ]);
-        expect(rec).toEqual({ p1: 'm-a' });
-    });
-});
+// buildModelsUsedRecord's unit tests went with it: the record it built keyed one
+// model per SEAT, and a send now answers from exactly one model.
 
 describe('minePatternFromPrompt', () => {
     it('maps keyword families at send time', () => {

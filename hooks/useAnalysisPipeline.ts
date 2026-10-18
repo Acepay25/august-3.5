@@ -14,7 +14,6 @@ import { WireAuditEntry, type ReasoningEffort } from '../services/providers/reas
 import { defaultToolsForRole } from '../types/bot';
 import { getActiveUsername } from '../utils/activeUser';
 import { getBots, getGroups, AgentTeamSeat } from '../services/agents/agentRoster';
-import { TEAM_MAX_SEATS } from '../utils/teamRoster';
 
 // Analysis / validation / backtesting services
 import { tryFetchHybridDataFromPromptWithCalibration, generateHybridPromptInjection, HybridDataPacket } from '../services/analysis/HybridIntelligenceService';
@@ -32,7 +31,6 @@ import { splitThinkingFromOutput } from '../utils/thinkingSplit';
 import { chatModelIdOf, isProviderReady, resolveChatModelSelection } from '../utils/providerUtils';
 import { buildDecisionReflectionContext } from '../services/learning/DecisionReflectionService';
 import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
-import { buildModelsUsedRecord } from './analysisPipeline/modelsUsed';
 import { assemblePipelineMemoryContext } from './analysisPipeline/memoryContext';
 import { useStreamThrottlers } from './analysisPipeline/streamThrottlers';
 import { isNotebookQuickSaveRequest, runNotebookQuickSave } from './analysisPipeline/notebookQuickSave';
@@ -65,7 +63,7 @@ import { generateWeightedVotingContext } from '../services/backtesting/ModelPerf
 import { threadForProvider } from '../utils/agentThreads';
 import { formatInvokedSkillSection, resolveInvokedSkills } from '../services/learning/SkillMemoryService';
 import { recordRegimeDay, marketRegimeToLedger } from '../services/learning/regimeLedger';
-import { ANALYST_ROLE_DEFINITIONS, EnsembleModelSelection } from '../services/ui/AnalystLensService';
+import { EnsembleModelSelection } from '../services/ui/AnalystLensService';
 import { buildHybridEnvelope } from '../utils/debateEnvelopes';
 import { buildRunContractStages } from '../utils/runContract';
 import { extractDebateTemplate, DebateTemplate } from '../utils/debateTemplates';
@@ -628,7 +626,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // Build the analyst list (model-level entries). Extracted to a pure
         // helper so the N-1 failure path is unit-testable; stale lens-assignment
         // model ids are resolved against each provider's current model list.
-        const { analysts: enabledProviders, missingAnalystRoles, hasCompleteAnalystAssignments, } = buildEnsembleAnalysts(
+        const { analysts: enabledProviders } = buildEnsembleAnalysts(
             providerConfigs,
             runLensConfig,
             runEnsembleSelection,
@@ -720,15 +718,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             return { ok: false };
         }
 
-        // Moderator pre-flight: the debate cannot function without its
-        // moderator — they chair the rounds and produce the binding verdict.
-        // A missing/broken moderator pick used to fall through to a 'none'
-        // placeholder config and the run died mid-debate with a raw provider
-        // error AFTER the analysts had already burned their requests. Refuse
-        // before anything starts instead.
-        if (runEnsembleEnabled && !isProviderReady(runModeratorConfig)) {
+        // Moderator pre-flight belongs to the one path that still reads that
+        // pick: a scheduled run takes its answering seat from it (`automationSeatFor`
+        // below). A human send answers from the composer's own selection — one
+        // model, :1368 — so refusing a click over an unused moderator config is a
+        // block with nothing behind it. The check stays where the config is read.
+        if (isAutomationRun && !isProviderReady(runModeratorConfig)) {
             appendBlockedRunNotice(
-                'The debate cannot start: no moderator model is available. Pick a moderator (Team picker or Settings → AI Models), make sure it is enabled and has an API key, then send this again.'
+                'This schedule has no model to answer with: pick a moderator model (Settings → AI Models), make sure it is enabled and has an API key, then run this again.'
             );
             return { ok: false };
         }
@@ -750,51 +747,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // in-chat) — this was never an analysis run; consume it.
             return { ok: true };
         }
-        if (runEnsembleEnabled && !isAutomationRun) {
-            // Role-assignment requirements only apply when Lenses are ON —
-            // with Lenses off, the ordinary "Debate Models" picker (or the
-            // per-provider ensemble models) determines the participants.
-            // (Automation runs build complete assignments by construction.)
-            if (runLensConfig.enabled) {
-                if (missingAnalystRoles.length > 0) {
-                    appendBlockedRunNotice(
-                        `Your analyst team is incomplete. Assign ${missingAnalystRoles.map(role => ANALYST_ROLE_DEFINITIONS[role].shortName).join(', ')} in the Team menu, then send again.`
-                    );
-                    return { ok: false };
-                }
-                if (!hasCompleteAnalystAssignments) {
-                    appendBlockedRunNotice(
-                        'Analysts must use different models. Each lens role needs its own model (the same provider is allowed) — reassign the duplicates in the Team menu, then send again.'
-                    );
-                    return { ok: false };
-                }
-            } else if (enabledProviders.length > 1) {
-                // Normal mode (Lenses OFF): the same provider+model may not
-                // occupy two seats — identical prompts through an identical
-                // model produce identical output (the "three AIs say the same
-                // thing" symptom). Block it up front.
-                const seatIdentities = enabledProviders.map(p => `${p.config.id}::${p.model}`);
-                if (new Set(seatIdentities).size !== seatIdentities.length) {
-                    appendBlockedRunNotice(
-                        'Two debate seats share a model. Identical prompts through an identical model return identical output — pick a different model per seat in the Team menu, then send again.'
-                    );
-                    return { ok: false };
-                }
-            }
-        }
-
-        // Seat ceiling (TEAM_MAX_SEATS, kept from the Team era — now it
-        // caps the GROUP debate room). Teams of 4+ are the supported
-        // pod-tier configuration (debatePods), so the old hard-3
-        // Standard-mode cap was stale — it blocked exactly the room sizes
-        // the roster builder seats. The ceiling still guards a runaway
-        // enabled-provider list from fanning out N× calls.
-        if (!isAutomationRun && !runAccuracyMode && enabledProviders.length > TEAM_MAX_SEATS) {
-            appendBlockedRunNotice(
-                `Too many providers for a Standard-mode debate. A maximum of ${TEAM_MAX_SEATS} AI providers can join — disable at least one in Settings → AI Models, then send again.`
-            );
-            return { ok: false };
-        }
+        // The seat-completeness refusals are gone with the debate. Only ONE
+        // model answers a send (`provider`, below), so "your analyst team is
+        // incomplete", "analysts must use different models" and "two debate
+        // seats share a model" all blocked a run over a roster the run never
+        // uses — identical prompts through identical models cannot happen here,
+        // because there is only one prompt and one model. The TEAM_MAX_SEATS
+        // ceiling went for the same reason: it existed to stop N× fan-out, and
+        // nothing fans out since the engine was deleted.
 
         // Live-backtest summary (block-scoped result is captured here so the
         // final message update below can persist it on runStats).
