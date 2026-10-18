@@ -9,21 +9,26 @@ memory, closed-trade skill crafting) stops working with no replacement.
 
 ## Done (each: tsc + full vitest + lint + render-probe green)
 
-- `e2b3965` post-mortem deleted: `usePostMortem`, `MistakePatternService`,
+- `03fc0d5` post-mortem deleted: `usePostMortem`, `MistakePatternService`,
   `JobQueueService`, `postMortemReport/Lessons`, ~1,450 lines in survivors.
   Both lesson stores (`aiPatternMemory`, `insightKnowledgeBase`) are now
   **frozen**; `LoggedTrade.postMortem` still reads through SQLite but has no
   writer, so `DecisionReflectionService`, `DoctrineConsolidationService`,
   `EvidencePackService`, `MemoryFilesService` and
   `PatternMemorySynthesisService` see only what a profile already carries.
-- `96af726` the 2D debate floor: DeskScene, PixelSeat, SpeechBubble,
+  **The route was starved, not deleted** — 25 read accesses across 17 files
+  remain outside the tests, and `craftSkillFromPostMortem`
+  (`SkillCraftService.ts:140`) is still called from `botLearning.ts:234`; its
+  guard `if (pm.length < 40) return null` (`:144`) is what makes it answer null
+  for every trade closed after this date. Clearing the readers is stage 21.
+- `854bd58` the 2D debate floor: DeskScene, PixelSeat, SpeechBubble,
   VerdictCard, DeskSteerInput, floorLayout, roomLayout, roleOverrides,
   DeskSeatMappingEditor, debateStageActors + 21 test files.
-- `2095864` debate-derived history: BotSeatOverridesDialog, the Journal's Saved
+- `591f735` debate-derived history: BotSeatOverridesDialog, the Journal's Saved
   tab + SavedAnalyses, the dissent tally, the Conviction-auction card, the
   Reasoning panel's transcript block, `LiveStreamView`, AnalysisProgress's
   post-mortem props.
-- `d90095b` Settings: the `lenses` (Roles) tab, `AnalystLensSettings`,
+- `cf1c6e6` Settings: the `lenses` (Roles) tab, `AnalystLensSettings`,
   `LensesTab`, the "Team analysis" switch.
 
 ## Stage 20 — APPROVED 2026-10-18 with six changes; task ids 22–32
@@ -193,6 +198,40 @@ reading is expensive to undo.
 4. **Stage 21** types (`DebateTurn`, `postMortem*`, the `savedAnalyses` store +
    SQLite table + backup plumbing), remaining gates, docs.
 
+## Landed since the approval (2026-10-18, later in the same day)
+
+- **20a (#22)** — `services/trade/toolTurn.ts` is the sink-based turn executor
+  (`runToolTurn`), and `runSeatTurn` now only owns its row. The strip/settle/
+  echo/repaint behaviours moved with it; `tests/toolTurn.test.ts` pins them and
+  `tests/stage3NoiseFixes.test.ts` was retargeted at the executor (with a new
+  assertion that the dock keeps no second copy of the strip).
+- **20a2 (#23)** — already pushed as `f89b754`.
+- **20g (#24)** — the loop already had max rounds (8), the turn budget
+  (`DESK_TURN_BUDGET_MS`) and repeat/STALL detection. Added: `DESK_TOOL_TIMEOUT_MS`
+  + `withinToolDeadline(call, work, signal, timeoutMs?)` in
+  `services/analysis/DeskToolsService.ts`, applied to the built-in batch AND the
+  forged-tool path, so a hung lookup returns a `DATA_UNAVAILABLE:` receipt
+  instead of holding the round, and a Stop answers the pending call immediately.
+  Both exits keep the assistant/tool pairing (nothing throws past the batch —
+  the loop's round-top abort check still ends the turn). Fallback defined for
+  tools-off: `runToolTurn` notices when the seat emitted protocol markup while
+  `deskToolsEnabled` is off, so an answer that looked up nothing cannot read as
+  an answer that looked something up. Tests: `tests/deskToolDeadline.test.ts`.
+- **The coin a chat picks is now the coin the chart draws (#34)** — measured,
+  not guessed: render-probe had been failing this check deterministically at
+  `f89b754` (three clean runs). The picker's write landed and its own label
+  followed, but the chart read a different row. Three places resolved "the
+  active session" three ways: `AgentsView` rendered `active ?? sessions[0]`
+  while writing `getActiveId()`; `TradeView` read `sessions.find(activeId)`
+  with no fallback and only inside an effect; and `bindConversation` — which
+  App calls when the trader switches homes — minted a session with NO symbol,
+  so the chart opened on its default. Now `chatStore.getActiveSession()` is the
+  one rule for read, write and adoption, `TradeView` seeds its first frame from
+  it, and a minted bind inherits `symbol`/`interval`. Pinned by
+  `tests/chartFollowsChatSession.test.tsx` (6). render-probe's check now also
+  waits for convergence and prints the first paint, so a chart that merely
+  lags is distinguishable from one that never follows.
+
 ## Deviations from the approved manifest (say so before repeating them)
 
 - **WatchListPanel kept.** "Watch becomes a chat tool only" named the list, but
@@ -213,9 +252,9 @@ reading is expensive to undo.
 
 ## Corrected claims
 
-- Commit `2095864`'s message reported "488 files / 4915 tests"; the measured
+- Commit `591f735`'s message reported "488 files / 4915 tests"; the measured
   tree was 489 files / 4850 tests. Figures were written from memory instead of
-  the log's summary line — corrected in `d90095b`.
+  the log's summary line — corrected in `cf1c6e6`.
 
 ## Running the gates on this box
 

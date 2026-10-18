@@ -9,7 +9,7 @@ Dotted nodes exist in the code but are **never mounted** by the running app.
 Companion docs: [learning-loop-map.md](learning-loop-map.md) covers section D in more
 depth, [ui-doctrine.md](ui-doctrine.md) governs the shell in sections A and B.
 Sections B, C and D move again in stages 19–20 of the debate deletion — see
-[debate-deletion-status.md](debate-deletion-status.md).
+[docs/plans/debate-deletion-status.md](plans/debate-deletion-status.md).
 
 ---
 
@@ -47,12 +47,12 @@ Stored surface values `'chat'`, `'boards'`, `'skills'` all migrate to `'trade'`
 ```mermaid
 flowchart TD
     subgraph CHAT["Chat surface (agents)"]
-        CB["composer textarea — AgentsView.tsx:504 ref, Enter :1361"] --> D1{"send() :660 branches on what is SELECTED, branch :698"}
+        CB["composer textarea — AgentsView.tsx:504 ref, Enter :1362"] --> D1{"send() :660 branches on what is SELECTED, branch :698"}
         D1 -->|a bot is selected| BOT["onSendBotTurn :698 → App:2602 → useBotMailbox → runBotTurn"]
         D1 -->|no bot| AN["onAnalyze(prompt, images) :688 → App:1700 handleRunAnalysisFromChat"]
     end
     subgraph DOCK["Chart AI dock — inside Trade, TradeView.tsx:1103"]
-        DC["ChatComposer.tsx:160 :218"] --> D2{"chatTurnRunner.send :833 — branches on seats"}
+        DC["ChatComposer.tsx:146 :218"] --> D2{"chatTurnRunner.send :833 — branches on seats"}
         D2 -->|solo| SO["runSeatTurn called :978 → streamChatWithDeskTools :641"]
         D2 -->|panel, 2+ seats| PN["per-seat :1127 + createDebateMailbox :1055 + planPanelTurn :1067"]
         D2 -->|Full analysis button| FA["runFullAnalysis :1189 → the SAME App:1700 wrapper — it holds the session run slot and writes no row"]
@@ -106,9 +106,10 @@ the debate removal, and re-measuring 8 anchors to document a week's life is not
 worth it. The structure above is what to replace it with.
 
 **The node that used to hang off stage 8 is gone.** `usePostMortem.ts` and
-`GenericAnalysisService.conductPostMortem` were deleted (2026-10-18, `e2b3965`);
+`GenericAnalysisService.conductPostMortem` were deleted (2026-10-18, `03fc0d5`);
 nothing re-runs an analysis after a trade closes. That is the arrow section D used
-to close on.
+to close on — and deleting the writer is not the same as deleting the route, which
+section D states exactly.
 
 ---
 
@@ -130,11 +131,22 @@ flowchart TD
 
 **What changed here:** the entry node used to be `closed trade / post-mortem →
 craftSkillFromPostMortem`. The post-mortem was the only writer of
-`LoggedTrade.postMortem`, and every detector downstream of it was a keyword scan of
-that field, so the closed-trade route into skill drafting was deleted with it — by
-the owner's explicit choice, with no replacement. The chain from `draftGates` to the
-injected skill is unchanged and still runs; it now starts at the review passes and
-at the chat's `propose_skill` tool, not at a settled position.
+`LoggedTrade.postMortem`, so deleting it **starved that route rather than deleting
+it** — the distinction matters because the code still looks alive. Nothing writes
+the field any more, but `craftSkillFromPostMortem`
+([services/learning/SkillCraftService.ts:140](../services/learning/SkillCraftService.ts))
+is still called from `botLearning.ts:234`, and its first guard is
+`if (pm.length < 40) return null` on `trade.postMortem` (`:144`). So for every trade
+closed after 2026-10-18 the craft leg can only return null; it still answers for a
+row that carries a post-mortem from before then. `selfImprovement.ts:73-74`,
+`SkillMemoryService` and `DoctrineConsolidationService` read the same dead field —
+25 read accesses across 17 files outside the tests and the SQLite row mapping
+(measured 2026-10-18). Deleting the writer was the owner's
+explicit choice, with no replacement; clearing the readers is stage 21.
+
+The chain from `draftGates` to the injected skill is unchanged and still runs; it
+now starts at the review passes and at the chat's `propose_skill` tool, not at a
+settled position.
 
 Corollary that is easy to miss: `GlobalMemory.aiPatternMemory` and
 `insightKnowledgeBase` are **frozen stores** (see G), and
@@ -200,19 +212,19 @@ flowchart TD
 ```
 
 Both lesson stores are **frozen**: readers and the injected index stay, so a profile
-keeps what it already carries, but nothing grows them (`e2b3965`).
+keeps what it already carries, but nothing grows them (`03fc0d5`).
 
 | What | Key |
 |---|---|
 | dock sessions · active id · tool payloads | `trade_chat_sessions_v1_` · `trade_chat_active_v1_` · `trade_tool_payloads_v1_` |
 | notebook · queue · drafts · rules | `memory_files_v1_` · `learning_proposals_v1:` · `skill_drafts_v1:` · `approval_rules_v1:` |
 | roster · automations · providers | `agents_bots_v1` · `automations_v1_` · `provider_configs_v1` (keys `enc:v1:` via safeStorage) |
-| screenshots · reasoning traces | IDB store `images` (`messageImageStore.ts`) · own db (`ThinkingStoreService.ts`) |
+| screenshots · reasoning traces | IDB store `images` (`services/infrastructure/messageImageStore.ts`) · own db (`services/infrastructure/ThinkingStoreService.ts`) |
 | reduce-motion preference | `desk_idle_motion_v1_&lt;user&gt;` — the desk floor is deleted, the key is not, renaming it silently resets every profile |
 
 `savedAnalyses` still travels through profile persistence, SQLite and backups, but
 **has no writer** — the Journal's Saved tab and `SavedAnalyses.tsx` were deleted
-(`2095864`), and clearing the store itself is stage 21.
+(`591f735`), and clearing the store itself is stage 21.
 
 ---
 
@@ -234,7 +246,7 @@ keeps what it already carries, but nothing grows them (`e2b3965`).
 | 12 | bot branch → useBotMailbox | `runUserBotTurn` → `runBotTurn` |
 | 13 | AgentsView.send → analysis branch | `onAnalyze` `:688` → App `:1700` — the dock's `onRunAnalysis` reaches the SAME wrapper |
 | 14 | dock Full analysis → the run slot | `runFullAnalysis :1189` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
-| 15 | ChatComposer → chatTurnRunner.send | Enter `:160` / button `:218` → `:833` |
+| 15 | ChatComposer → chatTurnRunner.send | Enter `:146` / button `:218` → `:833` |
 | 16 | solo → runSeatTurn | `:978` (definition `:604`) |
 | 17 | runSeatTurn → streamChatWithDeskTools | `:641` → `DeskToolsService` → `streamChatRequest` |
 | 18 | panel → per-seat + mailbox | `:1127` · `:1055` · `:1067` |
@@ -249,7 +261,7 @@ keeps what it already carries, but nothing grows them (`e2b3965`).
 | 27 | automation tick → runAutomation | fork on `config.botId`; no-bot path reuses 21 with `automation` → private list `:464-467 :614-617` |
 | 28 | bot routine → injected stream | `botRoutine.ts` ← `useAutomations` (reuses 22) |
 | 29 | rooms → groupRounds | `useAgentGroups` → `streamQuickResponse` |
-| 30 | review passes / propose_skill → draft → approval → skill | `draftGates.ts` → `skillApproval` — the post-mortem route is deleted |
+| 30 | review passes / propose_skill → draft → approval → skill | `draftGates.ts` → `skillApproval` — the post-mortem leg is starved, not deleted (see D) |
 | 31 | approved skill → next prompt | `resolveInvokedSkills` — closes into 24's stage 3 |
 | 32 | logged trade → memory + autopilot | `useTradeLogging` → `MemoryService`; `proposedTrade` leaves outcome PENDING so the autopilot watches it |
 | 33 | App messages + dock entries → one thread | `chatSessions.ts:525` |
