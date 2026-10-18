@@ -1061,3 +1061,28 @@ user-visible blocks shipped with no pin on them.
 No suite pinned the removed blocks; tsc clean, full vitest 477 files / 4711 tests
 green (the 2 fewer are the deleted buildModelsUsedRecord units), and render-probe
 OK with zero pageerrors after the cut.
+
+## Stage 21, first pass: the dead debate-era message fields are gone
+
+Censused across EVERY production directory before touching anything — the first
+census (hooks/services/components/App only) wrongly reported
+`replacementOffer` as unread, and `utils/approvalInbox.ts:76` does read it. That
+near-miss is why the field set below was re-measured, not assumed.
+
+Deleted from `types/message.ts`: `ensembleProgress`, `debateRunLog`,
+`debateCheckpoint`, `provisionalAnalysis`, `provisionalPlanFields`, plus the
+`EnsembleProgress` / `EnsembleAnalystProgress` / `EnsembleAnalystProgressStatus` /
+`DebateCheckpoint` types, the two provisional clears in `runOutcome`, the now
+nonexistent key in `SqliteService`'s persist strip, and
+`tests/ensembleProgress.test.ts` (its three units exercised a local helper over a
+type that no longer exists).
+
+KEPT, because a reader survives: `debateTurns` (journal carry + watchList + the
+monthly report's transcript recompute), `activeDebateSpeakers` and `isDebating`
+(legacy-row normalization in `useUserProfileLoader` + `AgentsView`'s streaming
+test), `liveToolEvents`, `replacementOffer`, `modelsUsed`, `runContract`,
+`DebateRunEvent` (still the element type of `debateRunLogRef`).
+
+Gates: tsc clean; full vitest 476 files / 4708 tests green (the 3 gone tests are
+the deleted suite); render-probe re-run for this change because the persistence
+strip is inside the export/import path the probe exercises.

@@ -45,10 +45,6 @@ export const mapRunFailureMessages = (prev: Message[], ctx: {
         activeDebateSpeakers: {},
         liveToolEvents: undefined,
         replacementOffer: undefined,
-        // An interrupted verdict may be incomplete — never leave a
-        // provisional card standing in for a final one.
-        provisionalAnalysis: undefined,
-        provisionalPlanFields: undefined,
         text: ctx.cancelled ? 'The analysis was cancelled.' : 'The debate was interrupted by an error before the moderator could issue a final verdict.',
     };
 }).filter((m): m is Message => m !== null);
