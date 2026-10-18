@@ -37,6 +37,7 @@ import { CHAT_SURFACE_TOOLS, MAX_LIVE_TOOL_LINES, chatSurfaceTurnMessages, surfa
 import type { TradeProposal } from './proposedTrade';
 import { isProviderReady } from '../../utils/providerUtils';
 import { loadAutomationPlanCount, recordAutomationPlan, MAX_PLANS_PER_DAY } from '../automation/AutomationService';
+import { recordToolTurnUsage } from '../../utils/sessionUsage';
 
 /** The desk tools a SCHEDULED run may call: the Chat surface's set minus the
  *  half of it that edits the trader's notebook. `write_memory_note`, `remember`,
@@ -253,6 +254,15 @@ export const runAutomationTurn = async (req: AutomationTurnRequest): Promise<Aut
         effort,
         transport,
         events,
+    });
+    recordToolTurnUsage({
+        startedAt: req.startedAt,
+        workedMs: out.workedMs,
+        modelId: req.config.selectedModel,
+        usage: out.usage,
+        usageCalls: out.usageCalls,
+        answer: out.text,
+        coin: proposal?.symbol ?? undefined,
     });
 
     const notices: string[] = [];

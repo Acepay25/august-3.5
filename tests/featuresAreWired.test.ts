@@ -178,6 +178,7 @@ const CAPABILITIES: Array<{ name: string; definedIn: string; why: string }> = [
     { name: 'readToolArtifact', definedIn: 'services/analysis/toolArtifactStore.ts', why: 'the read-back tool must be reachable from a tool call' },
     { name: 'clearToolArtifacts', definedIn: 'services/analysis/toolArtifactStore.ts', why: 'otherwise spilled bytes outlive the run' },
     { name: 'getStorageInfo', definedIn: 'services/infrastructure/dbService.ts', why: 'the journal’s eviction risk has to be visible somewhere' },
+    { name: 'recordToolTurnUsage', definedIn: 'utils/sessionUsage.ts', why: 'the tool turn must land the ledger, not a dead finalizer' },
     { name: 'withDetectedTradeType', definedIn: 'services/analysis/ScalpDetectionService.ts', why: 'the journal scalp/swing filter needs a producer' },
     { name: 'importBackupFromText', definedIn: 'services/infrastructure/BackupService.ts', why: 'an exported journal file must be restorable' },
     { name: 'convertToLineData', definedIn: 'services/analysis/AITrendlineService.ts', why: 'the AI’s trendline endpoints reach the screen through it' },

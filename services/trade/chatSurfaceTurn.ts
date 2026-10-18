@@ -44,6 +44,7 @@ import { runPresentTrade } from './presentTradeTool';
 import { userContentWithImage } from './chatTurnRunner';
 import { saveToolPayload } from './toolPayloadStore';
 import { appendToolActions } from '../../utils/toolActions';
+import { recordToolTurnUsage } from '../../utils/sessionUsage';
 
 /** The desk tools a Chat-surface seat may call. Everything here answers from
  *  the exchange, the journal, the notebook or the web — none of it needs the
@@ -326,6 +327,14 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
         effort: resolveComposerEffort(req.effort),
         transport,
         events: tracked,
+    });
+    recordToolTurnUsage({
+        startedAt: req.startedAt,
+        workedMs: out.workedMs,
+        modelId: req.config.selectedModel,
+        usage: out.usage,
+        usageCalls: out.usageCalls,
+        answer: out.text,
     });
     if (req.requireTools && !sawTool && !out.interrupted) {
         // The honest notice, on the row it belongs to: an answer that looked up
