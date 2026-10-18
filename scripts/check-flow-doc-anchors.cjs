@@ -386,7 +386,7 @@ const problems = [...rep.missingFile, ...rep.outOfRange, ...rep.blank];
 // are "what the rule can see", not "what is broken" — do not cite them as a
 // defect count, and do not answer a doubt about a wrapped sentence by trusting
 // this ceiling: re-measure the anchor by hand.
-const COMMENT_CEILING = 34;
+const COMMENT_CEILING = 28;
 const SYMMISS_CEILING = 0;
 
 console.log(`flow docs: ${all.length} anchor references, ${unique.size} unique, across ${DOCS.join(' + ')}`);
