@@ -188,7 +188,7 @@ describe('who is speaking inside a user-role turn', () => {
     it('leaves the trader’s own steering as the unmarked, higher-authority case', () => {
         // The prompts tell a seat that USER STEERING is the human. That only
         // holds while the harness never uses the same label for itself.
-        const debate = readFileSync(join('services', 'providers', 'ensembleService.ts'), 'utf8');
+        const debate = readFileSync(join('constants', 'prompts', 'debatePrompts.ts'), 'utf8');
         expect(debate).toContain('**USER STEERING');
         expect(HARNESS_TURN_MARK).not.toMatch(/USER STEERING/);
     });

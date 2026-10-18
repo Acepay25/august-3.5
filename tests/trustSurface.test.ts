@@ -15,7 +15,6 @@ import {
     ledgerFramingLine,
     brierQuality,
 } from '../services/validation/CalibrationLedgerService';
-import { buildTicketSheet } from '../utils/analysisReport';
 import { LoggedTrade } from '../types/trade';
 import { TradeOutcome } from '../types/enums';
 import { TradeAnalysis } from '../types';
@@ -181,22 +180,5 @@ describe('buildCalibrationLedger', () => {
         expect(brierQuality(0.20)).toBe('fair');
         expect(brierQuality(0.40)).toBe('poor');
         expect(brierQuality(null)).toBe('none');
-    });
-});
-
-describe('buildTicketSheet copy pass', () => {
-    it('softens deterministic conditions and closes with the disclaimer', () => {
-        const analysis = {
-            coinName: 'BTC',
-            direction: 'Long',
-            confidence: 'High',
-            entryPoints: [{ price: '100000' }],
-            stopLoss: '97000',
-            takeProfit: [{ price: '110000' }],
-            invalidationCriteria: [{ level: '97000', condition: 'will invalidate the setup' }],
-        } as unknown as TradeAnalysis;
-        const sheet = buildTicketSheet(analysis);
-        expect(sheet).toContain('may invalidate the setup');
-        expect(sheet).toContain(FINANCIAL_ADVICE_DISCLAIMER);
     });
 });
