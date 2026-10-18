@@ -2,7 +2,13 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**222 anchors, 0 unattributed**); this pass took out accuracy mode with the calibration
+**243 unique anchors verified, 0 unattributed** — plus two quality ceilings, 68 citations
+that land on a comment line and 16 whose named symbol is not on the cited line, which
+count only what the rule can *see* and therefore under-report: both rules exempt a line
+carrying more than one citation, and a sentence that wraps puts its number out of reach of
+its symbol, so four copies of one wrong number were fixed by hand after the gate called it
+zero. A doubt about a wrapped citation gets re-measured, not waved at the ceiling);
+this pass took out accuracy mode with the calibration
 dashboards and the settings store that fed it (#17), the `savedAnalyses` store (#21), and
 `isDebating` / `activeDebateSpeakers` with the run-failure branch that read them. It follows
 the post-mortem, 2D desk floor, Saved-tab and Roles-tab deletions and
