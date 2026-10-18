@@ -249,24 +249,29 @@ describe('the route a scheduled run takes now', () => {
         expect(src).not.toMatch(/isAutomationRun \|\| isEnsembleEnabled/);
     });
 
-    it('the schedule has its OWN arm, and it is ordered BEFORE the mode fork', () => {
-        // Ordered, not merely present: if the arm sat inside the ensemble branch
-        // a schedule would answer differently depending on the trader's toggle,
-        // which is the two-behaviours-for-one-config bug 20f/20t both refuse.
+    it('a schedule is claimed by its own arm before any ensemble block can run', () => {
         const arm = src.indexOf('const out = await runAutomationTurn({');
-        const fork = src.indexOf('if (runEnsembleEnabled) {\n                const summaries = [');
+        const guard = src.indexOf('if (isAutomationRun) {');
+        const ensemble = src.indexOf('if (runEnsembleEnabled) {');
         expect(arm).toBeGreaterThan(-1);
-        expect(fork).toBeGreaterThan(-1);
-        expect(arm).toBeLessThan(fork);
+        expect(guard).toBeGreaterThan(-1);
+        // The arm RETURNS inside the guard, so what a schedule must never reach is
+        // an ensemble-gated block. Position is the proof: guard < arm, and the
+        // guard precedes every remaining `runEnsembleEnabled` block — the hybrid
+        // pull still runs for a human send with the toggle on, and stage 19's next
+        // tranche deletes those blocks outright.
+        expect(guard).toBeLessThan(arm);
+        expect(guard).toBeLessThan(ensemble);
         // The arm delivers the row AND the caveats through the scheduler's own
         // callback — the store and the toast must not be able to disagree.
         expect(src).toMatch(/onMessage\(\{\s*\n?\s*userMessage,\s*\n?\s*aiMessage,\s*\n?\s*\.\.\.\(out\.notices/);
     });
 
-    it('the ensemble branch is still the mode’s, and the keywords stay dead', () => {
-        // Stage 20c retired the wording gate; nothing here re-adds it. A re-add
-        // would give a schedule two different behaviours for two wordings.
-        expect(src).toMatch(/if \(runEnsembleEnabled\) \{\n\s+const summaries = \[/);
+    it('the debate is gone from the pipeline, and the keywords stay dead', () => {
+        // Stage 19 removed the branch that called the engine; nothing here may
+        // re-add a debate call or a wording gate. A re-add would give a schedule
+        // two different behaviours for two wordings.
+        expect(src).not.toMatch(/conductDebate\(|conductRealDebate\(/);
         expect(src).not.toMatch(/isChartAnalysisRequested/);
         expect(src).not.toMatch(/upperPrompt/);
         expect(src).not.toMatch(/Prompt\.includes\(/);
@@ -276,6 +281,9 @@ describe('the route a scheduled run takes now', () => {
         }
         // The debate's gate scan is still keyed on the MODE, not on the schedule:
         // a scheduled plan is capped by present_trade's own gate instead.
-        expect(src).toMatch(/if \(finalSymbol && runEnsembleEnabled\) \{/);
+        // Stage 20a2 put the gate where a plan is minted (`present_trade`). The
+        // pipeline scanning the tape for its own verdict is what stage 19 deleted,
+        // and a re-add would spend a network call per send on a result nothing reads.
+        expect(src).not.toMatch(/if \(finalSymbol && runEnsembleEnabled\) \{/);
     });
 });

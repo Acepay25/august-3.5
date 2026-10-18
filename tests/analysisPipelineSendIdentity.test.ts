@@ -79,8 +79,11 @@ describe('handleSendMessage — composer state is not a dependency', () => {
         // the stream had produced mid-run instead of the packet captured when
         // the trader pressed send. The local is the only safe shape here.
         expect(src).not.toMatch(/hybridAtSendRef/);
-        // And the snapshot is what actually reaches the pipeline.
-        expect(src).toMatch(/currentHybridData: hybridAtSend,/);
+        // Stage 19 deleted the branch this packet fed. The seat fetches the tape
+        // INSIDE the turn, so what must stay false is a pre-captured market packet
+        // threaded into a model call — and the path that answers is the tool turn.
+        expect(src).not.toMatch(/currentHybridData: hybridAtSend,/);
+        expect(src).toMatch(/toolTurn = await runChatSurfaceTurn\(\{/);
     });
 });
 
