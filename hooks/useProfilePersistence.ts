@@ -20,7 +20,6 @@ export interface ProfileSettingsState {
     isEntryNotHitCapturing: boolean;
     useAlgorithmicSummary: boolean;
     useAlgorithmicInsights: boolean;
-    confidenceCalibration: UserProfile['settings']['confidenceCalibration'];
 }
 
 export interface UseProfilePersistenceArgs extends ProfileSettingsState {
@@ -64,7 +63,7 @@ export interface UseProfilePersistenceResult {
  * multi-MB conversation payloads.
  */
 /** Shallow, key-wise compare of two settings snapshots. `customInstructions`
- *  and `confidenceCalibration` are objects, so they are compared by JSON —
+ *  is an object, so it is compared by JSON —
  *  settings are a few KB at most and this only runs on unload. */
 const settingsEqual = (a: Record<string, unknown> | null | undefined, b: Record<string, unknown> | null | undefined): boolean => {
     if (a === b) return true;
@@ -94,7 +93,6 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
         customInstructions,
         isHybridIntelligenceEnabled, isAutoCapturing,
         isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights,
-        confidenceCalibration,
     } = args;
 
     const lastSavedSnapshotRef = useRef<Partial<Omit<UserProfile, 'username'>> | null>(null);
@@ -110,7 +108,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
         tradeSummaries: tradeSummaries,
         finalTradeSummary: finalTradeSummary,
         globalMemory: globalMemory,
-        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel },
+        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, memoryProvider: memoryConfig?.id || '', memoryModel },
         lastActiveConversationId: activeConversationId || undefined,
         // AI Learning data
         insightKnowledgeBase: insightKnowledgeBase,
@@ -119,7 +117,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
         // clear silently destroyed them. Snapshotting them here populates the
         // users.learningRules column and BackupService payload.
         learningRules: storageService.loadLearningRules(),
-    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, insightKnowledgeBase, memoryConfig, memoryModel]);
+    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, insightKnowledgeBase, memoryConfig, memoryModel]);
 
     // ─── Split save into DATA (heavy) + SETTINGS (light) ───────────
     // Previously a single effect re-serialized ALL conversations (with base64
@@ -175,8 +173,8 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
     // The light payload, in one place so the SETTINGS effect and the unload
     // dirty-check can never drift on WHICH fields count as settings.
     const buildSettingsSnapshot = useCallback(() => ({
-        activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryProvider: memoryConfig?.id || '', memoryModel,
-    }), [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryConfig, memoryModel]);
+        activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, memoryProvider: memoryConfig?.id || '', memoryModel,
+    }), [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, memoryConfig, memoryModel]);
 
     // (2) SETTINGS save — light payload, runs on settings toggles. Uses a
     // longer debounce (2500ms) since settings changes are low-risk and we
@@ -208,7 +206,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
         return () => {
             clearTimeout(handler);
         };
-    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, confidenceCalibration, memoryConfig, memoryModel, activeUsername, setSaveStatus, toast]);
+    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, memoryConfig, memoryModel, activeUsername, setSaveStatus, toast]);
 
     // (3) SAVE HEARTBEAT — the 1500ms DATA debounce restarts on every message
     // change, so nothing is persisted for the ENTIRE duration of a run (the

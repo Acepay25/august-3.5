@@ -90,7 +90,6 @@ export interface UseTradeLoggingParams {
     // Toast:
     toast: { error: (title: string, msg?: string) => void; success: (title: string, msg?: string) => void };
     // Additional setters needed by handlers:
-    setConfidenceCalibration: (v: any) => void;
 }
 
 export const useTradeLogging = (params: UseTradeLoggingParams) => {
@@ -102,7 +101,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         setIsAutoCaptureBusy, setIsHybridLoading, setIsEntryNotHitCaptureBusy,
         setIsUpdateCaptureBusy, isEntryNotHitCapturing, isAutoCapturing, setIsInsightGenerating,
         setCurrentHybridData, handleSendMessage,
-        toast, setConfidenceCalibration,
+        toast,
     } = params;
 
     // ─── State ────────────────────────────────────────────────────────────
@@ -515,8 +514,6 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             } catch (e) {
                 console.warn('[Confluence] Failed to track outcome:', e);
             }
-            // Sync React state for UI
-            setConfidenceCalibration(GlobalLearningService.getCalibration());
         }
 
         // Trigger auto-learning from this trade outcome

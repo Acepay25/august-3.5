@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { CustomInstructionsMap, AnalystLensConfig, GlobalMemory, ConfidenceCalibration, InsightKnowledgeBase, AIProvider } from '../types';
+import { CustomInstructionsMap, AnalystLensConfig, GlobalMemory, InsightKnowledgeBase, AIProvider } from '../types';
 import { ProviderConfig } from '../types/provider';
 import { DEFAULT_FRAMEWORKS } from '../constants/models';
 import { loadLensConfig, loadEnsembleModelSelection, EnsembleModelSelection, loadCustomEnsemblePrompt, loadCustomLensPrompts } from '../services/ui/AnalystLensService';
@@ -43,7 +43,6 @@ export function useAppSettings() {
     const [customLensPrompts, setCustomLensPrompts] = useState<Record<string, string>>(() => loadCustomLensPrompts());
 
     // Confidence Calibration
-    const [confidenceCalibration, setConfidenceCalibration] = useState<ConfidenceCalibration | undefined>(undefined);
 
     // AI Learning - Knowledge base.
     // WRITE-ONLY BY CONSTRUCTION, and it is the SECOND copy of that name:
@@ -89,7 +88,6 @@ export function useAppSettings() {
         ensembleModelSelection, setEnsembleModelSelection,
         customEnsemblePrompt, setCustomEnsemblePrompt,
         customLensPrompts, setCustomLensPrompts,
-        confidenceCalibration, setConfidenceCalibration,
         insightKnowledgeBase, setInsightKnowledgeBase,
         activeFrameworks, setActiveFrameworks,
         summaryCharLimit, setSummaryCharLimit,

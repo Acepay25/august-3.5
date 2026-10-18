@@ -90,7 +90,6 @@ export interface UseUserProfileLoaderArgs {
     setIsEnsembleEnabled: React.Dispatch<React.SetStateAction<boolean>>;
     setIsAutoCapturing: React.Dispatch<React.SetStateAction<boolean>>;
     setIsEntryNotHitCapturing: React.Dispatch<React.SetStateAction<boolean>>;
-    setConfidenceCalibration: React.Dispatch<React.SetStateAction<any>>;
     setAutopilotResolutions: React.Dispatch<React.SetStateAction<Record<string, any>>>;
 
     setInput: React.Dispatch<React.SetStateAction<string>>;
@@ -131,7 +130,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setCustomInstructions,
         setIsHybridIntelligenceEnabled,
         setIsEnsembleEnabled, setIsAutoCapturing,
-        setIsEntryNotHitCapturing, setConfidenceCalibration, setAutopilotResolutions,
+        setIsEntryNotHitCapturing, setAutopilotResolutions,
         setInput, setImages,
         setIsLoading, setActiveUsername, setExistingUsernames, setIsUserModalOpen,
         toast, profileReadyRef,
@@ -205,7 +204,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setIsEnsembleEnabled(profile.settings?.isEnsembleEnabled ?? (ensembleModelCount > 1));
         setIsAutoCapturing(profile.settings?.isAutoCapturing ?? false);
         setIsEntryNotHitCapturing(profile.settings?.isEntryNotHitCapturing ?? false);
-        setConfidenceCalibration(profile.settings?.confidenceCalibration);
 
         const loadedMemoryConfig = providerConfigs.find(p => p.id === profile.settings?.memoryProvider) || null;
         setMemoryConfig(loadedMemoryConfig);
@@ -221,7 +219,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setCustomInstructions,
         setIsHybridIntelligenceEnabled, setIsEnsembleEnabled,
         setIsAutoCapturing, setIsEntryNotHitCapturing,
-        setConfidenceCalibration, setMemoryConfig, setMemoryModel, setInsightKnowledgeBase,
+ setMemoryConfig, setMemoryModel, setInsightKnowledgeBase,
     ]);
 
     const resetAppState = useCallback(async (usernameToSave?: string | null) => {

@@ -1284,7 +1284,7 @@ The file lists are recorded here so the next pass starts from evidence, not from
 
 **#19 — the ensemble branch, the hybrid pull, and the prompt A/B lane.**
 `runEnsembleEnabled` is not local to the hook: it is threaded from `App.tsx` through
-`hooks/useAnalysisPipeline.ts:279/:279/:557` and gates `:411` (a UI-muting early return), `:617`,
+`hooks/useAnalysisPipeline.ts:556/:279/:556` and gates `:411` (a UI-muting early return), `:617`,
 `:806` (the coin tip), `:874`, `:923`, `:956`, and appears in the `:1594` dependency array. The
 toggle itself is persisted (`hooks/useProfilePersistence.ts`, `hooks/useUserProfileLoader.ts`,
 `types/user.ts`, `services/learning/MemoryFilesService.ts`, `services/trade/automationTurn.ts`,
@@ -1380,7 +1380,7 @@ config change is needed to proceed.
 **#21 — `postMortem`, `savedAnalyses`, `Message.debateTurns`.** Measured the `savedAnalyses`
 surface before touching it, and it is not the quick trim the phrase "no writer" suggests: **54
 references across 17 files**. Only `setSavedAnalyses` is starved (called at
-`hooks/useUserProfileLoader.ts:173` to load and `:255` to clear), but the plumbing around it is
+`hooks/useUserProfileLoader.ts:172` to load and `:255` to clear), but the plumbing around it is
 alive and asserted: `services/infrastructure/SqliteService.ts:73/:465/:491/:686-710` reads and
 writes it as its own column, staging JSON and diffing against the previous profile;
 `utils/profileUtils.ts:11,32-33` validates the first element's shape on every profile read;
@@ -1419,7 +1419,7 @@ What the attempt measured, which is the value it leaves behind:
 - `services/providers/GenericAnalysisService.ts:361` is a three-way prompt chain;
   deleting the two mode branches means lifting the standard branch out of its
   `else` and dedenting it, which needs a brace-walking flattener, not a regex.
-- `hooks/useProfilePersistence.ts:185` and `hooks/useAnalysisPipeline.ts:1573` list
+- `hooks/useProfilePersistence.ts:185` and `hooks/useAnalysisPipeline.ts:1572` list
   the five fields inside one-line object literals and one very long dependency
   array, so whole-line filtering cannot reach them — they need token strips.
 - The one unsolved blocker is `components/settings/CustomInstructionsEditor.tsx:164`:
@@ -1565,16 +1565,17 @@ and the owner's "delete the dashboards too" ruling is about the second one.
 `components/dashboards/learning/CalibrationBar.tsx`, their mount at
 `components/dashboards/LearningDashboard.tsx:203`, and the
 `confidenceAccuracy` producer at `services/learning/SelfLearningService.ts:248`.
-Separately, `confidenceCalibration` in `App.tsx:282`, `App.tsx:803`,
-`App.tsx:1370` and `hooks/useAnalysisPipeline.ts:128` is plumbed through
-settings, persistence and the pipeline props; before deleting it, settle whether
-any pipeline behavior still reads it, because a plumbed field with no reader is
-a different deletion than a rendered one.
+Separately, the `confidenceCalibration` settings field is now deleted too. It
+was plumbed through `App.tsx`, the profile persistence and the pipeline's props
+and dependency array, but the pipeline never read it — a prop that is only ever
+listed in a dependency array is a writer with no reader. `GlobalLearningService
+.getCalibration()` itself stays: the pipeline, the lens service and the version
+history card all still call it directly.
 
 **#21 — three sub-items, measured, none started.** `debateTurns` is declared at
 `types/message.ts:189` and `types/trade.ts:110`, written at
 `hooks/useTradeLogging.ts:350` and `utils/watchList.ts:30`, and read by
-`hooks/analysisPipeline/runOutcome.ts:41`, `hooks/useAnalysisPipeline.ts:779`,
+`hooks/analysisPipeline/runOutcome.ts:41`, `hooks/useAnalysisPipeline.ts:778`,
 `hooks/useWatchAndAutopilot.ts:105`, `services/analysis/convictionDrift.ts:82`,
 `services/learning/monthlyReport.ts:220`, `utils/analysisUtils.ts:990` and the
 report's turn count at `utils/reportExport.ts:241`, plus a seeded fixture in
@@ -1627,3 +1628,16 @@ field and its persistence/loader plumbing — where the field is plumbed through
 `App.tsx` and `hooks/useAnalysisPipeline.ts` but has no renderer, so it needs a
 reader check before it can be called dead. And #19, and #21's three remaining
 sub-items.
+
+The settings copy of the calibration store is deleted with this: the field, its
+state, the loader read, the persistence snapshot entries and the pipeline prop.
+The pipeline only ever listed that prop in a dependency array, so removing it
+changed no behavior — which is the point of a writer with no reader.
+
+`tests/analysisPipelineSendIdentity.test.ts` then failed, and it is worth
+recording why: its header claimed the send callback's dependency array was
+"36 entries", while the committed mode deletion had already taken it to 31 and
+this one to 30. The floor (`toBeGreaterThan(30)`) was the only thing that
+noticed, and a number inside a comment is checked by nothing. The census in the
+header is now the measured 30 and the floor is 24, both with the reason written
+next to them, so the guard still fails loudly if the extraction ever breaks.

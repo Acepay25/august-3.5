@@ -160,7 +160,6 @@ const createMockArgs = (overrides: Partial<UseUserProfileLoaderArgs> = {}): UseU
     setIsEnsembleEnabled: vi.fn(),
     setIsAutoCapturing: vi.fn(),
     setIsEntryNotHitCapturing: vi.fn(),
-    setConfidenceCalibration: vi.fn(),
     setAutopilotResolutions: vi.fn(),
     setInput: vi.fn(),
     setImages: vi.fn(),
