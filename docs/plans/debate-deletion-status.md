@@ -386,6 +386,65 @@ seconds from filling" hazard, not a regression — but it is a hazard of the sam
 family as the header-timing bug fixed in the 20s entry, and the durable fix belongs
 in 20p, which is the probe-stage for exactly this: wait for the node, don't sleep.
 
+## Stage 19 — measured resume point (2026-10-18, attempted and reverted; tree is green)
+
+I cut the ensemble arm this session, measured the fallout, and **reverted it rather
+than leave a red tree**. Nothing of it is in `3d498db`. The facts below are the
+point: stage 19 is now a known-size job, not an unknown one.
+
+**The cut itself is mechanically easy.** `hooks/useAnalysisPipeline.ts`: the arm
+opens at `:1589` (`if (runEnsembleEnabled) {`), the casual arm's `} else {` is
+`:3254`, the wrapper closes at `:3420`. Deleting `1589–3254` + `:3420` and dedenting
+the 165 surviving body lines gave **`tsc --noEmit` clean** — because the arm only ever
+CONSUMED locals declared above it (`:683` flag, `:1022-1075` placeholder, refs), and
+`noUnusedLocals` is off. Dedenting is safe only under a template-literal check: a line
+of a multi-line template is TEXT, and shifting its indentation silently rewrites prompt
+bytes. The guard used was "no retained line may carry an odd number of unescaped
+backticks", and it passed clean, so a plain 4-space dedent was provable here.
+
+**The cleanup is the whole job.** After the cut, this one file reported **124 eslint
+problems — 1 error + 123 warnings** (baseline repo-wide is 818 warnings under a 889
+cap, so the file alone would have blown the ratchet even ignoring the error):
+
+- The error is the class of bug the cut creates: `stopTokenUsage` at `:665` is
+  `let`-declared and only ever assigned INSIDE the deleted arm, so it is provably
+  `undefined` forever (`no-unassigned-vars`). The catch block still passes
+  `ensemblePlaceholder` to `mapRunFailureMessages` (committed position `:3446`), which
+  is the same species and must be unwired from `hooks/analysisPipeline/runOutcome.ts`.
+- 70 names were "defined but never used"; they sat inside 35 import statements, which
+  the trimmer touched — 26 dropped whole, 9 rewritten to shed one specifier. That pass
+  took the file 124 → **57 problems**.
+- The remaining 56 are dead LOCALS and the blocks that compute them — the pre-flight
+  work the arm consumed: analyst building, lens role assignment and duplicate-seat
+  validation, moderator pre-flight, `TEAM_MAX_SEATS`, the Gate Keeper scan, the
+  resume-target block. These need judgment, not a script, because an initializer can
+  have side effects (`recordPreflightResult`, token-usage subscription, thinking
+  records) and some of those effects are what the SURVIVING surfaces read.
+
+**Two tool bugs found, both of the "green means nothing" family.** My import trimmer
+first reported `unusedReported: 0` and wrote nothing — it looked like a clean run.
+Cause 1: eslint's message text ends with a period (`'X' is defined but never used.`)
+and my regex anchored without it. Cause 2: I handed node `/tmp/eslint-19.json`, which
+for bash is `AppData\Local\Temp` but for node on Windows is `C:\tmp` — and a stale file
+existed there, so it parsed real JSON about a DIFFERENT run. A scanner that reads the
+wrong file is indistinguishable from a clean scan unless the script asserts a non-zero
+population; it does now (`ABORT: no unused names parsed`).
+
+**Unfinished, in order:** (1) finish this file's dead-local pass and get it back under
+the lint cap with 0 errors; (2) delete the now-orphaned engine and its own tests —
+`ensembleService` / `ensembleConsensus` / `debateScience` / `debatePods` /
+`EnsembleAnalystService` / `AnalystLensService` / `verdictFinalizer` / `autoplayParser`
+/ `debateResume` / `streamThrottlers` / `runOutcome` / `utils/debate*` / debate prompts,
+plus ~26 ensemble-only test files and FOUR incidental ones that must be edited, not
+deleted (`verdictFinalizer.test.ts`, `harnessFeatures.test.ts`,
+`automationRouteCharacterization.test.tsx` — its `runEnsembleEnabled` source pins — and
+`lensPipelineValidation.test.ts`); (3) the settings surface and the five Preference keys
+(`ENSEMBLE_MODEL_SELECTION`, `LAST_MODERATOR_PICK`, `CUSTOM_ENSEMBLE_PROMPT`,
+`CUSTOM_LENS_PROMPTS`, `ANALYST_LENS_CONFIG`) and the `isEnsembleEnabled` flag itself,
+`scripts/installer-smoke.cjs:289` and `scripts/render-probe.cjs`'s `lens` chunk; (4) the
+debate-only `Message` fields. Item counts in (2) came from a research agent and are
+**not yet verified by me line-by-line** — check each before deleting.
+
 ## #33 — the confidence WORD now follows the number
 
 `downgradeConfidenceForProbability` walked ONE step, so a verdict whose
