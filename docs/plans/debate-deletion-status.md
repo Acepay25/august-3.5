@@ -1918,10 +1918,11 @@ Each review finding was re-opened in the CURRENT files rather than assumed close
 |---|---|---|
 | 1 | Section D hid that the post-mortem route was **starved**, not deleted | closed — the doc now says so at `docs/app-flow.md` §D, and the guard it quotes is real: `if (pm.length < 40) return null` is `services/learning/SkillCraftService.ts:145` |
 | 2 | dangling hashes `e2b3965` / `2095864` | closed — neither string appears in either flow doc any more; the only hashes cited are `03fc0d5` and `591f735`, and `git merge-base --is-ancestor` says both are ancestors of HEAD |
-| 3 | stale anchors | closed by the gate, not by hand: 248 anchors verified, 0 unattributed, ceilings 46 comment-line / 16 symbol |
+| 3 | stale anchors | closed by the gate, not by hand: 248 anchors verified, 0 unattributed, ceilings 46 comment-line / 16 symbol. **Those are the counts at that commit, not today's** — both ceilings have since been driven to 0 and the population is 247 (one stale stage row retired); the live numbers are in the resume-facts block below |
 | 4 | cross-link resolved to `docs/debate-deletion-status.md` | closed — the link is now `(plans/debate-deletion-status.md)`, relative to `docs/`, and the broken form has 0 occurrences |
 | 5 | `messageImageStore.ts` filed under `utils/` | closed — the table row names `services/infrastructure/messageImageStore.ts`, which is where the file is |
 | 6 | `ChatComposer.tsx:160` for the Enter key | closed — the doc cites `:146`, and line 146 is `if (ev.key === 'Enter' && !ev.shiftKey)`. The doc no longer cites an AgentsView Enter line at all |
+| 7 | not in the review, found while answering it: `AGENTS.md` said the release gate "runs the same static + probe chain" | closed as a doc fix, not a CI change — `AGENTS.md` now names the asymmetry with the `comm -13` recipe that prints it: release lacks `check-flow-doc-anchors`, `skill-approval-probe`, `test` and bare `typecheck`, and adds `installer-smoke`. **The owner still owes the other option** (add the anchor step to `release.yml`), which would change what a tag push gates |
 
 Two review items stay honestly open. "One service replacing nine" is unfalsifiable as
 written and no gate can settle it. Section C's eight-stage ordering is deliberately
@@ -1976,8 +1977,11 @@ that carries a symbol the doc line actually names.
 **Gate state on this tree, each read from its own marker, not a piped exit code:**
 typecheck, type-check-scripts, electron parse, flow-doc anchors (247 verified,
 0 unattributed, **0** comment-line and **0** symbol misses — both ceilings now zero, with 4
-citations listed as deliberate comment-as-claim exemptions), vitest (477 files,
-1 skipped), lint (0 errors / 681 warnings under the ratchet — CI's step is now runnable
+citations listed as deliberate comment-as-claim exemptions), vitest re-run on the
+tip and read out of the log's own summary block: `Test Files 477 passed | 1 skipped
+(478)`, `Tests 4715 passed | 11 skipped (4726)`, 237.67s — the skipped file is
+`tests/lensWordCount.measure.test.ts` (11 measurements, skipped by design),
+lint (0 errors / 681 warnings under the ratchet — CI's step is now runnable
 locally because `docs/analysis/**` is ignored as the untracked scratch it is),
 `vite build`, boot-probe, render-probe, Playwright e2e (5 passed), and the
 skill-approval probe — whose own log says `25/25 checks passed; pageErrors=2`.
