@@ -20,36 +20,22 @@ import type { EnsembleAnalystEntry } from '../../services/ui/EnsembleAnalystServ
 /**
  * Map the conversation through a run's cancel/error: a live-streaming casual
  * bubble must settle (keep whatever text already arrived, drop the streaming
- * flag), an untouched ensemble placeholder is rewritten to explain the debate
- * never started, and an interrupted debate PRESERVES its transcript — never
- * wipe a debate that already produced turns; a bare placeholder (no turns
- * yet) is still removed. Verbatim from the catch block's message sweep.
+ * flag), and a row that was still marked debating keeps its transcript — never
+ * wipe a run that already produced turns; an empty one is removed. The ensemble
+ * placeholder this used to rewrite is gone: the staged send no longer mints a
+ * second row, so there is nothing here left to explain. Verbatim from the catch
+ * block's message sweep.
  */
 export const mapRunFailureMessages = (prev: Message[], ctx: {
     cancelled: boolean;
     /** The live-streaming casual-chat bubble id, if one was open. */
     casualMessageId?: string | null;
-    /** The ensemble placeholder row, if the debate never started. */
-    ensemblePlaceholder?: Message | null;
 }): Message[] => prev.map(m => {
     // A live-streaming casual bubble must settle on cancel/error —
     // keep whatever text already arrived, drop the streaming flag.
     if (ctx.casualMessageId && m.id === ctx.casualMessageId) {
         if (!m.text.trim()) return null;
         return { ...m, isStreaming: false };
-    }
-    if (m.id === ctx.ensemblePlaceholder?.id && m.ensembleProgress) {
-        return {
-            ...m,
-            isDebating: false,
-            activeDebateSpeakers: {},
-            liveToolEvents: undefined,
-            text: ctx.cancelled ? 'The analysis was cancelled.' : 'The ensemble could not continue before the debate started.',
-            ensembleProgress: {
-                ...m.ensembleProgress,
-                moderator: { status: 'error', error: ctx.cancelled ? 'Cancelled by user.' : 'The ensemble could not continue before the debate started.' },
-            },
-        };
     }
     if (!m.isDebating) return m;
     if ((m.debateTurns?.length ?? 0) === 0) return null;

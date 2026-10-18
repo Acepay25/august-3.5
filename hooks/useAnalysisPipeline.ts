@@ -649,10 +649,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 // Legacy mandate rotation (ad-hoc ensembles, no active team). Hoisted
         // so the mid-debate replacement path can mirror the initial seats.
         
-        // Accuracy mode runs the same per-analyst analysis phase, so the
-        // staged analyst cards (status + live reasoning) apply there too —
-        // previously the user only saw the single moderator stream.
-        const isStagedEnsemble = runEnsembleEnabled && enabledProviders.length > 1;
+        // The staged analyst cards this flag used to gate are gone with the
+        // ensemble engine: nothing renders `ensembleProgress`, and the placeholder
+        // row it minted had no settle path.
 
         let effectiveInput = '';
         if (typeof customPrompt === 'string') {
@@ -884,47 +883,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             })(),
         };
 
-        const ensembleMessageId = canResume && resumeTarget ? resumeTarget.id : `ensemble-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-        const ensembleProgress = isStagedEnsemble ? {
-            analysts: enabledProviders.map(provider => ({
-                key: provider.thoughtsKey,
-                providerId: provider.config.id,
-                providerName: provider.config.name,
-                modelId: provider.model,
-                modelName: provider.model,
-                displayName: provider.name,
-                status: 'waiting' as const,
-            })),
-            moderator: {
-                status: 'waiting' as const,
-                waitingFor: enabledProviders.map(provider => provider.name),
-            },
-        } : undefined;
-        const ensemblePlaceholder: Message | null = isStagedEnsemble ? {
-            id: ensembleMessageId,
-            role: MessageRole.AI,
-            text: '',
-            createdAt: canResume && resumeTarget ? resumeTarget.createdAt : new Date().toISOString(),
-            isDebating: false,
-            debateTurns: canResume && resumeTarget ? (resumeTarget.debateTurns || []) : [],
-            debateRunLog: canResume && resumeTarget ? (resumeTarget.debateRunLog || []) : [],
-            debateCheckpoint: canResume && resumeTarget ? resumeTarget.debateCheckpoint : undefined,
-            ensembleProgress,
-            ocrModelUsed: userMessage.ocrModelUsed,
-            imageSummaries: userMessage.imageSummaries,
-            ocrCache: userMessage.ocrCache,
-            modelsUsed: (canResume && resumeTarget?.modelsUsed) || buildModelsUsedRecord(enabledProviders),
-            isAccuracyMode: runAccuracyMode,
-            isLensMode: runLensConfig?.enabled ?? false,
-            accuracySubMode: runAccuracyMode ? runAccuracySubMode : undefined,
-            tradingStyle: runLensConfig?.enabled && runLensConfig.tradingStyle !== 'auto' ? (runLensConfig.tradingStyle as any) : undefined,
-        } : null;
-
-        if (canResume) {
-            updateRequestMessages(prev => prev.map(m => m.id === ensembleMessageId ? { ...m, isDebating: true } : m));
-        } else {
-            updateRequestMessages(prev => ensemblePlaceholder ? [...prev, userMessage, ensemblePlaceholder] : [...prev, userMessage]);
-        }
+        // The staged-ensemble PLACEHOLDER is gone. The tool turn writes its own
+        // canonical row (`streamingMessageId`, below), so this row was a second
+        // one appended beside the answer — and after the debate engine was
+        // deleted nothing had a settle path for it: a staged send left an empty
+        // bubble in the transcript permanently. `runOutcome` keyed its
+        // cancel/error text on this row's `ensembleProgress`, and that guard goes
+        // with it, so an interrupted run settles the answer row and nothing else.
+        updateRequestMessages(prev => [...prev, userMessage]);
         // Automation runs must not clear the composer (the user may be
         // mid-draft while a scheduled run fires).
         if (!isAutomationRun) {
@@ -1584,7 +1550,7 @@ ${enhancedPrompt}`;
             // Preserve the debate transcript when the debate was interrupted —
             // never wipe a debate that already produced turns. A bare
             // placeholder (no turns yet) is still removed.
-            updateRequestMessages(prev => mapRunFailureMessages(prev, { cancelled, casualMessageId, ensemblePlaceholder }));
+            updateRequestMessages(prev => mapRunFailureMessages(prev, { cancelled, casualMessageId }));
 
             // User cancels / stale runs get no error bubbles. A deliberate
             // Stop (or a superseded run) is NOT a retryable failure —

@@ -1014,3 +1014,28 @@ is created with `text: ''` and `isDebating: false`, and nothing renders
 provider) send between the send and the settle — a live row, an empty row, or nothing?
 That decides whether the ensemble-branch removal is one change or two, and it is only
 answerable in the browser: `npm run render-probe` does not assert it today.
+
+## Staged placeholder removed — the ensemble branch is now partly gone (this commit)
+
+Measured first, because the obvious cut was wrong: `ensembleProgress` had no
+rendering reader after `1bd501e`, but `runOutcome.ts` keyed its cancel/error TEXT on
+it — deleting the mint alone would have stranded an empty row on every cancelled
+staged send. So the field, the row it belonged to, and that guard go together.
+
+What the row actually was: `isStagedEnsemble` (ensemble flag + >1 enabled
+provider) appended a second AI message with `text: ''` beside the row the tool
+turn writes (`streamingMessageId`, now :1406/:1432), and nothing had a settle path
+for it since the debate engine was deleted. A staged send therefore left an empty
+bubble in the transcript. That is the fourth user-visible consequence of this
+stage; the other three (journal label, usage ledger, chart verdict) are earlier in
+this file.
+
+Also measured: `options.resumeMessageId` has NO caller in the tree, so the resume
+branch is the only writer of `isDebating: true` and is unreachable plumbing — left
+in place deliberately, because deleting the option is an API change this commit
+does not need. The three refusals (:731, :761, :794) still stand and
+are the next cut.
+
+Gates: tsc clean; full vitest 477 files / 4713 tests green. render-probe to be
+re-run for this change — it asserts row counts per conversation, and this removes
+a row.
