@@ -2,7 +2,8 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-18** (after the post-mortem, 2D desk floor, saved-analyses and Roles-tab
-deletions **and stages 20a/20a2/20g/20b/20b-B/20t/20c/20s of the debate removal**, which moved
+deletions **and stages 20a/20a2/20g/20b/20b-B/20t/20c/20s/20d/20f of the debate
+removal**, which moved
 both chat homes onto one turn executor); if a line moves, fix the line rather than
 deleting the claim.
 
@@ -65,13 +66,13 @@ flowchart TD
     BOT --> TR["streamQuickResponse — GenericAnalysisService.ts (bots stay chat-only)"]
     AN --> HSM["handleSendMessage — useAnalysisPipeline.ts:608"]
     FA --> HSM
-    HSM --> D3{"runEnsembleEnabled :671 — the guard :1492. Nothing tests the wording any more"}
+    HSM --> D3{"runEnsembleEnabled :676 — the guard :1497. Nothing tests the wording any more"}
     D3 -->|true| ENS["ensemble analysis — section C (stage 19's target)"]
-    D3 -->|false, casual :3157| SPLIT{"a bot thread? :3213"}
+    D3 -->|false, casual :3162| SPLIT{"a bot thread? :3218"}
     SPLIT -->|yes| TR
-    SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:211, tools from CHAT_SURFACE_TOOLS :54, prompt chatSurfaceSystemPrompt :103"]
+    SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:217, tools from CHAT_SURFACE_TOOLS :54, prompt chatSurfaceSystemPrompt :103"]
     CST --> TT
-    TR --> LW["live writer — applyCasualStreamUpdate streamThrottlers.ts:160, peel per frame; flush BEFORE the settle write :3289"]
+    TR --> LW["live writer — applyCasualStreamUpdate streamThrottlers.ts:160, peel per frame; flush BEFORE the settle write :3295"]
     CST --> LW
     ENS --> MERGE
     LW --> MERGE["entriesForSession — chatSessions.ts:531, parameter literally named canonical :533"]
@@ -235,7 +236,7 @@ flowchart TD
 ```
 
 An automation run always takes the ensemble path: `runEnsembleEnabled =
-isAutomationRun || isEnsembleEnabled` (useAnalysisPipeline.ts:671). That is why
+isAutomationRun || isEnsembleEnabled` (useAnalysisPipeline.ts:676). That is why
 stage 19 has to give scheduled runs a new route, not just delete the branch.
 
 What that route must keep is written down, not assumed:
@@ -332,9 +333,9 @@ card that forgets it was clicked offers a second journal row.
 | 18 | panel → per-seat + mailbox | `:1068` · `:996` · `:1008` |
 | 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `TradeChatPanel.tsx:453` |
 | 20 | every dock turn → chatStore | `mutate` · `beginRun` |
-| 21 | handleSendMessage → the fork | the mode flag `:671` is the whole decision — guard `:1492`, else `:3157`. Stage 20c deleted the wording predicate |
-| 22 | the casual arms | a bot thread → `streamQuickResponse :3218` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:211` → arrow 17. Tier on both via `resolveComposerEffort` |
-| 23 | casual frames → Message.text | `streamThrottlers.ts:160`; flush precedes the settle write `:3289` |
+| 21 | handleSendMessage → the fork | the mode flag `:676` is the whole decision — guard `:1497`, else `:3162`. Stage 20c deleted the wording predicate |
+| 22 | the casual arms | a bot thread → `streamQuickResponse :3223` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:217` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
+| 23 | casual frames → Message.text | `streamThrottlers.ts:160`; flush precedes the settle write `:3295` |
 | 24 | ensemble → 8 stages | see C — anchors deliberately omitted |
 | 25 | desk tools → what a caller can reach | `executeDeskTool DeskToolsService.ts` (its allow-list is enforced at execution, not only at offer time) |
 | 26 | panel tools → chart echo | `executePanelTool chatTurnRunner.ts` → `onToolAction` |

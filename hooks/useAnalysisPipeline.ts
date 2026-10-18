@@ -653,6 +653,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
          *  The debate ignores it: each seat's effort comes from the role
          *  schedule (`EFFORT_BY_TASK`), not from a composer. */
         reasoningEffort?: ReasoningEffort;
+        /** Stage 20f: the trader pressed FULL ANALYSIS. With the ensemble toggle
+         *  off this is what turns the desk arm's casual turn into a turn that is
+         *  TOLD to look things up and CHECKED for having done so — the surviving
+         *  half of the old keyword trigger, with the keyword gone (20c). */
+        fullAnalysis?: boolean;
     }): Promise<ChatRunOutcome> => {
         const isAutomationRun = !!options?.automation;
         let stopTokenUsage: (() => void) | undefined;
@@ -3253,6 +3258,7 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                         interval: options?.interval,
                         trades: loggedTrades,
                         effort: options?.reasoningEffort,
+                        requireTools: options?.fullAnalysis === true,
                         signal: currentAbortController.signal,
                         startedAt: turnStartedAt,
                         patch: fn => updateMessages(

@@ -1717,7 +1717,7 @@ const App: React.FC = () => {
      * started or ended without a verdict — neither has a transcript row to
      * carry it, which is why both surfaces route this to a toast.
      */
-    const handleRunAnalysisFromChat = useCallback(async (prompt: string, chatImages: Array<{ name: string; dataURL: string }>): Promise<void> => {
+    const handleRunAnalysisFromChat = useCallback(async (prompt: string, chatImages: Array<{ name: string; dataURL: string }>, fullAnalysis = false): Promise<void> => {
         if (isAnalysisInProgress) throw new Error('an analysis is already running — wait for it or stop it first');
         if (readyProviders.length === 0) throw new Error('no AI providers are configured');
         // Bind before the run: the session that stands for this conversation is
@@ -1735,6 +1735,10 @@ const App: React.FC = () => {
         const outcome = await handleSendMessage(prompt, images, undefined, {
             ...activeInstrument(),
             reasoningEffort: chatStore.getActiveEffort(),
+            // Stamped by the CALLER that means it (the dock's Full-analysis
+            // button), never guessed from the prompt text — 20c deleted the
+            // wording gate, so intent has to travel as data.
+            fullAnalysis,
         });
         // `ok:false` is the pipeline's own "this attempt produced no completed
         // analysis" verdict (rate limit, quota, a pre-run block). `ok:true`
@@ -2525,7 +2529,7 @@ const App: React.FC = () => {
                                     groups={groups.map(g => ({ id: g.id, name: groupDisplayName(g, bots) }))}
                                     botSessionRequest={tradeBotRequest ?? undefined}
                                     groupSessionRequest={tradeGroupRequest ?? undefined}
-                                    onRunAnalysis={handleRunAnalysisFromChat}
+                                    onRunAnalysis={(prompt, images) => handleRunAnalysisFromChat(prompt, images, true)}
                                     onAnalysisError={(message) => toast.error(message)}
                                     onStopRun={handleCancelAnalysis}
                                     getAnalysisMessage={getAnalysisMessage}

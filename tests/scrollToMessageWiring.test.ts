@@ -136,7 +136,12 @@ describe('Chat and Chart AI share one analysis turn', () => {
     };
 
     it('both surfaces are wired to the SAME analysis entry', () => {
-        expect(appSrc).toMatch(/onRunAnalysis=\{handleRunAnalysisFromChat\}/);
+        // Stage 20f gave the dock's binding one extra argument (Full analysis is
+        // an instruction now, not a keyword), so the wiring is an arrow function
+        // around the same wrapper. The invariant this gate exists for is UNCHANGED:
+        // one wrapper, reached from both homes, never a per-surface twin — the
+        // twin is what drifted.
+        expect(appSrc).toMatch(/onRunAnalysis=\{\(prompt, images\) => handleRunAnalysisFromChat\(prompt, images, true\)\}/);
         expect(appSrc).toMatch(/onAnalyze=\{handleRunAnalysisFromChat\}/);
         // One entry, not a per-surface twin — the twin is what drifted.
         expect(appSrc.match(/const handleRunAnalysis\w+ = useCallback/g)).toHaveLength(1);
