@@ -28,13 +28,14 @@ import type { LoggedTrade } from '../../types';
 import type { Message } from '../../types/message';
 import type { ProviderConfig } from '../../types/provider';
 import type { ChatMessage, ContentPart } from '../providers/GenericProviderService';
-import { streamChatWithDeskTools, stripTextToolCalls, type DeskToolCall, type DeskToolResult } from '../analysis/DeskToolsService';
+import type { DeskToolCall, DeskToolResult } from '../analysis/DeskToolsService';
 import { fetchHybridData, generateHybridPromptInjection } from '../analysis/HybridIntelligenceService';
 import { buildTradeChatContext, describeChartSnapshotForModel } from './tradeChatContext';
 import {
     describeDrawingsForModel, drawingFromChartTool, drawingsFromDetectedPattern, drawingsFromLevelTool, type ChartDrawing,
 } from './chartDrawings';
 import { parseTradeProposal, computeRrRatio } from './proposedTrade';
+import { runToolTurn, type ToolTurnEvents, type ToolTurnRequest } from './toolTurn';
 import { beginGateScan, cancelGateScan, gateReceiptLine } from './proposalGate';
 import { scoreDrawnLevel, levelAccuracy, describeLevelAccuracyForModel } from './tradePlanLevels';
 import * as levelWatch from './levelWatchService';
@@ -68,7 +69,6 @@ import { intervalSeconds } from '../../components/trade/TradingChart';
 import type { AgentBot } from '../agents/agentRoster';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { isVisionModel } from '../../utils/modelUtils';
-import { splitThinkingFromOutput } from '../../utils/thinkingSplit';
 import { TASK_BUDGETS } from '../providers/taskBudgets';
 import { getHarnessSettings } from '../../utils/harnessSettings';
 import { resolveComposerEffort, type ReasoningEffort } from '../providers/reasoningControls';
@@ -665,12 +665,13 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         const patch = (fn: (e: LiveEntry) => LiveEntry): void => {
             mutate(sid, s => ({ ...s, updatedAt: Date.now(), entries: s.entries.map(e => (e.id === entryId ? fn(e) : e)) }));
         };
-        let full = '';
-        let reasoning = '';
-        const stream = streamChatWithDeskTools(config, messages, {
+        // The transport options stay HERE (they are this row's context); the
+        // loop, the reasoning/echo/peel repair and the settle live in
+        // services/trade/toolTurn so the Chat surface can run the same turn
+        // against a canonical row instead of copying that logic.
+        const transport: ToolTurnRequest['transport'] = {
             defaultSymbol: symbol,
             allowedTools: TRADE_TOOLS,
-            signal: controller.signal,
             maxTokens: TASK_BUDGETS.chat,
             temperature: 0.4,
             reasoningEffort: resolveComposerEffort(effort),
@@ -694,26 +695,20 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             mailboxSeat,
             mailboxRound: 0,
             onMailSent,
-            onStreamReset: () => {
-                // Self-heal bounce: what streamed so far was a malformed
-                // tool-call attempt, NOT the answer — clear it so the
-                // corrected turn paints alone instead of concatenating.
-                full = '';
-                patch(e => ({ ...e, text: hidePass && panelCouldStillBePass(full) ? '' : full }));
-            },
-            onReasoning: (chunk: string) => { reasoning += chunk; patch(e => ({ ...e, reasoning: (e.reasoning ?? '') + chunk })); },
+        };
+        // Each method here is a WRITE TO THIS ROW SHAPE, not generic turn logic.
+        const events: ToolTurnEvents = {
+            setText: text => patch(e => ({ ...e, text })),
+            addReasoning: chunk => patch(e => ({ ...e, reasoning: (e.reasoning ?? '') + chunk })),
             // Tool lines AND their ids are appended in the SAME patch. The id is
             // the only safe join key for a payload: `results` inside the desk
             // loop is assembled `[...replays, ...extra, ...forged, ...core]`, so
             // its order does not match the `calling…` lines rendered here.
             // Pairing by index would silently attach the wrong payload to a row.
-            // '' marks a line with no payload (calling…, already fetched, guard).
-            onToolEvent: (line: string) => patch(e => ({ ...e, tools: [...e.tools, line], toolIds: [...(e.toolIds ?? []), ''] })),
-            onToolPayload: (payload) => {
-                // Persist the real bytes, then record the id against the line
-                // that is ALREADY rendered for this call. The desk loop emits the
-                // digest (`onToolEvent`) before this, so the row exists and
-                // `tools`/`toolIds` are already the same length.
+            addToolLine: line => patch(e => ({ ...e, tools: [...e.tools, line], toolIds: [...(e.toolIds ?? []), ''] })),
+            attachPayload: payload => {
+                // The desk loop emits the digest line before this, so the row
+                // exists and `tools`/`toolIds` are already the same length.
                 try {
                     saveToolPayload(payload);
                 } catch {
@@ -732,7 +727,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                     return { ...e, toolIds: ids };
                 });
             },
-            onToolAction: action => {
+            addAction: action => {
                 patch(e => ({ ...e, actions: [...(e.actions ?? []), action] }));
                 // Mirror the side-effect into the caller's collector so a
                 // PANEL seat's next turn (and the synthesis) can SEE that a
@@ -740,77 +735,35 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 // asked for around skill/memory/tool edits.
                 onAction?.(`${action.ok ? action.verb : 'rejected'} ${action.tool === 'revise_skill' || action.tool === 'propose_skill' ? `skill ${action.label}` : action.tool === 'write_memory_note' ? `memory note ${action.label}` : action.tool === 'amend_memory' ? `memory amendment ${action.label}` : action.tool === 'forge_tool' ? `tool ${action.label}` : action.label}`);
             },
+        };
+        const outcome = await runToolTurn({
+            config,
+            messages,
+            signal: controller.signal,
+            startedAt: turnStartedAt,
+            effort: resolveComposerEffort(effort),
+            keepTextHidden: hidePass ? panelCouldStillBePass : undefined,
+            transport,
+            events,
         });
-        for await (const delta of stream) {
-            if (controller.signal.aborted) break;
-            full += delta;
-            // Absolute text (not += delta): a hidden-pass stream shows ''
-            // until it proves it spoke, then the whole answer lands at once.
-            patch(e => ({ ...e, text: hidePass && panelCouldStillBePass(full) ? '' : full }));
-        }
-        // Settle on STRIPPED text. The loop's own stripped return value was
-        // discarded by this accumulator, so a text-protocol tool call — a bare
-        // <tool_call>, an unquoted <function=…>, native tool_calls coexisting
-        // with painted markup, anything the loop's wipe gate skipped — used to
-        // reach the transcript as literal protocol soup. Every settle path
-        // below (echo repair, peel, abort) now reads the cleaned text.
-        full = stripTextToolCalls(full);
-        // An explicit Stop is the user pulling the plug — NOT a failure.
-        // Settle quietly and check this FIRST: without the guard, a stopped
-        // turn fell through to the pure-echo repair below and printed
-        // "streamed only its reasoning…" on a deliberate stop click (and
-        // callers' catch blocks labelled it "could not answer").
-        if (controller.signal.aborted) {
-            // Stamp the work time even on an explicit Stop: a stopped turn is
-            // exactly where the user most wants to see how long it ran.
-            // Also stamp the interrupt + the prompt, so the row renders an
-            // in-flow "Run stopped" notice with Edit prompt / Try again. A
-            // stopped turn is NOT a failure — it is a half-written answer the
-            // user chose to cut, and the only way forward is to re-run or edit.
-            patch(e => ({ ...e, streaming: false, workedMs: workedMsFor(turnStartedAt), interrupted: true }));
-            return full;
-        }
-        // Settle-time repair: the live gate only strips TAG-delimited thinking
-        // (<thinking>…). Header-style ("Thinking:" / "FINAL_OUTPUT:") or a model
-        // that repeats its native CoT into the content stream leaks raw
-        // reasoning into the answer bubble — which is both the "thinking isn't
-        // stripped" and the "final output doesn't render" complaint (a stray
-        // scratchpad fence breaks the markdown). Run the journal's splitter on
-        // the settled text, but ONLY act when it actually peeled something the
-        // native stream didn't already own — so a clean answer (even one that
-        // opens with "Verdict:") is left byte-for-byte untouched.
-        const settled = splitThinkingFromOutput(reasoning, full);
-        // PURE ECHO: the model repeated its native CoT verbatim into the
-        // content channel (the "thinking and response are the same" report —
-        // the splitter confirms it by returning an empty answer). The reply
-        // is only what comes AFTER the echo; if nothing does (the budget died
-        // mid-reasoning), say so instead of showing the scratchpad twice.
-        // The `f === ''` arm covers the desktop bridge: main.cjs no longer
-        // substitutes reasoning into text, so a turn that really ends with no
-        // answer arrives as empty content + reasoning, and deserves the same
-        // explanation rather than a blank bubble.
-        const r = reasoning.trim();
-        const f = full.trim();
-        if (r && settled.output === '' && (f === '' || f.startsWith(r))) {
-            const rest = f.slice(r.length).trim();
-            patch(e => ({
-                ...e,
-                streaming: false,
-                text: rest,
-                workedMs: workedMsFor(turnStartedAt),
-                tools: rest ? e.tools : [...e.tools, 'The model streamed only its reasoning this turn — no separate answer came through. Try a lower thinking effort, or ask again.'],
-            }));
-            // The panel room still carries the analysis for the peers.
-            return rest || f;
-        }
-        // A peel happened when the splitter's answer differs from the raw
-        // stream, and it's genuinely leaked reasoning (not just a benign
-        // label like "Verdict:") only when something sits in thinking now.
-        const peeled = full.trim() !== settled.output;
-        const leaked = peeled && !!(settled.thinking.trim() || reasoning.trim());
-        const finalText = leaked ? (settled.output || full) : full;
-        patch(e => ({ ...e, streaming: false, text: finalText, workedMs: workedMsFor(turnStartedAt), reasoning: leaked ? (settled.thinking || e.reasoning) : (e.reasoning || reasoning) }));
-        return finalText;
+        patch(e => ({
+            ...e,
+            streaming: false,
+            workedMs: outcome.workedMs,
+            ...(outcome.interrupted
+                // A stopped turn keeps whatever text was already painted: a
+                // hidden-pass seat that never spoke must not reveal its partial
+                // accumulator just because the user pressed Stop.
+                ? { interrupted: true }
+                : {
+                    text: outcome.text,
+                    reasoning: outcome.leaked
+                        ? (outcome.reasoning || e.reasoning)
+                        : (e.reasoning || outcome.reasoning),
+                }),
+            ...(outcome.notice ? { tools: [...e.tools, outcome.notice] } : {}),
+        }));
+        return outcome.carry;
     };
 
     /** Every few Chart AI conversations, quietly review the recent ones for

@@ -1,0 +1,169 @@
+/**
+ * toolTurn — ONE model turn against the desk-tool transport.
+ *
+ * This is the half of `runSeatTurn` that was never about the dock: stream a
+ * reply, let the model call tools while it does, keep its reasoning out of the
+ * answer channel, and settle the row honestly. It lived inside the Chart AI
+ * panel's session machinery, so the Chat surface could not get tool calls
+ * without copying that machinery — and a second copy is how two homes start
+ * disagreeing about one turn.
+ *
+ * The executor owns the TRANSITION; the caller owns the ROW. How a turn is
+ * stored (a dock `LiveEntry` with `tools`/`toolIds`, a canonical `Message` with
+ * `thoughtProcesses`) stays behind `ToolTurnEvents`, because the two row types
+ * do not share those fields — `Message` has no `tools`/`toolIds` at all, which
+ * is why this is an event sink and not one shared state object.
+ *
+ * Four behaviours here each cost a bug to learn; do not "simplify" them:
+ *  - the abort check runs BEFORE the echo repair, or a deliberate Stop is
+ *    reported as a failure ("it cancelled" became "could not answer");
+ *  - the settle reads STRIPPED text, or a text-protocol tool call reaches the
+ *    transcript as literal protocol soup;
+ *  - the splitter only acts when it really peeled something, or a clean answer
+ *    that happens to open with "Verdict:" gets eaten;
+ *  - `resetText` fires on a bounced malformed call, because what streamed so
+ *    far was the attempt, not the answer.
+ */
+
+import type { ProviderConfig } from '../../types/provider';
+import type { ChatMessage } from '../providers/GenericProviderService';
+import { streamChatWithDeskTools, stripTextToolCalls } from '../analysis/DeskToolsService';
+import type { StreamWithDeskToolsOptions } from '../analysis/DeskToolsService';
+import { splitThinkingFromOutput } from '../../utils/thinkingSplit';
+import { getHarnessSettings } from '../../utils/harnessSettings';
+import type { ReasoningEffort } from '../providers/reasoningControls';
+
+/** What the row should look like right now. Every method is a display intent,
+ *  never a storage shape — the caller decides whether that means a chatStore
+ *  patch, a Message patch, or (after unmount) nothing at all. */
+export interface ToolTurnEvents {
+    /** Absolute visible text, not an append. A hidden-pass seat sees '' until
+     *  it proves it spoke, then the whole answer lands at once. */
+    setText(text: string): void;
+    addReasoning(chunk: string): void;
+    addToolLine(line: string): void;
+    attachPayload(payload: Parameters<NonNullable<StreamWithDeskToolsOptions['onToolPayload']>>[0]): void;
+    addAction(action: Parameters<NonNullable<StreamWithDeskToolsOptions['onToolAction']>>[0]): void;
+}
+
+export interface ToolTurnOutcome {
+    /** The answer, after stripping and the echo/peel repair — what to PAINT. */
+    text: string;
+    /** What to hand back to the caller. Equal to `text` except on the pure-echo
+     *  path, where the bubble must show only what came after the echoed
+     *  reasoning while a panel room still has to carry the whole analysis. */
+    carry: string;
+    /** The reasoning that should be STORED with the turn (peeled-aware). */
+    reasoning: string;
+    /** The splitter moved reasoning out of the answer channel. */
+    leaked: boolean;
+    /** The user pulled the plug — not a failure, and checked before anything else. */
+    interrupted: boolean;
+    workedMs: number;
+    /** A line the caller should append to its own notice list: this turn had no
+     *  separate answer, only its reasoning. */
+    notice?: string;
+}
+
+export interface ToolTurnRequest {
+    config: ProviderConfig;
+    messages: ChatMessage[];
+    signal: AbortSignal;
+    /** The turn's own start, so a Stop, a failure and a clean finish all report
+     *  the same "worked for Ns". */
+    startedAt: number;
+    effort: ReasoningEffort;
+    events: ToolTurnEvents;
+    /** Forwarded verbatim to the transport, minus the five callbacks this owns. */
+    transport: Omit<
+        StreamWithDeskToolsOptions,
+        'onReasoning' | 'onToolEvent' | 'onToolPayload' | 'onToolAction' | 'onStreamReset' | 'signal'
+    >;
+    /** Panel seats: keep the bubble empty while a pure (pass) is still possible.
+     *  Passed the RAW accumulator, never the stripped one. */
+    keepTextHidden?: (accumulated: string) => boolean;
+}
+
+/** Run the turn. Transport errors propagate: the caller owns what a failed turn
+ *  looks like, because only it knows whether a toast or a row note is right. */
+export const runToolTurn = async (req: ToolTurnRequest): Promise<ToolTurnOutcome> => {
+    const { events, signal, startedAt } = req;
+    let raw = '';
+    let reasoning = '';
+    const visible = (text: string): string => (req.keepTextHidden && req.keepTextHidden(raw) ? '' : text);
+
+    const stream = streamChatWithDeskTools(req.config, req.messages, {
+        ...req.transport,
+        signal,
+        onStreamReset: () => {
+            // The attempt, not the answer: clear the accumulator and repaint,
+            // so the corrected turn paints alone instead of concatenating.
+            raw = '';
+            events.setText(visible(''));
+        },
+        onReasoning: chunk => { reasoning += chunk; events.addReasoning(chunk); },
+        onToolEvent: line => events.addToolLine(line),
+        onToolPayload: payload => events.attachPayload(payload),
+        onToolAction: action => events.addAction(action),
+    });
+
+    for await (const delta of stream) {
+        if (signal.aborted) break;
+        raw += delta;
+        events.setText(visible(raw));
+    }
+
+    const workedMs = Math.max(0, Date.now() - startedAt);
+    const full = stripTextToolCalls(raw);
+    // The transport self-gates: with `deskToolsEnabled` off (or the caller's own
+    // `enabled: false`) it streams plain text and parses NO tool call at all. A
+    // seat that still emits the protocol then claims to have read the tape while
+    // nothing ran — the one failure a fallback must not hide. The markup comes
+    // off either way; what this adds is the truth in the transcript.
+    const toolsOff = req.transport.enabled === false || !getHarnessSettings().deskToolsEnabled;
+    const attemptedProtocol = full.trim() !== raw.trim();
+    const offNotice = 'Desk tools are OFF for this turn, so nothing was looked up - '
+        + 'the seat tried to call a tool and no data came back. Anything it reports is from memory.';
+
+    // An explicit Stop is the user pulling the plug, and it settles FIRST: after
+    // it, every other path reads like a failure, and a stopped turn is a
+    // half-written answer the trader chose to cut.
+    if (signal.aborted) {
+        return { text: full, carry: full, reasoning, leaked: false, interrupted: true, workedMs };
+    }
+
+    const settled = splitThinkingFromOutput(reasoning, full);
+    const r = reasoning.trim();
+    const f = full.trim();
+    // PURE ECHO: the model repeated its native chain of thought verbatim into
+    // the content channel, so the reply is only what came AFTER it — and if
+    // nothing did, the row has to say so instead of showing the scratchpad twice.
+    if (r && settled.output === '' && (f === '' || f.startsWith(r))) {
+        const rest = f.slice(r.length).trim();
+        const echoNotice = rest ? undefined
+            : 'The model streamed only its reasoning this turn — no separate answer came through. Try a lower thinking effort, or ask again.';
+        return {
+            text: rest,
+            carry: rest || f,
+            reasoning,
+            leaked: false,
+            interrupted: false,
+            workedMs,
+            ...(toolsOff && attemptedProtocol
+                ? { notice: offNotice }
+                : echoNotice ? { notice: echoNotice } : {}),
+        };
+    }
+
+    const leaked = full.trim() !== settled.output && !!(settled.thinking.trim() || r);
+    const text = leaked ? (settled.output || full) : full;
+    return {
+        text,
+        carry: text,
+        reasoning: leaked ? (settled.thinking || reasoning) : reasoning,
+        leaked,
+        interrupted: false,
+        workedMs,
+        ...(toolsOff && attemptedProtocol ? { notice: offNotice } : {}),
+    };
+};
