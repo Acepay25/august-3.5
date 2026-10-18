@@ -1941,3 +1941,48 @@ line (the "`sym` at / `path:NNN`" list shape) is still unpaired, because telling
 from "`path:NNN`, `sym` at" needs the sentence's tail, not the line's contents. Measured
 attempt made it worse (17 findings to 24) and was reversed; the arrow table's own
 line-level claims are the adjacent form and all of them check out.
+
+## Resume facts, 2026-10-19 end of session — read this before exploring anything
+
+**Two questions, one word each. Everything else in the backlog is closed.**
+
+1. #19 — the surviving ensemble branch is a live multi-seat panel chat (not the deleted
+   debate). Keep it, or make the dock one-model? If "one model", it is two gated passes:
+   the panel surface itself, then the persisted `ensemble` session kind that history
+   rows still carry.
+2. #21 — `Message.postMortem` (105 field-shaped lines then; **34 lines in 23 files** for
+   `.postMortem` now) and `Message.debateTurns` are read only by consumers of *stored*
+   history: `services/analysis/convictionDrift.ts`, `ensembleLineFromTranscript` in
+   `services/learning/monthlyReport.ts`, round-1 openings in
+   `hooks/useWatchAndAutopilot.ts`, `debateTurnCount` in `utils/reportExport.ts`. The
+   ruling "delete fields + readers" needs the added words *and the stored history*.
+
+**Also open, owned by nobody yet:** the calibration ledger
+(`CalibrationLedgerService` + `calibrationStore/policy/prompts`) is still an unresolved
+product decision; the anchor gate's other ceiling, 61 citations landing on comment
+lines, is a measured backlog that ratchets down only; and a citation whose symbol is
+named on the line ABOVE its citation is now paired forward, but the connector test
+matches `at|is|to|→|->|–|:` only after a non-space, so a shape using another connective
+would still abstain.
+
+**Gate state on this tree, each read from its own marker, not a piped exit code:**
+typecheck, type-check-scripts, electron parse, flow-doc anchors (251 verified,
+0 unattributed, 61 comment-line, **0 symbol**, 17 reach controls), vitest (477 files,
+1 skipped), lint (0 errors / 681 warnings under the ratchet — CI's step is now runnable
+locally because `docs/analysis/**` is ignored as the untracked scratch it is),
+`vite build`, boot-probe, render-probe, Playwright e2e (5 passed).
+`installer-smoke` is CI-only by design. The skill-approval probe was the last step
+running at the time of writing; if its log does not end in a pass, that is the first
+thing to re-check.
+
+**Do not re-derive these** (each cost a turn this session and is already proven): the
+review's six defects are all closed in the current files; the post-mortem route is
+**starved, not deleted** (`SkillCraftService.ts:145`); `reconstructOpenings`,
+`utils/debateResume` and `confidenceAccuracy` exist nowhere in the tree; the census
+recipe is `grep -rE` over `.ts/.tsx` (122 lines / 50 files for the token, 34 / 23 for
+the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:69`; and the
+progress panel now mints two rows (`market-data`, `analysis`), completed by
+`settleOpenSteps()` in the run's `finally` after the catch has marked any failure.
+
+**Push state:** 40 local commits, nothing pushed this session; the earlier authorization
+covered only the first 16.
