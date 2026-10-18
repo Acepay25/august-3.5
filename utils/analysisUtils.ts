@@ -1454,11 +1454,33 @@ export const clampProbabilityToGate = (
  * rule only ever walks High→Medium→Low. */
 export type ConfidenceLabel = 'High' | 'Medium' | 'Low' | 'Avoid';
 
+/** The word a probability earns. Same floors the one-step version used, so a
+ *  label only ever moves when the number genuinely crosses a band. */
+const confidenceBand = (probability: number): ConfidenceLabel =>
+    probability < 55 ? 'Low' : probability < 70 ? 'Medium' : 'High';
+
+/**
+ * Stamp the word onto the number that survived the gate cap.
+ *
+ * This used to walk ONE step (High→Medium) however far the clamped probability
+ * sat below the Medium floor, because the inline if/else in the finalizer did
+ * exactly that and the extraction preserved it byte-for-byte. The result was a
+ * verdict saying "Medium" over a 34% number — the label and the probability
+ * disagreed in the same field, and a trader reading the word acted on a
+ * confidence the gate had already refused.
+ *
+ * It is still NOT free to upgrade. A seat that answered "Low" and was right to
+ * — the band is a ceiling on the word, never a reason to promote it.
+ */
 export const downgradeConfidenceForProbability = (
     probability: number,
     confidence: ConfidenceLabel,
 ): ConfidenceLabel => {
-    if (probability < 70 && confidence === 'High') return 'Medium';
-    if (probability < 55 && confidence === 'Medium') return 'Low';
-    return confidence;
+    // 'Avoid' is a veto, not a rung: it means "do not take this trade", and a
+    // probability says nothing about that. The one-step version left it alone;
+    // so does this.
+    if (confidence === 'Avoid') return 'Avoid';
+    const RANK: Record<ConfidenceLabel, number> = { Low: 0, Medium: 1, High: 2, Avoid: -1 };
+    const band = confidenceBand(probability);
+    return RANK[band] < RANK[confidence] ? band : confidence;
 };

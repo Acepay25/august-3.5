@@ -77,7 +77,9 @@ describe('the card once the stamp has landed', () => {
         }));
         expect(screen.queryByTestId('proposal-gate-pending')).toBeNull();
         expect(screen.getByTestId('proposal-confidence')).toHaveTextContent('50%');
-        expect(screen.getByTestId('proposal-confidence')).toHaveTextContent('Medium');
+        // The tier shown is the band the capped number earns (task 33), so a
+        // 50% plan is never labelled "Medium" on the card the trader accepts.
+        expect(screen.getByTestId('proposal-confidence')).toHaveTextContent('Low');
     });
 
     it('an unmeasurable plan says so on the card, next to the button', () => {

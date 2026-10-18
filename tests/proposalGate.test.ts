@@ -190,12 +190,14 @@ describe('the cap binds the analysis a logged plan becomes', () => {
         expect(a.validationWarnings?.join(' ')).toContain('logged UNCAPPED');
     });
 
-    it('an evaluated 50% cap drags a High plan to 50 and re-tiers it one step', () => {
+    it('an evaluated 50% cap drags a High plan to 50 and re-tiers it to the band', () => {
         const a = buildProposedTradeAnalysis(proposal({ gate: stamp({ confidenceCap: 0.5 }) }));
         expect(a.probability).toBe(50);
-        // ONE step, exactly as the pipeline's finalizer has always done it — the
-        // bands-not-one-step rule is a follow-up (task 33), not this change.
-        expect(a.confidence).toBe('Medium');
+        // Task 33: the label is a band of the FINAL number, not one step from the
+        // old one. A 50% plan sits under the Low/Medium floor (55), so it reads
+        // Low — the one-step walk left the word "Medium" on a 50, which is the
+        // probability and the word disagreeing inside one verdict.
+        expect(a.confidence).toBe('Low');
         expect(a.validationWarnings?.join(' ')).toContain('Gate enforcement');
         expect(a.gate?.status).toBe('evaluated');
     });
