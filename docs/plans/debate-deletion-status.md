@@ -960,3 +960,21 @@ everyone else in the meantime).
 
 Gate closure 2026-10-18: after the four stage-19 / chart-verdict commits, `tsc --noEmit` clean, vitest 477 files / 4713 tests green (VITEST_EXIT=0), and `npm run render-probe` OK with zero pageerrors. Gate state: render-probe PASSED on 2026-10-18 after these commits (zero pageerrors); it asserts no canvas overlay levels, so the drawn verdict line is still un-asserted, and lint / boot-probe / e2e remain unrun.
  Still un-asserted by any gate: the chart actually drawing the verdict levels — the probe never looks at overlay levels, so that claim stops at the pure-function test.
+
+## Resume here (turn budget paused 2026-10-18 ~09:32Z)
+
+Tree state: everything I built this session is committed on main, 7 commits
+(48c3ee8, c4dd059, abe838e, 1bd501e, 22364c9, 8b1f25e, ead0230). Nothing pushed.
+The only dirty paths are the owner's (package-lock.json, docs/analysis/,
+docs/improvements/, the harness-accuracy plan). Gate state at this commit: tsc
+clean, vitest 477 files / 4713 tests green, render-probe OK. Unrun: lint,
+boot-probe, e2e.
+
+Order to resume in, cheapest risk first:
+1. Stage 17 pre-cuts (relocate ConfidenceLevel + detectTradingSession out of
+   calibrationStore, inline brierQuality into monthlyReport) — mechanical, same
+   technique as stage 19 tranche 2, unblocks the whole accuracy-mode deletion.
+2. The three ensemble refusals + the never-moving ensembleProgress in
+   useAnalysisPipeline (read :900-1470 before cutting; run render-probe after).
+3. Task #32's three observations on the non-settling tool turn.
+4. Stage 21 field census, then AGENTS.md counts.
