@@ -161,8 +161,8 @@ Stage 19 deleted the debate from this path. What one send actually does now:
 
 ```mermaid
 flowchart LR
-    S1["1 data pull HybridIntelligenceService — still gated on runEnsembleEnabled :1022"] --> S3["3 prompt assembly memoryContext.ts"]
-    S3 --> S4["4 one turn: runChatSurfaceTurn :1475 → executeDeskTool"]
+    S1["1 data pull HybridIntelligenceService — still gated on runEnsembleEnabled hooks/useAnalysisPipeline.ts:874"] --> S3["3 prompt assembly memoryContext.ts"]
+    S3 --> S4["4 one turn: runChatSurfaceTurn services/trade/chatSurfaceTurn.ts:230 → executeDeskTool"]
     S4 -->|a seat calls| PT["present_trade → runPresentTrade → plan + gate stamp"]
     PT --> JR["journal row — logTradeWithFeedback useTradeLogging.ts"]
     S4 --> ANS["the answer is the prose beside the card"]
@@ -179,7 +179,7 @@ pipeline-side Monte Carlo and backtest. The engine FILES are now deleted too: st
 that still imported debate helpers were cut by INLINING the slice each one used
 (`streamThrottlers` keeps only `throttledCasualStream`; the watch follow-up groups
 round-1 turns itself; `monthlyReport` computes the log-odds mean itself), so no
-displayed number changed. `runEnsembleEnabled` (:575) survives as a switch with
+displayed number changed. `runEnsembleEnabled` (hooks/useAnalysisPipeline.ts:557) survives as a switch with
 far fewer things to switch between, and `Message.debateTurns` stays as a read-only
 legacy field for rows written before the cut — the same rule `modelsUsed` follows.
 
@@ -191,7 +191,8 @@ Why the deletion is safe rather than a loss: the thing section C existed to prod
 verdict-shaped rows come from `proposal` cards, and the surviving readers were
 re-pointed in 20b-B and 20r rather than left reading a field nothing writes.
 
-**One known residue, not a bug I hid.** The hybrid data pull at `:1022` still runs
+**One known residue, not a bug I hid.** The hybrid data pull at
+`hooks/useAnalysisPipeline.ts:874` and `:956` still runs
 for a human send with the toggle on, and its packet reaches no model any more — the
 turn fetches the tape through tools. Deleting it is the next tranche's first job,
 and `beginPromptLane` now has zero callers while the `finally` still calls
