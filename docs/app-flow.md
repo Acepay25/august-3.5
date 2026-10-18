@@ -67,7 +67,7 @@ flowchart TD
     AN --> HSM["handleSendMessage — useAnalysisPipeline.ts:504"]
     FA --> HSM
     HSM --> D3{"the debate branch is GONE (19): a send answers through the tool turn :1475. runEnsembleEnabled :584 survives only as a gate on the hybrid pull :1022 — a schedule is claimed earlier, by its own arm :827"}
-    D3 -->|true| ENS["ensemble branch — section C (ENGINE DELETED; the branch still gates and still refuses)"]
+    D3 -->|true| ENS["ensemble branch — section C (ENGINE DELETED; the branch answers with ONE tool turn and no longer refuses over seats)"]
     D3 -->|false, casual :1469| SPLIT{"a bot thread? :1449"}
     SPLIT -->|yes| TR
     SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:229, tools from CHAT_SURFACE_TOOLS :54, prompt chatSurfaceSystemPrompt :146"]
