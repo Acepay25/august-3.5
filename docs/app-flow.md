@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**246 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**247 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 3 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -476,10 +476,10 @@ card that forgets it was clicked offers a second journal row.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in both flow docs names
-   its file on the same line, so the gate can check it: 246 anchors verified, 0
+   its file on the same line, so the gate can check it: 247 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 246 anchors verified, and the gate
+   the gate's own output: these docs state 247 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    **Coverage asymmetry, measured rather than trusted from prose:** the step runs
    in `ci.yml`, and `release.yml` does NOT run it — the release gate is missing
@@ -517,6 +517,20 @@ card that forgets it was clicked offers a second journal row.
    the question the trader's switch asks. If the sentence comes back, whoever
    restores it has also made stage 19 undeletable and given every schedule a debate
    nobody is watching.
+
+9. **"Does either gate actually wait for the splash to clear?" — yes, both, measured
+   rather than assumed.** `e2e/smoke.spec.ts:54` puts it in the shared `boot()` helper
+   and `e2e/smoke.spec.ts:140` asserts it again as "no white screen", both as
+   `toHaveCount(0)` on `#splash`; `scripts/boot-probe.cjs:119` blocks on
+   `!document.querySelector('#splash')` against the BUILT bundle. What they watch for
+   is prose, not code: the boot probe's opening comment, `scripts/boot-probe.cjs:5`,
+   records the v1.0.20 TDZ crash as a splash hang. A page that dies before React
+   mounts fails both gates, not just one.
+
+10. **The arrow table is 53 rows, and every citation in it is machine-checked.** An
+    outside review probed 66 anchors and could not speak to the rest; the gate now
+    resolves all 247 unique anchors on every run, so coverage of the table is no
+    longer a matter of which subset a reviewer happened to sample.
 
 ## Measured after stage 19: what the deletion did NOT remove
 
