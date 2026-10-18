@@ -328,6 +328,25 @@ direction, plus source contracts on the plumbing — the invariant in
 `scrollToMessageWiring.test.ts` (one wrapper, both homes) is kept while its pin now
 reads the arrow-function binding, because the wiring gained an argument, not a twin.
 
+## #33 — the confidence WORD now follows the number
+
+`downgradeConfidenceForProbability` walked ONE step, so a verdict whose
+probability the gate clamped from 88 to 34 still read "Medium": the number and
+the word disagreed inside the same object and the trader acted on the word. It is
+now a band of the final probability (<55 Low, <70 Medium, else High), applied at
+every clamp site, and it still never upgrades — a seat that said Low keeps Low.
+'Avoid' is a veto, not a rung, and is returned untouched.
+
+Two existing tests pinned the old walk, and both were rewritten rather than
+deleted, per the rule that a green check can encode the bug:
+`proposalGate.test.ts` was titled "…re-tiers it one step" (the name itself said
+"one step", with a comment deferring to this task) and
+`proposalCard.test.tsx` asserted the card showed "Medium" over 50%. Both now
+assert the band, in the same tests that already proved the probability and the
+warning line. Stored analyses are not re-derived: only a freshly stamped verdict
+changes label. New: `tests/confidenceBand.test.ts` (16, incl. a monotonicity
+sweep and a never-touch-a-veto case).
+
 ## Deviations from the approved manifest (say so before repeating them)
 
 - **WatchListPanel kept.** "Watch becomes a chat tool only" named the list, but
