@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**243 unique anchors verified, 0 unattributed** — plus two quality ceilings, 68 citations
+**248 unique anchors verified, 0 unattributed** — plus two quality ceilings, 61 citations
 that land on a comment line and 16 whose named symbol is not on the cited line, which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
 carrying more than one citation, and a sentence that wraps puts its number out of reach of
@@ -82,7 +82,7 @@ flowchart TD
     SPLIT -->|yes| TR
     SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:230, tools from CHAT_SURFACE_TOOLS :55, prompt chatSurfaceSystemPrompt :147"]
     CST --> TT
-    TR --> LW["live writer — applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:28, peel per frame; flush BEFORE the settle write useAnalysisPipeline.ts:1445"]
+    TR --> LW["live writer — applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:28, peel per frame; flush BEFORE the settle write useAnalysisPipeline.ts"]
     CST --> LW
     ENS --> MERGE
     LW --> MERGE["entriesForSession — chatSessions.ts:531, parameter literally named canonical :533"]
@@ -287,7 +287,7 @@ flowchart TD
     D -->|has a bot| BR["runBotRoutineTurn useAutomations.ts:343 → botRoutine.ts:80 — prompt, history"]
     BR --> ST["injected stream = streamQuickResponse useAutomations — reuses the bot transport, NOT the debate"]
     D -->|no bot| AT["automation arm BEFORE the mode fork useAnalysisPipeline.ts:1247 → runAutomationTurn automationTurn.ts:160"]
-    AT --> PRIV["runs into a private message list, not the open conversation — automationMessagesRef useAnalysisPipeline.ts:364, its notices (a failed tool, a turn that called nothing, a refused plan)"]
+    AT --> PRIV["runs into a private message list, not the open conversation — automationMessagesRef useAnalysisPipeline.ts:352, its notices (a failed tool, a turn that called nothing, a refused plan)"]
     AT --> CAP["plan rationed: MAX_PLANS_PER_RUN services/trade/automationTurn.ts:69 · MAX_PLANS_PER_DAY AutomationService.ts:113"]
     AT --> FAIL["failed tool + refused plan + no-lookup land in notices → row text and a WARNING toast useAutomations.ts:531"]
     GR["useAgentGroups.ts → groupRounds → streamQuickResponse"] --> GV["GroupChatView"]
@@ -403,12 +403,12 @@ card that forgets it was clicked offers a second journal row.
 | 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `TradeChatPanel.tsx:453`, assembled `:475` |
 | 20 | every dock turn → chatStore | `mutate` · `beginRun` |
 | 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useAnalysisPipeline.ts:1357`, anything else runs the tool turn `:1376`; the mode flag `:556` now only gates the hybrid pull `:874` |
-| 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1357` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:230` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
-| 23 | casual frames → Message.text | `hooks/analysisPipeline/streamThrottlers.ts:28`; flush precedes the settle write useAnalysisPipeline.ts:1445 |
+| 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1334` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:230` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
+| 23 | casual frames → Message.text | `hooks/analysisPipeline/streamThrottlers.ts:28`; flush precedes the settle write useAnalysisPipeline.ts |
 | 24 | ensemble → 8 stages | see C — anchors deliberately omitted |
 | 25 | desk tools → what a caller can reach | `executeDeskTool DeskToolsService.ts` (its allow-list is enforced at execution, not only at offer time) |
 | 26 | panel tools → chart echo | `executePanelTool chatTurnRunner.ts` → `onToolAction` |
-| 27 | automation tick → runAutomation | `useAutomations.ts:411`, forks on `config.botId` `:431`; the no-bot path takes the pipeline's OWN schedule arm `useAnalysisPipeline.ts:1247` → `runAutomationTurn automationTurn.ts:160`, writing the private list automationMessagesRef useAnalysisPipeline.ts:364, its `notices` (a tool that came back failed, a turn that called nothing, a refused plan) and settling through `onMessage` `useAutomations.ts:531`. Characterized in `tests/automationRouteCharacterization.test.tsx` |
+| 27 | automation tick → runAutomation | `useAutomations.ts:411`, forks on `config.botId` `:431`; the no-bot path takes the pipeline's OWN schedule arm `useAnalysisPipeline.ts:1247` → `runAutomationTurn automationTurn.ts:160`, writing the private list automationMessagesRef useAnalysisPipeline.ts:352, its `notices` (a tool that came back failed, a turn that called nothing, a refused plan) and settling through `onMessage` `useAutomations.ts:531`. Characterized in `tests/automationRouteCharacterization.test.tsx` |
 | 28 | bot routine → injected stream | `botRoutine.ts` ← `useAutomations` (reuses 22's bot arm) |
 | 29 | rooms → groupRounds | `useAgentGroups` → `streamQuickResponse` |
 | 30 | review passes / propose_skill → draft → approval → skill | `draftGates.ts` → `skillApproval` — the post-mortem leg is starved, not deleted (see D) |
