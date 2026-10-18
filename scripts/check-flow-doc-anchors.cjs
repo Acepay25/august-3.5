@@ -285,6 +285,14 @@ const problems = [...rep.missingFile, ...rep.outOfRange, ...rep.blank];
 // errors: when one sentence wraps, the symbol sits on the neighbour of its number,
 // so pairing by line is unsound. Fix that by zipping symbols to anchors per
 // paragraph, and only then drive this to 0.
+// THESE TWO COUNTS UNDER-REPORT. Chasing one stale `runEnsembleEnabled …:556`
+// turned up four more copies of the same wrong number that neither rule flagged,
+// because both exempt the line they cannot read: symMiss skips any doc line
+// carrying more than one anchor, and comment/symMiss both look at a single line,
+// so a sentence that wraps puts its number out of reach of its symbol. 16 and 68
+// are "what the rule can see", not "what is broken" — do not cite them as a
+// defect count, and do not answer a doubt about a wrapped sentence by trusting
+// this ceiling: re-measure the anchor by hand.
 const COMMENT_CEILING = 68;
 const SYMMISS_CEILING = 16;
 
