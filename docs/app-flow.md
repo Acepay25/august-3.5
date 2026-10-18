@@ -66,7 +66,7 @@ flowchart TD
     BOT --> TR["streamQuickResponse — GenericAnalysisService.ts (bots stay chat-only)"]
     AN --> HSM["handleSendMessage — useAnalysisPipeline.ts:486"]
     FA --> HSM
-    HSM --> D3{"the debate branch is GONE (19): a send answers through the tool turn :1475. runEnsembleEnabled :584 survives only as a gate on the hybrid pull :1022 — a schedule is claimed earlier, by its own arm :827"}
+    HSM --> D3{"the debate branch is GONE (19): a send answers through the tool turn hooks/useAnalysisPipeline.ts:1376. runEnsembleEnabled hooks/useAnalysisPipeline.ts:557 survives only as a gate on the hybrid pull :1022 — a schedule is claimed earlier, by its own arm :827"}
     D3 -->|true| ENS["ensemble branch — section C (ENGINE DELETED; the branch answers with ONE tool turn and no longer refuses over seats)"]
     D3 -->|false, casual :1343| SPLIT{"a bot thread? :1345"}
     SPLIT -->|yes| TR
