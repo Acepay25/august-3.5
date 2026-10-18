@@ -1300,11 +1300,36 @@ drive it are live and user-facing: `promptAbRate` and `pinnedPromptLane` are sur
 the lane therefore removes a visible control and its statistics. My earlier sentence in
 `docs/app-flow.md` described the dead writer only; it understated the feature still attached to it.
 
-**#17 — accuracy mode and the calibration ledger.** Live: `isAccuracyModeEnabled` selects
-`customInstructions.accuracyPure` / `accuracyOriginal`, the modal is mounted, and scheduled
-automations persist `accuracySubMode`. Deleting it touches the schedule schema, so a stored
-`accuracySubMode` must read as absent rather than corrupt — check the backup validation path
-before removing the field, the same trap `savedAnalyses` is in.
+**#17 — accuracy mode and the calibration ledger.** Measured on the second pass, and my earlier
+framing was wrong in two ways that both matter before anyone edits:
+
+- *The calibration store is not accuracy mode's sidecar.* `calibration` has **402 hits across 30+
+  files**, including `components/dashboards/learning/CalibrationBar.tsx`, `TraderProfileCards.tsx`,
+  `services/learning/monthlyReport.ts`, `metaCalibration.ts` and `schemas/tradeAnalysis.ts`.
+  Deleting it deletes visible Learn-surface dashboards and the confidence-band input. So
+  "accuracy mode + the calibration ledger" is really two decisions, and only the first was
+  clearly ruled on. The ledger was NOT deleted on that ambiguity.
+- *Accuracy mode is load-bearing in three places the task text never named.* (1) It changes what a
+  prompt receives: `services/providers/GenericAnalysisService.ts:335` sends the memory context
+  whole for accuracy and truncates it to 800 tokens otherwise, so the branch's survival value for
+  the ordinary path must be decided, not assumed. (2) `AccuracySubMode` is not an optional setting
+  but a **required, persisted `AutomationConfig.mode`** (`types/automation.ts:44`) with a picker at
+  `components/automation/AutomationEditorModal.tsx:515` and a label at
+  `components/automation/AutomationView.tsx:68` — stored schedules already carry it, so removing
+  the field needs a read-side migration or old configs fail validation on load. (3) Three further
+  toggles live under it (`isPlaybookEnabledInPureAI`, `isFamiliesEnabledInPureAI`,
+  `isMemoryEnabledInPureAI`) and gate injection in `GenericAnalysisService` and the memory
+  context. Scope: **129 accuracy hits across 22 files**, 4 of them suites
+  (`automationRouteCharacterization`, `memoryFilesService`, `useProfilePersistence`,
+  `useUserProfileLoader`), plus `components/modals/AccuracyModeModal.tsx`, the `accuracyOriginal` /
+  `accuracyPure` tabs in `components/settings/CustomInstructionsEditor.tsx`, and the journal badge
+  in `components/journal/TradeLog.tsx:107-111`.
+
+Not attempted this session, deliberately: with the full gate chain costing ~10 minutes per pass and
+the remaining budget in single-digit turns, a 22-file feature removal with a stored-config migration
+would have landed half-finished on a `main` that is pushed. Two decisions unblock it: whether the
+800-token truncation survives as the only path, and whether `AutomationConfig.mode` is dropped with
+a migration or collapsed to `'standard'` while the field stays.
 
 **#21 — `postMortem`, `savedAnalyses`, `Message.debateTurns`.** Deleting the fields removes ~25
 readers (EvidencePackService, DoctrineConsolidation, SkillMemoryService, memoryContext,
