@@ -14,6 +14,14 @@
  *
  * Adding an entry means the capability is load-bearing; if it is ever genuinely
  * retired, delete the export AND the row — do not exempt it here.
+ *
+ * A SECOND pass (2026-10-18) made the word "reachable" mean what it says. A
+ * mention in ANY production file discharged a duty, so `withDetectedTradeType`
+ * kept the journal filter green while its only caller lived in
+ * `verdictFinalizer.ts` — a file stage 19 cut out of the send path and nothing
+ * running code imports. The gate passed for a reason unrelated to what it claims.
+ * Consumers must now be reachable from the app's own entry roots, which is the
+ * same rule the header already asserted and previously did not enforce.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -45,6 +53,32 @@ const codeOnly = (src: string): string => {
 
 const PROD_ROOTS = ['App.tsx', 'components', 'hooks', 'services', 'utils', 'constants', 'shared'];
 
+/**
+ * Import lines removed, multi-line specifiers included. An `import { X }` is not
+ * an application of X: the day the debate branch stopped calling
+ * `withDetectedTradeType`, the name still reached the old gate through a dead
+ * module's import line. A consumer has to USE the name in its body.
+ */
+const bodyOnly = (src: string): string => {
+    const out: string[] = [];
+    let inImport = false;
+    for (const line of src.split('\n')) {
+        if (inImport) {
+            // The run ends at the specifier, not at any quote: a template literal
+            // or a JSX line that merely ends in `'` must not close it.
+            if (/\bfrom\s*['"][^'']*['"]\s*;?\s*$/.test(line) || /;\s*$/.test(line)) inImport = false;
+            continue;
+        }
+        const startsImport = /^[ \t]*import\b/.test(line) || /^[ \t]*export\b[^\n]*\bfrom\b/.test(line);
+        if (!startsImport) {
+            out.push(line);
+            continue;
+        }
+        if (!/\bfrom\s*['"][^'']*['"]\s*;?\s*$/.test(line) && !/;\s*$/.test(line)) inImport = true;
+    }
+    return out.join('\n');
+};
+
 const productionFiles = (() => {
     const found: string[] = [];
     const walk = (p: string): void => {
@@ -54,7 +88,54 @@ const productionFiles = (() => {
         else if (/\.(c)?[jt]sx?$/.test(p) && !p.endsWith('.d.ts')) found.push(p);
     };
     PROD_ROOTS.forEach(walk);
-    return found.map(p => ({ path: p.split(/[\\/]/).join('/'), code: codeOnly(readFileSync(p, 'utf8')) }));
+    return found.map(p => {
+        const path = p.split(/[\\/]/).join('/');
+        const raw = readFileSync(p, 'utf8');
+        const code = codeOnly(raw);
+        return { path, raw, code, body: bodyOnly(code) };
+    });
+})();
+
+/**
+ * The import closure of the running app. Follows every static `from '…'` and
+ * every `React.lazy(() => import('…'))`, so a module that nothing on screen can
+ * reach is not credited as a consumer. Resolved against the files this scan
+ * actually loaded, so an unresolvable specifier is simply not walked — the walk
+ * over-credits nothing.
+ */
+const REACHABLE: Set<string> = (() => {
+    const byPath = new Map(productionFiles.map(f => [f.path, f]));
+    const seen = new Set<string>();
+    const roots = ['App.tsx', 'index.tsx', 'main.tsx'].filter(p => byPath.has(p));
+    const stack = [...roots];
+    const IMPORT_RE = /(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g;
+    while (stack.length) {
+        const cur = stack.pop() as string;
+        if (seen.has(cur)) continue;
+        seen.add(cur);
+        const file = byPath.get(cur);
+        if (!file) continue;
+        let m: RegExpExecArray | null;
+        IMPORT_RE.lastIndex = 0;
+        while ((m = IMPORT_RE.exec(file.raw)) !== null) {
+            const spec = m[1];
+            if (!spec.startsWith('.')) continue;
+            const segs = cur.split('/').slice(0, -1);
+            for (const part of spec.split('/')) {
+                if (part === '' || part === '.') continue;
+                if (part === '..') segs.pop();
+                else segs.push(part);
+            }
+            const base = segs.join('/');
+            for (const cand of [base, `${base}.ts`, `${base}.tsx`, `${base}.cjs`, `${base}/index.ts`, `${base}/index.tsx`]) {
+                if (byPath.has(cand)) {
+                    if (!seen.has(cand)) stack.push(cand);
+                    break;
+                }
+            }
+        }
+    }
+    return seen;
 })();
 
 describe('the scan itself is looking at the tree', () => {
@@ -63,6 +144,22 @@ describe('the scan itself is looking at the tree', () => {
         // file exists to prevent.
         expect(productionFiles.length).toBeGreaterThan(300);
         expect(productionFiles.some(f => f.path === 'App.tsx')).toBe(true);
+    });
+
+    it('the reachability walk separates live from dead instead of claiming everything', () => {
+        // Two identical numbers prove nothing: a walk that reached every file,
+        // or none, would let this list rot exactly as the mention-only rule did.
+        expect(REACHABLE.size).toBeGreaterThan(200);
+        expect(REACHABLE.size).toBeLessThan(productionFiles.length);
+        // live control — the journal row writer, reachable through App
+        expect(REACHABLE.has('hooks/useTradeLogging.ts')).toBe(true);
+        // dead controls — stage 19 cut these out of the send path
+        const deadControls = [
+            'hooks/analysisPipeline/verdictFinalizer.ts',
+            'services/providers/ensembleService.ts',
+        ].filter(p => productionFiles.some(f => f.path === p));
+        expect(deadControls.length, 'no dead control left to test the walk with').toBeGreaterThan(0);
+        for (const d of deadControls) expect(REACHABLE.has(d), `${d} must not count as reachable`).toBe(false);
     });
 });
 
@@ -97,11 +194,11 @@ describe('every load-bearing capability is reachable from running code', () => {
         const self = definedIn.split(/[\\/]/).join('/');
         const re = new RegExp(`\\b${name}\\b`);
         const consumers = productionFiles
-            .filter(f => f.path !== self && re.test(f.code))
+            .filter(f => f.path !== self && re.test(f.body) && REACHABLE.has(f.path))
             .map(f => f.path);
         expect(
             consumers.length,
-            `${name} has no production consumer outside ${self} — it is implemented for its own tests`,
+            `${name} is used in no reachable module's body — an import line or a dead module does not discharge it`,
         ).toBeGreaterThan(0);
     });
 });

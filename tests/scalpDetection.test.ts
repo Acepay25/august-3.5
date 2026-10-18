@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
+import { readFileSync } from 'fs';import {
     applyTradeTypeToAnalysis,
     detectTradeType,
     getTradeTypeStats,
@@ -219,7 +219,7 @@ describe('validators tolerate a declined verdict with no levels', () => {
     });
 });
 
-/** The pipeline calls THIS one, not `applyTradeTypeToAnalysis`, because the
+/** The journal writer calls THIS one, not `applyTradeTypeToAnalysis`, because the
  *  validity fill would hand an expiry window to verdicts that never had one.
  *  If this ever starts touching validity, autopilot quietly widens. */
 describe('withDetectedTradeType', () => {
@@ -269,5 +269,23 @@ describe('getTradeTypeStats', () => {
         expect(stats.scalp.wins).toBe(1);
         expect(stats.scalp.losses).toBe(0);
         expect(stats.scalp.winRate).toBe(100);
+    });
+});
+
+/**
+ * The producer's call site. Stage 19 removed the caller this used to have, and
+ * featuresAreWired now proves a REACHABLE module uses it — but reachability is a
+ * graph fact, not behaviour. Source shape is the honest weaker claim here, because
+ * logTradeWithFeedback needs a live journal store; it fails the day the wrap moves
+ * or the validity-filling variant is swapped in.
+ */
+describe('the journal writer is the detector producer', () => {
+    const src = readFileSync("hooks/useTradeLogging.ts", "utf8");
+    it("labels the analysis on both row-minting paths", () => {
+        expect(src).toMatch(/analysis: withDetectedTradeType\(message\.analysis!\)/);
+        expect(src).toMatch(/analysis: withDetectedTradeType\(candidate\.message\.analysis\)/);
+    });
+    it("never reaches for the validity-filling variant", () => {
+        expect(src).not.toMatch(/applyTradeTypeToAnalysis\s*\(/);
     });
 });

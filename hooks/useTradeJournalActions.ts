@@ -50,7 +50,7 @@ export interface UseTradeJournalActionsResult {
     handleRewriteInsightsWithAI: (ids?: string[]) => Promise<void>;
     handleUpdateTradeLeverage: (id: string, leverage: number) => void;
     /** Correct the auto-detected scalp/swing class. The classifier labels every
-     *  verdict on finalization, so without this the label is something the
+     *  row as it is written to the journal, so without this the label is something the
      *  trader can filter by but never disagree with — and `tradeTypeManualOverride`
      *  exists in the type for exactly this case, unused. Manual wins:
      *  `withDetectedTradeType` skips any row that already carries a type. */
