@@ -477,9 +477,16 @@ card that forgets it was clicked offers a second journal row.
    check-flow-doc-anchors` now refuses it.** Every number in both flow docs names
    its file on the same line, so the gate can check it: 256 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
-   `:NNN` no longer survives a push, and neither does a stale figure quoted from its own output: the
-   docs state 256 anchors verified and the gate refuses the merge if that sentence stops
-   matching the scan. Qualifying the citations that had no symbol
+   `:NNN` no longer survives a push, and neither does a stale figure quoted from
+   the gate's own output: these docs state 256 anchors verified, and the gate
+   refuses the merge if that sentence stops matching the scan.
+   **Coverage asymmetry, measured rather than trusted from prose:** the step runs
+   in `ci.yml`, and `release.yml` does NOT run it — the release gate is missing
+   this one check from the chain it is described as repeating, so a tag can
+   publish with a dead line number in the flow docs while CI would have rejected
+   the same commit. Reconciling it (add the step, or amend the wording in
+   `AGENTS.md`) changes the publish path, so it is recorded rather than done.
+   Qualifying the citations that had no symbol
    of their own is what found
    six numbers that were right-shaped and wrong: `runSeatTurn` is called at
    `services/trade/chatTurnRunner.ts:929`, `createDebateMailbox` at
