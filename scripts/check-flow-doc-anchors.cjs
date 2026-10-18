@@ -270,7 +270,7 @@ const rep = check(all);
 const unique = new Set(all.map(a => `${a.file}:${a.line}`));
 const problems = [...rep.missingFile, ...rep.outOfRange, ...rep.blank];
 // Two newer checks measure rather than refuse, on purpose. Both found real
-// weakness the moment they were written: 68 citations land on a comment line and
+// weakness the moment they were written: 61 citations land on a comment line and
 // 23 name a symbol that is not on the cited line (several are genuinely wrong —
 // a run of arrow-table rows cites the previous row's line, so `planPanelTurn`
 // points at `createDebateMailbox`). A gate that goes red on the day it ships gets
@@ -293,7 +293,7 @@ const problems = [...rep.missingFile, ...rep.outOfRange, ...rep.blank];
 // are "what the rule can see", not "what is broken" — do not cite them as a
 // defect count, and do not answer a doubt about a wrapped sentence by trusting
 // this ceiling: re-measure the anchor by hand.
-const COMMENT_CEILING = 68;
+const COMMENT_CEILING = 61;
 const SYMMISS_CEILING = 16;
 
 console.log(`flow docs: ${all.length} anchor references, ${unique.size} unique, across ${DOCS.join(' + ')}`);
