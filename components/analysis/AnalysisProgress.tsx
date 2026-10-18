@@ -130,17 +130,12 @@ const CompletionSummaryBar: React.FC<{
       const count = analysisStep.subSteps.length;
       parts.push(`${count} provider${count !== 1 ? 's' : ''}`);
     }
-    if (steps.some((s) => s.id === 'gate-scan' && s.status === 'complete')) {
-      parts.push('1 gate scan');
-    }
+    // Only rows the pipeline still mints. gate-scan, debate and validation
+    // each had a clause here after their step stopped existing: the rows were
+    // still created (and never completed) while the writers that moved them
+    // lived inside the deleted debate engine and accuracy mode.
     if (steps.some((s) => s.id === 'market-data' && s.status === 'complete')) {
       parts.push('1 market fetch');
-    }
-    if (steps.some((s) => s.id === 'debate' && s.status === 'complete')) {
-      parts.push('1 debate');
-    }
-    if (steps.some((s) => s.id === 'validation' && s.status === 'complete')) {
-      parts.push('1 validation');
     }
     return parts.length > 0 ? parts.join(', ') : 'analysis complete';
   }, [steps]);

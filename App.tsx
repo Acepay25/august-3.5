@@ -1263,7 +1263,7 @@ const App: React.FC = () => {
             }
             if (isAnalysisInProgress) {
                 handleCancelAnalysis();
-                toast.info('Analysis cancelled', 'The partial debate was preserved in the chat.');
+                toast.info('Analysis cancelled', 'Anything it had already produced stays in the chat.');
             }
         };
         document.addEventListener('keydown', onKeyDown);

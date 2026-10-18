@@ -20,7 +20,6 @@ import { tryFetchHybridDataFromPromptWithCalibration, generateHybridPromptInject
 import { extractSymbolFromPrompt } from '../services/analysis/MarketDataService';
 import { LabeledMonteCarloResult } from '../services/analysis/MonteCarloService';
 import { type LiveBacktestResult } from '../services/backtesting/LiveBacktestService';
-import { getGateAnalysis, GateOutput } from '../services/validation/GateKeeperService';
 
 // Utils
 import { TokenUsage } from '../utils/tokenUsage';
@@ -363,11 +362,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     // call through the freshest closure, not the one that started the run.
     // Assigned after handleSendMessage below.
     const drainSendRef = useRef<((text?: string) => Promise<ChatRunOutcome>) | null>(null);
-    // Which pipeline phase is running — used to fail the CORRECT step when a
-    // run errors (the old catch hardcoded failStep('analysis'), so debate-phase
-    // failures marked the wrong step and the finally force-completed everything).
-    const currentPhaseRef = useRef<'analysis' | 'debate'>('analysis');
-
     // ─── RAF-throttled casual-chat stream update ──────────────────────────
     // The four debate writers this call used to hand back died with the
     // ensemble engine; see hooks/analysisPipeline/streamThrottlers.ts.
@@ -443,6 +437,21 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         if (automationSilentRef.current) return;
         setAnalysisSteps(prev => prev.map(s => s.id === id
             ? { ...s, status: 'stopped' as const, endTime: Date.now(), errorKind: 'cancelled', errorText: describeStepError('cancelled') }
+            : s));
+    };
+
+    /**
+     * Close any row the run started but never explicitly completed. This is
+     * safe ONLY because the catch marks the failing step (and Stop marks the
+     * cancelled one) before the finally reaches this — 'error' and 'stopped'
+     * are terminal and are left alone. When the sweep was last unconditional,
+     * the catch could only fail 'analysis', so a failure in a later phase was
+     * painted "complete" and the panel lied about a broken run.
+     */
+    const settleOpenSteps = () => {
+        if (automationSilentRef.current) return;
+        setAnalysisSteps(prev => prev.map(s => s.status === 'running' || s.status === 'pending'
+            ? { ...s, status: 'complete' as const, endTime: Date.now() }
             : s));
     };
 
@@ -907,9 +916,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 }
                 initAnalysisSteps([
                     { id: 'market-data', title: 'Fetching market data', status: 'pending' },
-                    { id: 'gate-scan', title: 'Running pattern gate scan', status: 'pending' },
                     { id: 'analysis', title: 'Analyzing charts', status: 'pending' },
-                    { id: 'debate', title: 'Ensemble debate', status: 'pending' },
                 ]);
             } else {
                 setAnalysisSteps([]);
@@ -1463,8 +1470,8 @@ ${enhancedPrompt}`;
             // A user Stop is not a failure — it gets the neutral 'stopped'
             // chrome. Only a real error carries the rose treatment, and now
             // carries the reason with it.
-            if (cancelled) stopStep(currentPhaseRef.current);
-            else failStep(currentPhaseRef.current, error);
+            if (cancelled) stopStep('analysis');
+            else failStep('analysis', error);
             // A pending replacement wait is void — a late click on the banner
             // must never resolve into a dead debate.
             replacementChoiceRef.current = null;
@@ -1548,10 +1555,12 @@ ${enhancedPrompt}`;
                 // (the assert threw before it) — reset here so the panel
                 // spinner can't spin until the next run.
                 setIsHybridLoading(false);
-                // NOTE: the old finally force-completed every running step,
-                // masking debate-phase errors and cancellations as "complete".
-                // Failures are marked by the catch above; success paths already
-                // complete their own steps.
+                // The catch above marks the failing step and Stop marks the
+                // cancelled one, so a row still open here really did succeed.
+                // Nothing else completes 'analysis' any more: its completer
+                // lived inside the deleted engine, which left the spinner
+                // running forever on a run that worked.
+                settleOpenSteps();
                 analysisAbortController.current = null;
                 analysisConversationIdRef.current = null;
                 setIsAnalysisInProgress(false);
