@@ -328,6 +328,64 @@ direction, plus source contracts on the plumbing — the invariant in
 `scrollToMessageWiring.test.ts` (one wrapper, both homes) is kept while its pin now
 reads the arrow-function binding, because the wiring gained an argument, not a twin.
 
+## 20r — a schedule gets its own tool turn, its own ration, and its own bad news
+
+Stage 20c made `runEnsembleEnabled` the only guard, so a scheduled run with the
+toggle on was still entering the debate. 20r does not delete that dependency in
+stage 19 — it gives the schedule a route of its own first, so one config has one
+behaviour at every revision. The arm sits in the pipeline at
+`useAnalysisPipeline.ts:1539`, ABOVE the mode fork at `:1589`, and
+`tests/automationRouteCharacterization.test.tsx` pins the order by `indexOf`
+rather than by prose, so moving the arm below the fork is a failing test, not a
+comment.
+
+`services/trade/automationTurn.ts` is the third sink over the same `runToolTurn`.
+It reuses `chatSurfaceTurnMessages` and `surfacePromptWith`, so a schedule and the
+Chat surface cannot answer the same question with two prompt shapes; the `where`
+wording becomes "a schedule running unattended", which is what the seat needs to
+know. Two decisions worth naming:
+
+- **Caps are enforced where the plan is minted.** `MAX_PLANS_PER_RUN = 1` in the
+  turn and `MAX_PLANS_PER_DAY = 3` in `AutomationService` (a local-day key,
+  because a "day" that rolls at 08:00 in UTC+8 is not a day the trader would
+  recognise) refuse inside `executePanelTool` and return `ok:false` — the
+  executor's existing "a refusal is a failed call" contract, not a silent skip.
+  A refusal counts against the ration, so a seat cannot farm retries.
+- **Notebook writes are denied outright**
+  (`AUTOMATION_UNATTENDED_DENY` — `write_memory_note`, `amend_memory`, `remember`,
+  `forget`, the skill/strategy proposers, `forge_tool`). Nobody is watching when a
+  schedule edits the trader's memory, so the deny list is DERIVED from
+  `CHAT_SURFACE_TOOLS` and a test asserts both directions: every denied name still
+  exists in the registry, and the resulting list is not the Chat list. This is a
+  feature-shape call I made, not one the manifest made — flagging it.
+- **Failure is written down.** `onToolPayload` already carried `ok`, so a failed
+  lookup needs no fourth sink event: the turn's `notices` are appended to the
+  stored row and `onMessage` downgrades the toast to `toast.warning`. A success
+  toast over a failed price read is how an unattended run manufactures confidence.
+
+`MAX_HISTORY_RUNS = 3` now reads only delivered runs; the characterization file
+recorded that stub rows were eating half the budget. `AutomationRunCard` renders a
+`proposal`-only run (gate receipt line included) instead of calling it "Bot reply".
+
+Tests: `tests/automationToolTurn.test.ts` (15), `tests/automationPlanLedger.test.ts`
+(8), `tests/automationRouteCharacterization.test.tsx` rewritten (12). One test was
+false-green while I wrote it: it imported `MAX_PLANS_PER_DAY` from
+`automationTurn`, which does not re-export it, so the cap compared against
+`undefined` and the assertion passed by never binding a number. It now asserts the
+constant is a number first.
+
+Gates: tsc clean, 501 files / 4978 tests, lint 818 warnings / 0 errors, RENDER
+PROBE OK. The first probe run FAILED three checks (`Ctrl+B puts the conversation
+column away` and its two companions) with `md:hidden=null` — null means the
+`agents-rail` node was ABSENT, not un-collapsed, i.e. the probe measured the Agents
+surface in the ~900 ms after switching to it, before the lazy `AgentsView` chunk
+mounted. Re-run alone on an idle machine: all three pass with real values
+(`md:hidden=true`, then `240px, md:hidden=false`). So the gate still distinguishes
+the two states and the failure was the documented "don't measure while the app is
+seconds from filling" hazard, not a regression — but it is a hazard of the same
+family as the header-timing bug fixed in the 20s entry, and the durable fix belongs
+in 20p, which is the probe-stage for exactly this: wait for the node, don't sleep.
+
 ## #33 — the confidence WORD now follows the number
 
 `downgradeConfidenceForProbability` walked ONE step, so a verdict whose

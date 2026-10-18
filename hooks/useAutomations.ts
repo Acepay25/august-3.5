@@ -1,13 +1,18 @@
 /**
- * useAutomations — state + scheduler for scheduled ensemble analyses.
+ * useAutomations — state + scheduler for runs a cron fires by itself.
  *
  * Owns the automation configs (CRUD), the per-automation run store, the
  * cron tick loop, and the catch-up pass that replays ticks missed while the
- * app was closed (capped). Runs execute through the SAME analysis pipeline
- * (handleSendMessage with the automation option): each run gets its own
- * mode/model overrides and delivers its card via onMessage — the main
- * conversation is never touched, and reasoning/thinking records persist
- * exactly like manual runs.
+ * app was closed (capped). Since stage 20r a non-bot run executes as ONE tool
+ * turn through the same pipeline entry (`handleSendMessage` with the automation
+ * option) both chat homes use: the schedule's own model pick answers with the
+ * desk tools, its plan is rationed per run and per day, and what comes back is
+ * delivered via onMessage — with any tool failure or refused plan attached, so
+ * this hook can report a caveat instead of a success. The main conversation is
+ * never touched: each run writes into its own private thread and its own row.
+ *
+ * A bot-scoped config takes the other fork (`runBotRoutineTurn`): bots stay
+ * chat-only, per the stage 20 ruling.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -60,6 +65,19 @@ export interface AutomationPipelineOutcome {
     ok?: boolean;
 }
 
+/** What one delivered run carries.
+ *  `notices` is stage 20r's honest half: the tool turn's caveats — a tool that
+ *  came back with nothing, a plan the cap refused, a run that looked nothing up.
+ *  They ride the callback rather than only the row because a schedule runs while
+ *  nobody is looking at the card, and a run that quietly failed is the failure
+ *  mode an unattended feature is most afraid of. Optional: a caller with no tool
+ *  turn (a bot routine, a stub) has nothing to report. */
+export interface AutomationRunDelivery {
+    userMessage: Message;
+    aiMessage: Message;
+    notices?: string[];
+}
+
 export interface AutomationPipelineRunner {
     (
         prompt: string,
@@ -70,7 +88,7 @@ export interface AutomationPipelineRunner {
                 automationId: string;
                 conversation: Conversation;
                 overrides?: AutomationRunOverrides;
-                onMessage: (run: { userMessage: Message; aiMessage: Message }) => void;
+                onMessage: (run: AutomationRunDelivery) => void;
                 onError: (error: string) => void;
             };
         }
@@ -174,6 +192,11 @@ export const buildAutomationOverrides = (
  *  eviction pressure on the shared origin) for a number that only needs to be
  *  roughly right. Flushed with force on teardown instead. */
 const LAST_SEEN_FLUSH_MS = 60_000;
+
+/** How many DELIVERED runs a schedule remembers as context. Three is a window,
+ *  not a budget: a seat that re-reads its last hour of self should not be handed
+ *  forty stale verdicts, and the prompt cost is per run, not per row. */
+export const MAX_HISTORY_RUNS = 3;
 
 export function useAutomations(params: UseAutomationsParams) {
     const { activeUsername, runPipeline, conversationHistory, providerConfigs, isAnalysisInProgress, toast } = params;
@@ -433,9 +456,16 @@ export function useAutomations(params: UseAutomationsParams) {
         setRunningAutomationId(config.id);
         appendRun(config.id, { id: runId, automationId: config.id, status: 'running', startedAt, finishedAt: startedAt });
 
-        // The run's chat history = the last few runs of THIS automation
-        // (context continuity), never the main conversation.
-        const previousRuns = (await loadAutomationRuns(username, config.id)).slice(0, 4);
+        // The run's chat history = its own RECENT DELIVERED RUNS, never the main
+        // conversation. The filter is the fix: `appendRun` prepends a 'running'
+        // stub for every attempt and never dedupes it, so reading the newest N
+        // ROWS spent half the budget on rows with no text in them — a schedule
+        // that runs every 15 minutes could only ever remember its last two
+        // answers. Rows with BOTH a prompt and an answer are the runs worth
+        // remembering.
+        const previousRuns = (await loadAutomationRuns(username, config.id))
+            .filter(r => r.userMessage && r.message)
+            .slice(0, MAX_HISTORY_RUNS);
         const historyMessages: Message[] = [];
         for (const r of [...previousRuns].reverse()) {
             if (r.userMessage) historyMessages.push(r.userMessage);
@@ -498,11 +528,29 @@ export function useAutomations(params: UseAutomationsParams) {
                 automationId: config.id,
                 conversation,
                 overrides: buildAutomationOverrides(config, providerConfigs),
-                onMessage: ({ userMessage, aiMessage }) => {
+                onMessage: ({ userMessage, aiMessage, notices }) => {
                     finish({ status: 'complete', userMessage, message: aiMessage });
+                    // A tool-turn run carries a `proposal`; a debate run carried
+                    // an `analysis`. Read BOTH because the store holds history
+                    // written by the old route, and a card that shows "No signal"
+                    // for the plan the model actually presented is a lie by
+                    // omission of the new shape.
                     const a = aiMessage.analysis;
-                    toast.success(isCatchUp ? 'Automation caught up' : 'Automation complete',
-                        `"${config.name}" — ${a?.direction ?? 'No signal'} ${a?.coinName ?? ''} (${a?.confidence ?? '—'} confidence)`);
+                    const p = aiMessage.proposal;
+                    const verdict = a?.direction ?? p?.direction ?? 'No signal';
+                    const coin = a?.coinName ?? p?.symbol ?? '';
+                    const confidence = typeof a?.confidence === 'number' ? ` (${a.confidence}% confidence)` : '';
+                    const body = `"${config.name}" — ${verdict} ${coin}${confidence}`.trimEnd();
+                    if (notices && notices.length > 0) {
+                        // VISIBLE failure (stage 20r): the reading completed, but
+                        // something in it was not looked up, not confirmed, or
+                        // not allowed. A success toast over that is how an
+                        // unattended schedule becomes a source of fake confidence.
+                        toast.warning(isCatchUp ? 'Automation caught up with caveats' : 'Automation finished with caveats',
+                            `${body} — ${notices.length} thing(s) to check on the card.`);
+                    } else {
+                        toast.success(isCatchUp ? 'Automation caught up' : 'Automation complete', body);
+                    }
                 },
                 onError: (error) => {
                     finish({ status: 'error', error });

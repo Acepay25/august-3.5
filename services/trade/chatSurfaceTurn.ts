@@ -88,19 +88,20 @@ export interface ChatSurfacePrompt {
 const SKILL_INDEX_WINDOW = 30;
 
 /**
- * The Chat surface's own system prompt (stage 20s), assembled the way the dock
- * assembles its seat prompt — surface mandate + skills index + active strategy
- * plans + the profile memory index, each read FRESH per turn so a `remember` or
- * an approved skill lands in the NEXT turn's prompt instead of waiting for a
- * reload — with two differences this surface has to honour: the skills heading
- * says "what the trader asks about", because there is no chart here to match
- * against, and the mandate forbids the tool calls the canvas owns.
+ * Assemble a surface mandate with the trader's notebook under it: surface
+ * mandate + skills index + active strategy plans + the profile memory index, each
+ * read FRESH per turn so a `remember` or an approved skill lands in the NEXT
+ * turn's prompt instead of waiting for a reload.
+ *
+ * `where` phrases the skills heading, because two surfaces ask the same question
+ * about different subjects — the Chat surface matches a skill to "what the trader
+ * asks about", a scheduled run to "what this schedule is looking at".
  *
  * Every block is guarded separately. An unreadable notebook must not cost the
  * trader their answer: the prompt simply carries less, the same way the dock's
  * `skillsIndexForPrompt` swallows and returns ''.
  */
-export const chatSurfaceSystemPrompt = (): ChatSurfacePrompt => {
+export const surfacePromptWith = (mandate: string, where: string): ChatSurfacePrompt => {
     let skillsBlock: string;
     let skills: string[];
     try {
@@ -113,7 +114,7 @@ export const chatSurfaceSystemPrompt = (): ChatSurfacePrompt => {
             thenAction: meta.thenAction,
         }));
         skills = rows.slice(0, SKILL_INDEX_WINDOW).map(r => r.slug);
-        skillsBlock = buildSkillsIndexForPrompt(rows, SKILL_INDEX_WINDOW, 'what the trader asks about');
+        skillsBlock = buildSkillsIndexForPrompt(rows, SKILL_INDEX_WINDOW, where);
     } catch {
         skills = [];
         skillsBlock = '';
@@ -131,10 +132,19 @@ export const chatSurfaceSystemPrompt = (): ChatSurfacePrompt => {
         memoryBlock = '';
     }
     return {
-        text: [CHAT_SURFACE_SYSTEM_PROMPT, skillsBlock, strategiesBlock, memoryBlock].filter(Boolean).join('\n\n'),
+        text: [mandate, skillsBlock, strategiesBlock, memoryBlock].filter(Boolean).join('\n\n'),
         skills,
     };
 };
+
+/**
+ * The Chat surface's own system prompt (stage 20s), assembled the way the dock
+ * assembles its seat prompt, with one difference this surface has to honour: the
+ * skills heading says "what the trader asks about", because there is no chart
+ * here to match against, and the mandate forbids the tool calls the canvas owns.
+ */
+export const chatSurfaceSystemPrompt = (): ChatSurfacePrompt =>
+    surfacePromptWith(CHAT_SURFACE_SYSTEM_PROMPT, 'what the trader asks about');
 
 /** The speaker key for this surface's live tool feed — `chatRowFrom` flattens
  *  `liveToolEvents` for the Chat row and `liveEntryFromMessage` does the same
@@ -142,8 +152,10 @@ export const chatSurfaceSystemPrompt = (): ChatSurfacePrompt => {
 const DESK_SPEAKER = 'desk';
 
 /** Rolling cap on the live tool feed, matching the ensemble feed's window so a
- *  long tool round does not turn a bubble into a log. */
-const MAX_LIVE_TOOL_LINES = 8;
+ *  long tool round does not turn a bubble into a log. Exported because the
+ *  schedule sink (`automationTurn`) writes the SAME field on its row and a
+ *  second number there would mean one renderer trimming two ways. */
+export const MAX_LIVE_TOOL_LINES = 8;
 
 /**
  * The prompt for a Chat-surface turn, built the way `streamQuickResponse`

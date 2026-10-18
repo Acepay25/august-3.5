@@ -48,6 +48,8 @@ import { buildAutoplaySpeakerRegex, parseAutoplayTranscriptChunk } from './analy
 import { isNotebookQuickSaveRequest, runNotebookQuickSave } from './analysisPipeline/notebookQuickSave';
 import { classifyRunFailure, mapRunFailureMessages, resolveQuotaFlaggedModel, sanitizeFallbackErrorMessage } from './analysisPipeline/runOutcome';
 import { runChatSurfaceTurn } from '../services/trade/chatSurfaceTurn';
+import { automationSeatFor, runAutomationTurn } from '../services/trade/automationTurn';
+import { appendToolActions } from '../utils/toolActions';
 import type { ToolTurnOutcome } from '../services/trade/toolTurn';
 import type { PredicateGateResult } from '../services/learning/skillPredicateGate';
 
@@ -671,9 +673,14 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const runEnsembleSelection = options?.automation?.overrides?.ensembleModelSelection ?? ensembleModelSelection;
         const runModeratorConfig = options?.automation?.overrides?.moderatorConfig ?? moderatorConfig;
         const runModeratorModel = options?.automation?.overrides?.moderatorModel ?? moderatorModel;
-        // Automations always run the ensemble pipeline, even when the global
-        // ensemble toggle is off.
-        const runEnsembleEnabled = isAutomationRun || isEnsembleEnabled;
+        // Stage 20r: a scheduled run is NO LONGER forced onto the debate. The
+        // flag used to be true whenever this was an automation, whatever the
+        // trader had switched — which meant stage 19 could not delete the engine
+        // without taking the scheduler down with it. The route a schedule takes
+        // now is its own tool turn (the arm at the fork below), so this flag
+        // answers the question it always should have: does THIS SEND use the
+        // ensemble mode?
+        const runEnsembleEnabled = isEnsembleEnabled;
 
         // ── Composer + hybrid snapshots ──────────────────────────────────
         // These three used to be dependencies of this callback, which is the
@@ -1494,6 +1501,91 @@ ${reflectionBlock}`
             // are now reachable as TOOLS from the casual arm (stage 20's point);
             // the branch below is the mode's, not the prompt's, and stage 19
             // deletes it.
+            if (isAutomationRun) {
+                // ── 20r: A SCHEDULED RUN ANSWERS WITH ITS TOOLS ────────────────
+                // The arm sits BEFORE the mode fork, not inside it, so one config
+                // has exactly one behaviour: the trader's ensemble toggle changes
+                // what a human send does and never what a schedule does. The run
+                // keeps the four properties stage 20t pinned — private thread
+                // (`automationMessagesRef`, built by `useAutomations`), its own
+                // continuity (the history in `currentMessages`), its own model
+                // pick (`automationSeatFor`), and a verdict row a human can act
+                // on — and gains two it never had: a ration on how many plans a
+                // schedule may present, and a failure the card cannot hide.
+                const automationId = options?.automation?.automationId ?? '';
+                const seat = automationSeatFor(
+                    runModeratorConfig ?? undefined,
+                    runModeratorModel,
+                    [
+                        ...(runEnsembleSelection ?? []),
+                        // Lens-mode configs carry their picks as role
+                        // assignments, not as an ensemble selection.
+                        ...(runLensConfig?.enabled
+                            ? (runLensConfig.assignments ?? []).map(a => ({ providerId: a.assignedProvider, model: a.assignedModel }))
+                            : []),
+                    ],
+                    providerConfigs,
+                );
+                if (!seat) {
+                    // A schedule with no ready model is a FAILURE the trader sees,
+                    // not a run that silently produced nothing.
+                    options?.automation?.onError?.(
+                        'No AI model is ready for this schedule: its configured provider is disabled, has no API key, or no longer offers that model. Re-pick it in the automation editor.',
+                    );
+                    return { ok: false };
+                }
+                setIsAnalysisInProgress(true);
+                const turnStartedAt = Date.now();
+                const out = await runAutomationTurn({
+                    config: seat.config,
+                    history: currentMessages,
+                    prompt: promptToSend,
+                    // A replayed chart from "repeat the last manual analysis" is
+                    // SENT, as a real image part — the same contract the Chat
+                    // surface got in 20b.
+                    image: dataURLs[0],
+                    symbol: finalSymbol ?? options?.symbol ?? null,
+                    interval: options?.interval,
+                    trades: loggedTrades,
+                    username: getActiveUsername(),
+                    automationId,
+                    signal: currentAbortController.signal,
+                    startedAt: turnStartedAt,
+                });
+                // A Stop on a scheduled run lands in the existing cancel path
+                // (`cancelled` → `{ ok: true }` → the scheduler settles it as
+                // 'skipped'), so a cut run is never written as if it finished.
+                if (!isCurrentRequest()) assertCurrentRequest();
+                const scheduleText = [out.text, ...out.notices].filter(part => part.trim()).join('\n\n');
+                const scheduleMessage: Message = {
+                    id: `ai-${Date.now()}`,
+                    role: MessageRole.AI,
+                    text: scheduleText,
+                    createdAt: new Date().toISOString(),
+                    modelsUsed: { [seat.config.id]: seat.model },
+                    thoughtProcesses: out.reasoning.trim() ? { [seat.config.id]: out.reasoning } : undefined,
+                    liveToolEvents: out.toolLines.length ? { desk: out.toolLines.join('\n') } : undefined,
+                    injectedSkills: out.skills.length ? out.skills : undefined,
+                    ...(out.proposal ? { proposal: out.proposal, planId: out.proposal.planId } : {}),
+                    runStats: {
+                        runId: `schedule-${userMessage.id}`,
+                        startedAt: new Date(turnStartedAt).toISOString(),
+                        finishedAt: new Date(turnStartedAt + out.workedMs).toISOString(),
+                        durationMs: out.workedMs,
+                    },
+                    imageSummaries: userMessage.imageSummaries,
+                };
+                // The side-effect ledger rides through the ONE cap helper, so a
+                // schedule's rows are trimmed exactly like a chat row's.
+                const aiMessage = appendToolActions([scheduleMessage], scheduleMessage.id, out.actions)[0];
+                updateRequestMessages(prev => [...prev, aiMessage]);
+                options?.automation?.onMessage({
+                    userMessage,
+                    aiMessage,
+                    ...(out.notices.length ? { notices: out.notices } : {}),
+                });
+                return { ok: true };
+            }
             if (runEnsembleEnabled) {
                 const summaries = [
                     ...imagesToUse.map(meta => meta.fullAnalysisText).filter((t): t is string => Boolean(t)),

@@ -4,6 +4,7 @@ import { ChevronDownIcon, LoadingIcon } from '../shared/Icons';
 import MarkdownContent from '../shared/MarkdownContent';
 import StatusPill from '../ui/StatusPill';
 import { phtStamp } from '../../utils/timezone';
+import { gateReceiptLine } from '../../services/trade/proposalGate';
 
 /** Minimal view of the stored hybrid snapshot (HybridDataPacket). */
 interface HybridSnapshot {
@@ -33,11 +34,16 @@ const AutomationRunCard: React.FC<{
     const [confirmed, setConfirmed] = useState<RunOutcomeConfirm | null>(null);
 
     const analysis = run.message?.analysis;
+    // A stage-20r run has no `analysis` object — its verdict is a
+    // `present_trade` proposal plus prose. Read the shape the run ACTUALLY
+    // produced: the legacy `analysis` path stays for rows written before the
+    // schedule moved onto the tool turn, which is what the store holds.
+    const proposal = run.message?.proposal;
     const snapshot = (analysis?.marketSnapshot ?? undefined) as HybridSnapshot | undefined;
     const time = phtStamp(run.startedAt);
     // a bot-scoped run's message carries persona prose, no analysis —
     // without this the card reads a misleading "Neutral" with an empty bubble.
-    const isBotReply = !analysis && !!run.message?.text?.trim();
+    const isBotReply = !analysis && !proposal && !!run.message?.text?.trim();
 
     const statusBadge = run.status === 'complete' ? (
         <StatusPill tone="up" kicker>Complete</StatusPill>
@@ -51,7 +57,7 @@ const AutomationRunCard: React.FC<{
 
     // A bot-scoped run has no trade analysis — label the card by what it is
     // instead of a fabricated "Neutral" signal.
-    const direction = analysis?.direction ?? (isBotReply ? 'Bot reply' : 'Neutral');
+    const direction = analysis?.direction ?? proposal?.direction ?? (isBotReply ? 'Bot reply' : 'Neutral');
     const directionColor = direction === 'Long' ? 'text-emerald-400' : direction === 'Short' ? 'text-rose-400' : 'text-zinc-400';
 
     // Compact chat-message summary of the signal (no raw JSON). Bot-scoped
@@ -60,6 +66,18 @@ const AutomationRunCard: React.FC<{
     const markdown = useMemo(() => {
         if (isBotReply) return run.message?.text ?? '';
         if (run.status === 'skipped' && run.error) return `_Skipped — ${run.error}_`;
+        if (proposal) {
+            // A stage-20r run's bubble is its own prose — which is where the
+            // tool failures and any refused plan already are — with the plan
+            // stated once from the proposal the model actually presented, and
+            // the gate in the app's ONE wording for what a gate said.
+            return [
+                `**${proposal.symbol} · ${proposal.direction}** — entry ${proposal.entry}, SL ${proposal.stopLoss}, TP ${proposal.takeProfits.join(' / ')}`,
+                ...(proposal.gate ? [gateReceiptLine(proposal.gate)] : []),
+                '',
+                run.message?.text ?? '',
+            ].join('\n');
+        }
         if (!analysis) return '';
         const lines: string[] = [];
         lines.push(`**${analysis.coinName ?? 'Unknown asset'} · ${analysis.direction ?? 'Neutral'} · ${analysis.confidence ?? '—'}**`);
@@ -76,7 +94,7 @@ const AutomationRunCard: React.FC<{
             lines.push(analysis.strategy.length > 400 ? `${analysis.strategy.slice(0, 400)}…` : analysis.strategy);
         }
         return lines.join('\n');
-    }, [isBotReply, run.status, run.error, run.message?.text, analysis, snapshot]);
+    }, [isBotReply, run.status, run.error, run.message?.text, analysis, proposal, snapshot]);
 
     const outcomeActions: { key: RunOutcomeConfirm; label: string; className: string }[] = [
         { key: 'win', label: 'Win', className: ' rounded-control bg-emerald-500/15 border border-emerald-500/40 px-4 py-2 text-ui-sm font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25' },
@@ -91,7 +109,7 @@ const AutomationRunCard: React.FC<{
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                     {statusBadge}
                     <span className={`font-black text-ui-base tracking-wider uppercase ${directionColor}`}>{direction}</span>
-                    {analysis?.coinName && <span className="font-mono text-ui-sm font-bold text-zinc-300">{analysis.coinName}</span>}
+                    {(analysis?.coinName ?? proposal?.symbol) && <span className="font-mono text-ui-sm font-bold text-zinc-300">{analysis?.coinName ?? proposal?.symbol}</span>}
                     <span className="ml-auto text-ui-xs font-mono text-zinc-500">{time}</span>
                 </div>
 
