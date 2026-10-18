@@ -386,7 +386,7 @@ const problems = [...rep.missingFile, ...rep.outOfRange, ...rep.blank];
 // are "what the rule can see", not "what is broken" — do not cite them as a
 // defect count, and do not answer a doubt about a wrapped sentence by trusting
 // this ceiling: re-measure the anchor by hand.
-const COMMENT_CEILING = 61;
+const COMMENT_CEILING = 46;
 const SYMMISS_CEILING = 0;
 
 console.log(`flow docs: ${all.length} anchor references, ${unique.size} unique, across ${DOCS.join(' + ')}`);
@@ -413,8 +413,8 @@ const UNATTRIBUTED_CEILING = 0;
 // Both quality lists print on EVERY run, not only when they breach: a counted
 // number whose evidence is invisible is not a measurement, and at exactly the
 // ceiling the list used to print nothing at all.
-rep.symMiss.slice(0, 15).forEach(m => console.log(`  SYMBOL MISS ${m}`));
-rep.comment.slice(0, 15).forEach(m => console.log(`  COMMENT LINE ${m}`));
+rep.symMiss.forEach(m => console.log(`  SYMBOL MISS ${m}`));
+rep.comment.forEach(m => console.log(`  COMMENT LINE ${m}`));
 
 if (unique.size < 180) { console.log(`FAIL — only ${unique.size} unique anchors parsed; the scanner is broken, not the docs`); process.exit(1); }
 if (controls.length) { console.log('FAIL — the gate cannot see its own planted defects'); process.exit(1); }

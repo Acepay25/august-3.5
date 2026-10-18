@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**251 unique anchors verified, 0 unattributed** — plus two quality ceilings, 61 citations
+**250 unique anchors verified, 0 unattributed** — plus two quality ceilings, 46 citations
 that land on a comment line and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
 carrying more than one citation, and a sentence that wraps puts its number out of reach of
@@ -38,7 +38,7 @@ flowchart TD
     US --> UR["useSurfaceRouter hooks/useSurfaceRouter.ts:75 openJournal, :101 hash read, :159 serialize"]
     UR --> HASH["utils/appHash.ts:10 — hash and state stay equal"]
     APP --> HD["Header band App.tsx:2467 — guard surface !== 'agents' :2466"]
-    HD --> SW["SurfaceSwitch App.tsx:2163 — 4 destinations, list in SurfaceMenuList.tsx:42-51"]
+    HD --> SW["SurfaceSwitch App.tsx:2163 — 4 destinations, list in SurfaceMenuList.tsx:42"]
     APP --> AV["AgentsView gets the same nodes as props App.tsx:2604-2697"]
     SW --> T["Trade · trade-view · App:2493"]
     SW --> J["Journal · journal-view · App:2538"]
@@ -61,14 +61,14 @@ Stored surface values `'chat'`, `'boards'`, `'skills'` all migrate to `'trade'`
 flowchart TD
     subgraph CHAT["Chat surface (agents)"]
         CB["composer textarea — AgentsView.tsx:538 ref, Enter :1474"] --> D1{"send() :697 branches on what is SELECTED"}
-        D1 -->|a bot is selected| BOT["onSendBotTurn components/agents/AgentsView.tsx:735 → App:2617 → useBotMailbox → runBotTurn"]
-        D1 -->|no bot| AN["onAnalyze(prompt, images) components/agents/AgentsView.tsx:725 → App:1711 handleRunAnalysisFromChat"]
+        D1 -->|a bot is selected| BOT["onSendBotTurn components/agents/AgentsView.tsx:732 → App:2617 → useBotMailbox → runBotTurn"]
+        D1 -->|no bot| AN["onAnalyze(prompt, images) components/agents/AgentsView.tsx:725 → App:1691 handleRunAnalysisFromChat"]
     end
     subgraph DOCK["Chart AI dock — inside Trade, TradeView.tsx:1115"]
         DC["ChatComposer.tsx:146 :218"] --> D2{"chatTurnRunner.send chatTurnRunner.ts:784 — branches on seats"}
         D2 -->|solo| SO["runSeatTurn called services/trade/chatTurnRunner.ts:929, defined :593"]
         D2 -->|panel, 2+ seats| PN["per-seat services/trade/chatTurnRunner.ts:1078 + createDebateMailbox :1006 + planPanelTurn :1018"]
-        D2 -->|Full analysis button| FA["runFullAnalysis components/trade/TradeChatPanel.tsx:547 → the SAME App:1711 wrapper — it holds the session run slot and writes no row"]
+        D2 -->|Full analysis button| FA["runFullAnalysis components/trade/TradeChatPanel.tsx:547 → the SAME App:1691 wrapper — it holds the session run slot and writes no row"]
     end
     SO --> TT["runToolTurn — services/trade/toolTurn.ts:109"]
     PN --> TT
@@ -107,7 +107,7 @@ recorded on the row (`Message.injectedSkills`, `types/message.ts:280`), bounded
 to the 30 the index prints — a row naming skills the model never saw would be an
 audit defect, not an audit trail.
 
-**One entry, both homes.** `handleRunAnalysisFromChat` (App.tsx:1711) is the only
+**One entry, both homes.** `handleRunAnalysisFromChat` (App.tsx:1691) is the only
 analysis wrapper: the dock passes it as `onRunAnalysis` (App:2485) and the Chat
 surface as `onAnalyze` (App:2581). It was two, and `services/trade/analysisTurn.ts`
 was deleted (2026-10-17) because a second writer keyed rows with ids no canonical
@@ -393,12 +393,12 @@ card that forgets it was clicked offers a second journal row.
 | 5 | useSurfaceRouter → appHash | `#/journal\|market\|settings\|watch` ⇄ state `hooks/useSurfaceRouter.ts:101`, serialize `:159` |
 | 6 | App → Header | band `App.tsx:2467`, guard `surface !== 'agents'` `:2466` |
 | 7 | App → 4 lazy surfaces | each behind `SurfaceSkeleton`, guards `App.tsx:2493 :2538 :2560 :2602` |
-| 8 | Header → SurfaceSwitch | the destination set `App.tsx:2163`, list `SurfaceMenuList.tsx:42-51` |
+| 8 | Header → SurfaceSwitch | the destination set `App.tsx:2163`, list `SurfaceMenuList.tsx:42` |
 | 9 | App → AgentsView props | same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) `App.tsx:2604-2697` |
 | 10 | TradeView → TradeChatPanel | the dock, inside Trade `components/trade/TradeView.tsx:1115` |
-| 11 | AgentsView.send → bot branch | the selected bot answered at `components/agents/AgentsView.tsx:735` |
+| 11 | AgentsView.send → bot branch | the selected bot answered at `components/agents/AgentsView.tsx:732` |
 | 12 | bot branch → useBotMailbox | `runUserBotTurn` → `runBotTurn` |
-| 13 | AgentsView.send → analysis branch | `onAnalyze` `components/agents/AgentsView.tsx:725` → `App.tsx:1711` — the dock's `onRunAnalysis` reaches the SAME wrapper |
+| 13 | AgentsView.send → analysis branch | `onAnalyze` `components/agents/AgentsView.tsx:725` → `App.tsx:1691` — the dock's `onRunAnalysis` reaches the SAME wrapper |
 | 14 | dock Full analysis → the run slot | `runFullAnalysis` `components/trade/TradeChatPanel.tsx:547` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
 | 15 | ChatComposer → chatTurnRunner.send | Enter `ChatComposer.tsx:146` / button `:201` → `services/trade/chatTurnRunner.ts:784` |
 | 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:929` (definition `:593`) |
