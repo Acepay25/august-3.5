@@ -1974,8 +1974,9 @@ would still abstain. The 46 remaining each need a hand look: the retired scratch
 that carries a symbol the doc line actually names.
 
 **Gate state on this tree, each read from its own marker, not a piped exit code:**
-typecheck, type-check-scripts, electron parse, flow-doc anchors (250 verified,
-0 unattributed, 46 comment-line, **0 symbol**, 17 reach controls), vitest (477 files,
+typecheck, type-check-scripts, electron parse, flow-doc anchors (247 verified,
+0 unattributed, **0** comment-line and **0** symbol misses — both ceilings now zero, with 4
+citations listed as deliberate comment-as-claim exemptions), vitest (477 files,
 1 skipped), lint (0 errors / 681 warnings under the ratchet — CI's step is now runnable
 locally because `docs/analysis/**` is ignored as the untracked scratch it is),
 `vite build`, boot-probe, render-probe, Playwright e2e (5 passed), and the
