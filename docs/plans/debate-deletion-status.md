@@ -1946,16 +1946,22 @@ line-level claims are the adjacent form and all of them check out.
 
 **Two questions, one word each. Everything else in the backlog is closed.**
 
-1. #19 — the surviving ensemble branch is a live multi-seat panel chat (not the deleted
-   debate). Keep it, or make the dock one-model? If "one model", it is two gated passes:
-   the panel surface itself, then the persisted `ensemble` session kind that history
-   rows still carry.
-2. #21 — `Message.postMortem` (105 field-shaped lines then; **34 lines in 23 files** for
-   `.postMortem` now) and `Message.debateTurns` are read only by consumers of *stored*
-   history: `services/analysis/convictionDrift.ts`, `ensembleLineFromTranscript` in
-   `services/learning/monthlyReport.ts`, round-1 openings in
-   `hooks/useWatchAndAutopilot.ts`, `debateTurnCount` in `utils/reportExport.ts`. The
-   ruling "delete fields + readers" needs the added words *and the stored history*.
+1. #19 — **When you press "Full analysis", how many minds should answer?** Today one
+   request can still be answered by several models at once in the panel chat, left over
+   from the debate. Either keep that (it works, it just isn't a debate any more), or make
+   the dock answer with the single model you picked, like the chat box does. Choosing
+   "single model" is two passes, not one: the panel itself, then the flag that tells
+   already-saved conversations they were multi-model — those old rows must keep showing
+   what they were.
+
+2. #21 — **Should old post-mortems and old debate transcripts still be readable?** A
+   closed trade can still carry a written post-mortem, and an old conversation can still
+   carry its debate transcript. Nothing writes either any more, but five places still
+   *read* them: the drift chart, the monthly report's debate line, the "what the analysts
+   said first" opening in watch runs, and the count in the exported report. So today they
+   are a museum of pre-2026-10-18 runs that nothing new will ever join. Deleting the
+   fields means deleting that history too — that is the part your earlier "delete fields
+   + readers" ruling did not say either way.
 
 **Also open, owned by nobody yet:** the calibration ledger
 (`CalibrationLedgerService` + `calibrationStore/policy/prompts`) is still an unresolved
