@@ -1239,3 +1239,45 @@ population so a dead regex fails loudly; and carry a reach control that must
 catch both an out-of-range and a blank-line anchor before "0 problems" counts.
 Until then the per-line checker used for 69b93ff/5079090 (56 anchors, 0
 problems) is a manual step, not an enforced one.
+
+**That last sentence is now false, and the requirements above are all met (2026-10-18).**
+`scripts/check-flow-doc-anchors.cjs` exists and runs in CI as "Flow docs cite real lines":
+same-line ownership with `App:NNNN` resolved as an alias, no paragraph fallback, a population
+floor that fails loudly (120, measured 145), and nine reach controls that plant both an
+out-of-range and a blank-line anchor. The retracted-claim case was solved differently than the
+requirements imagined: rather than teach the scanner to recognise a quote, the withdrawn sentence
+at `docs/app-flow.md` was rewritten to "App.tsx line 2766", so the number is no longer in
+`file:NNN` form and the gate cannot mistake it for a live citation. `UNATTRIBUTED_CEILING`
+is **0** — every number in both flow docs names its file — and the ratchet was proved in both
+directions: a planted bare `:1234` made it FAIL, removing it made it pass. Qualifying the last
+98 unattributed claims is what exposed six wrong line numbers (see the flow doc's correction 6).
+
+## Gate evidence at this tip (2026-10-18, all figures read from each gate's own marker line)
+
+| Gate | Result |
+| --- | --- |
+| `npm run typecheck` | exit 0 |
+| `npm run typecheck:scripts` | exit 0 |
+| `npm run typecheck:electron` | exit 0 (three `.cjs` files, invisible to tsc) |
+| `npm run check-flow-doc-anchors` | OK — 145 anchors, 0 unattributed, 9 reach controls |
+| `npm run e2e` | 5 passed, 1 worker, 37.2 s, `E2E_EXIT=0` |
+| `npm run test` | **476 files passed / 1 skipped, 4708 tests passed / 11 skipped, 410 s, `VITEST_EXIT=0`** |
+| `npm run render-probe` | OK — 113 checks, 0 FAIL, zero pageerrors, `PROBE_EXIT=0` |
+
+**One discard, recorded rather than hidden.** The first full-suite run reported
+`2 failed / 469 passed` with `VITEST_EXIT=1` in 718.80 s, and `tests/coachThread.test.tsx` and
+`tests/deskToolPerceptionTruth.test.ts` failed 4 tests between them. It was launched 14 s after
+the Playwright webServer came down: 1.75× the idle duration and **5 × `Failed to start forks
+worker` / `Timeout waiting for worker to respond`**. Both files then ran 13/13 green solo in
+4.47 s, and the clean re-run above passed them with zero worker-start failures. The discarded
+measurement is the red one; the number to quote is 476/4708.
+
+**Still the owner's call, and none of it is a bug to fix silently:** accuracy mode + the
+calibration ledger (#17), the surviving ensemble branch — including the hybrid fetch, whose
+packet still picks the learning coin at `hooks/useAnalysisPipeline.ts:1040`, and the
+`beginPromptLane` lane that has no caller while `endPromptLane()` still runs at `:1568`
+(stage 19's tail), and `savedAnalyses` / `Message.debateTurns` / the ~25 `postMortem` readers
+that still read historical journal rows (#21). **Local `npm run lint` cannot run at home right
+now**: 95 of its 96 errors sit in `docs/analysis/data/`, which has zero tracked files, so CI
+never sees them — ignoring that directory or moving it out of the repo is a decision, not a
+cleanup.
