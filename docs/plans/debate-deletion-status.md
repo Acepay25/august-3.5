@@ -1542,3 +1542,55 @@ monthly report and conviction drift; `postMortem` is 50 files; `savedAnalyses` i
 31 with a SQLite column and backup validation. The calibration ruling is larger
 still than either, because the confidence store is written at outcome time and
 read by the validation gate, the lens service and the Learn dashboards at once.
+
+## 2026-10-19 — parked: what is landed, what is not, and the exact entry points
+
+Turn budget ends here. Nothing is half-done in the working tree: the six commits
+are gated, `git status` shows only the owner's own paths, and the remaining
+rulings are NOT started. The entry points below were re-read from the current
+tree this pass, not recalled.
+
+**Two of my earlier claims in this ledger were wrong and are corrected here.**
+The backup validator is `services/infrastructure/BackupService.ts`, and the line
+numbers I had attributed to a bare `BackupService.ts` are actually
+`services/infrastructure/SqliteService.ts:686` — the saved-analyses JSON compare.
+And the settings field `confidenceCalibration` is not what the Learn dashboards
+read: `components/dashboards/learning/CalibrationSection.tsx:28` renders
+`profile.confidenceAccuracy`, produced at
+`services/learning/SelfLearningService.ts:248`. Those are two different stores,
+and the owner's "delete the dashboards too" ruling is about the second one.
+
+**Remaining ruling inside #17 — the calibration dashboards.** Delete
+`components/dashboards/learning/CalibrationSection.tsx` and
+`components/dashboards/learning/CalibrationBar.tsx`, their mount at
+`components/dashboards/LearningDashboard.tsx:203`, and the
+`confidenceAccuracy` producer at `services/learning/SelfLearningService.ts:248`.
+Separately, `confidenceCalibration` in `App.tsx:282`, `App.tsx:803`,
+`App.tsx:1370` and `hooks/useAnalysisPipeline.ts:128` is plumbed through
+settings, persistence and the pipeline props; before deleting it, settle whether
+any pipeline behavior still reads it, because a plumbed field with no reader is
+a different deletion than a rendered one.
+
+**#21 — three sub-items, measured, none started.** `debateTurns` is declared at
+`types/message.ts:189` and `types/trade.ts:110`, written at
+`hooks/useTradeLogging.ts:350` and `utils/watchList.ts:30`, and read by
+`hooks/analysisPipeline/runOutcome.ts:41`, `hooks/useAnalysisPipeline.ts:779`,
+`hooks/useWatchAndAutopilot.ts:105`, `services/analysis/convictionDrift.ts:82`,
+`services/learning/monthlyReport.ts:220`, `utils/analysisUtils.ts:990` and the
+report's turn count at `utils/reportExport.ts:241`, plus a seeded fixture in
+`e2e/smoke.spec.ts:86`. Deleting it removes the input to conviction-drift and
+the monthly report's ensemble line, so those consumers change behavior, not just
+size. `savedAnalyses` carries a real table
+(`services/infrastructure/SqliteService.ts:214`), a read
+(`services/infrastructure/SqliteService.ts:462`), a write-and-diff
+(`services/infrastructure/SqliteService.ts:686`) and a migration list
+(`services/infrastructure/SqliteService.ts:706`) — a persisted-schema deletion,
+with backup validation and the SQLite round-trip test to update. `postMortem` is
+the largest reader set.
+
+**#19** is untouched: the surviving ensemble branch in the pipeline, with the
+market-polling coupling and the positional-argument site recorded above.
+
+**Gate chain each of these owes before commit:** typecheck, eslint on the changed
+files, the flow-docs anchor gate, the full suite, the render probe. Run them one
+at a time, never alongside the probe.
