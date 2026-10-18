@@ -416,7 +416,37 @@ const UNATTRIBUTED_CEILING = 0;
 rep.symMiss.forEach(m => console.log(`  SYMBOL MISS ${m}`));
 rep.comment.forEach(m => console.log(`  COMMENT LINE ${m}`));
 
+// The flow docs QUOTE this gate's own output ("N anchors verified"), and every
+// time a citation was added or a span narrowed the quoted number rotted — twice
+// this session. A self-referential claim is still a claim, so the gate checks it.
+// SCOPE: the two flow docs only. The stage ledger is exempt for the same reason
+// its bare numbers are exempt above — it is a dated run log, and "248 anchors
+// verified" there records what the scan measured that day, which is history, not
+// a live claim. A doc line that wants to stay current must name itself a flow doc.
+const QUOTA_RE = /(\d{2,4})\s+(?:unique\s+)?anchors\s+verified|(\d{2,4})\s+verified,\s*0\b/g;
+function selfQuota(text, label, measured) {
+    const out = [];
+    for (const m of text.matchAll(QUOTA_RE)) {
+        const n = parseInt(m[1] ?? m[2], 10);
+        if (n !== measured) out.push(`${label} states "${m[0].replace(/\s+/g, ' ')}" while the scan measures ${measured}`);
+    }
+    return out;
+}
+// The rule is only a rule if a wrong number is visible to it. Both arms, and the
+// second wording shape, planted here rather than trusted to the real docs.
+const quotaControls = [
+    ...selfQuota('says 97 anchors verified today', 'probe-wrong', 100).length === 1 ? [] : ['wrong self-quota missed'],
+    ...selfQuota('says 100 anchors verified today', 'probe-right', 100).length === 0 ? [] : ['correct self-quota flagged'],
+    ...selfQuota('(249 verified,\n0 unattributed)', 'probe-tail', 250).length === 1 ? [] : ['ledger-shaped self-quota missed'],
+];
+const quota = DOCS.filter(d => d.startsWith('docs/app-flow.'))
+    .flatMap(d => selfQuota(fs.readFileSync(d, 'utf8'), d, unique.size));
+quota.forEach(m => console.log(`  STALE SELF-QUOTA ${m}`));
+console.log(`self-quota: ${quota.length} quoted anchor count(s) disagree with the measurement`);
+
 if (unique.size < 180) { console.log(`FAIL — only ${unique.size} unique anchors parsed; the scanner is broken, not the docs`); process.exit(1); }
+if (quotaControls.length) { console.log(`FLOW DOC ANCHORS FAIL — the self-quota rule cannot see its own planted numbers: ${quotaControls.join('; ')}`); process.exit(1); }
+if (quota.length) { console.log(`FLOW DOC ANCHORS FAIL — ${quota.length} doc statement(s) quote an anchor count the gate no longer measures. Re-run and restate; do not loosen the rule.`); process.exit(1); }
 if (controls.length) { console.log('FAIL — the gate cannot see its own planted defects'); process.exit(1); }
 if (problems.length) { console.log(`FLOW DOC ANCHORS FAIL — ${problems.length} stale anchor(s)`); process.exit(1); }
 if (rep.symMiss.length > SYMMISS_CEILING) {
