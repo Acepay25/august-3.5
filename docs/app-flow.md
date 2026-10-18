@@ -55,7 +55,7 @@ flowchart TD
         D1 -->|no bot| AN["onAnalyze(prompt, images) :725 → App:1720 handleRunAnalysisFromChat"]
     end
     subgraph DOCK["Chart AI dock — inside Trade, TradeView.tsx:1115"]
-        DC["ChatComposer.tsx:146 :218"] --> D2{"chatTurnRunner.send :774 — branches on seats"}
+        DC["ChatComposer.tsx:146 :218"] --> D2{"chatTurnRunner.send chatTurnRunner.ts:774 — branches on seats"}
         D2 -->|solo| SO["runSeatTurn called :919, defined :592"]
         D2 -->|panel, 2+ seats| PN["per-seat :1068 + createDebateMailbox :996 + planPanelTurn :1008"]
         D2 -->|Full analysis button| FA["runFullAnalysis :1130 → the SAME App:1720 wrapper — it holds the session run slot and writes no row"]
@@ -72,7 +72,7 @@ flowchart TD
     SPLIT -->|yes| TR
     SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:229, tools from CHAT_SURFACE_TOOLS :54, prompt chatSurfaceSystemPrompt :146"]
     CST --> TT
-    TR --> LW["live writer — applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:160, peel per frame; flush BEFORE the settle write :1521"]
+    TR --> LW["live writer — applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:160, peel per frame; flush BEFORE the settle write useAnalysisPipeline.ts:1521"]
     CST --> LW
     ENS --> MERGE
     LW --> MERGE["entriesForSession — chatSessions.ts:531, parameter literally named canonical :533"]
@@ -247,7 +247,7 @@ flowchart TD
     D -->|has a bot| BR["runBotRoutineTurn useAutomations.ts:343 → botRoutine.ts:80 — prompt, history"]
     BR --> ST["injected stream = streamQuickResponse useAutomations — reuses the bot transport, NOT the debate"]
     D -->|no bot| AT["automation arm BEFORE the mode fork useAnalysisPipeline.ts:1339 → runAutomationTurn automationTurn.ts:160"]
-    AT --> PRIV["runs into a private message list, not the open conversation — automationMessagesRef useAnalysisPipeline.ts:382, rationale :617-622"]
+    AT --> PRIV["runs into a private message list, not the open conversation — automationMessagesRef useAnalysisPipeline.ts:382, its notices (a failed tool, a turn that called nothing, a refused plan)"]
     AT --> CAP["plan rationed: MAX_PLANS_PER_RUN :68 · MAX_PLANS_PER_DAY AutomationService.ts:113"]
     AT --> FAIL["failed tool + refused plan + no-lookup land in notices → row text and a WARNING toast useAutomations.ts:531"]
     GR["useAgentGroups.ts → groupRounds → streamQuickResponse"] --> GV["GroupChatView"]
@@ -357,15 +357,15 @@ card that forgets it was clicked offers a second journal row.
 | 16 | solo → runSeatTurn | `:919` (definition `:592`) |
 | 17 | runSeatTurn → the ONE turn executor | `runToolTurn toolTurn.ts:89` → `streamChatWithDeskTools :95` → `DeskToolsService` → `streamChatRequest` |
 | 18 | panel → per-seat + mailbox | `:1068` · `:996` · `:1008` |
-| 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `TradeChatPanel.tsx:453` |
+| 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `TradeChatPanel.tsx:453`, assembled `:475` |
 | 20 | every dock turn → chatStore | `mutate` · `beginRun` |
-| 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `:1449`, anything else runs the tool turn `:1475`; the mode flag `:584` now only gates the hybrid pull `:1022` |
-| 22 | the casual arms | a bot thread → `streamQuickResponse :3315` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:229` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
-| 23 | casual frames → Message.text | `hooks/analysisPipeline/streamThrottlers.ts:160`; flush precedes the settle write :1521 |
+| 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useAnalysisPipeline.ts:1449`, anything else runs the tool turn `:1475`; the mode flag `:584` now only gates the hybrid pull `:1022` |
+| 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1449` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:229` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
+| 23 | casual frames → Message.text | `hooks/analysisPipeline/streamThrottlers.ts:160`; flush precedes the settle write useAnalysisPipeline.ts:1521 |
 | 24 | ensemble → 8 stages | see C — anchors deliberately omitted |
 | 25 | desk tools → what a caller can reach | `executeDeskTool DeskToolsService.ts` (its allow-list is enforced at execution, not only at offer time) |
 | 26 | panel tools → chart echo | `executePanelTool chatTurnRunner.ts` → `onToolAction` |
-| 27 | automation tick → runAutomation | `useAutomations.ts:411`, forks on `config.botId` `:431`; the no-bot path takes the pipeline's OWN schedule arm `useAnalysisPipeline.ts:1339` → `runAutomationTurn automationTurn.ts:160`, writing the private list automationMessagesRef :382, rationale `:617-622` and settling through `onMessage` `useAutomations.ts:531`. Characterized in `tests/automationRouteCharacterization.test.tsx` |
+| 27 | automation tick → runAutomation | `useAutomations.ts:411`, forks on `config.botId` `:431`; the no-bot path takes the pipeline's OWN schedule arm `useAnalysisPipeline.ts:1339` → `runAutomationTurn automationTurn.ts:160`, writing the private list automationMessagesRef useAnalysisPipeline.ts:382, its `notices` (a tool that came back failed, a turn that called nothing, a refused plan) and settling through `onMessage` `useAutomations.ts:531`. Characterized in `tests/automationRouteCharacterization.test.tsx` |
 | 28 | bot routine → injected stream | `botRoutine.ts` ← `useAutomations` (reuses 22's bot arm) |
 | 29 | rooms → groupRounds | `useAgentGroups` → `streamQuickResponse` |
 | 30 | review passes / propose_skill → draft → approval → skill | `draftGates.ts` → `skillApproval` — the post-mortem leg is starved, not deleted (see D) |
