@@ -254,9 +254,16 @@ is still called from `botLearning.ts:234`, and its first guard is
 trade closed after 2026-10-18 the craft leg can only return null; it still answers
 for a row that carries a post-mortem from before then. `selfImprovement.ts:73-74`,
 `SkillMemoryService` and `DoctrineConsolidationService` read the same dead field.
-**Sizing that by grep is a trap, so the recipe is part of the number.** Counting the
-TOKEN `postMortem` in .ts/.tsx measures **122 lines in 50 files** today; counting the field
-reads (`.postMortem`) measures **34 lines in 23 files**. Earlier drafts of this page asserted
+**Sizing that by grep is a trap, so the recipe is part of the number — and the word
+boundary is load-bearing.** Counting the TOKEN, `grep -rE "postMortem" --include="*.ts"
+--include="*.tsx" .`, measures **122 lines in 50 files**; counting the field reads needs
+`grep -rE "\.postMortem\b" …` and measures **34 lines in 23 files**. Drop the `\b` and the
+second figure silently becomes **38**, because four of those lines are a DIFFERENT field:
+`postMortemCreatedAt`, the timestamp twin, which is read at
+`hooks/analysisPipeline/memoryContext.ts:183` and
+`services/learning/DecisionReflectionService.ts:24` and gated on at
+`services/ui/AlgorithmicSummaryService.ts:50`. A census without the boundary sweeps a live
+name into the dead list, which is the mistake this page keeps re-recording. Earlier drafts of this page asserted
 189/57 and 105/~35 — true the day they were taken, untrue from the stage that deleted readers
 onward, and unreproducible without the filter, which is how a census becomes a claim nobody can
 check. The rest
@@ -270,7 +277,10 @@ candles to decide whether a TP or SL really got hit; and the enum member
 deletion keyed on the word would remove the validator. Re-measured 2026-10-19; the reader
 list and the two decisions that pass has to make up front are in
 [the stage ledger](plans/debate-deletion-status.md). Deleting the writer was the owner's
-explicit choice, with no replacement; clearing the readers is stage 21.
+explicit choice, with no replacement. Clearing the readers is NOT simply scheduled work:
+the stored-history readers answer only for rows written before 2026-10-18, so whether
+that museum stays readable is the owner's open call (#21), and deleting the fields deletes
+the history with it.
 
 The chain from `draftGates` to the injected skill is unchanged and still runs; it
 now starts at the review passes and at the chat's `propose_skill` tool, not at a
@@ -465,9 +475,10 @@ card that forgets it was clicked offers a second journal row.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in both flow docs names
-   its file on the same line, so the gate can check it: 133 anchors verified, 0
+   its file on the same line, so the gate can check it: 253 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
-   `:NNN` no longer survives a push. Qualifying the last 98 of them is what found
+   `:NNN` no longer survives a push. Qualifying the citations that had no symbol
+   of their own is what found
    six numbers that were right-shaped and wrong: `runSeatTurn` is called at
    `services/trade/chatTurnRunner.ts:929`, `createDebateMailbox` at
    `services/trade/chatTurnRunner.ts:1006`, `planPanelTurn` at
