@@ -1394,3 +1394,43 @@ and stop writing it) rather than discovered mid-edit. **Local `npm run lint` can
 now**: 95 of its 96 errors sit in `docs/analysis/data/`, which has zero tracked files, so CI
 never sees them — ignoring that directory or moving it out of the repo is a decision, not a
 cleanup.
+
+## 2026-10-19 — #17 taken as one asserted codemod pass; the assertions won
+
+The DELETE ruling stands. This pass stopped trying to edit accuracy mode file by
+file and instead wrote ONE script (outside the repo: `acc_codemod.mjs` under the
+Windows `%TEMP%` dir) that refuses to write a single byte unless every
+replacement matches its expected count. It aborted twice and `git diff --stat`
+then showed only the owner's `package-lock.json`: the working tree is untouched,
+no half-deleted feature.
+
+What the attempt measured, which is the value it leaves behind:
+
+- The surface is 25 tracked source files, not the ~18 named earlier. Missed
+  before: `hooks/useUIState.ts` owns the modal's open flag,
+  `components/automation/AutomationEditorModal.tsx` renders the automation Mode
+  picker, `components/automation/AutomationView.tsx` renders its label, and
+  `scripts/installer-smoke.cjs:290-295` carries a profile fixture with all five
+  settings fields. Leaving any of them produces an inert control or a stale
+  packaged-exe fixture.
+- The Pure-AI trio cannot outlive the mode: `components/settings/tabs/GeneralTab.tsx:169`
+  renders those three switches only while the sub-mode is `pure_ai`, so they go
+  in the same pass as the toggle, not after it.
+- `services/providers/GenericAnalysisService.ts:380` is a three-way prompt chain;
+  deleting the two mode branches means lifting the standard branch out of its
+  `else` and dedenting it, which needs a brace-walking flattener, not a regex.
+- `hooks/useProfilePersistence.ts:185` and `hooks/useAnalysisPipeline.ts:1594` list
+  the five fields inside one-line object literals and one very long dependency
+  array, so whole-line filtering cannot reach them — they need token strips.
+- The one unsolved blocker is `components/settings/CustomInstructionsEditor.tsx:164`:
+  the tab strip is a single `<div>` holding three sibling `<button>`s, so "delete
+  from this line through the matching `</div>`" swallows its siblings (that is
+  what tripped the second abort). The fix is a sibling-aware range — walk back to
+  the line equal to `<button`, forward to the line equal to `</button>` — then
+  collapse `InstructionTab` to the one list.
+
+Resume facts: `node <temp>/acc_codemod.mjs` is idempotent-safe to iterate because
+it aborts before writing. After it succeeds, run `npm run typecheck` and expect
+to hand-repair the lines it deliberately skips (any line with unbalanced braces,
+e.g. an `if` opener left without its body). #19 and #21 are unchanged above and
+still unbuilt.
