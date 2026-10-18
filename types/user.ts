@@ -1,6 +1,6 @@
 // User profile, settings, and custom instruction types
 
-import { Conversation, LoggedTrade, SavedAnalysis, TradeSummary } from './trade';
+import { Conversation, LoggedTrade, TradeSummary } from './trade';
 import { GlobalMemory, InsightKnowledgeBase, LearningRule, TradingWeaknesses } from './learning';
 
 export interface CustomInstruction {
@@ -38,7 +38,6 @@ export interface UserProfile {
   username: string;
   conversations: Conversation[];
   tradeLog: LoggedTrade[];
-  savedAnalyses: SavedAnalysis[];
   tradeSummaries: TradeSummary[];
   finalTradeSummary: string | null;
   globalMemory?: GlobalMemory; // Layer 3: Global Long-Term Memory

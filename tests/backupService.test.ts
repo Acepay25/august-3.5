@@ -77,7 +77,6 @@ const profileFixture = {
     username: USERNAME,
     conversations: [],
     tradeLog: [],
-    savedAnalyses: [],
     settings: { activeFrameworks: [] },
 };
 

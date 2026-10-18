@@ -38,7 +38,6 @@ const exportedFile = (over: Record<string, unknown> = {}) => JSON.stringify({
         { id: 'c2', title: 'ETH fade', messages: [{ id: 'm3' }] },
     ],
     tradeLog: [{ id: 't1' }, { id: 't2' }, { id: 't3' }],
-    savedAnalyses: [],
     settings: { activeFrameworks: [] },
     _backupExportedAt: '2026-09-19T10:00:00.000Z',
     _preferencesBackup: { provider_configs_v1: [{ id: 'mock' }] },
@@ -124,7 +123,7 @@ describe('the Backup manager can choose a file', () => {
         importMock.mockReset();
         importMock.mockResolvedValue({
             ok: true,
-            preview: { username: 'rober', conversationCount: 2, messageCount: 3, tradeCount: 3, savedAnalysesCount: 0 },
+            preview: { username: 'rober', conversationCount: 2, messageCount: 3, tradeCount: 3 },
             limitations: ['Reasoning records (the thinking corpus) are not carried by an exported file.'],
         });
         render(

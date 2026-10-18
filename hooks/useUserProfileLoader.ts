@@ -68,7 +68,6 @@ export interface UseUserProfileLoaderArgs {
     setActiveConversationId: React.Dispatch<React.SetStateAction<string | null>>;
 
     setLoggedTrades: React.Dispatch<React.SetStateAction<LoggedTrade[]>>;
-    setSavedAnalyses: React.Dispatch<React.SetStateAction<any[]>>;
     setTradeSummaries: React.Dispatch<React.SetStateAction<TradeSummary[]>>;
     setFinalTradeSummary: React.Dispatch<React.SetStateAction<string | null>>;
     setGlobalMemory: React.Dispatch<React.SetStateAction<any>>;
@@ -121,7 +120,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         persistedEnsembleModeRef, ensembleModelCount,
         providerConfigs,
         setConversationHistory, setActiveConversationId,
-        setLoggedTrades, setSavedAnalyses, setTradeSummaries, setFinalTradeSummary,
+        setLoggedTrades, setTradeSummaries, setFinalTradeSummary,
         setGlobalMemory, setIsGlobalMemoryEnabled, setMemoryConfig, setMemoryModel,
         setInsightKnowledgeBase, setActiveFrameworks, setSummaryCharLimit,
         setSummarizationProvider, setSummarizationModel, setVisionModel,
@@ -164,7 +163,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
      * `loadUserData`, where the ordering is still visible.
      */
     const applyLoadedProfile = useCallback((profile: UserProfile): void => {
-        setSavedAnalyses(profile.savedAnalyses || []);
         setTradeSummaries((profile.tradeSummaries || []).slice(-MAX_TRADE_SUMMARIES));
         setFinalTradeSummary(profile.finalTradeSummary || null);
         setGlobalMemory(profile.globalMemory);
@@ -212,7 +210,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setInsightKnowledgeBase(profile.insightKnowledgeBase);
     }, [
         providerConfigs, ensembleModelCount, persistedEnsembleModeRef,
-        setSavedAnalyses, setTradeSummaries, setFinalTradeSummary, setGlobalMemory,
+        setTradeSummaries, setFinalTradeSummary, setGlobalMemory,
         setActiveFrameworks, setSummaryCharLimit, setSummarizationProvider,
         setSummarizationModel, setVisionModel, setUseAlgorithmicSummary,
         setUseAlgorithmicInsights, setIsGlobalMemoryEnabled, setIsStrategiesEnabled,
@@ -228,7 +226,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setConversationHistory([newConv]);
         setActiveConversationId(newConv.id);
         setLoggedTrades([]);
-        setSavedAnalyses([]);
         setTradeSummaries([]);
         setFinalTradeSummary(null);
         setGlobalMemory(undefined);
@@ -251,7 +248,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
             await dbService.saveUserProfile(usernameToSave, {
                 conversations: [newConv],
                 tradeLog: [],
-                savedAnalyses: [],
                 tradeSummaries: [],
                 finalTradeSummary: null,
                 globalMemory: undefined,
@@ -282,7 +278,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setIsAutoCapturing, setIsEntryNotHitCapturing,
         setIsGlobalMemoryEnabled, setIsHybridIntelligenceEnabled,
         setLoggedTrades, setMemoryConfig,
-        setMemoryModel, setSavedAnalyses, setSummarizationModel,
+        setMemoryModel, setSummarizationModel,
         setSummarizationProvider, setSummaryCharLimit, setTradeSummaries,
     ]);
 

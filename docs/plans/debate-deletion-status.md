@@ -1379,18 +1379,27 @@ config change is needed to proceed.
 
 **#21 — `postMortem`, `savedAnalyses`, `Message.debateTurns`.** Measured the `savedAnalyses`
 surface before touching it, and it is not the quick trim the phrase "no writer" suggests: **54
-references across 17 files**. Only `setSavedAnalyses` is starved (called at
-`hooks/useUserProfileLoader.ts:172` to load and `:255` to clear), but the plumbing around it is
-alive and asserted: `services/infrastructure/SqliteService.ts:73/:465/:491/:686-708` reads and
-writes it as its own column, staging JSON and diffing against the previous profile;
-`utils/profileUtils.ts:11,32-33` validates the first element's shape on every profile read;
-`services/infrastructure/BackupService.ts:686-687/:720/:730` refuses backups where it is not an
-array and reports `savedAnalysesCount`; `dbService.ts:242/:323` seed defaults; and ten suites pin
-it — `tests/sqliteService.test.ts:212,221` round-trips a row and asserts `userPrompt` survives, so
-**the store has a working read/write path with a dead source, not a dead path**. Deleting it is
-therefore a schema change plus a backup-format change plus 10 suite edits, and it belongs with the
-other two: one gated pass each, with the migrations decided explicitly (drop the column, or keep it
-and stop writing it) rather than discovered mid-edit. **Local `npm run lint` cannot run at home right
+references across 17 files**. Only `setSavedAnalyses` was starved, but the plumbing around it was
+alive and asserted: `SqliteService` read and wrote it as its own column, staging JSON and diffing
+against the previous profile; `profileUtils` validated the first element's shape on every profile
+read; `BackupService` refused backups where it was not an array and reported `savedAnalysesCount`;
+`dbService` seeded defaults; and ten suites pinned it — one round-tripped a row and asserted
+`userPrompt` survived. So **the store had a working read/write path with a dead source, not a dead
+path**. Deleting it therefore meant a schema change plus a backup-format change plus ten suite
+edits, with the migration decided explicitly rather than discovered mid-edit.
+
+**Resolved 2026-10-19, stage 21.** The migration was decided first: **keep the `saved_analyses`
+table, delete the code.** Dropping a table is a destructive migration against the owner's live
+journal, and the reasoning above is that its bytes may still be history worth having. Deleted: the
+`UserProfile` field and the `SavedAnalysis` type, the `useTradeLogging` state and the
+`setSavedAnalyses` prop that threaded it to the loader, three loader call sites, the persistence
+hook's snapshot key and both dirty-section comparisons, `SqliteService`'s fingerprint entry plus its
+SELECT section plus its INSERT/delete-absent section, `BackupService`'s validation and the
+`savedAnalysesCount` preview field (nothing under `components/` ever read it), `profileUtils`' shape
+check, `dbService`'s two default seeds, and 19 further occurrences in fixtures and nine probe
+scripts that seeded the old profile shape. The round-trip suite kept its trades and summaries and
+lost only the analyses leg. Census: 66 references across 21 files, removed as one all-or-nothing
+asserted codemod — nothing was written unless every expectation matched. **Local `npm run lint` cannot run at home right
 now**: 95 of its 96 errors sit in `docs/analysis/data/`, which has zero tracked files, so CI
 never sees them — ignoring that directory or moving it out of the repo is a decision, not a
 cleanup.
@@ -1538,8 +1547,9 @@ Gates run for this change, all green: typecheck, eslint on the three files, the
 flow-docs anchor gate, the full suite, and the render probe with zero pageerrors.
 The rest of #21 is untouched and is NOT this small: `debateTurns` spreads over 14
 source files plus 3 suites and feeds the training-data export, the chart, the
-monthly report and conviction drift; `postMortem` is 50 files; `savedAnalyses` is
-31 with a SQLite column and backup validation. The calibration ruling is larger
+monthly report and conviction drift; `postMortem` is 50 files; `savedAnalyses` —
+31 refs with a SQLite column and backup validation — has since been deleted (see
+stage 21). The calibration ruling is larger
 still than either, because the confidence store is written at outcome time and
 read by the validation gate, the lens service and the Learn dashboards at once.
 
@@ -1581,11 +1591,10 @@ history card all still call it directly.
 report's turn count at `utils/reportExport.ts:241`, plus a seeded fixture in
 `e2e/smoke.spec.ts:86`. Deleting it removes the input to conviction-drift and
 the monthly report's ensemble line, so those consumers change behavior, not just
-size. `savedAnalyses` carries a real table
-(`services/infrastructure/SqliteService.ts:214`), a read
-(`services/infrastructure/SqliteService.ts:462`), a write-and-diff
-(`services/infrastructure/SqliteService.ts:686`) and a migration list
-(`services/infrastructure/SqliteService.ts:706`) — a persisted-schema deletion,
+size. `savedAnalyses` carried a real table
+(`services/infrastructure/SqliteService.ts:214`, still created), a read, a
+write-and-diff and an id list — a persisted-schema deletion, which is why the
+table was kept and only the code removed. See the stage-21 note above.
 with backup validation and the SQLite round-trip test to update. `postMortem` is
 the largest reader set.
 
@@ -1673,7 +1682,8 @@ So #21's transcript item is left standing until the owner chooses: delete only
 the unreachable half (guard + three fallback parameters), or also give up
 analysis over the stored history. This is a feature-shape call, not a bug fix,
 which is why it was not made silently. Everything else ruled in #17 is landed and
-gated; #19 and the `savedAnalyses` / `postMortem` items remain.
+gated; #19 and the `postMortem` item remain (`savedAnalyses` was cleared later the
+same day — see the stage-21 note above).
 
 ## 2026-10-19 — the unreachable half is deleted: `isDebating` and `activeDebateSpeakers`
 

@@ -83,7 +83,7 @@ async function seed(page) {
         const tx = db.transaction('userProfiles', 'readwrite');
         tx.objectStore('userProfiles').put({
             username: 'Probe User',
-            conversations: [], tradeLog: [], savedAnalyses: [], tradeSummaries: [],
+            conversations: [], tradeLog: [], tradeSummaries: [],
             finalTradeSummary: null,
             settings: { activeFrameworks: [] },
         });

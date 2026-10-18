@@ -78,7 +78,7 @@ async function seed(page) {
         const tx = db.transaction('userProfiles', 'readwrite');
         tx.objectStore('userProfiles').put({
             username: 'Probe User',
-            conversations: [], tradeLog: [], savedAnalyses: [], tradeSummaries: [],
+            conversations: [], tradeLog: [], tradeSummaries: [],
             finalTradeSummary: null,
             settings: { activeFrameworks: [] },
         });
@@ -438,7 +438,7 @@ async function seedVerdicts(page) {
                 tradeRow('pt-3', 260, 'WIN', 'swing', 'Long', 'ETHUSDT'),
                 tradeRow('pt-4', 240, 'ENTRY_NOT_HIT', 'swing', 'Short', 'SOLUSDT'),
             ],
-            savedAnalyses: [], tradeSummaries: [],
+            tradeSummaries: [],
             finalTradeSummary: null,
             settings: { activeFrameworks: [] },
         });

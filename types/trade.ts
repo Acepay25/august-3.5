@@ -224,25 +224,6 @@ export interface CaptureJournalTags {
   skipReason?: string;
 }
 
-export interface SavedAnalysis {
-  id: string; // Corresponds to the message ID of the analysis
-  analysis: TradeAnalysis;
-  userPrompt: string;
-  timestamp: string;
-  // Ensemble fields — keyed by provider id (ProviderConfig.id)
-  modelsUsed?: Record<string, string>; // providerId → model id
-  // Legacy per-provider fields (kept for historical data migration)
-  geminiModelUsed?: string;
-  deepseekModelUsed?: string;
-  zhipuModelUsed?: string;
-  groqModelUsed?: string;
-  groqNewModelUsed?: string;
-  groqAlt2ModelUsed?: string;
-
-  ocrModelUsed?: string;
-  moderatorProvider?: string;  // ProviderConfig id
-  moderatorModel?: string;
-}
 
 export interface TradeSummary {
   id: string; // Corresponds to the LoggedTrade ID

@@ -106,7 +106,7 @@ async function freshSession(page) {
         const tx = db.transaction('userProfiles', 'readwrite');
         tx.objectStore('userProfiles').put({
             username: user,
-            conversations: [], tradeLog: [], savedAnalyses: [], tradeSummaries: [],
+            conversations: [], tradeLog: [], tradeSummaries: [],
             finalTradeSummary: null,
             settings: { activeFrameworks: [] },
         });

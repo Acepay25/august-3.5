@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Message, MessageRole, TradeOutcome, LoggedTrade, SavedAnalysis, TradeSummary, ImageMetadata, AIProvider, BenchmarkAlpha } from '../types';
+import { Message, MessageRole, TradeOutcome, LoggedTrade, TradeSummary, ImageMetadata, AIProvider, BenchmarkAlpha } from '../types';
 import { captureOutcomeComparison } from '../services/ui/AutoCaptureService';
 import { toLeveragedExcursionPct } from '../services/backtesting/outcomeEngine';
 import * as MemoryService from '../services/learning/MemoryService';
@@ -112,7 +112,6 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
      *  hold the PRE-log array, so the trade lookup inside it reads the ref. */
     const loggedTradesRef = useRef<LoggedTrade[]>([]);
     useEffect(() => { loggedTradesRef.current = loggedTrades; }, [loggedTrades]);
-    const [savedAnalyses, setSavedAnalyses] = useState<SavedAnalysis[]>([]);
     const [tradeSummaries, setTradeSummaries] = useState<TradeSummary[]>([]);
     const [finalTradeSummary, setFinalTradeSummary] = useState<string | null>(null);
     const [skipCandidate, setSkipCandidate] = useState<Message | null>(null);
@@ -994,7 +993,6 @@ ${result.comparisonBlock}
     return {
         // State values and setters
         loggedTrades, setLoggedTrades,
-        savedAnalyses, setSavedAnalyses,
         tradeSummaries, setTradeSummaries,
         finalTradeSummary, setFinalTradeSummary,
         updateCandidate, setUpdateCandidate,

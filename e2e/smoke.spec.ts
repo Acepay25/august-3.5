@@ -34,7 +34,6 @@ const seedMessages = async (page: import('@playwright/test').Page, username: str
                 leverage: 100,
             }],
             tradeLog: [],
-            savedAnalyses: [],
             tradeSummaries: [],
             finalTradeSummary: null,
             settings: { activeFrameworks: [] },

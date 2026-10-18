@@ -33,7 +33,7 @@ async function seedProfile(page) {
         const transaction = db.transaction('userProfiles', 'readwrite');
         transaction.objectStore('userProfiles').put({
             username: 'Probe User',
-            conversations: [], tradeLog: [], savedAnalyses: [], tradeSummaries: [],
+            conversations: [], tradeLog: [], tradeSummaries: [],
             finalTradeSummary: null, settings: { activeFrameworks: [] },
         });
         await new Promise((resolve, reject) => {

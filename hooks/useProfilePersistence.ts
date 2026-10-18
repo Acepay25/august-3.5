@@ -32,7 +32,6 @@ export interface UseProfilePersistenceArgs extends ProfileSettingsState {
 
     conversationHistory: Conversation[];
     loggedTrades: LoggedTrade[];
-    savedAnalyses: any[];
     tradeSummaries: TradeSummary[];
     finalTradeSummary: string | null;
     globalMemory: any;
@@ -84,7 +83,7 @@ const settingsEqual = (a: Record<string, unknown> | null | undefined, b: Record<
 export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfilePersistenceResult => {
     const {
         activeUsername, activeConversationId, setSaveStatus, toast, profileReadyRef,
-        conversationHistory, loggedTrades, savedAnalyses, tradeSummaries,
+        conversationHistory, loggedTrades, tradeSummaries,
         finalTradeSummary, globalMemory, insightKnowledgeBase,
         memoryConfig, memoryModel,
         isAnalysisInProgress,
@@ -104,7 +103,6 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
     const buildProfileSnapshot = useCallback((): Partial<Omit<UserProfile, 'username'>> => ({
         conversations: conversationHistory,
         tradeLog: loggedTrades,
-        savedAnalyses: savedAnalyses,
         tradeSummaries: tradeSummaries,
         finalTradeSummary: finalTradeSummary,
         globalMemory: globalMemory,
@@ -117,7 +115,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
         // clear silently destroyed them. Snapshotting them here populates the
         // users.learningRules column and BackupService payload.
         learningRules: storageService.loadLearningRules(),
-    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, insightKnowledgeBase, memoryConfig, memoryModel]);
+    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, insightKnowledgeBase, memoryConfig, memoryModel]);
 
     // ─── Split save into DATA (heavy) + SETTINGS (light) ───────────
     // Previously a single effect re-serialized ALL conversations (with base64
@@ -168,7 +166,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
         return () => {
             clearTimeout(handler);
         };
-    }, [conversationHistory, loggedTrades, savedAnalyses, tradeSummaries, finalTradeSummary, globalMemory, insightKnowledgeBase, activeUsername, setSaveStatus]);
+    }, [conversationHistory, loggedTrades, tradeSummaries, finalTradeSummary, globalMemory, insightKnowledgeBase, activeUsername, setSaveStatus]);
 
     // The light payload, in one place so the SETTINGS effect and the unload
     // dirty-check can never drift on WHICH fields count as settings.
@@ -236,7 +234,6 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
                     || last.conversations !== snapshot.conversations
                     || last.tradeLog !== snapshot.tradeLog
                     || last.tradeSummaries !== snapshot.tradeSummaries
-                    || last.savedAnalyses !== snapshot.savedAnalyses
                     || last.finalTradeSummary !== snapshot.finalTradeSummary
                     || last.globalMemory !== snapshot.globalMemory
                     || last.insightKnowledgeBase !== snapshot.insightKnowledgeBase;
@@ -264,7 +261,6 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
             if (last.conversations !== conversationHistory
                 || last.tradeLog !== loggedTrades
                 || last.tradeSummaries !== tradeSummaries
-                || last.savedAnalyses !== savedAnalyses
                 || last.finalTradeSummary !== finalTradeSummary
                 || last.globalMemory !== globalMemory
                 || last.insightKnowledgeBase !== insightKnowledgeBase
