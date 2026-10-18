@@ -1377,13 +1377,20 @@ real blockers for these three are the two design couplings above (market polling
 argument) and the persisted-field semantics, not the typechecker's speed, and no `incremental`
 config change is needed to proceed.
 
-**#21 — `postMortem`, `savedAnalyses`, `Message.debateTurns`.** Deleting the fields removes ~25
-readers (EvidencePackService, DoctrineConsolidation, SkillMemoryService, memoryContext,
-NotebookWriterService, rootCause, reportExport, `craftSkillFromPostMortem` and
-`selfImprovement`), the store + SQLite column + backup validation for `savedAnalyses`, and the
-legacy rows users already have in the journal. Let `tsc --noEmit` enumerate the consumers rather
-than a grep list, and decide the read-side for old rows explicitly: a stored column that no longer
-maps to a type is a restore-time crash, not a clean-up. **Local `npm run lint` cannot run at home right
+**#21 — `postMortem`, `savedAnalyses`, `Message.debateTurns`.** Measured the `savedAnalyses`
+surface before touching it, and it is not the quick trim the phrase "no writer" suggests: **54
+references across 17 files**. Only `setSavedAnalyses` is starved (called at
+`hooks/useUserProfileLoader.ts:173` to load and `:255` to clear), but the plumbing around it is
+alive and asserted: `services/infrastructure/SqliteService.ts:73/:465/:491/:686-710` reads and
+writes it as its own column, staging JSON and diffing against the previous profile;
+`utils/profileUtils.ts:11,32-33` validates the first element's shape on every profile read;
+`services/infrastructure/BackupService.ts:686-687/:720/:730` refuses backups where it is not an
+array and reports `savedAnalysesCount`; `dbService.ts:242/:323` seed defaults; and ten suites pin
+it — `tests/sqliteService.test.ts:212,221` round-trips a row and asserts `userPrompt` survives, so
+**the store has a working read/write path with a dead source, not a dead path**. Deleting it is
+therefore a schema change plus a backup-format change plus 10 suite edits, and it belongs with the
+other two: one gated pass each, with the migrations decided explicitly (drop the column, or keep it
+and stop writing it) rather than discovered mid-edit. **Local `npm run lint` cannot run at home right
 now**: 95 of its 96 errors sit in `docs/analysis/data/`, which has zero tracked files, so CI
 never sees them — ignoring that directory or moving it out of the repo is a decision, not a
 cleanup.
