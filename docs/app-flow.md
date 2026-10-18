@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**250 unique anchors verified, 0 unattributed** — plus two quality ceilings, 46 citations
+**256 unique anchors verified, 0 unattributed** — plus two quality ceilings, 46 citations
 that land on a comment line and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
 carrying more than one citation, and a sentence that wraps puts its number out of reach of
@@ -475,9 +475,11 @@ card that forgets it was clicked offers a second journal row.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in both flow docs names
-   its file on the same line, so the gate can check it: 253 anchors verified, 0
+   its file on the same line, so the gate can check it: 256 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
-   `:NNN` no longer survives a push. Qualifying the citations that had no symbol
+   `:NNN` no longer survives a push, and neither does a stale figure quoted from its own output: the
+   docs state 256 anchors verified and the gate refuses the merge if that sentence stops
+   matching the scan. Qualifying the citations that had no symbol
    of their own is what found
    six numbers that were right-shaped and wrong: `runSeatTurn` is called at
    `services/trade/chatTurnRunner.ts:929`, `createDebateMailbox` at
