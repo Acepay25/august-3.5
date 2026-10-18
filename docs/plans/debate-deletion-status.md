@@ -1272,12 +1272,47 @@ worker` / `Timeout waiting for worker to respond`**. Both files then ran 13/13 g
 4.47 s, and the clean re-run above passed them with zero worker-start failures. The discarded
 measurement is the red one; the number to quote is 476/4708.
 
-**Still the owner's call, and none of it is a bug to fix silently:** accuracy mode + the
-calibration ledger (#17), the surviving ensemble branch — including the hybrid fetch, whose
-packet still picks the learning coin at `hooks/useAnalysisPipeline.ts:1040`, and the
-`beginPromptLane` lane that has no caller while `endPromptLane()` still runs at `:1568`
-(stage 19's tail), and `savedAnalyses` / `Message.debateTurns` / the ~25 `postMortem` readers
-that still read historical journal rows (#21). **Local `npm run lint` cannot run at home right
+## Ruled on 2026-10-18, measured, and deliberately NOT started
+
+The owner answered all three open questions with DELETE, and pushed the 16 commits. What the
+measurement then showed is that none of the three is a trim — each is a feature with live UI and
+persisted state, so each needs its own gated pass rather than a half-edit at the end of a budget.
+The file lists are recorded here so the next pass starts from evidence, not from a grep hunt.
+
+**#19 — the ensemble branch, the hybrid pull, and the prompt A/B lane.**
+`runEnsembleEnabled` is not local to the hook: it is threaded from `App.tsx` through
+`hooks/useAnalysisPipeline.ts:173/:286/:557` and gates `:411` (a UI-muting early return), `:617`,
+`:806` (the coin tip), `:874`, `:923`, `:956`, and appears in the `:1594` dependency array. The
+toggle itself is persisted (`hooks/useProfilePersistence.ts`, `hooks/useUserProfileLoader.ts`,
+`types/user.ts`, `services/learning/MemoryFilesService.ts`, `services/trade/automationTurn.ts`,
+`services/ui/EnsembleAnalystService.ts`) and is covered by three suites
+(`tests/analysisPipelineSendIdentity.test.ts`, `tests/automationRouteCharacterization.test.tsx`,
+`tests/useProfilePersistence.test.tsx`). Deleting the hybrid pull also changes which coin the
+learning step receives, because the packet still feeds `assemblePipelineMemoryContext` at
+`hooks/useAnalysisPipeline.ts:1040`.
+
+**Correction to what this doc and the flow doc currently assert about the A/B lane.** It is not
+"starved with no caller" in the product sense: `beginPromptLane` has no caller, so
+`controlLane` can never become true and `getPrompt`'s guard at
+`services/infrastructure/PromptOverrideService.ts:63` is unreachable — but the two settings that
+drive it are live and user-facing: `promptAbRate` and `pinnedPromptLane` are surfaced in
+`components/settings/SessionUsagePanel.tsx` and read by `utils/promptVersionStats.ts`. Removing
+the lane therefore removes a visible control and its statistics. My earlier sentence in
+`docs/app-flow.md` described the dead writer only; it understated the feature still attached to it.
+
+**#17 — accuracy mode and the calibration ledger.** Live: `isAccuracyModeEnabled` selects
+`customInstructions.accuracyPure` / `accuracyOriginal`, the modal is mounted, and scheduled
+automations persist `accuracySubMode`. Deleting it touches the schedule schema, so a stored
+`accuracySubMode` must read as absent rather than corrupt — check the backup validation path
+before removing the field, the same trap `savedAnalyses` is in.
+
+**#21 — `postMortem`, `savedAnalyses`, `Message.debateTurns`.** Deleting the fields removes ~25
+readers (EvidencePackService, DoctrineConsolidation, SkillMemoryService, memoryContext,
+NotebookWriterService, rootCause, reportExport, `craftSkillFromPostMortem` and
+`selfImprovement`), the store + SQLite column + backup validation for `savedAnalyses`, and the
+legacy rows users already have in the journal. Let `tsc --noEmit` enumerate the consumers rather
+than a grep list, and decide the read-side for old rows explicitly: a stored column that no longer
+maps to a type is a restore-time crash, not a clean-up. **Local `npm run lint` cannot run at home right
 now**: 95 of its 96 errors sit in `docs/analysis/data/`, which has zero tracked files, so CI
 never sees them — ignoring that directory or moving it out of the repo is a decision, not a
 cleanup.
