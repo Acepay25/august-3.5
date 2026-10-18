@@ -145,8 +145,14 @@ describe('both chat homes drive the one stored tier', () => {
     it('both chat transports map the tier through one shared rule', () => {
         expect(runnerSrc).toMatch(/reasoningEffort: resolveComposerEffort\(effort\)/);
         expect(casualSrc).toMatch(/reasoningEffort: resolveComposerEffort\(effort\)/);
+        // 20b added a THIRD casual transport — the Chat surface's desk turn.
+        // One dial, three wires: a transport that skipped the shared rule would
+        // show a tier on the chip and send another on the wire.
+        const surfaceSrc = fs.readFileSync('services/trade/chatSurfaceTurn.ts', 'utf8');
+        expect(surfaceSrc).toMatch(/reasoningEffort: resolveComposerEffort\(req\.effort\)/);
         // No transport may keep its own copy of the chat default.
         expect(runnerSrc).not.toMatch(/effortForTask\('chat'\)/);
+        expect(surfaceSrc).not.toMatch(/effortForTask\('chat'\)/);
         expect(casualSrc).toMatch(/effortForTask\('chat'\)/); // getQuickResponse is not a composer
     });
 });

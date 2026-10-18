@@ -47,6 +47,8 @@ import { finalizeVerdict } from './analysisPipeline/verdictFinalizer';
 import { buildAutoplaySpeakerRegex, parseAutoplayTranscriptChunk } from './analysisPipeline/autoplayParser';
 import { isNotebookQuickSaveRequest, runNotebookQuickSave } from './analysisPipeline/notebookQuickSave';
 import { classifyRunFailure, mapRunFailureMessages, resolveQuotaFlaggedModel, sanitizeFallbackErrorMessage } from './analysisPipeline/runOutcome';
+import { runChatSurfaceTurn } from '../services/trade/chatSurfaceTurn';
+import type { ToolTurnOutcome } from '../services/trade/toolTurn';
 import type { PredicateGateResult } from '../services/learning/skillPredicateGate';
 
 // ─── Dev-only logging ─────────────────────────────────────────────────────
@@ -3194,33 +3196,80 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                 }]);
                 let reasoningContent = '';
                 let visibleContent = '';
-                const responseText = await streamQuickResponse(
-                    provider.config,
-                    promptToSend,
-                    // Bot threads see ONLY their own thread (derived view);
-                    // ordinary casual chat keeps the full conversation.
-                    useBotThread && activeBot
-                        ? threadForProvider(currentMessages, activeBot.providerId, activeBot.modelId, activeBot.id)
-                        : currentMessages,
-                    useBotThread && activeBot ? activeBot.systemPrompt : undefined,
-                    currentAbortController.signal,
-                    reasoning => {
-                        reasoningContent += reasoning;
-                        throttledCasualStream(requestConversationId, streamingMessageId, visibleContent, reasoningContent, provider.config.id, true);
-                    },
-                    delta => {
-                        visibleContent += delta;
-                        throttledCasualStream(requestConversationId, streamingMessageId, visibleContent, reasoningContent, provider.config.id, true);
-                    },
-                    // The dial the surface is showing, not the task default: a
-                    // chip that displayed a tier while the request sent `'low'`
-                    // is the dead affordance this argument exists to remove.
-                    options?.reasoningEffort,
-                );
+                // ONE live writer for both shapes of this branch: the
+                // RAF-coalesced casual updater, so a tool turn's per-token paint
+                // costs one Message write per frame exactly like the plain one.
+                const paint = (text: string, thinking: string): void => {
+                    throttledCasualStream(requestConversationId, streamingMessageId, text, thinking, provider.config.id, true);
+                };
+                // The bubble's own stamp: a Stop, a failure and a clean finish
+                // must all report the same "worked for Ns", not each measure from
+                // their own `Date.now()`.
+                const turnStartedAt = Date.now();
+                let toolTurn: ToolTurnOutcome | null = null;
+                let responseText = '';
+                if (useBotThread && activeBot) {
+                    // BOTS STAY CHAT-ONLY (stage 20 ruling). The roster
+                    // answers with its persona over the plain transport;
+                    // `useBotMailbox`, `botRoutine` and `groupRounds` are
+                    // deliberately NOT moved onto the tool turn.
+                    responseText = await streamQuickResponse(
+                        provider.config,
+                        promptToSend,
+                        // Bot threads see ONLY their own thread (derived view).
+                        threadForProvider(currentMessages, activeBot.providerId, activeBot.modelId, activeBot.id),
+                        activeBot.systemPrompt,
+                        currentAbortController.signal,
+                        reasoning => {
+                            reasoningContent += reasoning;
+                            paint(visibleContent, reasoningContent);
+                        },
+                        delta => {
+                            visibleContent += delta;
+                            paint(visibleContent, reasoningContent);
+                        },
+                        // The dial the surface is showing, not the task default: a
+                        // chip that displayed a tier while the request sent `'low'`
+                        // is the dead affordance this argument exists to remove.
+                        options?.reasoningEffort,
+                    );
+                } else {
+                    // THE DESK ANSWERS WITH ITS TOOLS — the one executor the
+                    // Chart AI dock runs, writing this canonical row instead of
+                    // a dock entry. Ordinary conversation on this surface used
+                    // to be answered from the model's training data while the
+                    // dock looked the same question up.
+                    toolTurn = await runChatSurfaceTurn({
+                        config: provider.config,
+                        history: currentMessages,
+                        prompt: promptToSend,
+                        // An attached screenshot is SENT, not mentioned: before
+                        // this the camera on this surface painted a bubble the
+                        // model never received.
+                        image: dataURLs[0],
+                        symbol: finalSymbol ?? options?.symbol ?? null,
+                        interval: options?.interval,
+                        trades: loggedTrades,
+                        effort: options?.reasoningEffort,
+                        signal: currentAbortController.signal,
+                        startedAt: turnStartedAt,
+                        patch: fn => updateMessages(
+                            prev => prev.map(m => (m.id === streamingMessageId ? fn(m) : m)),
+                            requestConversationId,
+                        ),
+                        paint,
+                    });
+                    responseText = toolTurn.text;
+                }
                 if (!isCurrentRequest()) assertCurrentRequest();
                 // Split before display: native CoT and any leaked scratchpad
-                // belong in the bubble's Thinking row, never in the reply.
-                const casualSplit = splitThinkingFromOutput(reasoningContent, responseText);
+                // belong in the bubble's Thinking row, never in the reply. The
+                // tool turn already did this on its own accumulator (`runToolTurn`
+                // owns the peel so both homes settle the same way), so re-splitting
+                // its output would be a second opinion about the same text.
+                const casualSplit = toolTurn
+                    ? { output: toolTurn.text, thinking: toolTurn.reasoning }
+                    : splitThinkingFromOutput(reasoningContent, responseText);
                 // Strip [[dm:@…]] markers BEFORE the first persisted update:
                 // the mailbox delivery below is fire-and-forget, so without
                 // this the bubble shows raw marker text until the mailbox's
@@ -3238,10 +3287,29 @@ ${ex.coin ? `Setup: ${ex.coin}` : 'Setup: (similar setup)'}${ex.confidence ? ` |
                 throttledCasualStream.flush();
                 updateMessages(prev => prev.map(m => m.id === streamingMessageId ? {
                     ...m,
-                    text: casualClean,
+                    // A deliberate Stop keeps the half-written answer the trader
+                    // chose to cut; a clean turn keeps the settled text.
+                    text: toolTurn?.interrupted ? (m.text || casualClean) : casualClean,
                     isStreaming: false,
                     modelsUsed: { [provider.config.id]: provider.model },
                     thoughtProcesses: casualSplit.thinking ? { [provider.config.id]: casualSplit.thinking } : undefined,
+                    ...(toolTurn && !toolTurn.interrupted ? {
+                        runStats: {
+                            runId: `desk-${streamingMessageId}`,
+                            startedAt: new Date(turnStartedAt).toISOString(),
+                            finishedAt: new Date(turnStartedAt + toolTurn.workedMs).toISOString(),
+                            durationMs: toolTurn.workedMs,
+                        },
+                    } : {}),
+                    // The tools-off / reasoning-only truth belongs IN the
+                    // transcript, beside the lines that claim it — not in a toast
+                    // that disappears while the answer stays on screen.
+                    ...(toolTurn?.notice ? {
+                        liveToolEvents: {
+                            ...m.liveToolEvents,
+                            desk: [m.liveToolEvents?.desk, toolTurn.notice].filter(Boolean).join('\n'),
+                        },
+                    } : {}),
                 } : m), requestConversationId);
                 // ── Bot Mode: hand the settled reply (raw, markers
                 // included) to the mailbox — it strips [[dm:@…]] markers
