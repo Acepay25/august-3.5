@@ -891,3 +891,36 @@ commit: render-probe, eslint, boot-probe (the 20p phase is parked in
 `.probe-artifacts/20p-probe-work-in-progress.patch` — its preamble waited for
 `[data-testid="trade-view"]`, which is the TRADE surface, while the probe's
 reload restores the Agents surface).
+
+## What stage 19 did NOT delete — measured after the island went
+
+The engine is gone, the pipeline's ensemble BRANCH is not. Read from the tree,
+not from the plan:
+
+- `hooks/useAnalysisPipeline.ts:575` still sets `runEnsembleEnabled`, and three
+  debate-only refusals still run on it: no-moderator (`:730`), incomplete lens
+  roles / two seats sharing a model (`:754-785`), and the seat ceiling
+  `TEAM_MAX_SEATS` (`:793`, "Too many providers for a Standard-mode debate").
+  Nothing on that path can convene a debate any more — `conductDebate` and
+  `ensembleService` are deleted — so a send with the ensemble toggle ON can still
+  be REFUSED for a debate that cannot happen.
+- `isStagedEnsemble` (`:655`) still mints `ensembleProgress` (`:888`, written on
+  the placeholder at `:912`) with every seat at `status: 'waiting'`. Nothing ever
+  moves it, because the only writers were the debate throttler (deleted) and
+  `runOutcome.ts:41`, which only marks it failed. `App.tsx:1254` reads it.
+- `isDebating: true` is now written in exactly ONE place: the resume path
+  (`:924`). Everything that once set it lived in the debate loop.
+
+**The live consequence, and it is the next job:** `App.tsx:1249` picks
+`verdictMessage` out of the debate shapes — `ensembleProgress`, >1 `modelsUsed`,
+`debateTurns` — and hands it to the chart as `verdict={verdictMessage?.analysis}`
+(`App.tsx:2526`). After this tranche nothing sets `Message.analysis` for a new
+run: the writer was `verdictFinalizer` (deleted), and a tool turn answers with a
+`TradeProposal` carried in the tool payload (`services/trade/presentTradeTool.ts`,
+`proposedTrade.ts`, `tradeShapedProse.ts`). So the chart's verdict prop has a
+reader and no writer — the third instance of the class this stage already fixed
+twice (session usage, the completion notice). NOT fixed here, because re-sourcing
+it means deciding whether the chart reads the settled `TradeProposal` or a
+re-minted `TradeAnalysis`, and that needs `npm run render-probe` (or the app open)
+to prove the line actually draws again. Do not "fix" it by widening the selector:
+the selector is not the defect, the missing producer is.
