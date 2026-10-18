@@ -1213,3 +1213,29 @@ Two operational notes, because both cost a run:
   docs/app-flow.html` → no matches). The falsifiable form lives in AGENTS.md:
   `GenericProviderService` + `GenericAnalysisService` are the only provider
   clients, and the legacy per-provider services were removed.
+
+## Parked: a permanent gate for the docs' line-number claims
+
+The flow docs carry 56 anchors and go stale silently, so a checker belongs in CI.
+Two attempts were built and both were deleted rather than shipped, and the reason
+is the design constraint:
+
+- As a vitest file it never ran: the pool reported `Failed to start forks worker`
+  / `Timeout waiting for worker to respond` — the contention signature this repo
+  already documents — while the log's own headline read `Test Files no tests`.
+  A gate that cannot be told apart from a machine fault is not a gate.
+- As `scripts/check-flow-doc-anchors.cjs` it ran and reported 82 problems, of
+  which ~80 were the scanner's fault: a bare `:2493` written after the `App:NNNN`
+  shorthand inherited a filename from an EARLIER line of the same paragraph. A
+  gate that false-alarms 80 times teaches everyone to ignore it, so it was
+  removed rather than tuned until quiet.
+
+Requirements for whoever rebuilds it, all measured: attribute a bare `:NNN` to
+the nearest filename on the SAME line, and only fall back to the paragraph when
+the line has none; resolve `App:NNNN` as an alias for App.tsx; ignore numbers
+inside a quoted withdrawn claim (`App.tsx:2766` at docs/app-flow.md:425 is
+correctly cited as a mistake this doc already retracted); floor the parsed
+population so a dead regex fails loudly; and carry a reach control that must
+catch both an out-of-range and a blank-line anchor before "0 problems" counts.
+Until then the per-line checker used for 69b93ff/5079090 (56 anchors, 0
+problems) is a manual step, not an enforced one.
