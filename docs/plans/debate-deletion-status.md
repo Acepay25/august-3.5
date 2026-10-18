@@ -765,3 +765,34 @@ finalizer is deleted.
 Lint note, not mine: `npm run lint` is red with 95 `no-require-imports` errors coming
 entirely from untracked scratch under `docs/analysis/data/*.cjs`, which eslint's scope
 picks up. My four changed files report 0 errors / 12 warnings.
+
+## Two more dark surfaces, same class as the label (measured, NOT yet fixed)
+
+The reachability walk found the label was not the only orphaned write:
+
+1. **Knowledge → Session Usage panel reads a store nothing writes.**
+   `components/settings/SessionUsagePanel.tsx:32` calls `loadSessionUsage()` and
+   `LearnView.tsx:314` mounts it, but `appendSessionUsage` is called only at
+   `verdictFinalizer.ts:645`. So the panel has shown nothing new since tranche 1, and
+   `ExportService` still lists `session_usage_v1` as a backed-up store. Re-homing it is
+   NOT a one-liner: the finalizer's entry is built from debate-shaped `runStats`
+   (per-analyst tokens, `analystCount`, `costUsd`), and the tool path never surfaces
+   provider token usage at all — `services/trade/toolTurn.ts` has no usage field. The
+   honest fix is to thread real usage out of `GenericProviderService` →
+   `streamChatWithDeskTools` → `runToolTurn`; writing a chars/4 estimate into a panel
+   that presents its numbers as usage would manufacture confidence, the same failure
+   20r removed for scheduled runs.
+2. **Completion notification for an analysis run is gone.** Its only caller is the
+   finalizer. `services/infrastructure/notify.ts` is live (price alerts,
+   `TradeView.tsx:716`), and its own header calls `CompletionNotifications` a
+   "native-only copy" — so the fix is one `notify()` call on the settled Full-analysis
+   path, and `CompletionNotifications` then dies with stage 19.
+
+`utils/messageDisplayText.ts` also has zero references anywhere. Its header claims the
+two chat row components share its strip chain; they do not import it, and the strips
+live in `utils/thinkingSplit.ts` + `sanitizeAIResponse`. Left in place: before deleting
+an anti-drift aggregation, both row components must be read to confirm neither leaks
+`<think>` or `<JSON_PLAN>` on its own. `useConversationLeverage` (superseded — App.tsx's
+only mention is a comment saying the handlers "used to" come from it) and
+`useTypingEffect` are deleted: zero importers in production or tests,
+501 files / 4981 tests green.
