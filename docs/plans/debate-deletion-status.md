@@ -1976,10 +1976,11 @@ typecheck, type-check-scripts, electron parse, flow-doc anchors (251 verified,
 0 unattributed, 61 comment-line, **0 symbol**, 17 reach controls), vitest (477 files,
 1 skipped), lint (0 errors / 681 warnings under the ratchet — CI's step is now runnable
 locally because `docs/analysis/**` is ignored as the untracked scratch it is),
-`vite build`, boot-probe, render-probe, Playwright e2e (5 passed).
-`installer-smoke` is CI-only by design. The skill-approval probe was the last step
-running at the time of writing; if its log does not end in a pass, that is the first
-thing to re-check.
+`vite build`, boot-probe, render-probe, Playwright e2e (5 passed), and the
+skill-approval probe — whose own log says `25/25 checks passed; pageErrors=2`.
+The two "notebook write FAILED (quota)" lines under that verdict are the probe's
+own injected fault: the write-failure surfacing is what it is testing, so they are
+the pass, not a failure. `installer-smoke` is CI-only by design. No gate is owed.
 
 **Do not re-derive these** (each cost a turn this session and is already proven): the
 review's six defects are all closed in the current files; the post-mortem route is
@@ -1990,5 +1991,7 @@ the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:69`; 
 progress panel now mints two rows (`market-data`, `analysis`), completed by
 `settleOpenSteps()` in the run's `finally` after the catch has marked any failure.
 
-**Push state:** 40 local commits, nothing pushed this session; the earlier authorization
-covered only the first 16.
+**Push state:** 49 unpushed commits at this tip (measured as `git rev-list --count
+origin/main..HEAD`, which is the only honest way to state it — the count grows with
+every commit, so re-measure rather than trust this number), nothing pushed this
+session; the earlier authorization covered only the first 16.
