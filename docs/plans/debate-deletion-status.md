@@ -270,6 +270,30 @@ reading is expensive to undo.
   source-shape pin, which I rewrote to bind the guard to its first statement
   (`if (runEnsembleEnabled) {` also appears at the data pull, so a bare match would
   stay green with the fork deleted) and to forbid the call shape `Prompt.includes(`.
+- **20s (#25)** — the Chat surface finally has a prompt of its own.
+  `chatSurfaceSystemPrompt` (`chatSurfaceTurn.ts:103`) leads with
+  `CHAT_SURFACE_SYSTEM_PROMPT` (`chatPrompts.ts:40`), which is
+  `CASUAL_CHAT_SYSTEM_PROMPT` **plus** a calling mandate and an explicit
+  "NO CHART HERE" — so the output discipline that fixed the
+  "Here's a thinking process:" replies is inherited, not replaced — then appends
+  the skills index, the active strategy plans and the profile memory index, each
+  read fresh per turn exactly as the dock reads them. Two things this exposed:
+  `buildSkillsIndexForPrompt`'s heading said "match **this chart**", so a canvas
+  free seat was being told to match a chart it cannot see — it now takes a `where`
+  argument and the dock's default is byte-identical (pinned as a control); and the
+  slugs that travelled are recorded on the row (`Message.injectedSkills`,
+  `types/message.ts:368`) bounded to the 30 the index printed, so the record cannot
+  claim skills the model never saw. Tests: `tests/chatSurfacePrompt.test.ts` (10).
+  Full suite: 496 files / 4922 tests, lint back on the 818/0 baseline after four
+  `no-useless-assignment` errors from initialized-then-overwritten locals.
+  The probe then FAILED once on `the dock header jumps straight to Chat — no
+  menu button/false` and passed the next run: the check queried
+  `[aria-label="Customization"]` synchronously while a previous check was still
+  transitioning surfaces, so it measured the probe's own timing. Fixed in
+  `scripts/render-probe.cjs` by waiting for the header with the same 8 s bound the
+  hop already uses, and a header that never arrives now reports which `*-view`
+  surface was live. The assertion itself is unchanged — a real missing header
+  still fails the gate. Two consecutive OK runs after the fix.
 
 ## Deviations from the approved manifest (say so before repeating them)
 

@@ -48,7 +48,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 </style>
 <div class="fc">
 <h1>August Trading — the complete flow</h1>
-<p class="sub">The printable view of <a href="app-flow.md">app-flow.md</a>; the markdown is the source of truth and carries the corrections. Both were re-grepped against the working tree on <b>2026-10-18</b>, after the post-mortem / 2D desk floor / saved-analyses / Roles-tab deletions and after <b>stages 20a, 20a2, 20g, 20b, 20b-B, 20t and 20c</b> of the debate removal. A number appears here only where it was measured this pass; a node that names a file with no line number is a claim about the file, not about a line. Dotted nodes exist in the code but are <b>never mounted</b> by the running app. Section C's stage anchors are deliberately omitted — they are the lines stage 19 deletes.</p>
+<p class="sub">The printable view of <a href="app-flow.md">app-flow.md</a>; the markdown is the source of truth and carries the corrections. Both were re-grepped against the working tree on <b>2026-10-18</b>, after the post-mortem / 2D desk floor / saved-analyses / Roles-tab deletions and after <b>stages 20a, 20a2, 20g, 20b, 20b-B, 20t, 20c and 20s</b> of the debate removal. A number appears here only where it was measured this pass; a node that names a file with no line number is a claim about the file, not about a line. Dotted nodes exist in the code but are <b>never mounted</b> by the running app. Section C's stage anchors are deliberately omitted — they are the lines stage 19 deletes.</p>
 <div class="legend">
 <span><i class="sw" style="background:var(--g)"></i>run path</span>
 <span><i class="sw" style="background:var(--a)"></i>decision</span>
@@ -130,8 +130,8 @@ body{padding:24px;max-width:1180px;margin:0 auto}
   <div class="n run"><b>streamQuickResponse</b><i>:3218 → GenericAnalysisService, tier via resolveComposerEffort</i></div>
  </div></div>
  <div class="col"><h3>no — the desk, WITH its tools</h3><div class="flow">
-  <div class="n run"><b>runChatSurfaceTurn</b><i>chatSurfaceTurn.ts:145 · tools from CHAT_SURFACE_TOOLS :50</i></div>
-  <div class="n"><b>prompt</b><i>CASUAL_CHAT_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:24 — no canvas, so no chart tools</i></div>
+  <div class="n run"><b>runChatSurfaceTurn</b><i>chatSurfaceTurn.ts:211 · tools from CHAT_SURFACE_TOOLS :54</i></div>
+  <div class="n"><b>prompt — chatSurfaceSystemPrompt :103</b><i>CHAT_SURFACE_SYSTEM_PROMPT chatPrompts.ts:40 (the casual prompt + a calling mandate + "NO CHART HERE") + skills index + active strategies + memory index, read fresh per turn; the 30 slugs printed are the 30 recorded on the row (types/message.ts:368)</i></div>
   <div class="n"><b>→ back into runToolTurn</b><i>arrow 17</i></div>
  </div></div>
  <div class="col"><h3>true → ensemble (stage 19's target)</h3><div class="flow">
@@ -285,7 +285,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>19</td><td>systemPromptFor → prompt</td><td><code>TRADE_CHAT_SYSTEM_PROMPT</code> + skills + strategies + profile + persona <code>TradeChatPanel.tsx:453</code></td></tr>
 <tr><td>20</td><td>every dock turn → chatStore</td><td><code>mutate</code> · <code>beginRun</code></td></tr>
 <tr><td>21</td><td>handleSendMessage → the fork</td><td>the mode flag <code>:671</code> is the whole decision — guard <code>:1492</code>, else <code>:3157</code>. Stage 20c deleted the wording predicate</td></tr>
-<tr><td>22</td><td>the casual arms</td><td>a bot thread → <code>streamQuickResponse :3218</code> (plain transport); the desk → <code>runChatSurfaceTurn chatSurfaceTurn.ts:145</code> → arrow 17. Tier on both via <code>resolveComposerEffort</code></td></tr>
+<tr><td>22</td><td>the casual arms</td><td>a bot thread → <code>streamQuickResponse :3218</code> (plain transport); the desk → <code>runChatSurfaceTurn chatSurfaceTurn.ts:211</code> → arrow 17. Tier on both via <code>resolveComposerEffort</code></td></tr>
 <tr><td>23</td><td>casual frames → Message.text</td><td><code>streamThrottlers.ts:160</code>; flush precedes the settle write <code>:3289</code></td></tr>
 <tr><td>24</td><td>ensemble → 8 stages</td><td>see C — anchors deliberately omitted</td></tr>
 <tr><td>25</td><td>desk tools → what a caller can reach</td><td><code>executeDeskTool DeskToolsService.ts</code> (its allow-list is enforced at execution, not only at offer time)</td></tr>
@@ -309,6 +309,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>43</td><td>approval tray → badge</td><td><code>collectApprovalItems</code> → <code>approvalsWaiting</code> → Knowledge tab only</td></tr>
 <tr><td>44</td><td>the pane filters what it shows</td><td><code>agentThreads.ts</code> read at <code>AgentsView.tsx</code></td></tr>
 <tr><td>45</td><td><code>present_trade</code> → a card in either home</td><td><code>runPresentTrade presentTradeTool.ts:76</code> ← dock sink <code>chatTurnRunner.ts</code> / desk sink <code>chatSurfaceTurn.ts</code>; gate scan starts there, the cap binds at log time (<code>ensureStamp</code>)</td></tr>
+<tr><td>46</td><td><code>chatSurfaceSystemPrompt</code> → the desk arm's prompt</td><td><code>chatSurfaceTurn.ts:103</code> — mandate (<code>chatPrompts.ts:40</code>) + skills index + active strategies + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (<code>types/message.ts:368</code>)</td></tr>
 </table>
 
 <h2>Corrections this page guards</h2>

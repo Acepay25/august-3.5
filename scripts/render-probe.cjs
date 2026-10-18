@@ -659,12 +659,25 @@ async function main() {
         // and the item lookup are TWO evaluates with a settle between them:
         // the menu is a React portal and one synchronous pass would query
         // before the commit.
-        const menuOpened = await page.evaluate(() => {
-            const menuBtn = document.querySelector('[aria-label="Customization"]');
-            if (!menuBtn) return 'no menu button';
-            menuBtn.click();
-            return 'opened';
-        });
+        // The dock header exists ONLY on the Trade surface, and a synchronous
+        // query fired while the app is still mid-transition (an earlier check
+        // hops surfaces) reported "no menu button" — that report measured the
+        // probe's own timing, not the app, and it made this check flake. Wait
+        // for the header with the same bound the hop itself uses, then click in
+        // one synchronous pass. A header that really never arrives still fails,
+        // and now says which surface was live when it gave up.
+        const headerSeen = await page.locator('[aria-label="Customization"]')
+            .waitFor({ state: 'attached', timeout: 8000 }).then(() => true).catch(() => false);
+        const surfaceLive = headerSeen ? '' : await page.evaluate(() => [...document.querySelectorAll('[data-testid]')]
+            .map(e => e.getAttribute('data-testid'))
+            .filter(t => typeof t === 'string' && /-view$/.test(t)).join(',') || 'no *-view testid');
+        const menuOpened = !headerSeen ? `no dock header within 8s (surface: ${surfaceLive})`
+            : await page.evaluate(() => {
+                const menuBtn = document.querySelector('[aria-label="Customization"]');
+                if (!menuBtn) return 'no menu button';
+                menuBtn.click();
+                return 'opened';
+            });
         await page.waitForTimeout(400);
         const chatJump = menuOpened === 'opened'
             ? await page.evaluate(() => {
