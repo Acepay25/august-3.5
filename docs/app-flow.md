@@ -102,8 +102,8 @@ to the 30 the index prints — a row naming skills the model never saw would be 
 audit defect, not an audit trail.
 
 **One entry, both homes.** `handleRunAnalysisFromChat` (App.tsx:1711) is the only
-analysis wrapper: the dock passes it as `onRunAnalysis` (App:2532) and the Chat
-surface as `onAnalyze` (App:2628). It was two, and `services/trade/analysisTurn.ts`
+analysis wrapper: the dock passes it as `onRunAnalysis` (App:2485) and the Chat
+surface as `onAnalyze` (App:2581). It was two, and `services/trade/analysisTurn.ts`
 was deleted (2026-10-17) because a second writer keyed rows with ids no canonical
 row could match — that is what made the two homes disagree.
 
@@ -183,7 +183,7 @@ pipeline-side Monte Carlo and backtest. The engine FILES are now deleted too: st
 that still imported debate helpers were cut by INLINING the slice each one used
 (`streamThrottlers` keeps only `throttledCasualStream`; the watch follow-up groups
 round-1 turns itself; `monthlyReport` computes the log-odds mean itself), so no
-displayed number changed. `runEnsembleEnabled` (hooks/useAnalysisPipeline.ts:556) survives as a switch with
+displayed number changed. `runEnsembleEnabled` (hooks/useAnalysisPipeline.ts:535) survives as a switch with
 far fewer things to switch between, and `Message.debateTurns` stays as a read-only
 legacy field for rows written before the cut — the same rule `modelsUsed` follows.
 
@@ -296,7 +296,7 @@ taking the scheduler down with it.
 What the schedule keeps, and what it gained, are written down rather than
 assumed. `tests/automationRouteCharacterization.test.tsx` pins the private
 `automation-<id>` thread, the config's own model pick, the continuity read (now
-the last three DELIVERED runs — `MAX_HISTORY_RUNS` useAutomations.ts:199, because
+the last three DELIVERED runs — `MAX_HISTORY_RUNS` useAutomations.ts:191, because
 the old row-count read spent half its budget on `appendRun`'s 'running' stubs),
 and the verdict row. `tests/automationToolTurn.test.ts` pins the two rules a run
 with nobody watching needs: a plan refused past the cap answers with an
@@ -448,7 +448,7 @@ card that forgets it was clicked offers a second journal row.
    directly); ESLint reports `App.tsx:125:8 'NavRail' is defined but never used`; and
    the code says so out loud — `App.tsx:2445` is the comment reading "The
    NavRail is GONE: its five destination rows were the tab strip this redesign was
-   asked to remove". Only the `AccountRow` export is rendered, at `App.tsx:2675`.
+   asked to remove". Only the `AccountRow` export is rendered, at `App.tsx:2637`.
    **An earlier pass of this doc asserted the opposite** ("rendered at App.tsx line 2766") and
    the mechanism is worth keeping: `App.tsx:2483` passes `onExpandNavRail={…}` and
    the rail's expand state is very much alive at `App.tsx:657` and `:680-692`, so a grep for `NavRail`
