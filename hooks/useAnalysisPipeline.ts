@@ -4,7 +4,7 @@ import {
     DebateTurn, Conversation, TradeAnalysis, TradeSummary,
     GlobalMemory, CustomInstructionsMap, CustomInstruction,
     AnalystLensConfig, AnalysisStep, InsightKnowledgeBase,
-    ReplacementOffer, PatternMemoryGateView,
+    PatternMemoryGateView,
 } from '../types';
 
 import { ProviderConfig } from '../types/provider';

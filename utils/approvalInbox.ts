@@ -3,7 +3,7 @@ import { AutopilotResolution } from '../services/ui/OutcomeAutopilotService';
 import { ticketExpiryLine } from './paperPnl';
 import { listSkillDrafts } from './skillDrafts';
 
-export type ApprovalKind = 'autopilot' | 'expired' | 'ungrounded' | 'replace' | 'skill';
+export type ApprovalKind = 'autopilot' | 'expired' | 'ungrounded' | 'skill';
 export type AutoJournalPolicy = 'ask' | 'always' | 'deny';
 
 export interface ApprovalItem {
@@ -69,16 +69,6 @@ export const collectApprovalItems = (
                 kind: 'autopilot',
                 title: coin || 'Setup',
                 detail: resolution.detail,
-                messageId: message.id,
-                coin,
-            });
-        }
-        if (message.replacementOffer && !message.replacementOffer.chosenProviderId) {
-            items.push({
-                id: `rp-${message.id}`,
-                kind: 'replace',
-                title: `${message.replacementOffer.droppedName} dropped`,
-                detail: 'Pick a replacement analyst or skip.',
                 messageId: message.id,
                 coin,
             });
