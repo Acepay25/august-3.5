@@ -257,6 +257,19 @@ reading is expensive to undo.
   name a file without a line were left without one rather than corrected by
   guess — and section C carries NO numbers by design, because those are exactly
   the lines stage 19 deletes.
+- **20c (#28)** — the keyword gate is deleted. `isChartAnalysisRequested` tested
+  the prompt for `LIVE MARKET` / `STRATEGY` / `ANALYZE` / `CHART` / `SETUP` and the
+  result was ANDed with `runEnsembleEnabled`, which already contained
+  `isEnsembleEnabled`. Measured consequence: for a human send those five tests could
+  never change the route — toggle on, every send analyzed whatever it said; toggle
+  off, no wording made one analyze — so the only thing wording decided was whether a
+  *scheduled* run got a verdict, contradicting the flag's own comment that
+  automations always run the pipeline. The guard is now `if (runEnsembleEnabled)`
+  alone, which makes that comment true. The brief also told me to delete "its
+  prompt-text tests"; none existed — the predicate had one consumer and one
+  source-shape pin, which I rewrote to bind the guard to its first statement
+  (`if (runEnsembleEnabled) {` also appears at the data pull, so a bare match would
+  stay green with the fork deleted) and to forbid the call shape `Prompt.includes(`.
 
 ## Deviations from the approved manifest (say so before repeating them)
 

@@ -1470,24 +1470,26 @@ ${reflectionBlock}`
             devLog('[AI Learning] Has learning injection:', learningInjection.length > 0);
             devLog('[Hybrid Intelligence] ======= END =======');
 
-            // Check if it's an update request via hiddenContext or other triggers
-            const isUpdate = !!hiddenContext;
-            const upperPrompt = originalPrompt.toUpperCase();
-            const isChartAnalysisRequested =
-                imageFiles.length > 0 ||
-                upperPrompt.includes("LIVE MARKET") ||
-                upperPrompt.includes("STRATEGY") ||
-                upperPrompt.includes("ANALYZE") ||
-                upperPrompt.includes("CHART") ||
-                upperPrompt.includes("SETUP") ||
-                isUpdate ||
-                // Ensemble mode always follows the analysis/debate pipeline,
-                // even when the user uses conversational wording.
-                isEnsembleEnabled;
-
-            // Chart analysis only runs in ensemble mode; otherwise the
-            // message is handled as casual chat with the selected model.
-            if (isChartAnalysisRequested && runEnsembleEnabled) {
+            // ── What the SEND IS decides the branch; what it SAYS never did ────
+            // This gate used to test the prompt text for LIVE MARKET / STRATEGY /
+            // ANALYZE / CHART / SETUP, plus the image and update facts. Read
+            // closely, the five wording tests could not change a human send's
+            // route: this predicate was ANDed with `runEnsembleEnabled`, and
+            // `isEnsembleEnabled` also appeared INSIDE the predicate — so with the
+            // toggle on every send ran the pipeline whatever its wording, and with
+            // it off no wording could make one run it. The one route wording
+            // controlled was a scheduled run's, where `isAutomationRun` supplied
+            // the flag: the same automation answered casually when its prompt read
+            // "outlook" and fully when it read "setup", against this flag's own
+            // documented intent ("Automations always run the ensemble pipeline").
+            // Deleting the wording therefore changes exactly one thing — a
+            // scheduled run is an analysis run, always — and leaves a send with
+            // the toggle off as casual chat even with a screenshot attached, which
+            // is what it already was. The verdict, the levels and the journal row
+            // are now reachable as TOOLS from the casual arm (stage 20's point);
+            // the branch below is the mode's, not the prompt's, and stage 19
+            // deletes it.
+            if (runEnsembleEnabled) {
                 const summaries = [
                     ...imagesToUse.map(meta => meta.fullAnalysisText).filter((t): t is string => Boolean(t)),
                     ...(userMessage.ocrCache?.texts ?? []),

@@ -48,7 +48,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 </style>
 <div class="fc">
 <h1>August Trading — the complete flow</h1>
-<p class="sub">The printable view of <a href="app-flow.md">app-flow.md</a>; the markdown is the source of truth and carries the corrections. Both were re-grepped against the working tree on <b>2026-10-18</b>, after the post-mortem / 2D desk floor / saved-analyses / Roles-tab deletions and after <b>stages 20a, 20a2, 20g, 20b, 20b-B and 20t</b> of the debate removal. A number appears here only where it was measured this pass; a node that names a file with no line number is a claim about the file, not about a line. Dotted nodes exist in the code but are <b>never mounted</b> by the running app. Section C's stage anchors are deliberately omitted — they are the lines stage 19 deletes.</p>
+<p class="sub">The printable view of <a href="app-flow.md">app-flow.md</a>; the markdown is the source of truth and carries the corrections. Both were re-grepped against the working tree on <b>2026-10-18</b>, after the post-mortem / 2D desk floor / saved-analyses / Roles-tab deletions and after <b>stages 20a, 20a2, 20g, 20b, 20b-B, 20t and 20c</b> of the debate removal. A number appears here only where it was measured this pass; a node that names a file with no line number is a claim about the file, not about a line. Dotted nodes exist in the code but are <b>never mounted</b> by the running app. Section C's stage anchors are deliberately omitted — they are the lines stage 19 deletes.</p>
 <div class="legend">
 <span><i class="sw" style="background:var(--g)"></i>run path</span>
 <span><i class="sw" style="background:var(--a)"></i>decision</span>
@@ -122,12 +122,12 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <div class="down">↓ the Chat surface's non-bot branch also enters the pipeline ↓</div>
 <div class="tier">
  <div class="n"><b>handleSendMessage</b><i>useAnalysisPipeline.ts:608</i></div>
- <div class="n dec"><b>isChartAnalysisRequested &amp;&amp; runEnsembleEnabled</b><i>predicate :1476 · flag :671 · guard :1490</i></div>
+ <div class="n dec"><b>runEnsembleEnabled alone</b><i>flag :671 · guard :1492 — stage 20c deleted the wording predicate</i></div>
 </div>
-<div class="down">↓ true = ensemble (section C) · false, casual :3155 = a branch on the thread ↓</div>
+<div class="down">↓ true = ensemble (section C) · false, casual :3157 = a branch on the thread ↓</div>
 <div class="cols">
- <div class="col"><h3>a bot thread? :3211 — yes</h3><div class="flow">
-  <div class="n run"><b>streamQuickResponse</b><i>:3216 → GenericAnalysisService, tier via resolveComposerEffort</i></div>
+ <div class="col"><h3>a bot thread? :3213 — yes</h3><div class="flow">
+  <div class="n run"><b>streamQuickResponse</b><i>:3218 → GenericAnalysisService, tier via resolveComposerEffort</i></div>
  </div></div>
  <div class="col"><h3>no — the desk, WITH its tools</h3><div class="flow">
   <div class="n run"><b>runChatSurfaceTurn</b><i>chatSurfaceTurn.ts:145 · tools from CHAT_SURFACE_TOOLS :50</i></div>
@@ -140,7 +140,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 </div>
 <div class="down">↓ ↓</div>
 <div class="tier">
- <div class="n store"><b>live writer, peeled per frame</b><i>applyCasualStreamUpdate streamThrottlers.ts:160 · flush BEFORE the settle write useAnalysisPipeline.ts:3287</i></div>
+ <div class="n store"><b>live writer, peeled per frame</b><i>applyCasualStreamUpdate streamThrottlers.ts:160 · flush BEFORE the settle write useAnalysisPipeline.ts:3289</i></div>
  <div class="n store"><b>entriesForSession — the one merge</b><i>chatSessions.ts:531, parameter literally named <code>canonical</code> :533 — App rows + dock entries, overwrite by id</i></div>
 </div>
 <div class="down">↓ a seat calls a tool ↓</div>
@@ -284,9 +284,9 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>18</td><td>panel → per-seat + mailbox</td><td><code>:1068</code> · <code>:996</code> · <code>:1008</code></td></tr>
 <tr><td>19</td><td>systemPromptFor → prompt</td><td><code>TRADE_CHAT_SYSTEM_PROMPT</code> + skills + strategies + profile + persona <code>TradeChatPanel.tsx:453</code></td></tr>
 <tr><td>20</td><td>every dock turn → chatStore</td><td><code>mutate</code> · <code>beginRun</code></td></tr>
-<tr><td>21</td><td>handleSendMessage → the fork</td><td><code>:1476</code>, guard <code>:1490</code>, else <code>:3155</code></td></tr>
-<tr><td>22</td><td>the casual arms</td><td>a bot thread → <code>streamQuickResponse :3216</code> (plain transport); the desk → <code>runChatSurfaceTurn chatSurfaceTurn.ts:145</code> → arrow 17. Tier on both via <code>resolveComposerEffort</code></td></tr>
-<tr><td>23</td><td>casual frames → Message.text</td><td><code>streamThrottlers.ts:160</code>; flush precedes the settle write <code>:3287</code></td></tr>
+<tr><td>21</td><td>handleSendMessage → the fork</td><td>the mode flag <code>:671</code> is the whole decision — guard <code>:1492</code>, else <code>:3157</code>. Stage 20c deleted the wording predicate</td></tr>
+<tr><td>22</td><td>the casual arms</td><td>a bot thread → <code>streamQuickResponse :3218</code> (plain transport); the desk → <code>runChatSurfaceTurn chatSurfaceTurn.ts:145</code> → arrow 17. Tier on both via <code>resolveComposerEffort</code></td></tr>
+<tr><td>23</td><td>casual frames → Message.text</td><td><code>streamThrottlers.ts:160</code>; flush precedes the settle write <code>:3289</code></td></tr>
 <tr><td>24</td><td>ensemble → 8 stages</td><td>see C — anchors deliberately omitted</td></tr>
 <tr><td>25</td><td>desk tools → what a caller can reach</td><td><code>executeDeskTool DeskToolsService.ts</code> (its allow-list is enforced at execution, not only at offer time)</td></tr>
 <tr><td>26</td><td>panel tools → chart echo</td><td><code>executePanelTool chatTurnRunner.ts</code> → <code>onToolAction</code></td></tr>

@@ -211,7 +211,25 @@ describe('the fact stage 19 has to replace rather than delete', () => {
         // removing it silently is how a schedule starts answering casually and
         // nobody notices for a week.
         expect(src).toMatch(/const runEnsembleEnabled = isAutomationRun \|\| isEnsembleEnabled;/);
-        expect(src).toMatch(/if \(isChartAnalysisRequested && runEnsembleEnabled\) \{/);
+        // Stage 20c retired the wording gate: the branch is the MODE's, so the
+        // flag alone decides it. Pinned WITH its first statement, because
+        // `if (runEnsembleEnabled) {` also appears at the data pull — a bare
+        // match would stay green if the fork itself were deleted.
+        expect(src).toMatch(/if \(runEnsembleEnabled\) \{\n\s+const summaries = \[/);
+        // And the keywords must stay dead. This is the whole ruling in four
+        // greps: no send may route on its own text, and a re-add would give a
+        // schedule two different behaviours for two different wordings.
+        // And the keywords must stay dead. Pinned as a CALL SHAPE, not as a
+        // word ban — the comment above this gate legitimately names the five
+        // words it removed, and a scan that trips on prose is a false-positive
+        // machine. What may not come back is a string test on the prompt.
+        expect(src).not.toMatch(/isChartAnalysisRequested/);
+        expect(src).not.toMatch(/upperPrompt/);
+        expect(src).not.toMatch(/Prompt\.includes\(/);
+        for (const word of ['LIVE MARKET', 'ANALYZE', 'CHART', 'SETUP', 'STRATEGY']) {
+            expect(src, `the pipeline tests the prompt for ${word} again`)
+                .not.toMatch(new RegExp(`includes\\(\\s*['"\`]${word}['"\`]`));
+        }
         // And the gate scan is part of that route, keyed on the same flag: the
         // cap a scheduled plan gets today is a gate cap, not a tool cap.
         expect(src).toMatch(/if \(finalSymbol && runEnsembleEnabled\) \{/);
