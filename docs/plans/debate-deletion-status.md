@@ -155,7 +155,7 @@ record of why the order is what it is.
 
 Structured chart analysis exists **only** inside the ensemble branch, and this app
 has no solo-analysis path: `isChartAnalysisRequested`
-(`useAnalysisPipeline.ts:1485`) lists `isEnsembleEnabled` as a trigger term, so with
+(`useAnalysisPipeline.ts:1578`) lists `isEnsembleEnabled` as a trigger term, so with
 the flag off every send is casual chat. Deleting the branch therefore deletes the
 verdict, the entry/SL/TP, the levels drawn on the chart, the gate scan, and the
 journal row that the autopilot watches — not just the debate.
@@ -443,7 +443,7 @@ deleted (`verdictFinalizer.test.ts`, `harnessFeatures.test.ts`,
 `lensPipelineValidation.test.ts`); (3) the settings surface and the five Preference keys
 (`ENSEMBLE_MODEL_SELECTION`, `LAST_MODERATOR_PICK`, `CUSTOM_ENSEMBLE_PROMPT`,
 `CUSTOM_LENS_PROMPTS`, `ANALYST_LENS_CONFIG`) and the `isEnsembleEnabled` flag itself,
-`scripts/installer-smoke.cjs:289` and the `lens` chunk in `scripts/render-probe.cjs`; (4) the
+`scripts/installer-smoke.cjs:289` and the lens chunk in `scripts/render-probe.cjs`; (4) the
 debate-only `Message` fields. Item counts in (2) came from a research agent and are
 **not yet verified by me line-by-line** — check each before deleting.
 
@@ -916,7 +916,7 @@ not from the plan:
 **The live consequence, and it is the next job:** `App.tsx:1249` picks
 `verdictMessage` out of the debate shapes — `ensembleProgress`, >1 `modelsUsed`,
 `debateTurns` — and hands it to the chart as `verdict={verdictMessage?.analysis}`
-(`App.tsx:2526`). After this tranche nothing sets `Message.analysis` for a new
+(`App.tsx`, and there is no line to give it: as of 2026-10-19 nothing passes an analysis prop there at all). After this tranche nothing sets `Message.analysis` for a new
 run: the writer was `verdictFinalizer` (deleted), and a tool turn answers with a
 `TradeProposal` carried in the tool payload (`services/trade/presentTradeTool.ts`,
 `proposedTrade.ts`, `tradeShapedProse.ts`). So the chart's verdict prop has a
@@ -1317,7 +1317,7 @@ framing was wrong in two ways that both matter before anyone edits:
   whole for accuracy and truncates it to 800 tokens otherwise, so the branch's survival value for
   the ordinary path must be decided, not assumed. (2) `AccuracySubMode` is not an optional setting
   but a **required, persisted `AutomationConfig.mode`** (`types/automation.ts:44`) with a picker at
-  `components/automation/AutomationEditorModal.tsx:515` and a label at
+  `components/automation/AutomationEditorModal.tsx` (the Lenses toggle block: the earlier citation landed on that block’s opening comment, so no line is given) and a label at
   `components/automation/AutomationView.tsx:68` — stored schedules already carry it, so removing
   the field needs a read-side migration or old configs fail validation on load. (3) Three further
   toggles live under it (`isPlaybookEnabledInPureAI`, `isFamiliesEnabledInPureAI`,

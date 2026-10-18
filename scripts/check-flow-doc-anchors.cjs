@@ -387,7 +387,7 @@ const problems = [...rep.missingFile, ...rep.outOfRange, ...rep.blank];
 // defect count, and do not answer a doubt about a wrapped sentence by trusting
 // this ceiling: re-measure the anchor by hand.
 const COMMENT_CEILING = 61;
-const SYMMISS_CEILING = 5;
+const SYMMISS_CEILING = 0;
 
 console.log(`flow docs: ${all.length} anchor references, ${unique.size} unique, across ${DOCS.join(' + ')}`);
 console.log(`cited-line quality: ${rep.comment.length} land on a comment line (ceiling ${COMMENT_CEILING}), ${rep.symMiss.length} miss the symbol their own line names (ceiling ${SYMMISS_CEILING}) — both ratchet to 0`);
