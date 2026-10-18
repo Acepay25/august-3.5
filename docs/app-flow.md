@@ -420,7 +420,7 @@ card that forgets it was clicked offers a second journal row.
 | 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useAnalysisPipeline.ts:1329`, anything else runs the tool turn `:1376`; the mode flag `:544` now only gates the hybrid pull `:860` |
 | 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1334` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:230` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
 | 23 | casual frames → Message.text | `hooks/analysisPipeline/streamThrottlers.ts:28`; flush precedes the settle write useAnalysisPipeline.ts |
-| 24 | ensemble → 8 stages | see C — anchors deliberately omitted |
+| 24 | ensemble → the stages that survive | see C — five of the old eight are gone from the call path, and no stage is named in the code, so no line number is claimed |
 | 25 | desk tools → what a caller can reach | `executeDeskTool DeskToolsService.ts` (its allow-list is enforced at execution, not only at offer time) |
 | 26 | panel tools → chart echo | `executePanelTool chatTurnRunner.ts` → `onToolAction` |
 | 27 | automation tick → runAutomation | `useAutomations.ts:411`, forks on `config.botId` `:431`; the no-bot path takes the pipeline's OWN schedule arm `useAnalysisPipeline.ts:1247` → `runAutomationTurn automationTurn.ts:161`, writing the private list automationMessagesRef useAnalysisPipeline.ts:352, its `notices` (a tool that came back failed, a turn that called nothing, a refused plan) and settling through `onMessage` `useAutomations.ts:531`. Characterized in `tests/automationRouteCharacterization.test.tsx` |
@@ -531,6 +531,16 @@ card that forgets it was clicked offers a second journal row.
     outside review probed 66 anchors and could not speak to the rest; the gate now
     resolves all 247 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
+11. **"One service replacing nine" is falsifiable, and it is right — counted, not
+    asserted.** `git log --diff-filter=D` over `services/providers/` names exactly nine
+    provider-client services removed: `AIProviderService` plus the eight per-provider
+    clients `geminiService`, `grokNativeService`, `deepseekService`, `groqAlt2Service`,
+    `groqNewService`, `openaiService`, `openrouterService` and `zhipuService`. What is
+    left in that directory is two clients — `GenericProviderService.ts` and
+    `GenericAnalysisService.ts` — plus four helpers, and a search for any remaining
+    `class <ProviderName>Service` over `services/` returns nothing. Twenty-four files
+    in total have been deleted from that directory; the other fifteen were the
+    accuracy-mode services, the debate engine and its types.
 
 ## Measured after stage 19: what the deletion did NOT remove
 
