@@ -1368,6 +1368,15 @@ grep-and-delete:
 
 The worktree was removed; `main` and the working checkout are untouched.
 
+**Correction to the cost claim I used to defer all three deletions (2026-10-18).** I wrote that one
+`npm run typecheck` pass runs 4–5 minutes and therefore a compiler-driven 22-file removal cannot fit
+in a session. Re-measured on an idle machine: **cold 14 s, warm 4 s** with `--incremental`
+(buildinfo 377,958 bytes, exit 0 both times). The slow run I generalised from called tsc **twice in
+one command** while the full suite had just released the machine — contention, not cost. So the
+real blockers for these three are the two design couplings above (market polling, a positional
+argument) and the persisted-field semantics, not the typechecker's speed, and no `incremental`
+config change is needed to proceed.
+
 **#21 — `postMortem`, `savedAnalyses`, `Message.debateTurns`.** Deleting the fields removes ~25
 readers (EvidencePackService, DoctrineConsolidation, SkillMemoryService, memoryContext,
 NotebookWriterService, rootCause, reportExport, `craftSkillFromPostMortem` and
