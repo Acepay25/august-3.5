@@ -254,8 +254,12 @@ is still called from `botLearning.ts:234`, and its first guard is
 trade closed after 2026-10-18 the craft leg can only return null; it still answers
 for a row that carries a post-mortem from before then. `selfImprovement.ts:73-74`,
 `SkillMemoryService` and `DoctrineConsolidationService` read the same dead field.
-**Sizing that by grep is a trap.** The token `postMortem` appears in **189 lines across
-57 files**; the field itself is **105 lines in ~35 files, ~17 of them production**. The rest
+**Sizing that by grep is a trap, so the recipe is part of the number.** Counting the
+TOKEN `postMortem` in .ts/.tsx measures **122 lines in 50 files** today; counting the field
+reads (`.postMortem`) measures **34 lines in 23 files**. Earlier drafts of this page asserted
+189/57 and 105/~35 — true the day they were taken, untrue from the stage that deleted readers
+onward, and unreproducible without the filter, which is how a census becomes a claim nobody can
+check. The rest
 is a name collision with two live things: the outcome-validation engine
 (`PostMortemTPHit` and the `[PostMortemValidation]` log prefixes in
 `services/backtesting/BacktestingService.ts`, `PostMortemDataSummary` /
