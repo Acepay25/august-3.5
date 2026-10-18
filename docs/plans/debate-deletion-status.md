@@ -66,7 +66,7 @@ Chat surface. The extraction therefore takes an **event sink** — the executor 
 each home maps them onto its own fields. That is what 20a builds.
 
 Second blocker for the cheaper "just lift the runner" route: the deps are captured
-**at construction** (`chatTurnRunner.ts:201-283`, `useMemo` over 35 fields at
+**at construction** (`chatTurnRunner.ts:202-283`, `useMemo` over 35 fields at
 `TradeChatPanel.tsx:515-551`), including composer state (`draft`, `attachments`,
 `setDraft`, `clearAttachments`, `setContextAt`) and `systemPromptFor`. Two surfaces
 cannot share one instance built per-mount, so 20a converts turn-scoped context into
@@ -103,7 +103,7 @@ numbering; the file is shorter now) — eight positional
   have no target there; (3) whether the Chat surface renders a tool chip (the dock's
   transcript rows already do).
 - Lifting `createChatTurnRunner` into App is **not** the cheap route: its deps
-  object (`chatTurnRunner.ts:201-283`) is 35 fields, most of them chart state
+  object (`chatTurnRunner.ts:202-283`) is 35 fields, most of them chart state
   owned by TradeView (`allDrawings`, `getChartSnapshot`, `addModelDrawings`,
   `onPlanPresented`). Do the transport swap, not the lift.
 
@@ -678,7 +678,7 @@ six peer-review defects verified fixed by grep (no dangling hashes, `plans/` cro
 `services/infrastructure/messageImageStore.ts`, `ChatComposer.tsx:146`, Section D says
 starved-not-deleted). Two defects my own scanner found that the reviewer's did not: a
 stale `streamQuickResponse :3315` (the debate arm's copy — it is `:1449` now) and a
-**fabricated citation**, `rationale :617-622`, in three places — the word `rationale`
+**fabricated citation**, `rationale` at lines 617-622, in three places — the word `rationale`
 does not appear in `automationTurn.ts`, `useAnalysisPipeline.ts` or `useAutomations.ts`
 at all. It described the notices that 20r assembles, so it now names `notices`.
 
@@ -696,7 +696,7 @@ and `featuresAreWired`, `harnessFeatures`, `scalpDetection`,
 
 Still blocked: `verdictFinalizer.ts` (the ~15 application sites above), and the engine
 cluster it feeds. Also two comments now make a false claim — `components/agents/AgentsView.tsx:245`
-and `components/shared/ChatTranscriptRow.tsx:18` both cite `verdictFinalizer.ts` as where a
+and the second comment, `components/shared/ChatTranscriptRow.tsx:18`, cite `verdictFinalizer.ts` as where a
 verdict payload is written, and it has no production caller. Not edited this pass (no turn to
 verify the sentence around them); fix with the re-home.
 
@@ -731,7 +731,7 @@ than a stage-19 deletion: **the journal's scalp/swing filter had no producer**. 
 calling `withDetectedTradeType` at the two row-minting sites in `logTradeWithFeedback`
 and `logEntryNotHitTrade` — the label-only variant, so `validityDurationMinutes` stays
 untouched and OutcomeAutopilot's expiry window does not silently widen. The reader is
-`components/journal/TradeLog.tsx:532` (`trade.tradeType || trade.analysis?.tradeType`),
+`components/journal/TradeLog.tsx:535` (`trade.tradeType || trade.analysis?.tradeType`),
 which is why the row is the right host: every journal path lands there, a presented plan,
 a prose chip or a manual log alike.
 
@@ -909,7 +909,7 @@ not from the plan:
 - `isStagedEnsemble` (`:655`) still mints `ensembleProgress` (`:888`, written on
   the placeholder at `:912`) with every seat at `status: 'waiting'`. Nothing ever
   moves it, because the only writers were the debate throttler (deleted) and
-  `runOutcome.ts:41`, which only marks it failed. `App.tsx:1254` reads it.
+  `runOutcome.ts:41`, which only marks it failed. `App.tsx:1252` reads it.
 - `isDebating: true` is now written in exactly ONE place: the resume path
   (`:924`). Everything that once set it lived in the debate loop.
 
@@ -1004,7 +1004,7 @@ not a mechanical one — it removes reporting the trader can currently open.
 **2. `ensembleProgress` has no rendering reader but IS load-bearing on the failure path.**
 Census over all `.ts`/`.tsx`: minted at `useAnalysisPipeline.ts:909`→`:912`, patched at
 `runOutcome.ts`'s debating branch, stripped at the SQLite boundary, and
-after `1bd501e` no component reads it (`App.tsx:1254` was the last, and that memo is
+after `1bd501e` no component reads it (`App.tsx:1252` was the last, and that memo is
 gone). But the `runOutcome` branch keyed on it writes the row's TEXT —
 "The analysis was cancelled." / "The ensemble could not continue before the debate
 started." — so deleting the mint without re-keying that guard strands an empty row on
@@ -1204,7 +1204,7 @@ Two operational notes, because both cost a run:
 ## The review's two remaining "not verified" items, closed by measurement
 
 - **"Do e2e/boot-probe wait on the splash node?"** Yes, both, with different
-  mechanics: `scripts/boot-probe.cjs:120` blocks on
+  mechanics: `scripts/boot-probe.cjs:119` blocks on
   `waitForFunction(() => !document.querySelector('#splash'))`, while the e2e
   specs assert ABSENCE with a count-0 expectation (`e2e/smoke.spec.ts:55` in the
   shared seed path, `:141` in the first-run spec). `index.tsx:86-92` is
@@ -1284,7 +1284,7 @@ The file lists are recorded here so the next pass starts from evidence, not from
 
 **#19 — the ensemble branch, the hybrid pull, and the prompt A/B lane.**
 `runEnsembleEnabled` is not local to the hook: it is threaded from `App.tsx` through
-`hooks/useAnalysisPipeline.ts:567/:279/:556` and gates `:403` (a UI-muting early return), `:617`,
+`hooks/useAnalysisPipeline.ts:567/:279/:544` and gates `:403` (a UI-muting early return), `:909`,
 `:806` (the coin tip), `:874`, `:923`, `:956`, and appears in the `:1594` dependency array. The
 toggle itself is persisted (`hooks/useProfilePersistence.ts`, `hooks/useUserProfileLoader.ts`,
 `types/user.ts`, `services/learning/MemoryFilesService.ts`, `services/trade/automationTurn.ts`,
@@ -1316,7 +1316,7 @@ framing was wrong in two ways that both matter before anyone edits:
   prompt receives: `services/providers/GenericAnalysisService.ts:335` sends the memory context
   whole for accuracy and truncates it to 800 tokens otherwise, so the branch's survival value for
   the ordinary path must be decided, not assumed. (2) `AccuracySubMode` is not an optional setting
-  but a **required, persisted `AutomationConfig.mode`** (`types/automation.ts:44`) with a picker at
+  but a **required, persisted `AutomationConfig.mode`** (`types/automation.ts:43`) with a picker at
   `components/automation/AutomationEditorModal.tsx` (the Lenses toggle block: the earlier citation landed on that block’s opening comment, so no line is given) and a label at
   `components/automation/AutomationView.tsx:68` — stored schedules already carry it, so removing
   the field needs a read-side migration or old configs fail validation on load. (3) Three further
@@ -1583,7 +1583,7 @@ listed in a dependency array is a writer with no reader. `GlobalLearningService
 history card all still call it directly.
 
 **#21 — three sub-items, measured, none started.** `debateTurns` is declared at
-`types/message.ts:189` and `types/trade.ts:110`, written at
+`types/message.ts:191` and `types/trade.ts:110`, written at
 `hooks/useTradeLogging.ts:350` and `utils/watchList.ts:30`, and read by
 `hooks/useAnalysisPipeline.ts:786`,
 `hooks/useWatchAndAutopilot.ts:105`, `services/analysis/convictionDrift.ts:82`,
@@ -1682,7 +1682,7 @@ Nothing produces a transcript any more: the only writes are copies
 (`hooks/useTradeLogging.ts:349`, `utils/watchList.ts:30`) and **no code sets
 `isDebating: true`** — every remaining `isDebating` is a literal `false`, and
 `hooks/useUserProfileLoader.ts:404` forces it false on load. So the failure-path
-guard at `hooks/analysisPipeline/runOutcome.ts:43` is unreachable and the three
+guard inside `classifyRunFailure` (`hooks/analysisPipeline/runOutcome.ts:48`) is unreachable and the three
 verdict-fallback parameters in `utils/analysisUtils.ts` (the final-verdict text,
 the level hit-odds legacy parse, the signal-card "why") only ever take their
 `analysis.strategy` / stored-`levelProbabilities` branch. That half is safe to
