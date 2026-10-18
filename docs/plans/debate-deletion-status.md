@@ -1035,9 +1035,9 @@ Also measured: the resume branch was the ONLY writer of `isDebating: true`, and
 placeholder, and nothing in the app can now mark a row as debating. The three refusals (:731, :761, :794) still stand and
 are the next cut.
 
-Gates: tsc clean; full vitest 477 files / 4713 tests green. render-probe to be
-re-run for this change — it asserts row counts per conversation, and this removes
-a row.
+Gates: tsc clean; full vitest green; render-probe OK (PROBE_EXIT=0, zero
+pageerrors) — the probe counts rendered rows per conversation, which is what this
+change alters, so the removal is browser-verified.
 
 Gate re-run after 336c887 (the placeholder removal): render-probe OK, PROBE_EXIT=0, zero pageerrors — the probe counts rendered rows per conversation, which is exactly what this change alters, so the removal is browser-verified, not just suite-verified. tsc and the full suite were green before it (477 files / 4713 tests).
 
@@ -1058,6 +1058,6 @@ last production caller, so the module and its two unit tests were deleted — no
 test asserted any of the removed refusals, which is worth noting: three
 user-visible blocks shipped with no pin on them.
 
-No suite pinned the removed blocks; tsc clean after the cut, targeted suites
-(analysisPipelineStages, automationRouteCharacterization, automationToolTurn,
-featuresAreWired) 55 tests green.
+No suite pinned the removed blocks; tsc clean, full vitest 477 files / 4711 tests
+green (the 2 fewer are the deleted buildModelsUsedRecord units), and render-probe
+OK with zero pageerrors after the cut.
