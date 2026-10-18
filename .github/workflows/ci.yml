@@ -35,8 +35,9 @@ jobs:
       - name: Type check scripts
         run: npm run typecheck:scripts
 
-      # tsc and vitest cannot see a doc line number, and the flow docs carry 110 of
-      # them; they have gone stale three times during this deletion.
+      # tsc and vitest cannot see a doc line number. The flow docs carry hundreds of them
+      # (the gate prints the live count), and they have gone stale three times during this
+      # deletion, so the scan runs before anything that costs a build.
       - name: Flow docs cite real lines
         run: npm run check-flow-doc-anchors
 
