@@ -14,19 +14,28 @@ import { formatLevelHitForModel, type WatchPlan } from '../services/trade/tradeP
 import { formatWatchFiredForModel, type WatchFired } from '../services/trade/chartTriggers';
 
 const runnerSrc = readFileSync('services/trade/chatTurnRunner.ts', 'utf8');
+// The strip moved out of the dock's session machinery into the shared turn
+// executor (2026-10-18, stage 20a) — so this gate follows the behaviour, and
+// keeps a second assertion that the dock cannot re-fork its own copy.
+const turnSrc = readFileSync('services/trade/toolTurn.ts', 'utf8');
 
 describe('the dock settles on stripped text', () => {
-    it('streamSeatTurn strips tool-call markup after the stream loop', () => {
+    it('the turn executor strips tool-call markup after the stream loop', () => {
         // The loop's own stripped return value is discarded by the runner's
         // accumulator; the settle point must re-strip or a text-protocol call
         // reaches the transcript as literal protocol soup.
-        expect(runnerSrc).toMatch(/full = stripTextToolCalls\(full\);/);
+        expect(turnSrc).toMatch(/const full = stripTextToolCalls\(raw\);/);
         // The strip sits AFTER the for-await (so abort + echo repair both read
         // it) — i.e. between the loop and the settle-time thinking splitter.
-        const loopEnd = runnerSrc.indexOf('full = stripTextToolCalls(full);');
-        const splitter = runnerSrc.indexOf('splitThinkingFromOutput(reasoning, full)');
-        expect(loopEnd).toBeGreaterThan(-1);
-        expect(splitter).toBeGreaterThan(loopEnd);
+        const stripAt = turnSrc.indexOf('const full = stripTextToolCalls(raw);');
+        const splitter = turnSrc.indexOf('splitThinkingFromOutput(reasoning, full)');
+        expect(stripAt).toBeGreaterThan(-1);
+        expect(splitter).toBeGreaterThan(stripAt);
+    });
+
+    it('the dock has no private second copy of the strip', () => {
+        expect(runnerSrc).not.toMatch(/stripTextToolCalls\(full\)/);
+        expect(runnerSrc).toMatch(/await runToolTurn\(/);
     });
 });
 
