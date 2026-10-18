@@ -100,7 +100,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
  </div>
  <div class="col"><h3>Chart AI dock (inside Trade)</h3>
   <div class="flow">
-   <div class="n"><span class="id">15</span><b>ChatComposer</b><i>trade-sidebar TradeView:1064,1107 · :160 :218</i></div>
+   <div class="n"><span class="id">15</span><b>ChatComposer</b><i>trade-sidebar TradeView:1064,1107 · :146 :218</i></div>
    <div class="down">↓</div>
    <div class="d"><span class="id" style="position:static;display:inline">16</span> chatTurnRunner.send — branch on seats<br>:832 · solo :932 · panel :1036 · full :1184</div>
    <div class="down">↓</div>
@@ -147,7 +147,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 </div>
 <div class="down">↓ the post-mortem hook is DELETED ↓</div>
 <div class="tier">
- <div class="n dead"><span class="id">28</span><b>usePostMortem → conductPostMortem</b><i>deleted 2026-10-18 (e2b3965) — nothing re-runs an analysis after a trade closes</i></div>
+ <div class="n dead"><span class="id">28</span><b>usePostMortem → conductPostMortem</b><i>deleted 2026-10-18 (03fc0d5) — nothing re-runs an analysis after a trade closes</i></div>
  <div class="n run"><b>journal row</b><i>logTradeWithFeedback useTradeLogging.ts · outcome facts from the detector, not a post-mortem</i></div>
 </div>
 </div>
@@ -156,7 +156,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <div class="loop"><div class="flow">
 <div class="tier">
  <div class="n"><span class="id">29</span><b>draft producers</b><i>sessionSkillReview · passMining · selfImprovement · bookSkillDrafts · chartScanSkills · botLearning · the propose_skill tool — the closed-trade/post-mortem route is deleted</i></div>
- <div class="n dead"><b>craft draft</b><i>craftSkillFromPostMortem — deleted 2026-10-18 with the post-mortem</i></div>
+ <div class="n dead"><b>craft draft</b><i>craftSkillFromPostMortem — STARVED, not deleted: still called from botLearning.ts:234, but its guard SkillCraftService.ts:144 needs a post-mortem nothing writes since 2026-10-18 (03fc0d5)</i></div>
  <div class="n"><b>two-tier evidence gate</b><i>draftGates.ts:1</i></div>
  <div class="n dec"><span class="id">30</span><b>HUMAN approval</b><i>approveSkillDraft skillApproval.ts:53 — reads the library back :14</i></div>
  <div class="n store"><b>notebook</b><i>memory_files_v1_&lt;user&gt; · tiers memoryBudget.ts:38 — refuse growth, never evict</i></div>
@@ -211,7 +211,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <table><tr><th>what</th><th>where</th></tr>
 <tr><td>dock sessions · active id · tool payloads</td><td><code>trade_chat_sessions_v1_&lt;user&gt;</code> · <code>trade_chat_active_v1_</code> · <code>trade_tool_payloads_v1_</code></td></tr>
 <tr><td>profile, conversations, trades, journal</td><td>IndexedDB <code>FuturesAI-DB/userProfiles</code> on web · SQLite on native — by platform, <code>dbService.ts:1-7</code>; one-way flag <code>sqlite_migrated</code></td></tr>
-<tr><td>screenshots · reasoning traces</td><td>split out of the profile: IDB store <code>images</code> (<code>messageImageStore.ts:21</code>) · its own db (<code>ThinkingStoreService.ts:11</code>)</td></tr>
+<tr><td>screenshots · reasoning traces</td><td>split out of the profile: IDB store <code>images</code> (<code>services/infrastructure/messageImageStore.ts:21</code>) · its own db (<code>services/infrastructure/ThinkingStoreService.ts:11</code>)</td></tr>
 <tr><td>notebook · queue · drafts · rules · roster · automations · providers</td><td><code>memory_files_v1_</code> · <code>learning_proposals_v1:</code> · <code>skill_drafts_v1:</code> · <code>approval_rules_v1:</code> · <code>agents_bots_v1</code> · <code>automations_v1_</code> · <code>provider_configs_v1</code> (keys <code>enc:v1:</code> via safeStorage)</td></tr>
 </table>
 
@@ -232,7 +232,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>12</td><td>bot branch → useBotMailbox</td><td><code>runUserBotTurn</code> App <code>:2904</code> → <code>:305</code> → <code>:199</code></td></tr>
 <tr><td>13</td><td>AgentsView.send → analysis branch</td><td><code>onAnalyze :688</code> → App <code>:1700</code> — the SAME wrapper as arrow 19; <code>analysisTurn.ts</code> is deleted</td></tr>
 <tr><td>14</td><td>one run → one set of rows</td><td>the pipeline writes question/answer/error into the active conversation; <code>entriesForSession chatSessions.ts:525</code> projects them into the dock by <code>Message.id</code></td></tr>
-<tr><td>15</td><td>ChatComposer → chatTurnRunner.send</td><td>Enter <code>:160</code> / button <code>:218</code> → <code>:832</code></td></tr>
+<tr><td>15</td><td>ChatComposer → chatTurnRunner.send</td><td>Enter <code>:146</code> / button <code>:218</code> → <code>:832</code></td></tr>
 <tr><td>16</td><td>solo → runSeatTurn</td><td><code>:977</code></td></tr>
 <tr><td>17</td><td>runSeatTurn → streamChatWithDeskTools</td><td><code>:640</code> → <code>DeskToolsService.ts:3684</code> → <code>streamChatRequest</code></td></tr>
 <tr><td>18</td><td>panel → per-seat + mailbox</td><td><code>:1126</code> · <code>createDebateMailbox :1054</code> · <code>planPanelTurn :1066</code></td></tr>
