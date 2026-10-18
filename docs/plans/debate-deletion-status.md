@@ -812,3 +812,33 @@ Pinned in `tests/analysisPipelineSendIdentity.test.ts`, including the negative
 (`not.toMatch(/notifyAnalysisComplete/)`) so the duplicate cannot creep back.
 
 Gates: `tsc --noEmit` clean, 501 files / 4988 tests green, docs 171/171 anchors land.
+
+## The finalizer is gone; the engine island has THREE live→dead edges left
+
+Deleted `hooks/analysisPipeline/verdictFinalizer.ts` (709 lines) with its suite: `tsc`
+clean, 500 files / 4969 tests green. It became safe as soon as the two live writes were
+re-homed — the label and the ledger — plus the completion notice.
+
+The remaining debate cluster cannot be swept yet, and not because of its own tests. Three
+REACHABLE modules still import dead helpers, and each one is a feature question, not a
+mechanical cut:
+
+| live importer | imports | the question it forces |
+|---|---|---|
+| `hooks/analysisPipeline/streamThrottlers.ts:30` | `lastCompletedRound`, `laneDraftsFromTurns` from `utils/debateResume` | the live writer's lane-draft display was built around rounds a single-seat turn does not have |
+| `hooks/useWatchAndAutopilot.ts:4` | `reconstructOpenings` from `utils/debateResume` | what a watch arms an opening FROM, now that no debate produces one |
+| `services/learning/monthlyReport.ts:24` | `computeEnsembleLine`, `SeatConviction` from `services/providers/debateScience` | what the monthly report's ensemble line says when there is no ensemble — a gap, or the single analyst's own conviction |
+
+Answer those three (or say "delete the display half") and the island goes in one commit:
+`ensembleService`, `ensembleConsensus`, `debateScience`, `debateResume`, `debateLevels`,
+`debateDiff`, `debateEpisodes`, `debatePreStep`, `debateReplyTo`, `debateTranscript`,
+`provisionalVerdict`, `keptAnalyst`, `recommendationContract`, `verdictSkillDraft`,
+`analysisResultProcessor`, `CompletionNotifications`, `archetypePrompts`,
+`analysisReport`, `analysisTrace`, `runGantt`, `hybridChartDrift`, `levelEvidence`,
+`ungroundedGate`, `levelKeywords`, `services/learning/preflight`, `lensMemoryRecord`, plus
+their ~27 test files.
+
+Method note, so this does not happen again: the first candidate sweep was wrong because it
+added each candidate's *production importers* to the delete list — which silently included
+three live files. A bulk delete must intersect the reachability walk and refuse any file
+reachable from `App.tsx`.
