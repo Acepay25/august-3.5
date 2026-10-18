@@ -204,6 +204,61 @@ export const MAX_DESK_TOOL_ROUNDS = 8;
 export const DESK_TURN_BUDGET_MS = 180_000;
 export const DESK_TURN_WRAPUP_AT = 0.8;
 
+/** Wall-clock ceiling for ONE tool call, and the reason a Stop is answered at
+ *  once instead of when a socket feels like giving up.
+ *
+ * `MAX_DESK_TOOL_ROUNDS` counts rounds and `DESK_TURN_BUDGET_MS` bounds the
+ * turn, but neither sees a call that never returns: the round simply awaits it,
+ * the transcript stays on "calling…", and a Stop click does nothing until the
+ * fetch dies on its own. Stage 20 puts this loop in front of a human watching a
+ * live bubble, so a stuck tool reads as a hung app. Must stay well under
+ * `DESK_TURN_BUDGET_MS`, or one lookup spends the entire turn. */
+export const DESK_TOOL_TIMEOUT_MS = 20_000;
+
+/**
+ * Run one desk-tool call inside its own deadline and under the seat's Stop.
+ *
+ * Neither exit throws past the batch: an assistant turn that asked for a tool
+ * must be answered by a tool result or a provider rejects the transcript, so a
+ * timed-out or stopped call comes back as a `DATA_UNAVAILABLE:` receipt naming
+ * what the seat did not get. The loop's round-top abort check then ends the turn
+ * honestly, and `toolTurn` marks it interrupted rather than failed.
+ */
+export async function withinToolDeadline(
+    call: DeskToolCall,
+    work: () => Promise<DeskToolResult>,
+    signal?: AbortSignal,
+    timeoutMs: number = DESK_TOOL_TIMEOUT_MS,
+): Promise<DeskToolResult> {
+    const label = toolLabel(call.name);
+    const stopped = (reason: string): DeskToolResult => ({
+        toolCallId: call.id,
+        name: call.name,
+        ok: false,
+        content: dataUnavailable(label, reason, 'Answer from what you already have and name what you did not get.'),
+    });
+    // Already-stopped beats starting work that cannot be reported back.
+    if (signal?.aborted) return stopped('the turn was stopped before this lookup ran');
+
+    return new Promise<DeskToolResult>(resolve => {
+        let settled = false;
+        const finish = (r: DeskToolResult): void => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timer);
+            signal?.removeEventListener('abort', onAbort);
+            resolve(r);
+        };
+        const timer = window.setTimeout(
+            () => finish(stopped(`did not answer within ${Math.round(timeoutMs / 1000)}s`)),
+            timeoutMs,
+        );
+        const onAbort = (): void => { finish(stopped('the turn was stopped while this lookup ran')); };
+        signal?.addEventListener('abort', onAbort, { once: true });
+        work().then(finish, () => finish(stopped('the lookup threw before it returned')));
+    });
+}
+
 /**
  * A seat repeating itself is a different failure from a seat running long, and
  * the round cap cannot see it: an `A,B,A,B` replay burns every remaining round
@@ -2914,7 +2969,13 @@ export async function executeDeskTools(
     calls: DeskToolCall[],
     context: DeskToolContext = {},
 ): Promise<DeskToolResult[]> {
-    return Promise.all(calls.map(call => executeDeskTool(call, context)));
+    // Every call gets its own deadline and hears the seat's Stop, so one hung
+    // lookup can no longer hold the round (and the bubble) open.
+    return Promise.all(calls.map(call => withinToolDeadline(
+        call,
+        () => executeDeskTool(call, context),
+        context.signal,
+    )));
 }
 
 /**
@@ -3472,8 +3533,17 @@ export async function runDeskToolLoop(params: {
                 forgedResults.push(rejectedResult(call, `${call.name} rejected: this tool is not available on this seat.`));
                 continue;
             }
-            const forged = await executeForgedTool(call.name, call, options?.signal);
-            if (forged) forgedResults.push(forged);
+            // A forged recipe is an HTTPS call the MODEL wrote, so it gets the
+            // same per-call clock as a built-in reader. The sentinel keeps the
+            // "not a forged tool after all" path distinguishable from a result.
+            const FORGED_MISS = '__not_a_forged_tool__';
+            const forged = await withinToolDeadline(
+                call,
+                async () => (await executeForgedTool(call.name, call, options?.signal))
+                    ?? { toolCallId: call.id, name: call.name, ok: true, content: FORGED_MISS },
+                options?.signal,
+            );
+            if (forged.content !== FORGED_MISS) forgedResults.push(forged);
         }
         const coreResults = builtInCalls.length > 0
             ? await executeDeskTools(builtInCalls, {
