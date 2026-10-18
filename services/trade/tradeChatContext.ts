@@ -199,7 +199,11 @@ export interface SkillIndexRow {
  * stays network-free). Each line leads with the activation description
  * (what/when), then the IF/THEN rule.
  */
-export const buildSkillsIndexForPrompt = (rows: SkillIndexRow[], max = 30): string => {
+/** The library index a seat reads. `where` names the thing a skill must match:
+ *  the dock looks at a chart, the Chat surface looks at nothing, and a heading
+ *  that says "match this chart" on a surface with no chart is a lie the model
+ *  can only answer by inventing one. */
+export const buildSkillsIndexForPrompt = (rows: SkillIndexRow[], max = 30, where = 'this chart'): string => {
     if (rows.length === 0) return '';
     const lines = rows.slice(0, max).map(r => {
         const rule = [
@@ -211,7 +215,7 @@ export const buildSkillsIndexForPrompt = (rows: SkillIndexRow[], max = 30): stri
         return `- ${r.slug}${r.status ? ` [${r.status}]` : ''} — ${kindTag}${desc || rule || '(see recall)'}${desc && rule ? ` · ${rule}` : ''}`;
     });
     return [
-        `## Skills library — ${rows.length} skill${rows.length === 1 ? '' : 's'}. Each line is WHEN to use it; the IF/THEN is the rule. APPLY any that match this chart before answering; cite the slug you used, and pull its full body with recall/get_notebook_map when you act on it.`,
+        `## Skills library — ${rows.length} skill${rows.length === 1 ? '' : 's'}. Each line is WHEN to use it; the IF/THEN is the rule. APPLY any that match ${where} before answering; cite the slug you used, and pull its full body with recall/get_notebook_map when you act on it.`,
         ...lines,
         rows.length > max ? `…and ${rows.length - max} more — get_notebook_map or recall lists the full library.` : '',
     ].filter(Boolean).join('\n');

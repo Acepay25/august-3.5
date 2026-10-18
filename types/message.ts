@@ -361,6 +361,11 @@ export interface Message {
    *  the bubble ("Saved to memory · N entries", "⚠ Memory write noted").
    *  Append-only; capped by the pipeline. */
   toolActions?: ToolAction[];
+  /** The notebook skill slugs that travelled in THIS turn's system prompt
+   *  (stage 20s). Recorded, not inferred: "the model had 30 skills available"
+   *  and "the model was shown these five" are different questions, and only the
+   *  second one can be audited after the fact. */
+  injectedSkills?: string[];
 }
 
 /** A committed pre-read call. `confidencePct` is the user's own

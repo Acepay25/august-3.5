@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-18** (after the post-mortem, 2D desk floor, saved-analyses and Roles-tab
-deletions **and stages 20a/20a2/20g/20b/20b-B of the debate removal**, which moved
+deletions **and stages 20a/20a2/20g/20b/20b-B/20t/20c/20s of the debate removal**, which moved
 both chat homes onto one turn executor); if a line moves, fix the line rather than
 deleting the claim.
 
@@ -69,7 +69,7 @@ flowchart TD
     D3 -->|true| ENS["ensemble analysis — section C (stage 19's target)"]
     D3 -->|false, casual :3157| SPLIT{"a bot thread? :3213"}
     SPLIT -->|yes| TR
-    SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:145, tools from CHAT_SURFACE_TOOLS :50, prompt CASUAL_CHAT_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:24"]
+    SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:211, tools from CHAT_SURFACE_TOOLS :54, prompt chatSurfaceSystemPrompt :103"]
     CST --> TT
     TR --> LW["live writer — applyCasualStreamUpdate streamThrottlers.ts:160, peel per frame; flush BEFORE the settle write :3289"]
     CST --> LW
@@ -81,8 +81,20 @@ flowchart TD
 The dock's system prompt is assembled by `systemPromptFor`
 ([TradeChatPanel.tsx:453](../components/trade/TradeChatPanel.tsx)) from
 `TRADE_CHAT_SYSTEM_PROMPT` + skills index + strategies + profile memory + persona.
-The Chat surface's casual prompt is still `CASUAL_CHAT_SYSTEM_PROMPT`, read from the
-same constant at three call sites, and the desk arm's system prompt is stage 20s.
+The Chat surface's prompt is its own now (stage 20s): `chatSurfaceSystemPrompt`
+([services/trade/chatSurfaceTurn.ts:103](../services/trade/chatSurfaceTurn.ts))
+leads with `CHAT_SURFACE_SYSTEM_PROMPT`
+([chatPrompts.ts:40](../constants/prompts/chatPrompts.ts)) — which is
+`CASUAL_CHAT_SYSTEM_PROMPT` with a calling mandate and an explicit "no chart
+here" bolted on, so the output discipline that fixed the
+"Here's a thinking process:" replies survives — then appends the skills index,
+the active strategy plans and the profile memory index, each read FRESH per turn
+the way the dock reads them. Its skills heading says *what the trader asks
+about*, not *this chart*: `buildSkillsIndexForPrompt` took a `where` argument so
+the dock's default stays byte-identical. The slugs that actually travelled are
+recorded on the row (`Message.injectedSkills`, `types/message.ts:368`), bounded
+to the 30 the index prints — a row naming skills the model never saw would be an
+audit defect, not an audit trail.
 
 **One entry, both homes.** `handleRunAnalysisFromChat` (App.tsx:1720) is the only
 analysis wrapper: the dock passes it as `onRunAnalysis` (App:2528) and the Chat
@@ -310,7 +322,7 @@ card that forgets it was clicked offers a second journal row.
 | 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `TradeChatPanel.tsx:453` |
 | 20 | every dock turn → chatStore | `mutate` · `beginRun` |
 | 21 | handleSendMessage → the fork | the mode flag `:671` is the whole decision — guard `:1492`, else `:3157`. Stage 20c deleted the wording predicate |
-| 22 | the casual arms | a bot thread → `streamQuickResponse :3218` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:145` → arrow 17. Tier on both via `resolveComposerEffort` |
+| 22 | the casual arms | a bot thread → `streamQuickResponse :3218` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:211` → arrow 17. Tier on both via `resolveComposerEffort` |
 | 23 | casual frames → Message.text | `streamThrottlers.ts:160`; flush precedes the settle write `:3289` |
 | 24 | ensemble → 8 stages | see C — anchors deliberately omitted |
 | 25 | desk tools → what a caller can reach | `executeDeskTool DeskToolsService.ts` (its allow-list is enforced at execution, not only at offer time) |
@@ -334,6 +346,7 @@ card that forgets it was clicked offers a second journal row.
 | 43 | approval tray → badge | `collectApprovalItems` → `approvalsWaiting` → Knowledge tab only |
 | 44 | the pane filters what it shows | `agentThreads.ts` read at `AgentsView.tsx` |
 | 45 | `present_trade` → a card in either home | `runPresentTrade presentTradeTool.ts:76` ← dock sink `chatTurnRunner.ts` / desk sink `chatSurfaceTurn.ts`; gate scan starts there, the cap binds at log time (`ensureStamp`) |
+| 46 | `chatSurfaceSystemPrompt` → the desk arm's prompt | `chatSurfaceTurn.ts:103` — mandate (`chatPrompts.ts:40`) + skills index + active strategies + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (`types/message.ts:368`) |
 
 ---
 

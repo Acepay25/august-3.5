@@ -32,9 +32,13 @@ import type { Message } from '../../types/message';
 import type { ProviderConfig } from '../../types/provider';
 import type { ChatMessage } from '../providers/GenericProviderService';
 import { MessageRole } from '../../types';
-import { CASUAL_CHAT_SYSTEM_PROMPT } from '../../constants/prompts/chatPrompts';
+import { CASUAL_CHAT_SYSTEM_PROMPT, CHAT_SURFACE_SYSTEM_PROMPT } from '../../constants/prompts/chatPrompts';
 import { TASK_BUDGETS } from '../providers/taskBudgets';
 import { resolveComposerEffort, type ReasoningEffort } from '../providers/reasoningControls';
+import { buildSkillsIndexForPrompt } from './tradeChatContext';
+import { listSkills } from '../learning/SkillMemoryService';
+import { activeStrategiesBlock } from '../learning/strategyStore';
+import { buildProfileMemoryIndex } from '../learning/profileMemory';
 import { runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
 import { runPresentTrade } from './presentTradeTool';
 import { userContentWithImage } from './chatTurnRunner';
@@ -69,6 +73,68 @@ export const CHAT_SURFACE_TOOLS = [
     // Anything that can be clipped must be able to be re-read.
     'read_tool_output',
 ];
+
+/** What travelled in one turn's system prompt: the text, and the skill slugs it
+ *  was built from. The slugs come back WITH the text on purpose — a caller that
+ *  records "which skills did this turn see" must not be able to disagree with the
+ *  prompt it just sent, which is what two separate reads of the library invite. */
+export interface ChatSurfacePrompt {
+    text: string;
+    skills: string[];
+}
+
+/** The window the index prints, and the list recorded, are the same window: a
+ *  slug truncated out of the prompt is not a skill this turn had. */
+const SKILL_INDEX_WINDOW = 30;
+
+/**
+ * The Chat surface's own system prompt (stage 20s), assembled the way the dock
+ * assembles its seat prompt — surface mandate + skills index + active strategy
+ * plans + the profile memory index, each read FRESH per turn so a `remember` or
+ * an approved skill lands in the NEXT turn's prompt instead of waiting for a
+ * reload — with two differences this surface has to honour: the skills heading
+ * says "what the trader asks about", because there is no chart here to match
+ * against, and the mandate forbids the tool calls the canvas owns.
+ *
+ * Every block is guarded separately. An unreadable notebook must not cost the
+ * trader their answer: the prompt simply carries less, the same way the dock's
+ * `skillsIndexForPrompt` swallows and returns ''.
+ */
+export const chatSurfaceSystemPrompt = (): ChatSurfacePrompt => {
+    let skillsBlock: string;
+    let skills: string[];
+    try {
+        const rows = listSkills().map(({ file, meta }) => ({
+            slug: file.name.replace(/\.md$/i, ''),
+            status: meta.status,
+            kind: meta.kind,
+            description: meta.description,
+            ifCondition: meta.ifCondition,
+            thenAction: meta.thenAction,
+        }));
+        skills = rows.slice(0, SKILL_INDEX_WINDOW).map(r => r.slug);
+        skillsBlock = buildSkillsIndexForPrompt(rows, SKILL_INDEX_WINDOW, 'what the trader asks about');
+    } catch {
+        skills = [];
+        skillsBlock = '';
+    }
+    let strategiesBlock: string;
+    try {
+        strategiesBlock = activeStrategiesBlock();
+    } catch {
+        strategiesBlock = '';
+    }
+    let memoryBlock: string;
+    try {
+        memoryBlock = buildProfileMemoryIndex();
+    } catch {
+        memoryBlock = '';
+    }
+    return {
+        text: [CHAT_SURFACE_SYSTEM_PROMPT, skillsBlock, strategiesBlock, memoryBlock].filter(Boolean).join('\n\n'),
+        skills,
+    };
+};
 
 /** The speaker key for this surface's live tool feed — `chatRowFrom` flattens
  *  `liveToolEvents` for the Chat row and `liveEntryFromMessage` does the same
@@ -215,9 +281,17 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
         },
     };
 
+    // A caller that brings its own mandate (a persona, a room note) gets it
+    // verbatim and NO skill record: nothing was injected that it did not ask
+    // for, and a row claiming skills it never saw is worse than a silent row.
+    const prompt = req.systemPrompt
+        ? { text: req.systemPrompt, skills: [] as string[] }
+        : chatSurfaceSystemPrompt();
+    if (prompt.skills.length > 0) req.patch(m => ({ ...m, injectedSkills: prompt.skills }));
+
     return runToolTurn({
         config: req.config,
-        messages: chatSurfaceTurnMessages(req.history, req.prompt, req.image, req.config.selectedModel, req.systemPrompt),
+        messages: chatSurfaceTurnMessages(req.history, req.prompt, req.image, req.config.selectedModel, prompt.text),
         signal: req.signal,
         startedAt: req.startedAt,
         effort: resolveComposerEffort(req.effort),
