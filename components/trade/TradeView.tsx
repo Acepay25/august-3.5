@@ -330,8 +330,16 @@ export const useTickFlash = (price: number | undefined): { cls: string; seq: num
 
 
 const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onAnalysisError, onStopRun, coachCount, botThreadRows, onBotTurnCommit, onSoloTurnCommit, conversationRows, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, onOpenChat, onToggleWatch, onOpenWatchList, watchOpenCount = 0, watchOpenR, pinnedMessageIds }) => {
-    const [symbol, setSymbol] = useState('BTCUSDT');
-    const [interval, setInterval_] = useState<ChartInterval>('15m');
+    // The chart opens on the coin the SHARED chat session carries. Adopting only
+    // from an effect is not enough: the dock mounts in the same commit, a child's
+    // effect runs before its parent's, and the dock can re-bind the active session
+    // first — leaving this surface to paint the wrong coin, then read a session
+    // whose coin was never set. Seeding from the session makes the first frame
+    // honest instead of one lurch behind the picker.
+    const [symbol, setSymbol] = useState(() => chatStore.getActiveSession()?.symbol ?? 'BTCUSDT');
+    const [interval, setInterval_] = useState<ChartInterval>(
+        () => (chatStore.getActiveSession()?.interval as ChartInterval) ?? '15m',
+    );
     // Shared with the Chat surface, which needs the same picker over the same
     // list — two 60s polls for one exchange answer would be waste.
     const symbols = useSymbolUniverse();
@@ -489,23 +497,27 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     // when the session id changes. A coin picked in the Chat surface has to
     // move this chart while it is mounted behind it, or the picker is a lie
     // the moment you return.
+    //
+    // `sharedSession` is resolved by chatStore's own rule (active row, else the
+    // first) rather than by raw id: the Chat surface writes and reads through
+    // that same accessor, so the row the picker painted is the row adopted here.
+    const sharedSession = chatSnap.sessions.find(x => x.id === chatSnap.activeId) ?? chatSnap.sessions[0];
     useEffect(() => {
-        const s = chatStore.getSnapshot().sessions.find(x => x.id === chatSnap.activeId);
-        if (!s) return;
-        if (s.symbol && s.symbol !== symbolRef.current) setSymbol(s.symbol);
-        if (s.interval && s.interval !== intervalRef.current) setInterval_(s.interval as ChartInterval);
-    }, [
-        chatSnap.activeId,
-        chatSnap.sessions.find(x => x.id === chatSnap.activeId)?.symbol,
-        chatSnap.sessions.find(x => x.id === chatSnap.activeId)?.interval,
-    ]);
+        if (!sharedSession) return;
+        if (sharedSession.symbol && sharedSession.symbol !== symbolRef.current) setSymbol(sharedSession.symbol);
+        if (sharedSession.interval && sharedSession.interval !== intervalRef.current) setInterval_(sharedSession.interval as ChartInterval);
+    }, [sharedSession?.symbol, sharedSession?.interval]);
     const changeSymbol = useCallback((next: string): void => {
         setSymbol(next);
-        chatStore.mutate(chatStore.getActiveId(), sess => ({ ...sess, symbol: next }));
+        // Written to the row this surface is ON, which is the row the Chat
+        // surface reads — not to whatever id the store last held.
+        const sid = chatStore.getActiveSession()?.id;
+        if (sid) chatStore.mutate(sid, sess => ({ ...sess, symbol: next }));
     }, []);
     const changeInterval = useCallback((next: ChartInterval): void => {
         setInterval_(next);
-        chatStore.mutate(chatStore.getActiveId(), sess => ({ ...sess, interval: next }));
+        const sid = chatStore.getActiveSession()?.id;
+        if (sid) chatStore.mutate(sid, sess => ({ ...sess, interval: next }));
     }, []);
 
 
