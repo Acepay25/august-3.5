@@ -1348,6 +1348,26 @@ would have landed half-finished on a `main` that is pushed.
 Also agreed: anything the user typed into the two accuracy instruction boxes is deleted with them,
 with an offer to migrate that text into the general list before the tabs go.
 
+**Attempted #19's tail in an isolated worktree on 2026-10-18 and stopped at the third site — with
+two couplings the list above did not contain.** They are the reason this is a design pass and not a
+grep-and-delete:
+- `isEnsembleEnabled` also gates **live market polling**: `App.tsx:503` passes it to
+  `hooks/useMarketData.ts`, which uses it at `:41` (clears `liveMarketConditions` when off), `:125`
+  and `:159` (the Binance reachability check) and `:116`/`:190` (effect deps). So deleting the
+  toggle silently kills the market ticker the header shows, unless the polling is re-parented onto
+  `isHybridIntelligenceEnabled`, which is that feature's own switch and the honest owner of it.
+  Note the toggle's default is **off** (`App.tsx:353` `useState(false)`), so "ordinary chat wins"
+  means today's default behaviour, not today's opt-in behaviour — a user who enabled ensemble
+  loses the ticker unless it is re-parented. That re-parenting is a feature decision, not a trim.
+- `runEnsembleEnabled` is not only read in the hook: it is passed **as a positional argument** at
+  `hooks/useAnalysisPipeline.ts:617` into a callee alongside `runLensConfig` and
+  `runEnsembleSelection`, so removing it changes that signature and its other callers, and the
+  argument order is load-bearing. Each such site drags a second file into the diff, which is how a
+  "22-file" task is really 30+ and why it needs a session with room for several typecheck loops
+  (one pass here runs 4–5 minutes).
+
+The worktree was removed; `main` and the working checkout are untouched.
+
 **#21 — `postMortem`, `savedAnalyses`, `Message.debateTurns`.** Deleting the fields removes ~25
 readers (EvidencePackService, DoctrineConsolidation, SkillMemoryService, memoryContext,
 NotebookWriterService, rootCause, reportExport, `craftSkillFromPostMortem` and
