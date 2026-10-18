@@ -1823,3 +1823,46 @@ the `isDebating` deletion, the `savedAnalyses` deletion and the desk-tool cache 
 the chain that signs the bytes). Nothing here is pushed: `git rev-list --count origin/main..HEAD`
 is **22** local commits, and the owner's earlier push authorization covered the 16 that existed
 when it was given — so the six since then are not covered and stay local until said so.
+
+## 2026-10-19 — the `postMortem` census in this doc is inflated, and the difference is a landmine
+
+Went to size the remaining #21 item and found my own earlier figure wrong, in a way that matters
+more than the number. Grepping the token `postMortem` across code returns **189 lines in 57
+files**. Grepping for the deleted *field* — a bare `postMortem` property or object key, excluding
+every longer name that merely starts with it — returns **105 lines in ~35 files**, roughly half of
+them test fixtures. The other ~84 lines are two different things that happen to share the word:
+
+- **The outcome-validation engine.** `services/backtesting/BacktestingService.ts` (15 hits:
+  `PostMortemTPHit`, the `[PostMortemValidation]` log prefixes) and `services/ui/AutoCaptureService.ts`
+  (7: `PostMortemDataSummary`, `extractPostMortemDataSummary`, `logPostMortemDataVerification`)
+  replay candles to decide whether a trade's TP or SL actually got hit and whether the captured
+  outcome agrees with the logged one. Load-bearing, live, and named after the *validation pass*,
+  not after the deleted prose field.
+- **An enum value.** `LoggedTrade.rSource` and `excursionSource` are `'autopilot' | 'postMortem'`
+  (`types/trade.ts:185-186`): "this excursion was observed by the after-close validation pass",
+  which still happens. `effortForTask('postMortem')` at `services/learning/traderLearner.ts:105`
+  is a reasoning-budget key, pinned by `tests/reasoningControls.test.ts:57`.
+
+**A bulk deletion keyed on the word would have taken the outcome engine with it.** The real
+field's production readers are `services/learning/SkillCraftService.ts` (the craft leg),
+`selfImprovement.ts`, `SkillMemoryService.ts`, `PatternMemorySynthesisService.ts`,
+`MemoryFilesService.ts`, `draftGates.ts`, `utils/rootCause.ts`, `utils/tradeInsightBrief.ts`,
+`utils/reportExport.ts`, `hooks/analysisPipeline/memoryContext.ts`,
+`services/learning/EvidencePackService.ts`, `DoctrineConsolidationService.ts`,
+`NotebookWriterService.ts` and `services/infrastructure/SqliteService.ts` (its row mapping).
+Where section D of the flow doc and an earlier entry here say "25 read accesses across 17 files",
+the measured statement is **105 field lines across ~35 files, of which ~17 are production** — and
+`services/trainingDataExport` deliberately omits the field, pinned by
+`tests/trainingDataExport.test.ts:45` (`expect(d).not.toHaveProperty('postMortem')`), so that
+assertion survives the deletion and should not be mistaken for a reader.
+
+Two decisions the eventual pass must make rather than discover: every reader that *composed* a
+prompt, note or brief from the post-mortem prose loses a whole section (its variable cannot just
+be renamed), and `rSource`/`excursionSource`'s `'postMortem'` member is a stale NAME on live data —
+renaming it touches the SQLite mapping, the round-trip test at `tests/sqliteService.test.ts:410/:436`
+and every row already storing that string, so it is its own schema-shaped decision, not part of
+this deletion.
+
+Held rather than executed: with the turns left, a 35-file pass over the learning and skill-craft
+path is exactly the work that either finishes or gets left half-deleted, and a half-deleted
+learning path fails silently the way the desk-tool cache did.

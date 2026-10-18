@@ -247,9 +247,19 @@ is still called from `botLearning.ts:234`, and its first guard is
 `if (pm.length < 40) return null` on `trade.postMortem` (`services/learning/SkillCraftService.ts:145`). So for every
 trade closed after 2026-10-18 the craft leg can only return null; it still answers
 for a row that carries a post-mortem from before then. `selfImprovement.ts:73-74`,
-`SkillMemoryService` and `DoctrineConsolidationService` read the same dead field —
-25 read accesses across 17 files outside the tests and the SQLite row mapping
-(measured 2026-10-18). Deleting the writer was the owner's
+`SkillMemoryService` and `DoctrineConsolidationService` read the same dead field.
+**Sizing that by grep is a trap.** The token `postMortem` appears in **189 lines across
+57 files**; the field itself is **105 lines in ~35 files, ~17 of them production**. The rest
+is a name collision with two live things: the outcome-validation engine
+(`PostMortemTPHit` and the `[PostMortemValidation]` log prefixes in
+`services/backtesting/BacktestingService.ts`, `PostMortemDataSummary` /
+`logPostMortemDataVerification` in `services/ui/AutoCaptureService.ts`), which replays
+candles to decide whether a TP or SL really got hit; and the enum member
+`'autopilot' | 'postMortem'` on `LoggedTrade.rSource` / `excursionSource`
+(`types/trade.ts:185-186`), which names that after-close pass and is still written. A bulk
+deletion keyed on the word would remove the validator. Re-measured 2026-10-19; the reader
+list and the two decisions that pass has to make up front are in
+[the stage ledger](plans/debate-deletion-status.md). Deleting the writer was the owner's
 explicit choice, with no replacement; clearing the readers is stage 21.
 
 The chain from `draftGates` to the injected skill is unchanged and still runs; it
