@@ -280,7 +280,7 @@ the trader's memory changes what every later turn sees, with nobody in the loop.
 
 ```mermaid
 flowchart LR
-    GA["GenericAnalysisService — one service replacing nine"] --> GP["GenericProviderService — 4 formats types/provider.ts, dispatch"]
+    GA["GenericAnalysisService — one of the two provider clients; the per-provider services are gone"] --> GP["GenericProviderService — 4 formats types/provider.ts, dispatch"]
     GP --> PO["shared/providerRequestPolicy.cjs — thinking, budget, temperature, host rules, one redirect walker"]
     GP --> W1["renderer fetch"]
     GP --> W2["dev proxy /__provider_proxy → vite.config.ts"]
