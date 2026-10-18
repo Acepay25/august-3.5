@@ -534,6 +534,48 @@ not arithmetic), and
    `%TEMP%\pipe-19d-singledrop.ts` (excision + import trim + single-line dead pass
    applied) rather than re-running the scripts.
 
+## Stage 19 tranche 1 — LANDED (`ab28158`), and tranche 2's blockers measured
+
+The branch is out of the send path: 3,657 → 1,789 lines, gates read from their own
+markers — tsc 0 errors, lint **0 errors** / 826 warnings (cap 889), `501 files /
+4978 tests`, **`RENDER PROBE OK`** (104 checks, zero pageerrors). The Gate Keeper
+block went with it, so a send no longer pays for a network call whose result
+nothing reads. Four pins were re-anchored rather than deleted; the hybrid-snapshot
+one inverted (a pre-captured packet reaching a model is now the thing that must
+stay false).
+
+**My earlier tranche-2 list is unsafe as written — verified with `grep`, not
+inherited.** Deletion order matters because two of those modules are NOT dead:
+
+- Zero app importers now: `hooks/analysisPipeline/verdictFinalizer.ts`,
+  `hooks/analysisPipeline/autoplayParser.ts`, and (reachable only through each
+  other or through `verdictFinalizer`) `services/providers/ensembleService.ts`,
+  `ensembleConsensus.ts`, `debatePods.ts`.
+- **`debateScience.ts` is NOT dead** — `services/learning/monthlyReport.ts` imports
+  it. Relocate what the monthly report uses (`computeEnsembleLine`) or keep the
+  file; deleting it breaks a live surface.
+- **`EnsembleAnalystService.ts` is NOT dead** — `hooks/analysisPipeline/runOutcome.ts`
+  imports it and the pipeline still imports `runOutcome` (for
+  `mapRunFailureMessages` in the `catch`, which still receives the now-always-null
+  `ensemblePlaceholder`). Unwire that argument FIRST, then the analyst service,
+  then `streamThrottlers`' four throttlers.
+- **`AnalystLensService` and `DebateMailbox` stay** — 11 live importers and the
+  surviving desk-tool/chat-turn surface respectively. The research agent's "~86
+  suites" and "delete DebateMailbox" were both wrong; the real count of suites
+  touching the engine cluster is **14**, and three of them
+  (`harnessFeatures`, `lensPipelineValidation`, `ensembleAnalysts`) also test live
+  code, so they must be edited, not deleted.
+- `tests/verdictFinalizer.test.ts` dies with the module, but the automation-private
+  message pin I just re-anchored lives in that file — **move it into
+  `tests/automationRouteCharacterization.test.tsx` before deleting the file**, or
+  the deletion silently drops coverage 20r was written to hold.
+
+Two residues left in the open, both deliberate: the hybrid pull still runs for a
+toggle-on human send and feeds no model, and `beginPromptLane` has zero callers
+while the `finally` still calls `endPromptLane()` — the prompt A/B lane is starved,
+not deleted, and re-wiring it onto the tool turn versus removing it is an owner
+call, not a mechanical one.
+
 ## #33 — the confidence WORD now follows the number
 
 `downgradeConfidenceForProbability` walked ONE step, so a verdict whose
