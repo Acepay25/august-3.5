@@ -2622,6 +2622,7 @@ const App: React.FC = () => {
                                     onSendBotTurn={async (bot, prompt) =>
                                         (await mailboxRef.current?.runUserBotTurn(bot, prompt)) ?? false}
                                     onAnalyze={handleRunAnalysisFromChat}
+                                    onLogProposedTrade={handleLogProposedTrade}
                                     onAnalysisError={(message) => toast.error(message)}
                                     onStopRun={handleCancelAnalysis}
                                     analysisRunning={isAnalysisInProgress}

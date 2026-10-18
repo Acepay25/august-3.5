@@ -153,8 +153,11 @@ describe('runChatSurfaceTurn — the canonical row is written through the sink',
         // misreport the stamp exists to prevent.
         expect(opts.liveMarkPrice).toBeUndefined();
         expect(opts.chartDrawings).toBeUndefined();
-        expect(opts.executePanelTool).toBeUndefined();
         expect(opts.mailbox).toBeUndefined();
+        // The one chart-action tool this seat may call is `present_trade`, and
+        // the dispatch below refuses everything else — so `streamChatWithDeskTools`
+        // offers only what the sink can actually honour.
+        expect(typeof opts.executePanelTool).toBe('function');
     });
 
     it('settles a stopped turn as interrupted without inventing a failure', async () => {
@@ -233,16 +236,42 @@ describe('the tool list a Chat-surface seat is offered', () => {
         expect(CHAT_SURFACE_TOOLS.filter(name => !registryNames.has(name))).toEqual([]);
     });
 
-    it('offers no canvas-bound tool to a surface with no canvas', () => {
+    it('offers no canvas-bound tool except the plan the trader can log', () => {
+        // Drawing needs a canvas, arming needs a chart, and a watch is a promise
+        // this surface cannot keep. `present_trade` is the exception the stage-20
+        // plan calls for: the verdict IS a tool call, and a card the trader can
+        // log needs no chart — only an honest receipt, which `runPresentTrade`
+        // gives this sink ("NO level-watch is armed and nothing was drawn").
         const chartBound = [
             'draw_on_chart', 'draw_detected', 'mark_trade_levels', 'clear_chart_drawings',
-            'present_trade', 'watch_price', 'wake_me', 'cancel_watch',
-            'get_chart_view', 'scan_chart_skills',
+            'watch_price', 'wake_me', 'cancel_watch', 'get_chart_view', 'scan_chart_skills',
         ];
         expect(CHAT_SURFACE_TOOLS.filter(n => chartBound.includes(n))).toEqual([]);
+        expect(CHAT_SURFACE_TOOLS).toContain('present_trade');
         // …and the market half of the dock's set really is offered, or this list
         // could pass by being empty.
         expect(CHAT_SURFACE_TOOLS.filter(n => n.startsWith('get_')).length).toBeGreaterThanOrEqual(6);
+    });
+
+    it('a sink call for a canvas tool falls through instead of faking a result', async () => {
+        script([{ text: 'ok' }]);
+        const h = harness();
+        await runChatSurfaceTurn(h.req);
+        const opts = mockStream.mock.calls[0]?.[2] as {
+            executePanelTool: (call: { id: string; name: string; arguments: Record<string, unknown> }) => Promise<null | { ok: boolean; content: string }>;
+        };
+        expect(await opts.executePanelTool({ id: 'c0', name: 'draw_on_chart', arguments: { kind: 'hline', prices: [1] } })).toBeNull();
+        // And `present_trade` lands a real card on the canonical row, with the
+        // no-chart honesty in the receipt rather than a watch promise.
+        const res = await opts.executePanelTool({
+            id: 'c1', name: 'present_trade',
+            arguments: { direction: 'Long', entry: 100, stopLoss: 90, takeProfits: [110] },
+        });
+        expect(res?.ok).toBe(true);
+        expect(res?.content).toContain('NO level-watch is armed');
+        expect(res?.content).not.toContain('The harness now watches');
+        expect(h.row.proposal?.symbol).toBe('BTCUSDT');
+        expect(h.row.proposal?.planId).toBeTruthy();
     });
 });
 

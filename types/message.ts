@@ -348,6 +348,14 @@ export interface Message {
    *  so the "Log this trade" card dedupes on a field instead of on the rendered
    *  headline text. */
   planId?: string;
+  /** The trade plan a model PRESENTED on this row via the `present_trade` tool.
+   *  The decision card both homes render comes from this field: the dock stores
+   *  it on its own entry, the Chat surface on the canonical row, and
+   *  `liveEntryFromMessage` projects one into the other by `m.id` — so a plan
+   *  said in one surface is a plan the other surface can log, not a second one.
+   *  Type-only import: `proposedTrade` imports `Message` back, and a value
+   *  import here would make that a runtime cycle in the bundle. */
+  proposal?: import('../services/trade/proposedTrade').TradeProposal;
   /** Persisted model side-effects: proposal tools and file
    *  creations this run produced, for the status rows on
    *  the bubble ("Saved to memory · N entries", "⚠ Memory write noted").

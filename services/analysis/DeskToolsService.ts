@@ -3796,9 +3796,17 @@ export async function* streamChatWithDeskTools(
     const seatName = mailboxSeat || '';
     const mailActive = Boolean(mailbox && seatName);
     // Chart-action tools ride the same extra-defs lane: offered only when
-    // the caller owns a live canvas to draw on.
+    // the caller owns a live canvas to draw on — AND only when the seat's own
+    // allow-list names them. A caller that dispatches HALF the set (the Chat
+    // surface presents a plan but has no canvas to draw on, no live mark and
+    // no level-watch to arm) must not be handed the rest: an offered tool the
+    // executor would have to refuse is the dead-affordance bug moved one layer
+    // down into the prompt, where no test can see it.
+    const chartDefs = executePanelTool
+        ? CHART_ACTION_TOOL_DEFS.filter(d => !allowedTools || allowedTools.length === 0 || allowedTools.includes(d.function.name))
+        : [];
     const extraDefs = [
-        ...(executePanelTool ? CHART_ACTION_TOOL_DEFS : []),
+        ...chartDefs,
         ...(mailActive ? DEBATE_MAIL_TOOLS : []),
     ];
     const mergedAllowed = (mailActive || executePanelTool) && allowedTools && allowedTools.length > 0
