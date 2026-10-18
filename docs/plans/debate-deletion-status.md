@@ -53,7 +53,7 @@ The two row types do **not** share the tool transcript's fields, measured 2026-1
 
 - dock row = `LiveEntry` (`services/trade/chatStore.ts:48`, `StoredChatEntry & {…}`):
   carries `tools: string[]`, `toolIds: string[]`, `actions`
-  (`chatTurnRunner.ts:682` appends the digest line and its id **in the same patch**,
+  (`chatTurnRunner.ts:685` appends the digest line and its id **in the same patch**,
   because the desk loop's `results` order does not match the rendered lines — pairing
   by index silently attaches the wrong payload).
 - canonical row = `Message` (`types/message.ts`): has `thoughtProcesses` `:209`,
@@ -67,7 +67,7 @@ each home maps them onto its own fields. That is what 20a builds.
 
 Second blocker for the cheaper "just lift the runner" route: the deps are captured
 **at construction** (`chatTurnRunner.ts:202-283`, `useMemo` over 35 fields at
-`TradeChatPanel.tsx:515-551`), including composer state (`draft`, `attachments`,
+`TradeChatPanel.tsx:515-556`), including composer state (`draft`, `attachments`,
 `setDraft`, `clearAttachments`, `setContextAt`) and `systemPromptFor`. Two surfaces
 cannot share one instance built per-mount, so 20a converts turn-scoped context into
 parameters and leaves the composer/state hooks with the caller.
@@ -118,7 +118,7 @@ focus on tool calling, skills, and memory."*
 So the target is NOT "keep the branch and shrink it to one seat". It is:
 
 - **No keyword routing at all.** `isChartAnalysisRequested`
-  (`useAnalysisPipeline.ts:1485-1484`) tests the prompt text for ANALYZE / CHART /
+  (`useAnalysisPipeline.ts:1485`) tests the prompt text for ANALYZE / CHART /
   SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
@@ -273,7 +273,7 @@ reading is expensive to undo.
   (`if (runEnsembleEnabled) {` also appears at the data pull, so a bare match would
   stay green with the fork deleted) and to forbid the call shape `Prompt.includes(`.
 - **20s (#25)** — the Chat surface finally has a prompt of its own.
-  `chatSurfaceSystemPrompt` (`chatSurfaceTurn.ts:103`) leads with
+  `chatSurfaceSystemPrompt` (`chatSurfaceTurn.ts:147`) leads with
   `CHAT_SURFACE_SYSTEM_PROMPT` (`chatPrompts.ts:40`), which is
   `CASUAL_CHAT_SYSTEM_PROMPT` **plus** a calling mandate and an explicit
   "NO CHART HERE" — so the output discipline that fixed the
@@ -1428,7 +1428,7 @@ What the attempt measured, which is the value it leaves behind:
 - `services/providers/GenericAnalysisService.ts:361` is a three-way prompt chain;
   deleting the two mode branches means lifting the standard branch out of its
   `else` and dedenting it, which needs a brace-walking flattener, not a regex.
-- `hooks/useProfilePersistence.ts:185` and `hooks/useAnalysisPipeline.ts:1581` list
+- `hooks/useProfilePersistence.ts:186` and `hooks/useAnalysisPipeline.ts:1581` list
   the five fields inside one-line object literals and one very long dependency
   array, so whole-line filtering cannot reach them — they need token strips.
 - The one unsolved blocker is `components/settings/CustomInstructionsEditor.tsx:164`:

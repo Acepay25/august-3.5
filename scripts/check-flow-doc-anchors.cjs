@@ -398,7 +398,7 @@ const problems = [...rep.missingFile, ...rep.outOfRange, ...rep.blank];
 // are "what the rule can see", not "what is broken" — do not cite them as a
 // defect count, and do not answer a doubt about a wrapped sentence by trusting
 // this ceiling: re-measure the anchor by hand.
-const COMMENT_CEILING = 10;
+const COMMENT_CEILING = 0;
 const SYMMISS_CEILING = 0;
 
 console.log(`flow docs: ${all.length} anchor references, ${unique.size} unique, across ${DOCS.join(' + ')}`);
@@ -459,6 +459,16 @@ console.log(`self-quota: ${quota.length} quoted anchor count(s) disagree with th
 
 if (unique.size < 180) { console.log(`FAIL — only ${unique.size} unique anchors parsed; the scanner is broken, not the docs`); process.exit(1); }
 if (quotaControls.length) { console.log(`FLOW DOC ANCHORS FAIL — the self-quota rule cannot see its own planted numbers: ${quotaControls.join('; ')}`); process.exit(1); }
+// An empty population is not a pass. This rule went green once while BOTH flow docs
+// had stopped stating any count at all, because the sentences it compares had been
+// deleted by a bad restatement — a scanner whose regex matches nothing reports zero.
+const QUOTED = /(?:unique )?anchors verified/;
+const stating = DOCS.filter(d => d.startsWith('docs/app-flow.'))
+    .filter(d => QUOTED.test(fs.readFileSync(d, 'utf8')));
+if (stating.length !== 2) {
+    console.log(`FLOW DOC ANCHORS FAIL — only ${stating.length} of 2 flow docs state their anchor count; the self-quota rule has an empty population, which is not a pass`);
+    process.exit(1);
+}
 if (quota.length) { console.log(`FLOW DOC ANCHORS FAIL — ${quota.length} doc statement(s) quote an anchor count the gate no longer measures. Re-run and restate; do not loosen the rule.`); process.exit(1); }
 if (controls.length) { console.log('FAIL — the gate cannot see its own planted defects'); process.exit(1); }
 if (problems.length) { console.log(`FLOW DOC ANCHORS FAIL — ${problems.length} stale anchor(s)`); process.exit(1); }

@@ -2,8 +2,9 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**255 unique anchors verified, 0 unattributed** — plus two quality ceilings, 46 citations
-that land on a comment line and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
+**246 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+ZERO: 0 citations that land on a comment line (and 3 more cite a comment because the
+comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
 carrying more than one citation, and a sentence that wraps puts its number out of reach of
 its symbol, so four copies of one wrong number were fixed by hand after the gate called it
@@ -298,7 +299,7 @@ before the next entry, no longer exist.
 ```mermaid
 flowchart TD
     TK["automation tick / runNow / boot catch-up → runAutomation useAutomations.ts:411"] --> D{"forks on config.botId :431"}
-    D -->|has a bot| BR["runBotRoutineTurn useAutomations.ts:343 → botRoutine.ts:80 — prompt, history"]
+    D -->|has a bot| BR["runBotRoutineTurn useAutomations.ts:346 → botRoutine.ts:80 — prompt, history"]
     BR --> ST["injected stream = streamQuickResponse useAutomations — reuses the bot transport, NOT the debate"]
     D -->|no bot| AT["automation arm BEFORE the mode fork useAnalysisPipeline.ts:1247 → runAutomationTurn automationTurn.ts:161"]
     AT --> PRIV["runs into a private message list, not the open conversation — automationMessagesRef useAnalysisPipeline.ts:352, its notices (a failed tool, a turn that called nothing, a refused plan)"]
@@ -475,10 +476,10 @@ card that forgets it was clicked offers a second journal row.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in both flow docs names
-   its file on the same line, so the gate can check it: 255 anchors verified, 0
+   its file on the same line, so the gate can check it: 246 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 255 anchors verified, and the gate
+   the gate's own output: these docs state 246 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    **Coverage asymmetry, measured rather than trusted from prose:** the step runs
    in `ci.yml`, and `release.yml` does NOT run it — the release gate is missing
