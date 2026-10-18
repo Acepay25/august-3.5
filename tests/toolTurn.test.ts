@@ -28,17 +28,19 @@ const mockStream = vi.mocked(streamChatWithDeskTools);
 
 type Owned = {
     onReasoning?: (chunk: string) => void;
+    onUsage?: (usage: { promptTokens: number; completionTokens: number; totalTokens: number }) => void;
     onToolEvent?: (line: string) => void;
     onStreamReset?: () => void;
 };
 
-type Step = { text?: string; reasoning?: string; line?: string; reset?: boolean; abort?: boolean };
+type Step = { text?: string; reasoning?: string; line?: string; reset?: boolean; abort?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } };
 
 const script = (steps: Step[], controller?: AbortController): void => {
     mockStream.mockImplementation((async function* (_c: unknown, _m: unknown, opts: unknown) {
         const owned = opts as Owned;
         for (const s of steps) {
             if (s.reasoning !== undefined) owned.onReasoning?.(s.reasoning);
+            if (s.usage !== undefined) owned.onUsage?.(s.usage);
             if (s.line !== undefined) owned.onToolEvent?.(s.line);
             if (s.reset) owned.onStreamReset?.();
             if (s.abort) controller?.abort();
@@ -179,5 +181,61 @@ describe('the settle paths', () => {
         }));
         expect(out.text).toBe('Levels sit at 100 and 115.');
         expect(out.notice).toBeUndefined();
+    });
+});
+
+/**
+ * The usage fold. A provider reports tokens per REQUEST and one turn makes
+ * several, and the Knowledge → Session Usage panel's only writer used to live in
+ * the verdict finalizer stage 19 took out of the send path — so every run landed
+ * with a reader and no numbers. Pinned here because every other suite mocks the
+ * transport below the point where usage arrives.
+ */
+describe('the measured usage fold', () => {
+    it('folds the frame the provider reported into the outcome', async () => {
+        const controller = new AbortController();
+        const rec = recorder();
+        script([{ usage: { promptTokens: 40, completionTokens: 40, totalTokens: 80 } }, { text: 'answered' }], controller);
+        const out = await runToolTurn(base({ signal: controller.signal, events: rec.events }));
+        expect(out.usage.promptTokens).toBe(40);
+        expect(out.usage.completionTokens).toBe(40);
+        expect(out.usageCalls).toBe(1);
+    });
+
+    it('sums across the rounds one turn makes', async () => {
+        const controller = new AbortController();
+        const rec = recorder();
+        script([
+            { usage: { promptTokens: 40, completionTokens: 10, totalTokens: 50 } },
+            { line: 'get_price_snapshot BTCUSDT' },
+            { usage: { promptTokens: 60, completionTokens: 30, totalTokens: 90 } },
+            { text: 'answered' },
+        ], controller);
+        const out = await runToolTurn(base({ signal: controller.signal, events: rec.events }));
+        expect(out.usage.promptTokens).toBe(100);
+        expect(out.usage.completionTokens).toBe(40);
+        expect(out.usageCalls).toBe(2);
+    });
+
+    it('a provider that reports nothing stays a gap, not a cheap run', async () => {
+        const controller = new AbortController();
+        const rec = recorder();
+        script([{ text: 'answered' }], controller);
+        const out = await runToolTurn(base({ signal: controller.signal, events: rec.events }));
+        expect(out.usageCalls).toBe(0);
+        expect(out.usage.totalTokens).toBe(0);
+    });
+
+    it("does not swallow the caller's own onUsage", async () => {
+        const controller = new AbortController();
+        const rec = recorder();
+        const seen: number[] = [];
+        script([{ usage: { promptTokens: 40, completionTokens: 40, totalTokens: 80 } }, { text: 'answered' }], controller);
+        await runToolTurn(base({
+            signal: controller.signal,
+            events: rec.events,
+            transport: { ...fixed().transport, onUsage: (u: { promptTokens: number }) => seen.push(u.promptTokens) },
+        }));
+        expect(seen).toEqual([40]);
     });
 });
