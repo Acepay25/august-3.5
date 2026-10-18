@@ -71,6 +71,8 @@ import InlineVerdict from '../analysis/InlineVerdict';
 import TradeProposalCard, { TradeProposalLoggedRow } from '../trade/panels/TradeProposalCard';
 import { proposalStateOf, rememberProposalState } from '../../services/trade/proposalDisposition';
 import type { TradeProposal } from '../../services/trade/proposedTrade';
+import { mintPlanId } from '../../services/trade/proposedTrade';
+import { planFromProse } from '../../services/trade/tradeShapedProse';
 
 interface AgentsViewProps {
     username: string;
@@ -519,6 +521,12 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         void proposalTick;
         return proposalStateOf(id);
     };
+    /** The plan this row's PROSE describes, when the seat never called
+     *  present_trade. Computed per render (the detector is regex over one row,
+     *  and the transcript is capped), and gated by the same disposition store
+     *  the card uses, so a dismissed chip stays dismissed. */
+    const prosePlanFor = (m: Message): TradeProposal | null =>
+        m.proposal ? null : planFromProse(m.text, m.analysis?.coinName ?? null);
     const onScrollerScroll = useCallback((): void => {
         const el = scroller.current;
         if (!el) return;
@@ -1379,6 +1387,48 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                                     />
                                                 )}
                                                 {!isUser && m.proposal && proposalStateFor(m.id) === 'logged' && <TradeProposalLoggedRow />}
+                                                {/* Stage 20d — the seat DESCRIBED a plan and never called
+                                                    present_trade. The prose carries the same three numbers, so
+                                                    the row offers the same decision instead of leaving the plan
+                                                    in a sentence the journal never sees. Validation is NOT
+                                                    re-implemented here: planFromProse hands the numbers to
+                                                    parseTradeProposal, which already refuses a long whose stop
+                                                    sits above its entry. */}
+                                                {!isUser && !m.proposal && proposalStateFor(m.id) === undefined && prosePlanFor(m) && (
+                                                    <div className="mt-1 flex items-center gap-2" data-testid="prose-plan-chip">
+                                                        <button type="button" disabled={!onLogProposedTrade || awaitingProposalRowId !== null}
+                                                            className="rounded-control border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-ui-dense font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
+                                                            onClick={async () => {
+                                                                const plan = prosePlanFor(m);
+                                                                if (!plan || !onLogProposedTrade) return;
+                                                                if (proposalStateOf(m.id) || awaitingProposalRowId) return;
+                                                                // The ONE plan-id shape, so a plan logged from
+                                                                // prose dedupes against the same plan presented by
+                                                                // the tool on another row.
+                                                                const stamped: TradeProposal = { ...plan, planId: plan.planId ?? mintPlanId(plan.symbol) };
+                                                                setAwaitingProposalRowId(m.id);
+                                                                let logged: boolean;
+                                                                try { logged = (await onLogProposedTrade(stamped)) !== false; }
+                                                                catch { logged = false; }
+                                                                finally { setAwaitingProposalRowId(null); }
+                                                                if (!logged) return;
+                                                                rememberProposalState(m.id, 'logged');
+                                                                setProposalTick(t => t + 1);
+                                                            }}>
+                                                            Log this? {prosePlanFor(m)!.direction} {prosePlanFor(m)!.symbol} @ {prosePlanFor(m)!.entry}
+                                                        </button>
+                                                        <button type="button" aria-label="Not this plan"
+                                                            className="text-ui-dense text-zinc-500 transition-colors hover:text-zinc-300"
+                                                            onClick={() => {
+                                                                if (proposalStateOf(m.id)) return;
+                                                                rememberProposalState(m.id, 'dismissed');
+                                                                setProposalTick(t => t + 1);
+                                                            }}>
+                                                            dismiss
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {!isUser && !m.proposal && proposalStateFor(m.id) === 'logged' && <TradeProposalLoggedRow />}
                                             </ChatTranscriptRow>
                                         );
                                     })}

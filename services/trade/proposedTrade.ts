@@ -60,6 +60,13 @@ const CONFIDENCE_PROBABILITY: Record<'High' | 'Medium' | 'Low', number> = {
 export const computeRrRatio = (p: Pick<TradeProposal, 'direction' | 'entry' | 'stopLoss' | 'takeProfits'>): number =>
     plannedRiskReward({ entry: p.entry, stopLoss: p.stopLoss, takeProfits: p.takeProfits });
 
+/** The one plan-id shape. `present_trade` mints it and the level-watch arms on
+ *  it; the prose chip (stage 20d) must mint the SAME thing, or a plan logged
+ *  from prose and a plan presented by the tool become two different objects to
+ *  the dedupe keyed on `planId`. */
+export const mintPlanId = (symbol: string): string =>
+    `${baseOf(symbol).toLowerCase()}-${Date.now().toString(36)}`;
+
 /** Validate + normalize the model's raw tool arguments into a proposal, or
  *  return the reason it is unusable (the tool surfaces this to the model). */
 export const parseTradeProposal = (args: Record<string, unknown>): { proposal?: TradeProposal; error?: string } => {

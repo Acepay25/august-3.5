@@ -310,6 +310,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>44</td><td>the pane filters what it shows</td><td><code>agentThreads.ts</code> read at <code>AgentsView.tsx</code></td></tr>
 <tr><td>45</td><td><code>present_trade</code> → a card in either home</td><td><code>runPresentTrade presentTradeTool.ts:76</code> ← dock sink <code>chatTurnRunner.ts</code> / desk sink <code>chatSurfaceTurn.ts</code>; gate scan starts there, the cap binds at log time (<code>ensureStamp</code>)</td></tr>
 <tr><td>46</td><td><code>chatSurfaceSystemPrompt</code> → the desk arm's prompt</td><td><code>chatSurfaceTurn.ts:103</code> — mandate (<code>chatPrompts.ts:40</code>) + skills index + active strategies + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (<code>types/message.ts:368</code>)</td></tr>
+<tr><td>47</td><td>prose that never called the tool → the same decision</td><td><code>planFromProse tradeShapedProse.ts</code> reads the labelled entry/stop/target out of the row, <code>parseTradeProposal</code> decides whether that is a plan, and the chip mints the ONE plan-id shape (<code>mintPlanId</code>) before calling <code>onLogProposedTrade</code></td></tr>
 </table>
 
 <h2>Corrections this page guards</h2>

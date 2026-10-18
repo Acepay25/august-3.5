@@ -21,11 +21,10 @@
 import type { LoggedTrade } from '../../types';
 import type { DeskToolCall, DeskToolResult } from '../analysis/DeskToolsService';
 import type { ProposalGate } from './proposedTrade';
-import { parseTradeProposal, computeRrRatio, type TradeProposal } from './proposedTrade';
+import { parseTradeProposal, computeRrRatio, mintPlanId, type TradeProposal } from './proposedTrade';
 import { beginGateScan, cancelGateScan, gateReceiptLine } from './proposalGate';
 import { drawingsFromLevelTool, type ChartDrawing } from './chartDrawings';
 import { staleLevelsAtArm, type WatchPlan } from './tradePlanLevels';
-import { baseOf } from '../../utils/symbol';
 
 /** What the turn is running against: the argument bag, the coin it was asked
  *  on, the closed-trade log for the gate, and the canvas truth it must not
@@ -83,7 +82,7 @@ export const runPresentTrade = (ctx: PresentTradeContext, sink: PresentTradeSink
     // The DOCK generates the stable plan id first: it keys the level-watch,
     // the receipt's level ids, "Log this trade" onto the journal row, AND the
     // one in-flight gate scan for this plan.
-    const planId = `${baseOf(proposal.symbol).toLowerCase()}-${Date.now().toString(36)}`;
+    const planId = mintPlanId(proposal.symbol);
     proposal.planId = planId;
     // The scan starts NOW but is not awaited here. Awaiting it put a
     // market-data fetch plus an OHLCV pull per timeframe in front of drawing
