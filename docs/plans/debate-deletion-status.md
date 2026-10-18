@@ -1086,3 +1086,23 @@ test), `liveToolEvents`, `replacementOffer`, `modelsUsed`, `runContract`,
 Gates: tsc clean; full vitest 476 files / 4708 tests green (the 3 gone tests are
 the deleted suite); render-probe re-run for this change because the persistence
 strip is inside the export/import path the probe exercises.
+
+## Stage 21, second pass: the run-contract chain had no producer left
+
+Censused first, then cut: `liveToolEventsRef` (declared, never read after the
+debate throttler went), `debateRunLogRef` (never pushed — so `runContractFor()`
+always returned the ladder for an EMPTY log), `runContractFor` (no consumer since
+the placeholder was removed), `buildRunContractStages` (its only caller was that
+function), and the `DebateRunEvent` / `DebateRunEventKind` types (nothing
+constructs one). `utils/runContract.ts` is now the ladder's TYPE vocabulary only —
+`RunContractPanel` imports those and still renders the `Message.runContract`
+persisted by rows written before the cut, which is what render-probe's seeded
+`run-contract` assertion covers.
+
+The comment above the deleted refs claimed the log was "reset at run start, merged
+into the AI message when it lands" — it was neither; a stale comment asserting a
+behavior no code has. Deleted with the refs.
+
+Gates: tsc clean; full vitest 476 files / 4708 tests green; eslint on the three
+changed files 0 errors / 32 warnings (all pre-existing shapes, the ratchet is
+repo-wide); render-probe re-run because the panel's source module changed.
