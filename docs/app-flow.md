@@ -1,10 +1,14 @@
 # August Trading — the complete flow
 
 Every node names the file and line that implements it. Verified against the tree on
-**2026-10-18** (after the post-mortem, 2D desk floor, saved-analyses and Roles-tab
-deletions **and stages 20a/20a2/20g/20b/20b-B/20t/20c/20s/20d/20f/20r of the debate
-removal**, which moved
-both chat homes and the scheduler onto one turn executor); if a line moves, fix the
+**2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
+**222 anchors, 0 unattributed**); this pass took out accuracy mode with the calibration
+dashboards and the settings store that fed it (#17), the `savedAnalyses` store (#21), and
+`isDebating` / `activeDebateSpeakers` with the run-failure branch that read them. It follows
+the post-mortem, 2D desk floor, Saved-tab and Roles-tab deletions and
+stages 20a/20a2/20g/20b/20b-B/20t/20c/20s/20d/20f/20r of the debate
+removal, which moved
+both chat homes and the scheduler onto one turn executor; if a line moves, fix the
 line rather than deleting the claim.
 
 Dotted nodes exist in the code but are **never mounted** by the running app.
