@@ -174,14 +174,14 @@ console.log(`reach controls: ${controls.length ? 'FAILED — ' + controls.join('
 problems.forEach(m => console.log(`  STALE ${m}`));
 unattributed.forEach(m => console.log(`  UNATTRIBUTED ${m}`));
 
-// Ratchet, not a cliff: every unattributed number is a claim no checker can
-// verify, and the docs carry 96 of them today (mostly mermaid nodes that name a
-// module in prose instead of a path). Refusing to merge at 97 means the number
-// can only shrink as claims get qualified — same shape as the eslint
-// --max-warnings floor this repo already runs.
-const UNATTRIBUTED_CEILING = 98;
+// Ratchet, not a cliff. Every line number in the flow docs now names its file,
+// so the ceiling is zero: a bare `:NNN` with no path on its line is unverifiable
+// by construction, and this gate refuses the merge rather than let one ride in.
+// Measured 2026-10-18 after qualifying all 98 that used to be listed here —
+// qualifying them is what found six of them pointing at the wrong line.
+const UNATTRIBUTED_CEILING = 0;
 
-if (unique.size < 45) { console.log(`FAIL — only ${unique.size} unique anchors parsed; the scanner is broken, not the docs`); process.exit(1); }
+if (unique.size < 120) { console.log(`FAIL — only ${unique.size} unique anchors parsed; the scanner is broken, not the docs`); process.exit(1); }
 if (controls.length) { console.log('FAIL — the gate cannot see its own planted defects'); process.exit(1); }
 if (problems.length) { console.log(`FLOW DOC ANCHORS FAIL — ${problems.length} stale anchor(s)`); process.exit(1); }
 if (unattributed.length > UNATTRIBUTED_CEILING) {
