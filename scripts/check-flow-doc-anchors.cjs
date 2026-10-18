@@ -209,7 +209,7 @@ function collect(doc, text) {
 }
 
 function check(anchors) {
-    const rep = { missingFile: [], outOfRange: [], blank: [], comment: [], symMiss: [] };
+    const rep = { missingFile: [], outOfRange: [], blank: [], comment: [], commentOk: [], symMiss: [] };
     for (const a of anchors) {
         const where = `${a.doc}:${a.docLine} → ${a.file}:${a.line}`;
         const src = linesOf(a.file);
@@ -219,7 +219,19 @@ function check(anchors) {
         if (!at) { rep.blank.push(`${where} (blank line)`); continue; }
         // A citation never lands on a comment: the comment is prose ABOUT code, so
         // pointing at it proves nothing about the construct it describes.
-        if (/^(\/\/|\/?\*)/.test(at)) { rep.comment.push(`${where} (comment line: ${at.slice(0, 60)})`); continue; }
+        // EXEMPTION, shaped not laid out: sometimes the comment IS the claim — the
+        // ledger cites two of them to record that they assert something false. Then a
+        // code line would be the wrong anchor. So a citation to a comment is accepted
+        // only when the doc line itself calls it a comment, and every such case is
+        // printed, because an exemption nobody can see is just a blind spot.
+        if (/^(\/\/|\/?\*)/.test(at)) {
+            // selfTest cites a synthetic label ('t'), not a file, so linesOf can
+            // legitimately return null here; no exemption without a real doc line.
+            const docLines = linesOf(a.doc) || [];
+            const docLineText = docLines[a.docLine - 1] || '';
+            if (/\bcomments?\b/i.test(docLineText)) { rep.commentOk.push(`${where} (cited AS a comment: ${at.slice(0, 48)})`); continue; }
+            rep.comment.push(`${where} (comment line: ${at.slice(0, 60)})`); continue;
+        }
         if (a.sym) {
             const win = src.slice(Math.max(0, a.line - 3), a.line).join('\n');
             // Match the way the docs actually name things: case-insensitively, as a
@@ -386,11 +398,11 @@ const problems = [...rep.missingFile, ...rep.outOfRange, ...rep.blank];
 // are "what the rule can see", not "what is broken" — do not cite them as a
 // defect count, and do not answer a doubt about a wrapped sentence by trusting
 // this ceiling: re-measure the anchor by hand.
-const COMMENT_CEILING = 28;
+const COMMENT_CEILING = 10;
 const SYMMISS_CEILING = 0;
 
 console.log(`flow docs: ${all.length} anchor references, ${unique.size} unique, across ${DOCS.join(' + ')}`);
-console.log(`cited-line quality: ${rep.comment.length} land on a comment line (ceiling ${COMMENT_CEILING}), ${rep.symMiss.length} miss the symbol their own line names (ceiling ${SYMMISS_CEILING}) — both ratchet to 0`);
+console.log(`cited-line quality: ${rep.comment.length} land on a comment line (${rep.commentOk.length} more cite a comment and SAY so — exempt, listed) (ceiling ${COMMENT_CEILING}), ${rep.symMiss.length} miss the symbol their own line names (ceiling ${SYMMISS_CEILING}) — both ratchet to 0`);
 console.log(`reach controls: ${controls.length ? 'FAILED — ' + controls.join('; ') : `all ${TOTAL_CONTROLS} passed`}`);
 problems.forEach(m => console.log(`  STALE ${m}`));
 // The stage ledger is checked for ACCURACY (its anchors must still land on a real,
@@ -413,6 +425,7 @@ const UNATTRIBUTED_CEILING = 0;
 // Both quality lists print on EVERY run, not only when they breach: a counted
 // number whose evidence is invisible is not a measurement, and at exactly the
 // ceiling the list used to print nothing at all.
+rep.commentOk.forEach(m => console.log(`  CITED AS COMMENT ${m}`));
 rep.symMiss.forEach(m => console.log(`  SYMBOL MISS ${m}`));
 rep.comment.forEach(m => console.log(`  COMMENT LINE ${m}`));
 
