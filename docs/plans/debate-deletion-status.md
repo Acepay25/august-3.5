@@ -927,7 +927,8 @@ the selector is not the defect, the missing producer is.
 
 ## The chart verdict producer — LANDED
 
-Re-sourced from the settled proposal: `latestChartVerdict(messages)` in `services/trade/chartData.ts`, wired into App (the old `verdictMessage` memo and the dead `isDebating` branch are gone). RED PROOF ran the old predicate against a proposal-only row: it returned null, so `verdict` was undefined for every new run. `tests/chartVerdictSource.test.ts` pins the proposal path, the `analysis` fallback for history, the preference when a row carries both, the symbol match through `verdictLevels`, and the App wiring by source grep. tsc clean; that suite + `chartData` + `streamThrottlers` green (15 tests). `render-probe` was NOT re-run: the canvas claim is unverified, stated not assumed.
+Re-sourced from the settled proposal: `latestChartVerdict(messages)` in `services/trade/chartData.ts`, wired into App (the old `verdictMessage` memo and the dead `isDebating` branch are gone). RED PROOF ran the old predicate against a proposal-only row: it returned null, so `verdict` was undefined for every new run. `tests/chartVerdictSource.test.ts` pins the proposal path, the `analysis` fallback for history, the preference when a row carries both, the symbol match through `verdictLevels`, and the App wiring by source grep. tsc clean; that suite + `chartData` + `streamThrottlers` green (15 tests). Gate state: render-probe PASSED on 2026-10-18 after these commits (zero pageerrors); it asserts no canvas overlay levels, so the drawn verdict line is still un-asserted, and lint / boot-probe / e2e remain unrun.
+
 
 ## 20p, second attempt: the navigation is fixed, the tool turn does not settle
 
@@ -957,4 +958,5 @@ The phase is parked again at `.probe-artifacts/20p-probe-work-in-progress.patch`
 (both files `node --check` clean after revert, so the gate is runnable for
 everyone else in the meantime).
 
-Gate closure 2026-10-18: after the four stage-19 / chart-verdict commits, `tsc --noEmit` clean, vitest 477 files / 4713 tests green (VITEST_EXIT=0), and `npm run render-probe` OK with zero pageerrors. Still unrun for these commits: `npm run lint`, `boot-probe`, e2e. Still un-asserted by any gate: the chart actually drawing the verdict levels — the probe never looks at overlay levels, so that claim stops at the pure-function test.
+Gate closure 2026-10-18: after the four stage-19 / chart-verdict commits, `tsc --noEmit` clean, vitest 477 files / 4713 tests green (VITEST_EXIT=0), and `npm run render-probe` OK with zero pageerrors. Gate state: render-probe PASSED on 2026-10-18 after these commits (zero pageerrors); it asserts no canvas overlay levels, so the drawn verdict line is still un-asserted, and lint / boot-probe / e2e remain unrun.
+ Still un-asserted by any gate: the chart actually drawing the verdict levels — the probe never looks at overlay levels, so that claim stops at the pure-function test.
