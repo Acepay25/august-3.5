@@ -495,9 +495,7 @@ export const sqliteGetUserProfile = async (username: string): Promise<UserProfil
 /**
  * Save user profile (upsert)
  */
-const serializeConversationMessages = (messages: Message[]): string => JSON.stringify(
-    messages.map(({ activeDebateSpeakers, ...message }) => message)
-);
+const serializeConversationMessages = (messages: Message[]): string => JSON.stringify(messages);
 
 /**
  * Delete rows of a collection that are absent from the profile being saved.

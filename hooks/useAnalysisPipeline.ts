@@ -665,7 +665,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 role: MessageRole.AI,
                 text: reason,
                 createdAt: new Date().toISOString(),
-                isDebating: false,
             }], activeConversationId);
         };
 
@@ -749,8 +748,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
         // Throw when the request goes stale (user cancel or conversation
         // switch). Plain early-returns/breaks bypassed the catch block's
-        // message cleanup, leaving the debate placeholder stuck with
-        // isDebating:true — and with the abort controller already nulled by
+        // message cleanup, leaving a streaming bubble stuck in its "thinking"
+        // state — and with the abort controller already nulled by
         // the finally, the Stop button couldn't even abort it again.
         const assertCurrentRequest = (): void => {
             if (!isCurrentRequest()) {
@@ -1453,7 +1452,7 @@ ${enhancedPrompt}`;
         } catch (error: any) {
             // Runs for BOTH errors and user cancels. Previously the
             // `!isCurrentRequest()` early-return skipped this cleanup on abort,
-            // leaving the placeholder stuck as isDebating:true with a permanent
+            // leaving a streaming bubble stuck with a permanent
             // "thinking" indicator until the next reload.
             //
             // Only a true abort of THIS run's own signal is a cancellation.
@@ -1469,10 +1468,8 @@ ${enhancedPrompt}`;
             // A pending replacement wait is void — a late click on the banner
             // must never resolve into a dead debate.
             replacementChoiceRef.current = null;
-            // Preserve the debate transcript when the debate was interrupted —
-            // never wipe a debate that already produced turns. A bare
-            // placeholder (no turns yet) is still removed.
-            updateRequestMessages(prev => mapRunFailureMessages(prev, { cancelled, casualMessageId }));
+            // Settle a live-streaming casual bubble; every other row survives.
+            updateRequestMessages(prev => mapRunFailureMessages(prev, { casualMessageId }));
 
             // User cancels / stale runs get no error bubbles. A deliberate
             // Stop (or a superseded run) is NOT a retryable failure —

@@ -1003,7 +1003,7 @@ not a mechanical one — it removes reporting the trader can currently open.
 
 **2. `ensembleProgress` has no rendering reader but IS load-bearing on the failure path.**
 Census over all `.ts`/`.tsx`: minted at `useAnalysisPipeline.ts:888`→`:912`, patched at
-`runOutcome.ts:41-53`, stripped at the SQLite boundary (`SqliteService.ts:499`), and
+`runOutcome.ts`'s debating branch, stripped at the SQLite boundary, and
 after `1bd501e` no component reads it (`App.tsx:1254` was the last, and that memo is
 gone). But the `runOutcome` branch keyed on it writes the row's TEXT —
 "The analysis was cancelled." / "The ensemble could not continue before the debate
@@ -1381,7 +1381,7 @@ config change is needed to proceed.
 surface before touching it, and it is not the quick trim the phrase "no writer" suggests: **54
 references across 17 files**. Only `setSavedAnalyses` is starved (called at
 `hooks/useUserProfileLoader.ts:172` to load and `:255` to clear), but the plumbing around it is
-alive and asserted: `services/infrastructure/SqliteService.ts:73/:465/:491/:686-710` reads and
+alive and asserted: `services/infrastructure/SqliteService.ts:73/:465/:491/:686-708` reads and
 writes it as its own column, staging JSON and diffing against the previous profile;
 `utils/profileUtils.ts:11,32-33` validates the first element's shape on every profile read;
 `services/infrastructure/BackupService.ts:686-687/:720/:730` refuses backups where it is not an
@@ -1575,7 +1575,7 @@ history card all still call it directly.
 **#21 — three sub-items, measured, none started.** `debateTurns` is declared at
 `types/message.ts:189` and `types/trade.ts:110`, written at
 `hooks/useTradeLogging.ts:350` and `utils/watchList.ts:30`, and read by
-`hooks/analysisPipeline/runOutcome.ts:41`, `hooks/useAnalysisPipeline.ts:778`,
+`hooks/useAnalysisPipeline.ts:777`,
 `hooks/useWatchAndAutopilot.ts:105`, `services/analysis/convictionDrift.ts:82`,
 `services/learning/monthlyReport.ts:220`, `utils/analysisUtils.ts:990` and the
 report's turn count at `utils/reportExport.ts:241`, plus a seeded fixture in
@@ -1674,3 +1674,43 @@ the unreachable half (guard + three fallback parameters), or also give up
 analysis over the stored history. This is a feature-shape call, not a bug fix,
 which is why it was not made silently. Everything else ruled in #17 is landed and
 gated; #19 and the `savedAnalyses` / `postMortem` items remain.
+
+## 2026-10-19 — the unreachable half is deleted: `isDebating` and `activeDebateSpeakers`
+
+Measured before cutting: every write of `Message.isDebating` in the app was a literal
+`false` — eight of them (five on constructed rows that never debated, two in the loader,
+one inside the branch below) — and the loader rewrote any loaded row to `false`, so no row
+could ever reach the one branch that read it. `activeDebateSpeakers` had exactly one
+writer, and it was inside that same branch. That makes `mapRunFailureMessages`'s debating
+branch unreachable, not merely unused: the guard, the transcript-preserving return and the
+two cancel/error sentences it chose could not execute.
+
+Deleted: that branch (`hooks/analysisPipeline/runOutcome.ts` — which is why `cancelled`
+left its `ctx`: the text it picked was the flag's only reader), `isDebating` and
+`activeDebateSpeakers` from `types/message.ts`, the load-time normalization that forced the
+flag false, the SQLite write-time strip of `activeDebateSpeakers`, the `|| m.isDebating` in
+the Agents desk row's streaming flag, and the five literals.
+
+The history-reading half above is untouched. `debateTurns` still travels with a logged
+trade and still feeds those four consumers; the owner's choice about them stands as written.
+
+Consequence measured, not assumed: dropping the SQLite strip means a row persisted before
+this change keeps its `activeDebateSpeakers` object when re-serialized instead of losing it
+on the next save. Nothing reads it and the field has left the type, so those are inert
+bytes on legacy rows — accepted over keeping a stripper for a key no writer can produce.
+
+Nine doc citations moved when these lines went. Each was re-measured by matching the HEAD
+line's content, and two were re-pointed at a real symbol instead of the bare `};` they used
+to land on (`useAnalysisPipeline.ts:739` for the automation claim, `:783` for the coin tip).
+One failure mode the gate cannot see, recorded because it happened here: a citation that
+drifts onto a DIFFERENT non-blank line passes. The run-failure guard's own number did
+exactly that, so the two ledger sentences citing it were rewritten rather than renumbered.
+
+**#19 scope, measured for whoever picks it up:** the multi-seat branch is 132 references
+across 27 files (`'panel'`, `panelModels`, `isEnsembleEnabled`, `ensembleModelSelection`),
+heaviest in `components/trade/TradeChatPanel.tsx` (21), `App.tsx` (13),
+`hooks/useAnalysisPipeline.ts` (11), `services/trade/chatSessions.ts` (7) and
+`hooks/useProfilePersistence.ts` (7). The session kind, the seat loop in
+`services/trade/chatTurnRunner.ts`, the persisted ensemble choice and the seat pickers are
+one unit — removing part of it leaves a picker that selects a roster nothing consumes. Not
+started here rather than left half-deleted.

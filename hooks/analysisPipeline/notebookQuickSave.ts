@@ -65,7 +65,6 @@ export const runNotebookQuickSave = async (effectiveInput: string, deps: Noteboo
                 role: MessageRole.AI,
                 text: `📓 **Saved to your Trader Notebook** — \`${note.folder}/${file.name}\` (${note.decision === 'append' ? 'appended a new section to the existing file' : 'new file'}).\n\nThe model will read this on every future analysis. Manage everything in **Settings → Memory**.`,
                 createdAt: new Date().toISOString(),
-                isDebating: false,
                 // status row for the model-authored write.
                 toolActions: [{
                     at: toolActionStamp(), speaker: 'Coach', tool: 'notebook_note', ok: true,
@@ -79,7 +78,6 @@ export const runNotebookQuickSave = async (effectiveInput: string, deps: Noteboo
                 role: MessageRole.AI,
                 text: `📓 **Notebook: nothing written** — the model found this already covered (or nothing concrete to save). You can still add it manually in **Settings → Memory**.`,
                 createdAt: new Date().toISOString(),
-                isDebating: false,
             }], activeConversationId);
         }
     } catch (quickSaveError) {
@@ -89,7 +87,6 @@ export const runNotebookQuickSave = async (effectiveInput: string, deps: Noteboo
             role: MessageRole.AI,
             text: `📓 **Notebook write failed** — ${(quickSaveError as Error)?.message ?? 'unknown error'}. The diary keeps recording trades automatically; this manual save did not go through.`,
             createdAt: new Date().toISOString(),
-            isDebating: false,
         }], activeConversationId);
     } finally {
         setLoadingMessage(null);

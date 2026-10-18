@@ -399,18 +399,11 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
 
                 const correctedConvs = (profile.conversations || []).map(conv => {
                     const leverage = conv.leverage || DEFAULT_LEVERAGE;
-                    const correctedMessages = (conv.messages || []).map(msg => {
-                        const normalized: Message = msg.isDebating || msg.activeDebateSpeakers
-                            ? { ...msg, isDebating: false, activeDebateSpeakers: undefined }
-                            : msg;
-                        if (normalized.analysis) {
-                            return { ...normalized, analysis: recalculateAnalysisMetrics(normalized.analysis, leverage) };
-                        }
-                        if (normalized.isDebating) {
-                            return { ...normalized, isDebating: false };
-                        }
-                        return normalized;
-                    });
+                    const correctedMessages = (conv.messages || []).map(msg =>
+                        msg.analysis
+                            ? { ...msg, analysis: recalculateAnalysisMetrics(msg.analysis, leverage) }
+                            : msg
+                    );
                     return { ...conv, leverage, messages: correctedMessages };
                 });
 

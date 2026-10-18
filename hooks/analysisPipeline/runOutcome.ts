@@ -20,14 +20,11 @@ import type { EnsembleAnalystEntry } from '../../services/ui/EnsembleAnalystServ
 /**
  * Map the conversation through a run's cancel/error: a live-streaming casual
  * bubble must settle (keep whatever text already arrived, drop the streaming
- * flag), and a row that was still marked debating keeps its transcript — never
- * wipe a run that already produced turns; an empty one is removed. The ensemble
- * placeholder this used to rewrite is gone: the staged send no longer mints a
- * second row, so there is nothing here left to explain. Verbatim from the catch
- * block's message sweep.
+ * flag) and an empty one is removed. Every other row is returned untouched —
+ * the debating placeholder this used to rewrite cannot exist any more, since no
+ * writer sets `isDebating` and the loader forces any stored one false.
  */
 export const mapRunFailureMessages = (prev: Message[], ctx: {
-    cancelled: boolean;
     /** The live-streaming casual-chat bubble id, if one was open. */
     casualMessageId?: string | null;
 }): Message[] => prev.map(m => {
@@ -37,16 +34,7 @@ export const mapRunFailureMessages = (prev: Message[], ctx: {
         if (!m.text.trim()) return null;
         return { ...m, isStreaming: false };
     }
-    if (!m.isDebating) return m;
-    if ((m.debateTurns?.length ?? 0) === 0) return null;
-    return {
-        ...m,
-        isDebating: false,
-        activeDebateSpeakers: {},
-        liveToolEvents: undefined,
-        replacementOffer: undefined,
-        text: ctx.cancelled ? 'The analysis was cancelled.' : 'The debate was interrupted by an error before the moderator could issue a final verdict.',
-    };
+    return m;
 }).filter((m): m is Message => m !== null);
 
 /** How the catch path treats a run failure, after the cancel check. */
