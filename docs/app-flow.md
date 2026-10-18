@@ -67,7 +67,7 @@ flowchart TD
     AN --> HSM["handleSendMessage — useAnalysisPipeline.ts:504"]
     FA --> HSM
     HSM --> D3{"the debate branch is GONE (19): a send answers through the tool turn :1475. runEnsembleEnabled :584 survives only as a gate on the hybrid pull :1022 — a schedule is claimed earlier, by its own arm :827"}
-    D3 -->|true| ENS["ensemble branch — section C (engine deleted; the branch itself still runs)"]
+    D3 -->|true| ENS["ensemble branch — section C (ENGINE DELETED; the branch still gates and still refuses)"]
     D3 -->|false, casual :1469| SPLIT{"a bot thread? :1449"}
     SPLIT -->|yes| TR
     SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:229, tools from CHAT_SURFACE_TOOLS :54, prompt chatSurfaceSystemPrompt :146"]
@@ -445,3 +445,9 @@ card that forgets it was clicked offers a second journal row.
    the question the trader's switch asks. If the sentence comes back, whoever
    restores it has also made stage 19 undeletable and given every schedule a debate
    nobody is watching.
+
+## Measured after stage 19: what the deletion did NOT remove
+
+The engine files are gone; the pipeline's ensemble BRANCH is not. `runEnsembleEnabled` (`hooks/useAnalysisPipeline.ts:575`) still gates three refusals that no longer protect a real debate — no moderator (`:730`), incomplete lens roles or two seats on one model (`:754`), and the `TEAM_MAX_SEATS` ceiling (`:793`) — so a send with the toggle ON can be refused for a debate that cannot happen. `isStagedEnsemble` (`:655`) still mints `ensembleProgress` (`:888` → `:912`) with every seat 'waiting', and nothing moves it: its writers were the deleted debate throttler and `runOutcome.ts:41`, which only marks it failed. `isDebating: true` now has exactly one writer left, the resume path (`:924`).
+
+The user-visible consequence: `App.tsx:1249` selects `verdictMessage` by the DEBATE shapes (`ensembleProgress`, >1 `modelsUsed`, `debateTurns`) and passes `verdict={verdictMessage?.analysis}` to the chart (`App.tsx:2526`) — while nothing writes `Message.analysis` for a new run any more. `verdictFinalizer` was the writer; a tool turn answers with a `TradeProposal` in the tool payload (`services/trade/presentTradeTool.ts`, `proposedTrade.ts`, `tradeShapedProse.ts`). Reader without a writer, the third time in this stage (session usage, the completion notice). Fixing it means re-sourcing the chart verdict from the settled proposal and proving the drawn line with `npm run render-probe` — not widening the selector.
