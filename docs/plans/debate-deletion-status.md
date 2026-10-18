@@ -713,3 +713,55 @@ follow:
    path. Until that lands, the filter is broken by data, not by a bug, and `useTradeJournalActions`'s
    comment ("the classifier labels every verdict on finalization") describes a path that no
    longer runs. Both need fixing in the re-home, not before it.
+
+## Tranche 2, second slice — the label has a live producer again, and the gate now means it
+
+Measured this pass with a reachability walk over the import graph (App.tsx + index.tsx
+as roots, static AND `React.lazy(() => import())` edges): 494 of 545 source files are
+reachable, and `verdictFinalizer.ts` / `ensembleService.ts` are **not** among them. Of
+the finalizer's 26 imported behaviours, only 3 are applied by a reachable module outside
+their own definition file (`clampProbabilityToGate` and
+`downgradeConfidenceForProbability` via `services/trade/proposedTrade.ts` — that is 20a2
+— and `buildRunContractStages` via the pipeline). 17 are applied nowhere live.
+
+One of those 17 is in `featuresAreWired`'s declared contract, so it is a defect rather
+than a stage-19 deletion: **the journal's scalp/swing filter had no producer**. Fixed by
+calling `withDetectedTradeType` at the two row-minting sites in `logTradeWithFeedback`
+and `logEntryNotHitTrade` — the label-only variant, so `validityDurationMinutes` stays
+untouched and OutcomeAutopilot's expiry window does not silently widen. The reader is
+`components/journal/TradeLog.tsx:532` (`trade.tradeType || trade.analysis?.tradeType`),
+which is why the row is the right host: every journal path lands there, a presented plan,
+a prose chip or a manual log alike.
+
+**And the gate itself was the bug.** Two holes, both found by reverting my own edit and
+watching the suite stay green:
+
+1. A mention in *any* production file discharged a duty, so a dead module counted as a
+   consumer. Now the consumer must be inside the entry-point import closure.
+2. After fixing (1), reverting the call sites STILL stayed green: an
+   `import { withDetectedTradeType }` line alone matched the name. Import statements are
+   now stripped before matching, so a consumer must use the name in its body. That second
+   hole briefly accused `harnessNoteLegend` of being orphaned — a false red from my own
+   stripper closing an import run on a line ending in a backtick; the real call is
+   `DeskToolsService.ts:3116`. The control that caught it is the new
+   `the reachability walk separates live from dead` test.
+
+Proof of load-bearing: producer reverted → `withDetectedTradeType` FAILS; restored →
+24/24 green. `tsc --noEmit` clean.
+
+Still unre-homed (16 of the 17) — none is in `featuresAreWired`'s list, so each is a
+product decision, not a contract violation: `appendSessionUsage`, `estimateCostUsd`
+(per-session token + cost accounting), `peekTruncations` (the truncation ceiling),
+`notifyAnalysisComplete` (the whole `CompletionNotifications` module is unreachable),
+`maybeQueueVerdictSkillDraft`, `annotateVerdictCitations`, `flagBannedVocabulary`,
+`parseKeptAnalyst`, `buildRecommendationContract`, `buildVerdictEvidencePack`,
+`deriveSetupQueryFromPrompt`, `isBindingMarkdownPlan`, `stripPlanTags`,
+`parseProseTradePlan`, `ANALYST_ROLE_DEFINITIONS`, `GENERAL_DIMENSION_TAGS`.
+The plan-parsing four are already replaced by the tool path (`present_trade` payload) and
+20d's `parseTradeProposal`, so those die with stage 19. The usage/cost/notification four
+look like capabilities the trader still expects to see, and need an owner call before the
+finalizer is deleted.
+
+Lint note, not mine: `npm run lint` is red with 95 `no-require-imports` errors coming
+entirely from untracked scratch under `docs/analysis/data/*.cjs`, which eslint's scope
+picks up. My four changed files report 0 errors / 12 warnings.

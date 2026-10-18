@@ -19,6 +19,7 @@ import { resolveTradeRegime } from '../services/learning/regimeLedger';
 import { botOriginForMessage } from '../services/agents/botLearning';
 import { appendWatchEpisode } from '../utils/watchList';
 import { getActiveUsername } from '../utils/activeUser';
+import { withDetectedTradeType } from '../services/analysis/ScalpDetectionService';
 import * as chatStore from '../services/trade/chatStore';
 
 // Maximum number of trade summaries (Recent Insights) to keep - enforces FIFO when limit reached
@@ -296,7 +297,14 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
 
         const loggedTrade: LoggedTrade = {
             id: message.id,
-            analysis: message.analysis!,
+            // Labelled here, at the row, because this is the one place every
+            // journal row passes through — a presented plan, a prose chip or a
+            // manual log all arrive here. The verdict finalizer used to stamp it
+            // upstream; label-only, so no `validityDurationMinutes` appears on a
+            // run that never had one and OutcomeAutopilot's expiry window stays
+            // exactly as wide as it was. A row that already carries a type —
+            // model-stated or the trader's own override — is left alone.
+            analysis: withDetectedTradeType(message.analysis!),
             outcome: outcome,
             timestamp: new Date().toISOString(),
             /** The plan this row came from — the same id the level-watch armed
@@ -661,7 +669,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         // Log the trade
         const loggedTrade: LoggedTrade = {
             id: candidate.message.id,
-            analysis: candidate.message.analysis,
+            analysis: withDetectedTradeType(candidate.message.analysis),
             outcome: TradeOutcome.ENTRY_NOT_HIT,
             timestamp: new Date().toISOString(),
             leverage: activeConversationLeverage || DEFAULT_LEVERAGE,
