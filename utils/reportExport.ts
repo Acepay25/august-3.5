@@ -239,7 +239,6 @@ export const trainingRecordFor = (t: LoggedTrade): Record<string, unknown> => {
             // Size discipline: the transcript belongs in the reasoning export.
             // Count it; the bodies stay behind the run id.
             debateTurnCount: t.debateTurns?.length ?? 0,
-            moderatorSynthesis: t.moderatorSynthesis ?? null,
         },
     };
 };

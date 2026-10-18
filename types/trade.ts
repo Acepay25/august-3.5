@@ -105,10 +105,9 @@ export interface LoggedTrade {
   moderatorProvider?: string;  // ProviderConfig id (historical values like 'gemini' remain valid strings)
   moderatorModel?: string;
 
-  // Debate transcript — the full debate turns and moderator synthesis
+  // Debate transcript — the full debate turns
   // Stored for training data and outcome-correlated reasoning analysis
   debateTurns?: DebateTurn[];
-  moderatorSynthesis?: string;
 
   // Mode Tracking
   /**

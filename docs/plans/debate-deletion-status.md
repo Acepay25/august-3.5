@@ -1525,3 +1525,20 @@ one jsdom tests cannot see.
 Not run locally, still CI-only: `installer-smoke` (needs the packaged exe) and
 `npm run build`'s bundle path. #17's second ruling — the calibration store with
 the Learn dashboards — is still untouched, as are #19 and #21.
+
+## 2026-10-19 — #21 first piece: the moderator synthesis field is gone
+
+`LoggedTrade.moderatorSynthesis` had exactly three sites — the declaration, the
+writer that copied the assistant message into it at log time, and one column in
+the printable report — and all three are deleted, with the transcript comment
+reworded to name only the debate turns that remain. A scan for the identifier
+across the repo returns nothing.
+
+Gates run for this change, all green: typecheck, eslint on the three files, the
+flow-docs anchor gate, the full suite, and the render probe with zero pageerrors.
+The rest of #21 is untouched and is NOT this small: `debateTurns` spreads over 14
+source files plus 3 suites and feeds the training-data export, the chart, the
+monthly report and conviction drift; `postMortem` is 50 files; `savedAnalyses` is
+31 with a SQLite column and backup validation. The calibration ruling is larger
+still than either, because the confidence store is written at outcome time and
+read by the validation gate, the lens service and the Learn dashboards at once.
