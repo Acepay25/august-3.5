@@ -956,3 +956,5 @@ and whether the mock ever received the follow-up request after the tool frame.
 The phase is parked again at `.probe-artifacts/20p-probe-work-in-progress.patch`
 (both files `node --check` clean after revert, so the gate is runnable for
 everyone else in the meantime).
+
+Gate closure 2026-10-18: after the four stage-19 / chart-verdict commits, `tsc --noEmit` clean, vitest 477 files / 4713 tests green (VITEST_EXIT=0), and `npm run render-probe` OK with zero pageerrors. Still unrun for these commits: `npm run lint`, `boot-probe`, e2e. Still un-asserted by any gate: the chart actually drawing the verdict levels — the probe never looks at overlay levels, so that claim stops at the pure-function test.
