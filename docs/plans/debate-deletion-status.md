@@ -1106,3 +1106,32 @@ behavior no code has. Deleted with the refs.
 Gates: tsc clean; full vitest 476 files / 4708 tests green; eslint on the three
 changed files 0 errors / 32 warnings (all pre-existing shapes, the ratchet is
 repo-wide); render-probe re-run because the panel's source module changed.
+
+## 20p attempt three: four causes, all in the harness, and the phase is parked again
+
+Runs 4-8 each failed for a DIFFERENT reason, and each one was measured rather
+than assumed — worth keeping as the record of what this phase actually needs:
+
+1. waited for `[data-testid="trade-view"]` (Trade surface) after a reload that
+   restored the Agents surface → timeout. Removed.
+2. no click at all: a reload restores the persisted surface (Settings after the
+   sweep), so `sendInDock` had no composer → "no Send button and no Stop button".
+   Fixed with a route click.
+3. a control send (plain text, same point in the run) failed IDENTICALLY, which
+   exonerated the tool path — the hang was never an app defect, and the mock's
+   `Unknown tool` branch at DeskToolsService.ts:2935 settles fine.
+4. the phase, moved next to the dock sends, called `navTo` before its `const`
+   initialization (`ReferenceError`, probe line 636) → replaced with the same DOM
+   click inline; `surface-switch-${id}` is real (SurfaceSwitch.tsx:54).
+5. runs 7 and 8 then failed in the boot sequence itself (`trade-view` wait, then
+   `page.goto` timeout): run 6 was still alive when 7 launched, so two dev servers
+   fought for :3000, and 8 inherited a dead server. Two of my gate cycles were
+   spent on self-inflicted contention — the rule I already had, applied to probes
+   as well as builds.
+
+Phase parked at `.probe-artifacts/20p-probe-work-in-progress.patch` (both probe
+files reverted, `node --check` clean, gate runnable). First action next time:
+start the dev server and confirm it answers on :3000 BEFORE launching the probe,
+one run at a time. What the phase asserts once it lands: a tool round projects a
+`tool-actions-row`, the ledger bytes grow from the same turn, the tool line
+survives a reload, and Stop during a tool round leaves exactly one settled row.
