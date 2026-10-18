@@ -220,6 +220,20 @@ export const getSnapshot = (): ChatSnapshot => {
 
 export const getActiveId = (): string => { ensureLoaded(); return activeId; };
 
+/** THE session the surfaces share — read, written and adopted through one rule.
+ *
+ *  Three places need "the chat this trader is on": the Chart AI dock, the Chat
+ *  surface's composer (its instrument picker writes here) and `TradeView`, which
+ *  follows the session's coin. Each used to resolve it its own way — one by raw
+ *  id, one with a `sessions[0]` fallback, one by raw id only — and when the two
+ *  answers differed the picker became a label: it repainted from the row it
+ *  rendered while the write and the chart's read landed on a row that no longer
+ *  existed. One accessor, so the reader and the writer cannot disagree. */
+export const getActiveSession = (): LiveSession | undefined => {
+    const s = getSnapshot();
+    return s.sessions.find(x => x.id === s.activeId) ?? s.sessions[0];
+};
+
 /**
  * The ACTIVE session's composer thinking tier, read fresh (no subscription).
  *
@@ -360,7 +374,18 @@ export const bindConversation = (conversationId: string): string => {
         emit();
         return blank.id;
     }
-    return addSession({ conversationId });
+    // Minting has to carry the instrument over. This runs when the trader moves
+    // between the two homes of ONE conversation, and `TradeView` reads the coin
+    // off the session it lands on: a session born with no symbol made the chart
+    // open on its default while the conversation it joined was about ETH. The
+    // dock's own "New chat" already stamps the setup on screen (see addSession's
+    // call there) — this is the same rule on the path a surface switch takes.
+    const from = getActiveSession();
+    return addSession({
+        conversationId,
+        ...(from?.symbol ? { symbol: from.symbol } : {}),
+        ...(from?.interval ? { interval: from.interval } : {}),
+    });
 };
 
 // ── Logged-trade harness visibility (openTrades, loggedTradeIds) ─────────────

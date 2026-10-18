@@ -469,11 +469,18 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const sessionSymbol = activeSession?.symbol ?? 'BTCUSDT';
     const sessionInterval = (activeSession?.interval ?? '15m') as ChartInterval;
     const symbols = useSymbolUniverse();
+    // Written through the SAME accessor the composer reads (`activeSession`) and
+    // the chart adopts from — `chatStore.getActiveSession()`, active row else
+    // first. Writing to the raw active id instead made the picker a label in the
+    // one state where the id does not resolve: the bubble repainted, nothing was
+    // stored on the row the chart looks at, and the coin never moved.
     const setSessionSymbol = useCallback((next: string): void => {
-        chatStore.mutate(chatStore.getActiveId(), sess => ({ ...sess, symbol: next }));
+        const sid = chatStore.getActiveSession()?.id;
+        if (sid) chatStore.mutate(sid, sess => ({ ...sess, symbol: next }));
     }, []);
     const setSessionInterval = useCallback((next: ChartInterval): void => {
-        chatStore.mutate(chatStore.getActiveId(), sess => ({ ...sess, interval: next }));
+        const sid = chatStore.getActiveSession()?.id;
+        if (sid) chatStore.mutate(sid, sess => ({ ...sess, interval: next }));
     }, []);
     const [openRoutines, setOpenRoutines] = useState<string | null>(null);
     // Below md the rail is an overlay, not a column — at 320px a permanent
