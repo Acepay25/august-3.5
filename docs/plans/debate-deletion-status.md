@@ -1977,7 +1977,7 @@ thing to re-check.
 
 **Do not re-derive these** (each cost a turn this session and is already proven): the
 review's six defects are all closed in the current files; the post-mortem route is
-**starved, not deleted** (`SkillCraftService.ts:145`); `reconstructOpenings`,
+**starved, not deleted** (the guard tests the length of the field, and `docs/app-flow.md` §D carries the exact line); `reconstructOpenings`,
 `utils/debateResume` and `confidenceAccuracy` exist nowhere in the tree; the census
 recipe is `grep -rE` over `.ts/.tsx` (122 lines / 50 files for the token, 34 / 23 for
 the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:69`; and the
