@@ -198,9 +198,10 @@ is how the numbers drift apart:
   Preferences-owned keys spends eviction-prone bytes on a copy nothing reads.
 - `duplicateTextPairs` (`services/ui/EnsembleAnalystService.ts`) — the ONE
   gateway-echo detector (normalized character-trigram Jaccard ≥ 0.9, samples
-  under 200 chars ignored). It answers by index so two callers can label the
-  same fact differently: the transcript toast names models, the moderator block
-  in `ensembleConsensus.ts` names seats and tells it not to count an echo twice.
+  under 200 chars ignored). It answers by index, not by name, so a caller labels
+  the fact in its own vocabulary. Its second consumer — the moderator block in
+  `ensembleConsensus.ts` — went with the debate engine, so it now has the one
+  call site at `services/ui/EnsembleAnalystService.ts:338`.
   Do not write a third similarity function.
 
 ## Providers are runtime-configured (dynamic migration)
