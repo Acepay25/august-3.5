@@ -2117,7 +2117,7 @@ Three stale labels were fixed in place: `hooks/useAppSettings.ts` and
 
 **Gate state on this tree, each read from its own marker, not a piped exit code:**
 Re-run here: typecheck, type-check-scripts, electron parse (both re-run on this tip: `tsc --noEmit` clean,
-`node --check` on all three electron files clean), flow-doc anchors (262 verified,
+`node --check` on all three electron files clean), flow-doc anchors (262 verified, — the same figure as before, reached by a different set of anchors,
 0 unattributed, **0** comment-line and **0** symbol misses — both ceilings now zero, with 5
 citations listed as deliberate comment-as-claim exemptions — **0** census disagreements, and
 **0 of 6** AGENTS.md control arms failing, the new half that measures `AGENTS.md`'s own counts:
@@ -2150,7 +2150,18 @@ claim is only honest while the diff behind it is provably inert, and the first s
 revokes it.
 
 **Do not re-derive these** (each cost a turn this session and is already proven): the
-review's six defects are all closed in the current files; the post-mortem route is
+review's six defects are all closed in the current files; **and the item it filed as
+"Not verified" — section C's ordering — turned out to carry nine wrong line numbers.** The
+fetch gate is `hooks/useAnalysisPipeline.ts:940` (the docs said `:941` in one file and `:890`
+in the other, and `:890` is the automation mute flag, not a gate); the injection string is
+built at `:953` (preset path `:994`, not `:988`); it is read only by `devLog` at `:978`, `:979`
+and `:1166` (not `:973`/`:1160`); `assemblePipelineMemoryContext` is called at `:1021` with the
+packet at `:1024` (not `:1047`); the hybrid loading flag is `:863` (not `:890`). Two docs that
+described the same residue disagreed with each other, and the gate passed both: a citation
+only binds to a symbol when the doc names one on that line, and these sentences named none.
+Restating them cost one more failure of my own — the new `:1024` first bound the neighbouring
+function name and then sat unqualified on a line that named no file. Both were caught by the
+run, not by reading. the post-mortem route is
 **starved, not deleted** (the guard tests the length of the field, and `docs/app-flow.md` §D carries the exact line); `reconstructOpenings`,
 `utils/debateResume` and `confidenceAccuracy` exist nowhere in the tree; the census
 recipe is `grep -rE` over `.ts/.tsx` (122 lines / 50 files for the token, 34 / 23 for

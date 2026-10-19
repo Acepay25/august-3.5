@@ -172,7 +172,7 @@ Stage 19 deleted the debate from this path. What one send actually does now:
 
 ```mermaid
 flowchart LR
-    S1["1 data pull HybridIntelligenceService — still gated on runEnsembleEnabled hooks/useAnalysisPipeline.ts:890"] --> S3["3 prompt assembly memoryContext.ts"]
+    S1["1 data pull HybridIntelligenceService — still gated on runEnsembleEnabled at hooks/useAnalysisPipeline.ts:940, prefetch gate :860"] --> S3["3 prompt assembly assemblePipelineMemoryContext hooks/useAnalysisPipeline.ts:1021"]
     S3 --> S4["4 one turn: runChatSurfaceTurn services/trade/chatSurfaceTurn.ts:230 → executeDeskTool"]
     S4 -->|a seat calls| PT["present_trade → runPresentTrade → plan + gate stamp"]
     PT --> JR["journal row — logTradeWithFeedback useTradeLogging.ts"]
@@ -203,18 +203,19 @@ verdict-shaped rows come from `proposal` cards, and the surviving readers were
 re-pointed in 20b-B and 20r rather than left reading a field nothing writes.
 
 **One known residue, stated as measured.** With Hybrid Intelligence on, a human
-send still fetches real-time data: the gate is `hooks/useAnalysisPipeline.ts:941`.
+send still fetches real-time data: the gate is `hooks/useAnalysisPipeline.ts:940`.
 What no longer happens is the part that made it worth the round trip — the
-injection string it builds (`hooks/useAnalysisPipeline.ts:954`, or `:988` for
+injection string it builds (`hooks/useAnalysisPipeline.ts:953`, or `:994` for
 preset data) is read afterwards only by `devLog` at
-`hooks/useAnalysisPipeline.ts:979`, `:973` and `:1160`. It is
+`hooks/useAnalysisPipeline.ts:978`, `:979` and `:1166`. It is
 never handed to the turn, because the analyst and moderator prompts it used to ride
 are the files stage 19 deleted. The packet object does still have one consumer:
-`hooks/useAnalysisPipeline.ts:1047` passes it into
-`assemblePipelineMemoryContext`, which is where the learning coin and the notebook
+`hooks/useAnalysisPipeline.ts:1021` passes it into
+`assemblePipelineMemoryContext` (the packet argument `freshHybridData` at `hooks/useAnalysisPipeline.ts:1024`),
+which is where the learning coin and the notebook
 slice come from, so dropping the fetch is NOT a byte-preserving cleanup — that is
 why it is an owner decision rather than something I removed silently. The loading
-state at `hooks/useAnalysisPipeline.ts:890` still flips for a send whose result
+state at `hooks/useAnalysisPipeline.ts:863` still flips for a send whose result
 only the coin picker reads. Separately, `beginPromptLane` now has zero callers
 while the `finally` still calls `endPromptLane()`, so the prompt A/B lane is
 starved rather than deleted; re-wiring it onto the tool turn or removing it is
