@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**286 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**296 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 3 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -398,9 +398,9 @@ card that forgets it was clicked offers a second journal row.
 
 | # | from → to | what crosses |
 |---|---|---|
-| 1 | index.html → index.tsx | mount, error handlers first `:23 :43` |
+| 1 | index.html → index.tsx | mount, error handlers first `unhandledrejection index.tsx:23` › `error index.tsx:43` |
 | 2 | index.tsx → App | `StrictMode index.tsx:73` › `ErrorBoundary index.tsx:74` › `ToastProvider index.tsx:75` |
-| 3 | App → useSurfaceRouter | surface + journalTab + journalOpenNonce |
+| 3 | App → useSurfaceRouter | surface + journalTab + journalOpenNonce, `useSurfaceRouter hooks/useSurfaceRouter.ts:54` |
 | 4 | useSurfaceRouter → useSurface | persisted value, key `august_surface_v1 hooks/useSurface.ts:15`, valid set `:16` |
 | 5 | useSurfaceRouter → appHash | `#/journal\|market\|settings\|watch` ⇄ state `parseAppHash hooks/useSurfaceRouter.ts:101`, serialize `serializeAppHash hooks/useSurfaceRouter.ts:159` |
 | 6 | App → Header | band `App.tsx:2467`, guard `surface App.tsx:2428` (surface !== 'agents') |
@@ -409,7 +409,7 @@ card that forgets it was clicked offers a second journal row.
 | 9 | App → AgentsView props | same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) on `AgentsView App.tsx:2566`, props `App.tsx:2604-2697` |
 | 10 | TradeView → TradeChatPanel | the dock, inside Trade `TradeChatPanel components/trade/TradeView.tsx:1115` |
 | 11 | AgentsView.send → bot branch | the selected bot answered at `onSendBotTurn components/agents/AgentsView.tsx:732` |
-| 12 | bot branch → useBotMailbox | `runUserBotTurn` → `runBotTurn` |
+| 12 | bot branch → useBotMailbox | `runUserBotTurn hooks/useBotMailbox.ts:305` → `runBotTurn hooks/useBotMailbox.ts:130` |
 | 13 | AgentsView.send → analysis branch | `onAnalyze components/agents/AgentsView.tsx:722` → `handleRunAnalysisFromChat App.tsx:1691` — the dock's `onRunAnalysis` reaches the SAME wrapper |
 | 14 | dock Full analysis → the run slot | `runFullAnalysis components/trade/TradeChatPanel.tsx:547` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
 | 15 | ChatComposer → chatTurnRunner.send | key `Enter components/trade/panels/ChatComposer.tsx:146` / button `:201` → `services/trade/chatTurnRunner.ts:784` |
@@ -417,22 +417,22 @@ card that forgets it was clicked offers a second journal row.
 | 17 | runSeatTurn → the ONE turn executor | `runToolTurn toolTurn.ts:109` → `streamChatWithDeskTools :133` → `DeskToolsService` → `streamChatRequest` |
 | 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1078` · `:1006` · `:1018` |
 | 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `systemPromptFor components/trade/TradeChatPanel.tsx:453` = the blocks below, assembled at `TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:475` |
-| 20 | every dock turn → chatStore | `mutate` · `beginRun` |
+| 20 | every dock turn → chatStore | `mutate services/trade/chatStore.ts:332` · `beginRun services/trade/chatStore.ts:479` |
 | 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useBotThread hooks/useAnalysisPipeline.ts:1329`, anything else runs the tool turn `:1376`; the mode flag `:544` now only gates the hybrid pull `:860` |
 | 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1334` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:230` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
 | 23 | casual frames → Message.text | `applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:28`; flush precedes the settle write useAnalysisPipeline.ts |
 | 24 | ensemble → the stages that survive | see C — five of the old eight are gone from the call path, and no stage is named in the code, so no line number is claimed |
-| 25 | desk tools → what a caller can reach | `executeDeskTool DeskToolsService.ts` (its allow-list is enforced at execution, not only at offer time) |
-| 26 | panel tools → chart echo | `executePanelTool chatTurnRunner.ts` → `onToolAction` |
+| 25 | desk tools → what a caller can reach | `executeDeskTool services/analysis/DeskToolsService.ts:2159` (its allow-list is enforced at execution, not only at offer time) |
+| 26 | panel tools → chart echo | `executePanelTool services/trade/chatTurnRunner.ts:335` is what echoes the result back into the panel |
 | 27 | automation tick → runAutomation | `runAutomation hooks/useAutomations.ts:403`, forks on `config.botId hooks/useAutomations.ts:423`; the no-bot path takes the pipeline's OWN schedule arm `useAnalysisPipeline.ts:1247` → `runAutomationTurn automationTurn.ts:161`, writing the private list automationMessagesRef useAnalysisPipeline.ts:352, its `notices` (a tool that came back failed, a turn that called nothing, a refused plan) and settling through `onMessage` `useAutomations.ts:531`. Characterized in `tests/automationRouteCharacterization.test.tsx` |
-| 28 | bot routine → injected stream | `botRoutine.ts` ← `useAutomations` (reuses 22's bot arm) |
-| 29 | rooms → groupRounds | `useAgentGroups` → `streamQuickResponse` |
-| 30 | review passes / propose_skill → draft → approval → skill | `draftGates.ts` → `skillApproval` — the post-mortem leg is starved, not deleted (see D) |
+| 28 | bot routine → injected stream | the routine reuses 22's bot arm from `runBotRoutineTurn services/agents/botRoutine.ts:80` |
+| 29 | rooms → groupRounds | `useAgentGroups hooks/useAgentGroups.ts:75` → `streamQuickResponse services/providers/GenericAnalysisService.ts:613` |
+| 30 | review passes / propose_skill → draft → approval → skill | `draftGates.ts` → `approveSkillDraft services/learning/skillApproval.ts:53` — the post-mortem leg is starved, not deleted (see D) |
 | 31 | approved skill → next prompt | `resolveInvokedSkills services/learning/SkillMemoryService.ts:494` — closes into 24's stage 3 |
 | 32 | logged trade → memory + autopilot | `useTradeLogging` → `MemoryService`; `proposedTrade` leaves outcome PENDING so the autopilot watches it |
 | 33 | App messages + dock entries → one thread | `entriesForSession services/trade/chatSessions.ts:531` |
 | 34 | chatStore → localStorage | `saveSessions services/trade/chatSessions.ts:419` → debounced key |
-| 35 | App → profile persistence → engine | `useProfilePersistence` → `dbService` or `SqliteService` |
+| 35 | App → profile persistence → engine | `useProfilePersistence hooks/useProfilePersistence.ts:83` → `dbService` or `SqliteService` |
 | 36 | providers → Preferences, keys encrypted | `ProviderConfigService` |
 | 37 | every provider call → the policy | `GenericProviderService` → `providerRequestPolicy.cjs` |
 | 38 | dev calls → the proxy | `/__provider_proxy` → `vite.config.ts` |
@@ -477,10 +477,10 @@ card that forgets it was clicked offers a second journal row.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 286 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 296 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 286 anchors verified, and the gate
+   the gate's own output: these docs state 296 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -570,7 +570,7 @@ card that forgets it was clicked offers a second journal row.
    records the v1.0.20 TDZ crash as a splash hang. A page that dies before React
    mounts fails both gates, not just one.
 
-10. **The arrow table is 53 rows, and every citation in it resolves — but every one of the 33 rows that cite a file also names the symbol it cites (23 → 28 → 31 → 33 across these passes), so no cited row is left content-unchecked. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently. The other 20 rows name no file at all — storage keys, wire formats, prose — and a wrong number in one of those is still outside this gate's reach, which is why the sentence says 28/53 rather than 53/53.** An
+10. **The arrow table is 53 rows, and every citation in it resolves — and 43 of the 53 rows pair their citation with the symbol that must live on that line (23 → 28 → 31 → 33 → 43 across these passes), so those rows are checked for content, not just for a line that exists. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently. The other 10 rows name no file at all — storage keys, wire formats, prose — and a wrong number in one of those is still outside this gate's reach, which is why the sentence says 43/53 rather than 53/53.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
     resolves all 255 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
