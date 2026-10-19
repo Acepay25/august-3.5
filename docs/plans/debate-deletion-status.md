@@ -1974,6 +1974,22 @@ widened tail rule tried today — that last arm-set is parked in
 widening newly bound are dated ledger claims whose symbols this pass deleted, and the
 gate cannot tell a historical sentence from a live claim.
 
+**A second hole, found while widening: the gate has never been able to see a citation to a
+deleted file.** `collect()` resolves each qualified path and `continue`s when nothing matches, so
+`rep.missingFile` could only fire for a file that resolved at collect time and vanished mid-run —
+i.e. never. Implemented the detection and ran it (parked as a clean-applying patch,
+`.probe-artifacts/deleted-file-citations.patch`, 72 lines): **3 hits in this ledger and 12 in the
+flow html — and all 12 html hits are a scanner defect, not a doc defect.** `strip()` deletes html
+tags without leaving a separator, so a `<b>App</b>` running into `<i>index.tsx:73-79` becomes the
+token `Appindex.tsx:73-79`; `threadchatSessions.ts:531` and `promptchatSurfaceTurn.ts:147` are the
+same artifact. The consequence is worse than the false positives: those 12 citations fail
+`resolve()` today, so they have never been checked for resolution, non-blank or comment-line at all.
+Work order: make `strip()` emit a space per tag and confirm the anchor population does not move;
+then re-apply the detector and expect ~15 real findings; then retire the ledger's historical line
+numbers the way the approval-inbox census row was retired today. The detector is reverted rather
+than shipped because a ceiling-0 rule that cries wolf 12 times gets disbelieved, and a red gate
+blocks every other pass.
+
 ## Resume facts, 2026-10-19 end of session — read this before exploring anything
 
 **Two questions, one word each. Everything else in the backlog is closed.**
