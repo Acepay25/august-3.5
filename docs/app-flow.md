@@ -505,8 +505,8 @@ card that forgets it was clicked offers a second journal row.
    A fourth rule measures `AGENTS.md` itself, because that file is the first thing an agent
    reads and its counts were still hand-typed. Three sentences are bound. The smoke-test
    figure is counted from the Playwright file it describes (5, from the test declarations in
-   `e2e/smoke.spec.ts`). The vitest census line must be internally consistent — 4664 pass +
-   0 skip = 4664 tests, 471 passing files + 0 skipped files = 471 files — and its file count
+   `e2e/smoke.spec.ts`). The vitest census line must be internally consistent — 4665 pass +
+   0 skip = 4665 tests, 471 passing files + 0 skipped files = 471 files — and its file count
    must equal what `git ls-files tests` actually lists (471). And every step named by the
    `comm -13` asymmetry — `check-flow-doc-anchors`, `skill-approval-probe`, `test`,
    `typecheck`, and `installer-smoke` on the other side — must appear as a WHOLE token in the
@@ -516,7 +516,7 @@ card that forgets it was clicked offers a second journal row.
    itself is floored, so deleting an arm from the list fails the build rather than passing
    silently. An absent recipe paragraph, an absent census sentence or an empty git listing
    is itself a finding, so a doc edit cannot escape the census by making the pattern
-   unmatchable. What this rule cannot check is the pass/skip split itself: 4664
+   unmatchable. What this rule cannot check is the pass/skip split itself: 4665
    and 0 come from vitest's own summary block, and the gate only proves they agree with each
    other and with git's file count — so a suite that changes size still needs `npm run test`
    re-run and the line restated by hand.

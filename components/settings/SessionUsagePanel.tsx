@@ -189,7 +189,7 @@ export const HarnessControls: React.FC = () => {
                     Studies finished conversations, bot closed trades, and the whole
                     chart, then writes drafts into the Approvals inbox. These paths can
                     cost provider calls, so they are off until you turn them on. Skills
-                    you save yourself, manually requested post-mortems, and imports are
+                    you save yourself, drafts you request by hand, and imports are
                     unaffected — this switch only stops drafts the app was not asked for.
                 </span>
                 <span className="mt-1 flex items-center gap-2">
