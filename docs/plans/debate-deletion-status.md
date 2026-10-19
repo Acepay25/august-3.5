@@ -2169,7 +2169,7 @@ the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:69`; 
 progress panel now mints two rows (`market-data`, `analysis`), completed by
 `settleOpenSteps()` in the run's `finally` after the catch has marked any failure.
 
-**Push state:** 97 unpushed commits at this tip (measured as `git rev-list --count
+**Push state:** 98 unpushed commits at this tip (measured as `git rev-list --count
 origin/main..HEAD`, which is the only honest way to state it — the count grows with
 every commit, so re-measure rather than trust this number), nothing pushed this
 session; the earlier authorization covered only the first 16.
@@ -2313,12 +2313,16 @@ which prints exactly five paths — `AGENTS.md`, `docs/app-flow.md`, `docs/app-f
 So: re-run here and green were `check-flow-doc-anchors` (281 anchors, 0 unattributed, 0 comment-line,
 0 symbol misses, 0 census disagreements, 0 of 6 AGENTS arms failing, arrow coverage 28/53 with 44 pairs
 and 0 control failures), `npm run lint` (0 errors / 681 warnings under the ratchet) and
-`npm run typecheck:scripts`. Carried over are `vitest`, `vite build`, `boot-probe`, `render-probe`,
-`e2e` and `skill-approval-probe`, last executed at `8e4808a1` — carried **with the evidence named**,
-not because a previous paragraph said so: no byte of source, test, workflow or asset differs between
-that tip and this one, so the bundle the probes passed on is the bundle this tip builds, and the
-census figures `AGENTS.md` states (4741 tests in 479 files) are still the ones the gate verifies
-against `git ls-files`.
+`npm run typecheck:scripts`. Then the three cheap ones were re-executed at HEAD anyway rather
+than left on inference: `npm run test` reads `Test Files 478 passed | 1 skipped (479)` and
+`Tests 4730 passed | 11 skipped (4741)` — which is the census `AGENTS.md` states, confirmed by the
+run and not only by arithmetic — `npm run typecheck` exits clean, and `vite build` succeeds in
+10.53s. Carried over are only the four browser gates (`boot-probe`, `render-probe`, `e2e`,
+`skill-approval-probe`), last executed at `8e4808a1` — carried **with the evidence named**, not
+because a previous paragraph said so: no byte of source, test, workflow or asset differs between
+that tip and this one, so the bundle they passed on is the bundle this tip builds. The `[MemoryFiles]
+notebook write FAILED` lines inside the vitest output are the suite's own injected quota faults —
+the write-failure surfacing is what those tests are testing.
 
 This is the same rule that revoked a carry-over earlier in this session — a carried claim dies at the
 first source edit — stated now in the direction that matters: the diff is what makes it survivable, and
