@@ -83,7 +83,7 @@ The goal is one tool-capable turn in **both** chat homes. Facts, so the next
 session does not re-derive them:
 
 - `streamChatWithDeskTools` is an **async generator** returning text deltas
-  (`services/analysis/DeskToolsService.ts:3764`), and **every option is optional**
+  (`services/analysis/DeskToolsService.ts:3783`), and **every option is optional**
   (`StreamWithDeskToolsOptions`). It self-gates on
   `getHarnessSettings().deskToolsEnabled`, and `withDeskToolsSystemPrompt` will not
   double-inject the DESK TOOLS block if the system message already carries it.
@@ -118,11 +118,11 @@ focus on tool calling, skills, and memory."*
 So the target is NOT "keep the branch and shrink it to one seat". It is:
 
 - **No keyword routing at all.** `isChartAnalysisRequested`
-  (`useAnalysisPipeline.ts:1481`) tests the prompt text for ANALYZE / CHART /
+  (`useAnalysisPipeline.ts:1481 (comment)`) tests the prompt text for ANALYZE / CHART /
   SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
-  `streamChatWithDeskTools` (`DeskToolsService.ts:3764`), which the dock's solo
+  `streamChatWithDeskTools` (`DeskToolsService.ts:3783`), which the dock's solo
   seat already runs at `chatTurnRunner.ts:641`.
 - **The verdict and the journal row become tools the model chooses to call**, not
   a pipeline stage it has to earn. What already exists: `present_trade`
@@ -744,7 +744,7 @@ watching the suite stay green:
    now stripped before matching, so a consumer must use the name in its body. That second
    hole briefly accused `harnessNoteLegend` of being orphaned — a false red from my own
    stripper closing an import run on a line ending in a backtick; the real call is
-   `DeskToolsService.ts:3116`. The control that caught it is the new
+   `DeskToolsService.ts:3123`. The control that caught it is the new
    `the reachability walk separates live from dead` test.
 
 Proof of load-bearing: producer reverted → `withDetectedTradeType` FAILS; restored →
@@ -1757,7 +1757,7 @@ when it was ruled on.
 **The panel is reachable and working.** `components/trade/TradeChatPanel.tsx:937` renders a
 **"New panel · up to 5 models"** control, and a local `addSession(kind)` creates the session;
 `chatTurnRunner.ts:989` builds the seats, refuses below two usable seats (`:990`), opens a
-`createDebateMailbox` (`:1006`), plans each turn with `planPanelTurn` (`:1018`), gives every
+`createDebateMailbox` (`:1010`), plans each turn with `planPanelTurn` (`:1022`), gives every
 seat its own mandate ("You are \"X\" on a 5-seat chart panel", `:1058`), streams each seat into
 its own bubble, and parses `@Name` mentions so a seat can pull another in mid-turn (`:1118`).
 The picker's own copy says it plainly: "pick up to 5 models or agents; **they answer together
@@ -2271,7 +2271,7 @@ instead of implying the table is checked.
 **Then 5 became 14.** Nine more rows were rewritten into the bindable shape, each only after its symbol was
 found on the line it cites: the `index.tsx` mount chain (StrictMode :73, ErrorBoundary :74, ToastProvider :75 —
 the old `73-79` range proved nothing), `august_surface_v1`, `onSendBotTurn`, `onAnalyze`, `handleRunAnalysisFromChat`,
-`runFullAnalysis`, `runSeatTurn` at both :593 and :1078, `applyCasualStreamUpdate`, `notify`. Binding found another real
+`runFullAnalysis`, `runSeatTurn` at both :593 and :1082, `applyCasualStreamUpdate`, `notify`. Binding found another real
 defect: row 13 cited AgentsView.tsx:725 for `onAnalyze`, and the await is at **:722** (:725 is the `finally` of that
 same try) — fixed in both flow docs. Coverage now prints 14/53 with 22 pairs and a floor of 14, and 39 rows remain
 line-resolved only.
@@ -2343,7 +2343,7 @@ where relevant), not re-read:
 | claim | recipe | measured |
 |---|---|---|
 | `beginPromptLane` has zero callers | `grep -rn beginPromptLane hooks services components App.tsx utils constants` | 2 hits: the import line and its own `export const` — no call site |
-| the prompt lane still settles | `grep -rn endPromptLane …` | 3: import, the settle call `settleOpenSteps useAnalysisPipeline.ts:1479` inside the finally, the definition |
+| the prompt lane still settles | `grep -rn endPromptLane …` | 3: import, the settle call `settleOpenSteps useAnalysisPipeline.ts:1482` inside the finally, the definition |
 | `savedAnalyses` was deleted outright (stage 21) | `grep -rl savedAnalyses --include=*.ts --include=*.tsx . \| wc -l` | **0 files** — field, state, SQLite read/write, backup validation all gone; the surviving mentions are in the untracked `docs/analysis/` census, where every count is already 0 |
 | `NavRail` is imported and never rendered | `grep -rn "<NavRail" …` | 1 hit, and it is the generic `<NavRailProps>` on its own definition line — no JSX use anywhere in production |
 | post-mortems are gone | `grep -rn usePostMortem conductPostMortem …` | 1, a comment in `services/learning/SkillMemoryService.ts`; 0 for `conductPostMortem` |

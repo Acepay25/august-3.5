@@ -1,10 +1,11 @@
 # August Trading
 
-August Trading is a **local-first AI trading harness**: a React + TypeScript desktop/web
-app where an ensemble of AI analysts debates a trade setup under an explicit
-harness contract, a moderator issues the binding verdict, and every outcome feeds
-a self-auditing memory loop (skills + doctrine) that is re-verified against the
-trade journal.
+August Trading is a **local-first AI trading operator**: a React + TypeScript desktop/web
+app that does the trader's work — prep, scan, plan, manage, journal, review, improve —
+around a single AI seat that reasons over your notebook (skills + doctrine) and live
+market data through a bounded set of tools. **The agent proposes; deterministic code
+checks; the trader decides.** Closed trades feed a self-auditing memory loop that is
+re-verified against the trade journal; settlement is human-confirmed today.
 
 Code lives at the repository root (no `src/` directory).
 
@@ -12,8 +13,8 @@ Code lives at the repository root (no `src/` directory).
 
 August Trading **places no trades**. It has no exchange account access, no API
 trading key, and no order-placement code path: every Binance call is a public
-market-data endpoint. It reads, analyses, debates, records and journals — a
-verdict is the model's reading of a chart, never an instruction to an exchange.
+market-data endpoint. It reads, analyses, proposes, records and journals — a plan
+is the model's reading of a chart, never an instruction to an exchange.
 It is not financial advice.
 
 Your journal, notebooks and drawings stay on your machine. When you send a
@@ -23,28 +24,30 @@ at is sent to **the AI provider you configured**. See [PRIVACY.md](PRIVACY.md).
 ## How it works
 
 ```
-user setup → Gate Scan (confidence cap / family pre-filter)
-           → analyst ensemble (parallel, per-seat temperature sampling)
-           → real debate (speculative rebuttal pump, devil's advocate rotation,
-             sealed conviction auction, clarification cycles)
-           → moderator verdict (+ seat-trust calibration block,
-             uncited verdicts forced Neutral by code)
-           → zod-validated plan → Monte Carlo → journal
-           → post-mortem → skill evidence → auto A/B skill evals → doctrine
+trader sends → surface prompt (mandate + skills index + strategies + profile memory)
+             → tool turn: the seat calls bounded desk tools (indicators, screener,
+               market packet, chart view, journal, notebook recall, web search)
+             → present_trade → zod-validated plan → deterministic gate
+                (confidence cap, pattern memory, regime, volume)
+             → the proposal card → THE TRADER DECIDES → R:R clamped at log time → journal
+             → outcome engine detects the resolution; the trader confirms it
+             → skill evidence → auto A/B skill evals → doctrine
 ```
 
 - **Harness contract** (`constants/prompts/harnessContract.ts`) is the single
   source of truth for output/plan rules; prompts compose through
-  `utils/composePrompt.ts` so the contract appears exactly once.
+  `utils/composePrompt.ts` so the contract appears exactly once. It is composed
+  on the analysis path and on every desk-tool chat turn, so the clause that
+  explains a harness note reaches the surfaces that emit one.
 - **Memory** is a trader notebook (`services/learning/MemoryRetrievalService`):
   one narrative voice (doctrine), everything else ranked data under hard
   per-stage char budgets; skills escalate from candidate → confirmed → retired
   on journal evidence with time/regime decay; injection telemetry records what
-  actually reached prompts.
-- **Desk tools** (`services/analysis/DeskToolsService.ts`) give debate seats +
-  moderator bounded live tools (derivatives, order book, liquidations, BTC
-  context, session, price snapshot, web search) plus `recall` — pull-based
-  search over their own notebook.
+  the retrieval layer selected for each prompt.
+- **Desk tools** (`services/analysis/DeskToolsService.ts`) give the seat bounded
+  live tools (derivatives, order book, liquidations, BTC context, session,
+  price snapshot, indicators, screener, Monte Carlo, web search) plus `recall` —
+  pull-based search over the trader's own notebook.
 
 ## Providers
 
@@ -75,16 +78,18 @@ installer, and only then uploads the signed bytes with `gh release upload`.
 | Path | Contents |
 |---|---|
 | `App.tsx` | main application component |
-| `components/` | UI, one flat dir per domain (`chat/`, `analysis/`, `dashboards/`, …) |
-| `hooks/` | `useAnalysisPipeline` (the send/debate engine) + supporting hooks |
+| `components/` | UI, one directory per domain (`chat/`, `analysis/`, `dashboards/`, `journal/`, `learn/`, `trade/`, …) |
+| `hooks/` | `useAnalysisPipeline` (the send path) + supporting hooks |
 | `services/` | providers, learning (memory/skills), backtesting, infrastructure |
 | `constants/prompts/` | all model-facing prompts; `promptRegistry.ts` makes them user-editable |
 | `schemas/` | zod boundary schemas for AI JSON |
-| `tests/` | Vitest suites (debate flow, financial math, schema coercion, harness memory) |
+| `tests/` | Vitest suites (financial math, schema coercion, harness memory, tool guards) |
 | `electron/` | desktop shell (safeStorage, auto-update) |
 
 ## Docs
 
+- **[`docs/plan/`](docs/plan/README.md) — the plan**: the working list of what is still not
+  implemented, the execution order with gates, and the evidence behind every claim
 - `AGENTS.md` — conventions for coding agents working in this repo
 - `changelog.md` — plain-English log of change rounds (newest first)
 - `docs/ui-doctrine.md` — the rules the interface actually obeys, as a checklist

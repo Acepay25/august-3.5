@@ -65,6 +65,10 @@ export const runGateScan = async (
     if (signal?.aborted) return unavailable('stopped before the gate ran');
     try {
         const input = await withTimeout(fetchGateInputData(proposal.symbol, tradeHistory), GATE_FETCH_TIMEOUT_MS);
+        // A Stop can land while the fetch is in flight. The fetch itself has no
+        // signal (it goes through the shared market service), so the result is
+        // discarded here: a cancelled turn must not settle an evaluated stamp.
+        if (signal?.aborted) return unavailable('stopped before the gate ran');
         if (!input) return unavailable('market data fetch returned nothing');
         const out = runProgrammaticGate(input);
         return {

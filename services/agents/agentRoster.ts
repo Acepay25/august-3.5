@@ -86,6 +86,12 @@ const write = <T,>(prefix: string, items: T[]): void => {
     notify();
 };
 
+/** Raw localStorage is an unvalidated boundary: a corrupted or foreign backup
+ *  can hold null/array rows. Both roster reads drop them rather than throwing
+ *  from a useState initializer and taking the Agents surface down. */
+const isStoredRow = (row: unknown): row is Record<string, unknown> =>
+    !!row && typeof row === 'object' && !Array.isArray(row);
+
 export const getBots = (): AgentBot[] => {
     // Migration (owner ruling, 2026-10-19): roles and per-role tool presets are
     // gone. Stored rows are rewritten the first time they are read, so a profile
@@ -93,11 +99,7 @@ export const getBots = (): AgentBot[] => {
     const raw = read<Record<string, unknown>>(BOTS_KEY);
     let changed = false;
     const bots = raw.flatMap((row) => {
-        // This boundary has no schema: a corrupted or foreign backup can hold
-        // null/array rows, and `'role' in row` threw inside a useState
-        // initializer — taking the whole agents surface down with it. Drop the
-        // unusable row and rewrite the blob so the next read is clean.
-        if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        if (!isStoredRow(row) || typeof row.id !== 'string') {
             changed = true;
             return [];
         }
@@ -111,7 +113,27 @@ export const getBots = (): AgentBot[] => {
     if (changed) write(BOTS_KEY, bots);
     return bots;
 };
-export const getGroups = (): AgentGroup[] => read<AgentGroup>(GROUPS_KEY);
+
+export const getGroups = (): AgentGroup[] => {
+    const raw = read<Record<string, unknown>>(GROUPS_KEY);
+    let changed = false;
+    const groups = raw.flatMap((row) => {
+        // `AgentsView` dereferences `g.memberIds.length` while rendering; a
+        // missing array is the group-side twin of the null-bot crash.
+        if (!isStoredRow(row) || typeof row.id !== 'string' || !Array.isArray(row.memberIds)) {
+            changed = true;
+            return [];
+        }
+        const memberIds = row.memberIds.filter((m): m is string => typeof m === 'string');
+        if (memberIds.length !== row.memberIds.length) {
+            changed = true;
+            return [{ ...row, memberIds } as unknown as AgentGroup];
+        }
+        return [row as unknown as AgentGroup];
+    });
+    if (changed) write(GROUPS_KEY, groups);
+    return groups;
+};
 
 export const saveBot = (bot: AgentBot): void => write(BOTS_KEY, [...getBots(), bot]);
 export const updateBot = (id: string, patch: Partial<Omit<AgentBot, 'id'>>): void =>

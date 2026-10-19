@@ -312,16 +312,10 @@ export interface SkillMeta {
      *  broken label. */
     originBotId?: string;
     originBotName?: string;
-    /** Invocation control (Agent Skills frontmatter port): which debate
-     *  audience may load this skill. Default 'all'. */
+    /** Invocation control (Agent Skills frontmatter port): which audience may
+     *  load this skill. Default 'all'. The moderator audience no longer runs,
+     *  so 'moderator' survives only on legacy files. */
     audience?: 'analyst' | 'moderator' | 'all';
-    /** Lens scope (Phase 3): which analyst seat this skill is meant for.
-     *  Default 'all' (any seat may load it). Used to filter skills per seat
-     *  at retrieval so a risk-scoped skill does not bleed into the macro
-     *  lens. The lens filter is advisory by default: when the calling code
-     *  used to pass `activeLens`; the role system that supplied it is gone.
-     *  from non-risk seat prompts. */
-    lensScope?: 'macro' | 'technical' | 'risk' | 'all';
     /** Latest automated A/B verdict (SkillEvalService). 'hurts' demotes a
      *  confirmed skill back to candidate on the next evidence pass. */
     evalVerdict?: 'helps' | 'mixed' | 'hurts' | 'inconclusive';
@@ -420,7 +414,7 @@ export const listSkillSlugs = (): string[] =>
  * So the file is written as two explicit sections behind this marker: a
  * PORTABLE face above it (spec-shaped: name, description, and the keys that
  * describe the procedure's behaviour — kind/coin/direction/family/regime/
- * ifCondition/thenAction/predicate/timeframe/source/audience/lensScope), and
+ * ifCondition/thenAction/predicate/timeframe/source/audience), and
  * a LEDGER face below it (every outcome and lifecycle key). The parser reads
  * straight through the marker, so NOTHING is rewritten and no migration is
  * needed: existing files parse exactly as before, and a spec-only file with
@@ -661,10 +655,6 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         audience: (() => {
             const a = pick('audience');
             return a === 'analyst' || a === 'moderator' ? a : 'all';
-        })(),
-        lensScope: (() => {
-            const s = (pick('lensScope') || '').toLowerCase();
-            return s === 'macro' || s === 'technical' || s === 'risk' ? s : 'all';
         })(),
         evalVerdict: (() => {
             const v = (pick('evalVerdict') || '').toLowerCase();
@@ -1085,7 +1075,6 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.sizing ? [`sizing: ${yamlString(meta.sizing.replace(/\n/g, ' '))}`] : []),
         ...(meta.prior ? [`prior: ${yamlString(meta.prior)}`] : []),
         ...(meta.audience && meta.audience !== 'all' ? [`audience: ${yamlString(meta.audience)}`] : []),
-        ...(meta.lensScope && meta.lensScope !== 'all' ? [`lensScope: ${yamlString(meta.lensScope)}`] : []),
         // ── provenance of the procedure's acceptance (portable: WHO said yes) ──
         ...(meta.approvedBy ? [`approvedBy: ${yamlString(meta.approvedBy)}`] : []),
         ...(meta.approvedAt ? [`approvedAt: ${yamlString(meta.approvedAt)}`] : []),
@@ -3483,13 +3472,6 @@ const countClosedTrades = (trades: LoggedTrade[]): number =>
  * MIN_SAMPLE_FOR_VETO counted trades of evidence (zero-evidence candidates
  * never reach the model, so they must not reach the trade either).
  */
-/** Map a legacy `ModeratorLens` label to its lensScope string. Stored skill
- *  metadata is still parsed for readability; no seat filters on it any more. */
-
-/** A skill is in-scope for an active lens when its lensScope is 'all' or
- *  matches the active lens. When no active lens is provided, the filter
- *  is permissive (legacy call sites that don't pass an active lens should
- *  keep seeing the same skills as before — the lens filter is opt-in). */
 
 export const applyNotebookSkillsToAnalysis = <T extends {
     coinName?: string;

@@ -3,12 +3,40 @@
 **Date:** 2026-10-19
 **Subject:** the `august-trading` repository at `C:\Dev\august-3.5`
 **Nature:** READ-ONLY. Nothing in the repository was modified, deleted, moved or renamed. The only
-files created are the six reports in this folder.
+files created are the seven reports in this folder.
 
 ---
 
 ## 0. Step 0 — the exact commit, the tree state, and the tools
 
+
+---
+
+## 0.0 The baseline, stated once
+
+**This audit measured against one commit. The repository has moved on. Both facts matter, so both
+are stated here, once, and every other section refers back to this one.**
+
+| | |
+|---|---|
+| **The audit baseline** | **`6a41a9f7`** — the commit every finding in Parts A–F was measured at. Line numbers, sizes and store shapes are all relative to this commit. |
+| **The current HEAD** | **`56639b4b`** — three commits later: the analyst-role/lens deletion (`6e1e09bb`, `69c4aa33`) and the un-tracking of the scratch directory (`56639b4b`). |
+| **The current working tree** | **60 changed paths** — 30 staged and 30 unstaged. 24 of them are this audit's own work (the 18 deleted plan documents, the plan's new home, the 16 repointed comments, `AGENTS.md`, `README.md`, `THIRD_PARTY_NOTICES.md`, `index.css`); the rest are the other session's in-flight work: the moderator picker's removal (`hooks/useModeratorPick.ts`, `services/infrastructure/moderatorPick.ts`, `components/settings/tabs/ModelsTab.tsx`, `components/settings/SettingsMenu.tsx`), the conversation-housekeeping and preferences changes, `scripts/render-probe.cjs`, and the flow docs. |
+| **The rule** | A finding that depends on a file in that 60-path set is **worktree-specific** and is labelled as such. A finding that does not is **stable across all three states**, and was re-verified at `56639b4b`. |
+
+**What changed between the baseline and HEAD that could move a finding:**
+
+| change | commits | effect on this audit |
+|---|---|---|
+| the analyst-role and Lens system was deleted, with a stored-profile migration | `6e1e09bb`, `69c4aa33` | **F-14 is resolved.** The Lens prompts, the seat personas and the three `AnalystRole` members are gone or reduced to the lens vocabulary. The HOLD rows in Report 4 §10 are decidable. **No headline finding is affected** — F-01, F-10, F-11, F-13 and F-01b all re-verified as **standing** at `56639b4b`. |
+| the `docs/analysis/` directory was un-tracked as scratch | `56639b4b` | **this audit's own output moved out of it**, to `docs/plan/` (§0.9b). |
+| the moderator picker was removed from the worktree | uncommitted | **one cleanup row is superseded** (Report 4 §3.4) — the field is being deleted, not relabelled. |
+
+**The re-anchor instruction, corrected.** Where Part E says *"re-anchor to the new HEAD and re-run
+the four sweeps"*, the new HEAD is **`56639b4b`** — and, because the working tree carries 30
+unstaged changes on top, the sweep should be re-run against **the worktree after the in-flight
+work lands**, not against `56639b4b` alone. The four sweeps are: the import graph, the export
+sweep, the localStorage/Preferences census, and the dead-path comment scan.
 ### 0.1 The commit
 
 | item | value |
@@ -104,16 +132,16 @@ repository (two suites shell out to `git ls-files`) and are not real failures �
 **No number in these reports is invented.** Where a number is an estimate it says so and names the
 method. Where a prior report's number is quoted, the prior report is named and dated.
 
-### 0.7 The six reports
+### 0.7 The seven reports
 
 | file | contents | maps to |
 |---|---|---|
-| `2026-10-19-00-index-and-method.md` | this file | Step 0 |
-| `2026-10-19-01-system-and-data-flow.md` | Report 1 — architecture, the full persisted-store inventory, the prompt inventory, the tool surface, security, reliability, performance, UX, quality gates | Part A |
-| `2026-10-19-02-enhancements.md` | Report 2 — enhancements and improvements, ranked, each with roadmap status | Part B |
-| `2026-10-19-03-new-features.md` | Report 3 — new features by trader workflow, ranked, each with roadmap status | Part C |
-| `2026-10-19-04-cleanup-manifest.md` | Report 4 — the cleanup manifest, the batches, the docs audit table | Part D |
-| `2026-10-19-05-ordering-and-open-questions.md` | the interleaved order, go/no-go per batch, open questions only the owner can answer, and the coverage statement | Output items 6–8 |
+| `audit/2026-10-19-00-index-and-method.md` | this file | Step 0 |
+| `audit/2026-10-19-01-system-and-data-flow.md` | Report 1 — architecture, the full persisted-store inventory, the prompt inventory, the tool surface, security, reliability, performance, UX, quality gates | Part A |
+| `audit/2026-10-19-02-enhancements.md` | Report 2 — enhancements and improvements, ranked, each with roadmap status | Part B |
+| `audit/2026-10-19-03-new-features.md` | Report 3 — new features by trader workflow, ranked, each with roadmap status | Part C |
+| `audit/2026-10-19-04-cleanup-manifest.md` | Report 4 — the cleanup manifest, the batches, the docs audit table | Part D |
+| `audit/2026-10-19-05-ordering-and-open-questions.md` | the interleaved order, go/no-go per batch, open questions only the owner can answer, and the coverage statement | Output items 6–8 |
 
 ### 0.8 A note on the previous audit — and on `docs/analysis/`
 
@@ -127,7 +155,7 @@ a `docs/analysis/` tree with `00-REPORT.md`, `01-architecture.md`, `02-trading-l
 `data/` folder of **1,176 files** (binary `_blobs/*.bin`, a `__pycache__/*.pyc`, and a 570 KB
 `ls_aggregates.json`).
 
-Those commits are **not reachable from any branch** (`git merge-base --is-ancestor 508b691a main`
+Those commits are **not reachable from `main`** (`git merge-base --is-ancestor 508b691a main` exits 1). **They ARE reachable from a branch: `archive/prior-audit-2026-10-18`, created 2026-10-20** (`git branch archive/prior-audit-2026-10-18 508b691a`). **That branch is what makes them gc-safe** — a branch reference keeps the objects reachable, so `git gc` can no longer prune them. It holds the **fullest** recovery, including `06-independent-review-2026-10-18.md`, which the other three do not.
 exits 1; `git branch -a --contains 508b691a` is empty). They survive only because the tool that
 made them has not garbage-collected yet. **A `git gc --prune=now` on the owner's machine would
 delete the previous audit entirely.**
@@ -145,7 +173,7 @@ Three consequences, and they are the reason this folder's structure matters:
    reports in this folder do not break the lint ratchet**, and it is load-bearing.
 3. The previous audit committed a Python extraction pipeline's **scratch data** (1,176 files,
    binary blobs, a `.pyc`) into git. That is the anti-pattern this audit deliberately repeats
-   nowhere: **these six reports are markdown only, and every measurement artefact lives outside
+   nowhere: **these seven reports are markdown only, and every measurement artefact lives outside
    the repository** at `%TEMP%\august-audit\`.
 
 ---
@@ -219,6 +247,29 @@ bigger than `App.tsx`.
 
 ---
 
+## 0.9b What changed after this audit was filed — the plan-document cleanup
+
+**Executed 2026-10-19, on the owner's instruction:** *"scan all md plan in docs and find what still
+not implemented and merge it to the full audit, if its implemented and stale delete it."*
+
+- **18 plan documents were deleted** (all of `docs/plans/` except the dated history ledger, plus
+  `docs/desk/README.md` and the two root plan files). Every deletion is a tracked `git rm` — one
+  `git revert` away.
+- **Their still-open items were harvested into `open-items.md`** — **121** open
+  items (O-01…O-129) + **24** owner decisions (D-01…D-24), each with the `file:line` that proves
+  it is open at HEAD, plus the **5 prior-audit rows that did not survive re-verification** and the
+  **11 rows this audit's own coverage passes added** (O-111…O-129).
+- **17 code/test comments** that named a deleted document were repointed at the register.
+- **`docs/plans/debate-deletion-status.md` was KEPT** because
+  `scripts/check-flow-doc-anchors.cjs:44` scans it — deleting it breaks a gate.
+- **The 7 committed PNGs were kept** — they are the only committed screenshots of this app.
+- Gates after the change: **`typecheck` exit 0 · `lint:loose` 677 warnings / 0 errors · `test`
+  471 files, 4,660 tests, all pass, exit 0** · **`check-flow-doc-anchors` exit 0, 296 anchors
+  verified, 0 unattributed** — and its agents-census arm reports **"0 AGENTS.md claim(s) disagree
+  with the tree"**.
+- **The 18 deletions are STAGED, not committed.** They are one `git revert` from being undone.
+
+**Full record: Report 4 §14.**
 ## 0.10 One-paragraph orientation for a reader who has not seen the code
 
 August Trading is a **single-window Electron/React desktop app** (plus a Capacitor Android shell
@@ -313,12 +364,12 @@ among its 87 changed paths.
 
 | file | git state | why |
 |---|---|---|
-| `2026-10-19-00-index-and-method.md` | **` M` (modified)** | committed at its pre-addendum length; the §0.11 and §0.12 addenda are uncommitted |
-| `2026-10-19-02-enhancements.md` | **` M` (modified)** | committed at its pre-addendum length; the §3B addendum is uncommitted |
-| `2026-10-19-04-cleanup-manifest.md` | **` M` (modified)** | committed at its pre-addendum length; the §12 addendum is uncommitted |
-| `2026-10-19-01-system-and-data-flow.md` | clean | committed, unchanged since |
-| `2026-10-19-03-new-features.md` | clean | committed, unchanged since |
-| `2026-10-19-05-ordering-and-open-questions.md` | clean | committed, unchanged since |
+| `audit/2026-10-19-00-index-and-method.md` | **` M` (modified)** | committed at its pre-addendum length; the §0.11 and §0.12 addenda are uncommitted |
+| `audit/2026-10-19-02-enhancements.md` | **` M` (modified)** | committed at its pre-addendum length; the §3B addendum is uncommitted |
+| `audit/2026-10-19-04-cleanup-manifest.md` | **` M` (modified)** | committed at its pre-addendum length; the §12 addendum is uncommitted |
+| `audit/2026-10-19-01-system-and-data-flow.md` | clean | committed, unchanged since |
+| `audit/2026-10-19-03-new-features.md` | clean | committed, unchanged since |
+| `audit/2026-10-19-05-ordering-and-open-questions.md` | clean | committed, unchanged since |
 
 **What this means for you:**
 

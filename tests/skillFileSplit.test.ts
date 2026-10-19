@@ -58,7 +58,6 @@ const richMeta = (): SkillMeta => ({
     approvedBy: 'human',
     approvedAt: '2026-08-01T00:00:00.000Z',
     audience: 'analyst',
-    lensScope: 'risk',
     evalVerdict: 'helps',
     evalDetail: '3/3',
     lastEvalAt: '2026-09-01T00:00:00.000Z',
@@ -87,7 +86,6 @@ describe('skill file splits into a portable face and a ledger face', () => {
         expect(back!.recentOutcomes).toBe('LLWLWLLLWWL');
         expect(back!.approvedBy).toBe('human');
         expect(back!.audience).toBe('analyst');
-        expect(back!.lensScope).toBe('risk');
         expect(back!.evalVerdict).toBe('helps');
         expect(back!.description).toBe(meta.description);
         // `meta.body` is the raw body as authored (the `# Title` line belongs

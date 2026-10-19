@@ -48,6 +48,10 @@ const ARTIFACT_TTL_MS = 30 * 60 * 1000;
 export interface ToolArtifact {
     id: string;
     tool: string;
+    /** The turn that produced it. Reads and clears are scoped to this token so
+     *  two concurrent turns (dock + Chat) cannot delete or page each other's
+     *  payloads. */
+    owner: string;
     /** The FULL pre-budget payload, exactly as the desk produced it. */
     full: string;
     totalChars: number;
@@ -80,6 +84,7 @@ export const storeToolArtifact = (
     full: string,
     keptChars: number,
     now = Date.now(),
+    owner = '',
 ): string | null => {
     if (isReadBackTool(name)) return null;
     if (!full || full.length > MAX_ARTIFACT_CHARS) return null;
@@ -95,7 +100,7 @@ export const storeToolArtifact = (
     sequence += 1;
     const id = idFor(sequence);
     artifacts.set(id, {
-        id, tool: name, full, totalChars: full.length, keptChars, savedAt: now, reads: 0,
+        id, tool: name, owner, full, totalChars: full.length, keptChars, savedAt: now, reads: 0,
     });
     return id;
 };
@@ -135,15 +140,19 @@ export const readToolArtifact = (
     offset = 0,
     limit = 2000,
     now = Date.now(),
+    owner?: string,
 ): ArtifactPage | ArtifactMiss => {
     sweepExpired(now);
     const artifact = artifacts.get((id || '').trim());
-    if (!artifact) {
+    // An id from an earlier turn is not this turn's context, even while the
+    // bytes are still inside the bounded window. `owner` is omitted by tests
+    // and by callers that predate the token.
+    if (!artifact || (owner !== undefined && artifact.owner !== owner)) {
         return {
             ok: false,
             content: dataUnavailable(
                 'read_tool_output',
-                `no stored tool result with id "${id}"`,
+                `no stored tool result with id "${id}" in this run`,
                 'It belongs to an earlier or expired run — it was never in this context. Do not retry this id; answer from the results you have',
             ),
         };
@@ -172,8 +181,15 @@ export const readToolArtifact = (
 /** How much of a payload is currently addressable, for diagnostics/tests. */
 export const artifactCount = (): number => artifacts.size;
 
-/** Drop everything. Called from `clearDeskToolCache`, i.e. at every tool turn,
- *  so an id can never resolve across runs. */
-export const clearToolArtifacts = (): void => {
-    artifacts.clear();
+/** Drop one turn's artifacts, or everything when no owner is named (tests and
+ *  the diagnostics surface). A caller must pass its own token: clearing all at
+ *  every turn start deleted a concurrent turn's live payloads. */
+export const clearToolArtifacts = (owner?: string): void => {
+    if (owner === undefined) {
+        artifacts.clear();
+        return;
+    }
+    for (const [id, a] of artifacts) {
+        if (a.owner === owner) artifacts.delete(id);
+    }
 };

@@ -342,6 +342,10 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
         usage: out.usage,
         usageCalls: out.usageCalls,
         answer: out.text,
+        rates: {
+            inputUsdPer1k: req.config.inputUsdPer1k,
+            outputUsdPer1k: req.config.outputUsdPer1k,
+        },
     });
     if (req.requireTools && !sawMarketTool && !out.interrupted) {
         // The honest notice, on the row it belongs to: an answer that looked up

@@ -93,7 +93,7 @@ describe('MemoryFilesService', () => {
   describe('initMemoryFiles (seeding)', () => {
     it('seeds the default folders (incl. distilled) on first boot', async () => {
       const { folders } = getMemoryFiles();
-      expect(folders.map(f => f.name)).toEqual(['profile', 'trader-diary', 'market-conditions', 'rules', 'skills', 'bots', 'lens', 'settled-beliefs', 'distilled', 'strategies']);
+      expect(folders.map(f => f.name)).toEqual(['profile', 'trader-diary', 'market-conditions', 'rules', 'skills', 'bots', 'settled-beliefs', 'distilled', 'strategies']);
     });
 
     it('seeds only the risk-rules starter — the unread market-conditions playbooks are gone', async () => {
@@ -106,9 +106,9 @@ describe('MemoryFilesService', () => {
 
     it('persists the seed so a reload does not reseed', async () => {
       await initMemoryFiles('test-user'); // second init
-      expect(getMemoryFiles().folders).toHaveLength(10);
+      expect(getMemoryFiles().folders).toHaveLength(9);
       const stored = store['memory_files_v1_test-user'] as { folders: unknown[] };
-      expect(stored.folders).toHaveLength(10);
+      expect(stored.folders).toHaveLength(9);
     });
 
     it('loads a saved store for the active user', async () => {
@@ -195,17 +195,17 @@ describe('MemoryFilesService', () => {
       const rules = folders.find(f => f.name === 'rules')!;
       await moveMemoryFolder(rules.id, 1, 'test-user');
       const after = getMemoryFiles().folders;
-      expect(after.map(f => f.name)).toEqual(['profile', 'rules', 'trader-diary', 'market-conditions', 'skills', 'bots', 'lens', 'settled-beliefs', 'distilled', 'strategies']);
-      expect(after.map(f => f.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      expect(after.map(f => f.name)).toEqual(['profile', 'rules', 'trader-diary', 'market-conditions', 'skills', 'bots', 'settled-beliefs', 'distilled', 'strategies']);
+      expect(after.map(f => f.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
       // Persists across reload.
       await initMemoryFiles('test-user');
-      expect(getMemoryFiles().folders.map(f => f.name)).toEqual(['profile', 'rules', 'trader-diary', 'market-conditions', 'skills', 'bots', 'lens', 'settled-beliefs', 'distilled', 'strategies']);
+      expect(getMemoryFiles().folders.map(f => f.name)).toEqual(['profile', 'rules', 'trader-diary', 'market-conditions', 'skills', 'bots', 'settled-beliefs', 'distilled', 'strategies']);
     });
 
     it('clamps out-of-range move targets', async () => {
       const { folders } = getMemoryFiles();
       await moveMemoryFolder(folders[0].id, 99, 'test-user');
-      expect(getMemoryFiles().folders.map(f => f.name)).toEqual(['trader-diary', 'market-conditions', 'rules', 'skills', 'bots', 'lens', 'settled-beliefs', 'distilled', 'strategies', 'profile']);
+      expect(getMemoryFiles().folders.map(f => f.name)).toEqual(['trader-diary', 'market-conditions', 'rules', 'skills', 'bots', 'settled-beliefs', 'distilled', 'strategies', 'profile']);
     });
 
     it('creates files with a forced .md extension', async () => {
@@ -494,13 +494,6 @@ describe('MemoryFilesService', () => {
       await createMemoryFile(profileFolder.id, 'memory.md', '# Profile\nseed', 'test-user', true);
       await expect(writeModelNote(
         { decision: 'append', folder: 'profile', fileName: 'memory', content: '## Rogue note' },
-        'test-user',
-      )).rejects.toThrow(/harness-managed/);
-      // lens/macro.md — same story for the seat memory files.
-      const lensFolder = getMemoryFiles().folders.find(f => f.name === 'lens')!;
-      await createMemoryFile(lensFolder.id, 'macro.md', '# Macro lens\nseed', 'test-user', true);
-      await expect(writeModelNote(
-        { decision: 'append', folder: 'lens', fileName: 'macro.md', content: '## Rogue' },
         'test-user',
       )).rejects.toThrow(/harness-managed/);
       // trader-diary is the harness's own namespace — model notes are banned

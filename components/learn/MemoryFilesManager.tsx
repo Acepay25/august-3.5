@@ -407,8 +407,11 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                 onClick={() => {
                                     const meta = parseSkillMarkdown(draft);
                                     if (!meta) return;
-                                    const order: Array<'all' | 'analyst' | 'moderator'> = ['all', 'analyst', 'moderator'];
-                                    const next = order[(order.indexOf(meta.audience ?? 'all') + 1) % order.length];
+                                    const order: Array<'all' | 'analyst'> = ['all', 'analyst'];
+                                    // A legacy 'moderator' skill has no seat to reach
+                                    // any more; the next click folds it into 'all'.
+                                    const current = meta.audience === 'analyst' ? 'analyst' : 'all';
+                                    const next = order[(order.indexOf(current) + 1) % order.length];
                                     const updated = { ...meta, audience: next, modifiedAt: new Date().toISOString() };
                                     const serialized = serializeSkill(updated, titleFromMeta(updated));
                                     setDraft(serialized);

@@ -36,7 +36,9 @@ references while building the debate/moderator and teammate-bots harnesses.
 "a MiniMax-style tip line", "the same intent MiniMax Code's" — describing how a
 UI element should behave. No code, assets, or structure were taken from that
 project. The pixel-art avatars are procedurally hand-built on a 16×20 grid
-specifically so that no sprite sheets are imported (see `docs/desk/README.md`).
+specifically so that no sprite sheets are imported. (The 2D desk floor they were
+built for was deleted on 2026-10-18; the assets remain in
+`components/chat/pixelAvatars.ts`.)
 
 ## Attribution — hermes-agent (MIT)
 

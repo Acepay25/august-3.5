@@ -62,6 +62,24 @@ const MUST_STAY_WIRED = [
     'notebook.chat_note', 'notebook.note', 'strategy.ocr_page', 'strategy.summarize_pdf',
 ];
 
+/** Live prompt ids that are deliberately NOT Settings-editable. They live in
+ *  their service (moving them into the registry would import a module that
+ *  already imports `getPrompt`, a cycle). Naming them here makes the inverse
+ *  direction testable: a new unregistered live prompt is a failure, not a
+ *  silent Settings gap. */
+const INTERNAL_PROMPTS = new Set([
+    'learning.skill_refine',
+    'learning.skill_worth',
+]);
+
+const liveIds = (() => {
+    const ids = new Set<string>();
+    for (const s of ALL) {
+        for (const m of s.text.matchAll(/getPrompt\(\s*['"]([a-z0-9._]+)['"]/g)) ids.add(m[1]);
+    }
+    return ids;
+})();
+
 // Ratchets DOWN only. Each entry deleted from the registry lowers this number.
 const UNREACHABLE_CEILING = 0;
 
@@ -89,6 +107,24 @@ describe('every prompt offered in Settings is one the app actually reads', () =>
         // Guards against adding a call site without naming it above: the moment
         // a prompt becomes reachable it must be listed as must-stay-wired.
         expect(WIRED.slice().sort()).toEqual(MUST_STAY_WIRED.slice().sort());
+    });
+
+    it('every live getPrompt id is registered or explicitly internal', () => {
+        // The forward direction above catches an entry with no reader. This is
+        // the reverse: a call site reading an id nobody registered is a prompt
+        // the trader cannot see or override, which the registry's own doc
+        // promises. Internal ids are named above with their reason.
+        const unaccounted = [...liveIds]
+            .filter(id => !registryIds.includes(id) && !INTERNAL_PROMPTS.has(id))
+            .sort();
+        expect(unaccounted).toEqual([]);
+    });
+
+    it('the internal list is still live (an exemption must not rot)', () => {
+        for (const id of INTERNAL_PROMPTS) {
+            expect(liveIds.has(id), `${id} is exempt from the registry but no call site reads it`).toBe(true);
+            expect(registryIds, `${id} is now registered; remove the internal exemption`).not.toContain(id);
+        }
     });
 
     it(`reports the unreachable prompt entries against a ceiling that ratchets down only`, () => {

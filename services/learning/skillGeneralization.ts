@@ -157,7 +157,6 @@ export const generalizeSkillClusterUnlocked = async (
         lastEvidenceAt: richest.meta.lastEvidenceAt,
         modifiedAt: now,
         audience: 'all',
-        lensScope: 'all',
         history: [{ status: 'candidate', validFrom: now, reason: `generalized from ${rows.length} coin skills` }],
     };
 

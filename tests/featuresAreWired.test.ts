@@ -188,16 +188,35 @@ const CAPABILITIES: Array<{ name: string; definedIn: string; why: string }> = [
     { name: 'threadForProvider', definedIn: 'utils/agentThreads.ts', why: 'a bot thread renders from it' },
 ];
 
+/** The rule as a function so the negative control below tests the same code the
+ *  capability list does, not a restatement of it. */
+const consumersOf = (
+    name: string,
+    definedIn: string,
+    files = productionFiles,
+): string[] => {
+    const self = definedIn.split(/[\\/]/).join('/');
+    const re = new RegExp(`\\b${name}\\b`);
+    return files
+        .filter(f => f.path !== self && re.test(f.body) && REACHABLE.has(f.path))
+        .map(f => f.path);
+};
+
 describe('every load-bearing capability is reachable from running code', () => {
     it.each(CAPABILITIES)('$name — $why', ({ name, definedIn }) => {
-        const self = definedIn.split(/[\\/]/).join('/');
-        const re = new RegExp(`\\b${name}\\b`);
-        const consumers = productionFiles
-            .filter(f => f.path !== self && re.test(f.body) && REACHABLE.has(f.path))
-            .map(f => f.path);
         expect(
-            consumers.length,
+            consumersOf(name, definedIn).length,
             `${name} is used in no reachable module's body — an import line or a dead module does not discharge it`,
         ).toBeGreaterThan(0);
+    });
+
+    it('rejects a capability that only exists in a file nothing reached', () => {
+        // A negative control for the rule itself: a synthetic module that no
+        // import closure touches must yield zero consumers, while the same
+        // helper still finds a real one. Without this, a rule that returns
+        // every file would pass the capability list above.
+        const dead = { path: 'components/__dead_control.ts', raw: '', code: '', body: 'export const deadControl = 1;' };
+        expect(consumersOf('deadControl', dead.path, [...productionFiles, dead])).toEqual([]);
+        expect(consumersOf('recordToolTurnUsage', 'utils/sessionUsage.ts').length).toBeGreaterThan(0);
     });
 });

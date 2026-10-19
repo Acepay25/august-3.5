@@ -595,7 +595,7 @@ Report 2 §E-08 — `strategy.summarize_pdf` (992 vs 1,358) is the material one.
 |---|---|---|
 | `components/analysis/InlineVerdict.tsx:86` | **"Inspect debate audit & evidence"** (button text) | SAFE — relabel |
 | `components/settings/SessionUsagePanel.tsx:327` | **"Debate cost cap (USD, 0 = off)"** | SAFE — a **dead flag with a live control** (§2.13) |
-| `components/settings/tabs/ModelsTab.tsx:127` | **"DEBATE MODERATOR"** (Settings → AI setup field label) | **the field must stay** — it still picks the verdict/arbiter model (`App.tsx:1491-1492` → `PREF_KEYS.LAST_MODERATOR_PICK`; `hooks/useAnalysisPipeline.ts:536` `runModeratorModel`). **Relabel only** ("Verdict model" / "Arbiter model") |
+| `components/settings/tabs/ModelsTab.tsx:127` | **"DEBATE MODERATOR"** (Settings → AI setup field label) | ⚠️ **SUPERSEDED BY THE WORKTREE (2026-10-20).** At the baseline the field still picked the verdict/arbiter model and needed a relabel. **The current worktree removes the field, the picker and its persistence entirely** — `hooks/useModeratorPick.ts` and `services/infrastructure/moderatorPick.ts` are deleted (unstaged), `ModelsTab.tsx` drops `moderatorProvider` / `moderatorModel` / `onSetModeratorProvider` / `onSetModeratorModel`, and `PREF_KEYS.LAST_MODERATOR_PICK` has **no remaining reference in the source**. **So the row is not "relabel" — the string goes away with the field, and the only residue is the `last_moderator_pick` Preferences key, which becomes a dead write.** Re-check against the worktree before acting. | NEEDS CHECK |
 | `components/automation/AutomationEditorModal.tsx:255` | "Pick the moderator model." | SAFE — relabel |
 | `components/automation/AutomationEditorModal.tsx:574` | "Moderator model" (section heading) | SAFE — relabel |
 | `components/automation/AutomationEditorModal.tsx:504` | **"Runs the full analyst debate pipeline."** | SAFE — it now runs a tool turn |
@@ -1082,6 +1082,17 @@ including `LICENSE`, 3 `.github/` workflows) plus `index.html`.
 
 ### 8.1 The table
 
+> ⚠️ **UPDATED 2026-10-19 — this table has been ACTED ON.** The owner's instruction was *"scan all
+> md plan in docs and find what still not implemented and merge it to the full audit, if its
+> implemented and stale delete it."* **18 of the plan documents in this table have been DELETED**
+> (rows 4, 5, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29). Their still-open
+> items were harvested into **`docs/plan/open-items.md`** (Part F of the
+> merged audit) — **121** open items + **24** owner decisions, each with the `file:line` that proves it is
+> open. **The full execution record, the rescue list and the 17 repointed code/test comments are in
+> §14 below.** Rows 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 14, 30, 31, 32, 33, 34 were **kept** — they are
+> living documents, not plans, and several still need UPDATE (rows 1, 2, 6, 7, 11, 12).
+
+
 | # | file | size | accurate? | contradicted by | classify | reason + evidence |
 |---|---|---|---|---|---|---|
 | 1 | `AGENTS.md` | 350 / 24.5K | **partially** | — | **UPDATE** | 4 factual errors: the vitest census is **stale by 2** (`:157` — the measured figure is **4,739** in 479 files, 4,728 pass + 11 skip); **`services/research/` does not exist** (`:140`); **`components/` is not flat** (`:128` — 15 subdirectories, three two levels deep); **`.github/workflows/guards.yml` is not mentioned** — and `vitest.config.ts:58-65` *does* refer to "the `guards` workflow". 4 more claims die when the in-flight tree lands (`:148`, `:215`, `:220`) |
@@ -1547,3 +1558,335 @@ test can assert *something* and still assert the wrong thing. The 17 files that 
 code (Report 4 §4.1) all make assertions. **They assert correctly about code the app never runs.**
 That is the more dangerous class, and it is why `E-11` (a test that asserts what is *sent*) and
 `E-24` (behavioural coverage for the Electron shell) matter more than any count of assertions.
+
+---
+
+## 13. Addendum — the orphan class neither audit had named, and one stale comment
+
+### 13.1 **Dead-by-transitivity**: four modules that are only reachable from a dead module
+
+The previous audit's dead-module list (§2.14) and my own orphan sweep (§1.1) overlapped but did not
+match exactly. The difference is a class neither named.
+
+**My sweep found modules with ZERO inbound edges. Their list included modules that DO have an
+importer — but the importer is itself dead.** A module imported only by a dead module is dead; it
+simply does not show up in a zero-inbound-edge scan.
+
+| module | its only importer | that importer's state |
+|---|---|---|
+| `services/analysis/EntryTimingService.ts` | `services/validation/TradeValidationGate.ts` | **dead** — `TradeValidationGate` is imported only by `tests/accuracyValidation.test.ts` |
+| `services/validation/ValidationConstants.ts` | `services/validation/TradeValidationGate.ts` | **dead** — same |
+| `services/analysis/convictionDrift.ts` | `services/analysis/TradeValidationGate.ts` (or a test) | **dead** — same |
+| `utils/navModality.ts` | — | **dead** — no production importer |
+| `services/infrastructure/SessionGuardService.ts` | — | **dead** — and it is the **only reader of the trader's `equityUsd`**, so the equity setting is configured in Settings (`components/settings/SessionUsagePanel.tsx:149`) and read by nothing in production |
+
+**⇒ five more modules to the manifest, and the fourth one is a *setting* with no reader** — the same
+class as the three dead `PREF_KEYS` in §2.3, but a fourth instance: `equityUsd` is a live
+user-facing field whose only reader is unreachable.
+
+**Confidence: SAFE for the deletion of the four modules; NEEDS CHECK for `SessionGuardService`,
+because `equityUsd` is a live setting and the right answer may be to *wire* it (it is the
+liquidation-buffer guard) rather than delete it.** **[Verified by code reading]** at HEAD
+`69c4aa33`; the importers must be re-checked after the in-flight tree settles (Report 0 §0.11).
+
+### 13.2 One more stale comment, in the class of Report 4 §3.6
+
+| file:line | the comment | the code | confidence |
+|---|---|---|---|
+| `services/ui/OutcomeAutopilotService.ts:7` | *"Runs a **60s** loop only while…"* | `const CHECK_INTERVAL_MS = 20_000;` (`:85`), used at `:352` | **SAFE** |
+
+This is the **third** instance of the same defect class in this file family: the comment says 60 s,
+the code says 20 s. The prior audit found it; I did not. **[Verified by code reading]** at HEAD.
+
+### 13.3 The "green suite over dead code" case, at its sharpest
+
+`applyNotebookSkillsToAnalysis` — the function that applies the hard `avoid` veto, the candidate cap
+and the confidence downgrade — has **ten test call sites across four test files and zero production
+call sites** (`services/learning/SkillMemoryService.ts:3494` is the definition; every actual call is
+in `tests/approvalGate.test.ts`, `tests/decisionBiasClosure.test.ts`, `tests/harnessMemory.test.ts`
+and `tests/learningLoopMachinery.test.ts`). `VetoLedgerService.recordVeto` is the same shape:
+**seven test call sites, zero production call sites.**
+
+**⇒ a reviewer reading only the test suite would conclude the deterministic skill layer is
+enforced, active, and well-tested. It is none of those three things.** This is the single best
+argument in the whole audit for E-24 (behavioural coverage for the shell) and E-11 (a test that
+asserts what is *sent*): **the tests are rigorous about the code they can reach, and the code that
+matters is the code nothing reaches.**
+
+**Confidence: SAFE (it is a measurement, not a change). The proposed change — wiring it — is
+Report 2 §3C.2, E-35.**
+
+---
+
+## 14. Addendum — the plan-document cleanup, executed
+
+**Executed:** 2026-10-19, after the owner's instruction to *"scan all md plan in docs and find what
+still not implemented and merge it to the full audit, if its implemented and stale delete it."*
+
+**The register that replaced them: `docs/plan/open-items.md`** (Part F of
+the merged audit) — **121 open items + 24 owner decisions**, each with the `file:line` that proves
+it is still open, each mapped to the proposal that covers it, plus the **5 prior-audit rows that
+did not survive re-verification** and the **15 "facts paid for"** rescued from `stage3-status.md`
+before it went.
+
+### 14.1 What was deleted — 18 documents
+
+| deleted | why it qualified | where its content went |
+|---|---|---|
+| `docs/desk/README.md` | the 2D desk floor was **deleted**; 100 % of its cited paths are dead; 0 open items | nothing to salvage |
+| `docs/plans/chat-dock-reference.md` | the surfaces were rebuilt three times; 100 % dead paths | its **7 PNGs are kept** — they are the only committed screenshots of this app |
+| `docs/plans/docs-audit-2026-10-06.md` | its 7 dispositions were still un-actioned | O-98…O-106, Q4, D-04 |
+| `docs/plans/flow-ui-audit-2026-10-15.md` | superseded by the 2026-10-10 redesign; its Tier-4 findings are still open | O-65…O-75, O-79, O-81, O-100 |
+| `docs/plans/memory-skills-research-2026-10-10.md` | its durable finding survives | O-30, O-38…O-41 |
+| `docs/plans/redesign-plan-claude-chatgpt-haze-2026-10-10.md` | **it is the design that shipped**; the binding rules are already in `docs/ui-doctrine.md` | O-62, O-90, O-91, and the density/type cluster |
+| `docs/plans/reference-transcript-catalog-copy.md` | a copy spec for a UI rebuilt three times | O-14, O-45, O-51, D-14, D-15 |
+| `docs/plans/stage1-ui-ux-spec.md` | 35 % of its cited paths are dead; its own header admits no screenshots | O-69…O-71, O-83…O-86 |
+| `docs/plans/stage2-implementation-plan.md` | Phase 0–2 shipped; Phase 3/4 open | O-04, O-69, O-76, O-93…O-95, O-106 |
+| `docs/plans/stage3-arrangement.md` | Phase A–G shipped | O-49 |
+| `docs/plans/stage3-status.md` | historical status | **the 15 "facts paid for" are rescued verbatim** (register §3.1) · O-50 |
+| `docs/plans/ui-redesign-deep-dive-2026-10-10.md` | a baseline against `78f99bd` whose artefacts are gitignored — **its numbers are unfalsifiable** | O-66…O-71, O-83, O-90 |
+| `docs/plans/ui-ux-target-plan-2026-10-11.md` | overthrown by the 2026-10-15 audit | D-18, D-19, D-21, D-22, O-38, O-46, O-53 |
+| `docs/plans/workstream1-status.md` | its open items are the register's | O-32, O-35, O-45, O-60, O-96 |
+| `docs/plans/workstream1-stepB-evidence.md` | its 14 activation paths are still live — and are now O-32 | O-32, O-33; its method line is rescued |
+| `docs/plans/workstream1-stepB-gap-audit.md` | its 4 gaps are moot | its method line is rescued |
+| `HANDOFF_LEARNING_LOOP.md` | IMPLEMENT-1…6 shipped | O-42, O-43, O-44, D-16, D-17 |
+| `PLAN_LEARNING_LOOP_AND_UI.md` | WS-1…WS-6 shipped | O-40, O-41, D-22 |
+
+**Every deletion is a tracked `git rm`, so every one is one `git revert` away.** The content also
+stays in `main`'s history.
+
+### 14.2 What was KEPT, and why
+
+| kept | why |
+|---|---|
+| `docs/plans/debate-deletion-status.md` | **the dated history ledger** — it names deleted files on purpose, and **`scripts/check-flow-doc-anchors.cjs:44` scans it**: `const DOCS = ['AGENTS.md', 'docs/app-flow.md', 'docs/app-flow.html', 'docs/plans/debate-deletion-status.md']`. **Deleting it breaks a gate.** |
+| `docs/app-flow.md` / `.html` | living and machine-checked — 303 verified anchors, 0 unattributed |
+| `docs/learning-loop-map.md` | living; needs UPDATE (three wrong rows), not deletion |
+| `docs/ui-doctrine.md` | living; needs a 2 px correction (O-87) |
+| `docs/plans/reference/*.png` (7) | the only committed screenshots of this app |
+| `AGENTS.md`, `README.md`, `PRIVACY.md`, `THIRD_PARTY_NOTICES.md`, `changelog.md` | living, and not plan documents |
+
+### 14.3 The dangling references, and what was done about them
+
+**No test *reads* any plan document** — every reference was a *comment*. There were **17** of them,
+across 16 files, pointing at 4 of the deleted documents.
+
+| file | reference |
+|---|---|
+| `index.css:297` | the redesign plan |
+| `tests/radiusRamp.test.ts:8`, `tests/typeRamp.test.ts:10` | the redesign plan |
+| `components/learn/MemoryTopicPanel.tsx:14`, `MemoryTopicsCard.tsx:8`, `SkillViewerPanel.tsx:17` | the 2026-10-11 target plan |
+| `components/skills/SkillsLibrary.tsx:7` | the 2026-10-11 target plan |
+| `services/learning/memoryTopics.ts:3`, `memoryTopicEdits.ts:3` | the 2026-10-11 target plan |
+| `services/infrastructure/ExportService.ts:405`, `services/learning/approvalMigration.ts:18` | workstream-1 status |
+| `tests/agentsSurface.test.tsx:778,829`, `tests/answerActionRow.test.tsx:124`, `tests/proposedTrade.test.ts:104`, `tests/skillViewerPanel.test.tsx:2`, `tests/approvalGate.test.ts:4` | the plan docs |
+
+**All 17 were repointed at the surviving register** — `docs/plan/open-items.md` —
+so no comment now names a file that does not exist. **16 files changed, 17 lines.**
+
+`THIRD_PARTY_NOTICES.md:39` named `docs/desk/README.md`; it was rewritten to state the fact instead
+of linking a ghost: the avatars are hand-built on a 16×20 grid *"so that no sprite sheets are
+imported"*, and the 2D desk floor they were built for was deleted on 2026-10-18.
+
+### 14.4 The gates after the change
+
+| gate | result |
+|---|---|
+| `npm run typecheck` | **exit 0**, 0 errors |
+| `npm run lint:loose` | **676 problems, 0 errors** (682 before — the 16 comment edits and the concurrent session's own changes) |
+| `npm run test` | see §14.6 |
+
+### 14.5 A note on the method — the register is a *measurement*, not a transcription
+
+Every "still open" row in the register carries a `file:line` that proves it is open **at HEAD**. That
+is the difference between this register and the plan corpus it replaces, which carried *claims*.
+
+**And it changed the answer.** Five rows from the previous audit **did not survive re-verification**,
+and the register says so rather than repeating them:
+
+| prior row | verdict at HEAD `56639b4b` |
+|---|---|
+| `recordToolTurnUsage` has a reader and no writer | **CORRECTED** — it has three production callers |
+| `runEnsembleEnabled` survives as a half-live flag | **CORRECTED** — the flag is gone, and a test asserts it is |
+| the supervisor auto-approves drafts with no human | **CORRECTED** — it is auto-**triage** only; the narrower truth (auto-triage on by default, no UI off-switch) is O-34 |
+| `analysisPrompts.ts:299` "Family C … highest win rate (~86 %)" | **CORRECTED** — not found; the file is 190 lines and the phrase does not exist |
+| the 14 activation paths | **PARTLY CORRECTED** — path 5 is stale; the other 13 remain live and are now O-32 |
+
+### 14.6 The test run
+
+See the table in the delivery note. The run was executed in a **throwaway copy**
+(`%TEMP%\august-audit\gate-copy`, a `git init`-ed snapshot of the post-change working tree, with
+`node_modules` junctioned read-only) — **never against the live tree or a live profile.**
+
+---
+
+## 15. The test-removal plan
+
+**Added 2026-10-20** at the owner's request: *"include in the plan to remove all those useless
+test"*.
+
+**The honest headline first: the tests are the symptom. The disease is 13 modules the app never
+loads — and the largest one is the product's core promise.**
+
+### 15.1 The measurement
+
+A reachability graph over **521 source modules** from the real entry points (`index.tsx`,
+`App.tsx`, `electron/main.cjs`, the e2e spec, and the 20 gate scripts), resolving static imports,
+`export … from`, `import()` (including `React.lazy` and `new Worker(new URL(...))`), `require()` and
+the `@/` alias, then classifying all **475 test files** by what they actually exercise.
+
+**[Verified live] 492 of 521 source modules are reachable. 29 are not.**
+
+| bucket | files | lines | verdict |
+|---|---|---|---|
+| **A** — exercises only code the app never loads | 10 | 1,523 | **6 are candidates, 4 are NOT** (see §15.3) |
+| **B** — exercises both live and orphan code | 15 | 3,483 | **keep the file, drop the dead side-import** |
+| **C** — exercises only live code | 420 | 69,944 | keep |
+| **D** — imports no source at all (self-contained) | 30 | 3,602 | keep |
+
+**A correction to the numbers, so they are not misread:** a test that imports a *test helper*
+(`tests/helpers/sourceCode.ts`, `tests/jsxScan.ts`) is counted as "exercising an orphan" because
+helpers are not in the reachability set. **Those four are repo-wide source guards, not dead-code
+coverage.**
+
+### 15.2 The 13 modules the app never loads
+
+**Every one of these has ZERO production importers** — their only importers are tests, or other
+dead modules. Verified with a direct `from '…'` grep, not the graph.
+
+| # | module | lines | who imports it | what it is |
+|---|---|---|---|---|
+| 1 | **`services/validation/TradeValidationGate.ts`** | **986** | **nothing** | **the 20-check validation gate — the product's "deterministic code checks" half** |
+| 2 | **`services/backtesting/BacktestingService.ts`** | **1,414** | **nothing** | the backtest engine; `utils/riskReward.ts:7` cites it in a **comment** as the realized-R authority |
+| 3 | **`components/analysis/AnalysisProgress.tsx`** | — | **nothing** | the **step ladder** — the roadmap's F-73 says it is "muted"; it is **not mounted at all** |
+| 4 | `services/analysis/EntryTimingService.ts` | — | only the dead gate | |
+| 5 | `services/analysis/ProbabilityEngineService.ts` | 313 | tests only | |
+| 6 | `services/providers/debatePods.ts` | 142 | tests only | the debate engine's last remnant |
+| 7 | `utils/incrementalMarkdown.ts` | 111 | tests only | |
+| 8 | `utils/seriesPalette.ts` | 30 | tests only | |
+| 9 | `utils/preRead.ts` | — | tests only | its own comment in `hooks/useWatchAndAutopilot.ts` says the feature *"was deleted in the audit purge: its only UI … never existed"* |
+| 10 | `services/analysis/convictionDrift.ts` | — | tests only | |
+| 11 | `services/learning/providerFitness.ts` | — | tests only | only a **comment** in `ModelPerformanceService.ts` names it |
+| 12 | `utils/ticketSize.ts` | — | tests only | **the sizing module the plan WIRES (E-12)** |
+| 13 | `services/learning/chartScanSkills.ts` | — | tests only | only a **comment** in `draftGates.ts` names it |
+
+#### 🔴 The one that changes the plan: **the validation gate is not wired**
+
+`grep 'runValidationGate\|TradeValidationGate'` over every non-test file returns **four hits, and
+three of them are comments or the definition**:
+
+```
+services/analysis/EntryTimingService.ts:588      * Generate a compact warning for TradeValidationGate
+services/backtesting/StopLossOptimizerService.ts:332   * Generate warning for TradeValidationGate
+services/validation/TradeValidationGate.ts:2      * TradeValidationGate - Central validation orchestrator
+services/validation/TradeValidationGate.ts:495    export const runValidationGate = (
+```
+
+**⇒ The app's 986-line, 20-check validation gate — with the R:R floor, the pattern-memory
+downgrade, the volume cap, the Devil's Advocate, the scalp/swing branch and the confidence ladder —
+has no production caller.** Only `GateKeeperService` (a *narrower* gate: a confidence cap and a
+family pre-filter) is wired, via `services/trade/proposalGate.ts`.
+
+**This closes the plan's own open question.** `docs/plan/open-items.md` **O-10** was recorded as
+*"The full validation gate may not be wired at all — `runValidationGate` has zero production
+importers"*, status **OPEN-VERIFY**. **It is now OPEN, with the evidence.** And it reframes two
+existing items:
+
+- **E-02** (one R:R formula) was framed as a *drift* fix. It is **bigger than that**: the formula
+  being fixed is in a module **nothing calls**. **E-02 must first become "wire the gate, or
+  retire it"** — and that is an owner decision, not a refactor.
+- The same applies to **`services/backtesting/BacktestingService.ts`** (1,414 lines), which
+  `utils/riskReward.ts:7` cites in a comment as *"the realized ratio in `BacktestingService`"* —
+  **a comment pointing at a module the app never loads.**
+
+**⇒ The two biggest items in the dead-module list are not leftovers. They are the two halves of
+the product's promise that were never connected.**
+
+### 15.3 The batches
+
+#### **Batch T1 — the unambiguously dead** *(5 test files, 482 lines, + 4 modules, 596 lines)*
+
+| test file | lines | module | lines |
+|---|---|---|---|
+| `tests/debatePods.test.ts` | 101 | `services/providers/debatePods.ts` | 142 |
+| `tests/probabilityEngine.test.ts` | 164 | `services/analysis/ProbabilityEngineService.ts` | 313 |
+| `tests/lazySurfaceSkeletons.test.ts` | 83 | (the same module) | — |
+| `tests/incrementalMarkdown.test.ts` | 92 | `utils/incrementalMarkdown.ts` | 111 |
+| `tests/seriesPalette.test.ts` | 42 | `utils/seriesPalette.ts` | 30 |
+
+**Gate:** `npm run typecheck && npm run lint && npm run test && npm run test:coverage`.
+**Risk: LOW.** **Rollback:** `git revert` — the test *and* its module in one commit.
+**Note:** `ProbabilityEngineService` carries 313 lines and two test files; delete both tests with
+the module, or the second test is left pointing at nothing.
+
+#### **Batch T2 — dead-by-decision** *(6 test files + 6 modules — **HELD**)*
+
+| test file(s) | module | the decision that must come first |
+|---|---|---|
+| `tests/accuracyValidation.test.ts` | `services/validation/TradeValidationGate.ts` (986) | **wire the gate (E-02a) or retire it (E-02b).** The test is the only proof it works — if the gate is going to ship, the test must survive; if it is going, the test goes with it. **Do not delete before the decision.** |
+| `tests/backtestingKlineLadder.test.ts`, `tests/backtestingOutcomes.test.ts`, `tests/validateTradeOutcome.test.ts` | `services/backtesting/BacktestingService.ts` (1,414) | the same question: is the backtest engine part of the product, or is the **replay harness (E-20)** its replacement? |
+| `tests/runStatus.test.tsx`, `tests/stoppedStepReason.test.tsx` | `components/analysis/AnalysisProgress.tsx` | the step ladder — the roadmap's F-73. Wire it, or delete it and its two tests. |
+| `tests/planLevelLocation.test.ts` | `services/analysis/EntryTimingService.ts` | follows the gate's fate |
+| `tests/convictionDrift.test.ts` | `services/analysis/convictionDrift.ts` | standalone; safe to delete with its module |
+| `tests/preRead.test.ts` | `utils/preRead.ts` | the module's own comment says the feature was deleted — **safe to delete with its module** |
+
+**Gate:** same as T1. **Risk: MEDIUM** — three of these are decisions, not deletions.
+
+#### **Batch T3 — the 15 mixed files: keep the file, drop the dead import**
+
+These 15 files test **live** code and also import a module the app never loads. **The file stays;
+only the dead side-import goes.** 3,483 lines of coverage are not collateral damage.
+
+`tests/accuracyValidation.test.ts` · `tests/analysisUtils.test.ts` · `tests/auditFixes.test.ts` ·
+`tests/backtestingKlineLadder.test.ts` · `tests/backtestingOutcomes.test.ts` ·
+`tests/convictionDrift.test.ts` · `tests/decisionBiasClosure.test.ts` ·
+`tests/drawVisibilityReceipt.test.ts` · `tests/drawingCapAndChartTruth.test.ts` ·
+`tests/financialMath.test.ts` · `tests/planLevelLocation.test.ts` · `tests/preRead.test.ts` ·
+`tests/runStatus.test.tsx` · `tests/stoppedStepReason.test.tsx` · `tests/validateTradeOutcome.test.ts`
+
+*(listed for completeness; in practice the import disappears with its module in T1/T2)*
+
+#### **Batch T4 — the ones that LOOK useless and are NOT** *(849 lines, keep)*
+
+| file | lines | why it must stay |
+|---|---|---|
+| `tests/themeContrast.test.ts` | 393 | a **repo-wide source guard** — it scans the source tree as text for contrast violations. It imports `tests/jsxScan.ts`, a *helper*, which is why it looks like an orphan. |
+| `tests/jsxNesting.test.ts` | 283 | the same: a **repo-wide JSX-nesting guard** over the whole source tree |
+| `tests/sourceCodeHelper.test.ts` | 96 | it tests the **guard machinery** every other source guard depends on |
+| `tests/aiTrendlinesDrawn.test.ts` | 77 | a source-text guard on the trendline wiring |
+
+**⇒ 849 lines that a naive "orphan subject" scan would have deleted, and that are among the most
+valuable files in the suite.** They are the repo's own lint, in test form.
+
+### 15.4 The keep-list — the four that look removable and must not be
+
+| test | lines | why it stays |
+|---|---|---|
+| **`tests/ticketMathTiers.test.ts`** | 187 | it is the **only** coverage of `utils/ticketSize.ts` — and **the plan wires that module (E-12)**. Deleting the test before the module ships removes the only proof it works. **HOLD.** |
+| **`tests/accuracyValidation.test.ts`** | — | the only coverage of the validation gate, whose fate is the decision in T2. **HOLD.** |
+| **`tests/financialMath.test.ts`** | — | 5 live subjects, 1 orphan side-reference. **KEEP the file.** |
+| the 420 bucket-C files | 69,944 | live coverage |
+
+### 15.5 The rule this batch must obey
+
+1. **A test and its dead module go together, or neither.** A test that outlives its subject is the
+   exact defect in Report 4 §4.1 — a green suite that proves nothing.
+2. **Never delete a test to make a number smaller.** The suite's value is its coverage of what
+   *ships*; the number of files is not the metric. **Before any deletion, confirm the subject
+   module has zero production importers** — a `git grep` for the import specifier, not a reachability
+   pointer.
+3. **Never delete a source-text guard.** A guard that reads the repo as text is the repo's lint;
+   it has no import graph to be orphaned from.
+4. **A test for a module the plan intends to WIRE is not dead — it is the acceptance test.** That is
+   `tests/ticketMathTiers.test.ts`, and it is why the order is: **decide the module's fate (T2) →
+   then delete (T1/T2) → never the other way round.**
+
+### 15.6 What this does to the plan
+
+| item | change |
+|---|---|
+| **E-02** (one R:R formula) | **reframed.** It is not a drift fix in a live module — it is a fix in a module **nothing calls**. **E-02 splits: E-02a "wire the gate" and E-02b "retire it".** E-02b is a **much cheaper** outcome (delete 986 lines + a test) and E-02a is a much bigger one (ship the gate the product promises). **It is the owner's call, and it is the single highest-leverage decision in this plan.** |
+| **O-10** | **OPEN-VERIFY → OPEN**, with the evidence. |
+| **O-129** (new) | the dead-module list itself, so the register carries it. |
+| **E-50** (new) | **the test-removal batches T1–T4** as a cleanup item, with the keep-list. |
+| **F-73** (the roadmap's "step ladder is muted") | **resolved to "not mounted at all"** — `AnalysisProgress.tsx` has zero production importers. |

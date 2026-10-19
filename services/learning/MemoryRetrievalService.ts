@@ -817,9 +817,6 @@ export interface MemoryContextOptions {
      *  (A/B evals) must not pollute the attribution telemetry that
      *  applySkillEvidence trusts for credit-granting windows. */
     recordInjections?: boolean;
-    /** Active lens seat ('macro' | 'technical' | 'risk' | role-shaped string).
-     *  Prompt-side half of the lensScope contract: lens-scoped skills only
-     *  reach the prompt of their own seat. Omitted ⇒ filter is a no-op. */
     /** Per-run id used to seed the reproducible ε-holdout decision.
      *  Omitted ⇒ this retrieval never holds out (conservative default). */
     runId?: string;

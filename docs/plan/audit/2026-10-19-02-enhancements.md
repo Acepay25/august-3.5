@@ -18,7 +18,7 @@
 (G-01…G-64) extracted from `docs/plans/**` (20 files), `docs/learning-loop-map.md`,
 `docs/ui-doctrine.md`, `HANDOFF_LEARNING_LOOP.md`, `PLAN_LEARNING_LOOP_AND_UI.md`, `AGENTS.md`,
 `changelog.md`, plus the recovered orphan `docs/analysis/05-lead-findings.md`. Full index in
-`2026-10-19-04-cleanup-manifest.md` §8.
+`audit/2026-10-19-04-cleanup-manifest.md` §8.
 
 ---
 
@@ -48,11 +48,11 @@ these, and two of them are not on the roadmap at all.
 | **Proposed change** | Two mutually exclusive options — **pick one and make it explicit**:<br>**(a) Wire it.** Pass the assembled prompt on the desk path; give the retrieval call `recordInjections: false` unless the block is actually sent; move the gate constraints out of the dead variable and into the real prompt. Cost: a per-request token increase, and a budget decision.<br>**(b) Cut it.** Delete the assembly, the `devLog`s, and the injection record that goes with it. The desk path's own `surfacePromptWith` (`services/trade/chatSurfaceTurn.ts:105-139`) already assembles a *deliberate, narrower* context, and the tools (`recall`, `get_notebook_map`, `read_memory`) give the model a pull path. Cost: the "hybrid intelligence" the app is named for stays out of the prompt.<br>**What is not acceptable is the current state**, where the app pays for a retrieval it does not use and then lies about what the model saw. |
 | **Impact** | **Accuracy** (the loop learns from what it actually saw) · **cost** (one wasted retrieval per send) · **reliability** (the ledger stops lying) · **maintainability** (a dead branch and a hard-coded empty string out) |
 | **Effort** | **M** (a) · **S** (b) |
-| **Risk** | (a) changes every prompt — needs a token budget and a canary. (b) is behaviour-neutral but removes a capability the product is named for. **Recommendation: (b) first, (a) as a measured follow-up** — because the pull path already exists and the push path's budget was never settled. |
+**The one recommendation, made consistent across the whole audit and the plan index (§3C.1):** **(1) inject the harness contract — 1,582 chars: the confidence ladder, the risk rules and the `HARNESS_TURN_MARK` convention — into the P1/P2/P3 system prompts; (2) cut the retrieved context by default; (3) flip `recordInjections` to default-false in the same change**, or the ledger keeps lying while you decide. Inject and record together, or neither. |
 | **How to verify** | A new test that builds the **sent** message and asserts the expected blocks are present and the forbidden ones absent (E-11). Then `npm run render-probe`. Then: log the injection record's `sources` next to the sent prompt for one run and confirm they agree. |
 | **Roadmap** | **PARTIAL** — `R-256` names "the data-pull residue — the injection string is read only by `devLog`", and `G-07` names `enhancedPrompt`. **The missing part, named:** R-256 does not name (i) the seven specific dropped blocks, (ii) the injection-ledger consequence, (iii) the hard-coded `gateInjection = ''`, (iv) the owner decision *"what replaces the analysis branch"* that `docs/plans/debate-deletion-status.md:110-147` is waiting on. |
 
-### E-02 — One planned R:R, one formula
+### E-02 — One planned R:R, one formula — **REFRAMED 2026-10-20: the module it fixes is not wired**
 
 | | |
 |---|---|
@@ -65,6 +65,7 @@ these, and two of them are not on the roadmap at all.
 | **Risk** | **M** — changing the gate changes what is refused. Ship behind the existing `ValidationConstants` thresholds, and diff the gate verdict over the existing trade corpus before and after. |
 | **How to verify** | A table-driven test over out-of-order target lists asserting `gateRatio === cardRatio` for every combination; and a replay of the stored `trades` table comparing the old and new verdicts (the corpus is in the journal). |
 | **Roadmap** | **NEW** — nothing in `docs/plans/` and nothing in the orphan gap report names the R:R drift. `AGENTS.md` names `utils/riskReward.ts` as the canonical module, which makes the gate's copy an unnoticed second implementation of a module the repo says is canonical. |
+| **🔴 REFRAMED 2026-10-20** | **The gate this fixes is not wired.** `services/validation/TradeValidationGate.ts` (986 lines, 20 checks) has **ZERO production importers** — `grep 'runValidationGate\|TradeValidationGate'` over every non-test file returns only the definition and **two comments in other files offering to feed it** (`services/analysis/EntryTimingService.ts:588`, `services/backtesting/StopLossOptimizerService.ts:332`). Only the narrower `GateKeeperService` (a confidence cap + a family pre-filter) is live, via `services/trade/proposalGate.ts`. **⇒ E-02 splits: E-02a *wire the gate* (big) and E-02b *retire it* (small — delete 986 lines and its test).** This is **the single highest-leverage decision in the plan**, and it is the owner's, not a refactor's. |
 
 ### E-03 — Charge the round trip
 
@@ -73,13 +74,14 @@ these, and two of them are not on the roadmap at all.
 | **Problem** | The app has **no cost model**. There is no fee, slippage or funding term anywhere in the source. Every `realizedR`, every win rate, every calibration bucket, every skill's expectancy and the whole RL ledger are **gross**. The field named `netR` is the *sum of gross* R multiples — the name is misleading. |
 | **Evidence** | a repo-wide search for `slippage\|takerFee\|makerFee\|commission\|costBps\|feeRate` returns exactly three files: `services/analysis/ScalpDetectionService.ts:189` (a *warning string*), `services/learning/ReinforcementSignalService.ts:50` (a *comment* — *"Potential future params: slippage, timeToTarget, etc."*), and `services/learning/SkillMemoryService.ts:1431` (the `netR` accumulator). `services/backtesting/BacktestingService.ts:1358-1366` computes P&L as a raw price difference. |
 | **Why it is decisive** | The app's own gates define the loosest trade it will allow: R:R 1.2 (Low/Avoid), scalp SL ≤ 1.0 % of price, scalp min R:R 1.0. A 0.10 % round trip against a 1.0 % stop is **0.10 R**; against a 0.3 % scalp stop it is **0.33 R**. At a 50 % win rate and R:R 1.2, gross expectancy is **+0.10 R** and the round trip consumes it. **The breakeven win rate moves from 45.5 % to 50.0 %** — and the gate simultaneously caps that trade's confidence at **≤54 %** (`utils/analysisUtils.ts:1430-1440`). |
-| **Caveat, stated** | The 0.05 %/side taker rate is an **assumption** ("the standard published taker rate and is not in the repo"). The arithmetic is linear in it, and the conclusion holds for any taker fee above ~0.02 % per side at a 1 % stop. **The honest design is therefore to make the trader state their fee tier**, not to hardcode an exchange rate. |
-| **Proposed change** | A single cost model, in R, computed at journal-write time: `costR = (feePerSide×2 + slippageBps/10000) / (stopDistancePct/100)`, with the fee and slippage **user-configurable** and a visible **"gross" badge** when they are unset. Store `costR` and `netR` on the row, feed the ledger and the calibration buckets from `netR`, and keep `realizedR` for the gross view. |
+| **Caveat, stated** | The 0.05 %/side taker rate was an **assumption** ("the standard published taker rate and is not in the repo"). The arithmetic is linear in it, and the conclusion holds for any taker fee above ~0.02 % per side at a 1 % stop. **The design is therefore to make the trader state their fee tier**, not to hardcode an exchange rate — and that is now decided (see *Approved parameters* below). |
+| **APPROVED PARAMETERS** (owner, 2026-10-20) | ✅ **5 bps taker / 2 bps maker, zero slippage, with a visible "slippage not modeled" label.** The fee tier is the trader's setting. **The slippage line is labelled, never a silent zero** — an unlabelled zero reads as a claim the model did not make, which is the same class of defect as the "fresh packet" claim in E-33. |
+| **Proposed change** | A single cost model, in R, computed at journal-write time: `costR = (feePerSide×2 + slippageBps/10000) / (stopDistancePct/100)`, with the fee **user-configurable** at the approved defaults and a visible **"slippage not modeled"** label on every net figure. Store `costR` and `netR` on the row, feed the ledger and the calibration buckets from `netR`, and keep `realizedR` for the gross view. |
 | **Impact** | **Accuracy** (the ledger becomes net) · **profit** (this is the largest single correctness gap for a manual trader) · **reliability** (the expectancy shown to the trader becomes the expectancy they have) |
 | **Effort** | **M** |
 | **Risk** | **M** — it changes every number in the journal, so existing rows need a "gross" marker and the UI needs to say which is which. |
 | **How to verify** | A test that a 1:1 plan at a 1 % stop with a 0.05 %/side fee shows a net expectancy ≤ 0 at a 50 % win rate, and that the skill ledger's expectancy matches `netR` and not `realizedR`. |
-| **Roadmap** | **NEW (prior)** — this is `G-01`/`G-02`, and it comes from the **orphan** `docs/analysis/05-lead-findings.md`, **not** from `docs/plans/`. **It is not in the roadmap at all**, and the file it lives in survives in four unreachable commits. |
+| **Roadmap** | **NEW (prior)** — this is `G-01`/`G-02`, and it comes from the **orphan** `docs/analysis/05-lead-findings.md`, **not** from `docs/plans/`. **It is not in the roadmap at all** — and the file it lives in was one `git gc` from being lost. It is now protected by the branch `archive/prior-audit-2026-10-18`. |
 
 ### E-04 — Fix the inverted ensemble weighting
 
@@ -307,7 +309,7 @@ these, and two of them are not on the roadmap at all.
 | **Depends on** | **real trade data** — and the *stored* data's completeness. `R-213` records that the live-journal counts were **never obtained**; `R-214` records that pre-F3a rows carry no `planId`. |
 | **Roadmap** | **NEW** — nothing in the corpus proposes a replay. `R-206` (`SkillEvalService`) is the closest machinery: it re-runs a *prompt* against a trade. A replay of the *deterministic* code is the missing half. |
 
-### E-21 — Break the notebook out of one JSON blob
+### E-44 — Break the notebook out of one JSON blob
 
 | | |
 |---|---|
@@ -350,7 +352,7 @@ Ranked by impact ÷ effort, with the roadmap status.
 | 20 | **E-19** | One plan object | accuracy · profit | L | NEW | big bet |
 | 21 | **E-18** | Close the loop (auto-resolve) | accuracy · profit | L | NEW (prior) | big bet |
 | 22 | **E-20** | A replay harness | accuracy · reliability | L | NEW | big bet |
-| 23 | **E-21** | Break the notebook out of one blob | reliability · speed | L | NEW | big bet |
+| 23 | **E-44** | Break the notebook out of one blob | reliability · speed | L | NEW | big bet |
 
 ---
 
@@ -374,8 +376,8 @@ and 64-gap table extracted from `docs/plans/**` and the other planning documents
 orphan `docs/analysis/05-lead-findings.md`; and the four teammates' read-only audits
 (architecture and stores, prompts and tools, security and gates, UX and docs). **No gate was run
 in the repo by this thread**, **the app was never run**, and **no live profile was touched**. The
-full set of measurements, with the commands, is in `2026-10-19-01-system-and-data-flow.md` §10
-and `2026-10-19-00-index-and-method.md` §0.4.
+full set of measurements, with the commands, is in `audit/2026-10-19-01-system-and-data-flow.md` §10
+and `audit/2026-10-19-00-index-and-method.md` §0.4.
 
 ---
 
@@ -613,3 +615,300 @@ Each is a real finding with evidence, not a placeholder.
 | **observability** | **E-31** |
 | testing | **E-11**, **E-24** · **E-29** (the ratchet) |
 | **developer experience** | **E-32** · **E-07** (`noUnusedLocals`) |
+
+---
+
+## 3C. Cross-check against the previous audit, and the items it found that I missed
+
+**The user's question — "does the current plan contradict `docs/analysis/06-independent-review-2026-10-18.md`?" — is answered in Report 5 §7, with the full item-by-item mapping.** This section carries the *new* material: the findings the previous review had that my first draft did not, and the one place where I now **defer to it**.
+
+**Source:** the orphan commit `508b691a`, `docs/analysis/06-independent-review-2026-10-18.md`
+(58,715 B, 910 lines) — an independent trading review authored 2026-10-18 against a tree 162
+commits before my pin. **Every claim below was re-verified at the current HEAD (`69c4aa33`).**
+
+### 3C.1 The one I defer to: a **third option** for the context decision
+
+Their **QW5** and their **M1** are the same item as my **E-01** — *"Decide the context policy —
+inject or delete"*. We agree on the decision; we differ on the **default**, and **they are right
+about a third option that I did not name**:
+
+- **My default:** cut the assembly first, then re-add deliberately.
+- **Their QW5:** *put the trading contract back in the live prompt* — `HARNESS_CONTRACT_PROMPT`
+  (1,582 chars) composed into the Chat-surface and dock system prompts through
+  `utils/composePrompt.ts`, which already dedupes the contract.
+
+**The third option is better than both of ours, and it is cheap.** The harness contract carries the
+**confidence ladder**, the **marker convention** (`HARNESS_TURN_MARK` — the only text that tells a
+seat which words are the app's and which are the trader's) and the **risk rules**. The expensive
+part of `enhancedPrompt` is the *retrieved context*, not the contract. So:
+
+> **E-01 is refined into two decisions, not one.**
+> **(a) Inject the CONTRACT** (1,582 chars) into the P1/P2/P3 system prompts — **S effort**, and it
+> closes the C-5 contradiction (the mark is used in the user role on every desk turn and explained
+> nowhere) and gives the model a ladder and a "no trade is a decision" instruction.
+> **(b) Decide the REST of the context separately** — the retrieved notebook, the matched skill
+> body, the similar setups, the reflections, the hybrid packet — and **cut it by default**, because
+> the pull path (`recall`, `get_notebook_map`, `read_memory`) already exists and the push path's
+> budget was never settled.
+
+**And the change is what makes the ledger honest:** inject **and** record, or record only what was
+injected. Never one without the other.
+
+### E-35 — The finding I missed that is the sharpest in either audit: **the deterministic skill layer is computed and thrown away** (§3C.2)
+
+| | |
+|---|---|
+| **Problem** | `applyNotebookSkillsToAnalysis` (`services/learning/SkillMemoryService.ts:3494`) is the function that applies the **hard `avoid` veto**, the **candidate cap** and the **confidence downgrade** — the entire deterministic half of the skill system. **It has no production caller.** Its telemetry helper `recordEnforcement` is dead with it. Separately, `services/learning/skillPredicateGate.ts:200` computes `ceilings` from the fired `avoid` skills and returns `ceiling?: number` (`:78`) — **and the consumer discards it**, because `predicateGate` is one of the seven blocks folded into the never-sent `enhancedPrompt` (F-01). |
+| **Evidence** | **[Verified at HEAD `69c4aa33`]** `git grep applyNotebookSkillsToAnalysis` returns: the **definition** (`:3494`), three **comments** (`SkillMemoryService.ts:793`, `services/validation/TradeValidationGate.ts:876`, `utils/harnessSettings.ts:39`) — and **every actual call site is in `tests/`** (`tests/approvalGate.test.ts:110,123`, `tests/decisionBiasClosure.test.ts:297,310`, `tests/harnessMemory.test.ts:384,419,485,491,500,534,571`, `tests/learningLoopMachinery.test.ts:758,765,772`). **Zero production callers.** `git grep recordVeto` returns the definition (`services/ui/VetoLedgerService.ts:90`), a comment (`:9`), an internal catch (`:160`) — and **seven test call sites** (`tests/decisionBiasClosure.test.ts:318`, `tests/learningLoopMachinery.test.ts:200-336`). **Zero production callers.** |
+| **Why it matters** | The app's whole thesis is *"the agent proposes, **deterministic code checks**, the user decides."* **The deterministic check is not connected.** The learner's hard veto — the thing that makes a skill the trader's own rule rather than a suggestion — is computed and dropped. And `VetoLedgerService`'s ledger, which the Health tab and `memoryHygiene` **read**, is never **written**. |
+| **Proposed change** | **Wire `applyNotebookSkillsToAnalysis` into the plan path** (`services/trade/presentTradeTool.ts` / `buildProposedTradeAnalysis`), and pass the `predicateGate.ceiling` into the recorded probability with a `validationWarnings` note naming the skill. **And write the veto** when the veto fires — `VetoLedgerService.recordVeto` already exists and already has the right shape. **Do NOT re-enable the hard veto until E-37 raises the sample floor.** |
+| **Impact** | **Accuracy** (the trader's own rules start binding) · **Reliability** (a read-but-never-written ledger is a lie on the Health tab) · **Maintainability** (a function with 10 test call sites and 0 production ones is the clearest "green suite over dead code" case in the repo) |
+| **Effort** | **S–M** |
+| **Risk** | **M** — a wrong predicate can suppress a good trade. That is exactly why E-37 must land first. |
+| **How to verify** | A test that a fired `avoid` predicate at ceiling 0.40 caps a 72 % plan to 40 % **and stamps the reason**; a retired or zero-sample skill does not. And that the veto ledger's write count is non-zero after a vetoed plan. |
+| **Roadmap** | **NEW** — no roadmap item names the enforcement disconnection. The closest is `R-151` (*"nothing checks `approvedBy` or `whyAccepted` at injection time"*) — **the missing part, named: that is the approval gate, not the enforcement path, and neither one has a caller.** |
+
+### E-37 — The evidence floors are too low for the outcomes that are about to arrive (§3C.3)
+
+| | |
+|---|---|
+| **Problem** | The learning system's sample floors are tuned for a world where there are no outcomes. `MIN_SAMPLE_FOR_VETO = 2` (`services/learning/SkillMemoryService.ts:385`) — **a two-trade sample can veto a real setup**, and a veto can *zero* it. `MIN_CLUSTER_FOR_SKILL = 3` (`:358`) — a three-trade cluster can mint a skill. `MIN_SAMPLE_CONFIRMED = 5` (`:359`). |
+| **Evidence** | **[Verified at HEAD]** `services/learning/SkillMemoryService.ts:358, 359, 385`. |
+| **Why it matters** | **This is a sequencing dependency, and it is the one that bites.** The moment the outcome loop is fixed (E-18), these floors start producing confident, wrong conclusions *from the data they have*. Fixing the outcome loop **without** raising the floors manufactures noise. |
+| **Proposed change** | Raise them **before** the outcomes arrive, in this order: `MIN_SAMPLE_FOR_VETO` 2 → ≥10 (the one that can zero a real setup); then `MIN_CLUSTER_FOR_SKILL` 3 → ≥10 and `MIN_SAMPLE_CONFIRMED` 5 → ≥20. `services/learning/metaCalibration.ts` already proposes this. |
+| **Impact** | **Accuracy** · **Profit** (a wrong veto is a lost trade) · **Reliability** |
+| **Effort** | **S** |
+| **Risk** | **S** — but it needs its existing tests updated deliberately, not incidentally. |
+| **How to verify** | The existing suites updated on purpose; then the promotion rate measured over the new settled population. |
+| **Roadmap** | **NEW** — no roadmap item names the floors. `R-180` (the 9-item Improve list) is the closest home; **the missing part, named: the floors are not on that list, and they are a hard dependency of E-18.** |
+
+### E-38 — A presented plan never expires, so the denominator is wrong (§3C.4)
+
+| | |
+|---|---|
+| **Problem** | `validityDurationMinutes` is declared optional in the schema (`schemas/tradeAnalysis.ts:218`), transformed (`:468`) and **read** by the scalp detector (`services/analysis/ScalpDetectionService.ts:86-87`) — but **no producer ever sets it**. `hooks/useTradeLogging.ts:301` says so in a comment: *"label-only, so no `validityDurationMinutes` appears on a…"*. So a plan that never triggers **vanishes** instead of being recorded as `ENTRY_NOT_HIT`. |
+| **Evidence** | **[Verified at HEAD]** the four sites above; no writer. |
+| **Why it matters** | **The denominator.** Win rate counts only the setups that reached a level. A setup that never triggered is not a loss and not a win — it is a **skip** — and it is currently invisible. The `TradeOutcome` enum has `ENTRY_NOT_HIT` (`types/enums.ts:9-15`), so the outcome exists; nothing produces it. |
+| **Proposed change** | Stamp a default window in `buildProposedTradeAnalysis` — e.g. 24 h for scalp-class, 72 h for swing, derived from `withDetectedTradeType` — and let the autopilot's existing expiry branch (`services/ui/OutcomeAutopilotService.ts:443-456`) write `ENTRY_NOT_HIT` at expiry. |
+| **Impact** | **Accuracy** (the denominator becomes honest) · **Profit** (the expectancy stops being overstated) |
+| **Effort** | **S** |
+| **Risk** | **S** |
+| **How to verify** | After E-18, the ratio of `ENTRY_NOT_HIT` to resolved rows is non-zero and stable across two weeks. |
+| **Roadmap** | **NEW** — and it is a **prerequisite** for E-18's "net expectancy" claims, which are worthless without it. |
+
+### E-39 — The most consequential output in the app is produced at the lowest thinking tier (§3C.5)
+
+| | |
+|---|---|
+| **Problem** | `EFFORT_BY_TASK` (`services/providers/reasoningControls.ts`) is a role→effort schedule: `analysis: 'high'`, `rebuttal: 'high'`, `moderatorVerdict: 'max'`, `clarification: 'low'`, **`chat: 'low'`**, `postMortem: 'medium'`, `supervision: 'medium'`, `ocr: 'low'`. The **Chat surface and the dock** — the paths that can call `present_trade` — resolve through `chat`. **The one output that matters is produced at the lowest tier**, unless the trader manually raises the dial. And the tier the prompt *advertises* is not the tier that is sent: the chat turn asks for temperature 0.4 (`services/trade/chatSurfaceTurn.ts:265`) and automation for 0.3 (`services/trade/automationTurn.ts:198`), but on a thinking-enabled Anthropic model the transport **omits temperature** (`shared/providerRequestPolicy.cjs:180-185`) — the provider default applies. |
+| **Evidence** | **[Verified at HEAD]** `services/providers/reasoningControls.ts` (`EFFORT_BY_TASK`), `services/trade/chatSurfaceTurn.ts:266,327` (the pass-through), `services/trade/chatSurfaceTurn.ts:265` and `services/trade/automationTurn.ts:198` (the requested temperature), `shared/providerRequestPolicy.cjs:180-185` (the omission). |
+| **Proposed change** | Add a **`tradingDecision` task tier** (`high`; `max` for automation) and use it for any turn that can call `present_trade`. And publish the **effective** temperature per (format × thinking) in one table, asserted by a test — so the setting the trader can see is the setting that is sent. |
+| **Impact** | **Accuracy** — the prior review's phrasing is the right one: *"the same model, asked to reason longer, on the one output that matters."* · **Cost** (it will cost more per turn; that is the trade) |
+| **Effort** | **S** |
+| **Risk** | **S** for the tier; **M** for the cost increase. |
+| **How to verify** | A paired A/B on a fixed set of recorded prompts, scoring plan quality against the gate — which needs E-20's replay to store the prompts. |
+| **Roadmap** | **NEW** — no roadmap item names the effort tier or the temperature mismatch. |
+
+### E-40 — The journal's timestamp is the **write** time, so every dashboard measures the wrong thing (§3C.6)
+
+| | |
+|---|---|
+| **Problem** | `hooks/useTradeLogging.ts:284` writes `timestamp: message.createdAt || new Date().toISOString()` — the **decision** time — and `:307` writes `timestamp: new Date().toISOString()` — the **write** time. The **journal row** uses the write time. For an autopilot row that is when the trader **confirmed**, possibly days after entry. `analysis.createdAt` holds the decision time, but the dashboards group and sort by `timestamp` (`components/dashboards/WinRateDashboard.tsx:117-125`, `EquityCurveDashboard.tsx:34-43`, `LearningDashboard.tsx:106`). |
+| **Evidence** | **[Verified at HEAD]** the two writes, and the three dashboard reads. |
+| **Why it matters** | **Every hour-of-day, day-of-week and equity-curve analysis is measuring confirmation time, not trading time.** The equity curve can reorder trades. |
+| **Proposed change** | Add `decidedAt` (from `analysis.createdAt`) and use it for all time-bucketed analytics; keep `timestamp` as `loggedAt` for provenance. Backfill from the embedded analysis — **the data is already in the row.** |
+| **Impact** | **Accuracy** · **Profit** (an equity curve that reorders trades is a wrong equity curve) |
+| **Effort** | **S–M** |
+| **Risk** | **S** |
+| **How to verify** | A unit test with a trade decided Monday and confirmed Friday lands on Monday; the equity-curve order matches the decision order. |
+| **Roadmap** | **NEW** |
+
+### E-41 — The default leverage is 100×, and the liquidation buffer is in the unreachable module (§3C.7)
+
+| | |
+|---|---|
+| **Problem** | `DEFAULT_LEVERAGE = 100` (`utils/conversationUtils.ts:6`) is the app-wide default. `computeLiquidationBuffer` (`utils/ticketSize.ts:194`) exists and is **in the module with no production caller** (E-12). So the app defaults to 100× and never shows the trader how close the liquidation line is. At 100×, a stop 0.19 % from entry is a ~15.9 % account move at 1R on full notional, and a 1 % adverse wick is a total loss. |
+| **Evidence** | **[Verified at HEAD]** `utils/conversationUtils.ts:6` and `:18` (`leverage: DEFAULT_LEVERAGE` — *"Match the app-wide default (useTradeLogging / schema / UI)"*). |
+| **Proposed change** | **Two parts.** (a) On the proposal card, show the **liquidation buffer** beside the stop: *"stop is 0.19 % from entry; liquidation is ~1 % away; a 0.8 % wick is total loss"* — `computeLiquidationBuffer` is already written. (b) **The 100× default is a product decision, not a code change** — it should be the trader's setting, defaulted lower, with the buffer warning always visible. |
+| **Impact** | **Profit** (a wrong size is the most expensive error a manual trader makes) · **Accuracy** (the trader is not shown the risk) |
+| **Effort** | **S** for the warning (it rides on E-12) · **S** for the setting |
+| **Risk** | **S** |
+| **How to verify** | The card shows the buffer for a fixture plan; a plan whose stop is inside the buffer is flagged. |
+| **Roadmap** | **NEW** — the leverage default is not in the corpus. |
+
+### E-42 — A decline leaves no object — there is no HOLD (§3C.8)
+
+| | |
+|---|---|
+| **Problem** | `TradeOutcome` has WIN, LOSS, PENDING, ENTRY_NOT_HIT, SKIPPED (`types/enums.ts:9-15`). **There is no NO_TRADE / HOLD.** A model that declines to present a plan leaves **no row, no candidate, no reason** — the only trace is the level-watch's armed list. And there is **no daily or per-candle job** that scans the universe and logs candidates: `run_screener` (`services/trade/screener.ts:110`) walks the top-N universe deterministically but is only called on demand by the tool and the screener panel, and **automations have no symbol field** (`types/automation.ts:34-68`) — the instrument comes from the prompt text. No `shadow`, `candidate` or `daily scan` store exists. |
+| **Evidence** | **[Verified by code reading]** the enum, the screener's on-demand-only callers, the automation type. |
+| **Why it matters** | **"Are we skipping winners?" is structurally unanswerable today.** That is the largest question a trading app can be asked, and the app cannot answer it because the skip is not a first-class object. |
+| **Proposed change** | **Two steps.** (a) **A `decline_trade` tool** — the model calls it with a reason and the levels it rejected. That is the HOLD record, it is **S/M**, and it fits the existing tool architecture (`present_trade`'s sibling). (b) The **shadow log** — one row per candidate, taken and not taken. The prior review's B1 specifies it: symbol, timeframe, decision time, the feature snapshot, regime, prompt+packet hash, model, the parsed signal **including HOLD**, confidence + `probabilitySource`, entry/SL/TP, which gates ran and which refused, and the cost inputs — with a resolver that settles TP/SL/timeout into `pnlR`, `netR`, MAE/MFE and `resolvedAt`, persisted in Preferences with a stated retention rollup (the notebook cannot hold it). **The pieces already exist and must not be rebuilt:** `outcomeEngine.scanTradeOutcome` (the resolver), `passMining.resolvePassOutcome` (already classifies `MISSED_OPPORTUNITY` vs `CORRECT_PASS`), `VetoLedgerService` (settles what a veto would have done: `WOULD_TP`/`WOULD_SL`/`EXPIRED`), `useAutomations` + `services/automation/*` (cron, 15 s tick, catch-up, run history), `screener.ts` (the universe walk). |
+| **Impact** | **Accuracy** · **Profit** (threshold tuning and prompt replay become possible) · **Reliability** (the biggest question becomes answerable) |
+| **Effort** | **S/M** for (a) · **L** for (b) |
+| **Risk** | **M** for (b) — each candidate can be a model call. Make it opt-in, cap candidates per run, estimate tokens before enabling, and fail closed with no ready provider. |
+| **How to verify** | For (b): replay one week of settled shadow rows against the live thresholds and check that a changed threshold improves expectancy **out of sample** — walk-forward, never random. |
+| **Roadmap** | **NEW** for (a) and (b). `R-119` (the rating store) and `R-120` (the review destinations) are adjacent in shape but not the same. **Note the brief excluded regime routing — and the prior review's own B3 says doing regime routing before the shadow log is *"fitting noise"*, so the exclusion and their sequencing agree.** |
+
+### E-43 — `minEdge`: refuse a plan whose net expectancy at its own probability is ≤ 0 (§3C.9)
+
+| | |
+|---|---|
+| **Problem** | The app caps confidence and downgrades tiers, but **nothing refuses a plan on the arithmetic of its own edge**. A plan at 45 % probability with a 1.1 R:R is a *negative* expectancy after fees, and the app will present it. |
+| **Evidence** | **[Verified by code reading]** the gate's cap-and-downgrade behaviour (Report 1 §4.2) and the absence of any expectancy test. |
+| **Proposed change** | **One inequality, using numbers the app will have after E-03 and E-12**: `netEdge = p × netR_win − (1 − p) × netR_loss`; refuse when `netEdge ≤ 0`. It must be **the trader's threshold**, with the app showing the number it refused on and why. |
+| **Impact** | **Profit** — this is the gate that would have caught the prior review's Plan A (**−1.63 R net**) before it was presented. · **Accuracy** |
+| **Effort** | **S** (after E-03 and E-12) |
+| **Risk** | **M** — a refusal is a lost opportunity if the probability is mis-calibrated. That is why it must be the trader's dial, not the app's. |
+| **How to verify** | A fixture plan with a negative `netEdge` is refused with a named reason; a positive one is not. |
+| **Roadmap** | **NEW** — no roadmap item proposes an expectancy-based refusal. |
+
+### 3C.10 The two things the prior review had that I did not, and I am carrying forward
+
+- **A deterministic baseline: "has anyone asked whether the model beats a fixed rule?"** For every
+  settled candidate, compute what *"trade every `scan_setups` signal with the same SL/TP"* would
+  have returned. **If the deterministic baseline wins, that is the most important thing the app can
+  tell its user** — and it is a few lines against the shadow log. **This is a *use* of my E-20
+  (the replay harness), and it is the sharpest framing of what replay is for.** Carried forward as
+  **E-20's headline use case.**
+- **An exit-model label.** The 50/50 blend and the 150 % zone are **unrecorded assumptions**
+  (`services/backtesting/outcomeEngine.ts:69-71` blends TP1 and breakeven; the 150 % zone
+  `extendedSlPrice` `:119-121` is an unrecorded policy). Store `exitModel: 'blended' | 'single' |
+  'breakeven' | 'trail'` on the row, then replay the same signals under hold-to-last-TP,
+  breakeven-only and a trailing stop. **"No new predictions, just a different management rule on the
+  same entries"** — the cheapest route to a genuine expectancy improvement. **Carried into E-20.**
+
+### 3C.11 One prior claim that does **not** verify at HEAD
+
+| prior claim | verdict at HEAD `69c4aa33` |
+|---|---|
+| `constants/prompts/analysisPrompts.ts:299` — *"Family C … Highest win rate (~86 %)"* asserted as fact | **NOT FOUND.** `analysisPrompts.ts` is **190 lines** at HEAD (the citation's line number is past its end), and a search for `win rate`/`winrate` across `constants/prompts/` returns **zero** hits. Either the text was removed with the lens deletion, or the citation was wrong. **The finding is not carried forward.** |
+
+### 3C.12 The prior review's dead-module list, checked against mine
+
+Their §2.14 list: `utils/ticketSize.ts`, `services/validation/TradeValidationGate.ts`,
+`services/validation/ValidationConstants.ts`, `services/analysis/EntryTimingService.ts`,
+`services/analysis/ProbabilityEngineService.ts`, `services/analysis/convictionDrift.ts`,
+`services/backtesting/BacktestingService.ts`, `services/learning/MemoryConsolidationService.ts`,
+`utils/teamRoster.ts`, `utils/navModality.ts`.
+
+**My sweep found 4 orphans** (`AvoidSetupsSection.tsx`, `MemoryConsolidationService.ts`,
+`messageDisplayText.ts`, `plugins/GallerySaver.ts`) plus the 63 dead exports and 202 dead `export`
+modifiers — **which covers their list as a superset**, except for **four modules my sweep did not
+flag** because they are reachable *from a dead module* rather than from nothing:
+`EntryTimingService.ts` (imported only by the dead `TradeValidationGate`),
+`navModality.ts`, `SessionGuardService.ts` (reads `equityUsd`, and is unreachable) and
+`ValidationConstants.ts` (imported only by the dead gate). **Those four are dead-by-transitivity —
+a second-order orphan class neither audit had named.** They are added to Report 4 §13.
+
+---
+
+### E-50 — Remove the tests that only cover code the app never loads — **with a keep-list**
+
+| | |
+|---|---|
+| **Problem** | A reachability graph over **521 source modules** from the real entry points finds **29 that the app never loads** — and **25 test files exist only to cover them**. Two of the three largest are the product's core promise: **`services/validation/TradeValidationGate.ts` (986 lines, the 20-check gate) has ZERO production callers**, and **`services/backtesting/BacktestingService.ts` (1,414 lines)** is named in a *comment* by `utils/riskReward.ts:7` as the realized-R authority. The third, **`components/analysis/AnalysisProgress.tsx`**, is the **step ladder** — the roadmap says it is "muted"; it is **not mounted at all**. |
+| **Proposed change** | **Four batches, and a keep-list that is the important half.**<br>**T1 — the unambiguously dead** (5 test files, 482 lines + 4 modules, 596 lines): `debatePods`, `ProbabilityEngineService` (×2 test files), `incrementalMarkdown`, `seriesPalette`. Delete the test **and** its module in one commit.<br>**T2 — dead-by-decision, HELD** (6 test files + 6 modules): the validation gate, the backtest engine, the step ladder, `EntryTimingService`, `convictionDrift`, `preRead`. **Each waits on the plan deciding that module's fate** — and three of them are the plan's biggest open decisions.<br>**T3 — the 15 mixed files** test live code: keep the file, drop the dead side-import.<br>**T4 — the 849 lines that LOOK useless and are NOT**: `themeContrast.test.ts` (393), `jsxNesting.test.ts` (283), `sourceCodeHelper.test.ts` (96), `aiTrendlinesDrawn.test.ts` (77) are **repo-wide source guards** — the repo's own lint, in test form. They import a *test helper*, which is why they look like orphans. **Never delete them.** |
+| **The keep-list** | **`tests/ticketMathTiers.test.ts` (187) stays** — it is the only coverage of `utils/ticketSize.ts`, and **the plan wires that module (E-12)**. Deleting the test before the module ships removes the only proof it works. **`tests/accuracyValidation.test.ts` stays** until the gate's fate is decided. **`tests/financialMath.test.ts` stays** — 5 live subjects, 1 orphan side-reference. |
+| **The rule** | **A test and its dead module go together, or neither** — a test that outlives its subject is the "green suite over dead code" defect itself. **Never delete a test to make a number smaller**; the suite's value is its coverage of what *ships*. Before any deletion, confirm the subject has **zero production importers** with a direct `git grep` for the import specifier — not a reachability pointer. |
+| **Impact** | **Maintainability** (the suite stops proving things that do not run) · **Speed** (≈1,000 lines of test and ≈2,100 lines of dead module out of the tree) · **Accuracy** — because T2 forces the two biggest dead modules to be *decided* rather than left in limbo |
+| **Effort** | **S** for T1 and T3 · **M** for T2 (it is a decision, not a deletion) |
+| **Risk** | **LOW** for T1/T3 · **MEDIUM** for T2 — three of the six are decisions, and two of them are the product's promise |
+| **How to verify** | `npm run typecheck && npm run lint && npm run test && npm run test:coverage`. The coverage ratchet (36/28/36/30) must stay satisfied **after** the deletions — removing 1,000 lines of tests can move it. |
+| **Roadmap** | **NEW** — and it is **the last, and the largest, piece of the cleanup**: Report 4 §15 has the full per-file table, the batches, the keep-list and the four rules. |
+
+## 3D. The three new features, as proposals
+
+**Added 2026-10-20** at the owner's request. The deep dives that justify them are in Report 1
+§12. These are the proposals those dives produced.
+
+### E-45 — The Chat surface's run gets per-session ownership, and a conversation switch stops killing it
+
+| | |
+|---|---|
+| **Problem** | The dock's run survives a surface switch because its state is hoisted into `services/trade/chatStore.ts` and its controller is per-session (`chatStore.beginRun` at `services/trade/chatTurnRunner.ts:850,1153,1196`). **The Chat surface's run does not** — it is owned by one module-level `analysisAbortController` (`hooks/useAnalysisPipeline.ts:327`), and the effect at `:351-367` aborts it on **any** `activeConversationId` change. Yet `:691-693` already binds every async write to the conversation the request started in, *"even if the user switches conversations before a provider response or stream chunk arrives"* — **the machinery for surviving a conversation switch exists, and the effect kills the run before it can be used.** |
+| **Evidence** | Report 1 §12.1. `:351-367` vs `:691-703`; `services/trade/chatStore.ts:479,493`; `chatTurnRunner.ts:850`; the surfaces unmount at `App.tsx:2312,2357,2379`; the dock's deliberate no-abort at `components/trade/TradeChatPanel.tsx:696-697` |
+| **Proposed change** | 1. Register the Chat surface's controller with `chatStore.beginRun`/`endRunOwned`, so a run is owned by a conversation, not by the hook. 2. **Stop aborting** in the `:351-367` effect: make the loading message, the step tracker, the in-progress flag and the steering queue **per-conversation**, and let the run write into its own conversation via the existing `updateRequestMessages`. 3. Make the double-submit guard per-conversation. 4. **Stop** aborts the active conversation's run only. 5. Deleting a conversation aborts that conversation's run. 6. Show a **busy badge** on conversations with a live run, so "it is still thinking over there" is visible. 7. **Keep** the profile switch cancelling — a different trader's data must not receive the previous trader's answer. |
+| **Impact** | **UX** (the feature as asked) · **Accuracy** (an answer that arrives after you look at another conversation is an answer, not a cancellation) · **Reliability** (two conversations can now run at once, as the dock already allows) |
+| **Effort** | **M** |
+| **Risk** | **M** — it changes *when* a run dies. `tests/useConversationHousekeeping.test.tsx:45` asserts `handleCancelAnalysis` **is** called on a conversation load; that test must be flipped deliberately. |
+| **How to verify** | A test that starts a run in A, switches to B, and asserts (i) A's controller was not aborted, (ii) A's text landed in A, (iii) Stop in B aborts only B, (iv) deleting A aborts A. Then `npm run render-probe` for the badge. |
+| **Roadmap** | **NEW** — the dock's half is already shipped, so this is the **second half of a design that exists**, not a new idea. |
+
+### E-46 — Level-3 sub-resources and a compatibility block for skills
+
+| | |
+|---|---|
+| **Problem** | August's skill format is **already a deliberate port of the Agent Skills spec** — `services/learning/SkillMemoryService.ts:411-431` says so in a comment, with the two-face split (`# august:skill-ledger`, `:432`), spec-shaped `name` + `description` (`:1068-1070`), and a parser that loads a spec-only file as an unproven candidate (`:424-427`). Two convention elements are missing, and **one of them costs the trader something**: (a) **no `references/` / `scripts/` / `assets/`** — so a long procedure is **clipped** at `RECALL_SKILL_BODY_MAX` = **700 characters** (`services/learning/skillDocument.ts:6-8`) instead of being extended; (b) **no `compatibility` block** — a skill cannot declare the tools, env vars or platform it needs (August has `audience`/`lensScope`/`manualOnly`, which say *who may see it*, not *what it needs*). |
+| **Proposed change** | (a) **Level 3**: let a skill carry a `references/<name>.md` note that the model pulls on demand with the same `recall` path that already pulls the body. The storage problem is real — the notebook is a flat list of `.md` entries, not a tree — so the cheapest version is a **sibling note referenced by path in the frontmatter**, not a directory tree. (b) **`compatibility`**: one more frontmatter key family (`requiresTools:`, `requiresEnv:`, `platforms:`), written by the craft and checked by the retrieval, so a skill that needs a tool the seat does not have is **not injected**. |
+| **Impact** | **Accuracy** (a long procedure stops being lossy) · **Reliability** (a skill that needs a missing tool is not injected) · **Maintainability** (the format becomes the spec's, so a Claude/Hermes skill is a first-class import) |
+| **Effort** | **L** for (a) — it is a storage-shape change · **S** for (b) |
+| **Risk** | **M** for (a) — the notebook is the one store the app cannot regenerate. **This is the only item in the whole plan where a bug can lose the trader's own thinking.** It must land **after** E-48's repair path exists, so a broken split is recoverable. |
+| **How to verify** | A skill with a `references/` note: the index line stays one line, the body stays ≤ 700 chars, and the note is pullable and cited. A skill with `requiresTools: [run_screener]` is not injected into a surface without that tool. |
+| **Roadmap** | **NEW** — but the *format* itself is already a port; the missing part is named precisely in Report 1 §12.2.2. |
+
+### E-47 — The small convention gaps: filename, category, version, URL install
+
+| | |
+|---|---|
+| **Problem** | The skill **content** is spec-shaped; the **envelope** is not. Files are `slug.md` (`isSkillFile`, `services/learning/SkillMemoryService.ts:405-406`), so a `SKILL.md` dropped into the skills folder is not recognised as spec-shaped. There is no `version` key. The notebook's folders are top-level (`skills/`, `rules/`, `doctrine/`, …) but there is **no category per skill**. Import is file-only (`services/learning/SkillImportService.ts:95-112` — `readSkillFiles`); there is no URL or owner-repo install. There are no skill bundles (one YAML loading several skills). |
+| **Proposed change** | (a) Accept `SKILL.md` as an alias for a spec-shaped skill file — the **parser already handles it**; only the filename check needs to widen. (b) A `version:` key on the portable face. (c) A per-skill `category:` key, and a category view in the catalog. (d) `installSkillFromUrl(url)` alongside the file import, with the same per-file outcome contract. (e) Defer bundles — they are the least valuable of the five and the most work. |
+| **Impact** | **Maintainability** (a Claude/Hermes skill drops in and works) · **UX** (a category view) · **Portability** |
+| **Effort** | **S** for (a), (b), (d) · **M** for (c) · **M** for (e), deferred |
+| **Risk** | **S** |
+| **How to verify** | Drop a spec-only `SKILL.md` into the skills folder and assert it lists, parses and loads as an unproven candidate. |
+| **Roadmap** | **NEW** |
+
+### E-48 — A "review all my skills" job that proposes, never writes
+
+| | |
+|---|---|
+| **Problem** | There is no way to see which of the trader's skills are malformed, clipped, untriggerable or shadowed — the format is already spec-shaped, but **nothing checks it**. A skill whose description is only the `ifCondition → thenAction` fallback (`services/learning/SkillMemoryService.ts:1064-1067`) will rarely fire; a skill over the 700-char recall cap is **silently clipped at the card** (`services/learning/skillDocument.ts:48-54` — `clipped`, `droppedChars` — the number is already computed and nothing surfaces it). |
+| **Proposed change** | **A two-stage job, both stages already exist as building blocks.**<br>**Stage 1 — deterministic, no model call.** For every skill: does it parse (`parseSkillMarkdown`); does it round-trip (`serializeSkill`); is `name` present and ≤ 64; is `description` real or a fallback; is the portable/ledger split intact; are the body sections recognised (`parseSkillBody` / the `HEADINGS` map); **how much would be clipped** (`projectSkillCard` → `droppedChars`); does the description say WHEN (a trigger phrase, or an `ifCondition`); does the file name match the skill (`skillFileNameFor`).<br>**Stage 2 — model-assisted, only for what code cannot decide.** Rewrite a description that does not say WHEN, and normalise section headings, using the existing skill-writing calls (`services/learning/SkillCraftService.ts` — `craftSkillFromPostMortem:155`, `refineSkillFromLosses:228`).<br>**The write rule: the job produces PROPOSALS, never writes.** Every proposal goes through the existing human gate — `utils/learningQueue.ts` (`queueLearningProposal`, `applyProposalCard`, `decideRewriteCard`) — landing in `components/learn/ActionApprovals.tsx`. The same discipline the supervisor and `propose_skill` already use.<br>**The budget: opt-in, capped per run, a token estimate shown before it starts, fail closed with no ready provider.** The precedent is `services/learning/SkillEvalScheduler.ts` — a scheduled, budgeted, sample-gated LLM pass over skills — and `services/learning/SkillEvalService.ts:307`, which already writes a verdict into a skill's frontmatter. **The review job is its sibling: same scheduler, same budget, different prompt, different write target.** |
+| **Impact** | **Accuracy** (an untriggerable skill is a skill that never fires; a clipped one is a procedure the model only half-reads) · **Maintainability** (one button to see the health of the whole library) · **UX** |
+| **Effort** | **M** — Stage 1 is **S** (everything it needs exists); Stage 2 is **M** |
+| **Risk** | **M** — a batch that rewrites skills is a batch that can damage them. Mitigations: proposals only; a diff per skill before anything is applied; a per-skill revert; the deterministic pass runs first and alone. |
+| **How to verify** | A test over a corpus of deliberately malformed skills (no frontmatter, no description, an unknown section, an over-cap body, a name that does not match the file) asserting one verdict each; and an end-to-end test that a Stage-1 report lists exactly those and proposes nothing. |
+| **Roadmap** | **NEW** — the *format* is already a port; the *bulk review* is not in the corpus. |
+
+### 3D-rank
+
+| rank | id | what | impact | effort | roadmap |
+|---|---|---|---|---|---|
+| 1 | **E-45** | Per-session run ownership for the Chat surface | UX · accuracy | **M** | NEW |
+| 2 | **E-48** | "Review all my skills" — propose, never write | accuracy · maintainability | **M** | NEW |
+| 3 | **E-47** | The envelope gaps: filename, category, version, URL install | maintainability | **S–M** | NEW |
+| 4 | **E-46** | Level-3 sub-resources + a compatibility block | accuracy | **L** | NEW |
+| 5 | **E-46** (the new features file) | **"a run is still going" badge on the conversation rail** | UX | **S** | NEW (as **N-21**) |
+
+---
+
+## 3E. Two additions the malformed-skill question forces
+
+**Added 2026-10-20**, after the owner asked what happens to a skill that does not follow the format
+or is too vague. The deep dive is Report 1 §12.4.
+
+### E-48b — the review job issues **three** verdicts, and proposes only what is safe
+
+| | |
+|---|---|
+| **Problem** | A skill that does not parse is **silently dropped** by `listSkills()` (`services/learning/SkillMemoryService.ts:1053-1057`) and by the retrieval (`MemoryRetrievalService.ts:218-219`). It sits in the notebook, in the backup and in the export — and appears in **no** list, including the Health card, whose report **already computes the count and throws it away** (`memoryHealth.ts:178-181` — `skillFiles` is used at `:178` and `:179` and never again). **The same file would be rejected *with a reason* on import** (`SkillImportService.ts:56-58`) — so the app gives two opposite answers for the same file depending on how it arrived. A skill that parses but names no trigger is listed, **occupies one of the 30 index slots in file order**, and will never fire (`MemoryRetrievalService.ts:257`, *"A skill that qualifies on neither signal stays invisible"*). A skill whose card is clipped at the 700-char recall cap is a **half-procedure in every prompt**, and `projectSkillCard` already returns `droppedChars` (`skillDocument.ts:48-54`) — **computed and never surfaced**. |
+| **Proposed change** | **The review issues three verdicts, and proposes only what is safe.**<br>**GHOST** (unparseable) — show the file, its size and **the first failing line**; propose (a) reconstruct the frontmatter from the file's own body, landing as an **unproven candidate with zero counters**, (b) archive it out of `skills/`, or (c) delete it **on the trader's word only**.<br>**DORMANT** (no usable trigger) — show the skill and *"names no setup it applies to"*; propose (a) the model writes a trigger **from the skill's own body**, old and new side by side, (b) demote to `candidate`, or (c) leave it alone. **A warning, not a defect** — a general rule is *supposed* to be unscoped, and the retrieval deliberately broadens on prose for exactly that case (`MemoryRetrievalService.ts:243-244`). **"Never fired" is NOT the verdict** — the injection log is run-capped, and the repo already refuses to conflate "never served" with "aged out" (`memoryHealth.ts:15-18`). Show it as a hint, never as the proof.<br>**CLIPPED** — show **how many characters are cut**; propose shortening the body, or moving the overflow to a `references/` note (**needs E-46**).<br>**And put the ghost count on the Health card permanently** — a hand-edit can create one at any time. |
+| **The safety rule** | **A repair that widens a skill's reach ACTIVATES it.** Reconstructing a ghost gives it a trigger; giving a dormant skill a real description makes it match. Once E-35 lands, that means a live rule that can veto a trade. **⇒ The default for a broken skill is NOT "make it work" — it is "show it and let the trader decide." Narrowing (demote, archive, retire) is safe and may be proposed freely; widening (activate) must be confirmed one skill at a time. Evidence counters are never invented: a reconstructed skill starts at zero wins, zero losses, `status: candidate`.** Every repair is a proposal through the existing queue with a diff. |
+| **Impact** | **Accuracy** (a ghost is a rule the trader believes in and the app has never heard of) · **Reliability** (two opposite answers for the same file is a correctness bug, not a formatting one) · **Maintainability** |
+| **Effort** | **S** for the deterministic stage — *every* number it needs is already computed somewhere and discarded — **M** for the model stage |
+| **Risk** | **M** — a batch that widens skills changes what the model does. Mitigations: proposals only, a diff per skill, per-skill revert, and the safe/unsafe split above. |
+| **How to verify** | A test over a corpus of deliberately broken skills — no frontmatter, a broken `---` fence, a description equal to the fallback, an over-cap body — asserting one verdict each; a test asserting a reconstructed ghost lands as `candidate` with zero counters; and a test asserting the Health card's ghost count equals `skillFiles.length - metas.length`. |
+| **Roadmap** | **NEW** — an extension of E-48, not a separate idea. |
+
+### E-49 — rank the 30-slot index, so fixing the skills actually gets them in front of the model
+
+| | |
+|---|---|
+| **Problem** | The prompt's skill index is **30 slots, filled in notebook file order, unranked and unfiltered by status** (`services/trade/chatSurfaceTurn.ts:109-118` → `rows.slice(0, SKILL_INDEX_WINDOW)`; `listSkills()` returns file order). A **retired** skill and an unproven **candidate** occupy a slot exactly like a **confirmed** one, and a **dormant** skill occupies a slot a good skill needed. `buildSkillsIndexForPrompt` (`services/trade/tradeChatContext.ts:206-224`) renders whatever it is given. **⇒ Repairing the library does not guarantee the model sees the repaired skill** — and the index is the only place a skill is ever *named* to the model. |
+| **Proposed change** | **Rank and filter the rows before the slice.** A skill earns an index slot by: (1) it has a usable trigger; (2) it is not `retired`; (3) `confirmed` before `candidate`; (4) a skill the current audience may see (`audience` / `lensScope` / `manualOnly` — `MemoryRetrievalService.ts:258-260` already filters these for *retrieval*, but the **index** does not); (5) ties broken by last evidence, then by name. The `…and N more` line already exists for the overflow (`tradeChatContext.ts:222`), so the honest count is already handled. |
+| **Impact** | **Accuracy** (the model sees the skills that can act) · **Cost** (the same 30 slots carry better content) · **Reliability** (a retired skill stops occupying a slot a live one needs) |
+| **Effort** | **S** |
+| **Risk** | **S** — it changes which skills are named. The pool that ranks out is reported in the `…and N more` line, so nothing disappears silently. It must use `utils/runStatus.ts`'s vocabulary for the status word, not a new one. |
+| **How to verify** | A test with a retired skill, a dormant skill and a confirmed skill, asserting the order of the index and that the retired one is absent. Plus a test that the `manualOnly` skill stays out of an audience that may not see it. |
+| **Roadmap** | **NEW** — and it is the **same defect as the "one fact, several homes" cluster**, seen from the prompt side. |
