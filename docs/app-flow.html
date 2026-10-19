@@ -72,7 +72,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <div class="down">↓ App.tsx:189 — surfaces render from :2493 down ↓</div>
 <div class="tier">
  <div class="n"><b>&lt;Header&gt; band</b><i>App.tsx:2467 band, guard surface !== 'agents' App.tsx:2466</i></div>
- <div class="n run"><b>SurfaceSwitch — 4 destinations</b><i>App:2167 · list SurfaceMenuList.tsx:42</i></div>
+ <div class="n run"><b>SurfaceSwitch — 4 destinations</b><i>App:2140 · list SurfaceMenuList.tsx:42</i></div>
  <div class="n dead"><b>NavRail + its destination rows</b><i>imported App:125, never rendered · "NavRail is GONE" App:2445 · rows SurfaceMenuList.tsx:116 (only mount passes hideSurfaces, App:2638)</i></div>
  <div class="n dead"><b>onExpandNavRail is a prop, not a render</b><i>App:2483 · rail state App:679-692 · only the AccountRow export is mounted, App:2675</i></div>
 </div>
@@ -127,7 +127,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <div class="down">↓ true = ensemble (section C) · false = the desk else-arm hooks/useAnalysisPipeline.ts:1377 ↓</div>
 <div class="cols">
  <div class="col"><h3>a bot thread? hooks/useAnalysisPipeline.ts:1352 — yes</h3><div class="flow">
-  <div class="n run"><b>streamQuickResponse</b><i>:1350 → GenericAnalysisService, tier via resolveComposerEffort</i></div>
+  <div class="n run"><b>streamQuickResponse</b><i>hooks/useAnalysisPipeline.ts:1334 → GenericAnalysisService, tier via resolveComposerEffort</i></div>
  </div></div>
  <div class="col"><h3>no — the desk, WITH its tools</h3><div class="flow">
   <div class="n run"><b>runChatSurfaceTurn</b><i>services/trade/chatSurfaceTurn.ts:230 · tools from CHAT_SURFACE_TOOLS :55</i></div>
@@ -145,7 +145,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 </div>
 <div class="down">↓ a seat calls a tool ↓</div>
 <div class="tier">
- <div class="n"><b>present_trade → runPresentTrade</b><i>presentTradeTool.ts:75 → a decision CARD on the row, in EITHER home · gate scan starts here, the cap binds at log time (<code>ensureStamp</code>)</i></div>
+ <div class="n"><b>present_trade → runPresentTrade</b><i>presentTradeTool.ts:75 → a decision CARD on the row, in EITHER home · gate scan starts here, the cap binds at log time (<code>ensureStamp services/trade/proposalGate.ts:122</code>)</i></div>
  <div class="n store"><b>logged / dismissed dispositions</b><i>proposalDisposition.ts:22 — one map serves both homes</i></div>
 </div>
 <p class="note"><b>One entry, both homes.</b> <code>handleRunAnalysisFromChat</code> (App:1719) is the only analysis wrapper: the dock passes it as <code>onRunAnalysis</code> (App:2485) and the Chat surface as <code>onAnalyze</code>. It was two, and <code>services/trade/analysisTurn.ts</code> was deleted (2026-10-17) because a second writer keyed rows with ids no canonical row could match. The Chat surface's "no desk tools wired" gap closed on 2026-10-18 (stage 20b).</p>
@@ -197,7 +197,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <div class="flow">
 <div class="tier">
  <div class="n"><b>automation tick / runNow / boot catch-up</b><i>runAutomation, useAutomations.ts:411</i></div>
- <div class="n dec"><b>forks on config.botId</b><i>:431 — has a bot → routine · no bot → its own tool turn</i></div>
+ <div class="n dec"><b>forks on config.botId</b><i>hooks/useAutomations.ts:423 — has a bot → routine · no bot → its own tool turn</i></div>
 </div>
 <div class="down">↓</div>
 <div class="cols">
@@ -312,7 +312,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>42</td><td>heartbeat → hygiene + idle sweep</td><td><code>useLearningHeartbeat</code> → <code>memoryHygiene.ts</code> → <code>skillIdleLifecycle.ts</code></td></tr>
 <tr><td>43</td><td>approval tray → badge</td><td><code>collectApprovalItems</code> → <code>approvalsWaiting</code> → Knowledge tab only</td></tr>
 <tr><td>44</td><td>the pane filters what it shows</td><td><code>agentThreads.ts</code> read at <code>AgentsView.tsx</code></td></tr>
-<tr><td>45</td><td><code>present_trade</code> → a card in either home</td><td><code>runPresentTrade presentTradeTool.ts:75</code> ← dock sink <code>chatTurnRunner.ts</code> / desk sink <code>chatSurfaceTurn.ts</code>; gate scan starts there, the cap binds at log time (<code>ensureStamp</code>)</td></tr>
+<tr><td>45</td><td><code>present_trade</code> → a card in either home</td><td><code>runPresentTrade presentTradeTool.ts:75</code> ← dock sink <code>chatTurnRunner.ts</code> / desk sink <code>chatSurfaceTurn.ts</code>; gate scan starts there, the cap binds at log time (<code>ensureStamp services/trade/proposalGate.ts:122</code>)</td></tr>
 <tr><td>46</td><td><code>chatSurfaceSystemPrompt</code> → the desk arm's prompt</td><td><code>chatSurfaceTurn.ts:147</code> — mandate (<code>chatPrompts.ts:40</code>) + skills index + active strategies + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (<code>types/message.ts:280</code>)</td></tr>
 <tr><td>47</td><td>prose that never called the tool → the same decision</td><td><code>planFromProse tradeShapedProse.ts</code> reads the labelled entry/stop/target out of the row, <code>parseTradeProposal</code> decides whether that is a plan, and the chip mints the ONE plan-id shape (<code>mintPlanId</code>) before calling <code>onLogProposedTrade</code></td></tr>
 <tr><td>48</td><td>a scheduled run → a rationed plan</td><td><code>MAX_PLANS_PER_RUN</code> (<code>automationTurn.ts:69</code>) counts inside the turn; <code>MAX_PLANS_PER_DAY</code> (<code>AutomationService.ts:113</code>) is a local-calendar-day ledger keyed per automation (<code>:130</code> read, <code>:143</code> spend). Past either, <code>present_trade</code> gets an <code>ok: false</code> receipt naming the limit — a refusal the MODEL reads, not a card that quietly never appears</td></tr>
@@ -330,7 +330,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 3. The provider layer speaks <b>four</b> wire formats; "three" describes only <code>electron/sseParser.cjs</code>, which has no <code>google</code> dialect.
 4. Approvals is a <b>tab</b> of Knowledge, not a fifth destination.
 5. <b><code>NavRail</code> is imported and NOT rendered.</b> An <code>on…</code> prop is not a render: <code>onExpandNavRail</code> (App:2483) and the rail's expand state (App:679-692) are alive, and that is how an earlier pass of this doc came to claim the rail was mounted. Withdrawn.
-6. <b>A doc line number is a claim, not a citation — and <code>npm run check-flow-doc-anchors</code> now refuses it.</b> Every number here names its file on the same line, so CI can check it: 247 anchors verified, 0 unattributed, ceiling 0. The gate also reads its own quoted figure: this sentence states a number, and CI refuses the merge if it stops matching the scan. <b>Coverage asymmetry, measured rather than trusted from prose:</b> that step runs in <code>ci.yml</code>, and <code>release.yml</code> does NOT run it — nor the skill-approval probe, the bare typecheck, or CI's second suite job — while <code>installer-smoke</code> is the only gate release has and CI lacks. A <code>comm -13</code> over the two workflow files' npm-run lines prints that difference, and <code>AGENTS.md</code> now states it instead of claiming "the same static + probe chain". A tag can still publish with a dead line number in these docs while CI would reject the same commit; adding the step to <code>release.yml</code> would close that, and that half changes the publish path, so it is recorded rather than done. Qualifying the last 98 is what found six that were right-shaped and wrong (<code>chatTurnRunner.ts:929</code> rather than line 919, <code>:1006</code> rather than line 996, <code>:1018</code> rather than line 1008, <code>:784</code> rather than line 774, <code>TradeChatPanel.tsx:547</code> rather than line 1130, <code>automationTurn.ts:69</code> rather than line 68 ). Counts are taken with <code>grep -c</code>, not a truncated <code>head</code>.
+6. <b>A doc line number is a claim, not a citation — and <code>npm run check-flow-doc-anchors</code> now refuses it.</b> Every number here names its file on the same line, so CI can check it: 252 anchors verified, 0 unattributed, ceiling 0. The gate also reads its own quoted figure: this sentence states a number, and CI refuses the merge if it stops matching the scan. <b>Coverage asymmetry, measured rather than trusted from prose:</b> that step runs in <code>ci.yml</code>, and <code>release.yml</code> does NOT run it — nor the skill-approval probe, the bare typecheck, or CI's second suite job — while <code>installer-smoke</code> is the only gate release has and CI lacks. A <code>comm -13</code> over the two workflow files' npm-run lines prints that difference, and <code>AGENTS.md</code> now states it instead of claiming "the same static + probe chain". A tag can still publish with a dead line number in these docs while CI would reject the same commit; adding the step to <code>release.yml</code> would close that, and that half changes the publish path, so it is recorded rather than done. Qualifying the last 98 is what found six that were right-shaped and wrong (<code>chatTurnRunner.ts:929</code> rather than line 919, <code>:1006</code> rather than line 996, <code>:1018</code> rather than line 1008, <code>:784</code> rather than line 774, <code>TradeChatPanel.tsx:547</code> rather than line 1130, <code>automationTurn.ts:69</code> rather than line 68 ). Counts are taken with <code>grep -c</code>, not a truncated <code>head</code>.
 7. "The Chat surface has no tools wired" was true, and stopped being true on 2026-10-18.<br>
 8. "Automations always run the ensemble pipeline" was a code comment, and stage 20r (2026-10-18) made it false: a schedule now takes its own arm, so the ensemble flag answers only the trader’s switch. Restore the sentence and you have also made stage 19 undeletable.</p>
 </div>
