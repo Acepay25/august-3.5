@@ -155,7 +155,7 @@ record of why the order is what it is.
 
 Structured chart analysis exists **only** inside the ensemble branch, and this app
 has no solo-analysis path: `isChartAnalysisRequested`
-(`useAnalysisPipeline.ts:1578`) lists `isEnsembleEnabled` as a trigger term, so with
+(`useAnalysisPipeline.ts:1565`) lists `isEnsembleEnabled` as a trigger term, so with
 the flag off every send is casual chat. Deleting the branch therefore deletes the
 verdict, the entry/SL/TP, the levels drawn on the chart, the gate scan, and the
 journal row that the autopilot watches — not just the debate.
@@ -336,7 +336,7 @@ Stage 20c made `runEnsembleEnabled` the only guard, so a scheduled run with the
 toggle on was still entering the debate. 20r does not delete that dependency in
 stage 19 — it gives the schedule a route of its own first, so one config has one
 behaviour at every revision. The arm sits in the pipeline at
-`useAnalysisPipeline.ts:1548`, ABOVE the mode fork at `:1598`, and
+`useAnalysisPipeline.ts:1537`, ABOVE the mode fork at `:1598`, and
 `tests/automationRouteCharacterization.test.tsx` pins the order by `indexOf`
 rather than by prose, so moving the arm below the fork is a failing test, not a
 comment.
@@ -1002,7 +1002,7 @@ the store stays. `CalibrationLedgerService` (117 lines) feeds TWO live surfaces:
 not a mechanical one — it removes reporting the trader can currently open.
 
 **2. `ensembleProgress` has no rendering reader but IS load-bearing on the failure path.**
-Census over all `.ts`/`.tsx`: minted at `useAnalysisPipeline.ts:909`→`:912`, patched at
+Census over all `.ts`/`.tsx`: minted at the block now at `useAnalysisPipeline.ts:903`→`:908` (the placeholder row itself was deleted with the engine), patched at
 `runOutcome.ts`'s debating branch, stripped at the SQLite boundary, and
 after `1bd501e` no component reads it (`App.tsx:1252` was the last, and that memo is
 gone). But the `runOutcome` branch keyed on it writes the row's TEXT —
@@ -1287,7 +1287,7 @@ The file lists are recorded here so the next pass starts from evidence, not from
 
 **#19 — the ensemble branch, the hybrid pull, and the prompt A/B lane.**
 `runEnsembleEnabled` is not local to the hook: it is threaded from `App.tsx` through
-`hooks/useAnalysisPipeline.ts:567/:279/:544` and gates `:403` (a UI-muting early return), `:909`,
+`hooks/useAnalysisPipeline.ts:567/:279/:544` and gates `:403` (a UI-muting early return), `:903`,
 `:806` (the coin tip), `:874`, `:923`, `:956`, and appears in the `:1594` dependency array. The
 toggle itself is persisted (`hooks/useProfilePersistence.ts`, `hooks/useUserProfileLoader.ts`,
 `types/user.ts`, `services/learning/MemoryFilesService.ts`, `services/trade/automationTurn.ts`,
@@ -1295,7 +1295,7 @@ toggle itself is persisted (`hooks/useProfilePersistence.ts`, `hooks/useUserProf
 (`tests/analysisPipelineSendIdentity.test.ts`, `tests/automationRouteCharacterization.test.tsx`,
 `tests/useProfilePersistence.test.tsx`). Deleting the hybrid pull also changes which coin the
 learning step receives, because the packet still feeds `assemblePipelineMemoryContext` at
-`hooks/useAnalysisPipeline.ts:1021` (the call; the import sits at :33).
+`hooks/useAnalysisPipeline.ts:1008` (the call; the import sits at :33).
 
 **Correction to what this doc and the flow doc currently assert about the A/B lane.** It is not
 "starved with no caller" in the product sense: `beginPromptLane` has no caller, so
@@ -1354,9 +1354,9 @@ with an offer to migrate that text into the general list before the tabs go.
 **Attempted #19's tail in an isolated worktree on 2026-10-18 and stopped at the third site — with
 two couplings the list above did not contain.** They are the reason this is a design pass and not a
 grep-and-delete:
-- `isEnsembleEnabled` also gates **live market polling**: `App.tsx:495` passes it to
-  `hooks/useMarketData.ts`, which uses it at `:41` (clears `liveMarketConditions` when off), `:125`
-  and `:159` (the Binance reachability check) and `:116`/`:190` (effect deps). So deleting the
+- `isEnsembleEnabled` gated **live market polling** too: `App.tsx:495` passed it to
+  `hooks/useMarketData.ts`, which uses it at `:44` (clears `liveMarketConditions` when off), `:127`
+  and `:161` (the Binance reachability check) and `:118`/`:192` (effect deps). So deleting the
   toggle silently kills the market ticker the header shows, unless the polling is re-parented onto
   `isHybridIntelligenceEnabled`, which is that feature's own switch and the honest owner of it.
   Note the toggle's default is **off** (`App.tsx:353` `useState(false)`), so "ordinary chat wins"
@@ -1736,7 +1736,7 @@ bytes on legacy rows — accepted over keeping a stripper for a key no writer ca
 
 Nine doc citations moved when these lines went. Each was re-measured by matching the HEAD
 line's content, and two were re-pointed at a real symbol instead of the bare `};` they used
-to land on (`useAnalysisPipeline.ts:750` for the automation claim, `:783` for the coin tip).
+to land on (`useAnalysisPipeline.ts:747` for the automation claim, `:783` for the coin tip).
 One failure mode the gate cannot see, recorded because it happened here: a citation that
 drifts onto a DIFFERENT non-blank line passes. The run-failure guard's own number did
 exactly that, so the two ledger sentences citing it were rewritten rather than renumbered.
@@ -2152,7 +2152,7 @@ revokes it.
 **Do not re-derive these** (each cost a turn this session and is already proven): the
 review's six defects are all closed in the current files; **and the item it filed as
 "Not verified" — section C's ordering — turned out to carry nine wrong line numbers.** The
-fetch gate is `hooks/useAnalysisPipeline.ts:940` (the docs said `:941` in one file and `:890`
+fetch gate is `hooks/useAnalysisPipeline.ts:927` (the docs said `:941` in one file and `:890`
 in the other, and `:890` is the automation mute flag, not a gate); the injection string is
 built at `:953` (preset path `:994`, not `:988`); it is read only by `devLog` at `:978`, `:979`
 and `:1166` (not `:973`/`:1160`); `assemblePipelineMemoryContext` is called at `:1021` with the
@@ -2280,10 +2280,10 @@ line-resolved only.
 **Coverage 14 became 23, and it cost the docs three more wrong numbers.** Binding a row to its symbol means reading the line, so ten more rows
 went through the source: `runAutomation` is hooks/useAutomations.ts:403 (the table said :411), the `config.botId` fork is
 :423 (it said :431), and the row that attributes `Message.proposal` to the pipeline cited line 1293 of that
-file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1254. All three fixed in both flow docs. Newly bound and verified true:
+file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1241. All three fixed in both flow docs. Newly bound and verified true:
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:42, the Enter branch at
 components/trade/panels/ChatComposer.tsx:146, systemPromptFor components/trade/TradeChatPanel.tsx:453 with
-TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:475, useBotThread hooks/useAnalysisPipeline.ts:1329,
+TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:475, useBotThread hooks/useAnalysisPipeline.ts:1274,
 entriesForSession services/trade/chatSessions.ts:531, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:147
 with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
 services/trade/automationTurn.ts:69, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices
@@ -2344,7 +2344,7 @@ where relevant), not re-read:
 | claim | recipe | measured |
 |---|---|---|
 | `beginPromptLane` has zero callers | `grep -rn beginPromptLane hooks services components App.tsx utils constants` | 2 hits: the import line and its own `export const` — no call site |
-| the prompt lane still settles | `grep -rn endPromptLane …` | 3: import, `useAnalysisPipeline.ts:1550` in the `finally`, the definition |
+| the prompt lane still settles | `grep -rn endPromptLane …` | 3: import, the settle call `settleOpenSteps useAnalysisPipeline.ts:1550` inside the finally, the definition |
 | `savedAnalyses` was deleted outright (stage 21) | `grep -rl savedAnalyses --include=*.ts --include=*.tsx . \| wc -l` | **0 files** — field, state, SQLite read/write, backup validation all gone; the surviving mentions are in the untracked `docs/analysis/` census, where every count is already 0 |
 | `NavRail` is imported and never rendered | `grep -rn "<NavRail" …` | 1 hit, and it is the generic `<NavRailProps>` on its own definition line — no JSX use anywhere in production |
 | post-mortems are gone | `grep -rn usePostMortem conductPostMortem …` | 1, a comment in `services/learning/SkillMemoryService.ts`; 0 for `conductPostMortem` |
@@ -2389,3 +2389,6 @@ file: 33, every one bound; 20 rows name no file, floors moved to 33.
 
 
 **The last unverified review item is now measured (2026-10-19): do the browser gates wait on the splash node?** Yes, both of them, and each is cited to the line that does it. boot-probe clears the splash with `waitForFunction scripts/boot-probe.cjs:119` — the predicate is that no #splash element remains — and then waits for the lazy Trade surface at `waitForSelector scripts/boot-probe.cjs:122`, which is the pair the probe was written for (the v1.0.20 symptom WAS a splash hang, so waiting for the splash to vanish is the assertion, not a nicety). The e2e smoke does the same from the other side: `toHaveCount e2e/smoke.spec.ts:54` inside the workspace seeder, and again per-test at `toHaveCount e2e/smoke.spec.ts:140`, both asserting the #splash node is gone after React mounts. So the reviewer could not see it from the doc, and it is true in the code: neither gate can pass while the app is still showing the splash. Related, the other item the reviewer called unfalsifiable — the provider-client count — is already a recipe the anchor gate re-executes, and it prints git names 24 deleted files under services/providers/ with 6 remaining.
+
+
+**Stage 1 of #19 landed (2026-10-19): the ensemble flag stops deciding data work.** Per the owner ruling — keep Hybrid Intelligence, delete the ensemble leg, let market data be pulled on demand — a manual send no longer fetches real-time data: the seat calls get_market_packet, which already runs the same fetchHybridData + generateHybridPromptInjection path, so the capability is unchanged while an ordinary answer stops spending an exchange round trip it never asked for. Scheduled runs keep their unconditional pull, because for them the data IS the point. hooks/useMarketData now keys live polling to the Hybrid Intelligence toggle alone (guard at :44, reachability check at :127 and :161, effect deps at :118 and :192), which is exactly the re-parenting the grep-and-delete warning above said would be required before the toggle could go. Two things this pass caught about itself: (1) tests/automationRouteCharacterization.test.tsx went red because the deletion SUCCEEDED — it required an `if (runEnsembleEnabled) {` block to still exist, and its own comment anticipated the deletion — so it now asserts the property (no mode-gated block, the arm inside the schedule guard, a schedule-only fetch) and was checked against HEAD source to prove those assertions fail there; (2) 22 citations into the hook drifted when about fifteen lines vanished and the gate caught only six of them, because the rest are bare continuation numbers that land silently on whatever code is now there — including two that landed on comment lines and were flagged only in the ledger. The anchor count moved 305 to 302 as citations collapsed onto shared lines and others were re-anchored.

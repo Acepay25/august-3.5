@@ -14,7 +14,7 @@ import { fetchRecentLiquidations, fetchOHLCV, pingBinanceAPI } from '../services
  */
 const LIVE_MARKET_SYMBOL = 'BTCUSDT';
 
-export function useMarketData(isHybridIntelligenceEnabled: boolean, isEnsembleEnabled: boolean) {
+export function useMarketData(isHybridIntelligenceEnabled: boolean) {
     const [currentHybridData, setCurrentHybridData] = useState<HybridDataPacket | null>(null);
     const [hybridConnectionStatus, setHybridConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
     const [latestMonteCarloResult, setLatestMonteCarloResult] = useState<MonteCarloResult | null>(null);
@@ -36,9 +36,11 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean, isEnsembleEn
     } | null>(null);
 
     // Fetch live market conditions periodically for Global Sessions display.
-    // Market data is only fetched while ensemble mode is on.
+    // The Hybrid Intelligence toggle alone decides whether the app talks to the
+    // exchange on a timer — the ensemble mode this used to also require no
+    // longer exists, and nothing about a chat answer depends on it.
     useEffect(() => {
-        if (!isEnsembleEnabled) {
+        if (!isHybridIntelligenceEnabled) {
             setLiveMarketConditions(null);
             return;
         }
@@ -113,7 +115,7 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean, isEnsembleEn
             stopInterval();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, [isEnsembleEnabled]);
+    }, [isHybridIntelligenceEnabled]);
 
     // Check Binance API connection when Hybrid Intelligence is enabled
     useEffect(() => {
@@ -122,7 +124,7 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean, isEnsembleEn
         let disposed = false;
         let retryCount = 0;
 
-        const isEnabled = (): boolean => !disposed && isHybridIntelligenceEnabled && isEnsembleEnabled;
+        const isEnabled = (): boolean => !disposed && isHybridIntelligenceEnabled;
 
         const checkConnection = async () => {
             if (isEnabled()) {
@@ -156,7 +158,7 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean, isEnsembleEn
             }
         };
 
-        if (isHybridIntelligenceEnabled && isEnsembleEnabled) {
+        if (isHybridIntelligenceEnabled) {
             checkConnection();
             // Re-check connection every 60 seconds (less aggressive than 30s)
             intervalId = setInterval(checkConnection, 60000);
@@ -187,7 +189,7 @@ export function useMarketData(isHybridIntelligenceEnabled: boolean, isEnsembleEn
             disposed = true;
             setHybridConnectionStatus('disconnected');
         }
-    }, [isHybridIntelligenceEnabled, isEnsembleEnabled]);
+    }, [isHybridIntelligenceEnabled]);
 
     return {
         currentHybridData,

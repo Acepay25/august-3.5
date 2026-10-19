@@ -247,18 +247,21 @@ describe('the route a scheduled run takes now', () => {
     });
 
     it('a schedule is claimed by its own arm before any ensemble block can run', () => {
-        const arm = src.indexOf('const out = await runAutomationTurn({');
-        const guard = src.indexOf('if (isAutomationRun) {');
-        const ensemble = src.indexOf('if (runEnsembleEnabled) {');
-        expect(arm).toBeGreaterThan(-1);
-        expect(guard).toBeGreaterThan(-1);
-        // The arm RETURNS inside the guard, so what a schedule must never reach is
-        // an ensemble-gated block. Position is the proof: guard < arm, and the
-        // guard precedes every remaining `runEnsembleEnabled` block — the hybrid
-        // pull still runs for a human send with the toggle on, and stage 19's next
-        // tranche deletes those blocks outright.
-        expect(guard).toBeLessThan(arm);
-        expect(guard).toBeLessThan(ensemble);
+        // The route is proved by structure, not by position numbers: the arm the
+        // schedule takes must sit INSIDE the isAutomationRun guard, within a
+        // bounded window so the test cannot match across the whole file.
+        const armInsideGuard = /if \(isAutomationRun\) \{[\s\S]{0,4000}?\bconst out = await runAutomationTurn\(\{/.test(src);
+        expect(armInsideGuard).toBe(true);
+        // This used to assert that the guard PRECEDED every remaining
+        // `if (runEnsembleEnabled) {` block — a check that could only stay green
+        // while the mode still existed, so it would have failed as a false alarm
+        // the moment the mode was deleted. The property the position was standing
+        // in for is simpler now: no block is gated on the mode at all.
+        expect(src).not.toMatch(/if \(runEnsembleEnabled/);
+        // And the real-time pull that the mode switched on for a human send is
+        // now a schedule-only fetch: a manual send answers with get_market_packet
+        // instead of spending an exchange round trip it never asked for.
+        expect(src).toMatch(/if \(isAutomationRun && runHybridEnabled && !options\?\.presetHybridData\)/);
         // The arm delivers the row AND the caveats through the scheduler's own
         // callback — the store and the toast must not be able to disagree.
         expect(src).toMatch(/onMessage\(\{\s*\n?\s*userMessage,\s*\n?\s*aiMessage,\s*\n?\s*\.\.\.\(out\.notices/);
