@@ -785,11 +785,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             : undefined;
         const canResume = Boolean(resumeTarget && !resumeTarget.analysis && (resumeTarget.debateTurns?.length || 0) > 0);
 
-        // Ensemble without a chart still works — bare greetings just get a
-        // nudge toward including a coin, not a hard block. A surface that
-        // ALREADY has an instrument selected is not a bare greeting, so it must
-        // not be nagged about one it is effectively supplying.
-        if (!isAutomationRun && runEnsembleEnabled && imagesToUse.length === 0 && !canResume
+        // A send that names no coin is not blocked — it gets a nudge to include
+        // one. A surface that ALREADY has an instrument selected is not a bare
+        // greeting, so it must not be nagged about one it is effectively
+        // supplying.
+        if (!isAutomationRun && imagesToUse.length === 0 && !canResume
             && !extractSymbolFromPrompt(effectiveInput) && !options?.symbol) {
             toast.warning('Tip: include a coin', 'For a full analysis add a symbol like BTC, SOL or ETH — e.g. “analyze BTC”.');
         }
@@ -853,17 +853,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             && cachedHybridAgeMs <= HYBRID_REUSE_MAX_AGE_MS
             ? hybridAtSend
             : null;
-        // Hybrid intelligence: automation runs ALWAYS fetch real-time market
-        // data (that data IS the point of an automated analysis) — the
-        // global toggle only gates MANUAL runs.
+        // Hybrid intelligence: a SCHEDULED run always fetches real-time market
+        // data (that data IS the point of an automated analysis). A manual send
+        // no longer does — the seat pulls the same packet on demand through the
+        // get_market_packet desk tool, so an ordinary chat answer cannot spend
+        // an exchange round trip it never asked for.
         const runHybridEnabled = isAutomationRun || isHybridIntelligenceEnabled;
-        if (runEnsembleEnabled && runHybridEnabled && !cachedHybridData && !options?.presetHybridData) {
-            if (!isAutomationRun) {
-                setHybridConnectionStatus(prev => (prev === 'connected' ? 'connected' : 'connecting'));
-                setIsHybridLoading(true);
-                setCurrentHybridData(null);
-            }
-        }
         let freshHybridData: HybridDataPacket | null = cachedHybridData;
         if (options?.presetHybridData) {
             setCurrentHybridData(options.presetHybridData);
@@ -901,19 +896,11 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // "apply skill X" without skill X's text is a wish, not an
             // instruction. Missing slugs are stated, never silently dropped.
                         
-            // These steps describe the ensemble analysis pipeline only. Casual
-            // chat must not render analysis/fetching progress at all.
-            // Set loading immediately so the empty-chat hero and progress UI
-            // swap in the same paint — otherwise there is a gap of black
-            // canvas before "Fetching market data" appears.
-            if (runEnsembleEnabled) {
-                if (!isAutomationRun) {
-                    setLoadingMessage(
-                        runHybridEnabled && !cachedHybridData && !options?.presetHybridData
-                            ? 'Fetching real-time market data...'
-                            : 'Starting analysis...'
-                    );
-                }
+            // The progress rows describe a run that actually pulls data: a
+            // schedule. A manual send answers from its tools, and a row that
+            // promises "Fetching market data" for a fetch that never happens is
+            // a lie about work in progress.
+            if (isAutomationRun) {
                 initAnalysisSteps([
                     { id: 'market-data', title: 'Fetching market data', status: 'pending' },
                     { id: 'analysis', title: 'Analyzing charts', status: 'pending' },
@@ -937,7 +924,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // is fetched and nothing is injected into the analyst prompts.
             // Preset data (auto-capture) always wins — it was explicitly
             // fetched for this analysis, so it is injected below regardless.
-            if (runEnsembleEnabled && runHybridEnabled && !options?.presetHybridData) {
+            if (isAutomationRun && runHybridEnabled && !options?.presetHybridData) {
                 try {
                     devLog('[Hybrid Intelligence] Attempting to fetch data for prompt:', effectiveInput);
                     if (!isAutomationRun) setLoadingMessage('Fetching real-time market data...');

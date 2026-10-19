@@ -492,7 +492,7 @@ const App: React.FC = () => {
     }, [ensembleModelCount]);
 
     // Market data state and effects (extracted to hooks/useMarketData.ts)
-    const marketData = useMarketData(isHybridIntelligenceEnabled, isEnsembleEnabled);
+    const marketData = useMarketData(isHybridIntelligenceEnabled);
     const {
         currentHybridData, setCurrentHybridData,
  setHybridConnectionStatus,
