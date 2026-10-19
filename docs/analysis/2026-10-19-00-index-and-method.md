@@ -233,3 +233,104 @@ that leave the machine are the provider and market-data HTTP calls, and the only
 to the trader's own storage. The single most important thing this audit found is that the
 **reading half of that learning loop is assembled and then thrown away on every send** — see
 Report 1 §7.3, finding **F-01**.
+
+---
+
+## 0.11 Addendum — the repository moved after the pin, and what that changes
+
+**Written at 2026-10-19 22:15, after the deliverables were first filed.**
+
+### The move
+
+**Two more commits landed after the pin:**
+
+| commit | subject | what it did |
+|---|---|---|
+| `6e1e09bb` | `feat(desk)!: delete the analyst-role system and migrate stored profiles` | the Analyst Lens / analyst-role system, deleted, with a **stored-profile migration** |
+| `69c4aa33` | `chore(desk): remove the last role/lens vocabulary residue` | the last role/lens vocabulary |
+
+`87 files changed, 5,303 insertions(+), 4,073 deletions(-)`. **The working tree is now clean** (one dirty path: `package-lock.json`).
+
+`AGENTS.md`'s own census has already moved: it now reads *"4660 tests in 471 files: 4660 pass in 471 and 0 skip across 0 wholly-skipped files … after the analyst-role/lens deletion removed 8 files and 85 tests, and the roster-migration test added one."*
+
+### Does the audit still hold?
+
+**Yes — the substance holds; only line numbers moved.** Re-verified against the new HEAD:
+
+| finding | at the pin | at the new HEAD | verdict |
+|---|---|---|---|
+| **F-01** — the assembled context is discarded | `useAnalysisPipeline.ts:1103` | `:1052` (`let enhancedPrompt = promptToSend;`), `:1059`, `:1081` | **STANDS** |
+| **F-11** — the gate scores R:R from `takeProfit[0]` | `TradeValidationGate.ts:589` | `:589` (`const takeProfit1 = parsePrice(analysis.takeProfit[0]?.price \|\| '') \|\| 0;`) | **STANDS** |
+| **F-13** — no cost model | 3 files, no fee term | **0 files** with `takerFee\|makerFee\|costBps\|feeRate` | **STANDS** |
+| `formatHarnessNotesBlock` — the orphaned prompt reader | definition only | definition only | **STANDS** |
+| **F-14** — the roster store was read but never written | 3 call sites | the whole `BotRegistry` is gone | **RESOLVED by the in-flight work** |
+| **F-10** — the analysis prompt never reaches a trader-facing answer | skill-eval only | unchanged | **STANDS** |
+| the `LENS_SWING/SCALP/POSITION` prompts | live / dead / dead | **all gone** | **RESOLVED** |
+| the 4 orphan modules | 4 | **1** (`AvoidSetupsSection.tsx`); `MemoryConsolidationService.ts` may now be reachable | **partly resolved** — **re-run the sweep** |
+| the 63 dead exports | 63 | **fewer** (the lens exports are gone) | **re-run the sweep** |
+
+### What the move *resolves* from the cleanup manifest
+
+These HOLD items are now decidable, and they resolve **towards deletion**, not towards keeping:
+
+| item | verdict now |
+|---|---|
+| `services/ui/AnalystLensService.ts` (9 dead exports) | **the file is gone.** Delete the leftovers in one pass (Report 4 §10). |
+| `constants/prompts/lensRolePrompts.ts` (9,461 chars of lens prompts) | **gone.** |
+| `utils/thinkingLens.ts`, `types/lens.ts`, `services/learning/lensMemory.ts` | **gone.** |
+| `services/agents/seatPersonas.ts` | **gone** (the file). |
+| `utils/debateEnvelopes.ts`, `utils/teamRoster.ts`, `types/bot.ts`, `services/bots/BotRegistry.ts` | **gone.** |
+| `custom_lens_prompts` / `custom_ensemble_prompt` split read/write (Report 4 §2.3) | **the reader is gone** — so the *native-never-applies* bug is moot. But the **JSON-quoted-on-web** half is a separate defect and may survive. **Re-check.** |
+| the `LENS_*` prompt constants | **gone** — the dead-prompt budget in Report 1 §3.3 drops by ~9,461 chars. |
+
+### What the move *changes* that needs a re-run
+
+**Do not apply the cleanup manifest's Batch 2/3 tables to the new HEAD without re-running the four sweeps.** Specifically:
+
+1. `services/learning/MemoryConsolidationService.ts` — the claim *"the pruners are called from `AlgorithmicMemoryService.ts`"* was **false at the pin** (Report 4 §1.1 #2) and `AlgorithmicMemoryService.ts` is in the changed set. **Re-verify before deciding re-wire vs delete.**
+2. The orphan set, the dead-export set and the localStorage/Preferences census have all changed. The **method** in Report 4 §0 is unchanged — only the results need re-running.
+3. `AGENTS.md`'s census (4,741 → 4,660) means the **doc-anchor gate's** "agents-census" arm will now fail until `AGENTS.md` is updated — **that is Phase 0 / Batch 1 work, and the lens deletion has just made it necessary.**
+
+### The one conclusion that does **not** change
+
+**F-01 — the context is assembled and discarded — is now the app's single most load-bearing defect, and it is now the *only* one left of its kind.** With the analyst-role system gone, there is exactly one retrieval path, one prompt assembly, and one send — and the retrieval still does not reach the wire. **The fix (E-01) and the ledger honesty fix (E-05) are now unblocked by the deletion, not complicated by it.**
+
+**⇒ The recommended order in Report 5 stands, with one change: Phase 0 item 0.1 ("let the in-flight work land") is now COMPLETE. Start at 0.2 — re-anchor to `69c4aa33`, re-run the four sweeps, and diff them against Report 4's tables before starting any batch.**
+
+---
+
+## 0.12 A note on how these files entered git — read this if you see them in a commit
+
+**I did not commit anything.** The brief prohibited it, and I did not. But the concurrent session's
+commit **`6e1e09bb` (`feat(desk)!: delete the analyst-role system and migrate stored profiles`)**
+used a broad `git add`, and it **swept all six of these reports into that commit** alongside its
+own 87-file change.
+
+**Verified:** `git show --name-only 6e1e09bb` lists all six `docs/analysis/2026-10-19-*.md` files
+among its 87 changed paths.
+
+**Current state of the working tree (as of 22:20):**
+
+| file | git state | why |
+|---|---|---|
+| `2026-10-19-00-index-and-method.md` | **` M` (modified)** | committed at its pre-addendum length; the §0.11 and §0.12 addenda are uncommitted |
+| `2026-10-19-02-enhancements.md` | **` M` (modified)** | committed at its pre-addendum length; the §3B addendum is uncommitted |
+| `2026-10-19-04-cleanup-manifest.md` | **` M` (modified)** | committed at its pre-addendum length; the §12 addendum is uncommitted |
+| `2026-10-19-01-system-and-data-flow.md` | clean | committed, unchanged since |
+| `2026-10-19-03-new-features.md` | clean | committed, unchanged since |
+| `2026-10-19-05-ordering-and-open-questions.md` | clean | committed, unchanged since |
+
+**What this means for you:**
+
+1. **The read-only constraint was honoured by me** — every byte I wrote is inside `docs/analysis/`,
+   and I ran no git write of any kind. The commit was the other session's.
+2. **The reports are now in `main`'s history**, which is a reasonable place for them to be, but it
+   was not my decision to make. If you would rather they were not in the tree, they can be removed
+   with a single revert of `6e1e09bb`'s `docs/analysis/` paths — **or** left, since the
+   `eslint.config.js:26` ignore already treats the directory as expected.
+3. **The three uncommitted modifications are mine and are safe to commit or discard at your
+   discretion.** They are only the three addenda that close the coverage gaps (this section, §0.11,
+   Report 2 §3B, Report 4 §12).
+4. **This is also, incidentally, the second time the previous audit's reports were lost to a
+   dangling commit.** The 2026-10-18 generation survived only because nothing swept it into
+   `main`. **The 2026-10-19 generation is safe** — for the opposite reason.

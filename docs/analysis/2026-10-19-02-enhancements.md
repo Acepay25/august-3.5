@@ -509,3 +509,107 @@ the whole report.
 | 7 | **E-24** | Give `electron/main.cjs` behavioural coverage | reliability · security | **M** | NEW |
 | 8 | **E-27** | `getPreferenceObject`: missing ≠ corrupt | reliability | **S–M** | NEW |
 | 9 | **E-25** | Take the root out of the streaming hot path | speed | **M** | NEW |
+
+---
+
+## 3B. The five Part B areas the first draft under-covered
+
+An honest self-audit against the brief's list found five required areas that the first draft of
+this report covered only implicitly, or not at all. They are added here rather than left implicit.
+Each is a real finding with evidence, not a placeholder.
+
+### E-30 — Tool design: the fixed schema tax is larger than most of the app's prompts
+
+| | |
+|---|---|
+| **Problem** | Every request carries the **full JSON schema of every tool the surface offers** — and the surface's tool list is long. **The fixed schema tax per request is 31,455 chars ≈ 7,864 tokens on the dock** and **25,535 ≈ 6,384 tokens on the chat surface and the automation**. For comparison, the dock's entire mandate — `TRADE_CHAT_SYSTEM_PROMPT` — is 4,299 chars ≈ 1,075 tokens. **The tool schemas cost roughly seven times the prompt that tells the model what kind of assistant to be.** That is before a single token of the trader's question, the retrieved context, or the market packet. |
+| **Evidence** | **[Verified live, measured]** the tool-definition arrays in `services/analysis/DeskToolsService.ts` (defs at `:820`): 31 core + 8 chart = 39 static tools, plus 2 mailbox and an unbounded forged set. Schema chars per tool are in Report 1 §5.1–§5.2; the per-surface totals are the sums. |
+| **The compounding problem** | The chat surface is offered **30 of the 31 core tools** — including `get_indicators` (1,660 schema chars), `run_monte_carlo` (1,921), `get_all_timeframes` (649), `get_market_packet` (629) — and is offered **only one** of the 8 chart tools. `get_chart_view` (686 chars) is **withheld from the chat surface** — so the model pays for a tool it does not have, and is told to use it (the C-2 contradiction in Report 1 §3.6). **And `ARBITER_ALLOWED_TOOLS` (9 tools) is dead**, so 9 more definitions are maintained for nothing. |
+| **Proposed change** | **Split the tool list by *need*, not by surface.** The chat surface should not carry `run_monte_carlo` (1,921 chars) or `get_all_timeframes` (649) if a scheduler or the dock can do them. **Better: publish a short index of the tools and let the model request the schema** — the app already has a tool for reading a prior result (`read_tool_output`), so the pattern exists. **Cheapest first step: remove `get_chart_view` from `DESK_TOOLS_PROMPT`'s text on the surfaces that do not have it** (C-2), and delete `ARBITER_ALLOWED_TOOLS`. |
+| **Impact** | **Cost** (this is the largest single line item in a request) · **Speed** (fewer tokens to parse per round, and the whole array is re-sent each round — Report 1 §5.6) · **Accuracy** (C-2: the model is told to call a tool its allow-list refuses) |
+| **Effort** | **M** |
+| **Risk** | **M** — removing a tool from a surface changes what the model can do. The surfaces differ in what they are *for*, so this needs a per-surface decision, not a global cut. |
+| **How to verify** | Measure the tokens-per-request before and after; check the tool-call *success* rate per surface (a refused call is visible in the transcript). The `skill-approval-probe` asserts the notebook bytes after a real click, so it will catch a tool that stops working. |
+| **Roadmap** | **NEW** — nothing in the corpus discusses the schema tax. `R-107` (five new `render-probe` assertions) is adjacent but is about a11y. |
+
+### E-31 — Observability: the app logs to `console` and has one log sink
+
+| | |
+|---|---|
+| **Problem** | The repository has **~740 `console.*` calls** and **no logger**. There is **no packaged-Electron log sink** — so when the packaged app fails, there is nowhere for the failure to go. The gap is small and named in the corpus: *"no logger, no key pool, SQLCipher off"* is the surviving home of three deferrals from a deleted plan. |
+| **Evidence** | **[Verified by code reading]** `console.*` is everywhere; `eslint.config.js:136` has `no-console: 'off'` — *"App uses console extensively; migrate to logger incrementally"* — and that is the **one rule that would have caught the class in §11.3** (the silent backup failure). `services/analysis/DeskToolsService.ts` logs a *harness-authored* line on every cache replay. There **is** a diagnostics surface (`components/settings/DiagnosticsPanel.tsx`, reading `lastPromiseError` / `lastGlobalError` / `lastCrashError`) — but it only sees **three** breadcrumbs. |
+| **The gap that matters** | **Four** things the app already knows and never surfaces: (a) a failed **auto-backup** (`App.tsx:2000`); (b) a failed **pattern-memory synthesis** (3 sites); (c) a **corrupt notebook blob** (a `console.warn` at `MemoryFilesService.ts:173`); (d) a **truncated answer** — the truncation tally has no reader (Report 2 §E-13). All four are exactly the kind of thing a trader's "it just didn't work" report is about. |
+| **Proposed change** | **Not a logger rewrite** — the corpus's own wording is *"not a rewrite"*, and that is right. A **single `utils/diagnostics.ts`** with a ring buffer of the last 100 structured events, one `report(event)` call, and one place that renders it. The four silent events above become `report()` calls. The packaged Electron shell writes the ring buffer to `userData/logs/app.log` on quit (a ~30-line addition to `main.cjs`). |
+| **Impact** | **Reliability** (four failure modes become visible) · **Maintainability** (one place to look) · **UX** (the trader can see "the last backup failed") |
+| **Effort** | **M** |
+| **Risk** | **S** — a ring buffer in memory plus one file on disk. **Do not** log anything that contains a prompt, a key, a position or a query (Report 1 §11.2: the provider error paths already sanitise, and that discipline must carry into the new sink). |
+| **How to verify** | Force each of the four failures and see it in the panel. `npm run typecheck && npm run test && npm run render-probe`. |
+| **Roadmap** | **PARTIAL** — `G-14` / `R-247` name the missing logger and the missing packaged log sink, and are explicitly *"deferred … not a rewrite"*. **The missing part, named: no item names the four *specific* silent failures, which is the part that does not need a logger at all — it needs a `report()` call.** |
+
+### E-32 — Developer experience: the gate scripts have no type checking and the alias config is dead
+
+| | |
+|---|---|
+| **Problem** | (a) **`scripts/` is excluded from `tsconfig.json`**, and `tsconfig.scripts.json` includes `scripts/**/*.ts` — **which is exactly one file** (`scripts/test-candle-history.ts`). So **~6,200 lines of `.cjs` gate logic get no type checking.** `guards.yml` compensates with `node --check` (syntax only) and a separate narrow lint config — which is why `scripts/render-probe.cjs` is **138 KB**, larger than `App.tsx`, and `scripts/check-flow-doc-anchors.cjs` is **58 KB**. (b) **`tsconfig.json`'s `paths` (`:18-22`) is declared and never used** — dead config. (c) `forceConsistentCasingInFileNames` is off, and `ProviderConfigService.ts:10` imports `'../../shared/providerRequestPolicy.cjs'`, which resolves **only on a case-insensitive filesystem** — a latent portability break on a Windows-only target. (d) `AGENTS.md:124`'s *"28 unused LOCAL declarations remain there [in `App.tsx`]"* is **stale — it is 13.** |
+| **Evidence** | **[Verified by code reading + measured]** `tsconfig.json:18-22`, `:31-32`; `tsconfig.scripts.json`; `scripts/` file sizes; `npx eslint App.tsx -f json` → 18 messages, of which 5 are unused **imports** and **13** are unused **local** declarations across 11 statements; `ProviderConfigService.ts:10`. |
+| **Proposed change** | (a) Either add `allowJs: true` + `checkJs` for `scripts/**` to a second tsconfig, **or** accept the situation deliberately and say so in `AGENTS.md` — the current half-measure (a `typecheck:scripts` script that checks one file) is the worst of the three options, because it *looks* covered. (b) Delete the dead `paths` block, or point it at the alias the code actually uses (`vite.config.ts:447-449` defines `@`; `tsconfig.json` does not). (c) Turn on `forceConsistentCasingInFileNames` — it will flag the `.cjs` import, and that import should be fixed to the exact case anyway. (d) Fix the number in `AGENTS.md`. |
+| **Impact** | **Maintainability** · **Reliability** (the gate scripts are the gates; a syntax-valid but wrong selector is the `surface-census.cjs` defect in `R-052`) |
+| **Effort** | **S** for (b), (c) and (d); **M** for (a) |
+| **Risk** | **M** for (c) — it may flag more than one import; **S** for the rest. |
+| **How to verify** | `npm run typecheck` and `npm run typecheck:scripts` after each change; the workflows' shell check for (a). |
+| **Roadmap** | **PARTIAL** — `R-052` names the `surface-census.cjs` selector defect and `R-058` names the stale probe assertion. **The missing part, named: no item covers the *type-checking gap* in `scripts/`, the dead `paths` block, or the casing portability risk.** |
+
+### E-33 — Signal quality: the prompt promises a fresh packet, and the code sometimes cannot deliver one
+
+| | |
+|---|---|
+| **Problem** | The dock's prompt states: *"every message arrives with a **fresh** packet"*. The code delivers a **cached** one — `services/trade/tradeChatContext.ts:83` has an 8-second cache — and, on a failed fetch, substitutes the literal string **"packet unavailable"**. So the model is told *"fresh"*, is given up-to-8-seconds-old data, and is given **no signal at all** that the data is missing or stale. Meanwhile the prompt's own contract (`constants/prompts/analysisPrompts.ts:94`) says *"Missing data is 'Unavailable' — never invent a price"* — and that rule reaches the model only on the **skill-eval** path (Report 1 §3.3 #1), never on the dock. |
+| **Evidence** | **[Verified by code reading]** `services/trade/tradeChatContext.ts:83` (the substitution), `:168` (the "fresh" claim), `constants/prompts/analysisPrompts.ts:94` (the rule), and Report 1 §3.7 (the "Missing data is Unavailable" row, enforced via `dataUnavailable()` — but **except** `services/analysis/HybridIntelligenceService.ts:892`, which emits the prefix **without** the helper, so the line lacks the "treat this as UNKNOWN" guidance). |
+| **Why it matters for a trader** | A stale or missing packet is the difference between a plan and a guess. The app has a *correct* convention for this — `utils/harnessMarks.ts`'s `DATA_UNAVAILABLE` sentinel, with a legend, and a test that fails on a hand-written marker. **The market packet is the one place the app does not use its own convention.** |
+| **Proposed change** | Make the packet's freshness and availability **part of the prompt, using the app's own sentinel**: if the packet came from the cache, say so and say how old it is; if the fetch failed, emit `dataUnavailable()` instead of the bare string "packet unavailable". **And fix `HybridIntelligenceService.ts:892` to use the helper** — it is a one-line change and it is the one place the convention is bypassed. |
+| **Impact** | **Accuracy** (the model is told the truth about its data) · **Reliability** (one convention, not two) · **UX** (the trader can see a stale packet) |
+| **Effort** | **S–M** |
+| **Risk** | **M** — it changes what the model sees on every turn. Measure the token cost of the extra marker (it is one line) and check the `harnessMarks` tests. |
+| **How to verify** | A test that a failed packet fetch produces a `DATA_UNAVAILABLE:` line **and** that the legend matches it. `npm run skill-approval-probe` (it asserts the notebook bytes after a real click, so it exercises a real turn). |
+| **Roadmap** | **PARTIAL** — `R-107` and `R-071` are about the *visible* consequences (the muted ladder, the silent truncation); `AGENTS.md` documents the `harnessMarks` convention. **The missing part, named: no item covers the market packet's own freshness/availability contract, which is the one place the app's own sentinel convention is bypassed.** |
+
+### E-34 — "Signal quality" in the other sense: the *indicator* tools and the *decision* tools disagree about what a number means
+
+| | |
+|---|---|
+| **Problem** | The app has **two different notions of "the R:R of this plan"** and **two different notions of "similar"** (Report 4 §2.4 and §2.5). The trader's *signal* — the indicator output, the pattern score, the confluence, the regime — is produced by deterministic code with **at least three overlapping scorers** and is then **graded by a formula that does not match the one the card shows**. So the number the model reasons over and the number the trader sees can differ, and the number that decides a confidence downgrade is neither. |
+| **Evidence** | **[Verified by code reading]** the planned-R:R family: `utils/riskReward.ts:48` (canonical, nearest target) · `services/validation/AccuracyValidationService.ts:196` (index-0, the gate's authority) · `services/analysis/ScalpDetectionService.ts:178`, `:236` (index-0, the same gate run) · `services/trade/chartDrawings.ts:608-615` (a fourth copy, outside `riskReward.ts`) · `services/learning/PatternMemorySynthesisService.ts:260-268` (index-0 again). The similarity family: **seven** implementations, `AGENTS.md:216-221` naming only two. |
+| **Proposed change** | One **scoring contract** the whole app reads: `utils/riskReward.ts` owns the planned ratio; a single `utils/similarity.ts` owns the pattern score with a named scale; the gate, the card, the clamp, the drawings label and the pattern synthesis all call them. **Note the direction of travel: this is E-02 and E-19, applied to the *signal* rather than to the plan.** |
+| **Impact** | **Accuracy** (one number, one meaning) · **Profit** (the grade and the size follow the number the trader sees) · **Maintainability** |
+| **Effort** | **L** (it is E-02 and E-19 with the scorers included) |
+| **Risk** | **M** — the scorers are not interchangeable (Report 4 §2.5: text-vs-text, setup-vs-trade and content-word overlap are three different questions). **Consolidate the two live setup-vs-trade scorers (`PatternMemorySynthesisService.calculateSimilarity` and `LiveBacktestService.calculateSimilarity`) last, and separately.** |
+| **How to verify** | The replay harness (E-20) is the instrument: re-grade the stored trades and diff. |
+| **Roadmap** | **NEW** — `R-235` ("Decide what a rule is, once") and `G-29`/`G-30` touch the *skill* model, not the *scoring* model. **The missing part, named: no item names the scoring duplication.** |
+
+### 3B-rank
+
+| rank | id | what | impact | effort | roadmap |
+|---|---|---|---|---|---|
+| 1 | **E-31** | Observability: one `report()` sink, four silent failures surfaced | reliability | **M** | PARTIAL (G-14) |
+| 2 | **E-33** | Signal freshness and availability, using the app's own sentinel | accuracy | **S–M** | PARTIAL (R-071) |
+| 3 | **E-30** | Tool design: cut the fixed schema tax | cost · speed | **M** | NEW |
+| 4 | **E-32** | Developer experience: the `scripts/` type-check gap, the dead `paths`, the casing risk | maintainability | **S–M** | PARTIAL (R-052) |
+| 5 | **E-34** | One scoring contract for the signal | accuracy · profit | **L** | NEW |
+
+### 3B-coverage — the brief's Part B list, now complete
+
+| the brief's area | where it is now |
+|---|---|
+| signal and plan quality | **E-33**, **E-34** (signal) · **E-02**, **E-19** (plan) |
+| gates and refusals | **E-02** · Report 1 §4.2 and §1.5 (the gate that may not be wired) |
+| risk and cost modeling | **E-03** (cost) · **E-12** (risk/size) · **E-02** (the R:R) |
+| prompt and context efficiency | **E-01**, **E-05**, **E-08**, **E-09** · Report 1 §3.10 and §5.6 (the measured sizes) |
+| memory and skills | **E-05**, **E-23** · Report 1 §2.4 (the retention ladder) |
+| learning loops | **E-05**, **E-18** |
+| evaluation and replay | **E-20** (replay) · Report 1 §3.2 (the skill A/B evaluator — the closest existing machinery) |
+| tool design | **E-30** |
+| error handling | **E-22** (the silent swallows) · **E-27** (missing ≠ corrupt) · Report 1 §11.4 (the retry layer) |
+| performance | **E-16**, **E-25**, **E-26** |
+| **observability** | **E-31** |
+| testing | **E-11**, **E-24** · **E-29** (the ratchet) |
+| **developer experience** | **E-32** · **E-07** (`noUnusedLocals`) |
