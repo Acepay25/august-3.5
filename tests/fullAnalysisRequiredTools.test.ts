@@ -34,10 +34,11 @@ vi.mock('../services/learning/SkillMemoryService', async (importOriginal) => {
 
 const mockStream = vi.mocked(streamChatWithDeskTools);
 
-const script = (steps: Array<{ line?: string; text?: string }>): void => {
+const script = (steps: Array<{ call?: string; line?: string; text?: string }>): void => {
     mockStream.mockImplementation((async function* (_c: unknown, _m: unknown, o: unknown) {
-        const owned = o as { onToolEvent?: (line: string) => void };
+        const owned = o as { onToolEvent?: (line: string) => void; onToolCall?: (name: string) => void };
         for (const s of steps) {
+            if (s.call !== undefined) owned.onToolCall?.(s.call);
             if (s.line !== undefined) owned.onToolEvent?.(s.line);
             if (s.text !== undefined) yield s.text;
         }
@@ -83,9 +84,22 @@ describe('a full analysis is told, and checked', () => {
     });
 
     it('says NOTHING when a tool actually ran — the check passed', async () => {
-        script([{ line: 'get_price_snapshot calling…' }, { text: 'Spot 111,040.' }]);
+        script([{ call: 'get_price_snapshot', line: 'price snapshot · BTCUSDT · 111,040' }, { text: 'Spot 111,040.' }]);
         const out = await turn({ requireTools: true });
         expect(out.notice).toBeUndefined();
+    });
+
+    it('does not count a presented plan as looking something up', async () => {
+        // `present_trade` is a tool call and paints a call line like any other,
+        // but it reads nothing. A Full analysis that only presented a plan is
+        // exactly the turn the notice exists for.
+        script([
+            { call: 'present_trade', line: 'calling present trade…' },
+            { line: 'trade plan · BTCUSDT · Long' },
+            { text: 'Long BTC at 111,000, stop 109,800.' },
+        ]);
+        const out = await turn({ requireTools: true });
+        expect(out.notice).toMatch(/NOTHING LOOKED UP/);
     });
 
     it('leaves an ordinary chat line alone: no mandate, no notice', async () => {

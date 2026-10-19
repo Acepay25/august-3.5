@@ -231,7 +231,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                     <div>
                         <h3 className="text-ui-base font-bold text-white tracking-tight">Strategies</h3>
                         <p className="text-ui-dense text-zinc-500 mt-0.5">
-                            Upload trading books (PDF) — a model summarizes them into strategies every analyst and the moderator follow.
+                            Upload trading books (PDF) — a model summarizes them into strategies the desk follows.
                         </p>
                     </div>
                     {setIsStrategiesEnabled && (
@@ -283,8 +283,8 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                         <BookmarkIcon className="w-8 h-8 text-zinc-500 mx-auto mb-3" aria-hidden="true" />
                         <p className="text-ui-sm font-bold text-zinc-400">No strategy books yet</p>
                         <p className="text-ui-dense text-zinc-600 mt-1 max-w-sm mx-auto leading-relaxed">
-                            Upload a trading PDF and it will be summarized into strategies here. Enable it and the ensemble
-                            (analysts + moderator) will follow it like a human trader following the book.
+                            Upload a trading PDF and it will be summarized into strategies here. Enable it and the desk
+                            will follow it like a human trader following the book.
                         </p>
                     </div>
                 ) : docs.map(doc => {
@@ -359,7 +359,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                                     </div>
                                     <p className="text-ui-xs text-zinc-600">
                                         {doc.enabled
-                                            ? 'Enabled — this summary is injected into every analysis and debate prompt.'
+                                            ? 'Enabled — this summary is injected into every analysis prompt.'
                                             : 'Disabled — the models do not see this summary.'}
                                     </p>
                                 </div>

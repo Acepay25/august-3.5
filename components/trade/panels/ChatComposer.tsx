@@ -193,7 +193,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                 </button>
                 {onRunAnalysis && draft.trim() && !isPanel && (
                     <button type="button" onClick={() => void runFullAnalysis()} disabled={busy}
-                        title="Run the full ensemble analysis (hybrid data + debate + verdict) on this request"
+                        title="Run the full analysis (live market data + tools + trade plan) on this request"
                         className="shrink-0 whitespace-nowrap rounded-full border border-white/[0.07] px-2 py-1 text-ui-xs font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-100 disabled:opacity-40">
                     Full analysis
                     </button>

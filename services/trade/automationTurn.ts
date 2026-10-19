@@ -31,7 +31,7 @@ import type { DeskToolCall, DeskToolResult } from '../analysis/DeskToolsService'
 import { AUTOMATION_SYSTEM_PROMPT } from '../../constants/prompts/chatPrompts';
 import { TASK_BUDGETS } from '../providers/taskBudgets';
 import { resolveComposerEffort } from '../providers/reasoningControls';
-import { runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
+import { isPresentationOnlyTool, runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
 import { runPresentTrade } from './presentTradeTool';
 import { CHAT_SURFACE_TOOLS, MAX_LIVE_TOOL_LINES, chatSurfaceTurnMessages, surfacePromptWith, type ChatSurfacePrompt } from './chatSurfaceTurn';
 import type { TradeProposal } from './proposedTrade';
@@ -174,8 +174,12 @@ export const runAutomationTurn = async (req: AutomationTurnRequest): Promise<Aut
         // its own reasoning accumulator, which is what the caller stores.
         setText: () => { },
         addReasoning: () => { },
+        addToolCall: name => {
+            // `present_trade` presents a plan; it does not read the tape, so it
+            // must not silence the "nothing was looked up" notice by itself.
+            if (!isPresentationOnlyTool(name)) sawTool = true;
+        },
         addToolLine: line => {
-            sawTool = true;
             toolLines.push(line);
             if (toolLines.length > MAX_LIVE_TOOL_LINES) toolLines.shift();
         },

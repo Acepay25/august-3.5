@@ -870,7 +870,7 @@ describe('AgentsView decision card furniture', () => {
         // lost was still on this summary, so a sentence-case source shouted.
         render(<AgentsView {...base} selection={{ kind: 'team' }}
             messages={[msg({ role: MessageRole.AI, text: 'short it here', modelsUsed: { 'p-1': 'm1' }, analysis: analysisFor() })]} />);
-        const summary = screen.getByText('Inspect debate audit & evidence');
+        const summary = screen.getByText('Inspect evidence & gate');
         expect(summary.parentElement?.className).not.toMatch(/uppercase|tracking-wider/);
     });
 });

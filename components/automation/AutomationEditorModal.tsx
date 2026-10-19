@@ -458,10 +458,10 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
 
                     {/* Run as bot — the routine executes as a roster bot
                         (its persona + its own provider/model, reply in its
-                        thread) instead of the ensemble debate. Empty = the
-                        full ensemble pipeline (default). Rendered while a
+                        thread) instead of the desk's analysis tool turn. Empty
+                        = the analysis tool turn (default). Rendered while a
                         saved routine points at a bot that has since been
-                        deleted, so it can be cleared back to the ensemble. */}
+                        deleted, so it can be cleared back to the desk. */}
                     {(botOptions.length > 0 || runAsBot) && (
                         <div>
                             <span className="text-ui-xs font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Run as bot</span>
@@ -472,7 +472,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                     { value: '', label: 'No — run the analysis pipeline (default)' },
                                     ...botOptions,
                                 ]}
-                                placeholder="Unknown bot — pick another, or run the ensemble"
+                                placeholder="Unknown bot — pick another, or run the desk"
                                 aria-label="Run as bot"
                                 data-testid="automation-run-as-bot"
                                 triggerClassName="w-full rounded-control border border-white/10 bg-zinc-900 px-3 py-2 text-ui-caption hover:bg-zinc-800"
@@ -491,9 +491,9 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                     <div>
                     </div>
 
-                    {/* Moderator */}
+                    {/* Model — the schedule runs on this provider/model. */}
                     <div>
-                        <span className="text-ui-xs text-zinc-500 font-bold uppercase mb-1 block">Moderator model</span>
+                        <span className="text-ui-xs text-zinc-500 font-bold uppercase mb-1 block">Model</span>
                         <ModelPicker
                             providers={providers}
                             value={moderatorSelection}

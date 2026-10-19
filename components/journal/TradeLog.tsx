@@ -7,8 +7,6 @@ import { LoggedTrade, TradeOutcome } from '../../types';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import { EmptyState } from '../ui/EmptyState';
 import StatusPill, { VerdictReviewPill, type PillTone } from '../ui/StatusPill';
-import { ReasoningPanel } from './ReasoningPanel';
-import { getThinkingTradeId } from '../../services/infrastructure/ThinkingStoreService';
 import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
 import { captureEfficiencyPct } from '../../utils/disciplineAnalytics';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
@@ -384,10 +382,10 @@ const TradeDetailView: React.FC<{
                                     </div>
                                 )}
 
-                                {/* Reasoning Panel — per-analyst reasoning + debate transcript */}
-                                <div className="col-span-2">
-                                    <ReasoningPanel tradeId={getThinkingTradeId(trade.analysis?.createdAt, trade.id)} outcome={outcome} username={username} />
-                                </div>
+                                {/* The Model Reasoning panel went with the
+                                    debate engine: nothing writes a
+                                    ThinkingRecord any more, so it rendered an
+                                    empty section on every trade. */}
                             </div>
                         </div>
                         </div>

@@ -22,11 +22,10 @@ interface PromptManagerProps {
  * Prompt categories — derived from the id prefix, so the sidebar groups
  * prompts the way the Trader Notebook groups md files into folders.
  */
-const GROUP_ORDER = ['analysis', 'debate', 'postmortem', 'strategy', 'notebook'];
+const GROUP_ORDER = ['analysis', 'learning', 'strategy', 'notebook'];
 const GROUP_LABELS: Record<string, string> = {
     analysis: 'Analysis',
-    debate: 'Debate',
-    postmortem: 'Post-mortem',
+    learning: 'Learning',
     strategy: 'Strategy',
     notebook: 'Notebook',
 };

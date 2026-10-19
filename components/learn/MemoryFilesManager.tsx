@@ -403,7 +403,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                         {selectedFolder?.name === 'skills' && (
                             <button
                                 type="button"
-                                title="Which debate audience may load this skill"
+                                title="Which audience may load this skill"
                                 onClick={() => {
                                     const meta = parseSkillMarkdown(draft);
                                     if (!meta) return;

@@ -3254,6 +3254,10 @@ export async function runDeskToolLoop(params: {
     getLiveMarkPrice?: () => number | null;
     getFormingCandle?: () => FormingCandle | null;
     onToolEvent?: (line: string) => void;
+    /** The model's tool NAME, once per executed call, before it runs. The line
+     *  callback above carries human labels, so a caller that must know WHICH
+     *  tool ran (was the tape read, or only a plan presented?) reads this. */
+    onToolCall?: (name: string) => void;
     /** Fires once per RESULT that carries a payload, so the caller can persist
      *  the real tool output behind the one-line digest the seat saw.
      *
@@ -3302,6 +3306,7 @@ export async function runDeskToolLoop(params: {
         getLiveMarkPrice,
         getFormingCandle,
         onToolEvent,
+        onToolCall,
         onToolPayload,
         onToolAction,
         speaker = '',
@@ -3518,7 +3523,10 @@ export async function runDeskToolLoop(params: {
         }
         // One line per call — the transcript renders each call as its own
         // compact status row (joined lines can't be attributed per-tool).
-        for (const c of calls) onToolEvent?.(`calling ${toolLabel(c.name)}…`);
+        for (const c of calls) {
+            onToolCall?.(c.name);
+            onToolEvent?.(`calling ${toolLabel(c.name)}…`);
+        }
         // Forged tools (model-authored recipes) execute through their own
         // hardened path BEFORE the built-in executor sees the calls — but the
         // SEAT POLICY applies here too: a restricted seat whose (merged) allow
@@ -3692,6 +3700,8 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     /** Live tool-call visibility (Floor chips) — fires before and after each
      *  tool round with a short human-readable line. */
     onToolEvent?: (line: string) => void;
+    /** Same contract as the loop options: the model's tool NAME per call. */
+    onToolCall?: (name: string) => void;
     /** See the main options interface — same contract, so a payload can be
      *  persisted from the streaming loop too. */
     onToolPayload?: (payload: ToolPayload) => void;
@@ -3785,6 +3795,7 @@ export async function* streamChatWithDeskTools(
         getLiveMarkPrice,
         getFormingCandle,
         onToolEvent,
+        onToolCall,
         onToolAction,
         onStreamReset,
         allowedTools,
@@ -3928,6 +3939,7 @@ export async function* streamChatWithDeskTools(
         // always the most recent instruction the seat reads before its turn.
         appendSystemNotice,
         onToolAction,
+        onToolCall,
         speaker: seatName,
         onToolEvent: line => {
             onToolEvent?.(line);

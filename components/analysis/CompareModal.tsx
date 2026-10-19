@@ -98,7 +98,11 @@ const CompareModal: React.FC<CompareModalProps> = ({ primary, secondary, analysi
           <StatRow label="MC EV" a={a.mcEV} b={b?.mcEV ?? '—'} />
           <StatRow label="Run time" a={a.duration} b={b?.duration ?? '—'} />
           <StatRow label="Tokens" a={a.tokens} b={b?.tokens ?? '—'} />
-          <StatRow label="Est. cost" a={a.cost} b={b?.cost ?? '—'} />
+          {/* Only rows with a measured price: no run has provider rates, so a
+              permanent "—" row was decoration. Legacy rows can still show it. */}
+          {(a.cost !== '—' || (b?.cost ?? '—') !== '—') && (
+            <StatRow label="Est. cost" a={a.cost} b={b?.cost ?? '—'} />
+          )}
 
           {!secondary && (
             <div className="mt-3">

@@ -24,9 +24,20 @@ beforeEach(() => {
     vi.stubGlobal('Notification', FakeNotification);
     // Force the web path: make the Capacitor probe resolve non-native.
     vi.doMock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => false } }));
+    // jsdom reports a visible document; a notification is for a tab the user
+    // has left, so the posting cases have to say so explicitly.
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
 });
 
 describe('notify (web path)', () => {
+    it('posts nothing while the app is in the foreground', async () => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+        FakeNotification.requestPermission = vi.fn(async (): Promise<NotificationPermission> => { FakeNotification.permission = 'granted'; return 'granted'; });
+        const ok = await notify('settled', 'the analysis is ready');
+        expect(ok).toBe(false);
+        expect(FakeNotification.instances.length).toBe(0);
+    });
+
     it('requests permission then posts a Notification with title + body', async () => {
         FakeNotification.requestPermission = vi.fn(async (): Promise<NotificationPermission> => { FakeNotification.permission = 'granted'; return 'granted'; });
         const ok = await notify('BTC watch fired', 'BTCUSDT above 112000');

@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**296 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**293 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 3 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -71,17 +71,17 @@ flowchart TD
         D2 -->|panel, 2+ seats| PN["per-seat services/trade/chatTurnRunner.ts:1078 + createDebateMailbox :1006 + planPanelTurn :1018"]
         D2 -->|Full analysis button| FA["runFullAnalysis components/trade/TradeChatPanel.tsx:547 → the SAME App:1559 wrapper — it holds the session run slot and writes no row"]
     end
-    SO --> TT["runToolTurn — services/trade/toolTurn.ts:109"]
+    SO --> TT["runToolTurn — services/trade/toolTurn.ts:119"]
     PN --> TT
     TT --> SCDT["streamChatWithDeskTools — toolTurn.ts:133 → DeskToolsService"]
     BOT --> TR["streamQuickResponse — GenericAnalysisService.ts (bots stay chat-only)"]
-    AN --> HSM["handleSendMessage — useAnalysisPipeline.ts:495"]
+    AN --> HSM["handleSendMessage — useAnalysisPipeline.ts:493"]
     FA --> HSM
-    HSM --> D3{"the debate branch is GONE (19): a send answers through the tool turn hooks/useAnalysisPipeline.ts:1276. the ensemble mode and the seat roster it fed were deleted by owner ruling (2026-10-19) — a schedule is claimed earlier, by its own arm hooks/useAnalysisPipeline.ts:696"}
+    HSM --> D3{"the debate branch is GONE (19): a send answers through the tool turn hooks/useAnalysisPipeline.ts:1273. the ensemble mode and the seat roster it fed were deleted by owner ruling (2026-10-19) — a schedule is claimed earlier, by its own arm hooks/useAnalysisPipeline.ts:693"}
     D3 -->|true| ENS["ensemble branch — section C (ENGINE DELETED; the branch answers with ONE tool turn and no longer refuses over seats)"]
-    D3 -->|false: the desk else-arm hooks/useAnalysisPipeline.ts:1270| SPLIT{"a bot thread? :1203"}
+    D3 -->|false: the desk else-arm hooks/useAnalysisPipeline.ts:1267| SPLIT{"a bot thread? :1200"}
     SPLIT -->|yes| TR
-    SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:230, tools from CHAT_SURFACE_TOOLS :55, prompt chatSurfaceSystemPrompt :147"]
+    SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:234, tools from CHAT_SURFACE_TOOLS :55, prompt chatSurfaceSystemPrompt :147"]
     CST --> TT
     TR --> LW["live writer — applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:28, peel per frame; flush BEFORE the settle write useAnalysisPipeline.ts"]
     CST --> LW
@@ -115,7 +115,7 @@ was deleted (2026-10-17) because a second writer keyed rows with ids no canonica
 row could match — that is what made the two homes disagree.
 
 **One executor, two row shapes.** `runToolTurn`
-([services/trade/toolTurn.ts:109](../services/trade/toolTurn.ts)) owns the stream,
+([services/trade/toolTurn.ts:119](../services/trade/toolTurn.ts)) owns the stream,
 the tool rounds, the abort-before-repair order, the text-protocol strip and the
 reasoning peel. The ROW stays with the caller, because the two shapes do not share
 those fields: the dock writes a `chatStore` `LiveEntry` (`tools`/`toolIds`), the
@@ -173,7 +173,7 @@ Stage 19 deleted the debate from this path. What one send actually does now:
 ```mermaid
 flowchart LR
     S1["1 data pull HybridIntelligenceService — automation runs only, gated at hooks/useAnalysisPipeline.ts:876"] --> S3["3 prompt assembly assemblePipelineMemoryContext hooks/useAnalysisPipeline.ts:957"]
-    S3 --> S4["4 one turn: runChatSurfaceTurn services/trade/chatSurfaceTurn.ts:230 → executeDeskTool"]
+    S3 --> S4["4 one turn: runChatSurfaceTurn services/trade/chatSurfaceTurn.ts:234 → executeDeskTool"]
     S4 -->|a seat calls| PT["present_trade → runPresentTrade → plan + gate stamp"]
     PT --> JR["journal row — logTradeWithFeedback useTradeLogging.ts"]
     S4 --> ANS["the answer is the prose beside the card"]
@@ -203,15 +203,15 @@ verdict-shaped rows come from `proposal` cards, and the surviving readers were
 re-pointed in 20b-B and 20r rather than left reading a field nothing writes.
 
 **One known residue, stated as measured.** With Hybrid Intelligence on, a human
-Only a scheduled run still fetches real-time data: the gate is `hooks/useAnalysisPipeline.ts:876`.
-What no longer happens is the part that made it worth the round trip — the
-injection string it builds (`hooks/useAnalysisPipeline.ts:889`, or `:934` for
-preset data) is read afterwards only by `devLog` at
-`hooks/useAnalysisPipeline.ts:914`, `:915` and `:1102`. It is
+send no longer fetches real-time data. Only a scheduled run still does: the gate is
+`hooks/useAnalysisPipeline.ts:873`. What no longer happens is the part that made it
+worth the round trip — the injection string it builds (`hooks/useAnalysisPipeline.ts:886`,
+or `hooks/useAnalysisPipeline.ts:927` for preset data) is read afterwards only by `devLog` at
+`hooks/useAnalysisPipeline.ts:911`, `:912` and `:1099`. It is
 never handed to the turn, because the analyst and moderator prompts it used to ride
 are the files stage 19 deleted. The packet object does still have one consumer:
-`hooks/useAnalysisPipeline.ts:957` passes it into
-`assemblePipelineMemoryContext` (the packet argument `freshHybridData` at `hooks/useAnalysisPipeline.ts:960`),
+`hooks/useAnalysisPipeline.ts:954` passes it into
+`assemblePipelineMemoryContext` (the packet argument `freshHybridData` at `hooks/useAnalysisPipeline.ts:957`),
 which is where the learning coin and the notebook
 slice come from, so dropping the fetch is NOT a byte-preserving cleanup — that is
 why it is an owner decision rather than something I removed silently. The loading
@@ -414,19 +414,19 @@ card that forgets it was clicked offers a second journal row.
 | 14 | dock Full analysis → the run slot | `runFullAnalysis components/trade/TradeChatPanel.tsx:547` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
 | 15 | ChatComposer → chatTurnRunner.send | key `Enter components/trade/panels/ChatComposer.tsx:146` / button `:201` → `services/trade/chatTurnRunner.ts:784` |
 | 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:929` (definition `runSeatTurn services/trade/chatTurnRunner.ts:593`) |
-| 17 | runSeatTurn → the ONE turn executor | `runToolTurn toolTurn.ts:109` → `streamChatWithDeskTools :133` → `DeskToolsService` → `streamChatRequest` |
+| 17 | runSeatTurn → the ONE turn executor | `runToolTurn toolTurn.ts:119` → `streamChatWithDeskTools :143` → `DeskToolsService` → `streamChatRequest` |
 | 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1078` · `:1006` · `:1018` |
 | 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `systemPromptFor components/trade/TradeChatPanel.tsx:453` = the blocks below, assembled at `TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:475` |
 | 20 | every dock turn → chatStore | `mutate services/trade/chatStore.ts:332` · `beginRun services/trade/chatStore.ts:479` |
-| 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useBotThread hooks/useAnalysisPipeline.ts:1203`, anything else runs the tool turn `:1347`; the ensemble flag and the roster it fed are gone (2026-10-19) |
-| 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1250` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:230` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
+| 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useBotThread hooks/useAnalysisPipeline.ts:1200`, anything else runs the tool turn `:1345`; the ensemble flag and the roster it fed are gone (2026-10-19) |
+| 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1248` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:234` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
 | 23 | casual frames → Message.text | `applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:28`; flush precedes the settle write useAnalysisPipeline.ts |
 | 24 | ensemble → the stages that survive | see C — five of the old eight are gone from the call path, and no stage is named in the code, so no line number is claimed |
 | 25 | desk tools → what a caller can reach | `executeDeskTool services/analysis/DeskToolsService.ts:2159` (its allow-list is enforced at execution, not only at offer time) |
 | 26 | panel tools → chart echo | `executePanelTool services/trade/chatTurnRunner.ts:335` is what echoes the result back into the panel |
 | 27 | automation tick → runAutomation | `runAutomation hooks/useAutomations.ts:381`, forks on `config.botId hooks/useAutomations.ts:401`; the no-bot path takes the pipeline's OWN schedule arm `useAnalysisPipeline.ts:1140` → `runAutomationTurn automationTurn.ts:161`, writing the private list automationMessagesRef useAnalysisPipeline.ts:352, its `notices` (a tool that came back failed, a turn that called nothing, a refused plan) and settling through `onMessage` `useAutomations.ts:531`. Characterized in `tests/automationRouteCharacterization.test.tsx` |
 | 28 | bot routine → injected stream | the routine reuses 22's bot arm from `runBotRoutineTurn services/agents/botRoutine.ts:80` |
-| 29 | rooms → groupRounds | `useAgentGroups hooks/useAgentGroups.ts:75` → `streamQuickResponse services/providers/GenericAnalysisService.ts:613` |
+| 29 | rooms → groupRounds | `useAgentGroups hooks/useAgentGroups.ts:75` → `streamQuickResponse services/providers/GenericAnalysisService.ts:606` |
 | 30 | review passes / propose_skill → draft → approval → skill | `draftGates.ts` → `approveSkillDraft services/learning/skillApproval.ts:53` — the post-mortem leg is starved, not deleted (see D) |
 | 31 | approved skill → next prompt | `resolveInvokedSkills services/learning/SkillMemoryService.ts:494` — closes into 24's stage 3 |
 | 32 | logged trade → memory + autopilot | `useTradeLogging hooks/useTradeLogging.ts:95` writes the journal row and the memory note → MemoryService; proposedTrade leaves outcome PENDING so the autopilot watches it |
@@ -450,7 +450,7 @@ card that forgets it was clicked offers a second journal row.
 | 50 | a journal row gets its scalp/swing class | `withDetectedTradeType` (`services/analysis/ScalpDetectionService.ts`) is called at the two row-minting sites `withDetectedTradeType hooks/useTradeLogging.ts:305` and `withDetectedTradeType hooks/useTradeLogging.ts:665` — label-only, so no `validityDurationMinutes` appears and the autopilot expiry window never widens. The filter reads it at `components/journal/TradeLog.tsx:535` |
 | 51 | a run records its measured cost | `recordToolTurnUsage utils/sessionUsage.ts:63` is called by all three turn owners — desk arm chatSurfaceTurn.ts, schedule arm automationTurn.ts, dock seats chatTurnRunner.ts — from the usage the wire reported per request. Knowledge → Session Usage reads that ledger; stage 19 left it with a reader and no writer. usageCalls distinguishes a zero-cost run from a provider that sent no usage frame |
 | 52 | a finished analysis says so | `notify()` (`services/infrastructure/notify.ts`) fires when a Full-analysis send settles un-stopped (`notify hooks/useAnalysisPipeline.ts:1359`). Before stage 19 this came from the verdict finalizer; the old channel name CompletionNotifications was a native-only copy of the same thing, and its FILE is gone with stage 19's tranche — the only surviving mention is a comment in `services/infrastructure/notify.ts` — so the app speaks through one notifier |
-| 53 | the chart gets its Entry/Stop/Target lines | `latestChartVerdict(messages)` `latestChartVerdict services/trade/chartData.ts:91` is what App hands `TradeView` as `verdict` — the newest row carrying `Message.proposal` (what `present_trade` stamps; `proposal hooks/useAnalysisPipeline.ts:1170`), with `Message.analysis` as the fallback for pre-debate history. Red-proved: the old selector keyed on `ensembleProgress` / >1 `modelsUsed` / `debateTurns` and returned null for every tool-turn row. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate
+| 53 | the chart gets its Entry/Stop/Target lines | `latestChartVerdict(messages)` `latestChartVerdict services/trade/chartData.ts:95` is what App hands `TradeView` as `verdict` — the newest row carrying `Message.proposal` (what `present_trade` stamps; `proposal hooks/useAnalysisPipeline.ts:1167`), with `Message.analysis` as the fallback for pre-debate history. Red-proved: the old selector keyed on `ensembleProgress` / >1 `modelsUsed` / `debateTurns` and returned null for every tool-turn row. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate
 
 ---
 
@@ -477,10 +477,10 @@ card that forgets it was clicked offers a second journal row.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 296 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 293 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 296 anchors verified, and the gate
+   the gate's own output: these docs state 293 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -505,9 +505,9 @@ card that forgets it was clicked offers a second journal row.
    A fourth rule measures `AGENTS.md` itself, because that file is the first thing an agent
    reads and its counts were still hand-typed. Three sentences are bound. The smoke-test
    figure is counted from the Playwright file it describes (5, from the test declarations in
-   `e2e/smoke.spec.ts`). The vitest census line must be internally consistent — 4730 pass +
-   11 skip = 4741 tests, 478 passing files + 1 skipped file = 479 files — and its file count
-   must equal what `git ls-files tests` actually lists (479). And every step named by the
+   `e2e/smoke.spec.ts`). The vitest census line must be internally consistent — 4664 pass +
+   0 skip = 4664 tests, 471 passing files + 0 skipped files = 471 files — and its file count
+   must equal what `git ls-files tests` actually lists (471). And every step named by the
    `comm -13` asymmetry — `check-flow-doc-anchors`, `skill-approval-probe`, `test`,
    `typecheck`, and `installer-smoke` on the other side — must appear as a WHOLE token in the
    15 lines that print that recipe, so the "test" inside "tests" no longer counts as naming
@@ -516,8 +516,8 @@ card that forgets it was clicked offers a second journal row.
    itself is floored, so deleting an arm from the list fails the build rather than passing
    silently. An absent recipe paragraph, an absent census sentence or an empty git listing
    is itself a finding, so a doc edit cannot escape the census by making the pattern
-   unmatchable. What this rule cannot check is the pass/skip split itself: 4730
-   and 11 come from vitest's own summary block, and the gate only proves they agree with each
+   unmatchable. What this rule cannot check is the pass/skip split itself: 4664
+   and 0 come from vitest's own summary block, and the gate only proves they agree with each
    other and with git's file count — so a suite that changes size still needs `npm run test`
    re-run and the line restated by hand.
    **Coverage asymmetry, measured rather than trusted from prose:** the step runs
@@ -596,7 +596,7 @@ no call site that reads them**: every `debate.*` id, `analysis.families`, and th
 moderator fallback still instructed a model to "follow the Accuracy Mode checks" and to emit
 a debate envelope no parser can read — Accuracy Mode and the engine were both deleted, the
 registry was not. The gate pins the other direction too, because that is the one that breaks
-silently: the 11 ids a real call site reads must KEEP it, so a refactor that starves a live
+silently: the 10 ids a real call site reads must KEEP it, so a refactor that starves a live
 prompt fails the suite (proved by renaming one `getPrompt('analysis.master'…` argument and
 watching five arms go red). The 16 are a measured ceiling that ratchets down only — deleting
 an entry, with the prompt constants nothing else imports, lowers it, and nothing may raise it.
@@ -605,7 +605,7 @@ comments labelling live code as Accuracy Mode / verdict-finalizer paths after th
 deleted; the labels are gone, the code they mislabelled was correct.
 
 **…and then the 16 were deleted, which is not the same act as measuring them.** The registry
-is now 11 entries — every id a call site actually reads — and the unreachable ceiling is 0, so
+is now 10 entries — every id a call site actually reads — and the unreachable ceiling is 0, so
 an entry can no longer be added without wiring it. Two lessons came out of the deletion itself,
 both recorded rather than smoothed over:
 - A name-based consumer scan said the whole prompt file was dead. `tsc` disagreed immediately:
@@ -617,7 +617,7 @@ both recorded rather than smoothed over:
   ([[feedback-zero-importers-not-deletable]]).
 - The override-store suite used one dead id as its second prompt, which is how a test can pass
   while asserting nothing about the store it covers: two ids are needed to prove resetting one
-  leaves the other's override intact. It now uses `analysis.lens` and `analysis.master`.
+  leaves the other's override intact. It now uses `analysis.compact` and `analysis.master`.
 
 **The harness note in a user-role turn had no live teacher.** `harnessTurn()` still stamps
 `HARNESS NOTE (this app, not the trader):` onto user-role content at four desk-tool sites —
@@ -636,8 +636,8 @@ added in the same pass, because a scanner that matches nothing reports no drift.
 `moderatorConfig` (`App.tsx:288`) is live, but as a DEFAULT, not a debate role:
 `readyProviders[0] || moderatorConfig` (`App.tsx:311`) resolves the vision/OCR provider and
 `memoryConfig: memoryConfig || moderatorConfig` (`App.tsx:550`) the memory one, the automation
-editor still resolves a seat from it (`AutomationEditorModal.tsx:259`), and the journal prints
-`Mod:` from the stored `moderatorModel` (`TradeLog.tsx:351`). No moderator TURN exists — one
+editor still resolves a seat from it (`AutomationEditorModal.tsx:168`), and the journal prints
+`Mod:` from the stored `moderatorModel` (`TradeLog.tsx:349`). No moderator TURN exists — one
 model answers a send — so the harness contract can still say "the moderator's last block"
 without any code waiting for one. `constants/debateMarkers.ts` survives as a sanitizer:
 `utils/analysisUtils.ts:859` strips `<CLARIFICATION_*>` and the retry marker out of model text,
@@ -650,7 +650,7 @@ a table deletion must re-scan its rows' imports, because dead text kept alive by
 the same defect one layer down. Both removals were proven by `tsc` and `vite build`, not by the
 name grep that had already misled me once on this pass.
 
-The engine files are gone, and most of the branch with them. What was removed this pass: the seat-completeness refusals ("Your analyst team is incomplete", "Analysts must use different models", "Two debate seats share a model") and the `TEAM_MAX_SEATS` ceiling — only ONE model answers a send (`provider`, `hooks/useAnalysisPipeline.ts:1214` falls back to `enabledProviders[0]`), so those blocked a run over a roster the run never uses, and the ceiling guarded a fan-out that no longer exists. The moderator readiness check survives but now applies only to a scheduled run (`:649`), because a schedule really does take its seat from that config; the human-send version of it refused a click over an unused pick. The flag itself, the seat builder it fed and the roster behind it were deleted on 2026-10-19; the "include a coin" tip survives as a plain nudge. `isDebating` and `activeDebateSpeakers` are deleted outright — every writer set a literal `false`, so the one branch that read them could not run.
+The engine files are gone, and most of the branch with them. What was removed this pass: the seat-completeness refusals ("Your analyst team is incomplete", "Analysts must use different models", "Two debate seats share a model") and the `TEAM_MAX_SEATS` ceiling — only ONE model answers a send (`provider`, `hooks/useAnalysisPipeline.ts:1209` falls back to `enabledProviders[0]`), so those blocked a run over a roster the run never uses, and the ceiling guarded a fan-out that no longer exists. The moderator readiness check survives but now applies only to a scheduled run (`:642`), because a schedule really does take its seat from that config; the human-send version of it refused a click over an unused pick. The flag itself, the seat builder it fed and the roster behind it were deleted on 2026-10-19; the "include a coin" tip survives as a plain nudge. `isDebating` and `activeDebateSpeakers` are deleted outright — every writer set a literal `false`, so the one branch that read them could not run.
 
 
 The user-visible consequence, now FIXED: the chart used to pick its verdict row by the DEBATE shapes (`ensembleProgress`, >1 `modelsUsed`, `debateTurns`) and passed `verdict={verdictMessage?.analysis}` — while nothing writes `Message.analysis` for a new run any more. `verdictFinalizer` was the writer; a tool turn answers with a `TradeProposal` in the tool payload (`services/trade/presentTradeTool.ts`, `proposedTrade.ts`, `tradeShapedProse.ts`). Reader without a writer, the third time in this stage (session usage, the completion notice). Fixed by `latestChartVerdict` in `services/trade/chartData.ts` (`App.tsx:1197`, passed to the chart at `:2517`): it keys on the settled proposal through the existing `buildProposedTradeAnalysis` and keeps `analysis` as the fallback for old rows; `tests/chartVerdictSource.test.ts` pins the proposal path, the fallback, the preference when a row carries both, the symbol match through `verdictLevels`, and the App wiring. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate

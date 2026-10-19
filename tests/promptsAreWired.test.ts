@@ -57,7 +57,7 @@ const UNREACHABLE = registryIds.filter(id => READERS[id].length === 0);
 // 2026-10-19: the ids a real call site reads. A prompt the app composes must
 // never lose this wire while its entry is still on screen.
 const MUST_STAY_WIRED = [
-    'analysis.master', 'analysis.lens', 'analysis.compact', 'analysis.risk_rules',
+    'analysis.master', 'analysis.compact', 'analysis.risk_rules',
     'analysis.memory_enforcement', 'learning.chart_scan', 'learning.skill_craft',
     'notebook.chat_note', 'notebook.note', 'strategy.ocr_page', 'strategy.summarize_pdf',
 ];
@@ -67,7 +67,7 @@ const UNREACHABLE_CEILING = 0;
 
 describe('every prompt offered in Settings is one the app actually reads', () => {
     it('finds the registry, and the scanner has a population', () => {
-        expect(registryIds.length).toBe(11);
+        expect(registryIds.length).toBe(10);
         expect(WIRED.length).toBeGreaterThanOrEqual(MUST_STAY_WIRED.length);
         // A scanner that matched nothing would report every id unreachable and
         // still "pass" the ceiling if the ceiling were loose enough.

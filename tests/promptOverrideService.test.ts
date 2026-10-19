@@ -75,10 +75,10 @@ describe('PromptOverrideService', () => {
 
   it('resets a single override', async () => {
     await initPromptOverrides('alice');
-    await savePromptOverride('analysis.lens', 'lens custom', 'alice');
+    await savePromptOverride('analysis.compact', 'compact custom', 'alice');
     await savePromptOverride('analysis.master', 'master custom', 'alice');
-    await resetPromptOverride('analysis.lens', 'alice');
-    expect(getPrompt('analysis.lens', FALLBACK)).toBe(FALLBACK);
+    await resetPromptOverride('analysis.compact', 'alice');
+    expect(getPrompt('analysis.compact', FALLBACK)).toBe(FALLBACK);
     expect(getPrompt('analysis.master', 'master default')).toBe('master custom');
   });
 
