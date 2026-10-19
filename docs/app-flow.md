@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**305 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**303 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 3 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -474,14 +474,14 @@ card that forgets it was clicked offers a second journal row.
    asked to remove". Only the `AccountRow` export is rendered, at `App.tsx:2584`.
    **An earlier pass of this doc asserted the opposite** ("rendered at App.tsx line 2766") and
    the mechanism is worth keeping: `App.tsx:2430` passes `onExpandNavRail={…}` and
-   the rail's expand state is very much alive at `App.tsx:655` and `:680-692`, so a grep for `NavRail`
+   the rail's expand state is very much alive at `App.tsx:645`, so a grep for `NavRail`
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 305 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 303 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 305 anchors verified, and the gate
+   the gate's own output: these docs state 303 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
