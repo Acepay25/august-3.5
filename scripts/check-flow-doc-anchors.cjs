@@ -82,12 +82,13 @@ function linesOf(file) {
     return lineCache.get(file);
 }
 
-// Deleting a tag with NO separator glued adjacent runs into one token: html written
-// `<b>App</b><i>index.tsx:73-79` stripped to `Appindex.tsx:73-79`, which then failed
-// resolve() and was silently dropped — so 12 flow-doc citations were never checked at
-// all, and a deleted-file detector reported them as "no such file". A tag is a gap in
-// the text, so it becomes a space.
-const strip = s => s.replace(/<[^>]*>/g, ' ');
+// A tag is a gap in the text, so it becomes a space — and it must be padded to the tag's own
+// length, not collapsed to one character. Deleting a tag outright spliced the label onto the
+// citation beside it (12 flow-doc citations became unresolvable tokens and were skipped, not
+// checked); collapsing to one space fixes that but makes the stripped line shorter than the raw
+// one, so the raw span offsets that symbol pairing needs stop being comparable to the stripped
+// offsets the anchor loops use. Pad to length and both coordinate spaces coincide by construction.
+const strip = s => s.replace(/<[^>]*>/g, m => " ".repeat(m.length));
 
 /**
  * The symbol a doc line claims its citation points at, when the line names
