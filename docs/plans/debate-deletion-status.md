@@ -2117,7 +2117,7 @@ Three stale labels were fixed in place: `hooks/useAppSettings.ts` and
 
 **Gate state on this tree, each read from its own marker, not a piped exit code:**
 Re-run here: typecheck, type-check-scripts, electron parse (both re-run on this tip: `tsc --noEmit` clean,
-`node --check` on all three electron files clean), flow-doc anchors (272 verified, — the same figure as before, reached by a different set of anchors,
+`node --check` on all three electron files clean), flow-doc anchors (281 verified, — the same figure as before, reached by a different set of anchors,
 0 unattributed, **0** comment-line and **0** symbol misses — both ceilings now zero, with 5
 citations listed as deliberate comment-as-claim exemptions — **0** census disagreements, and
 **0 of 6** AGENTS.md control arms failing, the new half that measures `AGENTS.md`'s own counts:
@@ -2169,7 +2169,7 @@ the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:69`; 
 progress panel now mints two rows (`market-data`, `analysis`), completed by
 `settleOpenSteps()` in the run's `finally` after the catch has marked any failure.
 
-**Push state:** 95 unpushed commits at this tip (measured as `git rev-list --count
+**Push state:** 96 unpushed commits at this tip (measured as `git rev-list --count
 origin/main..HEAD`, which is the only honest way to state it — the count grows with
 every commit, so re-measure rather than trust this number), nothing pushed this
 session; the earlier authorization covered only the first 16.
@@ -2323,4 +2323,25 @@ against `git ls-files`.
 This is the same rule that revoked a carry-over earlier in this session — a carried claim dies at the
 first source edit — stated now in the direction that matters: the diff is what makes it survivable, and
 the command that prints it belongs in the record so the next reader can re-run it instead of trusting me.
+## The absence claims were re-grepped (2026-10-19)
+
+Line numbers prove where something IS. The flow docs also make present-tense claims about things that
+ARE NOT there — no writer, zero callers, not rendered — and no anchor rule can see any of them. Each was
+re-measured over the production roots (`hooks services utils components App.tsx constants`, plus `electron`
+where relevant), not re-read:
+
+| claim | recipe | measured |
+|---|---|---|
+| `beginPromptLane` has zero callers | `grep -rn beginPromptLane hooks services components App.tsx utils constants` | 2 hits: the import line and its own `export const` — no call site |
+| the prompt lane still settles | `grep -rn endPromptLane …` | 3: import, `useAnalysisPipeline.ts:1550` in the `finally`, the definition |
+| `savedAnalyses` was deleted outright (stage 21) | `grep -rl savedAnalyses --include=*.ts --include=*.tsx . \| wc -l` | **0 files** — field, state, SQLite read/write, backup validation all gone; the surviving mentions are in the untracked `docs/analysis/` census, where every count is already 0 |
+| `NavRail` is imported and never rendered | `grep -rn "<NavRail" …` | 1 hit, and it is the generic `<NavRailProps>` on its own definition line — no JSX use anywhere in production |
+| post-mortems are gone | `grep -rn usePostMortem conductPostMortem …` | 1, a comment in `services/learning/SkillMemoryService.ts`; 0 for `conductPostMortem` |
+| all three turn owners record usage | `grep -rn recordToolTurnUsage …` | 3 call sites (`chatSurfaceTurn.ts:331`, `automationTurn.ts:258`, `chatTurnRunner.ts:709`) + the definition at `utils/sessionUsage.ts:63` |
+| one notifier | `grep -rn CompletionNotifications …` | 1, a comment in `services/infrastructure/notify.ts` — the module itself was deleted, which is stronger than "no caller" and is now what row 52 says |
+
+One sentence was tightened rather than corrected: row 52 said `CompletionNotifications` "has no caller",
+which understates the truth — the file is gone and only a comment mentions it. Everything else held.
+The point of printing the recipes is that an absence claim is exactly the kind of sentence that rots
+silently: a reader-less field can regain a writer with one line of code and no anchor moves.
 
