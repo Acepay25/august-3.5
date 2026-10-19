@@ -68,7 +68,7 @@ const ModelsTab: React.FC<{ tab: ModelsTabProps }> = ({ tab: props }) => {
         <div className="space-y-5 animate-fade-in min-h-0">
             <SettingsPageHeader
                 title="AI setup"
-                description="Connect a provider, then choose which model fills each seat on the desk."
+                description="Connect a provider, then choose the model the desk and the scheduler answer with."
             />
             {providerConfigsLoaded && readyConfigProviders.length === 0 && (
                 <div className="rounded-bubble border border-cyan-500/20 bg-cyan-500/[0.05] p-4">
@@ -124,7 +124,7 @@ const ModelsTab: React.FC<{ tab: ModelsTabProps }> = ({ tab: props }) => {
 
                 <div className="rounded-bubble border border-white/[0.07] bg-zinc-900/50 p-4">
                     <div className="mb-2 text-ui-dense font-semibold uppercase tracking-[0.08em] text-zinc-500">
-                        Debate Moderator
+                        Moderator
                     </div>
                     <ModelPicker
                         providers={providerConfigs ?? []}
