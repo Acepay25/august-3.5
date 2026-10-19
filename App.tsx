@@ -19,8 +19,6 @@ import { buildProposedTradeMessage, type TradeProposal } from './services/trade/
 import { ensureStamp } from './services/trade/proposalGate';
 import * as chatStore from './services/trade/chatStore';
 import { latestChartVerdict } from './services/trade/chartData';
-import { AnalystRole } from './types/enums';
-import { BotRegistry } from './services/bots/BotRegistry';
 
 
 // Modular Imports
@@ -1398,63 +1396,12 @@ const App: React.FC = () => {
         providerConfigs, providerConfigsLoaded,
     });
 
-    useEffect(() => {
-        if (!providerConfigsLoaded) return;
-        void (async () => {
-            const existing = await BotRegistry.list();
-            if (existing.length > 0) return;
-            const fallback: Array<{ providerId: string; model: string; role: AnalystRole; name: string }> = [];
-            if (lensConfig.enabled) {
-                const roleNames: Record<string, string> = {
-                    [AnalystRole.MACRO_VOLATILITY]: 'Macro',
-                    [AnalystRole.TECHNICAL_ANALYST]: 'Technical',
-                    [AnalystRole.RISK_EXECUTION]: 'Risk',
-                };
-                for (const a of lensConfig.assignments) {
-                    if (!a.assignedProvider || !a.role) continue;
-                    const provider = providerConfigs.find(p => p.id === a.assignedProvider);
-                    const model = a.assignedModel || provider?.selectedModel || provider?.models[0];
-                    if (!provider || !model) continue;
-                    fallback.push({ providerId: provider.id, model, role: a.role, name: roleNames[a.role] || provider.name });
-                }
-            }
-            if (fallback.length === 0) {
-                const names = ['Macro', 'Technical', 'Risk'];
-                const roles = [AnalystRole.MACRO_VOLATILITY, AnalystRole.TECHNICAL_ANALYST, AnalystRole.RISK_EXECUTION];
-                for (let i = 0; i < Math.min(3, ensembleModelSelection.length); i++) {
-                    const e = ensembleModelSelection[i];
-                    if (!e?.providerId || !e.model) continue;
-                    fallback.push({ providerId: e.providerId, model: e.model, role: roles[i], name: names[i] });
-                }
-            }
-            if (fallback.length > 0) {
-                await BotRegistry.seedIfEmpty(fallback);
-            }
-        })();
-    }, [providerConfigsLoaded, providerConfigs, lensConfig, ensembleModelSelection]);
-
-    const teamBotsSyncRef = useRef<string | null>(null);
-    useEffect(() => {
-        if (!providerConfigsLoaded) return;
-        const key = JSON.stringify({ lens: lensConfig, sel: ensembleModelSelection });
-        if (teamBotsSyncRef.current === key) return;
-        teamBotsSyncRef.current = key;
-        void (async () => {
-            const bots = await BotRegistry.list();
-            if (bots.length === 0 || bots.length !== 3) return;
-            if (lensConfig.enabled) {
-                for (const a of lensConfig.assignments) {
-                    if (!a.assignedProvider || !a.role) continue;
-                    const match = bots.find(b => b.role === a.role);
-                    if (!match) continue;
-                    const provider = providerConfigs.find(p => p.id === a.assignedProvider);
-                    const model = a.assignedModel || provider?.selectedModel || provider?.models[0];
-                    if (!model || (match.providerId === a.assignedProvider && match.model === model)) continue;
-                    await BotRegistry.upsert({ ...match, providerId: a.assignedProvider, model });
-                }
-            }
-        })();
-    }, [providerConfigsLoaded, providerConfigs, lensConfig, ensembleModelSelection]);
+    // The Agents desk is NOT seeded. Nothing here creates bots any more, so a
+    // fresh profile opens on the empty rail AgentsView already renders and an
+    // agent exists only because the trader made one. The built-in Macro,
+    // Technical and Risk analysts were removed by owner ruling: a roster the
+    // app invents is not a chat the trader chose, and an effect that rewrites a
+    // named bot model from a Settings picker they never pressed is worse.
 
     // ToolForge + memory amendments: models can PROPOSE mid-debate; the
     // user only sees them in Settings, so surface each arrival as a toast

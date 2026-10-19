@@ -909,11 +909,11 @@ not from the plan:
 - `isStagedEnsemble` (`:655`) still mints `ensembleProgress` (`:888`, written on
   the placeholder at `:912`) with every seat at `status: 'waiting'`. Nothing ever
   moves it, because the only writers were the debate throttler (deleted) and
-  `runOutcome.ts:41`, which only marks it failed. `App.tsx:1252` reads it.
+  `runOutcome.ts:41`, which only marks it failed. `App.tsx:1250` reads it.
 - `isDebating: true` is now written in exactly ONE place: the resume path
   (`:924`). Everything that once set it lived in the debate loop.
 
-**The live consequence, and it is the next job:** `App.tsx:1249` picks
+**The live consequence, and it is the next job:** `App.tsx:1247` picks
 `verdictMessage` out of the debate shapes — `ensembleProgress`, >1 `modelsUsed`,
 `debateTurns` — and hands it to the chart as `verdict={verdictMessage?.analysis}`
 (`App.tsx`, and there is no line to give it: as of 2026-10-19 nothing passes an analysis prop there at all). After this tranche nothing sets `Message.analysis` for a new
@@ -988,7 +988,7 @@ deleting anything in either area.
 
 **1. Accuracy mode is fully wired, and the calibration store is infrastructure, not part of the stage.**
 `AccuracyModeModal` looked orphaned to a `from '…'` grep — it is imported through
-`React.lazy` at `App.tsx:69` and mounted at `App.tsx:2222`. The
+`React.lazy` at `App.tsx:67` and mounted at `App.tsx:2169`. The
 `accuracySubMode` / `isAccuracyModeEnabled` flags reach App, GeneralTab,
 useAppSettings, useLensAndEnsembleConfig, useProfilePersistence, useAnalysisPipeline,
 GenericAnalysisService, HybridIntelligenceService, TradeLog and 4 types files. And
@@ -1004,7 +1004,7 @@ not a mechanical one — it removes reporting the trader can currently open.
 **2. `ensembleProgress` has no rendering reader but IS load-bearing on the failure path.**
 Census over all `.ts`/`.tsx`: minted at the block now at `useAnalysisPipeline.ts:903`→`:908` (the placeholder row itself was deleted with the engine), patched at
 `runOutcome.ts`'s debating branch, stripped at the SQLite boundary, and
-after `1bd501e` no component reads it (`App.tsx:1252` was the last, and that memo is
+after `1bd501e` no component reads it (`App.tsx:1250` was the last, and that memo is
 gone). But the `runOutcome` branch keyed on it writes the row's TEXT —
 "The analysis was cancelled." / "The ensemble could not continue before the debate
 started." — so deleting the mint without re-keying that guard strands an empty row on
@@ -1354,12 +1354,12 @@ with an offer to migrate that text into the general list before the tabs go.
 **Attempted #19's tail in an isolated worktree on 2026-10-18 and stopped at the third site — with
 two couplings the list above did not contain.** They are the reason this is a design pass and not a
 grep-and-delete:
-- `isEnsembleEnabled` gated **live market polling** too: `App.tsx:495` passed it to
+- `isEnsembleEnabled` gated **live market polling** too: `App.tsx:493` passed it to
   `hooks/useMarketData.ts`, which uses it at `:44` (clears `liveMarketConditions` when off), `:127`
   and `:161` (the Binance reachability check) and `:118`/`:192` (effect deps). So deleting the
   toggle silently kills the market ticker the header shows, unless the polling is re-parented onto
   `isHybridIntelligenceEnabled`, which is that feature's own switch and the honest owner of it.
-  Note the toggle's default is **off** (`App.tsx:353` `useState(false)`), so "ordinary chat wins"
+  Note the toggle's default is **off** (`App.tsx:351` `useState(false)`), so "ordinary chat wins"
   means today's default behaviour, not today's opt-in behaviour — a user who enabled ensemble
   loses the ticker unless it is re-parented. That re-parenting is a feature decision, not a trim.
 - `runEnsembleEnabled` is not only read in the hook: it is passed **as a positional argument** at
@@ -2044,7 +2044,7 @@ token three such glued tokens were produced across the flow html — none of the
 `resolve()` today, so they have never been checked for resolution, non-blank or comment-line at all.
 Work order: make `strip()` emit a space per tag and confirm the anchor population does not move;
 then re-apply the detector and expect ~15 real findings; then retire the ledger's historical line
-numbers the way the approval-inbox census row was retired today. LANDED THE SAME DAY, in the other order: fix strip() first (the scan went from 513 references / 247 unique to 538 / 252, and the wider scan itself failed the gate until five stale citations were retired: `App:2167` was a comment about chatModelFallback and now points at the mount at the mount site; the quick-reply row bare-numbered 1350 when the call is the quick-reply call site; the bot fork bare-numbered 431 when `if (config.botId)` is the fork line; and `ensureStamp` was paired with `runPresentTrade` line 75 though it is defined at the gate file where it is defined), then apply the detector. Measured with it live: 0 deleted-file citations in the flow docs, 6 in this ledger — the verdictFinalizer and CalibrationSection rows name files this run deleted, and three are the glued examples quoted above. A live-doc hit fails the merge; a ledger hit is recorded history and ratchets down only.
+numbers the way the approval-inbox census row was retired today. LANDED THE SAME DAY, in the other order: fix strip() first (the scan went from 513 references / 247 unique to 538 / 252, and the wider scan itself failed the gate until five stale citations were retired: `App:2114` was a comment about chatModelFallback and now points at the mount at the mount site; the quick-reply row bare-numbered 1350 when the call is the quick-reply call site; the bot fork bare-numbered 431 when `if (config.botId)` is the fork line; and `ensureStamp` was paired with `runPresentTrade` line 75 though it is defined at the gate file where it is defined), then apply the detector. Measured with it live: 0 deleted-file citations in the flow docs, 6 in this ledger — the verdictFinalizer and CalibrationSection rows name files this run deleted, and three are the glued examples quoted above. A live-doc hit fails the merge; a ledger hit is recorded history and ratchets down only.
 
 ## Resume facts, 2026-10-19 end of session — read this before exploring anything
 
@@ -2252,7 +2252,7 @@ registry row can orphan the constant it alone imported: `STRESS_TEST_PROTOCOL`,
 file and are deleted (proved by `tsc` and `vite build`, since the barrel can hide a consumer —
 the exact trap that had already saved two other constants on this pass). Three debate-era names
 were then re-checked rather than assumed dead, and the answer differs for each: `moderatorConfig`
-is live as the DEFAULT provider behind vision/OCR (`App.tsx:337`) and memory (`App.tsx:601`) and
+is live as the DEFAULT provider behind vision/OCR (`App.tsx:335`) and memory (`App.tsx:599`) and
 as the automation seat and the journal's `Mod:` label; the `<CLARIFICATION_*>`/`<MODERATOR_RETRY>`
 matchers in `constants/debateMarkers.ts` are live as sanitizers at `utils/analysisUtils.ts:859`,
 while no prompt file mentions either marker any more. Both facts, plus the "no moderator TURN
@@ -2264,7 +2264,7 @@ tsc 0; `vite build` ✓; flow-doc anchors 261 verified, 0 unattributed, 0 census
 file at all, and only 5 write the symbol beside the citation — the only shape the gate can bind to content.
 So 48 rows are line-resolved and nothing more, and the run prints `arrow coverage: 5/53` with a floor on both
 figures so coverage cannot fall silently. Row 7 came out wrong outright: the lazy-surface `SurfaceSkeleton`
-boundaries are App.tsx:2456 TradeView, :2501 Journal, :2523 LearnView, :2539 StrategyStudio plus the
+boundaries are App.tsx:2403 TradeView, :2448 Journal, :2470 LearnView, :2486 StrategyStudio plus the
 automation modal at :2298 — not the :2493/:2538/:2560/:2602 the table had, which are a prop, a component
 open tag and two unrelated lines. Those five are now cited with the symbol beside each path. Raising coverage is per-row verification work, not a rule change, and the docs say that
 instead of implying the table is checked.
@@ -2292,10 +2292,10 @@ services/trade/automationTurn.ts:155, latestChartVerdict services/trade/chartDat
 would still be invisible.
 
 **Coverage 23 became 28: every arrow row that cites a file is content-checked now.** Binding the last five
-produced one more wrong number: row 6 cited App.tsx:2466 for the guard `surface !== 'agents'`, but that line is a
-prop — the guard is at **App.tsx:2428**, 38 lines away. Also bound and verified against the source:
+produced one more wrong number: row 6 cited App.tsx:2413 for the guard `surface !== 'agents'`, but that line is a
+prop — the guard is at **App.tsx:2375**, 38 lines away. Also bound and verified against the source:
 parseAppHash hooks/useSurfaceRouter.ts:101 with serializeAppHash :159, the `AgentsView` element opening at
-App.tsx:2566, `TradeChatPanel` rendered at components/trade/TradeView.tsx:1115, and the two row-minting calls
+App.tsx:2513, `TradeChatPanel` rendered at components/trade/TradeView.tsx:1115, and the two row-minting calls
 withDetectedTradeType hooks/useTradeLogging.ts:305 and :665. What the gate still cannot reach: the 25 rows that
 name no file at all, and the docs say 28/53 rather than claiming the table is fully checked.
 ## Which gates actually ran at this tip (2026-10-19, after the arrow-binding passes)
@@ -2359,13 +2359,13 @@ silently: a reader-less field can regain a writer with one line of code and no a
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions
 services/trade/chatSessions.ts:419, collectApprovalItems utils/approvalInbox.ts:57, resolveInvokedSkills
 services/learning/SkillMemoryService.ts:494), and the gate caught the pairing that insertion created: the row
-also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1920, where the
+also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1867, where the
 useMemo actually is. 31 of 53 rows cite a file, all bound; 22 name no file at all.
 
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions chatSessions.ts:419,
 collectApprovalItems approvalInbox.ts:57, resolveInvokedSkills SkillMemoryService.ts:494), and the gate caught the
 pairing that insertion created: the same row also names approvalsWaiting, which is not on that line — a SYMBOL
-MISS, because pairing is positional. It now cites App.tsx:1920, where the useMemo actually is. 31 of 53 rows cite
+MISS, because pairing is positional. It now cites App.tsx:1867, where the useMemo actually is. 31 of 53 rows cite
 a file and every one of them binds a symbol; 22 name no file at all.
 
 **31 then 33.** Two more prose-only rows were bound after reading their source: deskThread is the export at
@@ -2392,3 +2392,6 @@ file: 33, every one bound; 20 rows name no file, floors moved to 33.
 
 
 **Stage 1 of #19 landed (2026-10-19): the ensemble flag stops deciding data work.** Per the owner ruling — keep Hybrid Intelligence, delete the ensemble leg, let market data be pulled on demand — a manual send no longer fetches real-time data: the seat calls get_market_packet, which already runs the same fetchHybridData + generateHybridPromptInjection path, so the capability is unchanged while an ordinary answer stops spending an exchange round trip it never asked for. Scheduled runs keep their unconditional pull, because for them the data IS the point. hooks/useMarketData now keys live polling to the Hybrid Intelligence toggle alone (guard at :44, reachability check at :127 and :161, effect deps at :118 and :192), which is exactly the re-parenting the grep-and-delete warning above said would be required before the toggle could go. Two things this pass caught about itself: (1) tests/automationRouteCharacterization.test.tsx went red because the deletion SUCCEEDED — it required an `if (runEnsembleEnabled) {` block to still exist, and its own comment anticipated the deletion — so it now asserts the property (no mode-gated block, the arm inside the schedule guard, a schedule-only fetch) and was checked against HEAD source to prove those assertions fail there; (2) 22 citations into the hook drifted when about fifteen lines vanished and the gate caught only six of them, because the rest are bare continuation numbers that land silently on whatever code is now there — including two that landed on comment lines and were flagged only in the ledger. The anchor count moved 305 to 302 as citations collapsed onto shared lines and others were re-anchored.
+
+
+**Stage 2 of #19 landed (2026-10-19): the Agents desk is never seeded, and the built-in Macro / Technical / Risk analysts are gone.** Per the owner the desk should open empty, like a chat, so the two effects in the App that invented a fallback roster (one from the Analyst Lens assignments, one from the model picker) and the effect that rewrote a named bot's model when those settings moved were deleted, together with the registry helper that only they called and the now-unreferenced role import. Nothing about the delete was quiet: it took four attempts on the docs, and three of them taught me something about my own checks. The first rewrote four CRLF files as LF, which is a whole-file diff masquerading as a documentation edit; the second assumed one hunk when the change was two, so every citation below the import was off by one line and the header-band references landed on comments; the third rewrote bare continuation numbers without their colon, corrupting the text it was meant to fix. Each time the correct move was to restore the files from HEAD and redo the pass, not patch the damage on top of itself. All four docs are now byte-consistent with CRLF intact and every App citation re-derived from the two hunks, with the header band fixed by content rather than arithmetic because a citation with no bound symbol is invisible to the gate while still being wrong. One honest gap is recorded in the flow docs themselves: no test covered the seeding, so removing it turned nothing red — the green suite here proves the deletion is safe, not that the feature was unused. Also worth stating plainly: the anchor gate caught my new sentence immediately, because attribution is one symbol per row, so the empty-state citation had to carry the identifier that actually lives on that line. The role feature is only half-cut: bot tool presets, role personas, lens prompts and the roster builder still name the three roles, and the Analyst Lens settings surface still exists, so those are the next tranche of this ruling.
