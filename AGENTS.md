@@ -151,7 +151,7 @@ competing for the machine.
 │                           #   imported by renderer, vite dev proxy AND electron main
 ├── types/                  # analysis, trade, provider, progress, message, learning …
 ├── utils/                  # See "Canonical single-source modules" below
-├── tests/                  # Vitest suites — 4726 tests in 478 files: 4715 pass in 477 and 11 skip in `tests/lensWordCount.measure.test.ts`. Read from vitest's own summary block 2026-10-19, after the debate-engine deletion removed 24 of them.
+├── tests/                  # Vitest suites — 4741 tests in 479 files: 4730 pass in 478 and 11 skip in `tests/lensWordCount.measure.test.ts`. Read from vitest's own summary block 2026-10-19, after the debate-engine deletion removed 24 of them.
 └── electron/               # main.cjs + preload.cjs (NOT covered by tsc)
 ```
 

@@ -568,6 +568,21 @@ card that forgets it was clicked offers a second journal row.
 
 ## Measured after stage 19: what the deletion did NOT remove
 
+**The prompt layer is the part the deletion never re-measured.** Settings → Prompts offers
+27 overridable prompts, and `tests/promptsAreWired.test.ts` measures that **16 of them have
+no call site that reads them**: every `debate.*` id, `analysis.families`, and the three
+`postmortem.*` ids. The app is handing the trader an editor for text it never sends, and one
+moderator fallback still instructs a model to "follow the Accuracy Mode checks" and to emit
+a debate envelope no parser can read — Accuracy Mode and the engine were both deleted, the
+registry was not. The gate pins the other direction too, because that is the one that breaks
+silently: the 11 ids a real call site reads must KEEP it, so a refactor that starves a live
+prompt fails the suite (proved by renaming one `getPrompt('analysis.master'…` argument and
+watching five arms go red). The 16 are a measured ceiling that ratchets down only — deleting
+an entry, with the prompt constants nothing else imports, lowers it, and nothing may raise it.
+`hooks/useAppSettings.ts`, `components/settings/SettingsMenu.tsx` and this hook also carried
+comments labelling live code as Accuracy Mode / verdict-finalizer paths after those were
+deleted; the labels are gone, the code they mislabelled was correct.
+
 The engine files are gone, and most of the branch with them. What was removed this pass: the seat-completeness refusals ("Your analyst team is incomplete", "Analysts must use different models", "Two debate seats share a model") and the `TEAM_MAX_SEATS` ceiling — only ONE model answers a send (`provider`, `hooks/useAnalysisPipeline.ts:1296` falls back to `enabledProviders[0]`), so those blocked a run over a roster the run never uses, and the ceiling guarded a fan-out that no longer exists. The moderator readiness check survives but now applies only to a scheduled run (`:737`), because a schedule really does take its seat from that config; the human-send version of it refused a click over an unused pick. `runEnsembleEnabled` (`:567`) is now down to `buildEnsembleAnalysts` and the "include a coin" tip; `isDebating` and `activeDebateSpeakers` are deleted outright — every writer set a literal `false`, so the one branch that read the flag could not run.
 
 

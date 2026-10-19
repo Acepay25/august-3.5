@@ -590,7 +590,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             return { ok: true };
         }
 
-        // --- ROUTING LOGIC: Standard vs Accuracy Mode ---
+        // --- ROUTING LOGIC: which model answers this send ---
         // Ensemble participants are model-level entries, not just provider
         // entries. This allows several models from one provider while keeping
         // each result and reasoning trace separate.
@@ -871,7 +871,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             setIsHybridLoading(false);
         }
 
-        // eslint-disable-next-line no-useless-assignment -- consumed by the verdictFinalizer input below; the cluster owns the lane attribution now.
+        // eslint-disable-next-line no-useless-assignment -- read by the failure path below (mapRunFailureMessages); the cluster owns the lane attribution now.
                 // Id of the live-streaming casual-chat bubble (if this run is a casual
         // reply) so the catch block can settle it on cancel/error instead of
         // leaving a stuck isStreaming placeholder.
