@@ -2077,6 +2077,23 @@ would still abstain. The 46 remaining each need a hand look: the retired scratch
 `retarget.cjs` prints, for every flagged citation, the nearest non-comment line in that file
 that carries a symbol the doc line actually names.
 
+**The anchor gate grew a census half (2026-10-19).** It now re-runs the RECIPES these
+docs quote instead of trusting the figure printed beside them: both post-mortem grep
+censuses, the size of the arrow table, and the provider-directory deletion list — checked
+name by name against `git log --diff-filter=D`, which is the direct answer to the outside
+review that called "one service replacing nine" unfalsifiable. Four control arms failed on
+the day the rule was written and every one of them was right: a tag-stripping regex applied
+to MARKDOWN ate whole paragraphs (a `<` in a .md is prose or a placeholder like
+`class <ProviderName>Service`), which made the rule report a clean zero over an EMPTY
+population — the population floor is what exposed it; `(\w+)` captured `four` out of
+`Twenty-four` and accused a correct sentence; a name lookahead `(?![.\w])` dropped the LAST
+item of a comma list, so the doc's own nine deletions read as eight; and the md's
+88-column wrap broke every multi-word pattern until each was rewritten with `\s+`. None was
+absorbed by loosening a claim. Two limits stay open and are named rather than hidden: the
+provider sentences bind only their FIRST match, so a duplicated copy of one of those claims
+would go unchecked until those become `matchAll`; and the git-history half prints SKIPPED on
+a shallow clone (CI's checkout is depth 1) rather than reporting zero findings.
+
 **Gate state on this tree, each read from its own marker, not a piped exit code:**
 Re-run here: typecheck, type-check-scripts, electron parse (both re-run on this tip: `tsc --noEmit` clean,
 `node --check` on all three electron files clean), flow-doc anchors (253 verified,
