@@ -568,11 +568,11 @@ card that forgets it was clicked offers a second journal row.
 
 ## Measured after stage 19: what the deletion did NOT remove
 
-**The prompt layer is the part the deletion never re-measured.** Settings → Prompts offers
-27 overridable prompts, and `tests/promptsAreWired.test.ts` measures that **16 of them have
+**The prompt layer was the part the deletion never re-measured.** Settings → Prompts had
+27 overridable prompts, and `tests/promptsAreWired.test.ts` measured that **16 had
 no call site that reads them**: every `debate.*` id, `analysis.families`, and the three
-`postmortem.*` ids. The app is handing the trader an editor for text it never sends, and one
-moderator fallback still instructs a model to "follow the Accuracy Mode checks" and to emit
+`postmortem.*` ids. The app was handing the trader an editor for text it never sends, and one
+moderator fallback still instructed a model to "follow the Accuracy Mode checks" and to emit
 a debate envelope no parser can read — Accuracy Mode and the engine were both deleted, the
 registry was not. The gate pins the other direction too, because that is the one that breaks
 silently: the 11 ids a real call site reads must KEEP it, so a refactor that starves a live
