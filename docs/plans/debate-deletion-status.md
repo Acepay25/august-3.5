@@ -2117,10 +2117,13 @@ Three stale labels were fixed in place: `hooks/useAppSettings.ts` and
 
 **Gate state on this tree, each read from its own marker, not a piped exit code:**
 Re-run here: typecheck, type-check-scripts, electron parse (both re-run on this tip: `tsc --noEmit` clean,
-`node --check` on all three electron files clean), flow-doc anchors (255 verified,
+`node --check` on all three electron files clean), flow-doc anchors (262 verified,
 0 unattributed, **0** comment-line and **0** symbol misses — both ceilings now zero, with 5
-citations listed as deliberate comment-as-claim exemptions — and **0** census disagreements),
-vitest re-run on the tip AFTER the prompt deletion and read out of the log's own summary block:
+citations listed as deliberate comment-as-claim exemptions — **0** census disagreements, and
+**0 of 6** AGENTS.md control arms failing, the new half that measures `AGENTS.md`'s own counts:
+smoke tests from `e2e/smoke.spec.ts`, the vitest census against `git ls-files tests`, and the
+workflow-asymmetry step names as whole tokens inside the paragraph that prints its own `comm -13`
+recipe), vitest re-run on the tip AFTER the prompt deletion and read out of the log's own summary block:
 `Test Files 478 passed | 1 skipped
 (479)`, `Tests 4730 passed | 11 skipped (4741)` — the skipped file is
 `tests/lensWordCount.measure.test.ts` (11 measurements, skipped by design),
@@ -2155,7 +2158,7 @@ the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:69`; 
 progress panel now mints two rows (`market-data`, `analysis`), completed by
 `settleOpenSteps()` in the run's `finally` after the catch has marked any failure.
 
-**Push state:** 82 unpushed commits at this tip (measured as `git rev-list --count
+**Push state:** 88 unpushed commits at this tip (measured as `git rev-list --count
 origin/main..HEAD`, which is the only honest way to state it — the count grows with
 every commit, so re-measure rather than trust this number), nothing pushed this
 session; the earlier authorization covered only the first 16.

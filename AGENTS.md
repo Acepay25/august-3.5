@@ -101,7 +101,9 @@ suite with console interception on. The release gate
 no `check-flow-doc-anchors`, no `skill-approval-probe` — and adds
 `installer-smoke` on the packaged exe plus the signing, source-map, signature
 and updater-manifest checks, and only then builds and publishes. So a doc edit
-that breaks the flow docs' line numbers fails CI but not the tag push.
+that breaks the flow docs' line numbers fails CI but not the tag push. The same gate
+re-measures the counts in this file — the smoke-test number above, the vitest census in the
+tree map, and the step names in this paragraph — so a stale figure here fails CI too.
 Measured, not assumed — this set-difference prints the whole asymmetry:
 `comm -13 <(grep -ohE "npm run [a-z0-9:._-]+" .github/workflows/release.yml | sort -u)`
 `<(grep -ohE "npm run [a-z0-9:._-]+" .github/workflows/ci.yml | sort -u)`
