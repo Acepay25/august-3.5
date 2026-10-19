@@ -22,8 +22,6 @@ export function useAppSettings() {
     // that gates whether enabled docs are injected into analysis prompts.
     const [isStrategiesEnabled, setIsStrategiesEnabled] = useState<boolean>(false);
 
-    // Accuracy Mode State
-
     // Custom AI Behavior
     const [customInstructions, setCustomInstructions] = useState<CustomInstructionsMap>({
         general: [],

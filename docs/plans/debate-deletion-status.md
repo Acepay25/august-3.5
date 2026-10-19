@@ -2094,6 +2094,27 @@ provider sentences bind only their FIRST match, so a duplicated copy of one of t
 would go unchecked until those become `matchAll`; and the git-history half prints SKIPPED on
 a shallow clone (CI's checkout is depth 1) rather than reporting zero findings.
 
+**New finding, 2026-10-19 (later): the prompt registry was never re-measured.** Settings →
+Prompts lists 27 overridable prompts; `tests/promptsAreWired.test.ts` measures 16 with no
+`getPrompt('<id>'` call site anywhere in live source — all 12 `debate.*`, `analysis.families`
+and 3 `postmortem.*`. Each such entry is a UI that accepts, stores and validates text the app
+never sends; the `debate.moderator_autoplay` fallback also still tells a model to follow
+"Accuracy Mode checks" and emit a debate envelope, both deleted. The unreachable count is a
+ceiling that ratchets down only, and the 11 wired ids must keep their call site (red-proved by
+renaming one `analysis.master` argument → 5 arms failed, and by tightening the ceiling by one).
+Deletion is the next pass: the 16 entries plus the prompt constants whose only importer is
+`constants/promptRegistry.ts` (measured: 15 of `debatePrompts.ts`'s exports have zero consumers
+at all, the rest reach code only through the dead entries). One dependency to resolve first, and
+deliberately NOT loosened here: `tests/harnessMarks.test.ts` binds its "prompts that claim the
+user role must quote the real harness mark" and "USER STEERING" arms to
+`constants/prompts/debatePrompts.ts` by path — deleting that file empties their population, so
+those two arms must move to whatever prompt files are still sent before the file goes.
+Three stale labels were fixed in place: `hooks/useAppSettings.ts` and
+`components/settings/SettingsMenu.tsx` headed live state/props as "Accuracy Mode", and
+`hooks/useAnalysisPipeline.ts` carried an eslint directive naming the deleted
+`verdictFinalizer` as the consumer of `casualMessageId` — the variable is read at
+`mapRunFailureMessages`, so only the comment was wrong.
+
 **Gate state on this tree, each read from its own marker, not a piped exit code:**
 Re-run here: typecheck, type-check-scripts, electron parse (both re-run on this tip: `tsc --noEmit` clean,
 `node --check` on all three electron files clean), flow-doc anchors (253 verified,

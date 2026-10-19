@@ -46,7 +46,6 @@ const FULL_BLEED_TABS: SettingsTab[] = ['prompts', 'memory', 'instructions', 'st
 interface SettingsMenuProps {
     isVisible: boolean;
     onClose: () => void;
-    // Accuracy Mode
     // Hybrid & Capturing
     isHybridIntelligenceEnabled: boolean;
     onToggleHybridIntelligence?: () => void;
