@@ -760,7 +760,7 @@ agents.forEach(m => console.log(`  STALE CENSUS ${m}`));
 const asym = asymmetry();
 console.log(`agents-census: ${agents.length} AGENTS.md claim(s) disagree with the tree; ${agentsControls.length} of ${agentsArms.length} control arms failed — smoke tests ${smokeTests()}, test files ${trackedTestFiles()}, asymmetry ci-only [${asym.ciOnly.join(' ')}] release-only [${asym.relOnly.join(' ')}]`);
 providers.forEach(m => console.log(`  STALE CENSUS ${m}`));
-const COVER_FLOOR = 23;
+const COVER_FLOOR = 28;
 const COVER_CITED_FLOOR = 28;
 // ── How much of the arrow table can the gate actually SEE? ───────────────────────
 // Every row of section H is line-resolved; only a row that writes `symbol path:NNN`
