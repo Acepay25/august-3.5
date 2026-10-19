@@ -143,7 +143,8 @@ competing for the machine.
 │   ├── automation/         # Scheduled automations (cron + run history)
 │   ├── validation/         # Trade-plan validation + gate scoring (the service
 │   │                       #   keeps its Accuracy* name; the Accuracy Mode toggle is gone)
-│   ├── ui/                 # Autopilot, debates, price alerts
+│   ├── ui/                 # Outcome autopilot, analyst lens + seat roster, auto-capture,
+│   │                         #   algorithmic summaries, price alerts, veto ledger
 │   └── infrastructure/     # SQLite, Preferences, ProviderConfigService, backups
 ├── constants/              # models, prompts (per-domain files), promptRegistry
 ├── schemas/                # zod boundary schemas (tradeAnalysis, learning)
