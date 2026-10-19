@@ -162,7 +162,13 @@ function collect(doc, text) {
         // connector test must allow the closing backtick that sits before "at" —
         // requiring a word character there is what made the first attempt inert.
         const symOwn = symbolOf(lines[i]);
-        const dangling = !!symOwn && /\S[ \t]*(?:at|is|to|→|->|–|:)[ \t]*$/i.test(line.trim());
+        // The connector must be a WORD, not a suffix: the shipped test had no boundary,
+        // so "`…` does read it. That" matched the `at` inside "That" and the row was
+        // treated as dangling for a reason that has nothing to do with a connective.
+        // Requiring whitespace before at|is|to kills that class and cannot touch the
+        // real shape, "`SYM` at", where the backtick is followed by a space. Arrows and
+        // a bare colon are standalone already, so they need no boundary.
+        const dangling = !!symOwn && /(?:\s(?:at|is|to)\b|[→–:]|->)[ \t]*$/i.test(line.trim());
         const sym = dangling ? carrySym : (symOwn ?? carrySym);
         carrySym = dangling ? symOwn : null;
         const owners = [];
@@ -308,6 +314,19 @@ function selfTest() {
     need('a forward-bound row that is accurate reports nothing', fwdRep.symMiss.length === 0);
     const wrRep = check(collect('t', fwdWrong).found.map((a, k) => ({ ...a, doc: 't', docLine: k + 1 })));
     need('a forward-bound row that is wrong is caught', wrRep.symMiss.length === 1 && wrRep.symMiss[0].includes(':' + badLine));
+
+    // A connector is a WORD, not a suffix. The shipped test had no boundary, so a row
+    // that merely wraps onto "That" was read as dangling and LOST its own pairing —
+    // 42 doc lines end in that|this|into|seat|analysis, and one of those absences was
+    // hiding a real stale citation. This control fails under the unbounded regex and
+    // passes under `\sat\b`, which is the only reason the difference is visible at all.
+    const suffixArm = [
+        '`' + symTok + '` was reported unread, and `hooks/useAnalysisPipeline.ts:' + goodLine + '` reads it. That',
+        '`hooks/useAnalysisPipeline.ts:' + badLine + '` is a different row entirely.',
+    ].join('\n');
+    const sBound = collect('t', suffixArm).found;
+    need('a row wrapping onto "That" still owns its own symbol', sBound.some(a => a.line === goodLine && a.sym === symTok));
+    need('and does not hand that symbol to the next row', !sBound.some(a => a.line === badLine && a.sym === symTok));
     const blankInApp = linesOf('App.tsx').findIndex((l, i) => i > 0 && !l.trim() && linesOf('App.tsx')[i - 1].trim()) + 1;
     const r = check([
         { file: 'App.tsx', line: 999999, doc: 't', docLine: 1 },
