@@ -39,7 +39,7 @@ import { buildSkillsIndexForPrompt } from './tradeChatContext';
 import { listSkills } from '../learning/SkillMemoryService';
 import { activeStrategiesBlock } from '../learning/strategyStore';
 import { buildProfileMemoryIndex } from '../learning/profileMemory';
-import { runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
+import { isPresentationOnlyTool, runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
 import { runPresentTrade } from './presentTradeTool';
 import { userContentWithImage } from './chatTurnRunner';
 import { saveToolPayload } from './toolPayloadStore';
@@ -163,13 +163,15 @@ export const MAX_LIVE_TOOL_LINES = 8;
  * built it — system, then history, then the live line — with one deliberate
  * difference: the screenshot attached to THIS line goes on the wire as a real
  * image part (a text-only seat is told it is there instead of answering blind).
- * History rows still travel as text; the dock re-sends its last ten, this
- * surface passes its whole conversation, and bolting images onto that would be
- * a cost decision rather than a correctness one.
+ * Older history rows still travel as text; the dock re-sends its last ten, this
+ * surface passes its whole conversation, and bolting images onto all of that
+ * would be a cost decision rather than a correctness one.
  *
  * The trailing-prompt guard is load-bearing: the pipeline appends the trader's
  * own row to `messages` BEFORE the run, so `history` already ends with it.
- * Pushing it again would send the question twice.
+ * Pushing it again would send the question twice — and skipping the push
+ * without attaching the image there dropped the screenshot in the ordinary
+ * case, because only the push branch built an image part.
  */
 export const chatSurfaceTurnMessages = (
     history: readonly Message[],
@@ -183,11 +185,13 @@ export const chatSurfaceTurnMessages = (
         content: m.text,
     }));
     messages.unshift({ role: 'system', content: systemPrompt || CASUAL_CHAT_SYSTEM_PROMPT });
-    if (messages[messages.length - 1]?.content !== prompt) {
-        messages.push({
-            role: 'user',
-            content: userContentWithImage(prompt, image ? { kind: 'image', payload: image } : undefined, selectedModel),
-        });
+    const attachment = image ? { kind: 'image' as const, payload: image } : undefined;
+    const last = messages[messages.length - 1];
+    if (last?.content !== prompt) {
+        messages.push({ role: 'user', content: userContentWithImage(prompt, attachment, selectedModel) });
+    } else {
+        // The row is already on the wire; the attachment is this turn's.
+        last.content = userContentWithImage(prompt, attachment, selectedModel);
     }
     return messages;
 };
@@ -314,10 +318,13 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
     const systemText = req.requireTools
         ? `${prompt.text}\n\nFULL ANALYSIS REQUESTED: this turn is not a conversation, it is a reading. Call the market tools (price, book, derivatives, indicators, the trader's own log) before you state a number, and finish with present_trade if you have a plan. If you call nothing, say plainly that you did not look anything up.`
         : prompt.text;
-    let sawTool = false;
+    let sawMarketTool = false;
     const tracked: ToolTurnEvents = {
         ...events,
-        addToolLine: line => { sawTool = true; events.addToolLine?.(line); },
+        // Name, not display line: `present_trade` renders as a call like any
+        // other, but it reads nothing — a plan presented out of memory must not
+        // satisfy a request to check the tape.
+        addToolCall: name => { if (!isPresentationOnlyTool(name)) sawMarketTool = true; },
     };
     const out = await runToolTurn({
         config: req.config,
@@ -336,13 +343,13 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
         usageCalls: out.usageCalls,
         answer: out.text,
     });
-    if (req.requireTools && !sawTool && !out.interrupted) {
+    if (req.requireTools && !sawMarketTool && !out.interrupted) {
         // The honest notice, on the row it belongs to: an answer that looked up
         // nothing must not read like one that looked something up. A stopped
         // turn is excluded — the trader cut it, the seat did not skip the tape.
         return {
             ...out,
-            notice: 'FULL ANALYSIS, NOTHING LOOKED UP: this turn called no tool, so every number in it is the model’s own memory. Re-ask, or check the chart.',
+            notice: 'FULL ANALYSIS, NOTHING LOOKED UP: this turn called no market tool, so every number in it is the model’s own memory. Re-ask, or check the chart.',
         };
     }
     return out;

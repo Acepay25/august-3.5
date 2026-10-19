@@ -54,6 +54,20 @@ describe('latestChartVerdict', () => {
         expect(latestChartVerdict([])).toBeNull();
     });
 
+    it('walks past a newer plan for another coin when the chart names a symbol', () => {
+        // The overlay used to vanish on coin A after a plan for coin B landed:
+        // the unscoped walk returned B, and the renderer's own coin check then
+        // refused to draw anything. A plan already in the thread must come back
+        // when the trader switches back to its coin.
+        const btc = row({ id: 'a', proposal: proposal() });
+        const eth = row({ id: 'b', proposal: proposal({ symbol: 'ETHUSDT', entry: 3000, stopLoss: 2900, takeProfits: [3200] }) });
+        expect(latestChartVerdict([btc, eth], 'BTCUSDT')?.coinName).toBe('BTCUSDT');
+        expect(latestChartVerdict([btc, eth], 'ETHUSDT')?.coinName).toBe('ETHUSDT');
+        expect(latestChartVerdict([btc, eth], 'SOLUSDT')).toBeNull();
+        // No symbol keeps the old newest-row answer for callers without a chart.
+        expect(latestChartVerdict([btc, eth])?.coinName).toBe('ETHUSDT');
+    });
+
     /** The whole point of the prop: these become the lines on the candle chart. */
     it('produces the levels the chart overlays, on the proposal symbol only', () => {
         const verdict = latestChartVerdict([row({ proposal: proposal() })]);
@@ -62,10 +76,13 @@ describe('latestChartVerdict', () => {
         expect(verdictLevels(verdict, 'ETHUSDT')).toEqual([]);
     });
 
-    it('is wired: App reads the verdict through this selector, not off Message.analysis', () => {
-        const src = readFileSync('App.tsx', 'utf8');
-        expect(src).toContain('latestChartVerdict(messages)');
-        expect(src).toContain('verdict={chartVerdict}');
-        expect(src).not.toContain('verdictMessage');
+    it('is wired: the chart scopes the verdict walk to the coin it is drawing', () => {
+        const app = readFileSync('App.tsx', 'utf8');
+        expect(app).toContain('latestChartVerdict(messages)');
+        expect(app).toContain('verdict={chartVerdict}');
+        expect(app).not.toContain('verdictMessage');
+        const view = readFileSync('components/trade/TradeView.tsx', 'utf8');
+        expect(view).toContain('latestChartVerdict(conversationRows, symbol)');
+        expect(view).toContain('verdict={chartVerdict}');
     });
 });

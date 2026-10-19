@@ -17,7 +17,7 @@ import { splitThinkingFromOutput, extractAndStripThinkBlocks, createThinkingStre
 import { CASUAL_CHAT_SYSTEM_PROMPT } from '../../constants/prompts/chatPrompts';
 import { buildTradeInsightBrief, compactInsightForPatternMemory } from '../../utils/tradeInsightBrief';
 import { parseGlobalMemory, parseStrategySearchResults } from '../../schemas/learning';
-import { MASTER_ANALYSIS_PROMPT, LENS_MODE_BASE_PROMPT, COMPACT_ANALYSIS_PROMPT, RISK_MANAGEMENT_RULES, AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT, HARNESS_CONTRACT_PROMPT } from '../../constants/prompts';
+import { MASTER_ANALYSIS_PROMPT, COMPACT_ANALYSIS_PROMPT, RISK_MANAGEMENT_RULES, AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT, HARNESS_CONTRACT_PROMPT } from '../../constants/prompts';
 import { constructOptimizedContext } from '../../utils/memoryUtils';
 import { parseLiveMarketData } from '../../utils/liveMarketParser';
 import {
@@ -240,16 +240,15 @@ export interface AnalyzeTradingViewParams {
     globalMemory?: GlobalMemory;
     threadSummary?: string;
     customInstructions?: string;
-    rolePrompt?: string;                    // Analyst Lens: specialized role prompt
     /**
      * Summaries of the user's uploaded strategy books (Settings → Strategies),
      * rendered into the system prompt so every analyst persona follows them.
      */
     userStrategies?: string;
     /**
-     * User-edited base prompt for Normal mode (Lenses off). Replaces
-     * MASTER_ANALYSIS_PROMPT as the standard-mode base while the appended
-     * contract sections (rules, formatting, evidence discipline) stay intact.
+     * User-edited base prompt for Normal mode. Replaces MASTER_ANALYSIS_PROMPT
+     * while the appended contract sections (rules, formatting, evidence
+     * discipline) stay intact.
      */
     systemPromptOverride?: string;
     /**
@@ -293,7 +292,7 @@ export async function analyzeTradingView(
     const {
         prompt, images, imageSummaries, chatHistory, finalTradeSummary, recentInsights,
         activeFrameworks, globalMemory, threadSummary, customInstructions,
-        rolePrompt, systemPromptOverride, seatDirective, userStrategies, signal, temperature, onReasoning, onPartialOutput, onWireAudit,
+        systemPromptOverride, seatDirective, userStrategies, signal, temperature, onReasoning, onPartialOutput, onWireAudit,
     } = params;
 
     const modelName = config.selectedModel;
@@ -345,9 +344,6 @@ export async function analyzeTradingView(
     const seatBlock = seatDirective
         ? `**INDEPENDENT SEAT DIRECTIVE**\n\n${seatDirective}`
         : '';
-    const roleBlock = rolePrompt
-        ? `**SPECIALIZED ANALYST ROLE ACTIVE**\n\n${rolePrompt}`
-        : '';
     const playbookBlock = frameworksList
         ? `**PLAYBOOK: CORE TRADING FRAMEWORKS**\n${frameworksList}`
         : '';
@@ -359,15 +355,12 @@ export async function analyzeTradingView(
         : '';
 
     let systemPrompt: string;
-    const basePrompt = rolePrompt
-        ? getPrompt('analysis.lens', LENS_MODE_BASE_PROMPT)
-        : (systemPromptOverride || getPrompt('analysis.master', MASTER_ANALYSIS_PROMPT));
+    const basePrompt = systemPromptOverride || getPrompt('analysis.master', MASTER_ANALYSIS_PROMPT);
     systemPrompt = composePrompt([
         { id: 'contract', text: HARNESS_CONTRACT_PROMPT },
         { id: 'seat', text: seatBlock },
-        { id: 'role', text: roleBlock },
         { id: 'job', text: basePrompt },
-        { id: 'vision', text: rolePrompt ? '' : visionDeepDive },
+        { id: 'vision', text: visionDeepDive },
         { id: 'memory', text: getPrompt('analysis.memory_enforcement', AI_PROVIDER_MEMORY_ENFORCEMENT_PROMPT) },
         { id: 'override', text: userOverride },
         { id: 'playbook', text: playbookBlock },

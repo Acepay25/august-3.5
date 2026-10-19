@@ -83,7 +83,7 @@ const InlineVerdict: React.FC<{
             <details className="group/audit mt-2" open>
                 <summary className="flex cursor-pointer select-none items-center gap-1.5 py-1 text-ui-sm font-semibold text-zinc-500 transition-colors hover:text-zinc-300 list-none">
                     <ChevronDown className="h-3 w-3 transition-transform group-open/audit:rotate-180" aria-hidden="true" />
-                    <span>Inspect debate audit & evidence</span>
+                    <span>Inspect evidence & gate</span>
                 </summary>
                 <div className="mt-1.5 border-t border-zinc-800/60 pt-1.5">
                     <VerdictAudit

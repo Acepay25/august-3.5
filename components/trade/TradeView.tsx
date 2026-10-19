@@ -23,7 +23,7 @@ import { PanelRight, PinIcon, TrendingDown, TrendingUp } from '../shared/Icons';
 import { ProviderConfig } from '../../types/provider';
 import { TradeAnalysis, LoggedTrade, Message, Kline } from '../../types';
 import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData } from '../../services/analysis/MarketDataService';
-import { verdictLevels } from '../../services/trade/chartData';
+import { latestChartVerdict, verdictLevels } from '../../services/trade/chartData';
 import type { ChartDrawing } from '../../services/trade/chartDrawings';
 import { drawingsControl, capDrawings } from '../../services/trade/drawingsControl';
 import type { TradeProposal } from '../../services/trade/proposedTrade';
@@ -677,7 +677,13 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     const lastPrice = feed.ticker?.lastPrice ?? markPrice;
     // What's drawn on the chart right now — forwarded to the chat so its
     // get_chart_view tool can tell the model what the user is looking at.
-    const chartLevels = useMemo(() => verdictLevels(verdict, symbol), [verdict, symbol]);
+    // The walk is scoped to the coin on screen: a newer plan for another coin
+    // used to shadow this one, so returning to it drew no overlay at all.
+    const chartVerdict = useMemo(
+        () => (conversationRows ? latestChartVerdict(conversationRows, symbol) : verdict ?? null),
+        [conversationRows, symbol, verdict],
+    );
+    const chartLevels = useMemo(() => verdictLevels(chartVerdict, symbol), [chartVerdict, symbol]);
 
     // ── Harness level-watch (advisory only — OutcomeAutopilot resolves) ────
     // Arm a plan the Chart AI model presents, feeding it the live mark so the
@@ -1038,7 +1044,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                          * viewport and clip the dock's right edge. */
                         : 'min-h-[420px] flex-1 lg:min-h-0 lg:min-w-0'}
                 >
-                    <TradingChart symbol={symbol} interval={interval} onIntervalChange={changeInterval} sessionId={chatSnap.activeId} verdict={verdict} live={live} liveKline={feed.kline}
+                    <TradingChart symbol={symbol} interval={interval} onIntervalChange={changeInterval} sessionId={chatSnap.activeId} verdict={chartVerdict} live={live} liveKline={feed.kline}
                         lastPrice={Number.isFinite(lastPrice) ? lastPrice : null}
                         markPrice={Number.isFinite(markPrice) ? markPrice : null}
                         chatLevels={chatLevels}

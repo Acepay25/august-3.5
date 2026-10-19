@@ -72,7 +72,7 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
                 <SettingsRow
                     icon={<Wrench className="h-4 w-4" aria-hidden="true" />}
                     title="Desk Tools"
-                    description="Lets analysts and the moderator call live tools anytime — web search, funding/OI, order book, liquidations, BTC context, session timing."
+                    description="Lets the desk call live tools anytime — web search, funding/OI, order book, liquidations, BTC context, session timing."
                     control={
                         <ToggleSwitch
                             checked={deskToolsEnabled}

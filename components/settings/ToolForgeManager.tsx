@@ -59,7 +59,7 @@ export const ToolForgeManager: React.FC = () => {
     return (
         <div className="space-y-2">
             <p className="text-ui-dense leading-snug text-zinc-500">
-                Tools proposed by the models during debates (via <code className="text-zinc-400">forge_tool</code>).
+                Tools proposed by the models during a tool turn (via <code className="text-zinc-400">forge_tool</code>).
                 A candidate is an inert HTTP recipe — it cannot run until you approve it.
             </p>
             {tools.length === 0 && (

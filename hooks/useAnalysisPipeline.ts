@@ -23,9 +23,8 @@ import { type LiveBacktestResult } from '../services/backtesting/LiveBacktestSer
 
 // Utils
 import { TokenUsage } from '../utils/tokenUsage';
-import { saveThinkingBatch } from '../services/infrastructure/ThinkingStoreService';
+import { appendToolActions } from '../utils/toolActions';
 import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
-import { ThinkingRecord } from '../types/thinking';
 import { splitThinkingFromOutput } from '../utils/thinkingSplit';
 import { chatModelIdOf, isProviderReady, resolveChatModelSelection } from '../utils/providerUtils';
 import { buildDecisionReflectionContext } from '../services/learning/DecisionReflectionService';
@@ -36,7 +35,6 @@ import { isNotebookQuickSaveRequest, runNotebookQuickSave } from './analysisPipe
 import { classifyRunFailure, mapRunFailureMessages, resolveQuotaFlaggedModel, sanitizeFallbackErrorMessage } from './analysisPipeline/runOutcome';
 import { runChatSurfaceTurn } from '../services/trade/chatSurfaceTurn';
 import { automationSeatFor, runAutomationTurn } from '../services/trade/automationTurn';
-import { appendToolActions } from '../utils/toolActions';
 import type { ToolTurnOutcome } from '../services/trade/toolTurn';
 import type { PredicateGateResult } from '../services/learning/skillPredicateGate';
 
@@ -274,7 +272,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         globalMemory: GlobalMemory | undefined;
         threadSummary: string | undefined;
         customInstructions: string;
-        rolePrompt: string | undefined;
         systemPromptOverride: string | undefined;
         /** Per-seat independence directive — rendered into the system prompt head. */
         seatDirective?: string;

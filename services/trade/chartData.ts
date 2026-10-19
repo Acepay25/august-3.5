@@ -87,12 +87,19 @@ export const verdictLevels = (analysis: TradeAnalysis | null | undefined, symbol
  * finalizer is deleted and a tool turn never mints a TradeAnalysis, so every new
  * run went quiet while the chart kept reading the prop: a live reader with no
  * live writer. analysis stays as the fallback for rows written before the cut.
+ *
+ * `symbol` scopes the walk to the coin the chart is drawing. Without it a newer
+ * plan for ANOTHER coin shadowed the current one: switching back to the first
+ * coin drew no overlay even though its plan was still in the thread.
  */
-export const latestChartVerdict = (messages: Message[]): TradeAnalysis | null => {
+export const latestChartVerdict = (messages: Message[], symbol?: string | null): TradeAnalysis | null => {
+    const wanted = symbol ? baseOf(symbol) : '';
     for (let i = messages.length - 1; i >= 0; i--) {
         const m = messages[i];
-        if (m.proposal) return buildProposedTradeAnalysis(m.proposal);
-        if (m.analysis) return m.analysis;
+        const verdict = m.proposal ? buildProposedTradeAnalysis(m.proposal) : m.analysis;
+        if (!verdict) continue;
+        if (wanted && baseOf(verdict.coinName || '') !== wanted) continue;
+        return verdict;
     }
     return null;
 };

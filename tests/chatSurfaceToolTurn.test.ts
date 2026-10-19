@@ -198,6 +198,26 @@ describe('chatSurfaceTurnMessages — the prompt the desk sees', () => {
         expect(out.filter(m => m.content === 'c').length).toBe(1);
     });
 
+    it('attaches this turn’s screenshot when the history already ends with the prompt', () => {
+        // The ordinary shape: the pipeline appended the user row (with its
+        // image) before the run, and the trailing-prompt guard skips the push.
+        // The attachment must ride on that existing row, or the model answers a
+        // screenshot it never received.
+        const hist = [msg(MessageRole.USER, 'look at this')];
+        hist[0].images = ['data:image/png;base64,AAA'];
+        const out = chatSurfaceTurnMessages(hist, 'look at this', 'data:image/png;base64,AAA', 'gpt-4o');
+        expect(out.filter(m => m.role === 'user').length).toBe(1);
+        const parts = out[out.length - 1].content as Array<{ type: string }>;
+        expect(Array.isArray(parts)).toBe(true);
+        expect(parts.map(p => p.type)).toEqual(['text', 'image_url']);
+        // Older rows keep travelling as text: the cost decision is unchanged.
+        const older = chatSurfaceTurnMessages(
+            [msg(MessageRole.USER, 'earlier'), hist[0]],
+            'look at this', 'data:image/png;base64,AAA', 'gpt-4o',
+        );
+        expect(older[1].content).toBe('earlier');
+    });
+
     it('sends an attached screenshot as a real image part, and tells a text-only seat it is there', () => {
         // Index 0 is the system message on this surface; the attached line is
         // the LAST one — that is the turn the user just sent.

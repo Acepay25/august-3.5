@@ -83,7 +83,7 @@ The goal is one tool-capable turn in **both** chat homes. Facts, so the next
 session does not re-derive them:
 
 - `streamChatWithDeskTools` is an **async generator** returning text deltas
-  (`services/analysis/DeskToolsService.ts:3684`), and **every option is optional**
+  (`services/analysis/DeskToolsService.ts:3764`), and **every option is optional**
   (`StreamWithDeskToolsOptions`). It self-gates on
   `getHarnessSettings().deskToolsEnabled`, and `withDeskToolsSystemPrompt` will not
   double-inject the DESK TOOLS block if the system message already carries it.
@@ -122,7 +122,7 @@ So the target is NOT "keep the branch and shrink it to one seat". It is:
   SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
-  `streamChatWithDeskTools` (`DeskToolsService.ts:3754`), which the dock's solo
+  `streamChatWithDeskTools` (`DeskToolsService.ts:3764`), which the dock's solo
   seat already runs at `chatTurnRunner.ts:641`.
 - **The verdict and the journal row become tools the model chooses to call**, not
   a pipeline stage it has to earn. What already exists: `present_trade`
@@ -336,10 +336,9 @@ Stage 20c made `runEnsembleEnabled` the only guard, so a scheduled run with the
 toggle on was still entering the debate. 20r does not delete that dependency in
 stage 19 — it gives the schedule a route of its own first, so one config has one
 behaviour at every revision. The arm sits in the pipeline at
-`useAnalysisPipeline.ts:1533`, ABOVE the mode fork at `:1598`, and
-`tests/automationRouteCharacterization.test.tsx` pins the order by `indexOf`
-rather than by prose, so moving the arm below the fork is a failing test, not a
-comment.
+`useAnalysisPipeline.ts:1109`. The mode fork it used to precede went with stage
+19, so the pair's order is no longer a testable property;
+`tests/automationRouteCharacterization.test.tsx` pins the route the arm takes.
 
 `services/trade/automationTurn.ts` is the third sink over the same `runToolTurn`.
 It reuses `chatSurfaceTurnMessages` and `surfacePromptWith`, so a schedule and the
@@ -1588,7 +1587,7 @@ history card all still call it directly.
 **#21 — three sub-items, measured, none started.** `debateTurns` is declared at
 `types/message.ts:189` and `types/trade.ts:110`, written at
 `hooks/useTradeLogging.ts:350` and `utils/watchList.ts:30`, and read by
-`hooks/useAnalysisPipeline.ts:735`,
+`hooks/useAnalysisPipeline.ts:732`,
 `hooks/useWatchAndAutopilot.ts:105`, `services/analysis/convictionDrift.ts:82`,
 `services/learning/monthlyReport.ts:220`, `utils/analysisUtils.ts:990` and the
 report's turn count at `utils/reportExport.ts:241`, plus a seeded fixture in
@@ -2280,14 +2279,14 @@ line-resolved only.
 **Coverage 14 became 23, and it cost the docs three more wrong numbers.** Binding a row to its symbol means reading the line, so ten more rows
 went through the source: `runAutomation` is hooks/useAutomations.ts:381 (the table said :389), the `config.botId` fork is
 :423 (it said :431), and the row that attributes `Message.proposal` to the pipeline cited line 1293 of that
-file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1170. All three fixed in both flow docs. Newly bound and verified true:
+file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1167. All three fixed in both flow docs. Newly bound and verified true:
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:42, the Enter branch at
 components/trade/panels/ChatComposer.tsx:146, systemPromptFor components/trade/TradeChatPanel.tsx:453 with
-TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:475, useBotThread hooks/useAnalysisPipeline.ts:1203,
+TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:475, useBotThread hooks/useAnalysisPipeline.ts:1200,
 entriesForSession services/trade/chatSessions.ts:531, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:147
 with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
 services/trade/automationTurn.ts:69, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices
-services/trade/automationTurn.ts:155, latestChartVerdict services/trade/chartData.ts:91. The gate prints
+services/trade/automationTurn.ts:155, latestChartVerdict services/trade/chartData.ts:95. The gate prints
 23/53 with 37 pairs and a floor of 23; 30 rows remain line-resolved, and those are where the next wrong number
 would still be invisible.
 
@@ -2348,7 +2347,7 @@ where relevant), not re-read:
 | `savedAnalyses` was deleted outright (stage 21) | `grep -rl savedAnalyses --include=*.ts --include=*.tsx . \| wc -l` | **0 files** — field, state, SQLite read/write, backup validation all gone; the surviving mentions are in the untracked `docs/analysis/` census, where every count is already 0 |
 | `NavRail` is imported and never rendered | `grep -rn "<NavRail" …` | 1 hit, and it is the generic `<NavRailProps>` on its own definition line — no JSX use anywhere in production |
 | post-mortems are gone | `grep -rn usePostMortem conductPostMortem …` | 1, a comment in `services/learning/SkillMemoryService.ts`; 0 for `conductPostMortem` |
-| all three turn owners record usage | `grep -rn recordToolTurnUsage …` | 3 call sites (`chatSurfaceTurn.ts:331`, `automationTurn.ts:258`, `chatTurnRunner.ts:709`) + the definition at `utils/sessionUsage.ts:63` |
+| all three turn owners record usage | `grep -rn recordToolTurnUsage …` | 3 call sites (`chatSurfaceTurn.ts:338`, `automationTurn.ts:262`, `chatTurnRunner.ts:709`) + the definition at `utils/sessionUsage.ts:63` |
 | one notifier | `grep -rn CompletionNotifications …` | 1, a comment in `services/infrastructure/notify.ts` — the module itself was deleted, which is stronger than "no caller" and is now what row 52 says |
 
 One sentence was tightened rather than corrected: row 52 said `CompletionNotifications` "has no caller",

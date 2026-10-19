@@ -299,7 +299,7 @@ const GroupChatViewImpl: React.FC<GroupChatViewProps> = ({
                             ))}
                         </div>
                         <div className="flex flex-wrap justify-center gap-2">
-                            {['Introduce yourselves', 'Debate the current BTC setup', 'What is the biggest risk right now?'].map(starter => (
+                            {['Introduce yourselves', 'Check the current BTC setup', 'What is the biggest risk right now?'].map(starter => (
                                 <button
                                     key={starter}
                                     type="button"

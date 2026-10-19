@@ -845,7 +845,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     // Under the composer, and truncated there, so it is also the title there.
     const contextNote = activeBot
         ? `@${activeBot.name} answers here`
-        : 'No agent selected — the full analysis runs';
+        : 'No agent selected — the desk can check the tape';
 
     // The + New menu: one creator, four honest verbs. The old chip row made
     // "Agents" and "Rooms" look like navigation when both only opened create
@@ -1035,7 +1035,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         {/* WS-6: the desk's own conversation is a first-class row,
                             not only the pane you fall back into. */}
                         <Row active={isChartPane} title="Chart AI" testId="chart-ai-row"
-                            preview={lastChartMessage ? previewTextFor(lastChartMessage) : 'Ask the desk — it runs the full analysis'}
+                            preview={lastChartMessage ? previewTextFor(lastChartMessage) : 'Ask the desk — it can check the tape'}
                             time={relTime(lastChartMessage?.createdAt ?? null)} Icon={MessageSquare}
                             onClick={() => selectThread({ kind: 'team' })} />
                         {pinnedBots.map(renderBotRow)}
@@ -1330,7 +1330,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                             ? botIsolated
                                                 ? `@${activeBot.name} thinks from its own notes only — it is isolated from the shared notebook.`
                                                 : `@${activeBot.name} reads its own notes and the shared notebook on every turn.`
-                                            : 'Pick an agent on the left and it answers in its own voice — or ask the desk and the full analysis runs.'}
+                                            : 'Pick an agent on the left and it answers in its own voice — or ask the desk, which can check the tape and present a trade.'}
                                     </p>
                                 </div>
                             ) : (
@@ -1476,7 +1476,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     <button type="button" onClick={openPicker} data-testid="composer-attach"
                                         aria-label="Attach image"
                                         title={activeBot
-                                            ? 'Agent replies are text-only — attachments run with the full analysis (no agent selected)'
+                                            ? 'Agent replies are text-only — attachments go to the desk (no agent selected)'
                                             : 'Attach an image'}
                                         disabled={!!activeBot}
                                         className="rounded-control border border-zinc-800/80 p-1 text-zinc-400 transition-colors hover:bg-white/[0.05] hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-zinc-400">

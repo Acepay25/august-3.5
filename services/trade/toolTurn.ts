@@ -44,9 +44,19 @@ export interface ToolTurnEvents {
     setText(text: string): void;
     addReasoning(chunk: string): void;
     addToolLine(line: string): void;
+    /** The model's tool NAME, once per executed call. Separate from the display
+     *  line because a caller that checks what a turn looked up must not parse
+     *  prose: `calling present_trade…` reads like any other lookup. */
+    addToolCall?(name: string): void;
     attachPayload(payload: Parameters<NonNullable<StreamWithDeskToolsOptions['onToolPayload']>>[0]): void;
     addAction(action: Parameters<NonNullable<StreamWithDeskToolsOptions['onToolAction']>>[0]): void;
 }
+
+/** A call that PRESENTS a result without reading one. `present_trade` runs the
+ *  proposal gate, but the gate is a scoring pass over data the model never saw,
+ *  so a turn whose only call is this one looked nothing up and must not satisfy
+ *  the Full-analysis / scheduled-run "checked the tape" contract. */
+export const isPresentationOnlyTool = (name: string): boolean => name === 'present_trade';
 
 export interface ToolTurnOutcome {
     /** The answer, after stripping and the echo/peel repair — what to PAINT. */
@@ -86,7 +96,7 @@ export interface ToolTurnRequest {
     /** Forwarded verbatim to the transport, minus the five callbacks this owns. */
     transport: Omit<
         StreamWithDeskToolsOptions,
-        'onReasoning' | 'onToolEvent' | 'onToolPayload' | 'onToolAction' | 'onStreamReset' | 'signal'
+        'onReasoning' | 'onToolEvent' | 'onToolCall' | 'onToolPayload' | 'onToolAction' | 'onStreamReset' | 'signal'
     >;
     /** Panel seats: keep the bubble empty while a pure (pass) is still possible.
      *  Passed the RAW accumulator, never the stripped one. */
@@ -141,6 +151,7 @@ const runToolTurnInner = async (req: ToolTurnRequest): Promise<InnerOutcome> => 
         },
         onReasoning: chunk => { reasoning += chunk; events.addReasoning(chunk); },
         onToolEvent: line => events.addToolLine(line),
+        onToolCall: name => events.addToolCall?.(name),
         onToolPayload: payload => events.attachPayload(payload),
         onToolAction: action => events.addAction(action),
     });

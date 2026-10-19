@@ -412,7 +412,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
             const readErrors = read.filter(f => f.error !== undefined) as Array<{ name: string; error: string }>;
             const result = await importSkillFiles(files);
             if (result.imported.length > 0) {
-                toast.success('Skills imported', `${result.imported.length} file${result.imported.length === 1 ? '' : 's'} added — the models can use them in debates now.`);
+                toast.success('Skills imported', `${result.imported.length} file${result.imported.length === 1 ? '' : 's'} added — the models can use them in analysis now.`);
             }
             for (const fail of result.failed) toast.error(`Import failed: ${fail.name}`, fail.reason);
             for (const fail of readErrors) toast.error(`Import failed: ${fail.name}`, fail.error);
@@ -537,8 +537,8 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                 {rows.length === 0 ? (
                     <p className="text-ui-sm italic text-zinc-600">
                         {skills.length === 0
-                            ? 'No playbooks yet — they form automatically from your post-mortems, or import skill .md files above.'
-                            : 'No playbooks match — clear the filters, or close trades with post-mortems to grow skill memory.'}
+                            ? 'No playbooks yet — approve a drafted skill in Learn → Approvals, run Scan → skills on a chart, or import skill .md files above.'
+                            : 'No playbooks match — clear the filters.'}
                     </p>
                 ) : (
                     /* The library is a CARD GRID, one card per playbook: the

@@ -57,6 +57,7 @@ const mockLedger = vi.mocked(loadAutomationPlanCount);
 
 type Owned = {
     onToolEvent?: (line: string) => void;
+    onToolCall?: (name: string) => void;
     onToolPayload?: (payload: never) => void;
     onReasoning?: (chunk: string) => void;
     executePanelTool?: (call: never) => Promise<{ ok: boolean; content: string } | null>;
@@ -67,7 +68,7 @@ const PLAN_CALL = {
     arguments: { direction: 'Long', entry: 100, stopLoss: 90, takeProfits: [110] },
 };
 
-type Step = { line?: string; failedTool?: string; plan?: boolean; text?: string };
+type Step = { call?: string; line?: string; failedTool?: string; plan?: boolean; text?: string };
 
 /** Drive the fake transport: replay `steps`, capture every `present_trade`
  *  receipt, and hand back the options the turn actually passed — so a test can
@@ -79,6 +80,7 @@ const script = (steps: Step[]) => {
         const owned = o as Owned;
         seen = o as Record<string, unknown>;
         for (const s of steps) {
+            if (s.call !== undefined) owned.onToolCall?.(s.call);
             if (s.line !== undefined) owned.onToolEvent?.(s.line);
             if (s.failedTool !== undefined) {
                 owned.onToolPayload?.({ toolCallId: 'p1', name: s.failedTool, ok: false } as never);
@@ -179,7 +181,7 @@ describe('a plan is rationed per day', () => {
 
 describe('a failure cannot look like a clean answer', () => {
     it('records a tool that came back with nothing and says so in a notice', async () => {
-        script([{ line: 'calling get_order_book…' }, { failedTool: 'get_order_book' }, { text: 'Book is thin.' }]);
+        script([{ call: 'get_order_book', line: 'calling get_order_book…' }, { failedTool: 'get_order_book' }, { text: 'Book is thin.' }]);
         const out = await runAutomationTurn(req());
         expect(out.failedTools).toEqual(['get_order_book']);
         expect(out.notices.join('\n')).toMatch(/TOOL FAILURE\(S\).*get_order_book/);
@@ -192,9 +194,17 @@ describe('a failure cannot look like a clean answer', () => {
     });
 
     it('does not shame a turn that did call something', async () => {
-        script([{ line: 'calling get_price_snapshot…' }, { text: 'BTC 111,000.' }]);
+        script([{ call: 'get_price_snapshot', line: 'calling get_price_snapshot…' }, { text: 'BTC 111,000.' }]);
         const out = await runAutomationTurn(req());
         expect(out.notices.join('\n')).not.toMatch(/NOTHING WAS LOOKED UP/);
+    });
+
+    it('does not count a presented plan as having looked something up', async () => {
+        // A schedule that only presents a plan read no tape — the notice must
+        // stay, or the trader trusts numbers the model never checked.
+        script([{ call: 'present_trade', line: 'calling present trade…' }, { plan: true }, { text: 'Long BTC.' }]);
+        const out = await runAutomationTurn(req());
+        expect(out.notices.join('\n')).toMatch(/NOTHING WAS LOOKED UP/);
     });
 
     it('keeps the tool feed capped at the same window the chat homes use', async () => {

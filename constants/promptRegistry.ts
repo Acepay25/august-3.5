@@ -10,7 +10,6 @@
 
 import {
     MASTER_ANALYSIS_PROMPT,
-    LENS_MODE_BASE_PROMPT,
     COMPACT_ANALYSIS_PROMPT,
     RISK_MANAGEMENT_RULES,
 } from './prompts/analysisPrompts';
@@ -42,13 +41,6 @@ export const PROMPT_REGISTRY: PromptRegistryEntry[] = [
         fallback: MASTER_ANALYSIS_PROMPT,
     },
     {
-        id: 'analysis.lens',
-        name: 'Analyst Lens Base Prompt',
-        description: 'Base system prompt when specialized analyst roles (Macro / Technical / Risk) are enabled. Domain stays strict; the write-up is prose, not a form.',
-        usage: ['Lens-mode analysis system prompt'],
-        fallback: LENS_MODE_BASE_PROMPT,
-    },
-    {
         id: 'analysis.compact',
         name: 'Compact Analysis Prompt',
         description: 'Trimmed desk-trader brief for small-context models (low context window).',
@@ -59,7 +51,7 @@ export const PROMPT_REGISTRY: PromptRegistryEntry[] = [
         id: 'analysis.risk_rules',
         name: 'Risk Management Rules',
         description: 'Mandatory risk rules appended to every analysis mode (leverage, R:R floor, position sizing).',
-        usage: ['All analysis modes', 'Moderator prompts'],
+        usage: ['All analysis modes'],
         fallback: RISK_MANAGEMENT_RULES,
     },
     {

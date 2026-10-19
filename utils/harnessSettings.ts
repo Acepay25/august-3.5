@@ -10,7 +10,6 @@ export interface HarnessSettings {
     equityUsd: number;
     riskPercent: number;
     promptAbRate: PromptAbRate;
-    debateCostCapUsd: number;
     pinnedPromptLane?: 'live' | 'control';
     /** Analysts may call live desk tools (search, derivatives, session) before the brief. Default on. */
     deskToolsEnabled: boolean;
@@ -83,9 +82,6 @@ export const getHarnessSettings = (): HarnessSettings => {
             ? Math.min(10, Math.max(0.1, stored.riskPercent))
             : 1,
         promptAbRate: rate === 0 || rate === 0.1 || rate === 0.5 ? rate : 0.1,
-        debateCostCapUsd: typeof stored.debateCostCapUsd === 'number' && stored.debateCostCapUsd >= 0
-            ? stored.debateCostCapUsd
-            : 0.5,
         pinnedPromptLane: stored.pinnedPromptLane === 'live' || stored.pinnedPromptLane === 'control'
             ? stored.pinnedPromptLane
             : undefined,

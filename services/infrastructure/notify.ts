@@ -17,6 +17,11 @@
  * that represent an EXPLICIT user intent to be alerted (arming a watch) should
  * call ensureNotifyPermission() up front so the grant exists before a trigger
  * fires minutes later.
+ *
+ * A notification is for when the trader is NOT looking: the app already paints
+ * the settle (or the watch bubble) on screen. Posting an OS banner over a
+ * visible window is noise, so both the web/Electron path and the native path
+ * return false while the app is in the foreground.
  */
 
 let permission: 'unknown' | 'granted' | 'denied' = 'unknown';
@@ -31,6 +36,20 @@ const isNative = async (): Promise<boolean> => {
         nativeReady = false;
     }
     return nativeReady;
+};
+
+const isForeground = async (): Promise<boolean> => {
+    try {
+        if (await isNative()) {
+            const { App } = await import('@capacitor/app');
+            const state = await App.getState();
+            return state.isActive;
+        }
+    } catch {
+        // Unknown state must not suppress a backgrounded alert.
+        return false;
+    }
+    return typeof document !== 'undefined' && !document.hidden;
 };
 
 /** Ask for notification permission once; safe to call repeatedly. Returns
@@ -72,6 +91,7 @@ export const notify = async (
 ): Promise<boolean> => {
     if (!title && !body) return false;
     try {
+        if (await isForeground()) return false;
         if (await isNative()) {
             const { LocalNotifications } = await import('@capacitor/local-notifications');
             const check = await LocalNotifications.checkPermissions();

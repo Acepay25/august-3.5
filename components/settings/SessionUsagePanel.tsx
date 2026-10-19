@@ -323,17 +323,6 @@ export const HarnessControls: React.FC = () => {
                 />
                 Pre-trade checklist at capture (off by default)
             </label>
-            <label className="block text-ui-dense text-zinc-400">
-                Debate cost cap (USD, 0 = off)
-                <input
-                    type="number"
-                    min={0}
-                    step={0.05}
-                    value={settings.debateCostCapUsd}
-                    onChange={e => persist({ debateCostCapUsd: Number(e.target.value) || 0 })}
-                    className="mt-1 w-full rounded-control border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
-                />
-            </label>
         </div>
     );
 };
