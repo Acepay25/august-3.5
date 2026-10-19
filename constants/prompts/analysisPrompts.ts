@@ -223,3 +223,58 @@ Scan like a pro: structure, liquidity, volume, session, the indicators that actu
 
 Public reply: first sentence is the call. Then a short brief of what you found — no numbered template, no TRADE PLAN BLOCK. If there is a trade, name Direction, Entry, Stop Loss, Take Profit 1, Probability: N%. If not, Neutral + the reason. Name the price that kills the idea.
 `;
+
+// Relocated here from the deleted debate-prompt file: these two are consumed by the
+// hybrid-intelligence path (HybridIntelligenceService), never by a registry entry, so the
+// prompt-override registry deletion must not have taken them with it.
+export const INVALIDATION_THESIS_PROMPT = `
+🚫 **TRADE INVALIDATION THESIS (MANDATORY)**
+
+Before recommending any trade, you MUST explicitly state:
+
+1. **Critical Invalidation Level**: The EXACT price at which this thesis is completely wrong.
+   - "This trade is INVALID if price closes [above/below] $[X] on the [timeframe] chart."
+   
+2. **Time Invalidation**: When does this setup expire?
+   - "If entry is not triggered within [X] candles/hours, re-evaluate the thesis."
+   
+3. **Structure Invalidation**: What chart event kills this trade?
+   - "Invalidated by: [e.g., break of ascending trendline, loss of EMA20 support, new lower low]"
+   
+4. **Counter-Signal Watch**: What would flip your bias completely?
+   - "Would flip to [Long/Short] if: [specific condition, e.g., 4H close above X with volume]"
+
+5. **Early Exit Triggers**: What should prompt an early exit even before SL?
+   - "Consider early exit if: [e.g., funding rate flips extremely positive, OI spikes 20%+]"
+
+**CRITICAL:** Include this section even if confidence is HIGH. High confidence does not mean no invalidation conditions.
+`;
+
+export const CORRELATION_AWARENESS_PROMPT = `
+📊 **CORRELATION & MACRO AWARENESS**
+
+Before finalizing any altcoin trade, consider:
+
+**BTC CORRELATION CHECK:**
+1. Where is BTC right now relative to key levels?
+   - At resistance: Altcoin longs are risky (BTC rejection = alt dump)
+   - At support: Altcoin shorts are risky (BTC bounce = alt pump)
+   
+2. What is BTC doing in the last 4 hours?
+   - If BTC is ranging, alts may have their own momentum
+   - If BTC is trending, alts will likely follow
+
+3. BTC Dominance Trend:
+   - Rising dominance = Alts underperform (BTC outperforms)
+   - Falling dominance = Alts can pump independently
+
+**MACRO CONSIDERATIONS:**
+- Is there a major economic event today? (FOMC, CPI, NFP)
+- Is it weekend/low liquidity period?
+- Is funding rate extreme? (>0.1% or <-0.1%)
+
+**INSTRUCTION:** Factor correlation into your confidence. If BTC is at a critical level, consider:
+- Reducing position size recommendation
+- Widening stop loss
+- Downgrading confidence
+`;

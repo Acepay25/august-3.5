@@ -583,6 +583,21 @@ an entry, with the prompt constants nothing else imports, lowers it, and nothing
 comments labelling live code as Accuracy Mode / verdict-finalizer paths after those were
 deleted; the labels are gone, the code they mislabelled was correct.
 
+**…and then the 16 were deleted, which is not the same act as measuring them.** The registry
+is now 11 entries — every id a call site actually reads — and the unreachable ceiling is 0, so
+an entry can no longer be added without wiring it. Two lessons came out of the deletion itself,
+both recorded rather than smoothed over:
+- A name-based consumer scan said the whole prompt file was dead. `tsc` disagreed immediately:
+  `HybridIntelligenceService.ts` imports `INVALIDATION_THESIS_PROMPT` and
+  `CORRELATION_AWARENESS_PROMPT` through the `constants/prompts` barrel, and my per-name grep
+  had miscounted them as "only the registry". They were relocated to `analysisPrompts.ts`
+  verbatim — the live hybrid path keeps its bytes and the barrel import that reaches them is
+  unchanged. Zero-consumer claims are proven by the compiler, not by grep
+  ([[feedback-zero-importers-not-deletable]]).
+- The override-store suite used one dead id as its second prompt, which is how a test can pass
+  while asserting nothing about the store it covers: two ids are needed to prove resetting one
+  leaves the other's override intact. It now uses `analysis.lens` and `analysis.master`.
+
 **The harness note in a user-role turn had no live teacher.** `harnessTurn()` still stamps
 `HARNESS NOTE (this app, not the trader):` onto user-role content at four desk-tool sites —
 tool results, a continue nudge, a clipped payload — and the only prompts that ever named that

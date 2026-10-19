@@ -2202,3 +2202,20 @@ arms moved onto the blocks the app actually sends, with the floor re-based on th
 and a planted-paraphrase control added, since a scanner matching nothing reports no drift. This
 unblocks the debate-prompt deletion, which was held back precisely because those arms were the
 file's last consumer.
+
+**The 16 unreachable prompt entries are deleted (2026-10-19).** `constants/promptRegistry.ts`
+is now the 11 ids a call site reads and `tests/promptsAreWired.test.ts` holds the unreachable
+ceiling at 0, so a future entry must ship with its `getPrompt(id, fallback)` caller.
+`constants/prompts/debatePrompts.ts` and its barrel line are gone — with one exception that the
+compiler, not the grep, caught: `HybridIntelligenceService.ts:98-99` imports
+`INVALIDATION_THESIS_PROMPT` and `CORRELATION_AWARENESS_PROMPT` from `../../constants/prompts`,
+so those two blocks moved verbatim into `constants/prompts/analysisPrompts.ts` and the importer
+is untouched. My per-name consumer scan had reported them as registry-only, which is the
+same mistake the zero-importer rule warns about, seen from the other side: the reference lived
+in a barrel re-export, not next to the definition. `tests/promptOverrideService.test.ts` also
+had to change: its "resets a single override" case used the dead `debate.rebuttal` as its second
+prompt, and after a blanket rename both halves pointed at one id — a two-id store test that
+asserts one id proves nothing, so it now uses `analysis.lens` and `analysis.master`.
+Gates: tsc 0, promptsAreWired + promptOverrideService + harnessMarks + composePrompt 55 tests
+green, flow-doc anchors 253 verified with 0 census disagreements, full suite read from its own
+summary marker below.
