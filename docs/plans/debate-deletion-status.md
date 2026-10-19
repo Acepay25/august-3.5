@@ -2078,8 +2078,9 @@ would still abstain. The 46 remaining each need a hand look: the retired scratch
 that carries a symbol the doc line actually names.
 
 **Gate state on this tree, each read from its own marker, not a piped exit code:**
-typecheck, type-check-scripts, electron parse, flow-doc anchors (247 verified,
-0 unattributed, **0** comment-line and **0** symbol misses — both ceilings now zero, with 4
+typecheck, type-check-scripts, electron parse (both re-run on this tip: `tsc --noEmit` clean,
+`node --check` on all three electron files clean), flow-doc anchors (253 verified,
+0 unattributed, **0** comment-line and **0** symbol misses — both ceilings now zero, with 5
 citations listed as deliberate comment-as-claim exemptions), vitest re-run on the
 tip and read out of the log's own summary block: `Test Files 477 passed | 1 skipped
 (478)`, `Tests 4715 passed | 11 skipped (4726)`, 237.67s — the skipped file is
