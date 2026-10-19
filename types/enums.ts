@@ -46,14 +46,3 @@ export type DebateSpeaker = string | 'Moderator';
 // ANALYST LENS TYPES - Specialized roles for 3-analyst ensemble debates
 // =============================================================================
 
-/**
- * Analyst roles for specialized ensemble debates.
- * Each role focuses on a specific analytical domain.
- */
-export enum AnalystRole {
-  MACRO_VOLATILITY = 'macro_volatility',   // Macro & Volatility Analyst
-  TECHNICAL_ANALYST = 'technical_analyst', // Technical Analyst (Patterns/SMC/Indicators)
-  RISK_EXECUTION = 'risk_execution',       // Risk & Execution Specialist (Devil's Advocate)
-  UNASSIGNED = 'unassigned',               // No special role, default behavior
-}
-

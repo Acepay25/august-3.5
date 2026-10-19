@@ -2,7 +2,7 @@
  * automationTurn — ONE scheduled run against the desk-tool transport.
  *
  * Automations were the last caller that REQUIRED the ensemble: the pipeline
- * forced `runEnsembleEnabled = isAutomationRun || isEnsembleEnabled`, so a
+ * forced the mode on for them, so a
  * schedule got a debate even with the toggle off. Stage 19 deletes that engine,
  * and a schedule cannot simply lose its route — `tests/automationRouteCharacterization.test.tsx`
  * (stage 20t) named the four properties it must keep: a private thread, its own
