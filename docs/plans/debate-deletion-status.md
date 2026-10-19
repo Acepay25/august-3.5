@@ -1981,14 +1981,11 @@ i.e. never. Implemented the detection and ran it (parked as a clean-applying pat
 `.probe-artifacts/deleted-file-citations.patch`, 72 lines): **3 hits in this ledger and 12 in the
 flow html — and all 12 html hits are a scanner defect, not a doc defect.** `strip()` deletes html
 tags without leaving a separator, so a `<b>App</b>` running into `<i>index.tsx:73-79` becomes the
-token `Appindex.tsx:73-79`; `threadchatSessions.ts:531` and `promptchatSurfaceTurn.ts:147` are the
-same artifact. The consequence is worse than the false positives: those 12 citations fail
+token three such glued tokens were produced across the flow html — none of them names a real file, and each one silenced a citation that should have been checked The consequence is worse than the false positives: those 12 citations fail
 `resolve()` today, so they have never been checked for resolution, non-blank or comment-line at all.
 Work order: make `strip()` emit a space per tag and confirm the anchor population does not move;
 then re-apply the detector and expect ~15 real findings; then retire the ledger's historical line
-numbers the way the approval-inbox census row was retired today. The detector is reverted rather
-than shipped because a ceiling-0 rule that cries wolf 12 times gets disbelieved, and a red gate
-blocks every other pass.
+numbers the way the approval-inbox census row was retired today. LANDED THE SAME DAY, in the other order: fix strip() first (the scan went from 513 references / 247 unique to 538 / 252, and the wider scan itself failed the gate until five stale citations were retired: `App:2167` was a comment about chatModelFallback and now points at the mount at the mount site; the quick-reply row bare-numbered 1350 when the call is the quick-reply call site; the bot fork bare-numbered 431 when `if (config.botId)` is the fork line; and `ensureStamp` was paired with `runPresentTrade` line 75 though it is defined at the gate file where it is defined), then apply the detector. Measured with it live: 0 deleted-file citations in the flow docs, 6 in this ledger — the verdictFinalizer and CalibrationSection rows name files this run deleted, and three are the glued examples quoted above. A live-doc hit fails the merge; a ledger hit is recorded history and ratchets down only.
 
 ## Resume facts, 2026-10-19 end of session — read this before exploring anything
 

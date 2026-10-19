@@ -155,6 +155,7 @@ function collect(doc, text) {
     const found = [];
     const spanned = [];
     const unattributed = [];
+    const missing = [];
     let carrySym = null;
     const lines = text.split('\n');
     for (let i = 0; i < lines.length; i++) {
@@ -195,7 +196,16 @@ function collect(doc, text) {
         for (const m of [...line.matchAll(OWNER_RE)]) {
             const file = m[1] ? resolve(m[1]) : ALIAS[m[2]];
             claimed.push([m.index, m.index + m[0].length]);
-            if (!file) continue;
+            if (!file) {
+                // A citation to a file that is not in the tree used to be DROPPED here:
+                // collect() skipped it, so check() never saw it and rep.missingFile could
+                // only fire for a file that resolved at collect time and vanished during
+                // the run — which is never. Deleted-file citations therefore passed while
+                // the doc claimed a line number in a file that no longer exists. Measured
+                // instance: the ledger cites verdictFinalizer.ts:645 and that file is gone.
+                missing.push(`${doc}:${i + 1}  ${m[0]} — no such file in the tree (a deleted file's line number is not evidence)`);
+                continue;
+            }
             for (const n of [parseInt(m[3], 10)].concat(m[4] ? [parseInt(m[4], 10)] : [])) found.push({ file, line: n, doc, docLine: i + 1, sym });
         }
         const inside = (pos) => claimed.some(([a, b]) => pos >= a && pos < b);
@@ -216,7 +226,7 @@ function collect(doc, text) {
         }
         for (const a of spanAnchors(lines[i])) spanned.push({ ...a, doc, docLine: i + 1 });
     }
-    return { found, spanned, unattributed };
+    return { found, spanned, unattributed, missing };
 }
 
 function check(anchors) {
@@ -333,6 +343,12 @@ function selfTest() {
     need('a row wrapping onto "That" still owns its own symbol', sBound.some(a => a.line === goodLine && a.sym === symTok));
     need('and does not hand that symbol to the next row', !sBound.some(a => a.line === badLine && a.sym === symTok));
     const blankInApp = linesOf('App.tsx').findIndex((l, i) => i > 0 && !l.trim() && linesOf('App.tsx')[i - 1].trim()) + 1;
+    // The deleted-file branch must be PROVEN reachable: it lives in collect(), not check(),
+    // so the existing `no such file caught` control (which calls check() directly) would keep
+    // passing even if collect() went back to swallowing these. One planted citation, one
+    // finding, or this rule is invisible exactly like the old one was.
+    need('collect() reports a citation to a file that is not in the tree',
+        collect('t', 'See `services/trade/definitely-not-here.ts:12` for it.').missing.length === 1);
     const r = check([
         { file: 'App.tsx', line: 999999, doc: 't', docLine: 1 },
         { file: 'App.tsx', line: blankInApp, doc: 't', docLine: 2 },
@@ -373,11 +389,13 @@ const TOTAL_CONTROLS = selfTest.ran();
 const all = [];
 const spanIndex = new Map();
 const unattributed = [];
+const missingRefs = [];
 for (const d of DOCS) {
-    const { found, spanned, unattributed: u } = collect(d, fs.readFileSync(path.join(ROOT, d), 'utf8'));
+    const { found, spanned, unattributed: u, missing: mi } = collect(d, fs.readFileSync(path.join(ROOT, d), 'utf8'));
     all.push(...found);
     for (const s of spanned) spanIndex.set(s.doc+":"+s.docLine+":"+s.file+":"+s.line, s.sym);
     unattributed.push(...u);
+    missingRefs.push(...mi);
 }
 // A symbol is only attributed to a citation when its doc line carries exactly one
 // of each. `App.tsx:2532 · App.tsx:2560 · onAnalyze · onRunAnalysis` names two
@@ -426,6 +444,17 @@ const COMMENT_CEILING = 0;
 const SYMMISS_CEILING = 0;
 
 console.log(`flow docs: ${all.length} anchor references, ${unique.size} unique, across ${DOCS.join(' + ')}`);
+// A citation naming a file that is not in the tree. The two flow docs describe the app AS IT IS,
+// so for them this is a hard zero. The stage ledger's dated entries cite files as they stood at
+// that commit — there the FILE NAME is the history and the line number is not a live claim, so
+// the count is printed every run and ratchets down only, exactly the policy already used for the
+// unattributed numbers in this same file. Before this rule existed, every deleted-file citation
+// was dropped in collect() and reported nothing at all: a green gate that could not see a whole
+// class of rot.
+const missingLive = missingRefs.filter(m => !m.startsWith('docs/plans/'));
+console.log(`deleted-file citations: ${missingLive.length} in the live flow docs (must be 0), ${missingRefs.length - missingLive.length} in the dated stage ledger (history; ratchets down only)`);
+missingRefs.slice(0, 12).forEach(m => console.log(`  NO SUCH FILE ${m}`));
+if (missingLive.length) { console.log(`FLOW DOC ANCHORS FAIL — ${missingLive.length} citation(s) in the live flow docs point at a file that is not in the tree`); process.exit(1); }
 console.log(`cited-line quality: ${rep.comment.length} land on a comment line (${rep.commentOk.length} more cite a comment and SAY so — exempt, listed) (ceiling ${COMMENT_CEILING}), ${rep.symMiss.length} miss the symbol their own line names (ceiling ${SYMMISS_CEILING}) — both ratchet to 0`);
 console.log(`reach controls: ${controls.length ? 'FAILED — ' + controls.join('; ') : `all ${TOTAL_CONTROLS} passed`}`);
 problems.forEach(m => console.log(`  STALE ${m}`));
