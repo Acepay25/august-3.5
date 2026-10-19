@@ -1,7 +1,7 @@
 /**
- * Debate protocol markers — the machine-readable control strings seats emit
- * and the pipeline matches/strips. One home so a prompt tweak can never
- * silently break this cross-module contract.
+ * Debate protocol markers — the machine-readable control strings the pipeline
+ * matches and strips. One home so a prompt tweak can never silently break this
+ * cross-module contract.
  *
  * These strings appear INSIDE model output. The prompt file that used to order a
  * model to emit them verbatim went with the debate engine, so this module is now
