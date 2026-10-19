@@ -92,13 +92,21 @@ export const getBots = (): AgentBot[] => {
     // stops carrying either field instead of being silently tolerated forever.
     const raw = read<Record<string, unknown>>(BOTS_KEY);
     let changed = false;
-    const bots = raw.map((row) => {
-        if (!('role' in row) && !('enabledTools' in row)) return row as unknown as AgentBot;
+    const bots = raw.flatMap((row) => {
+        // This boundary has no schema: a corrupted or foreign backup can hold
+        // null/array rows, and `'role' in row` threw inside a useState
+        // initializer — taking the whole agents surface down with it. Drop the
+        // unusable row and rewrite the blob so the next read is clean.
+        if (!row || typeof row !== 'object' || Array.isArray(row)) {
+            changed = true;
+            return [];
+        }
+        if (!('role' in row) && !('enabledTools' in row)) return [row as unknown as AgentBot];
         changed = true;
         const clean = { ...row };
         delete clean.role;
         delete clean.enabledTools;
-        return clean as unknown as AgentBot;
+        return [clean as unknown as AgentBot];
     });
     if (changed) write(BOTS_KEY, bots);
     return bots;

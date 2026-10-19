@@ -55,4 +55,15 @@ describe('agentRoster migration — roles and tool presets are stripped from sto
         expect('role' in rows[0]).toBe(false);
         expect(rows.every((r) => !('role' in r))).toBe(true);
     });
+
+    it('drops an unusable row instead of throwing inside the roster read', () => {
+        // Raw localStorage is an unvalidated boundary: a foreign/corrupted
+        // import can place null in the array, and `'role' in null` used to throw
+        // from a useState initializer.
+        seed([null, { id: 'keep', name: 'Keep' }, ['not', 'a', 'bot']]);
+        let bots: Array<{ id: string }> = [];
+        expect(() => { bots = getBots() as Array<{ id: string }>; }).not.toThrow();
+        expect(bots.map(b => b.id)).toEqual(['keep']);
+        expect(stored().map((r) => (r as { id?: string }).id)).toEqual(['keep']);
+    });
 });

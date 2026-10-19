@@ -35,7 +35,7 @@ const ActionsTab: React.FC<{ tab: ActionsTabProps }> = ({ tab: props }) => {
                 <p className="mt-1 max-w-prose text-ui-xs leading-4 text-zinc-500">
                     One JSON record per trade on its own line: the plan it came from, the verdict,
                     the outcome and when it was learned, PnL in whichever unit was captured, R,
-                    excursions, discipline tags and the post-mortem. Saves a local
+                    excursions, discipline tags and any stored post-mortem notes. Saves a local
                     {' '}.jsonl file — nothing is uploaded.
                 </p>
                 <button
