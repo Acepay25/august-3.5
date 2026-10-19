@@ -1937,11 +1937,30 @@ pageerrors), render-probe (RENDER_EXIT=0, zero pageerrors), Playwright e2e
 (5 passed, E2E_EXIT=0). `installer-smoke` remains CI-only on purpose — it is the
 gate that measures the signed artifact.
 
-Open engineering on the gate itself: a citation whose symbol is named on the PREVIOUS
-line (the "`sym` at / `path:NNN`" list shape) is still unpaired, because telling that
-from "`path:NNN`, `sym` at" needs the sentence's tail, not the line's contents. Measured
-attempt made it worse (17 findings to 24) and was reversed; the arrow table's own
-line-level claims are the adjacent form and all of them check out.
+Open engineering on the gate itself, and the shape of the last unsolved pairing. A
+citation whose symbol is named on the PREVIOUS line (the "`sym` at / `path:NNN`" list
+shape) is bound forward by a test on the current line's tail. That test is weak in BOTH
+directions, measured 2026-10-19 with the patch parked at `.probe-artifacts/connector-widening.patch`:
+
+- **It over-matches.** The connector list has no word boundary, so `…does read it. That`
+  ends in a suffix that reads as `at` and the row was treated as dangling. A row can be
+  "dangling" for a reason that has nothing to do with a connective.
+- **Widening the tail does not help.** Replacing the list with "the line ends without a
+  sentence terminator" produced 8 false symbol misses, all the same class: markdown
+  paragraphs WRAP, so an ordinary prose line ends mid-sentence constantly. Tightening to
+  "at most two tokens after the last span" took it to 2, and the remaining 2 are a third
+  class the tail regex cannot see at all: a line that carries a citation AND a bare symbol
+  *after* that citation (the Session Usage row, and the `replacementOffer` census row). The
+  symbol belongs to the next line's number; the line view binds it to its own.
+- **The next step is positional, not lexical.** A symbol whose span starts AFTER a
+  citation on the same line cannot own that citation — bind by position within the line and
+  drop the tail heuristic, then re-measure. Until then the ceiling stays at 0 and the two
+  rows above stay honestly unpaired, which is what the forward-binding caveat is for.
+
+The arrow table's own line-level claims all check out, and the reach controls prove each
+arm fires: 17 as shipped, 24 with the widened rule (three connectives × three arms, plus a
+negative arm planted against the wrapped-prose false positives so a future re-widening
+fails loudly instead of silently).
 
 ## Resume facts, 2026-10-19 end of session — read this before exploring anything
 
