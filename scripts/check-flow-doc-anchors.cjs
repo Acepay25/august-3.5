@@ -760,6 +760,38 @@ agents.forEach(m => console.log(`  STALE CENSUS ${m}`));
 const asym = asymmetry();
 console.log(`agents-census: ${agents.length} AGENTS.md claim(s) disagree with the tree; ${agentsControls.length} of ${agentsArms.length} control arms failed — smoke tests ${smokeTests()}, test files ${trackedTestFiles()}, asymmetry ci-only [${asym.ciOnly.join(' ')}] release-only [${asym.relOnly.join(' ')}]`);
 providers.forEach(m => console.log(`  STALE CENSUS ${m}`));
+const COVER_FLOOR = 5;
+const COVER_CITED_FLOOR = 28;
+// ── How much of the arrow table can the gate actually SEE? ───────────────────────
+// Every row of section H is line-resolved; only a row that writes `symbol path:NNN`
+// gives the gate a claim to test. Counting the difference turns "unverified beyond
+// the probed subset" into a figure, and the floor below makes it impossible to lose
+// coverage silently — a row rewritten without its symbol used to look like progress.
+function arrowCoverage() {
+    const lines = fs.readFileSync(path.join(ROOT, 'docs', 'app-flow.md'), 'utf8').split('\n');
+    const s = lines.findIndex(l => /^## H\b/.test(l));
+    const e = lines.findIndex((l, i) => i > s && /^## /.test(l));
+    if (s < 0 || e < 0) return { rows: 0, bound: 0, pairs: 0, cited: 0 };
+    const rows = lines.slice(s + 1, e).filter(l => /^\|/.test(l) && !/^\|[\s:-]*\|/.test(l)).map(l => l.replace(/^\|[^|]*\|/, '|')).slice(1);
+    let bound = 0, pairs = 0, cited = 0;
+    for (const l of rows) {
+        if (/\.(?:tsx|ts|cjs|js|css|json):\d+/.test(l)) cited++;
+        const withSym = spanAnchors(l).filter(a => a.sym).length;
+        pairs += withSym;
+        if (withSym) bound++;
+    }
+    return { rows: rows.length, bound, pairs, cited };
+}
+const cover = arrowCoverage();
+// Control: the counter must answer for a planted row and stay silent for a bare one,
+// otherwise "N rows bound" is a number about nothing.
+const coverControls = [
+    ...((spanAnchors('| x | `assemblePipelineMemoryContext hooks/useAnalysisPipeline.ts:1021` |').filter(a => a.sym).length === 1 ? [] : ['the coverage counter cannot pair a symbol with its own citation'])),
+    ...((spanAnchors('| x | `App.tsx:2493` |').filter(a => a.sym).length === 0 ? [] : ['a bare citation counted as bound coverage'])),
+];
+if (cover.bound < COVER_FLOOR) coverControls.push(`arrow-table coverage fell to ${cover.bound} of ${cover.rows} rows (floor ${COVER_FLOOR}): a row that stopped naming its symbol is no longer a check`);
+if (cover.cited < COVER_CITED_FLOOR) coverControls.push(`${cover.cited} arrow row(s) cite a file, floor ${COVER_CITED_FLOOR} — a row whose citation was dropped cannot be checked at all`);
+console.log(`arrow coverage: ${cover.bound}/${cover.rows} rows pair a symbol with a citation (${cover.pairs} pairs, floor ${COVER_FLOOR}), ${cover.cited} rows cite a file (floor ${COVER_CITED_FLOOR}); ${cover.rows - cover.bound} rows are line-resolved only; ${coverControls.length} coverage control failure(s)`);
 const stated = LIVE.filter(d => /lines\s+in\s+\d+\s+files/.test(plain(fs.readFileSync(d, 'utf8'), isHtml(d))));
 const rowStated = LIVE.filter(d => /arrow\s+table\s+is\s+\d+\s+rows/.test(plain(fs.readFileSync(d, 'utf8'), isHtml(d))));
 console.log(`census: ${census.length} recipe figure(s) disagree with the measurement; ${censusControls.length} census control failure(s) (arms answer only when wrong); ${stated.length}/2 docs quote a grep census, ${rowStated.length}/2 state the table size; providers ${providers.length} finding(s) — ${providersSkip || `git names ${deletedProviders.size} deleted files, ${leftProviders.length} remain`}`);
@@ -780,6 +812,7 @@ if (census.length) { console.log(`FLOW DOC ANCHORS FAIL — ${census.length} doc
 if (providers.length) { console.log(`FLOW DOC ANCHORS FAIL — ${providers.length} statement(s) about the provider-directory census disagree with git/the tree.`); process.exit(1); }
 if (agentsControls.length) { console.log(`FLOW DOC ANCHORS FAIL — the AGENTS.md rule cannot see its own planted numbers: ${agentsControls.join('; ')}`); process.exit(1); }
 if (agents.length) { console.log(`FLOW DOC ANCHORS FAIL — ${agents.length} AGENTS.md statement(s) disagree with the tree. Re-measure and restate; do not loosen the rule.`); process.exit(1); }
+if (coverControls.length) { console.log(`FLOW DOC ANCHORS FAIL — the arrow-table coverage rule is blind or coverage fell: ${coverControls.join('; ')}`); process.exit(1); }
 if (controls.length) { console.log('FAIL — the gate cannot see its own planted defects'); process.exit(1); }
 if (problems.length) { console.log(`FLOW DOC ANCHORS FAIL — ${problems.length} stale anchor(s)`); process.exit(1); }
 if (rep.symMiss.length > SYMMISS_CEILING) {
