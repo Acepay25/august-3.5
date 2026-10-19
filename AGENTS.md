@@ -6,7 +6,7 @@ This file contains guidelines and commands for agentic coding agents working in 
 
 August Trading is a React + TypeScript trading analysis application that uses multiple AI
 providers to deliver trading insights, pattern recognition, and post-trade analysis.
-The app features ensemble-style multi-seat analysis, trade-plan validation, hybrid intelligence with
+The app features single-seat, tool-driven analysis, trade-plan validation, hybrid intelligence with
 real-time market data, comprehensive trade logging with learning capabilities, and an
 Electron desktop shell (with Capacitor for mobile). Code lives at the repository root
 (no `src/` directory).
@@ -134,7 +134,7 @@ competing for the machine.
 │   ├── analysis/           # Technical analysis, Monte Carlo (+ web worker), desk tools
 │   ├── backtesting/        # Backtesting, model performance, live backtest, outcomeEngine
 │   ├── learning/           # Skills, pattern memory, rules, insights, global memory
-│   ├── agents/             # Bot roster, seat personas, mailbox, routines, group rounds
+│   ├── agents/             # Bot roster, bot personas (trader instructions), mailbox, routines, group rounds
 │   ├── bots/               # Per-bot memory + system notes
 │   ├── tools/              # toolForge (user/model-authored HTTPS tools)
 │   ├── research/           # Fixed 4-stage web research plan
@@ -145,7 +145,7 @@ competing for the machine.
 │   ├── automation/         # Scheduled automations (cron + run history)
 │   ├── validation/         # Trade-plan validation + gate scoring (the service
 │   │                       #   keeps its Accuracy* name; the Accuracy Mode toggle is gone)
-│   ├── ui/                 # Outcome autopilot, analyst lens + seat roster, auto-capture,
+│   ├── ui/                 # Outcome autopilot, auto-capture,
 │   │                         #   algorithmic summaries, price alerts, veto ledger
 │   └── infrastructure/     # SQLite, Preferences, ProviderConfigService, backups
 ├── constants/              # models, prompts (per-domain files), promptRegistry
@@ -154,7 +154,7 @@ competing for the machine.
 │                           #   imported by renderer, vite dev proxy AND electron main
 ├── types/                  # analysis, trade, provider, progress, message, learning …
 ├── utils/                  # See "Canonical single-source modules" below
-├── tests/                  # Vitest suites — 4741 tests in 479 files: 4730 pass in 478 and 11 skip in `tests/lensWordCount.measure.test.ts`. Read from vitest's own summary block 2026-10-19, after the debate-engine deletion removed 24 of them.
+├── tests/                  # Vitest suites — 4670 tests in 472 files: 4670 pass in 472 and 0 skip across 0 wholly-skipped files. Read from vitest's own summary block 2026-10-19, after the analyst-role/lens deletion removed 7 files and 74 tests, and the roster-migration test added one.
 └── electron/               # main.cjs + preload.cjs (NOT covered by tsc)
 ```
 
@@ -212,13 +212,6 @@ is how the numbers drift apart:
   store must be added there or it silently leaves no backup on mobile. Do not
   widen it "for safety": the WebView origin quota is shared, so shadow-copying
   Preferences-owned keys spends eviction-prone bytes on a copy nothing reads.
-- `duplicateTextPairs` (`services/ui/EnsembleAnalystService.ts`) — the ONE
-  gateway-echo detector (normalized character-trigram Jaccard ≥ 0.9, samples
-  under 200 chars ignored). It answers by index, not by name, so a caller labels
-  the fact in its own vocabulary. Its second consumer — the moderator block in
-  `ensembleConsensus.ts` — went with the debate engine, so it now has the one
-  call site at `services/ui/EnsembleAnalystService.ts:338`.
-  Do not write a third similarity function.
 
 ## Providers are runtime-configured (dynamic migration)
 

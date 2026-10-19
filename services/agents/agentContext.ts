@@ -34,7 +34,6 @@ export type AgentLike = {
     name: string;
     providerId: string;
     modelId?: string;
-    role?: AgentBot['role'];
     customPrompt?: string;
 };
 

@@ -15,7 +15,6 @@ import { Message } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import { isQuotaError } from '../../utils/errorUtils';
 import { buildModelIdToName } from '../../utils/providerUtils';
-import type { EnsembleAnalystEntry } from '../../services/ui/EnsembleAnalystService';
 
 /**
  * Map the conversation through a run's cancel/error: a live-streaming casual
@@ -59,7 +58,7 @@ export const classifyRunFailure = (error: { status?: number; message?: string })
 export const resolveQuotaFlaggedModel = (
     error: { message: string; model?: string },
     providerConfigs: ProviderConfig[],
-    enabledProviders: EnsembleAnalystEntry[],
+    enabledProviders: ReadonlyArray<{ name: string; model: string }>,
 ): string => {
     const quotaModelNames = buildModelIdToName(providerConfigs);
     let flaggedModel = '';

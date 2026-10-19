@@ -65,9 +65,6 @@ const AutomationView: React.FC<{
             {/* Controls */}
             <div className="px-4 py-2.5 border-b border-white/5 bg-zinc-900/60 shrink-0 flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap text-ui-xs text-zinc-500 font-mono">
-                    <span>Lenses: <span className="text-zinc-300">{config.useLenses ? 'On' : 'Off'}</span></span>
-                    <span>·</span>
-                    <span>Analysts: <span className="text-zinc-300">{config.analystModels.length}</span></span>
                     <span>·</span>
                     <span>Runs: <span className="text-zinc-300">{config.runCount}</span></span>
                 </div>

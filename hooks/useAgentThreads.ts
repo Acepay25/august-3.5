@@ -5,15 +5,12 @@ import {
     type AgentBot, type AgentGroup,
 } from '../services/agents/agentRoster';
 import { type ThreadSelection, markThreadOpened, loadThreadOpenedMap, saveThreadOpenedMap } from '../utils/agentThreads';
-import { AnalystRole } from '../types/enums';
 import type { ConfirmOptions } from '../components/shared/ConfirmDialog';
 
 export interface UseAgentThreadsArgs {
     activeUsername: string | null;
-    /** Opening a bot thread flips the composer to that bot's model with
-     *  ensemble off; opening a group re-arms the ensemble. */
+    /** Opening a bot thread flips the composer to that bot's model. */
     setSelectedChatModel: (modelId: string) => void;
-    setIsEnsembleEnabled: React.Dispatch<React.SetStateAction<boolean>>;
     confirmDialog: (opts: ConfirmOptions) => Promise<boolean>;
 }
 
@@ -35,8 +32,8 @@ export interface UseAgentThreadsResult {
     selectBotThread: (botId: string) => void;
     selectGroupThread: (groupId: string) => void;
     createBot: (draft: Omit<AgentBot, 'id' | 'createdAt'>) => void;
-    createGroup: (memberIds: string[], memberRoles?: Record<string, AnalystRole>) => void;
-    updateGroupMembers: (groupId: string, memberIds: string[], memberRoles?: Record<string, AnalystRole>) => void;
+    createGroup: (memberIds: string[]) => void;
+    updateGroupMembers: (groupId: string, memberIds: string[]) => void;
     deleteBot: (botId: string) => void;
     deleteGroup: (groupId: string) => void;
 }
@@ -49,7 +46,7 @@ export interface UseAgentThreadsResult {
  * every open surface without a reload.
  */
 export const useAgentThreads = (args: UseAgentThreadsArgs): UseAgentThreadsResult => {
-    const { activeUsername, setSelectedChatModel, setIsEnsembleEnabled, confirmDialog } = args;
+    const { activeUsername, setSelectedChatModel, confirmDialog } = args;
 
     // Boot surface = the main ensemble transcript ('team'). The chat-mode
     // rework briefly defaulted to the Coach inbox, which orphaned the
@@ -85,26 +82,19 @@ export const useAgentThreads = (args: UseAgentThreadsArgs): UseAgentThreadsResul
     // becomes update-membership. Null = plain create.
     const [groupEditTarget, setGroupEditTarget] = useState<AgentGroup | null>(null);
 
-    // Opening a bot thread flips the composer target to that bot's model
-    // with ensemble off — the thread then shows exactly what a send does.
+    // Opening a bot thread flips the composer target to that bot's model —
+    // the thread then shows exactly what a send does.
     const selectBotThread = useCallback((botId: string) => {
         setActiveThread({ kind: 'bot', botId });
         const bot = findBotById(bots, botId);
-        if (bot?.modelId) {
-            setSelectedChatModel(bot.modelId);
-            setIsEnsembleEnabled(false);
-        }
-    }, [bots, setSelectedChatModel, setIsEnsembleEnabled]);
+        if (bot?.modelId) setSelectedChatModel(bot.modelId);
+    }, [bots, setSelectedChatModel]);
 
-    // Opening a GROUP re-arms the ensemble (Team/group merge): a group is
-    // the debate room — a send runs the full pipeline (debate + hybrid
-    // intelligence + trade log + learning memory) with the room's members
-    // as the ensemble. A bot visit flips ensemble off for casual 1:1s;
-    // returning to a group re-arms it.
+    // Opening a GROUP selects the room. There is no mode to arm any more:
+    // a send is the same tool turn whether it comes from a bot or a room.
     const selectGroupThread = useCallback((groupId: string) => {
         setActiveThread({ kind: 'group', groupId });
-        setIsEnsembleEnabled(true);
-    }, [setIsEnsembleEnabled]);
+    }, []);
 
     // Unread badges: focusing a bot/group thread marks it opened
     // (markThreadOpened + persist). Team/coach have no badge key.
@@ -130,21 +120,11 @@ export const useAgentThreads = (args: UseAgentThreadsArgs): UseAgentThreadsResul
         // here (the roster subscriber hasn't re-rendered yet), so
         // selectBotThread would miss the lookup and skip the model flip.
         setActiveThread({ kind: 'bot', botId: bot.id });
-        if (bot.modelId) {
-            setSelectedChatModel(bot.modelId);
-            setIsEnsembleEnabled(false);
-        }
-    }, [setSelectedChatModel, setIsEnsembleEnabled]);
+        if (bot.modelId) setSelectedChatModel(bot.modelId);
+    }, [setSelectedChatModel]);
 
-    const createGroup = useCallback((memberIds: string[], memberRoles: Record<string, AnalystRole> = {}) => {
+    const createGroup = useCallback((memberIds: string[]) => {
         const group: AgentGroup = { id: `grp-${Date.now()}`, memberIds, createdAt: new Date().toISOString() };
-        // Group Settings role picks ride the bots themselves (the persona
-        // follows the bot into every room turn and the ensemble pipeline).
-        // UNASSIGNED is stored as absent — an explicit "General" pick must
-        // behave exactly like a bot that never had a role.
-        for (const [botId, role] of Object.entries(memberRoles)) {
-            updateBot(botId, { role: role === AnalystRole.UNASSIGNED ? undefined : role });
-        }
         saveGroup(group);
         setActiveThread({ kind: 'group', groupId: group.id });
     }, []);
@@ -152,10 +132,7 @@ export const useAgentThreads = (args: UseAgentThreadsArgs): UseAgentThreadsResul
     // the group header gear reuses the New Group dialog as an editor —
     // the Create button becomes Save (update-membership + member roles)
     // instead.
-    const updateGroupMembers = useCallback((groupId: string, memberIds: string[], memberRoles: Record<string, AnalystRole> = {}) => {
-        for (const [botId, role] of Object.entries(memberRoles)) {
-            updateBot(botId, { role: role === AnalystRole.UNASSIGNED ? undefined : role });
-        }
+    const updateGroupMembers = useCallback((groupId: string, memberIds: string[]) => {
         updateGroup(groupId, { memberIds });
     }, []);
 

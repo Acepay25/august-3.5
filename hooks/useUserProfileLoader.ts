@@ -6,11 +6,6 @@ import {
     syncFromTradeLog,
     syncRollingWindowFromTradeLog,
 } from '../services/backtesting/ModelPerformanceService';
-import {
-    initAnalystLensService,
-    loadLensConfig,
-    type EnsembleModelSelection,
-} from '../services/ui/AnalystLensService';
 import { initPromptOverrides } from '../services/infrastructure/PromptOverrideService';
 import { initStrategyDocs } from '../services/infrastructure/StrategyService';
 import {
@@ -55,12 +50,6 @@ import type { ProviderConfig } from '../types/provider';
 export interface UseUserProfileLoaderArgs {
     handleCancelAnalysis: () => void;
 
-    lensConfig: any;
-    handleSetLensConfig: (cfg: any) => void;
-    ensembleModelSelection: any;
-    handleSetEnsembleModelSelection: (sel: any) => void;
-    persistedEnsembleModeRef: React.MutableRefObject<boolean | null>;
-    ensembleModelCount: number;
 
     providerConfigs: ProviderConfig[];
 
@@ -86,7 +75,6 @@ export interface UseUserProfileLoaderArgs {
     setIsStrategiesEnabled: React.Dispatch<React.SetStateAction<boolean>>;
     setCustomInstructions: React.Dispatch<React.SetStateAction<CustomInstructionsMap>>;
     setIsHybridIntelligenceEnabled: React.Dispatch<React.SetStateAction<boolean>>;
-    setIsEnsembleEnabled: React.Dispatch<React.SetStateAction<boolean>>;
     setIsAutoCapturing: React.Dispatch<React.SetStateAction<boolean>>;
     setIsEntryNotHitCapturing: React.Dispatch<React.SetStateAction<boolean>>;
     setAutopilotResolutions: React.Dispatch<React.SetStateAction<Record<string, any>>>;
@@ -115,9 +103,6 @@ export interface UseUserProfileLoaderResult {
 export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserProfileLoaderResult => {
     const {
         handleCancelAnalysis,
-        lensConfig, handleSetLensConfig,
-        ensembleModelSelection, handleSetEnsembleModelSelection,
-        persistedEnsembleModeRef, ensembleModelCount,
         providerConfigs,
         setConversationHistory, setActiveConversationId,
         setLoggedTrades, setTradeSummaries, setFinalTradeSummary,
@@ -128,7 +113,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setIsStrategiesEnabled,
         setCustomInstructions,
         setIsHybridIntelligenceEnabled,
-        setIsEnsembleEnabled, setIsAutoCapturing,
+        setIsAutoCapturing,
         setIsEntryNotHitCapturing, setAutopilotResolutions,
         setInput, setImages,
         setIsLoading, setActiveUsername, setExistingUsernames, setIsUserModalOpen,
@@ -198,8 +183,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
 
         setIsHybridIntelligenceEnabled(profile.settings?.isHybridIntelligenceEnabled ?? false);
 
-        persistedEnsembleModeRef.current = profile.settings?.isEnsembleEnabled ?? null;
-        setIsEnsembleEnabled(profile.settings?.isEnsembleEnabled ?? (ensembleModelCount > 1));
         setIsAutoCapturing(profile.settings?.isAutoCapturing ?? false);
         setIsEntryNotHitCapturing(profile.settings?.isEntryNotHitCapturing ?? false);
 
@@ -209,13 +192,13 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
 
         setInsightKnowledgeBase(profile.insightKnowledgeBase);
     }, [
-        providerConfigs, ensembleModelCount, persistedEnsembleModeRef,
+        providerConfigs,
         setTradeSummaries, setFinalTradeSummary, setGlobalMemory,
         setActiveFrameworks, setSummaryCharLimit, setSummarizationProvider,
         setSummarizationModel, setVisionModel, setUseAlgorithmicSummary,
         setUseAlgorithmicInsights, setIsGlobalMemoryEnabled, setIsStrategiesEnabled,
         setCustomInstructions,
-        setIsHybridIntelligenceEnabled, setIsEnsembleEnabled,
+        setIsHybridIntelligenceEnabled,
         setIsAutoCapturing, setIsEntryNotHitCapturing,
  setMemoryConfig, setMemoryModel, setInsightKnowledgeBase,
     ]);
@@ -305,7 +288,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
             await dbService.initDatabase();
             await initNativeStatusBar();
             await initModelPerformanceService();
-            await initAnalystLensService();
             // The prompt-override / strategy-docs / memory-files trio writes
             // MODULE SINGLETONS scoped to `username`. A superseded load that
             // enters this trio after the newer profile's load already reset
@@ -348,22 +330,6 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 console.warn('[WeeklyRollup] boot pass failed:', e instanceof Error ? e.message : e);
             });
 
-            const cachedLens = loadLensConfig();
-            if (cachedLens && JSON.stringify(cachedLens) !== JSON.stringify(lensConfig)) {
-                handleSetLensConfig(cachedLens);
-            }
-
-            try {
-                const cachedSelection = await getPreferenceObject<EnsembleModelSelection>(PREF_KEYS.ENSEMBLE_MODEL_SELECTION);
-                if (isStale()) return;
-                if (Array.isArray(cachedSelection) && cachedSelection.length > 0
-                    && JSON.stringify(cachedSelection) !== JSON.stringify(ensembleModelSelection)) {
-                    handleSetEnsembleModelSelection(cachedSelection);
-                }
-            } catch (e) {
-                console.warn('[App] Failed to sync ensemble model selection:', e);
-            }
-
             // Monitoring/autopilot singletons take the INCOMING username
             // explicitly (the `last_active_user` marker still points at the
             // outgoing profile until this load's tail commits it).
@@ -384,6 +350,13 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
 
             const profile = await dbService.getUserProfile(username);
             if (isStale()) return;
+            // Owner ruling 2026-10-19: the ensemble toggle is gone. Strip the
+            // stored key the first time an upgraded profile is read, so the
+            // profile blob stops carrying a setting nothing honours.
+            if (profile?.settings && 'isEnsembleEnabled' in profile.settings) {
+                delete (profile.settings as Record<string, unknown>).isEnsembleEnabled;
+                await dbService.saveUserProfile(username, profile);
+            }
             if (profile) {
                 try {
                     await syncProfileMemory(profile, username);
@@ -532,9 +505,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         // here again would be a comment about an implementation that is one
         // call away — and would be wrong the day someone moves a setter.
         applyLoadedProfile,
-        ensembleModelSelection, handleCancelAnalysis,
-        handleSetEnsembleModelSelection, handleSetLensConfig,
-        lensConfig,
+        handleCancelAnalysis,
         resetAppState, setActiveConversationId, setActiveUsername,
         setAutopilotResolutions, setConversationHistory, setIsLoading,
         setIsUserModalOpen, setLoggedTrades, toast, profileReadyRef,

@@ -2,9 +2,8 @@
  * Automations — scheduled, self-running ensemble analyses.
  *
  * Each automation has its own schedule (cron), input source (a fixed prompt
- * template, or "repeat the last manual analysis"), mode (Standard / Accuracy
- * original / Accuracy pure-AI), optional lens roles, and its own model picks
- * for the three analysts + the moderator. Runs are stored per automation and
+ * template, or "repeat the last manual analysis"), a legacy mode field and its
+ * own moderator pick. Runs are stored per automation and
  * shown in the automation's own card feed (sidebar → Automations) — results
  * never pollute the main conversation. Reasoning/thinking records persist
  * exactly like manual runs.
@@ -41,14 +40,6 @@ export interface AutomationConfig {
     promptTemplate?: string;
     /** Legacy field: every run analyzes in 'standard' mode. */
     mode: AutomationMode;
-    /** Lens mode: the 3 analyst picks map to the Macro/Technical/Risk roles. */
-    useLenses: boolean;
-    /** Trading style for lens-mode runs ('swing' was hardcoded before — the
-     *  manual lens path resolves 'auto' via getEffectiveStyle; automations
-     *  could never use position/scalp/auto). */
-    lensTradingStyle?: 'position' | 'swing' | 'scalp' | 'auto';
-    /** Analyst models — exactly 3 when useLenses, 1-3 otherwise. */
-    analystModels: AutomationModelPick[];
     /** The debate moderator model. */
     moderatorModel: AutomationModelPick;
     pauseUntil?: number;

@@ -119,12 +119,6 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
 const createMockArgs = (overrides: Partial<UseUserProfileLoaderArgs> = {}): UseUserProfileLoaderArgs => ({
     profileReadyRef: { current: false },
     handleCancelAnalysis: vi.fn(),
-    lensConfig: null,
-    handleSetLensConfig: vi.fn(),
-    ensembleModelSelection: null,
-    handleSetEnsembleModelSelection: vi.fn(),
-    persistedEnsembleModeRef: { current: null },
-    ensembleModelCount: 2,
     providerConfigs: [{
         id: 'p1',
         name: 'Provider 1',
@@ -156,7 +150,6 @@ const createMockArgs = (overrides: Partial<UseUserProfileLoaderArgs> = {}): UseU
     setIsStrategiesEnabled: vi.fn(),
     setCustomInstructions: vi.fn(),
     setIsHybridIntelligenceEnabled: vi.fn(),
-    setIsEnsembleEnabled: vi.fn(),
     setIsAutoCapturing: vi.fn(),
     setIsEntryNotHitCapturing: vi.fn(),
     setAutopilotResolutions: vi.fn(),

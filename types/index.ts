@@ -1,7 +1,6 @@
 // Barrel file - re-exports all domain type modules
 
 export * from './enums';
-export * from './lens';
 export * from './analysis';
 export * from './message';
 export * from './trade';
@@ -10,4 +9,3 @@ export * from './calibration';
 export * from './user';
 export * from './progress';
 export * from './provider';
-export * from './bot';

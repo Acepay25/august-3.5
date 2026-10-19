@@ -28,7 +28,6 @@ import {
     stripInvalidationLines,
     invalidateSettledBeliefUnlocked,
 } from './settledBeliefs';
-import { summarizeLensMemory } from './lensMemory';
 import { getRegimeSummary, listLedgerCoins } from './regimeLedger';
 
 /** Rewrite the doctrine after every N newly-closed trades. */
@@ -72,7 +71,7 @@ export const shouldConsolidateDoctrine = (trades: LoggedTrade[]): boolean => {
 export const buildDoctrinePrompt = (
     trades: LoggedTrade[],
     currentDoctrine: string,
-    extras?: { settledBeliefs?: string; rollupNotes?: string; lensMemory?: string; regimeLines?: string },
+    extras?: { settledBeliefs?: string; rollupNotes?: string; regimeLines?: string },
 ): string => {
     const closed = trades.filter(t => t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS);
     const recent = closed.slice(-DOCTRINE_WINDOW_TRADES).map(t => {
@@ -83,7 +82,6 @@ export const buildDoctrinePrompt = (
 
     const settled = extras?.settledBeliefs?.trim();
     const rollup = extras?.rollupNotes?.trim();
-    const lensMemory = extras?.lensMemory?.trim();
     const regimeLines = extras?.regimeLines?.trim();
 
     return `You maintain your own trading doctrine — the revisable beliefs you bring to every analysis.
@@ -105,9 +103,6 @@ after the doctrine bullets. At most one invalidation per pass, and only on stron
 ${rollup ? `
 ROLLOUP NOTES (patterns aggregated from the past week — fold the durable ones into the doctrine):
 ${rollup}` : ''}
-${lensMemory ? `
-PER-LENS MEMORY (each analyst seat keeps its own notebook — fold the durable seat-level lessons into the doctrine):
-${lensMemory}` : ''}
 ${regimeLines ? `
 REGIME LEDGER (recent market regimes per coin — ground any regime-dependent stance in these):
 ${regimeLines}` : ''}
@@ -150,18 +145,6 @@ const consolidateDoctrineUnlocked = async (
             return f?.enabled ? f.content : '';
         })();
 
-        // Per-lens memory: the doctrine rewriter reads all three seat
-        // notebooks and writes one doctrine. Pass each seat's actual (capped)
-        // content — a heading alone would give the rewriter nothing to fold in.
-        const lensMemory = [
-            { label: 'macro', body: summarizeLensMemory(AnalystRole.MACRO_VOLATILITY, DOCTRINE_LENS_CHARS) },
-            { label: 'technical', body: summarizeLensMemory(AnalystRole.TECHNICAL_ANALYST, DOCTRINE_LENS_CHARS) },
-            { label: 'risk', body: summarizeLensMemory(AnalystRole.RISK_EXECUTION, DOCTRINE_LENS_CHARS) },
-        ]
-            .filter(l => l.body.trim())
-            .map(l => `${l.label}:\n${l.body}`)
-            .join('\n\n');
-
         // Regime ledger: one summary line per coin the harness has
         // observed, so regime-dependent stances are grounded in actual history.
         const regimeLines = listLedgerCoins()
@@ -177,7 +160,7 @@ const consolidateDoctrineUnlocked = async (
             .filter(Boolean)
             .join('\n');
 
-        const prompt = buildDoctrinePrompt(trades, current, { settledBeliefs: settled, rollupNotes, lensMemory, regimeLines });
+        const prompt = buildDoctrinePrompt(trades, current, { settledBeliefs: settled, rollupNotes, regimeLines });
         const result = await sendChatTurn(config, [{ role: 'user', content: prompt }], {
             temperature: 0.3,
             maxTokens: 700,

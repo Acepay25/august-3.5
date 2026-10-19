@@ -24,7 +24,6 @@ export interface UserSettings {
   isGlobalMemoryEnabled?: boolean; // Layer 3 Toggle
   customInstructions?: CustomInstructionsMap; // User-defined behavior overrides per mode
   isHybridIntelligenceEnabled?: boolean; // Hybrid Intelligence: Real-time data + programmatic TA
-  isEnsembleEnabled?: boolean; // Ensemble debate mode (off = casual chat)
   isStrategiesEnabled?: boolean; // Master switch: inject uploaded strategy books into analysis prompts
   isAutoCapturing?: boolean; // Prompt for post-trade result capture
   isEntryNotHitCapturing?: boolean; // Prompt when entry price is not hit

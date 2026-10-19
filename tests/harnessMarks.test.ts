@@ -177,7 +177,7 @@ describe('who is speaking inside a user-role turn', () => {
     // sites in DeskToolsService. The prompts that used to explain the mark were the
     // debate prompts, so this rule had no live subject — it now binds to the blocks
     // the app actually sends, and the contract had to gain the sentence first.
-    const SENT = ['harnessContract.ts', 'analysisPrompts.ts', 'memoryPrompts.ts', 'learningPrompts.ts', 'chatPrompts.ts', 'lensRolePrompts.ts'];
+    const SENT = ['harnessContract.ts', 'analysisPrompts.ts', 'memoryPrompts.ts', 'learningPrompts.ts', 'chatPrompts.ts'];
     const sentLines = SENT.flatMap(file => readFileSync(join('constants', 'prompts', file), 'utf8')
         .split('\n').map(line => ({ file, line })));
 

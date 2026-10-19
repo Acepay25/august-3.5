@@ -19,7 +19,7 @@ import { clipNote } from '../../utils/harnessMarks';
 import { buildSimilarSetupsContext, buildRegimeWeightingContext } from '../../services/learning/SetupMemoryService';
 import type { HybridDataPacket } from '../../services/analysis/HybridIntelligenceService';
 import type { LoggedTrade } from '../../types';
-import { BotRegistry } from '../../services/bots/BotRegistry';
+import { getBots } from '../../services/agents/agentRoster';
 
 // Merged cap across ALL bots' memory context — the notebook
 // opening budget is 900 chars; bot memory should not dwarf it. The number
@@ -89,13 +89,12 @@ export const assemblePipelineMemoryContext = async (
         pattern: pendingPattern,
         regime: freshHybridData?.regime?.regime,
     };
-    // P0-3: the roster moved to Preferences via BotRegistry; the raw
-    // localStorage read below only survives for pre-migration installs and is
-    // NEVER consulted on native (Capacitor Preferences and localStorage are
-    // two different places there).
+    // One roster only: agentRoster owns the bot list the trader edits. The
+    // legacy Preferences roster has had no writer since the seeding effects
+    // were deleted, so reading it here would have reported no bots.
     const botMemoryContext = await (async () => {
         try {
-            const allBots = await BotRegistry.list();
+            const allBots = getBots();
             if (!allBots.length) return '';
             // The coin universe the note filter would otherwise guess at: a
             // lesson about a coin THIS TRADER keeps a journal for is another

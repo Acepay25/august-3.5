@@ -4,7 +4,6 @@ import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { APP_NAME, APP_VERSION } from '../../constants/version';
 import { AIProvider, LoggedTrade } from '../../types';
-import { AnalystLensConfig } from '../../types/lens';
 import { CustomInstructionsMap } from '../../types/user';
 import { ProviderConfig, ApiFormat } from '../../types/provider';
 import type { JournalUIState } from '../../hooks/useJournalUI';

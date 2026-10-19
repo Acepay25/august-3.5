@@ -24,11 +24,7 @@ export const PREF_KEYS = {
     MEMORY_PROVIDER: 'memory_provider', // ProviderConfig id of the provider used for memory synthesis
 
     // Settings
-    ANALYST_LENS_CONFIG: 'analyst_lens_config',
-    ENSEMBLE_MODEL_SELECTION: 'ensemble_model_selection', // Ordinary 3-model picker used when Lenses are off
     LAST_MODERATOR_PICK: 'last_moderator_pick_v1',
-    CUSTOM_ENSEMBLE_PROMPT: 'custom_ensemble_prompt',     // Normal-mode base prompt override (prompt editor)
-    CUSTOM_LENS_PROMPTS: 'custom_lens_prompts',           // Per-role lens prompt overrides (prompt editor)
     CASUAL_CHAT_MODEL: 'casual_chat_model',
     HYBRID_PANEL_POSITION: 'hybrid_panel_position',
     MODEL_PERFORMANCE_DATA: 'model_performance_data',

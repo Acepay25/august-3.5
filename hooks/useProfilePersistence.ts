@@ -13,7 +13,6 @@ export interface ProfileSettingsState {
     visionModel: string;
     isGlobalMemoryEnabled: boolean;
     isStrategiesEnabled: boolean;
-    isEnsembleEnabled: boolean;
     customInstructions: UserProfile['settings']['customInstructions'];
     isHybridIntelligenceEnabled: boolean;
     isAutoCapturing: boolean;
@@ -88,7 +87,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
         memoryConfig, memoryModel,
         isAnalysisInProgress,
         activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel,
-        visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled,
+        visionModel, isGlobalMemoryEnabled, isStrategiesEnabled,
         customInstructions,
         isHybridIntelligenceEnabled, isAutoCapturing,
         isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights,
@@ -106,7 +105,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
         tradeSummaries: tradeSummaries,
         finalTradeSummary: finalTradeSummary,
         globalMemory: globalMemory,
-        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, memoryProvider: memoryConfig?.id || '', memoryModel },
+        settings: { activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, memoryProvider: memoryConfig?.id || '', memoryModel },
         lastActiveConversationId: activeConversationId || undefined,
         // AI Learning data
         insightKnowledgeBase: insightKnowledgeBase,
@@ -115,7 +114,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
         // clear silently destroyed them. Snapshotting them here populates the
         // users.learningRules column and BackupService payload.
         learningRules: storageService.loadLearningRules(),
-    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, insightKnowledgeBase, memoryConfig, memoryModel]);
+    }), [conversationHistory, loggedTrades, activeFrameworks, activeConversationId, tradeSummaries, finalTradeSummary, globalMemory, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, insightKnowledgeBase, memoryConfig, memoryModel]);
 
     // ─── Split save into DATA (heavy) + SETTINGS (light) ───────────
     // Previously a single effect re-serialized ALL conversations (with base64
@@ -171,8 +170,8 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
     // The light payload, in one place so the SETTINGS effect and the unload
     // dirty-check can never drift on WHICH fields count as settings.
     const buildSettingsSnapshot = useCallback(() => ({
-        activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, memoryProvider: memoryConfig?.id || '', memoryModel,
-    }), [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, memoryConfig, memoryModel]);
+        activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, memoryProvider: memoryConfig?.id || '', memoryModel,
+    }), [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, memoryConfig, memoryModel]);
 
     // (2) SETTINGS save — light payload, runs on settings toggles. Uses a
     // longer debounce (2500ms) since settings changes are low-risk and we
@@ -204,7 +203,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
         return () => {
             clearTimeout(handler);
         };
-    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, memoryConfig, memoryModel, activeUsername, setSaveStatus, toast]);
+    }, [activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel, visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, customInstructions,isHybridIntelligenceEnabled, isAutoCapturing, isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights, memoryConfig, memoryModel, activeUsername, setSaveStatus, toast]);
 
     // (3) SAVE HEARTBEAT — the 1500ms DATA debounce restarts on every message
     // change, so nothing is persisted for the ENTIRE duration of a run (the

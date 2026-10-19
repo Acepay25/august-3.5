@@ -164,20 +164,11 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
     const [inputSource, setInputSource] = useState<AutomationInputSource>(initial?.inputSource ?? 'template');
     const [promptTemplate, setPromptTemplate] = useState(initial?.promptTemplate ?? '');
     const [mode, setMode] = useState<AutomationMode>(initial?.mode ?? 'standard');
-    const [useLenses, setUseLenses] = useState(initial?.useLenses ?? false);
-    const [lensTradingStyle, setLensTradingStyle] = useState<'position' | 'swing' | 'scalp' | 'auto'>(initial?.lensTradingStyle ?? 'swing');
-    const [analystSelections, setAnalystSelections] = useState<string[]>(() => {
-        const picks = initial?.analystModels ?? [];
-        return [0, 1, 2].map(i => {
-            const p = picks[i];
-            return p ? `${p.providerId}::${p.modelId}` : '';
-        });
-    });
     const [moderatorSelection, setModeratorSelection] = useState<string>(() => {
         const m = initial?.moderatorModel;
         return m && m.providerId ? `${m.providerId}::${m.modelId}` : '';
     });
-    // "Run as bot" — empty string = the ensemble pipeline (default).
+    // "Run as bot" — empty string = the analysis tool turn (default).
     const [botId, setBotId] = useState<string>(initial?.botId ?? '');
     const [error, setError] = useState<string | null>(null);
 
@@ -188,8 +179,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
      *  string, so no field list to keep in sync as the form grows. */
     const draftFingerprint = (): string => JSON.stringify([
         name, frequencyMode, frequencyEvery, scheduleDays, scheduleTime,
-        advancedCron, inputSource, promptTemplate, mode, useLenses,
-        lensTradingStyle, analystSelections, moderatorSelection, botId,
+        advancedCron, inputSource, promptTemplate, mode, moderatorSelection, botId,
     ]);
     const [loadedFingerprint] = useState(draftFingerprint);
     const isDirty = draftFingerprint() !== loadedFingerprint;
@@ -235,12 +225,6 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
     const cronValid = parseCron(effectiveCron) !== null;
     const nextRun = cronValid ? nextCronTime(effectiveCron, new Date()) : null;
 
-    // Lens mode needs exactly 3 DISTINCT models; normal mode needs 1-3.
-    const requiredSelections = useLenses ? 3 : 1;
-    const filledSelections = analystSelections.filter(s => s !== '');
-    const distinctSelections = new Set(filledSelections);
-    const selectionsValid = filledSelections.length >= requiredSelections
-        && (useLenses ? distinctSelections.size === 3 : true);
 
     const handleSave = () => {
         setError(null);
@@ -251,11 +235,9 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
         // a bot-scoped routine runs the bot's own provider/model — the
         // ensemble seats do not apply.
         if (!runAsBot) {
-            if (!selectionsValid) { setError(useLenses ? 'Lens mode needs 3 distinct analyst models.' : 'Pick at least one analyst model.'); return; }
             if (!moderatorSelection) { setError('Pick the moderator model.'); return; }
         }
 
-        const analystModels: AutomationModelPick[] = filledSelections.slice(0, 3).map(splitOption);
         const moderatorModel = splitOption(moderatorSelection);
         const now = Date.now();
 
@@ -270,9 +252,6 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
             // ensemble seats are not read at fire time) — clear stale picks
             // so a saved routine never looks half-configured.
             mode,
-            useLenses,
-            lensTradingStyle,
-            analystModels: runAsBot ? [] : analystModels,
             moderatorModel: runAsBot ? { providerId: '', modelId: '' } : moderatorModel,
             botId: runAsBot ? botId : undefined,
             createdAt: initial?.createdAt ?? now,
@@ -490,7 +469,7 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                                 value={botId}
                                 onChange={setBotId}
                                 options={[
-                                    { value: '', label: 'No — run the full ensemble (default)' },
+                                    { value: '', label: 'No — run the analysis pipeline (default)' },
                                     ...botOptions,
                                 ]}
                                 placeholder="Unknown bot — pick another, or run the ensemble"
@@ -500,8 +479,8 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                             />
                             <p className="text-ui-xs text-zinc-500 mt-1.5">
                                 {runAsBot
-                                    ? 'Runs the prompt as the bot in its own thread — its persona, its model. The analyst seats below are skipped.'
-                                    : 'Runs the full analyst debate pipeline.'}
+                                    ? 'Runs the prompt as the bot in its own thread — its persona, its model.'
+                                    : 'Runs the analysis tool turn for this schedule.'}
                             </p>
                         </div>
                     )}
@@ -511,63 +490,6 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
                     {/* Mode */}
                     <div>
                     </div>
-
-                    {/* Lenses toggle */}
-                    <div className="flex items-center justify-between bg-zinc-900 border border-white/10 rounded-control px-3 py-2.5">
-                        <div>
-                            <p className="text-ui-sm font-bold text-zinc-300">Analyst Lenses</p>
-                            <p className="text-ui-xs text-zinc-500 mt-0.5">Macro / Technical / Risk personas (needs 3 distinct models)</p>
-                        </div>
-                        <ToggleSwitch checked={useLenses} onChange={() => setUseLenses(!useLenses)} label="Toggle lenses" />
-                    </div>
-
-                    {/* Analyst models */}
-                    <div>
-                        <span className="text-ui-xs font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">
-                            {useLenses ? 'Analyst roles' : 'Analyst models'} {useLenses ? '(3 required)' : '(1-3)'}
-                        </span>
-                        <div className="space-y-2">
-                            {[0, 1, 2].map(i => {
-                                const label = useLenses
-                                    ? ['Macro & Volatility', 'Technical Analyst', 'Risk & Execution'][i]
-                                    : `Model ${i + 1}`;
-                                const others = new Set(filledSelections.filter(s => s !== analystSelections[i]));
-                                return (
-                                    <div key={i}>
-                                        <span className="text-ui-xs text-zinc-500 font-bold uppercase mb-1 block">{label}</span>
-                                        <ModelPicker
-                                            providers={providers}
-                                            value={analystSelections[i]}
-                                            onChange={(v) => setAnalystSelections(prev => prev.map((p, idx) => idx === i ? v : p))}
-                                            mode="provider-model"
-                                            disabledValues={others}
-                                            placeholder="Select provider/model"
-                                        />
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Lens trading style — position/scalp/auto were previously
-                        impossible in automations (runtime hardcoded 'swing'). */}
-                    {useLenses && (
-                        <div>
-                            <span className="text-ui-xs font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Lens trading style</span>
-                            <div className="flex gap-1.5">
-                                {(['auto', 'position', 'swing', 'scalp'] as const).map(style => (
-                                    <button
-                                        key={style}
-                                        type="button"
-                                        onClick={() => setLensTradingStyle(style)}
-                                        className={`flex-1 px-2 py-1.5 rounded-control border text-ui-2xs font-bold uppercase tracking-widest transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${lensTradingStyle === style ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300' : 'bg-zinc-900 border-white/10 text-zinc-500 hover:text-zinc-300'}`}
-                                    >
-                                        {style}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
 
                     {/* Moderator */}
                     <div>

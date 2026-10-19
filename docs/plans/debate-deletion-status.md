@@ -118,7 +118,7 @@ focus on tool calling, skills, and memory."*
 So the target is NOT "keep the branch and shrink it to one seat". It is:
 
 - **No keyword routing at all.** `isChartAnalysisRequested`
-  (`useAnalysisPipeline.ts:1485`) tests the prompt text for ANALYZE / CHART /
+  (`useAnalysisPipeline.ts:1481`) tests the prompt text for ANALYZE / CHART /
   SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
@@ -155,7 +155,7 @@ record of why the order is what it is.
 
 Structured chart analysis exists **only** inside the ensemble branch, and this app
 has no solo-analysis path: `isChartAnalysisRequested`
-(`useAnalysisPipeline.ts:1565`) lists `isEnsembleEnabled` as a trigger term, so with
+(before its deletion, `useAnalysisPipeline.ts` listed `isEnsembleEnabled` as a trigger term), so with
 the flag off every send is casual chat. Deleting the branch therefore deletes the
 verdict, the entry/SL/TP, the levels drawn on the chart, the gate scan, and the
 journal row that the autopilot watches — not just the debate.
@@ -284,7 +284,7 @@ reading is expensive to undo.
   free seat was being told to match a chart it cannot see — it now takes a `where`
   argument and the dock's default is byte-identical (pinned as a control); and the
   slugs that travelled are recorded on the row (`Message.injectedSkills`,
-  `types/message.ts:280`) bounded to the 30 the index printed, so the record cannot
+  `types/message.ts:278`) bounded to the 30 the index printed, so the record cannot
   claim skills the model never saw. Tests: `tests/chatSurfacePrompt.test.ts` (10).
   Full suite: 496 files / 4922 tests, lint back on the 818/0 baseline after four
   `no-useless-assignment` errors from initialized-then-overwritten locals.
@@ -336,7 +336,7 @@ Stage 20c made `runEnsembleEnabled` the only guard, so a scheduled run with the
 toggle on was still entering the debate. 20r does not delete that dependency in
 stage 19 — it gives the schedule a route of its own first, so one config has one
 behaviour at every revision. The arm sits in the pipeline at
-`useAnalysisPipeline.ts:1537`, ABOVE the mode fork at `:1598`, and
+`useAnalysisPipeline.ts:1533`, ABOVE the mode fork at `:1598`, and
 `tests/automationRouteCharacterization.test.tsx` pins the order by `indexOf`
 rather than by prose, so moving the arm below the fork is a failing test, not a
 comment.
@@ -806,7 +806,7 @@ three turn owners, fed by `usage`/`usageCalls` that `runToolTurn` folds out of t
 per-request `onUsage`. Pinned in `tests/toolTurn.test.ts` ("the measured usage fold") and
 guarded by a new `featuresAreWired` row; stubbing the fold turns those pins red.
 
-`notify()` now fires on the settled Full-analysis path (`useAnalysisPipeline.ts:1568`),
+`notify()` now fires on the settled Full-analysis path (`useAnalysisPipeline.ts:1564`),
 scoped to `options?.fullAnalysis === true` and excluded on a stopped turn, so an ordinary
 chat line stays quiet and a schedule (which already reports in its own row) is not doubled.
 `CompletionNotifications` therefore has no caller left and dies with the engine.
@@ -899,7 +899,7 @@ reload restores the Agents surface).
 The engine is gone, the pipeline's ensemble BRANCH is not. Read from the tree,
 not from the plan:
 
-- `hooks/useAnalysisPipeline.ts:544` still sets `runEnsembleEnabled`, and three
+- The hook used to set `runEnsembleEnabled`, and three
   debate-only refusals still run on it: no-moderator (`:730`), incomplete lens
   roles / two seats sharing a model (`:754-785`), and the seat ceiling
   `TEAM_MAX_SEATS` (`:793`, "Too many providers for a Standard-mode debate").
@@ -909,11 +909,11 @@ not from the plan:
 - `isStagedEnsemble` (`:655`) still mints `ensembleProgress` (`:888`, written on
   the placeholder at `:912`) with every seat at `status: 'waiting'`. Nothing ever
   moves it, because the only writers were the debate throttler (deleted) and
-  `runOutcome.ts:41`, which only marks it failed. `App.tsx:1250` reads it.
+  `runOutcome`'s catch path, which only marks it failed, and the App read that surfaces it.
 - `isDebating: true` is now written in exactly ONE place: the resume path
   (`:924`). Everything that once set it lived in the debate loop.
 
-**The live consequence, and it is the next job:** `App.tsx:1247` picks
+**The live consequence, and it is the next job:** `App.tsx:1212` picks
 `verdictMessage` out of the debate shapes — `ensembleProgress`, >1 `modelsUsed`,
 `debateTurns` — and hands it to the chart as `verdict={verdictMessage?.analysis}`
 (`App.tsx`, and there is no line to give it: as of 2026-10-19 nothing passes an analysis prop there at all). After this tranche nothing sets `Message.analysis` for a new
@@ -988,7 +988,7 @@ deleting anything in either area.
 
 **1. Accuracy mode is fully wired, and the calibration store is infrastructure, not part of the stage.**
 `AccuracyModeModal` looked orphaned to a `from '…'` grep — it is imported through
-`React.lazy` at `App.tsx:67` and mounted at `App.tsx:2169`. The
+`React.lazy` at `App.tsx:68` and mounted at `App.tsx:2119`. The
 `accuracySubMode` / `isAccuracyModeEnabled` flags reach App, GeneralTab,
 useAppSettings, useLensAndEnsembleConfig, useProfilePersistence, useAnalysisPipeline,
 GenericAnalysisService, HybridIntelligenceService, TradeLog and 4 types files. And
@@ -1002,9 +1002,9 @@ the store stays. `CalibrationLedgerService` (117 lines) feeds TWO live surfaces:
 not a mechanical one — it removes reporting the trader can currently open.
 
 **2. `ensembleProgress` has no rendering reader but IS load-bearing on the failure path.**
-Census over all `.ts`/`.tsx`: minted at the block now at `useAnalysisPipeline.ts:903`→`:908` (the placeholder row itself was deleted with the engine), patched at
+Census over all `.ts`/`.tsx`: minted at the block now at `useAnalysisPipeline.ts:853`→`:856` (the placeholder row itself was deleted with the engine), patched at
 `runOutcome.ts`'s debating branch, stripped at the SQLite boundary, and
-after `1bd501e` no component reads it (`App.tsx:1250` was the last, and that memo is
+after `1bd501e` no component reads it (`App.tsx:1215` was the last, and that memo is
 gone). But the `runOutcome` branch keyed on it writes the row's TEXT —
 "The analysis was cancelled." / "The ensemble could not continue before the debate
 started." — so deleting the mint without re-keying that guard strands an empty row on
@@ -1287,7 +1287,7 @@ The file lists are recorded here so the next pass starts from evidence, not from
 
 **#19 — the ensemble branch, the hybrid pull, and the prompt A/B lane.**
 `runEnsembleEnabled` is not local to the hook: it is threaded from `App.tsx` through
-`hooks/useAnalysisPipeline.ts:567/:279/:544` and gates `:403` (a UI-muting early return), `:903`,
+the hook used to read the flag in three places and gate a UI-muting early return and the progress steps on it; every one of those reads is now deleted.
 `:806` (the coin tip), `:874`, `:923`, `:956`, and appears in the `:1594` dependency array. The
 toggle itself is persisted (`hooks/useProfilePersistence.ts`, `hooks/useUserProfileLoader.ts`,
 `types/user.ts`, `services/learning/MemoryFilesService.ts`, `services/trade/automationTurn.ts`,
@@ -1295,7 +1295,7 @@ toggle itself is persisted (`hooks/useProfilePersistence.ts`, `hooks/useUserProf
 (`tests/analysisPipelineSendIdentity.test.ts`, `tests/automationRouteCharacterization.test.tsx`,
 `tests/useProfilePersistence.test.tsx`). Deleting the hybrid pull also changes which coin the
 learning step receives, because the packet still feeds `assemblePipelineMemoryContext` at
-`hooks/useAnalysisPipeline.ts:1008` (the call; the import sits at :33).
+`hooks/useAnalysisPipeline.ts:957` (the call; the import sits at :33).
 
 **Correction to what this doc and the flow doc currently assert about the A/B lane.** It is not
 "starved with no caller" in the product sense: `beginPromptLane` has no caller, so
@@ -1319,9 +1319,9 @@ framing was wrong in two ways that both matter before anyone edits:
   prompt receives: `services/providers/GenericAnalysisService.ts:335` sends the memory context
   whole for accuracy and truncates it to 800 tokens otherwise, so the branch's survival value for
   the ordinary path must be decided, not assumed. (2) `AccuracySubMode` is not an optional setting
-  but a **required, persisted `AutomationConfig.mode`** (`types/automation.ts:43`) with a picker at
+  but a **required, persisted `AutomationConfig.mode`** (`types/automation.ts:42`) with a picker at
   `components/automation/AutomationEditorModal.tsx` (the Lenses toggle block: the earlier citation landed on that block’s opening comment, so no line is given) and a label at
-  `components/automation/AutomationView.tsx:68` — stored schedules already carry it, so removing
+  the automation card's Lenses/Analysts chips — stored schedules already carry it, so removing
   the field needs a read-side migration or old configs fail validation on load. (3) Three further
   toggles live under it (`isPlaybookEnabledInPureAI`, `isFamiliesEnabledInPureAI`,
   `isMemoryEnabledInPureAI`) and gate injection in `GenericAnalysisService` and the memory
@@ -1342,8 +1342,8 @@ would have landed half-finished on a `main` that is pushed.
    sends are byte-identical to what they are today; only accuracy-mode sends change.
 2. *Stored schedules*: `AutomationConfig.mode` collapses to `'standard'` **on the reader side** —
    the field stays in the type, anything not `'standard'` coerces to `'standard'`, the picker in
-   `components/automation/AutomationEditorModal.tsx:515` and the label at
-   `components/automation/AutomationView.tsx:68` go away. A saved schedule keeps running instead
+   the editor's Lenses toggle and the label at
+   the automation card's Lenses/Analysts chips go away. A saved schedule keeps running instead
    of failing validation on load, which is the whole reason not to drop the field outright.
 3. *Calibration*: the owner chose **delete the dashboards too**, after being told in plain terms
    that this removes the Learn tab's calibration bar, trader profile cards and monthly report — not
@@ -1354,16 +1354,16 @@ with an offer to migrate that text into the general list before the tabs go.
 **Attempted #19's tail in an isolated worktree on 2026-10-18 and stopped at the third site — with
 two couplings the list above did not contain.** They are the reason this is a design pass and not a
 grep-and-delete:
-- `isEnsembleEnabled` gated **live market polling** too: `App.tsx:493` passed it to
+- `isEnsembleEnabled` gated **live market polling** too: `App.tsx:462` passed it to
   `hooks/useMarketData.ts`, which uses it at `:44` (clears `liveMarketConditions` when off), `:127`
   and `:161` (the Binance reachability check) and `:118`/`:192` (effect deps). So deleting the
   toggle silently kills the market ticker the header shows, unless the polling is re-parented onto
   `isHybridIntelligenceEnabled`, which is that feature's own switch and the honest owner of it.
-  Note the toggle's default is **off** (`App.tsx:351` `useState(false)`), so "ordinary chat wins"
+  Note the toggle's default is **off** (`App.tsx:333` `useState(false)`), so "ordinary chat wins"
   means today's default behaviour, not today's opt-in behaviour — a user who enabled ensemble
   loses the ticker unless it is re-parented. That re-parenting is a feature decision, not a trim.
 - `runEnsembleEnabled` is not only read in the hook: it is passed **as a positional argument** at
-  `hooks/useAnalysisPipeline.ts:602` into a callee alongside `runLensConfig` and
+  the pipeline into a callee alongside `runLensConfig` and
   `runEnsembleSelection`, so removing it changes that signature and its other callers, and the
   argument order is load-bearing. Each such site drags a second file into the diff, which is how a
   "22-file" task is really 30+ and why it needs a session with room for several typecheck loops
@@ -1431,7 +1431,7 @@ What the attempt measured, which is the value it leaves behind:
 - `services/providers/GenericAnalysisService.ts:361` is a three-way prompt chain;
   deleting the two mode branches means lifting the standard branch out of its
   `else` and dedenting it, which needs a brace-walking flattener, not a regex.
-- `hooks/useProfilePersistence.ts:186` and `hooks/useAnalysisPipeline.ts:1581` list
+- `hooks/useProfilePersistence.ts:185` and `hooks/useAnalysisPipeline.ts:1510` list
   the five fields inside one-line object literals and one very long dependency
   array, so whole-line filtering cannot reach them — they need token strips.
 - The one unsolved blocker is `components/settings/CustomInstructionsEditor.tsx:164`:
@@ -1586,9 +1586,9 @@ listed in a dependency array is a writer with no reader. `GlobalLearningService
 history card all still call it directly.
 
 **#21 — three sub-items, measured, none started.** `debateTurns` is declared at
-`types/message.ts:191` and `types/trade.ts:110`, written at
+`types/message.ts:189` and `types/trade.ts:110`, written at
 `hooks/useTradeLogging.ts:350` and `utils/watchList.ts:30`, and read by
-`hooks/useAnalysisPipeline.ts:786`,
+`hooks/useAnalysisPipeline.ts:735`,
 `hooks/useWatchAndAutopilot.ts:105`, `services/analysis/convictionDrift.ts:82`,
 `services/learning/monthlyReport.ts:220`, `utils/analysisUtils.ts:990` and the
 report's turn count at `utils/reportExport.ts:241`, plus a seeded fixture in
@@ -1684,8 +1684,8 @@ action and is actually two.
 Nothing produces a transcript any more: the only writes are copies
 (`hooks/useTradeLogging.ts:349`, `utils/watchList.ts:30`) and **no code sets
 `isDebating: true`** — every remaining `isDebating` is a literal `false`, and
-`hooks/useUserProfileLoader.ts:404` forces it false on load. So the failure-path
-guard inside `classifyRunFailure` (`hooks/analysisPipeline/runOutcome.ts:48`) is unreachable and the three
+`hooks/useUserProfileLoader.ts:377` forces it false on load. So the failure-path
+guard inside `classifyRunFailure` (`hooks/analysisPipeline/runOutcome.ts:47`) is unreachable and the three
 verdict-fallback parameters in `utils/analysisUtils.ts` (the final-verdict text,
 the level hit-odds legacy parse, the signal-card "why") only ever take their
 `analysis.strategy` / stored-`levelProbabilities` branch. That half is safe to
@@ -1736,7 +1736,7 @@ bytes on legacy rows — accepted over keeping a stripper for a key no writer ca
 
 Nine doc citations moved when these lines went. Each was re-measured by matching the HEAD
 line's content, and two were re-pointed at a real symbol instead of the bare `};` they used
-to land on (`useAnalysisPipeline.ts:747` for the automation claim, `:783` for the coin tip).
+to land on (`useAnalysisPipeline.ts:696` for the automation guard, `:747` for the coin tip).
 One failure mode the gate cannot see, recorded because it happened here: a citation that
 drifts onto a DIFFERENT non-blank line passes. The run-failure guard's own number did
 exactly that, so the two ledger sentences citing it were rewritten rather than renumbered.
@@ -2044,7 +2044,7 @@ token three such glued tokens were produced across the flow html — none of the
 `resolve()` today, so they have never been checked for resolution, non-blank or comment-line at all.
 Work order: make `strip()` emit a space per tag and confirm the anchor population does not move;
 then re-apply the detector and expect ~15 real findings; then retire the ledger's historical line
-numbers the way the approval-inbox census row was retired today. LANDED THE SAME DAY, in the other order: fix strip() first (the scan went from 513 references / 247 unique to 538 / 252, and the wider scan itself failed the gate until five stale citations were retired: `App:2114` was a comment about chatModelFallback and now points at the mount at the mount site; the quick-reply row bare-numbered 1350 when the call is the quick-reply call site; the bot fork bare-numbered 431 when `if (config.botId)` is the fork line; and `ensureStamp` was paired with `runPresentTrade` line 75 though it is defined at the gate file where it is defined), then apply the detector. Measured with it live: 0 deleted-file citations in the flow docs, 6 in this ledger — the verdictFinalizer and CalibrationSection rows name files this run deleted, and three are the glued examples quoted above. A live-doc hit fails the merge; a ledger hit is recorded history and ratchets down only.
+numbers the way the approval-inbox census row was retired today. LANDED THE SAME DAY, in the other order: fix strip() first (the scan went from 513 references / 247 unique to 538 / 252, and the wider scan itself failed the gate until five stale citations were retired: `App:2064` was a comment about chatModelFallback and now points at the mount at the mount site; the quick-reply row bare-numbered 1350 when the call is the quick-reply call site; the bot fork bare-numbered 431 when `if (config.botId)` is the fork line; and `ensureStamp` was paired with `runPresentTrade` line 75 though it is defined at the gate file where it is defined), then apply the detector. Measured with it live: 0 deleted-file citations in the flow docs, 6 in this ledger — the verdictFinalizer and CalibrationSection rows name files this run deleted, and three are the glued examples quoted above. A live-doc hit fails the merge; a ledger hit is recorded history and ratchets down only.
 
 ## Resume facts, 2026-10-19 end of session — read this before exploring anything
 
@@ -2152,7 +2152,7 @@ revokes it.
 **Do not re-derive these** (each cost a turn this session and is already proven): the
 review's six defects are all closed in the current files; **and the item it filed as
 "Not verified" — section C's ordering — turned out to carry nine wrong line numbers.** The
-fetch gate is `hooks/useAnalysisPipeline.ts:927` (the docs said `:941` in one file and `:890`
+fetch gate is `hooks/useAnalysisPipeline.ts:876` (the docs said `:880` in one file and `:880`
 in the other, and `:890` is the automation mute flag, not a gate); the injection string is
 built at `:953` (preset path `:994`, not `:988`); it is read only by `devLog` at `:978`, `:979`
 and `:1166` (not `:973`/`:1160`); `assemblePipelineMemoryContext` is called at `:1021` with the
@@ -2183,10 +2183,10 @@ timestamp twin. Counting it is not pedantry: it is the difference between a cens
 dead field and a census that quietly includes a live-looking one.
 
 All 11 mentions of `postMortemCreatedAt`, enumerated rather than sampled: two are the
-declarations at `types/message.ts:154` and `types/trade.ts:60`; four are
+declarations at `types/message.ts:153` and `types/trade.ts:60`; four are
 `tests/pointInTime.test.ts:30` and its neighbours, which are the **only writers anywhere in
 the repository**; the remaining five are production reads at
-`hooks/analysisPipeline/memoryContext.ts:183`,
+`hooks/analysisPipeline/memoryContext.ts:182`,
 `services/learning/DecisionReflectionService.ts:24`, and
 `services/ui/AlgorithmicSummaryService.ts:50`. No quoted-key or shorthand write exists, so
 nothing has set this field since the post-mortem writer went.
@@ -2252,7 +2252,7 @@ registry row can orphan the constant it alone imported: `STRESS_TEST_PROTOCOL`,
 file and are deleted (proved by `tsc` and `vite build`, since the barrel can hide a consumer —
 the exact trap that had already saved two other constants on this pass). Three debate-era names
 were then re-checked rather than assumed dead, and the answer differs for each: `moderatorConfig`
-is live as the DEFAULT provider behind vision/OCR (`App.tsx:335`) and memory (`App.tsx:599`) and
+is live as the DEFAULT provider behind vision/OCR (`App.tsx:329`) and memory (`App.tsx:568`) and
 as the automation seat and the journal's `Mod:` label; the `<CLARIFICATION_*>`/`<MODERATOR_RETRY>`
 matchers in `constants/debateMarkers.ts` are live as sanitizers at `utils/analysisUtils.ts:859`,
 while no prompt file mentions either marker any more. Both facts, plus the "no moderator TURN
@@ -2264,7 +2264,7 @@ tsc 0; `vite build` ✓; flow-doc anchors 261 verified, 0 unattributed, 0 census
 file at all, and only 5 write the symbol beside the citation — the only shape the gate can bind to content.
 So 48 rows are line-resolved and nothing more, and the run prints `arrow coverage: 5/53` with a floor on both
 figures so coverage cannot fall silently. Row 7 came out wrong outright: the lazy-surface `SurfaceSkeleton`
-boundaries are App.tsx:2403 TradeView, :2448 Journal, :2470 LearnView, :2486 StrategyStudio plus the
+boundaries are App.tsx:2353 TradeView, :2398 Journal, :2420 LearnView, :2436 StrategyStudio plus the
 automation modal at :2298 — not the :2493/:2538/:2560/:2602 the table had, which are a prop, a component
 open tag and two unrelated lines. Those five are now cited with the symbol beside each path. Raising coverage is per-row verification work, not a rule change, and the docs say that
 instead of implying the table is checked.
@@ -2278,12 +2278,12 @@ same try) — fixed in both flow docs. Coverage now prints 14/53 with 22 pairs a
 line-resolved only.
 
 **Coverage 14 became 23, and it cost the docs three more wrong numbers.** Binding a row to its symbol means reading the line, so ten more rows
-went through the source: `runAutomation` is hooks/useAutomations.ts:403 (the table said :411), the `config.botId` fork is
+went through the source: `runAutomation` is hooks/useAutomations.ts:381 (the table said :389), the `config.botId` fork is
 :423 (it said :431), and the row that attributes `Message.proposal` to the pipeline cited line 1293 of that
-file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1241. All three fixed in both flow docs. Newly bound and verified true:
+file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1170. All three fixed in both flow docs. Newly bound and verified true:
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:42, the Enter branch at
 components/trade/panels/ChatComposer.tsx:146, systemPromptFor components/trade/TradeChatPanel.tsx:453 with
-TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:475, useBotThread hooks/useAnalysisPipeline.ts:1274,
+TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:475, useBotThread hooks/useAnalysisPipeline.ts:1203,
 entriesForSession services/trade/chatSessions.ts:531, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:147
 with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
 services/trade/automationTurn.ts:69, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices
@@ -2292,10 +2292,10 @@ services/trade/automationTurn.ts:155, latestChartVerdict services/trade/chartDat
 would still be invisible.
 
 **Coverage 23 became 28: every arrow row that cites a file is content-checked now.** Binding the last five
-produced one more wrong number: row 6 cited App.tsx:2413 for the guard `surface !== 'agents'`, but that line is a
-prop — the guard is at **App.tsx:2375**, 38 lines away. Also bound and verified against the source:
+produced one more wrong number: row 6 cited App.tsx:2363 for the guard `surface !== 'agents'`, but that line is a
+prop — the guard is at **App.tsx:2325**, 38 lines away. Also bound and verified against the source:
 parseAppHash hooks/useSurfaceRouter.ts:101 with serializeAppHash :159, the `AgentsView` element opening at
-App.tsx:2513, `TradeChatPanel` rendered at components/trade/TradeView.tsx:1115, and the two row-minting calls
+App.tsx:2463, `TradeChatPanel` rendered at components/trade/TradeView.tsx:1115, and the two row-minting calls
 withDetectedTradeType hooks/useTradeLogging.ts:305 and :665. What the gate still cannot reach: the 25 rows that
 name no file at all, and the docs say 28/53 rather than claiming the table is fully checked.
 ## Which gates actually ran at this tip (2026-10-19, after the arrow-binding passes)
@@ -2344,7 +2344,7 @@ where relevant), not re-read:
 | claim | recipe | measured |
 |---|---|---|
 | `beginPromptLane` has zero callers | `grep -rn beginPromptLane hooks services components App.tsx utils constants` | 2 hits: the import line and its own `export const` — no call site |
-| the prompt lane still settles | `grep -rn endPromptLane …` | 3: import, the settle call `settleOpenSteps useAnalysisPipeline.ts:1550` inside the finally, the definition |
+| the prompt lane still settles | `grep -rn endPromptLane …` | 3: import, the settle call `settleOpenSteps useAnalysisPipeline.ts:1479` inside the finally, the definition |
 | `savedAnalyses` was deleted outright (stage 21) | `grep -rl savedAnalyses --include=*.ts --include=*.tsx . \| wc -l` | **0 files** — field, state, SQLite read/write, backup validation all gone; the surviving mentions are in the untracked `docs/analysis/` census, where every count is already 0 |
 | `NavRail` is imported and never rendered | `grep -rn "<NavRail" …` | 1 hit, and it is the generic `<NavRailProps>` on its own definition line — no JSX use anywhere in production |
 | post-mortems are gone | `grep -rn usePostMortem conductPostMortem …` | 1, a comment in `services/learning/SkillMemoryService.ts`; 0 for `conductPostMortem` |
@@ -2359,13 +2359,13 @@ silently: a reader-less field can regain a writer with one line of code and no a
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions
 services/trade/chatSessions.ts:419, collectApprovalItems utils/approvalInbox.ts:57, resolveInvokedSkills
 services/learning/SkillMemoryService.ts:494), and the gate caught the pairing that insertion created: the row
-also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1867, where the
+also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1817, where the
 useMemo actually is. 31 of 53 rows cite a file, all bound; 22 name no file at all.
 
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions chatSessions.ts:419,
 collectApprovalItems approvalInbox.ts:57, resolveInvokedSkills SkillMemoryService.ts:494), and the gate caught the
 pairing that insertion created: the same row also names approvalsWaiting, which is not on that line — a SYMBOL
-MISS, because pairing is positional. It now cites App.tsx:1867, where the useMemo actually is. 31 of 53 rows cite
+MISS, because pairing is positional. It now cites App.tsx:1817, where the useMemo actually is. 31 of 53 rows cite
 a file and every one of them binds a symbol; 22 name no file at all.
 
 **31 then 33.** Two more prose-only rows were bound after reading their source: deskThread is the export at
@@ -2395,3 +2395,6 @@ file: 33, every one bound; 20 rows name no file, floors moved to 33.
 
 
 **Stage 2 of #19 landed (2026-10-19): the Agents desk is never seeded, and the built-in Macro / Technical / Risk analysts are gone.** Per the owner the desk should open empty, like a chat, so the two effects in the App that invented a fallback roster (one from the Analyst Lens assignments, one from the model picker) and the effect that rewrote a named bot's model when those settings moved were deleted, together with the registry helper that only they called and the now-unreferenced role import. Nothing about the delete was quiet: it took four attempts on the docs, and three of them taught me something about my own checks. The first rewrote four CRLF files as LF, which is a whole-file diff masquerading as a documentation edit; the second assumed one hunk when the change was two, so every citation below the import was off by one line and the header-band references landed on comments; the third rewrote bare continuation numbers without their colon, corrupting the text it was meant to fix. Each time the correct move was to restore the files from HEAD and redo the pass, not patch the damage on top of itself. All four docs are now byte-consistent with CRLF intact and every App citation re-derived from the two hunks, with the header band fixed by content rather than arithmetic because a citation with no bound symbol is invisible to the gate while still being wrong. One honest gap is recorded in the flow docs themselves: no test covered the seeding, so removing it turned nothing red — the green suite here proves the deletion is safe, not that the feature was unused. Also worth stating plainly: the anchor gate caught my new sentence immediately, because attribution is one symbol per row, so the empty-state citation had to carry the identifier that actually lives on that line. The role feature is only half-cut: bot tool presets, role personas, lens prompts and the roster builder still name the three roles, and the Analyst Lens settings surface still exists, so those are the next tranche of this ruling.
+
+
+**Stage 3 of #19 landed (2026-10-19): the analyst-role system is deleted and stored profiles are migrated.** Per the owner the desk opens empty, like a chat, so the built-in Macro / Technical / Risk analysts are gone end to end: the role vocabulary, the per-role tool presets, the role prompts and lens prompt files, the Analyst Lens service and its config, the ensemble model picker, the role pickers in the New Bot and New Group dialogs, the per-member role plumbing, role-scoped retrieval and the lens-scoped skill filter, and the automation editor is Lenses/Analysts controls. A bot is now its name, provider/model, notebook scope and the trader instructions that form its persona; groups carry membership only. The moderator pick survives (it still decides a scheduled run seat) and moved to its own module. Migration is real, not type-level: the roster rewrites a stored row the first time it is read (role and enabledTools removed, verified by a test that asserts the stored bytes, not just the returned object), profile settings lose the ensemble flag on first load, provider configs lose the per-provider ensemble roster on load and are persisted through the normal save path, and a boot step deletes the four removed preference keys. Two honest residues: notebooks may still contain lens/*.md files written by the old seats — they are no longer read, and nothing deletes user notes; and bot tool presets were already inert (bots are chat-only since stage 20), so their removal changes no runtime behaviour. All gates were re-executed on this tip, each read from its own summary: typecheck, typecheck:scripts and typecheck:electron clean; vitest 4670 tests in 472 files passing, none skipped; lint 0 errors with 675 warnings under the ratchet; vite build clean; flow-doc anchors OK at 296 anchors and 52 of 53 arrow rows content-checked, with the AGENTS census re-measured and its skipped-file rule now deriving the count instead of assuming the one file that used to be skipped; boot-probe and render-probe zero pageerrors across all four surfaces; Playwright 5 passed; skill-approval probe 25 of 25 with its two injected quota faults. The release workflow still has no anchor step because the owner said to leave it for now, and nothing was pushed by me.

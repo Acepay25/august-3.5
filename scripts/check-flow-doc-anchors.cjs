@@ -719,7 +719,12 @@ function agentsClaims(atext) {
     else {
         const [, t, f, p, pf, sk] = c;
         if (+t !== +p + +sk) out.push(`AGENTS.md census: ${t} tests, but ${p} pass + ${sk} skip = ${+p + +sk}`);
-        if (+f !== +pf + 1) out.push(`AGENTS.md census: ${f} files, but ${pf} pass + 1 skipped file = ${+pf + 1}`);
+        // The skipped-FILE count is read from the sentence (it defaulted to a
+        // hard-coded 1 while one measure file was skipped wholesale; that file
+        // went with the analyst-role deletion, so 0 is now a legal state).
+        const skipMatch = atext.match(/(\d+)\s+wholly-skipped files?/);
+        const skippedFiles = skipMatch ? +skipMatch[1] : 1;
+        if (+f !== +pf + skippedFiles) out.push(`AGENTS.md census: ${f} files, but ${pf} pass + ${skippedFiles} wholly-skipped = ${+pf + skippedFiles}`);
         if (+f !== testFiles) out.push(`AGENTS.md census says ${f} test files; git tracks ${testFiles} under tests/`);
     }
     if (testFiles < 400) out.push(`git ls-files tests returned ${testFiles} files; the census has no population to bind to`);
@@ -746,7 +751,7 @@ const agentsArms = [
     { msg: 'a +2 smoke-test count planted in the real sentence passed', check: () => plant(/(\d+)\s+smoke tests/, (m, d) => `${+d + 2} smoke tests`).some(m => /smoke tests; e2e/.test(m)) },
     { msg: 'a census total planted 1 too high passed the arithmetic', check: () => plant(/(\d+)\s+tests\s+in\s+(\d+)\s+files:/, (m, t, f) => `${+t + 1} tests in ${f} files:`).some(m => /pass \+ \d+ skip =/.test(m)) },
     { msg: 'a file count planted 7 off git ls-files passed', check: () => plant(/tests\s+in\s+(\d+)\s+files/, (m, f) => `tests in ${+f + 7} files`).some(m => /git tracks/.test(m)) },
-    { msg: 'a per-file pass count planted 1 off passed', check: () => plant(/pass\s+in\s+(\d+)/, (m, pf) => `pass in ${+pf + 1}`).some(m => /1 skipped file =/.test(m)) },
+    { msg: 'a per-file pass count planted 1 off passed', check: () => plant(/pass\s+in\s+(\d+)/, (m, pf) => `pass in ${+pf + 1}`).some(m => /wholly-skipped =/.test(m)) },
     { msg: 'deleting the release-only step name from its own paragraph passed', check: () => plant(/`installer-smoke` is the only command/, () => 'the only command').some(m => /no longer names the asymmetric workflow step "installer-smoke"/.test(m)) },
     { msg: 'a doc that stopped naming its own recipe passed', check: () => plant(/comm -13/, () => 'comm -NN').some(m => /no longer quotes the comm -13 recipe/.test(m)) },
 ];

@@ -921,7 +921,6 @@ export const syncProfileMemoryUnlocked = async (profile: UserProfile | null, use
     const s = profile.settings ?? {};
     const flags = [
         s.isHybridIntelligenceEnabled ? 'Hybrid Intelligence' : null,
-        s.isEnsembleEnabled ? 'Ensemble debate' : null,
         s.isStrategiesEnabled ? 'Strategy books' : null,
     ].filter(Boolean).join(', ') || 'standard setup';
 
