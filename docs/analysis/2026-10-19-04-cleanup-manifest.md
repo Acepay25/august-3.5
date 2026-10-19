@@ -1406,3 +1406,144 @@ Rollback: `git revert`.**
   removal of the no-order guarantee that `tests/disclaimer.test.ts` enforces.
 - **No new dependency**, no database, no vector store, no graph store, and **no widening of the
   tool surface** — every proposal here reads or writes something the app already stores.
+
+---
+
+## 12. Addendum — three gaps the first draft of this manifest left open
+
+An honest self-audit against the brief's Part D list found three items that were covered only
+implicitly. They are closed here.
+
+### 12.1 The per-store schema, version and growth table
+
+**§2 of Report 1 carries the full store inventory. What it did not carry, per store, is the
+schema/version, the count or byte cap, and the growth characteristic.** Here it is, for every
+persisted store, at the pin.
+
+| store | value shape | cap | growth | version? |
+|---|---|---|---|---|
+| **the notebook** `memory_files_v1_<user>` | a JSON **object** of `path → markdown` entries | **2 MiB** (the `memory_files_v1` key is the app's largest) | **unbounded in principle**, bounded by the memory budget's refusal-to-grow | **no version field, no checksum** — §11.8 |
+| `profile_memory_v1_<user>` | `JSON.stringify(entries.slice(-40))` — an **array** | **40 entries** (`services/learning/profileMemory.ts:47`) | count-bounded | no |
+| `learning_rules_v2_<user>` | a JSON object of rules | — | **write-only since the rules store was retired** (Report 1 §4.6) | no |
+| `global_learning_state_<user>` | a **calibration object** (`setPreferenceObject`, `GlobalLearningService.ts:162`) | — | grows with closed trades | no |
+| `memory_injections_v1_<user>` | an array of injection records | — | **grows with every turn** | no |
+| `rl_signals_data` | a JSON object of RL signals | — | grows with closed trades | no |
+| `session_review_{counter,drafted,open_theses,resolver}_v1` | small counters / thesis arrays | `OPEN_THESIS_TTL_MS` = 14 days (`sessionSkillReview.ts:308`) | TTL-bounded | no |
+| `supervisor_{auto,last_run}_v1_<user>` | a small object | — | fixed size | no |
+| `supervisor_triaged_v1_<user>:<id>` | one record per triaged item | — | grows with supervisor passes | no |
+| `memory_amendments_v1` | an array of amendment proposals | — | grows | no |
+| `august_harness_lessons_v1` | an array of wire/budget lessons | — | **grows without a cap** | no |
+| `approvals_grandfathered_v1_<user>` | a one-shot migration marker | — | fixed | no |
+| `book_drafts_seeded_v1` | a one-shot marker | — | fixed | no |
+| `skill_drafts_v1[:<user>]` | `JSON.stringify(drafts.slice(-20))` — an array | **20 drafts** (`utils/skillDrafts.ts:54`) | count-bounded | no |
+| `skill_drafts_v1_rejected:<user>` | tombstones | — | grows | no |
+| `skill_drafts_v1_gate_attempts:<user>` | attempt ledgers, `tradeIds.slice(-40)` (`:202`) | 40 trade ids per cluster | count-bounded | no |
+| `learning_proposals_v1:<user>` | `JSON.stringify(items.slice(-30))` — an array | **30 proposals** (`utils/learningQueue.ts:106`) | count-bounded | no |
+| `attributed_insights_kb` | a legacy array | — | **migrated into the notebook** (`distilledMemory.ts:343`) | no |
+| `bots_v1_<user>` | a JSON array of bot rows | — | **was never written** (F-14) | no |
+| `agents_bots_v1_<user>` / `agents_groups_v1_<user>` | `JSON.stringify(items)` — arrays (`services/agents/agentRoster.ts:100`) | — | grows with the roster | no — **removed in the in-flight tree** |
+| `agent_threads_opened_v1_<user>` | a set of opened thread ids | — | grows | no |
+| `agent_pins_v1_<user>` | pinned ids | — | grows | no |
+| `trade_chat_sessions_v1_<user>` | a JSON array of sessions, each with **≤60 entries** (`services/trade/chatSessions.ts:147`) | 60 entries/session; **512 KB** on export | **bounded by count, NOT by bytes** — the open backlog `R-201`/`G-60` | no |
+| `trade_chat_active_v1_<user>` | **a plain string** (a session id) | — | fixed | no — **deliberately not backed up** (`ExportService.ts:367-371`) |
+| `trade_tool_payloads_v1_<user>` | a JSON object of tool payloads | **256 KB** on export | grows with turns | no |
+| `trade_watches_v1_<user>` | `JSON.stringify([...watches].slice(-10))` (`services/trade/watchService.ts:61`) | **10 watches** (`:32`) | count-bounded | no |
+| `trade_level_arms_v1_<user>` | `JSON.stringify(plans)` (`levelWatchService.ts:140`) | — | grows with armed plans | no |
+| `trade_level_hits_v1_<user>` | `JSON.stringify([...fired].slice(-200))` (`:167`) | **200 hits** (`MAX_LATCHED`, `:64`) | count-bounded | no |
+| `trade_drawings_v1_<user>_<sym>` | `JSON.stringify(trimmed)` (`chartDrawings.ts:121`) | — | grows with drawings | no |
+| `trade_session_drawings_v1_<user>_<sess>` | `JSON.stringify(store)` (`:187`) | **1 MB** on export | **keeps every coin** — `G-27` | no |
+| `trade_session_model_v1` | a plain string | — | fixed | no — exempt |
+| `trade_tf_bar_v1_<user>` | the last timeframe bar | — | fixed | no |
+| `trading_checklist_v1` | a JSON array of checklist items | **64 KB** on export | **no count cap** — `G-27` | no |
+| `nav_rail_width_v1`, `right_panel_width_v1_<surface>`, `trade_sidebar_open_v1` | plain numbers/strings | — | fixed | no |
+| `august_surface_v1`, `august_trade_mode_v1_<user>`, `learn_tab_v1`, `august_update_notes_seen_v1`, `august_model_picker_free_only_v1`, `skills_grid_pins_v1` | plain strings | — | fixed | no |
+| `desk_idle_motion_v1_<user>` | a boolean | — | fixed | no |
+| `thinking_leak_bin_v1` | a ring buffer of thinking leaks | — | grows | no |
+| `last_active_user` | a plain string | — | fixed | no |
+| `approval_rules_v1[:<user>]` | a JSON object of per-coin rules | — | grows with the rules | no — **on neither backup list** (F-04) |
+| the 24 `PREF_KEYS` | strings, JSON objects, or arrays | — | varies | no |
+| **SQLite** `users`, `trades`, `conversations`, `trade_summaries`, `saved_analyses`, `thinking_records` | typed tables, 12 indexes | — | grows with use | **yes — `schema_migrations`, v2…v7** (`SqliteService.ts:265-270`, `:311-363`), all additive, recorded only on full success (`:296-308`) |
+| **IndexedDB** `FuturesAI-DB`, `AugustBackups`, `ThinkingStore`, `OfflineQueue`, `MessageImages` | object stores with keyPaths | — | grows | **yes — each store carries a version** |
+
+**The pattern, stated plainly: _every_ store is a version-less JSON blob except the two that
+have a real schema — SQLite and IndexedDB.** Nine of the stores are count-bounded, four are
+byte-bounded **on export only** (not on write — `R-201`/`R-202`/`G-60`), and **the notebook, which
+is the one store the app cannot regenerate, has neither a version nor a checksum.**
+
+### 12.2 The brief also asked about **duplicated packages** — and there is one duplication nobody has named
+
+**[Verified by code reading]** The brief's Part D item 5 lists *"unused, duplicated, outdated, risky
+or oversized packages"*. The first draft of this manifest covered unused, outdated, risky and
+oversized. The **duplicated** half was not covered, and it is not a package-level duplication — it
+is a **capability** duplication that the package list makes invisible:
+
+> **The app ships two complete SQLite implementations and picks between them at runtime.**
+> `@capacitor-community/sqlite` (`services/infrastructure/SqliteService.ts`) for native, and
+> `idb` + a hand-written IndexedDB layer (`services/infrastructure/dbService.ts`) for web.
+> Both expose the same seven tables' worth of operations, and **the two schemas are not the same
+> shape** — the web path is a *user-profile blob with nested trades and conversations*, the native
+> path is *relational tables with a `schema_migrations` ledger*.
+
+**Consequences that are already visible in the audit:**
+
+1. **A trade logged on web and a trade logged on native are not the same shape** — the web path
+   stores a nested profile document, the native path stores rows. That is why
+   `stage3-arrangement.md:29-41` (roadmap `R-213`) records the live-journal counts as *"not
+   obtained"*, and why `R-214` records that *"pre-F3a rows carry no `planId`"*.
+2. **The migration ledger only exists on the native path.** The web path has no version, so
+   **the web store cannot be migrated** — it can only be replaced.
+3. `services/infrastructure/dbService.ts:437` `isUsingSqlite` is a **dead export** (Report 4 §1.3) —
+   the switch between the two is decided somewhere else, and the flag that would have named it is
+   unused.
+
+**The duplication is not a bug to fix — it is a design decision to document.** The proposed
+change is therefore documentation-first: a `docs/architecture.md` section that states, in one
+place, **which path owns which table, what the web shape is, and what a migration between them
+would have to do.** Report 5 §2 Phase 3 already proposes writing that document. **The missing part
+is that it must include the two-schema problem, not just the module list.**
+
+**A smaller, genuine package-level duplication:** `clsx` **and** `tailwind-merge` are both used
+**only** by `lib/utils.ts`'s `cn` helper, and `lib/utils.ts` is used **only** by
+`components/ui/task.tsx`. So two popular packages hang off a single-file helper used by a single
+component. That is not duplication — it is a **dependency chain that a future edit could sever
+for free** (fold `cn` into the one consumer and drop both packages). Low priority; **SAFE**; a
+one-line change with two dependency removals.
+
+### 12.3 "Tests that assert nothing" — the systematic scan, and its result
+
+The brief's Part A item 10 asks for *"tests that pass over dead code **or assert nothing**"*. The
+first draft covered the first half thoroughly (Report 4 §4.1 — ~17 test files exercising dead
+app code) and the second half **not at all**. It is now scanned.
+
+**Method:** a script that strips line comments, then flags any file that has an `it(`/`test(`
+block but **no** `expect(` / `assert.` / `assert(` / `.should` / `toBeTruthy` / `toEqual` /
+`toMatch(` anywhere in the file.
+
+**[Verified live]** over the whole `tests/` tree:
+
+| result | count |
+|---|---|
+| files scanned | 475 at the current tree (479 at the pin) |
+| **files with a test block but no assertion at all** | **2** — and **both are support files, not test files**: `tests/helpers/sourceCode.ts` and `tests/jsxScan.ts` (neither matches the `*.test.ts` include glob) |
+| **files where every test block is skipped** | the same 2 |
+| **test files that assert nothing** | **ZERO** |
+
+**⇒ There is no "asserts nothing" class in this repository.** Every one of the 479 test files
+makes at least one assertion. **[Verified live]**
+
+Two related facts from the same pass, for the record:
+
+- **Zero snapshot tests** — no `.snap` file, no `toMatchSnapshot`, no `toMatchInlineSnapshot`
+  anywhere. **No brittle snapshots.**
+- **The 11 skips are all in one file** — `tests/lensWordCount.measure.test.ts`, whose whole
+  `describe` is `describe.skip` unless `RUN_LENS_MEASUREMENT=1` (`:55-56`) and a provider key is
+  configured. **Deliberate, documented at `:7-8`, and correctly designed.**
+- **The 8 skip/only markers in the tree** (measured by grep) are that file's `describe.skip` /
+  `it.skip` pairs plus the `gated` / `gatedIt` aliases it defines at `:55-56`. **No accidental
+  `.only`.**
+
+**The one caveat this scan cannot see — and it is the same caveat the whole audit carries:** a
+test can assert *something* and still assert the wrong thing. The 17 files that exercise dead
+code (Report 4 §4.1) all make assertions. **They assert correctly about code the app never runs.**
+That is the more dangerous class, and it is why `E-11` (a test that asserts what is *sent*) and
+`E-24` (behavioural coverage for the Electron shell) matter more than any count of assertions.
