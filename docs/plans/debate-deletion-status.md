@@ -2117,7 +2117,7 @@ Three stale labels were fixed in place: `hooks/useAppSettings.ts` and
 
 **Gate state on this tree, each read from its own marker, not a piped exit code:**
 Re-run here: typecheck, type-check-scripts, electron parse (both re-run on this tip: `tsc --noEmit` clean,
-`node --check` on all three electron files clean), flow-doc anchors (262 verified, — the same figure as before, reached by a different set of anchors,
+`node --check` on all three electron files clean), flow-doc anchors (272 verified, — the same figure as before, reached by a different set of anchors,
 0 unattributed, **0** comment-line and **0** symbol misses — both ceilings now zero, with 5
 citations listed as deliberate comment-as-claim exemptions — **0** census disagreements, and
 **0 of 6** AGENTS.md control arms failing, the new half that measures `AGENTS.md`'s own counts:
@@ -2169,7 +2169,7 @@ the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:69`; 
 progress panel now mints two rows (`market-data`, `analysis`), completed by
 `settleOpenSteps()` in the run's `finally` after the catch has marked any failure.
 
-**Push state:** 92 unpushed commits at this tip (measured as `git rev-list --count
+**Push state:** 93 unpushed commits at this tip (measured as `git rev-list --count
 origin/main..HEAD`, which is the only honest way to state it — the count grows with
 every commit, so re-measure rather than trust this number), nothing pushed this
 session; the earlier authorization covered only the first 16.
@@ -2276,3 +2276,17 @@ the old `73-79` range proved nothing), `august_surface_v1`, `onSendBotTurn`, `on
 defect: row 13 cited AgentsView.tsx:725 for `onAnalyze`, and the await is at **:722** (:725 is the `finally` of that
 same try) — fixed in both flow docs. Coverage now prints 14/53 with 22 pairs and a floor of 14, and 39 rows remain
 line-resolved only.
+
+**Coverage 14 became 23, and it cost the docs three more wrong numbers.** Binding a row to its symbol means reading the line, so ten more rows
+went through the source: `runAutomation` is hooks/useAutomations.ts:403 (the table said :411), the `config.botId` fork is
+:423 (it said :431), and the row that attributes `Message.proposal` to the pipeline cited line 1293 of that
+file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1254. All three fixed in both flow docs. Newly bound and verified true:
+SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:42, the Enter branch at
+components/trade/panels/ChatComposer.tsx:146, systemPromptFor components/trade/TradeChatPanel.tsx:453 with
+TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:475, useBotThread hooks/useAnalysisPipeline.ts:1329,
+entriesForSession services/trade/chatSessions.ts:531, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:147
+with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
+services/trade/automationTurn.ts:69, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices
+services/trade/automationTurn.ts:155, latestChartVerdict services/trade/chartData.ts:91. The gate prints
+23/53 with 37 pairs and a floor of 23; 30 rows remain line-resolved, and those are where the next wrong number
+would still be invisible.
