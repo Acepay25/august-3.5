@@ -2,6 +2,27 @@
 
 This file contains guidelines and commands for agentic coding agents working in this repository.
 
+## The Plan
+
+**`docs/plan/` is the plan, and it is the place to look before proposing work.** It holds:
+
+- `docs/plan/README.md` — the index, the five-phase execution order with the gate for every
+  step, the fourteen owner questions with proposed defaults, and the rules for working it
+- `docs/plan/open-items.md` — the working list: every open item the deleted plan corpus
+  named, each with the `file:line` that proves it is still open, each mapped to the
+  proposal that covers it
+- `docs/plan/full-audit.md` — the evidence, all seven sources merged, with a section index
+- `docs/plan/audit/` — the seven sources, individually
+
+Two things to know before you touch it. **The plan is a proposal, not a decision** — 23 of its
+items are rulings the trader must make, and the plan says which way it would recommend. And
+**the `docs/analysis/` directory is scratch, not a home for anything durable** — it is
+ignored by the lint config and has been un-tracked on purpose; a plan that must survive
+belongs in `docs/plan/`.
+
+The previous audit's reports are preserved on the `archive/prior-audit-2026-10-18` branch,
+which exists so that `git gc` cannot prune them.
+
 ## Project Overview
 
 August Trading is a React + TypeScript trading analysis application that uses multiple AI
@@ -125,7 +146,7 @@ competing for the machine.
 
 ```
 ├── App.tsx                 # Main application component (large — split work welcome)
-├── components/             # React UI components (flat, one dir per domain)
+├── components/             # React UI components (one directory per domain)
 ├── hooks/                  # Custom hooks (useAnalysisPipeline, useTradeLogging, …)
 ├── services/               # AI provider integration & business logic
 │   ├── providers/          # GenericProviderService + GenericAnalysisService (the only
@@ -134,10 +155,9 @@ competing for the machine.
 │   ├── analysis/           # Technical analysis, Monte Carlo (+ web worker), desk tools
 │   ├── backtesting/        # Backtesting, model performance, live backtest, outcomeEngine
 │   ├── learning/           # Skills, pattern memory, rules, insights, global memory
-│   ├── agents/             # Bot roster, bot personas (trader instructions), mailbox, routines, group rounds
+│   ├── agents/             # Bot roster, mailbox, routines, group rounds
 │   ├── bots/               # Per-bot memory + system notes
 │   ├── tools/              # toolForge (user/model-authored HTTPS tools)
-│   ├── research/           # Fixed 4-stage web research plan
 │   ├── trade/              # Trade journal actions + proposal parsing
 │   ├── desk/               # The reduce-motion preference only — the 2D desk floor
 │   │                       #   view and its seat layout were deleted (2026-10-18).

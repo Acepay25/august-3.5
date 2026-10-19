@@ -1,7 +1,7 @@
 /**
  * THE ACTIVATION GATE — proof before implementation.
  *
- * The Step B audit (docs/plans/workstream1-stepB-evidence.md §b) listed 13 paths by
+ * The Step B audit (docs/plan/open-items.md §b) listed 13 paths by
  * which a skill becomes active with no human approval. The owner's rule is the
  * opposite: nothing model-generated becomes active, gets veto weight, or is retired
  * without their approval. This file is written FIRST, against the code as it stands,

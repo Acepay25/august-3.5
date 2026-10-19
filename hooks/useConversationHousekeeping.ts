@@ -1,6 +1,5 @@
 import { useCallback, useEffect } from 'react';
 import { createNewConversation, findReusableEmptyConversation } from '../utils/conversationUtils';
-import { loadLastModeratorPick } from '../services/infrastructure/moderatorPick';
 import type { ConfirmOptions } from '../components/shared/ConfirmDialog';
 import type { Conversation, Message } from '../types';
 
@@ -78,15 +77,9 @@ export const useConversationHousekeeping = (args: UseConversationHousekeepingArg
             return;
         }
         const newConv = createNewConversation();
-        const lastModerator = loadLastModeratorPick();
         if (activeConversation) {
             newConv.ocrModel = activeConversation.ocrModel;
-            newConv.moderatorProviderId = activeConversation.moderatorProviderId || lastModerator?.providerId || '';
-            newConv.moderatorModel = activeConversation.moderatorModel || lastModerator?.model || '';
             newConv.leverage = activeConversation.leverage;
-        } else if (lastModerator) {
-            newConv.moderatorProviderId = lastModerator.providerId;
-            newConv.moderatorModel = lastModerator.model;
         }
         setConversationHistory(prev => [newConv, ...prev]);
         setActiveConversationId(newConv.id);

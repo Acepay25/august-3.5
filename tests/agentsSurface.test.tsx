@@ -775,7 +775,7 @@ describe('WS-6 §5 row context menu', () => {
 });
 
 describe('AgentsView elapsed labels', () => {
-    // §1b.1 of docs/plans/ui-ux-target-plan-2026-10-11.md: `relTime` computed
+    // §1b.1 of docs/plan/open-items.md: `relTime` computed
     // a DURATION (`Date.now() - Date.parse(iso)`) and handed it to `relTimeMs`,
     // which subtracted `Date.now()` again — so an 8-day-old row printed
     // `20731d`, the epoch leaking through a double subtraction. The suite could
@@ -826,7 +826,7 @@ describe('AgentsView elapsed labels', () => {
 });
 
 describe('AgentsView decision card furniture', () => {
-    // §1b.2–§1b.5 of docs/plans/ui-ux-target-plan-2026-10-11.md, all pinned
+    // §1b.2–§1b.5 of docs/plan/open-items.md, all pinned
     // against the desk pane: one card per turn, a labelled confidence, and a
     // sentence-case disclosure.
     const analysisFor = (): Message['analysis'] => ({

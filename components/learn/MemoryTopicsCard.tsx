@@ -5,7 +5,7 @@ import { memoryTopicsFromStore, relativeElapsed, type MemoryTopic } from '../../
 
 /**
  * MemoryTopicsCard — the notebook read as CONTENT (gap 2 of
- * docs/plans/ui-ux-target-plan-2026-10-11.md).
+ * docs/plan/open-items.md).
  *
  * The reference's Settings → Memory opens on a list of named topics, each
  * with a one-line summary and an "Updated" stamp. August's memory tab opened

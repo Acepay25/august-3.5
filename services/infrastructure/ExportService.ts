@@ -402,7 +402,7 @@ const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
 export const EXPORT_RAW_KEY_CAP_BYTES = 512 * 1024;
 
 /** Per-store ceilings, chosen from each owner's OWN bound so a normal backup is
- *  never trimmed (measured 2026-10-05, recorded in docs/plans/workstream1-status.md):
+ *  never trimmed (measured 2026-10-05, recorded in docs/plan/open-items.md):
  *
  *  - chat sessions 512 KB — 12 × 60 rows, images already stripped.
  *  - session drawings 1 MB — `chartDrawings.ts:54-55` bounds a coin at 40 drawings ×

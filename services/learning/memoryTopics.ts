@@ -1,6 +1,6 @@
 /**
  * memoryTopics — the topic index over the trader notebook (gap 2 of
- * docs/plans/ui-ux-target-plan-2026-10-11.md).
+ * docs/plan/open-items.md).
  *
  * The reference reads memory as CONTENT: named topics, each with a one-line
  * summary and an "Updated" stamp, into a detail view. August stores memory as

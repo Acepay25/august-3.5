@@ -24,7 +24,6 @@ export const PREF_KEYS = {
     MEMORY_PROVIDER: 'memory_provider', // ProviderConfig id of the provider used for memory synthesis
 
     // Settings
-    LAST_MODERATOR_PICK: 'last_moderator_pick_v1',
     CASUAL_CHAT_MODEL: 'casual_chat_model',
     HYBRID_PANEL_POSITION: 'hybrid_panel_position',
     MODEL_PERFORMANCE_DATA: 'model_performance_data',
@@ -37,7 +36,6 @@ export const PREF_KEYS = {
     OUTCOME_AUTOPILOT_STATE: 'outcome_autopilot_state',
     QUIET_HOURS: 'quiet_hours_v1',
 
-    BOTS: 'bots_v1',
     // Data integrity
     LAST_TRADE_COUNT: 'last_trade_count',
     LAST_SESSION: 'last_session',

@@ -1,5 +1,5 @@
 /**
- * The skill viewer — gap 1 of docs/plans/ui-ux-target-plan-2026-10-11.md.
+ * The skill viewer — gap 1 of docs/plan/open-items.md.
  *
  * The reference reads a skill as a rendered `SKILL.md`: `Description` as its
  * own labelled field, the body below it, `Save skill` / `Copy` in the header.

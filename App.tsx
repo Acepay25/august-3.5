@@ -13,7 +13,6 @@ import { useUserProfileLoader } from './hooks/useUserProfileLoader';
 import { useTradeJournalActions } from './hooks/useTradeJournalActions';
 import { useProfilePersistence } from './hooks/useProfilePersistence';
 import { useConversationHousekeeping } from './hooks/useConversationHousekeeping';
-import { useModeratorPick } from './hooks/useModeratorPick';
 import { useAgentThreads } from './hooks/useAgentThreads';
 import { useWatchAndAutopilot } from './hooks/useWatchAndAutopilot';
 import { buildProposedTradeMessage, type TradeProposal } from './services/trade/proposedTrade';
@@ -112,7 +111,6 @@ import { offlineQueue } from './services/infrastructure/OfflineQueueService';
 import { getPreference, setPreference, removePreference, PREF_KEYS } from './services/infrastructure/PreferencesService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
 import { ProviderConfig } from './types/provider';
-import { loadLastModeratorPick, saveLastModeratorPick } from './services/infrastructure/moderatorPick';
 import { isProviderOnCooldown, providerCooldownRemainingMs } from './services/infrastructure/ProviderHealthService';
 import { stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
@@ -258,8 +256,6 @@ const App: React.FC = () => {
         moderatorProviderId, moderatorModel,
 
         handleSetSelectedOcrModel,
-        handleSetModeratorProvider: setConversationModeratorProvider,
-        handleSetModeratorModel: setConversationModeratorModel,
     } = useConversations();
 
 
@@ -284,34 +280,20 @@ const App: React.FC = () => {
         useAlgorithmicInsights, setUseAlgorithmicInsights,
     } = useAppSettings();
 
-    // Derive the moderator ProviderConfig from readyProviders. When the user
-    // never picked a moderator, prefer a provider that is NOT one of the
-    // analyst providers — the old readyProviders[0] fallback often WAS an
-    // analyst, so the moderator debated itself. A benched provider (P4
-    // cooldown: ≥3 persisted errors in 15 min) is skipped even when the
-    // user picked it — a failing moderator sinks every run's verdict.
+    // The fallback provider. The global moderator picker is gone; this is only
+    // the model a scheduled run falls back to when its own automation named
+    // none, plus the last-resort provider for the memory/vision/strategy
+    // fallbacks below. Prefer a provider that is not benched (P4 cooldown:
+    // ≥3 persisted errors in 15 min).
     const moderatorConfig: ProviderConfig = useMemo(() => {
-        const selected = readyProviders.find(p => p.id === moderatorProviderId);
-        if (selected && !isProviderOnCooldown(selected.id)) return selected;
-        if (selected) {
-            const remainingMin = Math.ceil(providerCooldownRemainingMs(selected.id) / 60000);
-            console.warn(`[Moderator] ${selected.name} benched (error cooldown, ~${remainingMin}m left) — using a fallback moderator this run.`);
-        }
-        const fallbackModerator = readyProviders.find(p => !isProviderOnCooldown(p.id));
-        if (fallbackModerator) {
-            console.warn('[Moderator] No moderator selected — fell back to', fallbackModerator.name);
-            return fallbackModerator;
-        }
-        return readyProviders.find(p => !isProviderOnCooldown(p.id)) || (() => {
-            // Every ready provider is benched: the run still
-            // needs a moderator, but say so loudly instead of silently.
-            if (readyProviders.length > 0) console.warn('[Moderator] ALL providers are on error cooldown — using the first ready one anyway.');
-            return readyProviders[0];
-        })() || {
+        const healthy = readyProviders.find(p => !isProviderOnCooldown(p.id));
+        if (healthy) return healthy;
+        if (readyProviders.length > 0) console.warn('[Fallback model] all providers are on error cooldown — using the first ready one anyway.');
+        return readyProviders[0] || {
             id: 'none', name: 'None', apiKey: '', baseUrl: '', apiFormat: 'chat_completions' as const,
             isEnabled: false, isBuiltIn: true, models: [], selectedModel: '',
         };
-    }, [readyProviders, moderatorProviderId]);
+    }, [readyProviders]);
 
     // ONE vision model for EVERY vision feature (chart OCR, post-trade
     // uploads, PDF book OCR). Resolution: the globally selected model
@@ -761,7 +743,8 @@ const App: React.FC = () => {
         messages, messagesRef, updateMessages, activeConversation, activeConversationId,
         providerConfigs: readyProviders,
         selectedOcrModel,
-        moderatorConfig, moderatorModel,
+        moderatorConfig,
+        moderatorModel: moderatorConfig.selectedModel || '',
         memoryConfig,
         finalTradeSummary, loggedTrades, tradeSummaries,
         globalMemory, insightKnowledgeBase,
@@ -1342,13 +1325,6 @@ const App: React.FC = () => {
 
 
 
-    // The moderator pick survives the analyst-role removal: it still decides a
-    // scheduled run's answering seat, and the handler persists it per profile.
-    const { handleSetModeratorProvider, handleSetModeratorModel } = useModeratorPick({
-        setConversationModeratorProvider, setConversationModeratorModel,
-        moderatorProviderId, moderatorModel,
-    });
-
     // The lens/ensemble settings are gone; delete the keys an older build left
     // behind so no setting the app cannot explain survives the upgrade.
     useEffect(() => { void stripRemovedAppSettings(); }, []);
@@ -1443,18 +1419,6 @@ const App: React.FC = () => {
     // F3: New conversation (Ctrl/Cmd+N shortcut + palette action).
     // Reuse an existing blank session instead of minting another empty one —
     // "New" from a filled session should return to the unused blank tab.
-
-    useEffect(() => {
-        if (moderatorProviderId && moderatorModel) {
-            saveLastModeratorPick({ providerId: moderatorProviderId, model: moderatorModel });
-            return;
-        }
-        if (!activeConversation || activeConversation.moderatorProviderId) return;
-        const lastModerator = loadLastModeratorPick();
-        if (!lastModerator?.providerId) return;
-        setConversationModeratorProvider(lastModerator.providerId);
-        if (lastModerator.model) setConversationModeratorModel(lastModerator.model);
-    }, [activeConversation, moderatorProviderId, moderatorModel, setConversationModeratorProvider, setConversationModeratorModel]);
 
 
 
@@ -2169,10 +2133,6 @@ const App: React.FC = () => {
                 visionModel={visionModel}
                 onSetVisionModel={setVisionModel}
                 visionConfig={visionConfig}
-                moderatorProvider={moderatorProviderId as AIProvider}
-                moderatorModel={moderatorModel}
-                onSetModeratorProvider={handleSetModeratorProvider}
-                onSetModeratorModel={handleSetModeratorModel}
                 onUpdateProvider={handleUpdateProvider}
                 onAddCustomProvider={handleAddCustomProvider}
                 onRemoveProvider={handleRemoveProvider}

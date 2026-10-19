@@ -5,7 +5,7 @@ import { join, relative } from 'path';
 /**
  * The radius tokens are `rounded-control` (8px), `rounded-bubble` (12px) and
  * `rounded-full` — the three legal radii (docs/plans/
- * redesign-plan-claude-chatgpt-haze-2026-10-10.md, Part 3.5). Everything else
+ * docs/plan/open-items.md, Part 3.5). Everything else
  * — `rounded-lg`/`xl`/`2xl`/`md`, bare `rounded`, px literals — is drift from
  * before the tokens existed: 662 sites at this gate's birth, the survivors of
  * the old 650-vs-110 census.

@@ -62,8 +62,6 @@ export function useConversations() {
 
     const handleSetVisionModel = (modelId: string) => updateActiveConversation(c => ({ ...c, ocrModel: modelId }));
     const handleSetSelectedOcrModel = (id: string) => updateActiveConversation(c => ({ ...c, ocrModel: id }));
-    const handleSetModeratorProvider = (providerId: string) => updateActiveConversation(c => ({ ...c, moderatorProviderId: providerId }));
-    const handleSetModeratorModel = (id: string) => updateActiveConversation(c => ({ ...c, moderatorModel: id }));
 
     return {
         conversationHistory,
@@ -80,7 +78,5 @@ export function useConversations() {
         moderatorModel,
         handleSetVisionModel,
         handleSetSelectedOcrModel,
-        handleSetModeratorProvider,
-        handleSetModeratorModel,
     };
 }
