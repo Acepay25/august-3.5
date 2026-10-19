@@ -2117,7 +2117,7 @@ Three stale labels were fixed in place: `hooks/useAppSettings.ts` and
 
 **Gate state on this tree, each read from its own marker, not a piped exit code:**
 Re-run here: typecheck, type-check-scripts, electron parse (both re-run on this tip: `tsc --noEmit` clean,
-`node --check` on all three electron files clean), flow-doc anchors (281 verified, — the same figure as before, reached by a different set of anchors,
+`node --check` on all three electron files clean), flow-doc anchors (284 verified, — the same figure as before, reached by a different set of anchors,
 0 unattributed, **0** comment-line and **0** symbol misses — both ceilings now zero, with 5
 citations listed as deliberate comment-as-claim exemptions — **0** census disagreements, and
 **0 of 6** AGENTS.md control arms failing, the new half that measures `AGENTS.md`'s own counts:
@@ -2169,7 +2169,7 @@ the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:69`; 
 progress panel now mints two rows (`market-data`, `analysis`), completed by
 `settleOpenSteps()` in the run's `finally` after the catch has marked any failure.
 
-**Push state:** 99 unpushed commits at this tip (measured as `git rev-list --count
+**Push state:** 100 unpushed commits at this tip (measured as `git rev-list --count
 origin/main..HEAD`, which is the only honest way to state it — the count grows with
 every commit, so re-measure rather than trust this number), nothing pushed this
 session; the earlier authorization covered only the first 16.
@@ -2310,7 +2310,7 @@ git diff --name-only 8e4808a1..HEAD
 
 which prints exactly five paths — `AGENTS.md`, `docs/app-flow.md`, `docs/app-flow.html`,
 `docs/plans/debate-deletion-status.md`, `scripts/check-flow-doc-anchors.cjs` — and nothing else.
-So: re-run here and green were `check-flow-doc-anchors` (281 anchors, 0 unattributed, 0 comment-line,
+So: re-run here and green were `check-flow-doc-anchors` (284 284 anchors, 0 unattributed, 0 comment-line,
 0 symbol misses, 0 census disagreements, 0 of 6 AGENTS arms failing, arrow coverage 28/53 with 44 pairs
 and 0 control failures), `npm run lint` (0 errors / 681 warnings under the ratchet) and
 `npm run typecheck:scripts`. Then the three cheap ones were re-executed at HEAD anyway rather
@@ -2356,3 +2356,14 @@ which understates the truth — the file is gone and only a comment mentions it.
 The point of printing the recipes is that an absence claim is exactly the kind of sentence that rots
 silently: a reader-less field can regain a writer with one line of code and no anchor moves.
 
+**Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions
+services/trade/chatSessions.ts:419, collectApprovalItems utils/approvalInbox.ts:57, resolveInvokedSkills
+services/learning/SkillMemoryService.ts:494), and the gate caught the pairing that insertion created: the row
+also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1920, where the
+useMemo actually is. 31 of 53 rows cite a file, all bound; 22 name no file at all.
+
+**Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions chatSessions.ts:419,
+collectApprovalItems approvalInbox.ts:57, resolveInvokedSkills SkillMemoryService.ts:494), and the gate caught the
+pairing that insertion created: the same row also names approvalsWaiting, which is not on that line — a SYMBOL
+MISS, because pairing is positional. It now cites App.tsx:1920, where the useMemo actually is. 31 of 53 rows cite
+a file and every one of them binds a symbol; 22 name no file at all.
