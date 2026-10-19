@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**262 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**267 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 3 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -404,7 +404,7 @@ card that forgets it was clicked offers a second journal row.
 | 4 | useSurfaceRouter → useSurface | persisted value, key `hooks/useSurface.ts:15 august_surface_v1`, valid set `:16` |
 | 5 | useSurfaceRouter → appHash | `#/journal\|market\|settings\|watch` ⇄ state `hooks/useSurfaceRouter.ts:101`, serialize `:159` |
 | 6 | App → Header | band `App.tsx:2467`, guard `surface !== 'agents'` `:2466` |
-| 7 | App → 4 lazy surfaces | each behind `SurfaceSkeleton`, guards `App.tsx:2493 :2538 :2560 :2602` |
+| 7 | App → 4 lazy surfaces + the automation modal | each wrapped in `SurfaceSkeleton` — `SurfaceSkeleton App.tsx:2456` TradeView, `SurfaceSkeleton App.tsx:2501` Journal, `SurfaceSkeleton App.tsx:2523` LearnView, `SurfaceSkeleton App.tsx:2539` StrategyStudio, `SurfaceSkeleton App.tsx:2298` AutomationView |
 | 8 | Header → SurfaceSwitch | the destination set `App.tsx:2163`, list `SurfaceMenuList.tsx:42` |
 | 9 | App → AgentsView props | same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) `App.tsx:2604-2697` |
 | 10 | TradeView → TradeChatPanel | the dock, inside Trade `components/trade/TradeView.tsx:1115` |
@@ -477,10 +477,10 @@ card that forgets it was clicked offers a second journal row.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 262 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 267 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 262 anchors verified, and the gate
+   the gate's own output: these docs state 267 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -570,7 +570,7 @@ card that forgets it was clicked offers a second journal row.
    records the v1.0.20 TDZ crash as a splash hang. A page that dies before React
    mounts fails both gates, not just one.
 
-10. **The arrow table is 53 rows, and every citation in it is machine-checked.** An
+10. **The arrow table is 53 rows, and every citation in it resolves — but only 5 of the 53 also name the symbol they cite, and those are the rows whose CONTENT the gate can test. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently; 48 rows are line-resolved only.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
     resolves all 255 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
