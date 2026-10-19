@@ -1997,7 +1997,26 @@ Either way: a symbol whose span starts AFTER a citation cannot own it (that row'
 the previous row's), a symbol BEFORE it owns it, a crowded line with more than one of each
 abstains, and the reach controls must include an html fixture — every control written so far
 uses markdown backticks, where raw and stripped are the same string, so no existing control
-can see this bug. Until that html-arm control exists, do not trust a positional rule at all.
+can see this bug.
+
+**Attempted and reverted the same day, with the reason (so the next attempt starts here, not at
+zero).** Padded strip landed (`11bb0078`, scan byte-neutral at 253 unique / 539 references), then
+positional binding was implemented and measured: **5 symbol misses and 3 failing controls**, so it
+was reverted. The bug is in the dangling test, and it is a real design error worth naming: I used
+`citPos.every(c => c < symPos)`, i.e. "a row is dangling if SOME citation precedes its symbol".
+Section H's arrow rows are multi-citation — one row reads "`SYM-A path:a`, `SYM-B` at" — so a
+trailing `SYM-B` made the whole row dangling and the PREVIOUS row's symbol was pushed onto the
+current row's first citation. Every pairing shifted one row early:
+chatTurnRunner 929 got `createDebateMailbox` instead of `runSeatTurn`, 1006 got `planPanelTurn`
+instead of `createDebateMailbox`, 1018 got `send` instead of `planPanelTurn`, 784 got
+`runFullAnalysis` instead of `send`, and TradeChatPanel 547 got `MAX_PLANS_PER_RUN` instead of
+`runFullAnalysis` — five misses, all the same off-by-one, and the code is a dead giveaway that the
+rule is wrong rather than the docs. The correct predicate is per-citation, not per-row: a symbol
+owns the citations that follow it and carries to the next row ONLY IF it is the last span on the
+line and the line has no other unclaimed citation before it; multi-citation rows must be split
+into (symbol, citation) pairs by order within the line, which is what the span view already does
+for `SYM path:NNN` inside one span and what the line view still cannot do. Until that pairing is
+written, the boundary-fixed allowlist stays. Until that html-arm control exists, do not trust a positional rule at all.
 
 **A second hole, found while widening: the gate has never been able to see a citation to a
 deleted file.** `collect()` resolves each qualified path and `continue`s when nothing matches, so
