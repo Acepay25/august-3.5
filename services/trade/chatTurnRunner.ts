@@ -714,6 +714,10 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             usageCalls: outcome.usageCalls,
             answer: outcome.text,
             seats: 1,
+            rates: {
+                inputUsdPer1k: config.inputUsdPer1k,
+                outputUsdPer1k: config.outputUsdPer1k,
+            },
         });
         patch(e => ({
             ...e,

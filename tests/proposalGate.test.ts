@@ -106,6 +106,21 @@ describe('runGateScan', () => {
         expect(gate.reason).toContain('stopped');
     });
 
+    it('discards a fetch that answers after the turn was stopped', async () => {
+        // The market fetch has no signal of its own; the abort has to be
+        // re-checked when it resolves or a stopped turn gets an evaluated stamp.
+        let resolveFetch!: (value: GateInput) => void;
+        mockFetch.mockReturnValue(new Promise<GateInput>(resolve => { resolveFetch = resolve; }));
+        const c = new AbortController();
+        const pending = runGateScan(proposal(), [], c.signal);
+        c.abort();
+        resolveFetch({} as GateInput);
+        const gate = await pending;
+        expect(gate.status).toBe('unavailable');
+        expect(gate.reason).toContain('stopped');
+        expect(mockGate).not.toHaveBeenCalled();
+    });
+
     it('gives up on a scan that never answers', async () => {
         vi.useFakeTimers();
         try {

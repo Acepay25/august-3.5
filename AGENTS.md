@@ -174,7 +174,7 @@ competing for the machine.
 │                           #   imported by renderer, vite dev proxy AND electron main
 ├── types/                  # analysis, trade, provider, progress, message, learning …
 ├── utils/                  # See "Canonical single-source modules" below
-├── tests/                  # Vitest suites — 4665 tests in 471 files: 4665 pass in 471 and 0 skip across 0 wholly-skipped files. Read from vitest's own summary block 2026-10-20, after the trader-facing fix pass added the screenshot-attachment, symbol-scoped verdict, foreground-notification and plan-only-turn tests.
+├── tests/                  # Vitest suites — 4686 tests in 474 files: 4686 pass in 474 and 0 skip across 0 wholly-skipped files. Read from vitest's own summary block 2026-10-20, after the trader-facing fix pass added the screenshot-attachment, symbol-scoped verdict, foreground-notification and plan-only-turn tests, and the follow-up added the roster-group, cost, artifact-scope, harness-contract, abort and live-utility tests.
 └── electron/               # main.cjs + preload.cjs (NOT covered by tsc)
 ```
 

@@ -42,8 +42,6 @@ export interface PipelineMemoryContext {
     botMemoryContext: string;
     /** Analyst-audience notebook slice (stage budget: opening). */
     memoryFilesContext: string;
-    /** Moderator-audience notebook slice. */
-    moderatorMemoryContext: string;
     /** Analyst-audience notebook slice for the rebuttal rounds (stage budget:
      *  rebuttal). Built under the same runId as the opening slice. */
     rebuttalMemoryContext: string;
@@ -137,17 +135,12 @@ export const assemblePipelineMemoryContext = async (
             return contexts.join('\n\n---\n\n');
         } catch { return ''; }
     })();
-    // Analysts get the opening slice (independent read); the MODERATOR gets
-    // the verdict slice (full skill bodies, conflict flags, runner-up skills,
-    // similar trades) — the arbiter binds the decision, so it needs verdict
-    // depth even though its context bundle is assembled at send time. The
-    // collaboration-memory index (who the user is / how they want output) is
-    // prepended to BOTH — always loaded, like the notebook slice, so the
-    // seats tailor to the trader, not just the tape.
+    // Analyst seats get the opening slice (independent read). The verdict slice
+    // was built for a moderator that no longer exists — one model answers a
+    // send — so the second retrieval was a full notebook read nobody consumed.
     const profileMemoryIndex = buildProfileMemoryIndex();
     const withProfile = (ctx: string): string => [profileMemoryIndex, ctx].filter(Boolean).join('\n\n---\n\n');
     const memoryFilesContext = withProfile([getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst', 'opening', { runId, asOfMs, contextWindowTokens }), botMemoryContext].filter(Boolean).join('\n\n---\n\n'));
-    const moderatorMemoryContext = withProfile([getMemoryFilesContext(memoryQuery, loggedTrades, 'moderator', 'verdict', { runId, asOfMs, contextWindowTokens }), botMemoryContext].filter(Boolean).join('\n\n---\n\n'));
     // Rebuttal rounds re-enter the same seats, and until now they argued with
     // ZERO retrieved memory — the 400-char rebuttal budget existed with no
     // caller. Same runId as the opening slice on purpose: the ε-holdout is
@@ -201,7 +194,6 @@ export const assemblePipelineMemoryContext = async (
         pendingPattern,
         botMemoryContext,
         memoryFilesContext,
-        moderatorMemoryContext,
         rebuttalMemoryContext,
         memoryRetrieved,
         similarSetupsContext,

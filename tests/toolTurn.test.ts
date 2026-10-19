@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { streamChatWithDeskTools } from '../services/analysis/DeskToolsService';
 import { runToolTurn, type ToolTurnEvents, type ToolTurnRequest } from '../services/trade/toolTurn';
 
@@ -237,5 +238,40 @@ describe('the measured usage fold', () => {
             transport: { ...fixed().transport, onUsage: (u: { promptTokens: number }) => seen.push(u.promptTokens) },
         }));
         expect(seen).toEqual([40]);
+    });
+});
+
+/**
+ * A cost the provider config already carries must reach BOTH stores. The panel
+ * and the compare row read different ones: the ledger feeds Session Usage, and
+ * `runStats.costUsd` feeds the analysis card. Passing rates in only one owner
+ * leaves the other surface at "—" for a trader who configured prices.
+ */
+describe('the configured rates reach the cost stores', () => {
+    it.each([
+        'services/trade/chatSurfaceTurn.ts',
+        'services/trade/chatTurnRunner.ts',
+        'services/trade/automationTurn.ts',
+    ])('%s hands provider rates to the ledger', (path) => {
+        const src = readFileSync(path, 'utf8');
+        const start = src.indexOf('recordToolTurnUsage({');
+        expect(start, `${path} no longer calls recordToolTurnUsage`).toBeGreaterThan(-1);
+        const block = src.slice(start, src.indexOf('});', start));
+        expect(block).toContain('rates: {');
+        expect(block).toContain('inputUsdPer1k:');
+        expect(block).toContain('outputUsdPer1k:');
+    });
+
+    it('the pipeline writes the measured cost onto runStats', () => {
+        const src = readFileSync('hooks/useAnalysisPipeline.ts', 'utf8');
+        // There is a second runStats block for schedules; bind this to the desk
+        // row by its run id, not to the first `runStats:` in the file.
+        const runIdAt = src.indexOf('`desk-${streamingMessageId}`');
+        expect(runIdAt, 'the desk run id moved; update this binding').toBeGreaterThan(-1);
+        const start = src.lastIndexOf('runStats: {', runIdAt);
+        expect(start).toBeGreaterThan(-1);
+        const block = src.slice(start, src.indexOf('},', start));
+        expect(block).toContain('costUsd: estimateCostUsd(');
+        expect(block).toContain('promptTokens: toolTurn.usage.promptTokens');
     });
 });

@@ -267,6 +267,10 @@ export const runAutomationTurn = async (req: AutomationTurnRequest): Promise<Aut
         usageCalls: out.usageCalls,
         answer: out.text,
         coin: proposal?.symbol ?? undefined,
+        rates: {
+            inputUsdPer1k: req.config.inputUsdPer1k,
+            outputUsdPer1k: req.config.outputUsdPer1k,
+        },
     });
 
     const notices: string[] = [];

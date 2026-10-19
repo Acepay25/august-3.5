@@ -89,8 +89,12 @@ export const runPresentTrade = (ctx: PresentTradeContext, sink: PresentTradeSink
     // the plan, so the card appeared seconds later on a path that used to touch
     // no network at all. The LOG path awaits the same promise (`ensureStamp`),
     // which is where the cap actually has to bind.
+    let cancelled = false;
     void beginGateScan(planId, proposal, ctx.trades).then(gate => {
-        sink.setGate?.(gate);
+        // The abort handler below can delete the in-flight entry, but the
+        // promise it started still resolves. Drop that answer here: a late
+        // stamp must not resurrect a card the trader cancelled.
+        if (!cancelled) sink.setGate?.(gate);
     });
     if (sink.addDrawings) {
         const { drawings } = drawingsFromLevelTool(
@@ -118,7 +122,10 @@ export const runPresentTrade = (ctx: PresentTradeContext, sink: PresentTradeSink
     const stale = watching ? staleLevelsAtArm(plan, armPrice) : [];
     sink.armPlan?.(plan);
     sink.setProposal(proposal);
-    sink.onAbort?.(() => cancelGateScan(planId));
+    sink.onAbort?.(() => {
+        cancelled = true;
+        cancelGateScan(planId);
+    });
     // Planned R:R comes from utils/riskReward — the nearest target, not
     // whatever the model happened to list first. Reading takeProfits[0] here
     // made the receipt disagree with the card and the journal on any plan whose

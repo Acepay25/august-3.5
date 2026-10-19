@@ -123,9 +123,11 @@ const isBackedUp = (shape: string): boolean => isRawLocalStorageKey(shape) || is
 const PREFERENCES_TOUCH = /PreferencesService|getPreference(?:Object|Array)?\(|setPreference(?:Object|Array)?\(/;
 const ownerUsesPreferences = (path: string): boolean => PREFERENCES_TOUCH.test(readFileSync(path, 'utf8'));
 
-/** Only a WRITE claims ownership. A lone `getItem` of someone else's key must
- *  not be held to the raw list by the file that happens to read it. */
-const isWriteSite = (site: CallSite): boolean => site.method !== 'get';
+/** Only a SET claims ownership. A lone `getItem` reads someone else's key, and
+ *  a `removeItem` cleanup is deleting bytes rather than owning a store — neither
+ *  belongs on the raw export list. A cleanup loop that removes a list of dead
+ *  keys must not be mistaken for a store nothing backs up. */
+const isWriteSite = (site: CallSite): boolean => site.method === 'set';
 
 /**
  * The backlog the rule below exposes, NOT an endorsement.
@@ -362,6 +364,7 @@ describe('every raw-localStorage store is registered in ExportService', () => {
 
     it('registers every key whose owner writes localStorage directly', () => {
         const offenders = sites
+            .filter(isWriteSite)
             .filter(s => !isBackedUp(s.shape) && !isExempt(s.shape))
             // A key whose NAMESPACE is a parameter cannot be resolved here;
             // its file has to declare an allow-listed namespace to be readable.

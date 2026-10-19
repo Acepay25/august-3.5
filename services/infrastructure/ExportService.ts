@@ -737,7 +737,6 @@ const RESTORABLE_PREFERENCE_KEY_PREFIXES: readonly string[] = [
     'trade_sidebar_open_v1',
     'trade_tf_bar_v1',
     // Bots / agents / desk
-    'bots_v1_',
     'agents_bots_v1',
     'agents_groups_v1',
     'agent_threads_opened_v1',

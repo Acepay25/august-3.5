@@ -154,8 +154,10 @@ describe('context-window-scaled memory budget', () => {
 
         await assemblePipelineMemoryContext('BTCUSDT Short Family A setup watch', [], null, undefined, undefined, 8_192);
 
-        // Opening + verdict + rebuttal — all three notebook slices.
-        expect(spy.mock.calls).toHaveLength(3);
+        // Opening + rebuttal — the verdict slice was built for a moderator that
+        // no longer exists and was removed with it.
+        expect(spy.mock.calls).toHaveLength(2);
+        expect(spy.mock.calls.map(call => call[3])).toEqual(['opening', 'rebuttal']);
         for (const call of spy.mock.calls) {
             expect(call[4]).toMatchObject({ contextWindowTokens: 8_192 });
         }

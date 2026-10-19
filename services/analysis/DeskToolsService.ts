@@ -23,6 +23,7 @@ import {
     isDataUnavailable, MINIMAL_CLIP_NOTE, neutralizeHarnessNotes,
 } from '../../utils/harnessMarks';
 export { DATA_UNAVAILABLE_PREFIX, isDataUnavailable } from '../../utils/harnessMarks';
+import { HARNESS_CONTRACT_PROMPT } from '../../constants/prompts';
 import { executeForgedTool, confirmedForgedToolDefinitions } from '../tools/toolForge';
 import type { ChatMessage, ChatRequestOptions } from '../providers/GenericProviderService';
 import { sendChatTurn, streamChatRequest } from '../providers/GenericProviderService';
@@ -416,10 +417,9 @@ export const isRepeatGatedTool = (name: string): boolean =>
 
 export const clearDeskToolCache = (): void => {
     toolCache.clear();
-    // The artifact store is addressable only within the run that was handed the
-    // ids, so it is cleared with the cache it accompanies — never left holding
-    // bytes a future debate could resolve but should not.
-    clearToolArtifacts();
+    // Artifacts are NOT cleared here: this runs at the START of a turn, and a
+    // concurrent dock/Chat turn would lose the payloads its model is still
+    // paging through. Each turn clears only its own owner token when it ends.
 };
 
 /** Hard cap on one tool result's injected size — tool output goes into every
@@ -563,6 +563,7 @@ export const budgetToolContent = (
     content: string,
     tailReserve = 0,
     canReadBack = true,
+    artifactOwner = '',
 ): string => {
     const spillable = canReadBack && !isReadBackTool(name);
     let out = content;
@@ -671,7 +672,7 @@ export const budgetToolContent = (
         // merely clipped. `storeToolArtifact` refuses the read tool's own
         // output, which is what stops a seat paging into a receipt about a
         // receipt.
-        const id = spillable ? storeToolArtifact(name, content, visible) : null;
+        const id = spillable ? storeToolArtifact(name, content, visible, Date.now(), artifactOwner) : null;
         if (id) out += `\n${clipReceipt(id)}`;
     }
     return out;
@@ -2082,6 +2083,10 @@ export interface DeskToolContext {
      *  sees every call regardless of transport. An off-list name is refused.
      *  Absent/empty = unrestricted (legacy debate/analysis callers). */
     allowedTools?: string[];
+    /** This turn's artifact scope. Stored payloads are readable only by the
+     *  turn that produced them, and clearing this turn cannot delete another
+     *  turn's live payloads. */
+    artifactOwner?: string;
 }
 
 /** Market-data tools whose result may need the coin named in the transcript —
@@ -2616,6 +2621,8 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     String(args.id ?? ''),
                     Number.isFinite(offset) ? offset : 0,
                     limit,
+                    Date.now(),
+                    context.artifactOwner,
                 );
                 // Always ok:true-shaped text: a miss is DATA_UNAVAILABLE, the
                 // one sentinel vocabulary this file already teaches seats to
@@ -2944,7 +2951,7 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
         const withTail = STAMPED_TOOLS.has(call.name);
         const tail = (withTail ? packetStamps(call, context) : '') + pagingTail;
         const budgeted = budgetToolContent(call.name, content, tail.length,
-            spillReceiptAllowed(context.allowedTools));
+            spillReceiptAllowed(context.allowedTools), context.artifactOwner);
         // A failure sentinel must not be cached — that would freeze an
         // outage into the TTL even after the source recovers. Only the
         // whitelisted network reads cache at all (see CACHEABLE_TOOLS).
@@ -3258,6 +3265,8 @@ export async function runDeskToolLoop(params: {
      *  callback above carries human labels, so a caller that must know WHICH
      *  tool ran (was the tape read, or only a plan presented?) reads this. */
     onToolCall?: (name: string) => void;
+    /** This turn's artifact scope; see `DeskToolContext.artifactOwner`. */
+    artifactOwner?: string;
     /** Fires once per RESULT that carries a payload, so the caller can persist
      *  the real tool output behind the one-line digest the seat saw.
      *
@@ -3307,6 +3316,7 @@ export async function runDeskToolLoop(params: {
         getFormingCandle,
         onToolEvent,
         onToolCall,
+        artifactOwner = '',
         onToolPayload,
         onToolAction,
         speaker = '',
@@ -3565,6 +3575,7 @@ export async function runDeskToolLoop(params: {
                 formingCandle,
                 getLiveMarkPrice,
                 getFormingCandle,
+                artifactOwner,
                 // Enforce the seat's allow-list in the EXECUTOR, not just in
                 // what's offered: text-protocol seats can emit a tag for any
                 // tool, and these calls bypass the offer-time filter.
@@ -3738,7 +3749,14 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     onStreamReset?: () => void;
 }
 
-function withDeskToolsSystemPrompt(messages: ChatMessage[], nativeTools: boolean): ChatMessage[] {
+/**
+ * Add the desk-tool mandate to a turn's system prompt. The harness contract is
+ * inserted when the caller's prompt does not already carry it: the desk loop is
+ * one of the four live writers of a harness-authored user turn, so its seat has
+ * to be told whose words those are. Analysis sends already compose the contract
+ * and must not receive a second copy.
+ */
+export function withDeskToolsSystemPrompt(messages: ChatMessage[], nativeTools: boolean): ChatMessage[] {
     const block = `${DESK_TOOLS_PROMPT}${nativeTools ? '' : TEXT_TOOL_FALLBACK_PROMPT}`;
     const out = messages.map(m => ({ ...m }));
     const sysIdx = out.findIndex(m => m.role === 'system');
@@ -3746,14 +3764,15 @@ function withDeskToolsSystemPrompt(messages: ChatMessage[], nativeTools: boolean
         const prev = out[sysIdx].content;
         const prevText = typeof prev === 'string' ? prev : '';
         if (!prevText.includes('DESK TOOLS')) {
+            const contract = prevText.includes('HARNESS CONTRACT') ? '' : `${HARNESS_CONTRACT_PROMPT}\n\n`;
             out[sysIdx] = {
                 ...out[sysIdx],
-                content: `${prevText}\n\n${block}`.trim(),
+                content: `${contract}${prevText}\n\n${block}`.trim(),
             };
         }
         return out;
     }
-    return [{ role: 'system', content: block }, ...out];
+    return [{ role: 'system', content: `${HARNESS_CONTRACT_PROMPT}\n\n${block}` }, ...out];
 }
 
 /**
@@ -3886,7 +3905,11 @@ export async function* streamChatWithDeskTools(
         wake?.();
         wake = null;
     };
+    // One token per turn. A concurrent dock/Chat turn gets its own, so neither
+    // a read nor the end-of-run clear can touch the other's spilled payloads.
+    const artifactOwner = `turn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const loopPromise = runDeskToolLoop({
+        artifactOwner,
         config,
         messages: enriched,
         sendTurn: sendChatTurn,
@@ -3960,6 +3983,9 @@ export async function* streamChatWithDeskTools(
         if (loopSettled) break;
         await new Promise<void>(resolve => { wake = resolve; });
     }
+    // Release this turn's spilled payloads once the loop settles. Scoped to
+    // `artifactOwner` so a concurrent turn's artifacts survive.
+    void loopPromise.finally(() => clearToolArtifacts(artifactOwner)).catch(() => { /* `loop` below rethrows the real error */ });
     const loop = await loopPromise; // propagates the loop's error, if any
 
     if (loop.usedTools.length === 0 && loop.finalText.trim() && !streamedLive) {

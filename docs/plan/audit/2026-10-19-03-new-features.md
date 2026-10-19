@@ -372,3 +372,33 @@ LLM review calls and a macro calendar. **None is proposed here.** In particular:
   (replay) — and its first version deliberately does **not**: it replays the deterministic code.
 - **No macro calendar.** It is a data source, not a workflow, and it would put third-party
   economic-release data on the critical path of a trading decision.
+
+---
+
+## 11. The two new user-facing features
+
+**Added 2026-10-20** at the owner's request. The deep dives are in Report 1 §12.
+
+### N-21 — "Review all my skills" — one button, a verdict per skill, and a diff before anything changes
+
+| | |
+|---|---|
+| **User value** | The trader has dozens of learned skills and **no way to see which of them are actually working**: which never fire (a description that does not say WHEN), which are silently clipped at the 700-char recall cap, which have a malformed frontmatter, which shadow each other. Today that is only discoverable by reading the raw files. One button produces a per-skill verdict, and — for the ones that are wrong — a **proposed fix the trader accepts or rejects**. |
+| **Reuses** | `parseSkillMarkdown` (the parser) · `serializeSkill` (the serializer — a parse→serialize→compare round-trip is the format check) · `services/learning/skillDocument.ts` `parseSkillBody` / `projectSkillCard` (the section check and the clip count) · `skillFileNameFor` (the name check) · `utils/learningQueue.ts` (the proposal queue) · `components/learn/ActionApprovals.tsx` (the approval surface) · `services/learning/SkillCraftService.ts` (the model call that rewrites a description) · `services/learning/SkillEvalScheduler.ts` (the budgeted, scheduled precedent) |
+| **What it needs** | A new job with a deterministic first stage and an optional model second stage, and a button in `components/learn/SkillsCatalog.tsx`. **No new dependency, no new store, no new table.** |
+| **Effort** | **M** — the deterministic stage is **S**, the model stage is **M** |
+| **Risk** | **M** — a batch that rewrites skills can damage them. **The rule: the job proposes; the existing human gate applies.** One diff per skill; per-skill revert; the deterministic pass runs alone first. |
+| **Cohort / data** | Needs the trader's own skills (they exist from day one) and, for the model stage, a ready provider. **No closed trades needed** — this works on a brand-new profile. |
+| **Roadmap** | **NEW** — the *format* is already a documented Agent Skills port (`services/learning/SkillMemoryService.ts:411-431`); the *bulk review* is not in the corpus. See Report 1 §12.3. |
+
+### N-22 — "Still running" — the conversation rail shows where the model is thinking
+
+| | |
+|---|---|
+| **User value** | After E-45, a run keeps going while the trader looks at another conversation. **Unless the app says so, that reads as a hang.** The rail should carry a busy badge on the conversation that is still streaming, and the dock's own session list already tracks busy sessions. |
+| **Reuses** | `services/trade/chatStore.ts` (the store already tracks busy sessions — `beginRun`/`endRunOwned`, `:479`/`:493`) · `components/trade/TradeChatPanel.tsx:302` (*"unmounts, but the run keeps streaming into the store"*) · the conversation rail (`components/shell/SurfaceMenuList.tsx` / `components/chat/`) · `utils/runStatus.ts` — **the one module that owns the run-status vocabulary** (`AGENTS.md`: *"Never hardcode a status colour in a component"*) |
+| **What it needs** | A per-conversation busy flag surfaced from the store into the rail. The state exists; the surface does not. |
+| **Effort** | **S** once E-45 lands (it needs the per-conversation ownership E-45 introduces) |
+| **Risk** | **S** — but it must use `utils/runStatus.ts`'s vocabulary, not a new colour. |
+| **Cohort / data** | None — it is a live-state surface. |
+| **Roadmap** | **NEW** — and it is **the second half of E-45**: the run survives, so the app has to say so. |

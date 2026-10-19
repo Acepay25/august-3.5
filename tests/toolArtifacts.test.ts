@@ -190,13 +190,21 @@ describe('the store is a window, not an archive', () => {
         expect(readToolArtifact('ta-0001', 0, 10).ok).toBe(false);
     });
 
-    it('empties with the cache it belongs to', () => {
-        const out = budgetToolContent('get_funding', giant(9000));
-        const id = out.match(RECEIPT_RE)![1];
-        expect(readToolArtifact(id, 0, 10).ok).toBe(true);
+    it('is scoped to its turn: a cache clear cannot wipe a concurrent turn', () => {
+        // Two overlapping turns (dock + Chat) each get their own owner token.
+        // The cache clear at a turn START must not delete the other turn's
+        // live payloads, and an id from one turn is unreadable from the other.
+        const a = budgetToolContent('get_funding', giant(9000), 0, true, 'turn-a');
+        const idA = a.match(RECEIPT_RE)![1];
+        const b = budgetToolContent('get_funding', giant(9000, 'b'), 0, true, 'turn-b');
+        const idB = b.match(RECEIPT_RE)![1];
         clearDeskToolCache();
-        expect(artifactCount()).toBe(0);
-        expect(readToolArtifact(id, 0, 10).ok).toBe(false);
+        expect(artifactCount()).toBe(2);
+        expect(readToolArtifact(idA, 0, 10, Date.now(), 'turn-b').ok).toBe(false);
+        clearToolArtifacts('turn-a');
+        expect(readToolArtifact(idA, 0, 10, Date.now(), 'turn-a').ok).toBe(false);
+        expect(readToolArtifact(idB, 0, 10, Date.now(), 'turn-b').ok).toBe(true);
+        clearToolArtifacts();
     });
 
     it('refuses a payload too large to be worth keeping', () => {

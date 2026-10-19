@@ -29,7 +29,7 @@ Three streams, interleaved. **W** = a roadmap wave, **C** = a cleanup batch.
 | # | action | why it comes first |
 |---|---|---|
 | 0.1 | **Let the in-flight session land.** It is deleting the bot roster, the seat personas, the debate envelopes, `types/bot.ts`, `utils/teamRoster.ts` **and the whole Analyst Lens layer** (`services/ui/AnalystLensService.ts`, `services/ui/EnsembleAnalystService.ts`, `services/ui/TradingStyleDetector.ts`, `services/learning/lensMemory.ts`, `constants/prompts/lensRolePrompts.ts`, `types/lens.ts`, `utils/thinkingLens.ts`, `hooks/useCatalogReconcile.ts`, `hooks/useLensAndEnsembleConfig.ts` + 11 deleted test files). | **The cleanup manifest's own HOLD list is waiting on it.** `AnalystLensService` alone is 9 dead exports that cannot be judged until the change lands. Cleaning the lens layer now would be cleaning a moving target. |
-| 0.2 | **Re-anchor to the new HEAD and re-run the four sweeps**: the import graph, the export sweep, the localStorage/Preferences census, and the dead-path comment scan. | The clean-code pass was done against `6a41a9f7`. The in-flight deletion changes the orphan set, the dead-export set, **and** the store census. |
+| 0.2 | **Re-anchor and re-run the four sweeps** — the import graph, the export sweep, the localStorage/Preferences census, and the dead-path comment scan. **The new HEAD is `56639b4b`; but the working tree carries 30 unstaged changes on top, so re-run against the worktree once the in-flight work lands, not against `56639b4b` alone.** |
 | 0.3 | **Recover the previous audit's six markdown files from `508b691a`** to a durable location, and **do not delete `refs/cline/checkpoints/*`** until they are safe. | `git gc --prune=now` would destroy the only written record of the cost-model finding (G-01/G-02) and the `computeContractSize` finding (G-06). **This gets worse with time.** |
 | 0.4 | **Decide `docs/analysis/`'s fate** — this session's six reports, and whether the next session's go there too. The eslint ignore already exists (`eslint.config.js:26`). | The directory is already expected by the build. Leaving the decision open is how the previous generation ended up in four dangling commits. |
 | 0.5 | **Commit the lockfile fix** (1.0.30 → 1.3.0 + the `js-yaml` root block). One line. | It is the only *committed* state that is wrong about the manifest, and `npm ci` from a clean HEAD installs the 1.0.30-resolved set. |
@@ -95,11 +95,15 @@ the `app-flow.md` repair (§8.2 of Report 4). **Do it after 2.1**, because 2.1 f
 | # | bet | precondition |
 |---|---|---|
 | 4.1 | **E-19 — one plan object** | after W3.2 (one R:R formula) and W3.4 (the contract test) |
-| 4.2 | **E-05 → the ledger becomes honest** → **E-18** (the loop closes) | after 1.1 and 1.2 |
-| 4.3 | **E-24 — `electron/main.cjs` behavioural coverage** | after Phase 2 (so the CSP and the sender-frame guard are already in) |
-| 4.4 | **E-20 — the replay harness** | after W3.2 — it is the measurement instrument for it |
+| 4.2 | **E-37 (raise the evidence floors) + E-38 (the validity window) — MUST land with 4.3, not after it** | see §7.4: fixing the outcome loop first manufactures three-trade skills and two-trade vetoes, and the "net expectancy" claim is worthless while the denominator excludes `ENTRY_NOT_HIT` |
+| 4.3 | **E-05 → the ledger becomes honest** → **E-18** (the loop closes) | after 1.1, 1.2 **and 4.2** |
+| 4.3b | **E-35 — reconnect the deterministic skill enforcement** (`applyNotebookSkillsToAnalysis`, `predicateGate.ceiling`, the veto ledger) | after 4.2 — the hard veto must not be re-enabled before the floors are raised |
+| 4.3c | **E-40 — the journal's date semantics** · **E-39 — decide at `high` effort** · **E-03 — the cost model, at the APPROVED 5 bps taker / 2 bps maker with a "slippage not modeled" label** | after 4.3 (they need settled rows and recorded prompts to be measurable) |
+| 4.3e | **E-01 — fix the context: inject and record together, or neither.** **(1) inject the harness contract** (1,582 chars — the confidence ladder, the risk rules, the `HARNESS_TURN_MARK` convention); **(2) cut the retrieved context by default**; **(3) flip `recordInjections` to default-false** in the same change, or the ledger keeps recording skills the model never saw. | 0.4, and after 4.2 |
+| 4.3d | **E-24 — `electron/main.cjs` behavioural coverage** | after Phase 2 (so the CSP and the sender-frame guard are already in) |
+| 4.4 | **E-20 — the replay harness** (headline use case: **the deterministic baseline** — "has anyone asked whether the model beats a fixed rule?") | after W3.2 — it is the measurement instrument for it |
 | 4.5 | **E-23 — the notebook's recovery affordance** | **the only batch here with a data-migration risk.** Do it with a sidecar, never in place. |
-| 4.6 | **E-21 — break the notebook out of one blob** | after 4.5. **This is the one item where a bug loses the trader's own thinking.** |
+| 4.6 | **E-44 — break the notebook out of one blob** | after 4.5. **This is the one item where a bug loses the trader's own thinking.** |
 | 4.7 | **N-01 … N-20** (Report 3) | the **[DATA-GATED]** ones wait for 4.2 |
 
 ### Phase 5 — the things that need the owner, and the things that need a decision to be made
@@ -108,7 +112,7 @@ the `app-flow.md` repair (§8.2 of Report 4). **Do it after 2.1**, because 2.1 f
 |---|---|---|
 | 5.1 | **E-14 / the backup lists** (`approval_rules_v1`, the 5 restore-listed-but-not-RAW namespaces) | an **owner decision** on what should be in a backup. The repo's own test says *"worth a decision"* and the decision was never taken. |
 | 5.2 | **E-03's fee tier** | the trader's real numbers |
-| 5.3 | **E-21's notebook sharding** | a decision on whether one blob is acceptable |
+| 5.3 | **E-44's notebook sharding** | a decision on whether one blob is acceptable |
 | 5.4 | **The `fullscreen` branch, the two rails, the HUD wording, the 23 owner decisions** | the owner |
 | 5.5 | **The history rewrite** (52 MB of APKs) | a coordinated decision at a release boundary, with the remote branches deleted first |
 
@@ -151,18 +155,18 @@ Each has a **proposed default**, so that silence is not a blocker.
 |---|---|---|---|
 | **Q1** | **Does a trade outcome need a human click, or should the app record it automatically?** | It decides whether the entire learning loop can ever produce data. Every **[DATA-GATED]** feature in Report 3 waits on it. | **Automatic, with a provenance flag and a correction path — and a shadow month first** (resolve and show, do not record; report the disagreement rate). |
 | **Q2** | **Should the assembled context be sent, or should the assembly be removed?** | It decides whether the app's retrieval is worth its cost, and whether the hybrid packet ever reaches a model. | **Remove the assembly now; re-add deliberately, budgeted, and measured.** The pull path (`recall`, `get_notebook_map`, `read_memory`) already exists. |
-| **Q3** | **What is your actual fee tier and slippage?** | Without it the cost model can only carry an assumption, and every expectancy number in the app stays gross. | **Make it a setting**, defaulting to 0.05 %/side taker, with a visible **"gross"** badge when unset. Never hardcode an exchange rate. |
+| **Q3** | ~~**What is your actual fee tier and slippage?**~~ | — | ✅ **ANSWERED (owner, 2026-10-20): 5 bps taker / 2 bps maker, zero slippage, with a visible "slippage not modeled" label.** The fee tier is a trader setting; the slippage line is labelled, never a silent zero. |
 | **Q4** | **What should be in a backup?** | `approval_rules_v1` — the per-coin auto-apply policy — is on **neither** allow-list, and the repo's own test has said *"worth a decision"* since 2026-10-06. | **Put `approval_rules_v1` and the five restore-listed-but-not-RAW namespaces on the RAW list.** The quota argument against "widening for safety" applies to *shadow copies*, not to the trader's own policy. |
 | **Q5** | **Is the Analyst Lens feature staying?** | The in-flight tree is deleting it. Everything about it — 9 dead exports, 3 live prompt files, the `custom_lens_prompts` split read/write bug, `utils/thinkingLens.ts` — depends on the answer. | **Let the deletion land**, then delete the leftovers in one pass. A half-deleted feature is the worst state. |
 | **Q6** | **Is the Android gallery feature wanted?** | `GallerySaverPlugin.java` is **shipped in the APK** and reachable from the WebView bridge, and **no JavaScript calls it**. The app cannot save to the gallery at all. | **Wire it** — `TradingChart.tsx:1055` already produces the PNG bytes, so a "save chart snapshot" affordance is small — **or delete both sides.** Do not leave the Java half. |
 | **Q7** | **Where should the render-time `<think>` / `<JSON_PLAN>` strip live?** | `utils/messageDisplayText.ts` was the only one, and it is orphaned. New messages are clean; **historical** rows can still leak chain-of-thought into a bubble. | **Move the strip into the two row components** (`ChatTranscriptRow.tsx`, `ChatTranscriptList.tsx`), keep the file until that is done, then delete it. |
 | **Q8** | **Should old post-mortems and old debate transcripts stay readable?** (roadmap #21) | 25 read accesses across 17 files still read them, and the guard returns null for every post-2026-10-18 trade. | **Keep them readable.** The cost is a read path that returns nothing for new rows; the alternative is a data loss the trader did not ask for. |
 | **Q9** | **How many minds should answer "Full analysis"?** (roadmap #19) | It decides whether the analysis branch is one seat or several — and therefore whether the harness contract and the analyst persona ever reach a trader-facing answer. | **One seat, tool-driven.** The product framing says the agent proposes and the user decides; a second seat adds a prompt and a cost without adding a decision. |
-| **Q10** | **Is `docs/analysis/` a live location or scratch?** | The eslint ignore already treats it as scratch; the previous generation's reports live in four dangling commits and one `git gc` from being lost. | **Make it live and tracked** — with this session's six reports as the first entries — **and commit the archive** rather than moving it. |
+| **Q10** | ~~**Is `docs/analysis/` a live location or scratch?**~~ | — | ✅ **ANSWERED (owner, 2026-10-20): scratch.** The eslint ignore is right, the directory is un-tracked on purpose, and the plan lives at **`docs/plan/`** — tracked, indexed from `AGENTS.md` and `README.md`. The previous generation's reports are protected by the branch **`archive/prior-audit-2026-10-18`**, so `git gc` can no longer prune them. |
 | **Q11** | **Should the history be rewritten to drop the 52 MB of APKs?** | They are in the first commit and in every clone. | **Not now.** Delete the merged branches first, then take the decision at the next major version boundary. A force-push across four remote branches is not a cleanup batch. |
 | **Q12** | **Is the 1-second trade-surface clock needed, and is the root's 60 Hz re-render acceptable?** | They are the two largest render costs and both are the trader's felt experience. | **Move the clock to a leaf; move the transcript off the root.** Measure before and after, and if the numbers say it does not matter, say so and keep the code simple. |
 | **Q13** | **Do the old pre-2026-10-18 trades count as evidence for the calibration ledger and the provider ranking?** | Their `planId` is absent (`R-214`), and their verdicts were produced by a gate that no longer exists. | **Count them for history, not for calibration.** The calibration ledger needs rows whose gate and prompt version are known. |
-| **Q14** | **Which four tracked documents may be deleted?** (roadmap, 13 days open) | `docs/plans/` has 20 files, 4 slated for deletion or archival since 2026-10-07, and *"a deletion of a tracked file is a commit and yours to approve"*. | **Archive, do not delete.** An archive is recoverable and a deletion is not. The 18 files go to `docs/archive/` with a README that says a line number there points at a tree that no longer exists. |
+| **Q14** | ~~**Which tracked documents may be deleted?**~~ | — | ✅ **ANSWERED AND EXECUTED (2026-10-20): 18 plan documents were DELETED, not archived.** The rationale and the rescued content are in Report 4 §14 and the register §2–§3. **The deletions are staged, not committed** — one `git revert` undoes them. The dated history ledger (`docs/plans/debate-deletion-status.md`) was **kept**, because `scripts/check-flow-doc-anchors.cjs:44` scans it. |
 
 ---
 
@@ -303,3 +307,154 @@ contract — and then the loop closes, and the app becomes the operator it is tr
 
 **Stop here.** The reports are delivered. Nothing has been cleaned, nothing has been built, and
 nothing in the repository was modified except these six files. Awaiting approval.
+
+---
+
+## 7. Cross-check against the previous audit — **does the current plan contradict it?**
+
+**Short answer: no. There is no contradiction in substance.** Every one of the previous review's
+recommendations maps onto something in this plan, and where both audits cover the same ground they
+agree. **There is one real divergence — a default, not a plan** — and **sixteen findings and nine
+recommendations the previous review had that my first draft did not.** All of them are now in the
+reports (Report 2 §3C), and **all sixteen were re-verified at the current HEAD (`69c4aa33`)**.
+
+**The source:** `docs/analysis/06-independent-review-2026-10-18.md`, 58,715 B, 910 lines,
+recovered from the orphan commit **`508b691a`** (reachable only via
+`refs/cline/checkpoints/session_1792326571064_z70jp/*` — **§8.1 of the index: this file is one
+`git gc` from being lost, and it is the more valuable of the two documents the previous audit
+produced.**)
+
+### 7.1 Every prior recommendation, mapped
+
+| prior | mine | verdict |
+|---|---|---|
+| **QW1** settle PENDING rows without a human click | **E-18** | **SAME, and theirs is cheaper.** They propose a fifth sibling on the existing 15-minute heartbeat (`hooks/useLearningHeartbeat.ts:57-67`), `settledBy: 'auto'`, first-writer-wins, settling silently. I proposed automatic resolution with a provenance flag, a correction path, and a shadow month. **Their version is S/M effort against my L, and it reuses a heartbeat that already exists.** I am adopting their mechanism. **Not a contradiction — a refinement in their favour.** |
+| **QW2** give presented plans a validity window | **E-38** (new) | **I MISSED IT.** Now added: `validityDurationMinutes` is declared, transformed and read, but **never set** — so `ENTRY_NOT_HIT` is never written and the denominator is wrong. |
+| **QW3** add `netR` and a configurable fee | **E-03** | **SAME.** They name the owner (`utils/netRiskReward.ts`) and the formula; I name the field and the setting. **Compatible.** Their `netBreakEvenR` and "charge funding only when the hold crosses a funding boundary" are details I did not have. |
+| **QW4** put a size on the card and the row | **E-12** + **N-08** | **SAME.** Their "**sizing downgrade-only** — never up-scale on model confidence" is a rule I did not state. Adopted. |
+| **QW5** put the trading contract back in the live prompt | **E-01** | ⚠️ **THE ONE DIVERGENCE — and it is a default, not a plan.** See §7.2. |
+| **QW6** decide at `high` effort; stop advertising an unsent temperature | **E-39** (new) | **I MISSED IT.** `EFFORT_BY_TASK.chat = 'low'` for the one output that matters, and the transport omits temperature on thinking-enabled models. Now added. |
+| **QW7** normalise target order at the parse boundary | **E-02** | **SAME goal, different mechanism — and mine is the more robust.** They sort `takeProfits` by distance at the parse boundary (so index-0 == nearest); I unify the *formula* so one canonical computation is read by the card, the gate, the clamp and the drawings label. **Sorting leaves two formulas alive; unifying removes one. Mine supersedes theirs, and it also covers `ScalpDetectionService`'s second copy, which sorting would not.** |
+| **QW8** apply the predicate ceiling | **E-35** (new) | **I MISSED IT.** `predicateGate.ceiling` is computed and dropped. Now added — and it is the same disconnection as F-01, one layer deeper. |
+| **QW9** raise the evidence floors before outcomes arrive | **E-37** (new) | **I MISSED IT — and it is a hard dependency of E-18.** `MIN_SAMPLE_FOR_VETO = 2` can zero a real setup. Now added, and sequenced **before** E-18. |
+| **QW10** delete/quarantine the dead prompt corpus, fix the stale copy | Report 4 **Batches 1 and 5** | **SAME.** |
+| **M1** decide the context policy — inject or delete | **E-01** | **IDENTICAL ITEM** — theirs names the same two options. |
+| **M2** make the gate refuse, not just cap | **E-43** (new) | **I MISSED IT.** The `minEdge` refusal. Now added. |
+| **M3** record what the model saw | **E-05** | **SAME — same name, same idea.** |
+| **M4** align the R:R definition with the ladder | **E-02** + **E-34** | **SAME.** |
+| **M5** fix per-model weighting before it is re-wired | **E-04** | **SAME.** |
+| **M6** fix the journal's date semantics | **E-40** (new) | **I MISSED IT.** `LoggedTrade.timestamp` is the write time; every dashboard measures confirmation time. Now added. |
+| **B1** the daily candidate / shadow log | **E-43** + **N-04/N-05/N-20** + **E-35**'s decline | **RELATED, and their B1 is UPSTREAM of mine.** Their B1 is the *data substrate* — one row per candidate, taken and not taken. Mine are *surfaces* for the trader. **They are compatible and theirs is the precondition.** |
+| **B2** exit-model replay | **E-20** | **SAME, and more specific.** Their B2 is the label (`exitModel: 'blended' \| 'single' \| 'breakeven' \| 'trail'`) plus the study. Adopted into E-20. |
+| **B3** regime routing, measured | — | ⚠️ **SCOPE, NOT DISAGREEMENT.** The brief **excluded** regime routing. Their B3 proposes it — but their own text says *"doing it before B1 is fitting noise"* and *"Risk high if done early"*. **Their sequencing already agrees with excluding it for now.** Not carried forward. |
+| **B4** deterministic baseline | **E-20** | **I MISSED THE FRAMING, and they have the better one.** *"Has anyone asked whether the model beats a fixed rule?"* — for every settled candidate, compute what *"trade every `scan_setups` signal with the same SL/TP"* would have returned. **If the deterministic baseline wins, that is the most important thing the app can tell its user.** Adopted as **E-20's headline use case.** |
+| New features: `minEdge`, model-stated probability, `decline_trade`, liquidation-buffer warning | **E-43**, **E-35**, **E-38**, **E-37** | **I MISSED all four.** The **model-stated probability** (add an optional numeric `probability` to the `present_trade` schema so calibration is on a number, not a three-word label) is the one I am **not** carrying forward as written — it conflicts with the app's deliberate design (`AGENTS.md`: the number is *derived from the word* on today's path) and with my E-19. **Carried as a note, not a proposal.** The other three are now **E-43**, **E-35** (the decline), and **E-37** (the buffer). |
+
+### 7.2 The one divergence, in full
+
+**We agree on the decision; we differ on the default.**
+
+| | |
+|---|---|
+| **Their default (QW5 + M1a)** | inject `enhancedPrompt` on the pipeline path, naming the block it displaces under the existing zero-sum packet budget |
+| **My first default (E-01), superseded** | ~~cut the assembly first, then re-add deliberately, budgeted and measured~~ — **this was the stale half; see the row below** |
+| **Their M1b** | delete the fetch and the assembly, and rely on tools |
+| **✅ THE ONE RECOMMENDATION, now the same everywhere** | **Inject and record together, or neither.** **(1) Inject the harness contract** into the P1/P2/P3 system prompts — **1,582 chars**, carrying the **confidence ladder**, the **risk rules** and the **`HARNESS_TURN_MARK` convention**, the only text in the app that tells a seat which words are the trader's and which are the app's. It closes the C-5 contradiction immediately, where the mark is used in the user role and explained nowhere. **(2) Cut the retrieved context by default** — the expensive part of `enhancedPrompt` is the *retrieved context*, not the contract, and the pull path (`recall`, `get_notebook_map`, `read_memory`) already exists. **(3) Flip `recordInjections` to default-false in the same change** (`services/learning/MemoryRetrievalService.ts:976-981`), or the ledger keeps recording skills the model never saw while you decide. |
+
+**This is not a contradiction between the two audits. It is one audit naming a third option the other did not consider, and the resolution is in Report 2 §3C.1.**
+
+### 7.3 The sixteen findings I did not have — all re-verified at HEAD
+
+| # | finding | verified at `69c4aa33` | now in |
+|---|---|---|---|
+| 1 | **`applyNotebookSkillsToAnalysis` has no production caller** — the hard `avoid` veto, the candidate cap and the confidence downgrade are disconnected | ✅ definition at `SkillMemoryService.ts:3494`; every call site in `tests/` | E-35 |
+| 2 | **`VetoLedgerService.recordVeto` has no production caller** — the ledger is read, never written | ✅ definition `:90`; seven test call sites | E-35 |
+| 3 | **`MIN_SAMPLE_FOR_VETO = 2`** — a two-trade sample can zero a real setup | ✅ `SkillMemoryService.ts:385` | E-37 |
+| 4 | **default leverage is 100×**; the liquidation buffer is in the unreachable module | ✅ `utils/conversationUtils.ts:6` | E-37a → E-19 note |
+| 5 | **`LoggedTrade.timestamp` is the write time**; every dashboard measures confirmation time | ✅ `useTradeLogging.ts:284` vs `:307` | E-40 |
+| 6 | **no feature snapshot on the row** — `marketConditions` written as literal dashes | ✅ `proposedTrade.ts:160-162` | E-12 note |
+| 7 | **default reasoning effort for a trade decision is `low`** | ✅ `reasoningControls.ts` `EFFORT_BY_TASK.chat` | E-39 |
+| 8 | **temperature is not what is configured** — omitted on thinking-enabled models | ✅ `chatSurfaceTurn.ts:265`, `automationTurn.ts:198`, `providerRequestPolicy.cjs:180-185` | E-39 |
+| 9 | **no prompt caching** — every tool round re-sends the system prompt, 30 schemas and every prior result | ✅ no `cache_control` anywhere in `services/providers` or `shared` | E-30 |
+| 10 | **no HOLD / NO_TRADE outcome** — a declined plan leaves no object | ✅ `types/enums.ts:9-15` | E-35 (decline) |
+| 11 | **`validityDurationMinutes` is never set** → `ENTRY_NOT_HIT` never written → the denominator is wrong | ✅ `schemas/tradeAnalysis.ts:218,468`; `ScalpDetectionService.ts:86`; `useTradeLogging.ts:301` | E-38 |
+| 12 | **`OutcomeAutopilotService` comment says "60s loop"; the constant is 20 s** | ✅ `:7` vs `:85` | Report 4 §13 |
+| 13 | **`predicateGate.ceiling` is computed and never used** | ✅ `skillPredicateGate.ts:78,200` | E-35 |
+| 14 | **the row records no feature snapshot / no prompt** — `runStats.promptVersion` is never written, and the A/B lane has no caller | ✅ `useTradeLogging.ts:355`; `PromptOverrideService.ts:24` | E-05 (already) |
+| 15 | **spot fallback can silently feed perp analysis** — the gate and the predicate consume whatever came back | ✅ `KlineService.ts:10-13`; `HybridIntelligenceService.ts:908-910` | E-33 |
+| 16 | **Monte Carlo assumes its own volatility** when the model omits `atr` — 2 × stop distance | ✅ `HybridIntelligenceService.ts:1514-1531` | E-33 (adjacent) |
+
+**And one prior claim that does NOT verify:** `constants/prompts/analysisPrompts.ts:299` —
+*"Family C … Highest win rate (~86 %)"*. **Not found** — the file is 190 lines at HEAD and a search
+for `win rate` across `constants/prompts/` returns zero hits. **Not carried forward.**
+
+### 7.4 What this changes about the recommended order
+
+**One dependency is now explicit and it was missing:** **E-37 (raise the evidence floors) must land
+BEFORE E-18 (fix the outcome loop).** Fixing the outcome loop without raising the floors
+manufactures confident nonsense from three-trade clusters and two-trade vetoes, and then acts on
+it. The prior review called this *"the 'do it in the same release' dependency"*; it is a **same-release
+dependency, not a same-release convenience.**
+
+**And E-38 (the validity window) must land with E-18**, because the "net expectancy" claim E-18
+enables is worthless while the denominator excludes the setups that never triggered.
+
+### 7.5 The honest summary of the relationship between the two audits
+
+| | previous audit (2026-10-18) | this audit (2026-10-19) |
+|---|---|---|
+| **method** | read the live profile (decoded leveldb), traced the trading logic, 910 lines | full-repo static sweep, 5,064 lines, 1,018-file import graph, gates run in a throwaway copy |
+| **its unique strength** | **it read the trader's actual data** and found the n = 0 outcome corpus, the 3 real plans, and the 100× leverage. **No static audit can find that.** | |
+| **its unique strength** | | **it found the two-Schema split, the store census, the prompt/token accounting, the ratchets, the security posture and the dead-code class** — none of which the prior audit attempted |
+| **overlap** | 16 findings in common, all re-verified and **all still standing** | |
+| **net** | 16 findings + 9 recommendations the prior audit had that this one did not | 9 items the prior audit did not have |
+| **contradiction** | **none** | **none** |
+
+**⇒ Together they are one audit.** The prior document's most important content — the live-data
+findings and the nine missing items — is now merged into this plan and re-verified against a tree
+162 commits newer. **And both documents still live only in unreachable commits, unless this
+session's reports are committed.**
+
+---
+
+## 8. The three new features, in the order
+
+**Added 2026-10-20.** The deep dives are in Report 1 §12; the proposals are Report 2 §3D and
+Report 3 §11. The order below is by **dependency**, and it interleaves with Phases 0–4 above.
+
+### Where they land
+
+| phase | new item | why here |
+|---|---|---|
+| **Phase 1** (cheap wins) | **E-47a** — accept `SKILL.md` as a filename, add a `version:` key | **S**, no behaviour change, and it is the *portability* half of the convention. A Claude/Hermes skill drops in and works. |
+| **Phase 1** | **E-49 — rank the 30-slot index** (usable trigger first, `confirmed` before `candidate`, `retired` out, audience-filtered). **S**, and it is what makes repairing the library actually reach the model. | after E-48 stage 1 has shown which skills are dormant |
+| **Phase 1** | **E-48 stage 1** — the deterministic "review all my skills" pass | **S**, and every function it needs already exists. It is a **diagnostic**, and it should land before anything rewrites a skill, so the trader can see the baseline first. |
+| **Phase 2** | **E-45** — per-session run ownership for the Chat surface | **M**. It is independent of the cleanup and of the cost model, and it is the feature the owner asked for. It should land *before* N-22, which depends on its per-conversation ownership. |
+| **Phase 2** | **E-47b** — a per-skill `category:` key and a category view | **M**. |
+| **Phase 3** | **E-45b = N-22** — the "still running" badge on the conversation rail | **S**, and it needs E-45 first. **Ship it with E-45, not after** — a run that survives without a visible indicator reads as a hang. |
+| **Phase 3** | **E-48 stage 2** — the model-assisted repair, as **proposals** through the existing queue | **M**, and it needs E-48 stage 1 to have run, so the trader can compare the report to the proposal. |
+| **Phase 4** | **E-46b** — the `compatibility` block (`requiresTools` / `requiresEnv` / `platforms`) | **S**, and it needs the skills to be reviewed first, so the block describes what the skill actually needs. |
+| **Phase 4** | **E-46a** — level-3 sub-resources (`references/`) | **L**, and it is **the only item in the whole plan where a bug can lose the trader's own thinking.** It must land **after** E-48 stage 2 exists, so a broken split is recoverable by re-running the review. |
+
+### The dependency that matters most
+
+```
+E-48 stage 1 (diagnose)  →  E-48 stage 2 (propose fixes)  →  E-46a (level-3 resources)
+        S                        M                              L
+```
+
+**Do not build level-3 resources before the review job exists.** A skill split into a card plus a
+`references/` note is a **storage-shape change to the one store the app cannot regenerate**; the
+review job is the safety net that finds a broken split. Building the split first means a bug
+truncates a procedure with no way to notice.
+
+### Two things these features do **not** do
+
+- **They do not place an order, write to an exchange, route on regime, revive the debate engine, or
+  add an LLM review call to a live trading decision.** E-48's model stage is a **one-off batch over
+  the trader's own library**, opted into, capped, and estimated before it starts — the same shape
+  as the candidate log the owner already approved.
+- **They do not change the skills format.** The format is **already** a documented Agent Skills port
+  (`services/learning/SkillMemoryService.ts:411-431`), with the spec's two required fields, a
+  two-face split so a spec-only file loads, and progressive disclosure at two of three levels. **E-46
+  and E-47 close the remaining gaps; they do not redesign what works.**

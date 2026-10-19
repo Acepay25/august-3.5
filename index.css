@@ -294,8 +294,7 @@
 }
 
 /* The single dial every `text-ui-*` role is measured from. The 2026-10-10
-   redesign (docs/plans/redesign-plan-claude-chatgpt-haze-2026-10-10.md) moved
-   the default from Minara's 14px to 16px: 703 of ~1,500 type sites sat on the
+   redesign moved the default from Minara's 14px to 16px: 703 of ~1,500 type sites sat on the
    two smallest steps, and the ramp is offset-based off this one var. Override
    it here (or per subtree) and every labelled role moves together; the
    hard-coded `text-[Npx]` sites will not, which is the argument for keeping

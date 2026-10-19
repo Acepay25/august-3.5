@@ -6,7 +6,7 @@
 security, reliability, performance, UX, quality gates.
 
 Labelling: **[Verified live]** = measured; **[Verified by code reading]** = `file:line`;
-**[Unverified — needs X]** = what would settle it. See `2026-10-19-00-index-and-method.md` §0.6.
+**[Unverified — needs X]** = what would settle it. See `audit/2026-10-19-00-index-and-method.md` §0.6.
 
 ---
 
@@ -1122,6 +1122,7 @@ lost in a cleanup.
 | **F-01c** | **HIGH** | **The gate injection is a hard-coded empty string.** `const gateInjection = '';` at `useAnalysisPipeline.ts:1138` — the whole "GATE KEEPER: Two-Stage Gate Scan" block (`:1113-1150`) computes nothing, and the `devLog('[GateKeeper] Gate constraints injected into prompt')` at `:1148` can never fire. | `useAnalysisPipeline.ts:1138` |
 | **F-03** | **Med-High** | **`approval_rules_v1:<user>` is on neither allow-list** — on web it is exported and then refused on import; on native it is neither exported nor restored. It gates **every auto-apply**. The repo's own test says *"worth a decision"*; the decision was never taken. | §2.6 F-04; `utils/approvalInbox.ts:46`; `ExportService.ts:758-760` |
 | **F-10** | **Med-High** | **The analysis prompt never reaches a trader-facing answer.** `analyzeTradingView` has exactly one production caller — the skill-eval scheduler. `analyzeTradingViewWithTransientRetry` has zero. The harness contract, the analyst persona, the R:R rules and the memory-enforcement prompt reach a model **only in the skill-eval harness**. | `GenericAnalysisService.ts:289`; `SkillEvalScheduler.ts:284`; `useAnalysisPipeline.ts:228-254` |
+| **F-10b** | **HIGH** | 🔴 **The 986-line validation gate has ZERO production callers** (verified 2026-10-20). `grep 'runValidationGate\|TradeValidationGate'` over every non-test file returns only the definition and **two comments in other files offering to feed it** (`services/analysis/EntryTimingService.ts:588`, `services/backtesting/StopLossOptimizerService.ts:332`). Only the narrower `GateKeeperService` is live, via `services/trade/proposalGate.ts`. **⇒ The product's "deterministic code checks" half is not connected.** This makes F-11 a decision (wire it, or retire it), not a refactor. See Report 4 §15.2. |
 | **F-11** | **HIGH** | **The validation gate computes R:R from `takeProfit[0]`** while the card, the journal and the probability clamp use the **nearest** target. On an out-of-order target list a 1:1 plan can be **gated as 2:1** while the clamp applies the 1:1 band. This is exactly the drift `utils/riskReward.ts` was written to end, and the gate was never migrated. | `TradeValidationGate.ts:589` → `AccuracyValidationService.ts:196-222` vs `utils/riskReward.ts:48` → `utils/analysisUtils.ts:1272-1278` |
 | **F-12** | **Med** | **A second R:R implementation inside the same gate run** — `services/analysis/ScalpDetectionService.ts:178` and `:236`, both index-0, called at `TradeValidationGate.ts:889` and `:899`. The file's own "never wired in" comment (`:160`) is stale. | see left |
 | **F-13** | **Med-High** | **There is no cost model anywhere.** A repository-wide search for `slippage|takerFee|makerFee|commission|costBps|feeRate` finds only a *warning string* (`ScalpDetectionService.ts:189`), a *comment* (`ReinforcementSignalService.ts:50`) and the `netR` accumulator in `SkillMemoryService.ts`. **Every R in the journal, every win rate, every calibration bucket and the whole skill ledger is gross.** Note that `netR` is a misleading name: it is the **sum of realized R multiples**, not net of costs. | §7.4 below |
@@ -1883,3 +1884,364 @@ documentation.** See Report 4 §4.1.
 | **F-38** | **Info** | `window-state.json` is written non-atomically (harmless) |
 | **F-39** | **Info** | `playwright.config.ts` sets `reuseExistingServer: true` — a stale dev server on :3000 would be silently reused (a possible false green) |
 | **F-40** | **✅ positive** | **No filesystem IPC, no `path.join` with user input, a sound `app://` traversal check (including the Windows `%5c` bypass), a real shared SSRF/redirect policy with per-hop re-validation, no credential ever logged, atomic SQLite writes, a read-once notebook cache, zero snapshot tests, and a 3-of-23 eslint suppression profile.** |
+
+---
+
+## 12. Two feature deep dives
+
+**Added 2026-10-20** at the owner's request: (a) *"the model should not cancel its output and keep
+working even though I switch tabs or go to the skills or chat"*, and (b) *"how does Hermes format
+its skills, and can August's skills work that way"*.
+
+Both were read against the current source. **The first one turned out to be mostly built already —
+and the part that is missing is a contradiction inside one file. The second one turned out to be
+mostly built already too: August's skill format IS a deliberate port of the Agent Skills spec,
+and the code says so in a comment.**
+
+### 12.1 Deep dive — "keep generating until it's done"
+
+#### 12.1.1 What already works, and was deliberate
+
+| mechanism | evidence |
+|---|---|
+| the dock's session state is **hoisted out of React** "so an in-flight answer survives a surface switch" | `services/trade/chatStore.ts:1-8` — *"The trade surface is mounted only while its tab is active, so a plain `useState` panel would unmount (and its unmount-cleanup abort) the moment the user glanced at the Journal — the stream died mid-sentence."* |
+| the store owns **per-session AbortControllers** "so switching tabs never aborts another session's run — only an explicit Stop or deleting a session does" | `services/trade/chatStore.ts:10-11`; the map at `:84`; `beginRun` `:479`; `endRunOwned` `:493` |
+| the dock panel has **no unmount-abort, on purpose** | `components/trade/TradeChatPanel.tsx:696-697` — *"NOTE: no unmount-abort on purpose. Switching to another surface tab unmounts this panel; the run must keep streaming into the store so…"* |
+| the surfaces really do unmount on switch (so this had to be solved) | `App.tsx:2312` `{surface === 'trade' && (…)}`, `:2357` `{surface === 'journal' && (…)}`, `:2379` `{surface === 'learn' && (…)}` |
+| every run-owning hook is **App-level**, so a surface switch cannot unmount it | `useAnalysisPipeline` (App.tsx), `useBotMailbox` (`App.tsx:94`, `:700`, `:1086`), `useAgentGroups` (`App.tsx:1065`) |
+| the bot and room runs have **no unmount-abort at all** — only a user-facing cancel | `hooks/useAgentGroups.ts:117-124` `cancelRun`; `hooks/useBotMailbox.ts` has no abort-on-unmount at all |
+| a surface switch **binds a chat session**, it does not change the conversation | `App.tsx:375-378` `openChartAi` → `chatStore.bindConversation(activeConversationId)`; `chatStore.ts:362-389` — it binds a *session* to a conversation and returns a session id. The app's `activeConversationId` is a separate value owned by `useConversations`. |
+
+**⇒ Switching tabs, switching to the Skills surface, and switching to the Chat do NOT cancel a
+run. The dock keeps streaming into the store while the panel is gone and the text resumes on
+screen when you come back.**
+
+#### 12.1.2 What does cancel — and the contradiction that makes one of them a defect
+
+Three paths abort a run:
+
+| # | path | evidence |
+|---|---|---|
+| 1 | **switching conversation** | `hooks/useAnalysisPipeline.ts:351-367` — an effect on `activeConversationId`: `analysisAbortController.current?.abort(); analysisAbortController.current = null; analysisConversationIdRef.current = null; analysisInFlightRef.current = false; steeringQueueRef.current = []; setLoadingMessage(null); setIsAnalysisInProgress(false); setAnalysisSteps([]);` |
+| 2 | **new / load / delete a conversation** | `hooks/useConversationHousekeeping.ts:56`, `:67`, `:105`, `:116` — each calls `handleCancelAnalysis()` |
+| 3 | **switching profile (user)** | `hooks/useUserProfileLoader.ts:207` (`resetAppState` → `handleCancelAnalysis()`), `:272` |
+
+**Path 1 is a defect, not a policy — because the same file already contains the machinery for the
+behaviour the user is asking for, ~340 lines away:**
+
+> `hooks/useAnalysisPipeline.ts:691-693` — *"Bind every async message write to the conversation
+> that started the request. **This remains correct even if the user switches conversations before a
+> provider response or stream chunk arrives.**"*
+
+That is `updateRequestMessages` (`:695-703`) writing into `requestConversationId` (`:694`). **The
+run was designed to survive a conversation switch and land its answer in the conversation it was
+typed in.** The effect at `:351-367` kills the run the instant `activeConversationId` changes —
+before that machinery can ever be used. The comment at `:359-361` even assumes the abort: *"the
+queue is memory, not an outbox. Leaving them would drain into the WRONG conversation **when the
+abort settles**."*
+
+#### 12.1.3 The two chat paths do not behave the same
+
+| path | who runs it | run ownership | survives a conversation switch? |
+|---|---|---|---|
+| **the dock** (P2) | `components/trade/TradeChatPanel.tsx:57,58,85` → `services/trade/chatTurnRunner.ts` | **per session** — `chatStore.beginRun(sid, controller)` at `chatTurnRunner.ts:850`, `:1153`, `:1196`, released by `chatStore.endRunOwned(sid, controller)` (`:493`), which only clears if the controller is still the owner | **YES** — and another session can run concurrently |
+| **the Chat surface** (P1) | `services/trade/chatSurfaceTurn.ts:230` via `hooks/useAnalysisPipeline.ts:1276` | **one global** `analysisAbortController` ref (`:327`) — one run at a time, globally | **NO** — any conversation change kills it |
+
+`chatStore.beginRun` is called **only** from `chatTurnRunner.ts` — the Chat surface's run is not in
+the store's per-session map at all.
+
+#### 12.1.4 The proposal
+
+**E-45 — give the Chat surface the dock's per-session ownership, and stop aborting on a
+conversation switch.**
+
+1. **Own the run per conversation.** Replace the single `analysisAbortController` ref with a
+   conversation-keyed map — or simply register the Chat surface's controller with
+   `chatStore.beginRun(sid, controller)` / `endRunOwned`, which already implements the
+   owner-checked release (`chatStore.ts:493`).
+2. **Stop aborting in the `:351-367` effect.** It should *move the UI*, not kill the run: the
+   loading message, the step tracker and the in-progress flag become **per-conversation**, so
+   switching conversations shows *that* conversation's state rather than clearing it. The steering
+   queue becomes per-conversation too, instead of being cleared.
+3. **Make the double-submit guard per-conversation** (`analysisInFlightRef` at `:358`, `:686`), so a
+   run in conversation A neither blocks a send in conversation B nor is mistaken for one.
+4. **Stop must abort the active conversation's run only** — `handleCancelAnalysis`
+   (`:1497-1504`) currently aborts the single global controller.
+5. **Deleting a conversation must abort *that* conversation's run**, not every run.
+6. **Show that a run is still going.** The dock already tracks busy sessions in the store; the
+   conversation rail should carry the same badge, so "it is still thinking over there" is visible
+   instead of mysterious. (`components/trade/TradeChatPanel.tsx:302` — *"unmounts, but the run keeps
+   streaming into the store"* — shows the pattern is understood.)
+7. **Keep the profile switch cancelling** (path 3): a different trader's data must not receive the
+   previous trader's answer.
+
+**Impact:** the feature the owner asked for, on the path that was missing it. **Accuracy** (an
+answer that arrives after you look at another conversation is an answer, not a cancellation) ·
+**UX** · **Reliability**.
+**Effort:** **M**. **Risk:** **M** — it changes *when* a run dies, and there is a test that pins
+the current behaviour: `tests/useConversationHousekeeping.test.tsx:45` asserts
+`handleCancelAnalysis` **is** called on a conversation load. That test must be flipped
+deliberately, not incidentally.
+**How to verify:** a test that starts a run in conversation A, switches to B, and asserts (i) A's
+controller was **not** aborted, (ii) A's streamed text landed in A, (iii) the Stop button in B
+aborts only B, and (iv) deleting A aborts A. Then `npm run render-probe` for the busy badge.
+**Roadmap:** **NEW** — nothing in the corpus mentions it. The dock's half is already shipped, so
+this is the second half of a design that exists.
+
+### 12.2 Deep dive — the skills format, against the Agent Skills convention
+
+**The reference.** The agentskills.io / Claude Code / Hermes convention is a directory per skill:
+`SKILL.md` with **YAML frontmatter** (`name` + `description` required; optional `compatibility` or
+a Hermes-specific `hermes:` block), a markdown body with **When to use / Procedure / Verification**,
+and optional `scripts/`, `references/`, `assets/` sub-resources, loaded in **three levels of
+progressive disclosure** — the index always, the body on trigger, the sub-resources on demand.
+
+**The finding: August's skill format is already a deliberate, documented port of that spec — and
+in three respects it is stricter than the convention.**
+
+#### 12.2.1 What August already has
+
+| convention element | status | evidence |
+|---|---|---|
+| **YAML frontmatter with `name` + `description`** | ✅ **PRESENT** | `services/learning/SkillMemoryService.ts:1059-1070` — `serializeSkill` emits `name:` (derived from the title, **capped at the spec's 64 chars**, `:1063`) and `description:` (capped at 1024, `:1064-1067`), both YAML-safe via `yamlString` = `JSON.stringify` — and the comment at `:434-437` notes *"JSON strings are also valid YAML 1.2 double-quoted scalars."* |
+| **the spec's problem, solved explicitly** | ✅ **PRESENT, and better** | `:411-431` — *"The Agent Skills spec's required frontmatter is exactly `name` + `description`, and it has NO lifecycle or outcome fields at all. August's SkillMeta carries ~35 of them. Keeping both in one undivided block is why a skill file cannot be shared, imported, or read as a procedure — **it is a database row wearing markdown**."* The fix: **two faces** behind `# august:skill-ledger` (`:432`) — a **PORTABLE** face above (name, description, and the keys that describe the procedure's behaviour: kind/coin/direction/family/regime/ifCondition/thenAction/predicate/timeframe/source/audience/lensScope) and a **LEDGER** face below (every outcome and lifecycle key, `:1101-1118`). |
+| **a spec-only file already loads** | ✅ **PRESENT** | `:424-427` — *"The parser reads straight through the marker, so NOTHING is rewritten and no migration is needed: existing files parse exactly as before, and **a spec-only file with just the two required fields loads as an unproven candidate**."* |
+| **When to use / Procedure / Verification body** | ✅ **PRESENT** | `services/learning/skillDocument.ts:56-68` — the recognised headings: `when to use`, `how i know it still holds`, `the plan` / `my plan`, `when not to use`, `required inputs` / `inputs`, `steps`, `pitfalls`, `verification`, `examples` — plus `other` (`:45`) so *"an unknown section written by a hand-edited file is never silently lost."* |
+| **progressive disclosure** | ✅ **PRESENT, two of three levels** | `services/trade/tradeChatContext.ts:206-224` `buildSkillsIndexForPrompt` — the **index is always in context** (30 rows max), one line per skill: `- {slug} [{status}] — {kind} · {description} · IF … → THEN …`, and the header says *"Each line is WHEN to use it… pull its full body with **recall/get_notebook_map** when you act on it."* `skillDocument.ts:1-19` — *"A skill file is a document; the prompt can only ever carry a card"* — `parseSkillBody()` for the detail pane, `projectSkillCard()` for injection, and *"Truncation is reported, never silent: `clipped` says how much was dropped."* |
+| **agent-authored skills with a human gate** | ✅ **PRESENT** | the `propose_skill` / `revise_skill` desk tools → `utils/learningQueue.ts` (`queueLearningProposal`, `applyProposalCard`, `decideRewriteCard`, `APPLYABLE_PROPOSAL_KINDS`) → `services/learning/skillApproval.ts`. **This is exactly Hermes' `skill_manage` + `pending/` approval gate.** |
+| **import, with honest per-file outcomes** | ✅ **PRESENT** | `services/learning/SkillImportService.ts:45-83` — `imported` / `skipped` / `failed` **with a reason per file**; duplicates detected on the **trigger key** (`:63-70`); collisions get `-2`, `-3` (`:31-40`); a file that is not a skill is reported, never silently dropped (`:56-58`). |
+| **imported headings must survive** | ✅ **PRESENT** | `SkillMemoryService.ts:458-474` `skillBody` strips the frontmatter and the redundant generated `# Title`, but *"Imported skill section headings, including a leading H1, are real instructions and must survive."* |
+| **invocation control** | ✅ **PRESENT** | `audience`, `lensScope` (`:1087-1088`), `manualOnly` (`:1113`) — the code calls these *"Agent Skills frontmatter port"* (`:315`, `MemoryRetrievalService.ts:476`). |
+
+#### 12.2.2 What is missing
+
+| convention element | status | the gap | effort |
+|---|---|---|---|
+| **level 3 — `references/`, `scripts/`, `assets/`** | ❌ **ABSENT** | the body is one flat file, and `RECALL_SKILL_BODY_MAX` is **700 characters** (`skillDocument.ts:6-8`) — a long skill is *clipped*, not *extended*. The convention's answer is a `references/` doc loaded on demand; August has no equivalent, so **long procedures are lossy by design**. | **L** — a storage-shape change (the notebook is a flat list of `.md` entries, not a tree) |
+| **`compatibility` / `hermes:` block** (required tools, env vars, platform limits) | ❌ **ABSENT** | August has `audience`/`lensScope` (who may see the skill) and `manualOnly`, but **nothing that says what the skill NEEDS**. A skill that assumes the `run_screener` tool or a specific env var cannot say so. | **S** — one more frontmatter key family |
+| **`SKILL.md` as the filename** | ⚠️ **PARTIAL** | files are `slug.md` (`isSkillFile`, `:405-406`) — the *content* is spec-shaped, the *filename* is not, so a skill dropped into `skills/` is not auto-detected as spec-shaped | **S** |
+| **category grouping** | ⚠️ **PARTIAL** | the notebook has **top-level folders** (`ensureHarnessFolders`, `MemoryFilesService.ts`) — skills / rules / doctrine / diary / distilled — but not a category *per skill* | **M** |
+| **`version` field** | ❌ **ABSENT** | | **S** |
+| **skill bundles** (one YAML loading several) | ❌ **ABSENT** | | **M** |
+| **install from a URL / owner-repo** | ⚠️ **PARTIAL** | file import only (`readSkillFiles`, `:95-112`); no URL fetch | **S/M** |
+
+**⇒ The honest verdict: the format question is largely already answered, and by the repo's own
+comment.** What August does not have is (a) level-3 sub-resources, (b) a compatibility block,
+(c) the filename, (d) per-skill categories, (e) bundles and URL install. **The gap that actually
+costs the trader something is (a)**, because the 700-character cap means a good long procedure is
+clipped rather than extended.
+
+### 12.3 Deep dive — "review all my skills and fix the format"
+
+**This is the feature the owner asked for, and it is much smaller than it sounds — because most
+skills are already in the right shape.** The job is therefore mostly a **diagnostic**, not a mass
+rewrite.
+
+#### 12.3.1 What the checker can decide with **no model call at all**
+
+Every one of these is already implemented and can be reused as-is:
+
+| check | the existing code that answers it |
+|---|---|
+| does it parse as a skill at all? | `parseSkillMarkdown(content)` (`SkillMemoryService.ts`) — the same parser `SkillImportService` uses to reject a non-skill with *"missing or invalid skill frontmatter"* |
+| does it **round-trip**? | `serializeSkill(meta, title)` — **parse → serialize → compare** is the cheapest and strongest format check there is, and it needs no new code |
+| is `name` present, ≤64 chars, and equal to the file's identity? | `skillFileNameFor(meta)` (`:3642`) and the `name:` write rule (`:1063`) |
+| is `description` present and non-empty? | `serializeSkill` falls back to `ifCondition → thenAction → first 24 words → title` (`:1064-1067`) — a skill that only got the fallback **has no real description**, and that is worth flagging |
+| is the **portable/ledger split** intact? | the marker at `:432` |
+| are the body sections recognised? | `parseSkillBody` / the `HEADINGS` map (`skillDocument.ts:56-68`) — `other` (`:45`) catches a hand-written section, and says so |
+| how much would be clipped at the recall cap? | `projectSkillCard` (`skillDocument.ts`) returns `clipped` + `droppedChars` (`:48-54`) — **the number is already computed** |
+| does the description say **WHEN** to use it? | the convention's "pushy description" rule: the index line *is* the trigger, so a description without a trigger phrase (and no `ifCondition`) is a skill that will never fire |
+
+#### 12.3.2 What needs a model, and only for what code cannot decide
+
+| repair | the existing model-writing machinery |
+|---|---|
+| rewrite a description that does not say WHEN | `services/learning/SkillCraftService.ts` — `craftSkillFromPostMortem` (`:155`) and `refineSkillFromLosses` (`:228`) already write skills with a model |
+| normalise section headings to the recognised set | the `HEADINGS` map is the target; the body is the source |
+| split an over-long procedure into a card + a `references/` note | **this one is blocked on E-46 (level 3) — there is nowhere to put the extra text yet** |
+
+#### 12.3.3 The write path — the one rule that matters
+
+**A batch job must never write a skill file directly.** Every write goes through the **existing
+human gate**: the learning queue (`utils/learningQueue.ts` — `queueLearningProposal`,
+`applyProposalCard`, `decideRewriteCard`, `proposalApplyFailureMessage`), the same path
+`propose_skill` and `revise_skill` already use, landing in `components/learn/ActionApprovals.tsx`.
+**The review produces *proposals*; the trader applies them.** This is the same discipline the
+supervisor uses, and the same one the repo already applies to agent-authored skills.
+
+#### 12.3.4 The budget, and the precedent for it
+
+A review of N skills is up to N model calls. Two precedents exist in the repo:
+- `services/learning/SkillEvalScheduler.ts` — a **scheduled, budgeted, sample-gated** LLM pass over
+  skills, with a session budget and a default runner.
+- `services/learning/SkillEvalService.ts` — it runs a model over a skill, judges it, and **writes
+  the verdict into the skill's frontmatter** (`evalVerdict:`, `:307`).
+
+**⇒ The review job is a sibling of the evaluator: same scheduler, same budget, different prompt,
+different write target (a proposal, not a verdict).** It should be **opt-in**, **capped per run**,
+show a **token estimate before it starts**, and fail closed with no ready provider — exactly the
+constraint the prior review set for the candidate log.
+
+#### 12.3.5 Where the button goes
+
+`components/learn/SkillsCatalog.tsx` (the catalog the trader already opens) — the button belongs in
+its header. The per-skill verdicts render in `components/learn/SkillViewerPanel.tsx` (the detail
+pane) next to the existing card projection. The proposals land in `components/learn/ActionApprovals.tsx`.
+
+**Roadmap:** **NEW** — the skills *format* is already a port; the *bulk review* is not in the corpus.
+
+---
+
+## 12.4 What happens to a skill that does not follow the format, or is too vague
+
+**The owner's question, answered against the source. It is the question that decides whether the
+review job is a diagnostic or a mass rewrite — and the answer is: it is a diagnostic, with three
+verdicts, and one of them is currently a *silent* failure.**
+
+### 12.4.1 Verdict 1 — a **GHOST**: in the notebook, invisible to the app
+
+**The code.** `services/learning/SkillMemoryService.ts:1053-1057`:
+
+```ts
+export const listSkills = (): Array<{ file: MemoryFile; meta: SkillMeta }> =>
+    getMemoryFiles().files.filter(isSkillFile).map(file => {
+        const meta = parseSkillMarkdown(file.content);
+        return meta ? { file, meta } : null;
+    }).filter((row): row is { file: MemoryFile; meta: SkillMeta } => Boolean(row));
+```
+
+**A file that fails to parse is dropped — silently.** The same happens on the retrieval path
+(`services/learning/MemoryRetrievalService.ts:218-219`, `if (!meta) continue;`).
+
+**The app already has the number and throws it away.** `services/learning/memoryHealth.ts:178-181`:
+
+```ts
+const skillFiles = files.filter(isSkillFile);
+const metas = skillFiles
+    .map(f => parseSkillMarkdown(f.content))
+    .filter((m): m is SkillMeta => Boolean(m));
+```
+
+`skillFiles` is **every** `.md` in the skills folder; `metas` is the ones that parse. So
+**`skillFiles.length - metas.length` *is* the number of malformed skills** — and `skillFiles` is
+never used again (the only two references are `:178` and `:179`). There is **no flag** for it among
+the nine `flags.push` calls (`:297`, `:304`, `:307`, `:310`, `:313`, `:316`, `:319`, `:328`, `:334`,
+`:341`).
+
+**⇒ A ghost is:**
+- **in** the notebook, the backup, the export, and the file count;
+- **out** of `listSkills()`, the prompt index, the catalog, the retrieval, the health card, and the
+  review;
+- and — the sharp edge — **the same file would be REJECTED with a reason on import**
+  (`services/learning/SkillImportService.ts:56-58`: *"Not a skill file — missing or invalid skill
+  frontmatter"*).
+
+**⇒ The app gives two opposite answers for the same file depending on how it arrived: imported →
+rejected with a reason; already in the notebook → invisible.** The trader cannot tell which
+skills they actually have.
+
+### 12.4.2 Verdict 2 — a **DORMANT** skill: it lists, it occupies a slot, and it will not fire
+
+**The trigger gate.** `services/learning/MemoryRetrievalService.ts:232-257`:
+
+```
+const descScore = descriptionOverlap(meta, query);
+const descHit = descScore >= DESCRIPTION_MATCH_MIN;
+...
+if (!descHit && !skillMatchesSetup(meta, setup)) continue;
+```
+
+and the code's own comment on the gate: *"the description, which is the field that says what a
+skill does and **when it applies**, was never consulted… **A skill that qualifies on neither signal
+stays invisible, exactly as before.**"*
+
+**⇒ A skill with no usable trigger is alive in the index and dead in practice.**
+
+**And it takes a slot from a good one.** `services/trade/chatSurfaceTurn.ts:109-118`:
+
+```ts
+const rows = listSkills().map(({ file, meta }) => ({ … }));
+skills = rows.slice(0, SKILL_INDEX_WINDOW).map(r => r.slug);
+skillsBlock = buildSkillsIndexForPrompt(rows, SKILL_INDEX_WINDOW, where);
+```
+
+`listSkills()` returns **notebook file order** — `getMemoryFiles().files.filter(isSkillFile).map(…)`.
+**The 30-slot index is unranked, and unfiltered by status**: a `retired` skill and an unproven
+`candidate` occupy a slot exactly like a `confirmed` one.
+
+**And the line it renders is trigger-free.** `services/trade/tradeChatContext.ts:206-224`:
+
+```
+- {slug}[{status}] — {kind} · {desc || rule || '(see recall)'}{desc && rule ? ' · ' + rule : ''}
+```
+
+A skill with no description and no `ifCondition` renders as `- slug [candidate] — repeat · (see
+recall)` — **no trigger information at all**, inside a block whose own header says *"Each line is
+WHEN to use it."*
+
+**⇒ Three concrete harms:** a dormant skill **displaces a better one** from the index; it **never
+fires**; and the trader believes it is a rule.
+
+**What is NOT a usable signal here — and the repo has already worked this out.** The app *can*
+almost tell "this skill never fired" — but `services/learning/memoryHealth.ts:15-18` refuses to:
+
+> *"`staleFiles` — a file the log DOES place a hit on, whose newest hit is older than
+> `STALE_FILE_DAYS`… `unobserved` — a file with no hit inside the retained window. **Absence from a
+> run-capped log is not the same as never being served** (the hit may simply have aged out, and most
+> notebook folders are never named in a source record at all), so these are reported as unobserved —
+> with their days-since-edit — and never folded into the stale count."*
+
+**⇒ The review job must inherit that discipline: "never fired" is NOT provable from the injection
+log, so it must not be the verdict.** The verdict is the *structural* one — no trigger, or a
+fallback description — with "never observed" shown as a **corroborating hint**, never as the proof.
+
+**And the review must not confuse *vague* with *general*.** The retrieval deliberately broadens on
+prose for an unscoped rule (`:243-244` — *"A prose match may broaden retrieval for an
+unscoped/general skill"*), so a general lesson is **supposed** to have no structured scope. A
+vague skill and a general skill have the same shape from the outside. **⇒ the verdict is a
+WARNING, not a defect**, and the fix is the trader's choice.
+
+### 12.4.3 Verdict 3 — a **CLIPPED** skill: it fires, with half a procedure
+
+`RECALL_SKILL_BODY_MAX = 700` (`services/learning/MemoryRetrievalService.ts:144`), and
+`services/learning/skillDocument.ts:6-8` explains the consequence: *"A longer document injected
+naively would either truncate mid-section or push the rest of the packet out."* The card projection
+already returns `clipped` and `droppedChars` (`skillDocument.ts:48-54`) — **computed, and never
+surfaced to anyone.**
+
+**⇒ a clipped skill is a half-procedure in every single prompt that uses it, and nothing says so.**
+
+### 12.4.4 The safety rule the review must obey — and it falls out of E-35
+
+`applyNotebookSkillsToAnalysis` — the function with zero production callers today (E-35) — is the
+one that would apply the hard `avoid` veto, the candidate cap and the confidence downgrade. **If E-35
+lands, a repaired skill can change what the model does with the trader's money.**
+
+**So:**
+
+1. **A repair that WIDENS a skill's reach ACTIVATES it.** Reconstructing a ghost gives it a
+   trigger; giving a dormant skill a real description makes it match. Both turn a dormant rule into
+   a live one that can veto a trade.
+2. **⇒ The default for a broken skill is NOT "make it work" — it is "show it and let the trader
+   decide."**
+3. **Narrowing is safe; widening is not.** A proposal may **demote** (candidate, retired, archived)
+   freely — that only ever removes influence. A proposal that **activates** must be explicitly
+   confirmed, one skill at a time.
+4. **Evidence counters are never invented.** A reconstructed skill starts at **zero wins, zero
+   losses**, `status: candidate`, and no `lastEvidenceAt` — it has earned nothing, and the ledger
+   must say so.
+5. **Every repair is a proposal through the existing queue** (`utils/learningQueue.ts` →
+   `components/learn/ActionApprovals.tsx`), with the old and new text side by side.
+6. **The ghost count belongs on the Health card permanently**, not only in the review — a hand-edit
+   can create a ghost at any time, and today the trader has no way to know.
+
+### 12.4.5 The table
+
+| verdict | detection (all deterministic) | what the review shows | what it may propose |
+|---|---|---|---|
+| **GHOST** | `parseSkillMarkdown` returns null while `isSkillFile` is true. **Count already computed at `memoryHealth.ts:178-181` and discarded.** | the file name, its byte count, and **the first failing line** — the parse error, not *"invalid"* | (a) reconstruct the frontmatter from the file's own body → **unproven candidate, zero counters**; (b) archive it out of `skills/`; (c) delete it, **only on the trader's word** |
+| **DORMANT** | no `ifCondition`/`thenAction`, and the description is the `serializeSkill` fallback (`:1064-1067`) rather than a real one. *"Never observed"* is a **hint**, never the proof (`memoryHealth.ts:15-18`). | the skill, its description, and **"names no setup it applies to"** | (a) the model writes a trigger **from the skill's own body** — old and new side by side; (b) demote to `candidate`; (c) leave it alone. **A warning, not a defect** — a general rule is meant to be unscoped |
+| **CLIPPED** | `projectSkillCard(...).droppedChars > 0` — **already computed** (`skillDocument.ts:48-54`) and never surfaced | the skill and **how many characters are cut** | (a) shorten the body (model-proposed; the full text kept in the proposal); (b) move the overflow to a `references/` note — **needs E-46** |
+
+**⇒ The review job's output is a three-column report (fine / dormant / clipped / ghost), a per-skill
+diff for every proposal, and a Health-card counter for the ghosts. Not a rewrite.**

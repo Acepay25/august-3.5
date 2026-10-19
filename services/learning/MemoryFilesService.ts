@@ -77,9 +77,8 @@ const DEFAULT_FOLDERS: MemoryFolder[] = [
     { id: 'rules', name: 'rules', order: 3 },
     { id: 'skills', name: 'skills', order: 4 },
     { id: 'bots', name: 'bots', order: 5 },
-    { id: 'lens', name: 'lens', order: 6 },
-    { id: 'settled-beliefs', name: 'settled-beliefs', order: 7 },
-    { id: 'distilled', name: 'distilled', order: 8 },
+    { id: 'settled-beliefs', name: 'settled-beliefs', order: 6 },
+    { id: 'distilled', name: 'distilled', order: 7 },
     // Strategy plans (strategies/*.md). Lives in the SAME notebook blob as
     // everything else on purpose: a second persistence path would need a
     // second backup/export namespace, and a namespace nothing writes is a
@@ -1272,7 +1271,7 @@ const NOTE_SECTION_SEP = '\n\n---\n\n';
 /**
  * The (folder, file) pairs the harness REGENERATES WHOLESALE from its own
  * data — profile sync, pattern memory, recurring mistakes, doctrine,
- * suggestions, settled beliefs, the three lens seats. A model append into
+ * suggestions, settled beliefs. A model append into
  * one of these is silently clobbered on the next rebuild, so writeModelNote
  * rejects it; the amend_memory proposal flow is the only sanctioned write
  * path (it rejects these targets too, by design). Model notes (lessons/,
@@ -1289,9 +1288,6 @@ const HARNESS_REGENERATED_FILES: ReadonlySet<string> = new Set([
     'settled-beliefs/settled-beliefs.md',
     // settledBeliefs falls back to the profile folder when its own is absent.
     'profile/settled-beliefs.md',
-    'lens/macro.md',
-    'lens/technical.md',
-    'lens/risk.md',
 ]);
 const isHarnessRegeneratedFile = (folderName: string, fileName: string): boolean =>
     HARNESS_REGENERATED_FILES.has(`${folderName}/${fileName}`);

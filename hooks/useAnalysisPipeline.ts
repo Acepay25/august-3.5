@@ -22,7 +22,7 @@ import { LabeledMonteCarloResult } from '../services/analysis/MonteCarloService'
 import { type LiveBacktestResult } from '../services/backtesting/LiveBacktestService';
 
 // Utils
-import { TokenUsage } from '../utils/tokenUsage';
+import { TokenUsage, estimateCostUsd } from '../utils/tokenUsage';
 import { appendToolActions } from '../utils/toolActions';
 import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { splitThinkingFromOutput } from '../utils/thinkingSplit';
@@ -1331,6 +1331,12 @@ ${enhancedPrompt}`;
                         startedAt: new Date(turnStartedAt).toISOString(),
                         finishedAt: new Date(turnStartedAt + toolTurn.workedMs).toISOString(),
                         durationMs: toolTurn.workedMs,
+                        // The wire reported these; the row keeps the measured
+                        // numbers instead of making the compare panel show "—".
+                        promptTokens: toolTurn.usage.promptTokens,
+                        completionTokens: toolTurn.usage.completionTokens,
+                        analystCount: 1,
+                        costUsd: estimateCostUsd(toolTurn.usage, provider.config),
                     },
                 } : {}),
                 // The tools-off / reasoning-only truth belongs IN the
