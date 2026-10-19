@@ -481,6 +481,13 @@ card that forgets it was clicked offers a second journal row.
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
    the gate's own output: these docs state 253 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
+   Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
+   rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
+   bold label onto the citation beside it, and a spliced token matches no file — so those rows
+   were skipped, never checked, which is how this page reported green while 12 of its citations
+   were unverifiable); and a citation whose file is not in the tree is now REPORTED instead of
+   swallowed, measured at 0 in these two docs and 3 in the dated stage ledger, where naming a
+   deleted file is history and pointing at its line number is not a live claim.
    **Coverage asymmetry, measured rather than trusted from prose:** the step runs
    in `ci.yml`, and `release.yml` does NOT run it — nor does it run the
    skill-approval probe, the bare typecheck, or CI's second suite job, while
