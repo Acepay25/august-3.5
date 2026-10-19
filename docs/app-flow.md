@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**267 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**270 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 3 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -399,28 +399,28 @@ card that forgets it was clicked offers a second journal row.
 | # | from → to | what crosses |
 |---|---|---|
 | 1 | index.html → index.tsx | mount, error handlers first `:23 :43` |
-| 2 | index.tsx → App | StrictMode › ErrorBoundary › ToastProvider `index.tsx:73-79` |
+| 2 | index.tsx → App | `StrictMode index.tsx:73` › `ErrorBoundary index.tsx:74` › `ToastProvider index.tsx:75` |
 | 3 | App → useSurfaceRouter | surface + journalTab + journalOpenNonce |
-| 4 | useSurfaceRouter → useSurface | persisted value, key `hooks/useSurface.ts:15 august_surface_v1`, valid set `:16` |
+| 4 | useSurfaceRouter → useSurface | persisted value, key `august_surface_v1 hooks/useSurface.ts:15`, valid set `:16` |
 | 5 | useSurfaceRouter → appHash | `#/journal\|market\|settings\|watch` ⇄ state `hooks/useSurfaceRouter.ts:101`, serialize `:159` |
 | 6 | App → Header | band `App.tsx:2467`, guard `surface !== 'agents'` `:2466` |
 | 7 | App → 4 lazy surfaces + the automation modal | each wrapped in `SurfaceSkeleton` — `SurfaceSkeleton App.tsx:2456` TradeView, `SurfaceSkeleton App.tsx:2501` Journal, `SurfaceSkeleton App.tsx:2523` LearnView, `SurfaceSkeleton App.tsx:2539` StrategyStudio, `SurfaceSkeleton App.tsx:2298` AutomationView |
 | 8 | Header → SurfaceSwitch | the destination set `App.tsx:2163`, list `SurfaceMenuList.tsx:42` |
 | 9 | App → AgentsView props | same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) `App.tsx:2604-2697` |
 | 10 | TradeView → TradeChatPanel | the dock, inside Trade `components/trade/TradeView.tsx:1115` |
-| 11 | AgentsView.send → bot branch | the selected bot answered at `components/agents/AgentsView.tsx:732` |
+| 11 | AgentsView.send → bot branch | the selected bot answered at `onSendBotTurn components/agents/AgentsView.tsx:732` |
 | 12 | bot branch → useBotMailbox | `runUserBotTurn` → `runBotTurn` |
-| 13 | AgentsView.send → analysis branch | `onAnalyze` `components/agents/AgentsView.tsx:725` → `App.tsx:1691` — the dock's `onRunAnalysis` reaches the SAME wrapper |
-| 14 | dock Full analysis → the run slot | `runFullAnalysis` `components/trade/TradeChatPanel.tsx:547` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
+| 13 | AgentsView.send → analysis branch | `onAnalyze components/agents/AgentsView.tsx:722` → `handleRunAnalysisFromChat App.tsx:1691` — the dock's `onRunAnalysis` reaches the SAME wrapper |
+| 14 | dock Full analysis → the run slot | `runFullAnalysis components/trade/TradeChatPanel.tsx:547` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
 | 15 | ChatComposer → chatTurnRunner.send | Enter `ChatComposer.tsx:146` / button `:201` → `services/trade/chatTurnRunner.ts:784` |
-| 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:929` (definition `:593`) |
+| 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:929` (definition `runSeatTurn services/trade/chatTurnRunner.ts:593`) |
 | 17 | runSeatTurn → the ONE turn executor | `runToolTurn toolTurn.ts:109` → `streamChatWithDeskTools :133` → `DeskToolsService` → `streamChatRequest` |
-| 18 | panel → per-seat + mailbox | `services/trade/chatTurnRunner.ts:1078` · `:1006` · `:1018` |
+| 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1078` · `:1006` · `:1018` |
 | 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `TradeChatPanel.tsx:453`, assembled `:475` |
 | 20 | every dock turn → chatStore | `mutate` · `beginRun` |
 | 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useAnalysisPipeline.ts:1329`, anything else runs the tool turn `:1376`; the mode flag `:544` now only gates the hybrid pull `:860` |
 | 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1334` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:230` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
-| 23 | casual frames → Message.text | `hooks/analysisPipeline/streamThrottlers.ts:28`; flush precedes the settle write useAnalysisPipeline.ts |
+| 23 | casual frames → Message.text | `applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:28`; flush precedes the settle write useAnalysisPipeline.ts |
 | 24 | ensemble → the stages that survive | see C — five of the old eight are gone from the call path, and no stage is named in the code, so no line number is claimed |
 | 25 | desk tools → what a caller can reach | `executeDeskTool DeskToolsService.ts` (its allow-list is enforced at execution, not only at offer time) |
 | 26 | panel tools → chart echo | `executePanelTool chatTurnRunner.ts` → `onToolAction` |
@@ -449,7 +449,7 @@ card that forgets it was clicked offers a second journal row.
 | 49 | a schedule's failure → the row and the toast | the turn's `notices` (`automationTurn.ts:155`) — a tool that came back `ok: false` (from `onToolPayload`, which already carries it), a turn that called nothing, a refused plan — are written into the stored text at `useAnalysisPipeline.ts:1247` and handed to `useAutomations.ts:531`, which downgrades the toast from success to warning. Nobody is watching a schedule live; a success toast over a failed lookup is how an unattended run manufactures confidence |
 | 50 | a journal row gets its scalp/swing class | `withDetectedTradeType` (`services/analysis/ScalpDetectionService.ts`) is called at the two row-minting sites in `hooks/useTradeLogging.ts` — label-only, so no `validityDurationMinutes` appears and the autopilot expiry window never widens. The filter reads it at `components/journal/TradeLog.tsx:535` |
 | 51 | a run records its measured cost | `recordToolTurnUsage` (`utils/sessionUsage.ts`) is called by all three turn owners — desk arm `chatSurfaceTurn.ts`, schedule arm `automationTurn.ts`, dock seats `chatTurnRunner.ts` — from the `usage` the wire reported per request. `Knowledge → Session Usage` reads that ledger; stage 19 left it with a reader and no writer. `usageCalls` distinguishes a zero-cost run from a provider that sent no usage frame |
-| 52 | a finished analysis says so | `notify()` (`services/infrastructure/notify.ts`) fires when a Full-analysis send settles un-stopped (`hooks/useAnalysisPipeline.ts:1443`). Before stage 19 this came from the verdict finalizer; the old channel name CompletionNotifications was a native-only copy of the same thing and now has no caller, so the app speaks through one notifier |
+| 52 | a finished analysis says so | `notify()` (`services/infrastructure/notify.ts`) fires when a Full-analysis send settles un-stopped (`notify hooks/useAnalysisPipeline.ts:1443`). Before stage 19 this came from the verdict finalizer; the old channel name CompletionNotifications was a native-only copy of the same thing and now has no caller, so the app speaks through one notifier |
 | 53 | the chart gets its Entry/Stop/Target lines | `latestChartVerdict(messages)` (`services/trade/chartData.ts`) is what App hands `TradeView` as `verdict` — the newest row carrying `Message.proposal` (what `present_trade` stamps; `useAnalysisPipeline.ts:1293`), with `Message.analysis` as the fallback for pre-debate history. Red-proved: the old selector keyed on `ensembleProgress` / >1 `modelsUsed` / `debateTurns` and returned null for every tool-turn row. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate
 
 ---
@@ -477,10 +477,10 @@ card that forgets it was clicked offers a second journal row.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 267 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 270 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 267 anchors verified, and the gate
+   the gate's own output: these docs state 270 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -570,7 +570,7 @@ card that forgets it was clicked offers a second journal row.
    records the v1.0.20 TDZ crash as a splash hang. A page that dies before React
    mounts fails both gates, not just one.
 
-10. **The arrow table is 53 rows, and every citation in it resolves — but only 5 of the 53 also name the symbol they cite, and those are the rows whose CONTENT the gate can test. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently; 48 rows are line-resolved only.** An
+10. **The arrow table is 53 rows, and every citation in it resolves — but only 14 of the 53 also name the symbol they cite, and those are the rows whose CONTENT the gate can test. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently; 39 rows are line-resolved only.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
     resolves all 255 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
