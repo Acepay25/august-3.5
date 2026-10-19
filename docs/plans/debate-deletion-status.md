@@ -1067,9 +1067,12 @@ OK with zero pageerrors after the cut.
 ## Stage 21, first pass: the dead debate-era message fields are gone
 
 Censused across EVERY production directory before touching anything — the first
-census (hooks/services/components/App only) wrongly reported
-`replacementOffer` as unread, and `utils/approvalInbox.ts:76` does read it. That
-near-miss is why the field set below was re-measured, not assumed.
+census (hooks/services/components/App only) wrongly reported the replacement-offer
+field as unread, and the reader in `utils/approvalInbox.ts` proved it wrong. That
+near-miss is why the field set below was re-measured, not assumed. This row names
+the file, not a line number: the field was deleted in the pass this ledger records,
+so a line here would be a live claim the tree no longer supports, and the anchor
+gate would rightly refuse it.
 
 Deleted from `types/message.ts`: `ensembleProgress`, `debateRunLog`,
 `debateCheckpoint`, `provisionalAnalysis`, `provisionalPlanFields`, plus the
@@ -1942,9 +1945,16 @@ citation whose symbol is named on the PREVIOUS line (the "`sym` at / `path:NNN`"
 shape) is bound forward by a test on the current line's tail. That test is weak in BOTH
 directions, measured 2026-10-19 with the patch parked at `.probe-artifacts/connector-widening.patch`:
 
-- **It over-matches.** The connector list has no word boundary, so `…does read it. That`
-  ends in a suffix that reads as `at` and the row was treated as dangling. A row can be
-  "dangling" for a reason that has nothing to do with a connective.
+- **It over-matched — fixed the same day, with the proof on both sides.** The connector list
+  had no word boundary, so `…does read it. That` ended in a suffix that read as `at` and the
+  row was treated as dangling: 42 lines across the three docs end in a word whose tail is
+  at|is|to (16 of them just "that", plus into, seat, analysis, this, Chat, onto). Requiring
+  whitespace before `at|is|to` fixed it, the legitimate "`SYM` at" shape is untouched (29
+  lines end in " at"), and the fix immediately surfaced one pairing the old rule had been
+  abstaining on — a ledger census row that cited a live line number for a reader of a field
+  this pass deleted. That row now names the file, not the line. Two reach controls hold the
+  fix: they fail on the unbounded regex (verified by reverting it in tree and reading the
+  FAILED line) and pass on the bounded one.
 - **Widening the tail does not help.** Replacing the list with "the line ends without a
   sentence terminator" produced 8 false symbol misses, all the same class: markdown
   paragraphs WRAP, so an ordinary prose line ends mid-sentence constantly. Tightening to
@@ -1958,9 +1968,11 @@ directions, measured 2026-10-19 with the patch parked at `.probe-artifacts/conne
   rows above stay honestly unpaired, which is what the forward-binding caveat is for.
 
 The arrow table's own line-level claims all check out, and the reach controls prove each
-arm fires: 17 as shipped, 24 with the widened rule (three connectives × three arms, plus a
-negative arm planted against the wrapped-prose false positives so a future re-widening
-fails loudly instead of silently).
+arm fires: 17 before this fix, **19 now** (the two boundary arms above), and 24 with the
+widened tail rule tried today — that last arm-set is parked in
+`.probe-artifacts/connector-widening.patch`, not shipped, because the two pairings the
+widening newly bound are dated ledger claims whose symbols this pass deleted, and the
+gate cannot tell a historical sentence from a live claim.
 
 ## Resume facts, 2026-10-19 end of session — read this before exploring anything
 
