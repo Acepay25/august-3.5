@@ -42,7 +42,7 @@ const ROOT = path.join(__dirname, '..');
 // The stage ledger is scanned too: it carries file:line claims about the code it
 // is deleting, and an unchecked one ages faster than the flow doc's because the
 // ledger is written the same day the code moves.
-const DOCS = ['docs/app-flow.md', 'docs/app-flow.html', 'docs/plans/debate-deletion-status.md'];
+const DOCS = ['AGENTS.md', 'docs/app-flow.md', 'docs/app-flow.html', 'docs/plans/debate-deletion-status.md'];
 const SKIP_DIRS = ['node_modules', '.git', 'dist', 'dist_electron', 'android', 'ios', 'coverage', '.probe-artifacts', '.github'];
 // The printable view cites the root component as `App:2445`.
 const ALIAS = { App: 'App.tsx' };
