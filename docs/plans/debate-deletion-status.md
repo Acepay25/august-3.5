@@ -987,7 +987,7 @@ deleting anything in either area.
 
 **1. Accuracy mode is fully wired, and the calibration store is infrastructure, not part of the stage.**
 `AccuracyModeModal` looked orphaned to a `from '…'` grep — it is imported through
-`React.lazy` at `App.tsx:67` and mounted at `App.tsx:2083`. The
+`React.lazy` at `App.tsx:67` and mounted at `App.tsx:2098`. The
 `accuracySubMode` / `isAccuracyModeEnabled` flags reach App, GeneralTab,
 useAppSettings, useLensAndEnsembleConfig, useProfilePersistence, useAnalysisPipeline,
 GenericAnalysisService, HybridIntelligenceService, TradeLog and 4 types files. And
@@ -2043,7 +2043,7 @@ token three such glued tokens were produced across the flow html — none of the
 `resolve()` today, so they have never been checked for resolution, non-blank or comment-line at all.
 Work order: make `strip()` emit a space per tag and confirm the anchor population does not move;
 then re-apply the detector and expect ~15 real findings; then retire the ledger's historical line
-numbers the way the approval-inbox census row was retired today. LANDED THE SAME DAY, in the other order: fix strip() first (the scan went from 513 references / 247 unique to 538 / 252, and the wider scan itself failed the gate until five stale citations were retired: `App:2028` was a comment about chatModelFallback and now points at the mount at the mount site; the quick-reply row bare-numbered 1350 when the call is the quick-reply call site; the bot fork bare-numbered 431 when `if (config.botId)` is the fork line; and `ensureStamp` was paired with `runPresentTrade` line 75 though it is defined at the gate file where it is defined), then apply the detector. Measured with it live: 0 deleted-file citations in the flow docs, 6 in this ledger — the verdictFinalizer and CalibrationSection rows name files this run deleted, and three are the glued examples quoted above. A live-doc hit fails the merge; a ledger hit is recorded history and ratchets down only.
+numbers the way the approval-inbox census row was retired today. LANDED THE SAME DAY, in the other order: fix strip() first (the scan went from 513 references / 247 unique to 538 / 252, and the wider scan itself failed the gate until five stale citations were retired: `App:2043` was a comment about chatModelFallback and now points at the mount at the mount site; the quick-reply row bare-numbered 1350 when the call is the quick-reply call site; the bot fork bare-numbered 431 when `if (config.botId)` is the fork line; and `ensureStamp` was paired with `runPresentTrade` line 75 though it is defined at the gate file where it is defined), then apply the detector. Measured with it live: 0 deleted-file citations in the flow docs, 6 in this ledger — the verdictFinalizer and CalibrationSection rows name files this run deleted, and three are the glued examples quoted above. A live-doc hit fails the merge; a ledger hit is recorded history and ratchets down only.
 
 ## Resume facts, 2026-10-19 end of session — read this before exploring anything
 
@@ -2263,7 +2263,7 @@ tsc 0; `vite build` ✓; flow-doc anchors 261 verified, 0 unattributed, 0 census
 file at all, and only 5 write the symbol beside the citation — the only shape the gate can bind to content.
 So 48 rows are line-resolved and nothing more, and the run prints `arrow coverage: 5/53` with a floor on both
 figures so coverage cannot fall silently. Row 7 came out wrong outright: the lazy-surface `SurfaceSkeleton`
-boundaries are App.tsx:2313 TradeView, :2358 Journal, :2380 LearnView, :2396 StrategyStudio plus the
+boundaries are App.tsx:2328 TradeView, :2373 Journal, :2395 LearnView, :2411 StrategyStudio plus the
 automation modal at :2298 — not the :2493/:2538/:2560/:2602 the table had, which are a prop, a component
 open tag and two unrelated lines. Those five are now cited with the symbol beside each path. Raising coverage is per-row verification work, not a rule change, and the docs say that
 instead of implying the table is checked.
@@ -2291,10 +2291,10 @@ services/trade/automationTurn.ts:155, latestChartVerdict services/trade/chartDat
 would still be invisible.
 
 **Coverage 23 became 28: every arrow row that cites a file is content-checked now.** Binding the last five
-produced one more wrong number: row 6 cited App.tsx:2323 for the guard `surface !== 'agents'`, but that line is a
-prop — the guard is at **App.tsx:2285**, 38 lines away. Also bound and verified against the source:
+produced one more wrong number: row 6 cited App.tsx:2338 for the guard `surface !== 'agents'`, but that line is a
+prop — the guard is at **App.tsx:2300**, 38 lines away. Also bound and verified against the source:
 parseAppHash hooks/useSurfaceRouter.ts:101 with serializeAppHash :159, the `AgentsView` element opening at
-App.tsx:2423, `TradeChatPanel` rendered at components/trade/TradeView.tsx:1115, and the two row-minting calls
+App.tsx:2438, `TradeChatPanel` rendered at components/trade/TradeView.tsx:1115, and the two row-minting calls
 withDetectedTradeType hooks/useTradeLogging.ts:305 and :665. What the gate still cannot reach: the 25 rows that
 name no file at all, and the docs say 28/53 rather than claiming the table is fully checked.
 ## Which gates actually ran at this tip (2026-10-19, after the arrow-binding passes)
@@ -2358,13 +2358,13 @@ silently: a reader-less field can regain a writer with one line of code and no a
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions
 services/trade/chatSessions.ts:419, collectApprovalItems utils/approvalInbox.ts:57, resolveInvokedSkills
 services/learning/SkillMemoryService.ts:494), and the gate caught the pairing that insertion created: the row
-also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1781, where the
+also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1796, where the
 useMemo actually is. 31 of 53 rows cite a file, all bound; 22 name no file at all.
 
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions chatSessions.ts:419,
 collectApprovalItems approvalInbox.ts:57, resolveInvokedSkills SkillMemoryService.ts:494), and the gate caught the
 pairing that insertion created: the same row also names approvalsWaiting, which is not on that line — a SYMBOL
-MISS, because pairing is positional. It now cites App.tsx:1781, where the useMemo actually is. 31 of 53 rows cite
+MISS, because pairing is positional. It now cites App.tsx:1796, where the useMemo actually is. 31 of 53 rows cite
 a file and every one of them binds a symbol; 22 name no file at all.
 
 **31 then 33.** Two more prose-only rows were bound after reading their source: deskThread is the export at

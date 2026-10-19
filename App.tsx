@@ -1502,6 +1502,21 @@ const App: React.FC = () => {
             });
             if (!ok) return false;
         }
+        // A Full analysis that called no market tool gets an amber notice on
+        // its transcript row. Logging the plan is a second, durable claim, so
+        // the warning must bind once: the trader acknowledges it here.
+        const unverified = messages.some(m =>
+            m.proposal?.planId === proposal.planId
+            && (m.liveToolEvents?.desk ?? '').includes('NOTHING LOOKED UP'));
+        if (unverified) {
+            const ok = await confirmDialog({
+                title: 'This plan was not checked against the tape',
+                message: 'The Full analysis called no market tool before presenting this plan. Logging it records numbers the model did not look up. Log it anyway?',
+                confirmLabel: 'Log unverified plan',
+                destructive: true,
+            });
+            if (!ok) return false;
+        }
         updateMessages(prev => {
             // planId dedupe, keyed on the JOURNAL ROW (`LoggedTrade.planId`) and
             // the pending card's own field — never on the headline string. The
@@ -1516,7 +1531,7 @@ const App: React.FC = () => {
             return [...prev, buildProposedTradeMessage(stamped, `proposed-${Date.now()}`)];
         });
         return true;
-    }, [updateMessages, loggedTrades, confirmDialog]);
+    }, [updateMessages, loggedTrades, confirmDialog, messages]);
 
     /** The dock holds a settled verdict's message id, not a copy of the
      *  analysis — a persisted chat session would otherwise store a whole
