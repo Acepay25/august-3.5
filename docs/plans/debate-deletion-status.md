@@ -2218,4 +2218,8 @@ prompt, and after a blanket rename both halves pointed at one id — a two-id st
 asserts one id proves nothing, so it now uses `analysis.lens` and `analysis.master`.
 Gates: tsc 0, promptsAreWired + promptOverrideService + harnessMarks + composePrompt 55 tests
 green, flow-doc anchors 253 verified with 0 census disagreements, full suite read from its own
-summary marker below.
+summary marker (`Test Files 478 passed | 1 skipped`, `VITEST_EXIT=0`, zero `x` lines), and
+`npm run build` — which is the gate that matters after removing a module, because a dynamic
+`import()` or a barrel re-export can break the bundle while tsc stays silent: `✓ built in 34.07s`.
+`constants/debateMarkers.ts` also lost a comment naming the deleted prompt file as its other
+half; the markers it owns are now the only home for both the strings and the matchers.
