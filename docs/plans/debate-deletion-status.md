@@ -1974,6 +1974,31 @@ widened tail rule tried today — that last arm-set is parked in
 widening newly bound are dated ledger claims whose symbols this pass deleted, and the
 gate cannot tell a historical sentence from a live claim.
 
+**Why "just bind by position" is not a one-line change, worked out on 2026-10-19 so the
+next attempt does not rediscover it.** The pairing decision compares the symbol's offset
+with each citation's offset, but the two loops do NOT live in the same coordinate space:
+`symbolOf` and `spanAnchors` read the RAW line (html `<code>` spans only exist there),
+while the `OWNER_RE` and `BARE_RE` loops that push anchors scan the STRIPPED line. After
+today's tag fix a stripped html line is shorter by every tag it held, so a raw offset is
+meaningless against a stripped offset and comparing them mis-binds silently — which is
+exactly the failure class this rule is meant to eliminate. Two viable shapes:
+
+- Zip in order instead of comparing offsets: raw `OWNER_RE` matches and stripped `OWNER_RE`
+  matches are the same tokens in the same order (only tags differ), so build the raw start
+  list once per line and consume it with a counter as anchors are pushed. Breaks if any tag
+  removal ever deletes a digit — assert the two lists are the same length and abort to
+  abstain (never mis-bind) if they are not.
+- Or strip tags to a SPACE-PADDED equal-length string (replace each tag with the same number
+  of spaces rather than one), so raw and stripped positions are identical by construction and
+  every existing offset comparison stays valid. This is the smaller, more testable change and
+  it also removes the reason the two coordinate spaces ever differed.
+
+Either way: a symbol whose span starts AFTER a citation cannot own it (that row's number is
+the previous row's), a symbol BEFORE it owns it, a crowded line with more than one of each
+abstains, and the reach controls must include an html fixture — every control written so far
+uses markdown backticks, where raw and stripped are the same string, so no existing control
+can see this bug. Until that html-arm control exists, do not trust a positional rule at all.
+
 **A second hole, found while widening: the gate has never been able to see a citation to a
 deleted file.** `collect()` resolves each qualified path and `continue`s when nothing matches, so
 `rep.missingFile` could only fire for a file that resolved at collect time and vanished mid-run —
