@@ -2230,3 +2230,18 @@ summary marker (`Test Files 478 passed | 1 skipped`, `VITEST_EXIT=0`, zero `x` l
 `import()` or a barrel re-export can break the bundle while tsc stays silent: `✓ built in 34.07s`.
 `constants/debateMarkers.ts` also lost a comment naming the deleted prompt file as its other
 half; the markers it owns are now the only home for both the strings and the matchers.
+
+**Second-order leftovers from the prompt deletion (2026-10-19, later same day).** Removing a
+registry row can orphan the constant it alone imported: `STRESS_TEST_PROTOCOL`,
+`PROBABILITY_ESTIMATION_PROMPT` and `TRADING_FAMILIES_PROMPT` in
+`constants/prompts/analysisPrompts.ts` fell to zero references outside their own definition
+file and are deleted (proved by `tsc` and `vite build`, since the barrel can hide a consumer —
+the exact trap that had already saved two other constants on this pass). Three debate-era names
+were then re-checked rather than assumed dead, and the answer differs for each: `moderatorConfig`
+is live as the DEFAULT provider behind vision/OCR (`App.tsx:337`) and memory (`App.tsx:601`) and
+as the automation seat and the journal's `Mod:` label; the `<CLARIFICATION_*>`/`<MODERATOR_RETRY>`
+matchers in `constants/debateMarkers.ts` are live as sanitizers at `utils/analysisUtils.ts:859`,
+while no prompt file mentions either marker any more. Both facts, plus the "no moderator TURN
+exists" distinction, are now stated in the flow docs.
+Gates on this tip: full suite `478 files passed | 1 skipped`, `4730 passed | 11 skipped`, 233.18s;
+tsc 0; `vite build` ✓; flow-doc anchors 261 verified, 0 unattributed, 0 census disagreements.

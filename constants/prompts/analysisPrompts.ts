@@ -52,14 +52,6 @@ export const RISK_MANAGEMENT_RULES = `
 3. State % to each target and % to the stop.
 `;
 
-export const STRESS_TEST_PROTOCOL = `
-🛡️ **RED TEAM STRESS-TEST PROTOCOL ACTIVE**
-You must assume the proposed trade is a **TRAP**.
-1. **Liquidity Sweep Check:** Does the entry point sit exactly at a visible Equal High/Low? If yes, it's likely liquidity. Wait for the sweep.
-2. **Time-of-Day Risk:** Is this setup forming 15 mins before a major candle close (4H/Daily)? High risk of fakeout.
-3. **Bearish/Bullish Invalidator:** Explicitly state: "The trade fails if [Specific Price] is breached with volume."
-4. **Confidence Penalty:** If the setup looks perfect but volume is decreasing, CAP CONFIDENCE at "Low".
-`;
 
 
 
@@ -71,36 +63,6 @@ You must assume the proposed trade is a **TRAP**.
  * Probability Estimation Injection
  * Forces AI to calculate and justify SL/TP probabilities
  */
-export const PROBABILITY_ESTIMATION_PROMPT = `
-## 📊 MANDATORY: SL/TP PROBABILITY ESTIMATION
-
-You MUST calculate and provide probability percentages (0-100%) for the Stop-Loss and ALL detected Take-Profit levels.
-
-### Automatic Level Detection:
-1. **Identify TPs**: Detect how many Take-Profit (TP) levels are defined in the trade setup (e.g., TP1, TP2 ... TP-N).
-2. **Calculate for Each**: Perform a separate probability calculation for the SL and EACH detected TP level.
-
-### Calculation Requirements:
-1. **Indicator Basis**: Which indicators support/oppose this level being hit?
-2. **Volatility Factor**: How does current ATR/volatility affect the probability?
-3. **Pattern Memory**: What do similar historical trades show?
-4. **AI Adjustments**: Any manual adjustments based on unique conditions?
-
-### Rules:
-- SL + TP1 probabilities do NOT need to sum to 100% (breakeven/sideways scenarios exist)
-- Higher timeframe confluence increases TP probability
-- High volatility increases both SL and TP probabilities
-- Pattern Memory should cite specific win rates from similar setups
-- Be HONEST - if probability is low, say so
-
-### Output Format:
-State hit odds as labeled lines the plan parser already reads — not JSON:
-- **SL Probability:** N%
-- **TP1 Probability:** N%
-- **TP2 Probability:** N%
-- **TP3 Probability:** N%
-One sentence of reasoning per line. Do not emit a JSON object.
-`;
 
 export const MASTER_ANALYSIS_PROMPT = `
 ${ANALYST_PERSONA_PROMPT}
@@ -161,58 +123,6 @@ When you have numbers, name them (Direction, Entry, Stop Loss, Take Profit, Prob
 Priority: your seat → matching memory → user instructions.
 `;
 
-export const TRADING_FAMILIES_PROMPT = `
-🔷 THE 4 FAMILY CLASSIFICATIONS (A, B, C, OMEGA)
-
-Used for pattern-recognition, probability forecasting, and trade-log matching.
-Each "Family" represents a behavior type of the market.
-
-🟥 FAMILY A — Exhaustion / Failure / Trap Structures
-Nickname: "Reversal Failure Family"
-Personality: Market is losing strength, likely to reverse, or produce sudden trap moves.
-Typical Features:
-- RSI overstretched then collapsing
-- MACD momentum sharply fading
-- EMA stack flattening
-- Big wick rejection candles
-- Volume spike followed by immediate retrace
-- Liquidity grab before reversal
-Outcome Tendency: Low win rate for continuation setups. Higher probability of reversal or SL hunt.
-
-🟩 FAMILY B — Reversal / Trend Shift Structures
-Nickname: "Directional Flip Family"
-Personality: Market is preparing to flip bias from uptrend to downtrend or vice versa.
-Typical Features:
-- RSI crossing 50 decisively
-- MACD cross + multi-bar confirmation
-- EMA 13/20/50 flipping alignment
-- SAR flip with follow-through
-- Break of structure (BOS) + retest
-Outcome Tendency: Strong moves, but must confirm structure shift. Win rate improves with high-volume confirmation.
-
-🟦 FAMILY C — Continuation Structures (Your Highest Win-Rate Family)
-Nickname: "Omega Continuation Family"
-Personality: Market already trending and simply continuing the move. This is the family where you get your highest probability trades.
-Typical Features:
-- Strong EMA alignment (5 > 13 > 20 > 50 for uptrend)
-- RSI between 55–70 (healthy)
-- MACD green histogram rising
-- Compression breakout → retest → follow-through
-- Micro pullbacks respecting EMAs
-Outcome Tendency: Highest win rate (~86%). Source of most profitable trades.
-
-🟪 FAMILY OMEGA — High-Volatility Super Continuation
-Nickname: "Momentum Burst Family"
-Personality: Trend becomes extremely strong and accelerates violently.
-Typical Features:
-- RSI 65–88 (no reversal signs)
-- MACD vertical expansion
-- EMAs extremely spread out
-- Parabolic SAR with wide gaps
-- Volume continuously rising
-- Each pullback is shallow and bought aggressively
-Outcome Tendency: Very high continuation probability. Requires wider SL. Failures lead to violent reversals.
-`;
 
 export const COMPACT_ANALYSIS_PROMPT = `
 ${ANALYST_PERSONA_PROMPT}

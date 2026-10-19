@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**255 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**261 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 3 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -476,10 +476,10 @@ card that forgets it was clicked offers a second journal row.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in both flow docs names
-   its file on the same line, so the gate can check it: 255 anchors verified, 0
+   its file on the same line, so the gate can check it: 261 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 255 anchors verified, and the gate
+   the gate's own output: these docs state 261 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -610,6 +610,24 @@ request or as new permission to trade, and unmarked text — the trader's own wo
 on conflict. `tests/harnessMarks.test.ts` was moved off the dead file onto the blocks the app
 actually sends, with its floor re-based on that population and a planted-paraphrase control
 added in the same pass, because a scanner that matches nothing reports no drift.
+
+**Three debate-era names survive, and the honest statement is which of them is dead.**
+`moderatorConfig` (`App.tsx:298`) is live, but as a DEFAULT, not a debate role:
+`readyProviders[0] || moderatorConfig` (`App.tsx:337`) resolves the vision/OCR provider and
+`memoryConfig: memoryConfig || moderatorConfig` (`App.tsx:601`) the memory one, the automation
+editor still resolves a seat from it (`AutomationEditorModal.tsx:259`), and the journal prints
+`Mod:` from the stored `moderatorModel` (`TradeLog.tsx:351`). No moderator TURN exists — one
+model answers a send — so the harness contract can still say "the moderator's last block"
+without any code waiting for one. `constants/debateMarkers.ts` survives as a sanitizer:
+`utils/analysisUtils.ts:859` strips `<CLARIFICATION_*>` and the retry marker out of model text,
+because stored rows and an unprompted model can still carry them, and no prompt file in the tree
+mentions either marker any more (measured by grepping `constants/prompts/` for `CLARIFICATION_`
+and `MODERATOR_RETRY`: zero hits). Deleting the registry entries also orphaned three constants
+they alone imported — `STRESS_TEST_PROTOCOL`, `PROBABILITY_ESTIMATION_PROMPT`,
+`TRADING_FAMILIES_PROMPT` in `constants/prompts/analysisPrompts.ts` — which are now removed;
+a table deletion must re-scan its rows' imports, because dead text kept alive by a dead row is
+the same defect one layer down. Both removals were proven by `tsc` and `vite build`, not by the
+name grep that had already misled me once on this pass.
 
 The engine files are gone, and most of the branch with them. What was removed this pass: the seat-completeness refusals ("Your analyst team is incomplete", "Analysts must use different models", "Two debate seats share a model") and the `TEAM_MAX_SEATS` ceiling — only ONE model answers a send (`provider`, `hooks/useAnalysisPipeline.ts:1296` falls back to `enabledProviders[0]`), so those blocked a run over a roster the run never uses, and the ceiling guarded a fan-out that no longer exists. The moderator readiness check survives but now applies only to a scheduled run (`:737`), because a schedule really does take its seat from that config; the human-send version of it refused a click over an unused pick. `runEnsembleEnabled` (`:567`) is now down to `buildEnsembleAnalysts` and the "include a coin" tip; `isDebating` and `activeDebateSpeakers` are deleted outright — every writer set a literal `false`, so the one branch that read the flag could not run.
 
