@@ -2078,7 +2078,7 @@ would still abstain. The 46 remaining each need a hand look: the retired scratch
 that carries a symbol the doc line actually names.
 
 **Gate state on this tree, each read from its own marker, not a piped exit code:**
-typecheck, type-check-scripts, electron parse (both re-run on this tip: `tsc --noEmit` clean,
+Re-run here: typecheck, type-check-scripts, electron parse (both re-run on this tip: `tsc --noEmit` clean,
 `node --check` on all three electron files clean), flow-doc anchors (253 verified,
 0 unattributed, **0** comment-line and **0** symbol misses — both ceilings now zero, with 5
 citations listed as deliberate comment-as-claim exemptions), vitest re-run on the
@@ -2091,7 +2091,15 @@ locally because `docs/analysis/**` is ignored as the untracked scratch it is),
 skill-approval probe — whose own log says `25/25 checks passed; pageErrors=2`.
 The two "notebook write FAILED (quota)" lines under that verdict are the probe's
 own injected fault: the write-failure surfacing is what it is testing, so they are
-the pass, not a failure. `installer-smoke` is CI-only by design. No gate is owed.
+the pass, not a failure. `installer-smoke` is CI-only by design. No gate is owed — and the split is explicit, because
+"green on this tree" has to say which gates were re-run here. Re-run on this tip: the four
+static gates, the anchor gate, repo-wide lint, and the full suite again after the gate work
+(`477 files passed / 1 skipped`, `4715 passed / 11 skipped`, 216.77s). Carried over from the
+last probed tip rather than re-executed, because it is provable that nothing they read changed:
+`git diff --name-only <that tip>..HEAD` returns only `AGENTS.md`, the two flow docs, this ledger
+and `scripts/check-flow-doc-anchors.cjs` — no `.ts`, `.tsx`, `.css`, `electron/` or
+`package.json` file — so the built bundle is the same bytes the probes passed on. Re-run the
+probes before trusting them again after ANY source edit, not after a doc edit.
 
 **Do not re-derive these** (each cost a turn this session and is already proven): the
 review's six defects are all closed in the current files; the post-mortem route is
