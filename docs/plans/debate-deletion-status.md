@@ -2169,7 +2169,7 @@ the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:69`; 
 progress panel now mints two rows (`market-data`, `analysis`), completed by
 `settleOpenSteps()` in the run's `finally` after the catch has marked any failure.
 
-**Push state:** 88 unpushed commits at this tip (measured as `git rev-list --count
+**Push state:** 91 unpushed commits at this tip (measured as `git rev-list --count
 origin/main..HEAD`, which is the only honest way to state it — the count grows with
 every commit, so re-measure rather than trust this number), nothing pushed this
 session; the earlier authorization covered only the first 16.
@@ -2259,3 +2259,13 @@ while no prompt file mentions either marker any more. Both facts, plus the "no m
 exists" distinction, are now stated in the flow docs.
 Gates on this tip: full suite `478 files passed | 1 skipped`, `4730 passed | 11 skipped`, 233.18s;
 tsc 0; `vite build` ✓; flow-doc anchors 261 verified, 0 unattributed, 0 census disagreements.
+
+**Section H measured the same way, and it does not all check out.** The arrow table is 53 rows; 28 of them cite a
+file at all, and only 5 write the symbol beside the citation — the only shape the gate can bind to content.
+So 48 rows are line-resolved and nothing more, and the run prints `arrow coverage: 5/53` with a floor on both
+figures so coverage cannot fall silently. Row 7 came out wrong outright: the lazy-surface `SurfaceSkeleton`
+boundaries are App.tsx:2456 TradeView, :2501 Journal, :2523 LearnView, :2539 StrategyStudio plus the
+automation modal at :2298 — not the :2493/:2538/:2560/:2602 the table had, which are a prop, a component
+open tag and two unrelated lines. Those five are now cited with the symbol beside each path. Raising 5
+toward 53 is per-row verification work, not a rule change, and the docs say that instead of implying the
+table is checked.
