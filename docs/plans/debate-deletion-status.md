@@ -2016,7 +2016,22 @@ owns the citations that follow it and carries to the next row ONLY IF it is the 
 line and the line has no other unclaimed citation before it; multi-citation rows must be split
 into (symbol, citation) pairs by order within the line, which is what the span view already does
 for `SYM path:NNN` inside one span and what the line view still cannot do. Until that pairing is
-written, the boundary-fixed allowlist stays. Until that html-arm control exists, do not trust a positional rule at all.
+written, the boundary-fixed allowlist stays.
+**Second attempt the same day: the off-by-one was a carry-ordering bug, and fixing it drew the
+line under which pairing is sound.** `symFor` closed over `carrySym`, which was overwritten
+BEFORE the anchors were pushed, so each row read its own trailing symbol as the incoming
+carry. Reading the incoming value first removed the off-by-one entirely — the five section-H
+arrow rows pair correctly and all 20 controls still pass, the forward-binding fixtures
+included. It then bound 9 citations the lexical test had abstained on, and none of those are
+doc errors: `enabled` in "rides `enabled`, not a 4th status", `ReferenceError` in a prose
+aside, `isChartAnalysisRequested` and `reconstructOpenings` in sentences that name a deleted
+thing while citing something else. A backticked word is not a symbol claim, and position
+alone cannot distinguish one — what makes the SPAN view sound is that the symbol and the path
+share one span, which the line view cannot require without discarding most of its coverage.
+So this is a settled design boundary, not an unfinished task: the line view keeps the
+boundary-fixed allowlist, positional pairing stays where it is sound, and the enabler that
+is kept is 11bb0078, the length-padded strip (behaviour-neutral on its own, verified: same
+253 unique / 539 references, both ceilings 0, 20 controls). Until that html-arm control exists, do not trust a positional rule at all.
 
 **A second hole, found while widening: the gate has never been able to see a citation to a
 deleted file.** `collect()` resolves each qualified path and `continue`s when nothing matches, so
