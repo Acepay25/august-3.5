@@ -63,11 +63,11 @@ const MUST_STAY_WIRED = [
 ];
 
 // Ratchets DOWN only. Each entry deleted from the registry lowers this number.
-const UNREACHABLE_CEILING = 16;
+const UNREACHABLE_CEILING = 0;
 
 describe('every prompt offered in Settings is one the app actually reads', () => {
     it('finds the registry, and the scanner has a population', () => {
-        expect(registryIds.length).toBeGreaterThanOrEqual(27);
+        expect(registryIds.length).toBe(11);
         expect(WIRED.length).toBeGreaterThanOrEqual(MUST_STAY_WIRED.length);
         // A scanner that matched nothing would report every id unreachable and
         // still "pass" the ceiling if the ceiling were loose enough.
@@ -85,7 +85,7 @@ describe('every prompt offered in Settings is one the app actually reads', () =>
         expect(READERS[id], `${id} is still listed in Settings but no code reads it`).not.toHaveLength(0);
     });
 
-    it('has no wired id missing from the expected set', () => {
+    it('the wired set is the whole registry', () => {
         // Guards against adding a call site without naming it above: the moment
         // a prompt becomes reachable it must be listed as must-stay-wired.
         expect(WIRED.slice().sort()).toEqual(MUST_STAY_WIRED.slice().sort());
