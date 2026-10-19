@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**272 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**276 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 3 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -402,12 +402,12 @@ card that forgets it was clicked offers a second journal row.
 | 2 | index.tsx → App | `StrictMode index.tsx:73` › `ErrorBoundary index.tsx:74` › `ToastProvider index.tsx:75` |
 | 3 | App → useSurfaceRouter | surface + journalTab + journalOpenNonce |
 | 4 | useSurfaceRouter → useSurface | persisted value, key `august_surface_v1 hooks/useSurface.ts:15`, valid set `:16` |
-| 5 | useSurfaceRouter → appHash | `#/journal\|market\|settings\|watch` ⇄ state `hooks/useSurfaceRouter.ts:101`, serialize `:159` |
-| 6 | App → Header | band `App.tsx:2467`, guard `surface !== 'agents'` `:2466` |
+| 5 | useSurfaceRouter → appHash | `#/journal\|market\|settings\|watch` ⇄ state `parseAppHash hooks/useSurfaceRouter.ts:101`, serialize `serializeAppHash hooks/useSurfaceRouter.ts:159` |
+| 6 | App → Header | band `App.tsx:2467`, guard `surface App.tsx:2428` (surface !== 'agents') |
 | 7 | App → 4 lazy surfaces + the automation modal | each wrapped in `SurfaceSkeleton` — `SurfaceSkeleton App.tsx:2456` TradeView, `SurfaceSkeleton App.tsx:2501` Journal, `SurfaceSkeleton App.tsx:2523` LearnView, `SurfaceSkeleton App.tsx:2539` StrategyStudio, `SurfaceSkeleton App.tsx:2298` AutomationView |
 | 8 | Header → SurfaceSwitch | the destination set `App.tsx:2163`, list `SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:42` |
-| 9 | App → AgentsView props | same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) `App.tsx:2604-2697` |
-| 10 | TradeView → TradeChatPanel | the dock, inside Trade `components/trade/TradeView.tsx:1115` |
+| 9 | App → AgentsView props | same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) on `AgentsView App.tsx:2566`, props `App.tsx:2604-2697` |
+| 10 | TradeView → TradeChatPanel | the dock, inside Trade `TradeChatPanel components/trade/TradeView.tsx:1115` |
 | 11 | AgentsView.send → bot branch | the selected bot answered at `onSendBotTurn components/agents/AgentsView.tsx:732` |
 | 12 | bot branch → useBotMailbox | `runUserBotTurn` → `runBotTurn` |
 | 13 | AgentsView.send → analysis branch | `onAnalyze components/agents/AgentsView.tsx:722` → `handleRunAnalysisFromChat App.tsx:1691` — the dock's `onRunAnalysis` reaches the SAME wrapper |
@@ -447,7 +447,7 @@ card that forgets it was clicked offers a second journal row.
 | 47 | prose that never called the tool → the same decision | `planFromProse` (`services/trade/tradeShapedProse.ts`) reads the labelled entry/stop/target out of the row, `parseTradeProposal` decides whether that is a plan, and the chip mints the ONE plan-id shape (`mintPlanId`) before calling `onLogProposedTrade` — so a spoken plan reaches the journal the same way a presented one does |
 | 48 | a scheduled run → a rationed plan | `MAX_PLANS_PER_RUN` `MAX_PLANS_PER_RUN services/trade/automationTurn.ts:69` counts inside the turn; `MAX_PLANS_PER_DAY` `MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113` is a local-calendar-day ledger keyed per automation (`:130` read, `:143` spend). Past either, `present_trade` gets an `ok: false` receipt naming the limit — a refusal the MODEL reads, not a card that quietly never appears |
 | 49 | a schedule's failure → the row and the toast | the turn's `notices` `notices services/trade/automationTurn.ts:155` — a tool that came back `ok: false` (from `onToolPayload`, which already carries it), a turn that called nothing, a refused plan — are written into the stored text at `useAnalysisPipeline.ts:1247` and handed to `useAutomations.ts:531`, which downgrades the toast from success to warning. Nobody is watching a schedule live; a success toast over a failed lookup is how an unattended run manufactures confidence |
-| 50 | a journal row gets its scalp/swing class | `withDetectedTradeType` (`services/analysis/ScalpDetectionService.ts`) is called at the two row-minting sites in `hooks/useTradeLogging.ts` — label-only, so no `validityDurationMinutes` appears and the autopilot expiry window never widens. The filter reads it at `components/journal/TradeLog.tsx:535` |
+| 50 | a journal row gets its scalp/swing class | `withDetectedTradeType` (`services/analysis/ScalpDetectionService.ts`) is called at the two row-minting sites `withDetectedTradeType hooks/useTradeLogging.ts:305` and `withDetectedTradeType hooks/useTradeLogging.ts:665` — label-only, so no `validityDurationMinutes` appears and the autopilot expiry window never widens. The filter reads it at `components/journal/TradeLog.tsx:535` |
 | 51 | a run records its measured cost | `recordToolTurnUsage` (`utils/sessionUsage.ts`) is called by all three turn owners — desk arm `chatSurfaceTurn.ts`, schedule arm `automationTurn.ts`, dock seats `chatTurnRunner.ts` — from the `usage` the wire reported per request. `Knowledge → Session Usage` reads that ledger; stage 19 left it with a reader and no writer. `usageCalls` distinguishes a zero-cost run from a provider that sent no usage frame |
 | 52 | a finished analysis says so | `notify()` (`services/infrastructure/notify.ts`) fires when a Full-analysis send settles un-stopped (`notify hooks/useAnalysisPipeline.ts:1443`). Before stage 19 this came from the verdict finalizer; the old channel name CompletionNotifications was a native-only copy of the same thing and now has no caller, so the app speaks through one notifier |
 | 53 | the chart gets its Entry/Stop/Target lines | `latestChartVerdict(messages)` `latestChartVerdict services/trade/chartData.ts:91` is what App hands `TradeView` as `verdict` — the newest row carrying `Message.proposal` (what `present_trade` stamps; `proposal hooks/useAnalysisPipeline.ts:1254`), with `Message.analysis` as the fallback for pre-debate history. Red-proved: the old selector keyed on `ensembleProgress` / >1 `modelsUsed` / `debateTurns` and returned null for every tool-turn row. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate
@@ -477,10 +477,10 @@ card that forgets it was clicked offers a second journal row.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 272 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 276 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 272 anchors verified, and the gate
+   the gate's own output: these docs state 276 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -570,7 +570,7 @@ card that forgets it was clicked offers a second journal row.
    records the v1.0.20 TDZ crash as a splash hang. A page that dies before React
    mounts fails both gates, not just one.
 
-10. **The arrow table is 53 rows, and every citation in it resolves — but only 23 of the 53 also name the symbol they cite, and those are the rows whose CONTENT the gate can test. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently; 30 rows are line-resolved only.** An
+10. **The arrow table is 53 rows, and every citation in it resolves — but every one of the 28 rows that cite a file also names the symbol it cites (23 became 28 in this pass), so no cited row is left content-unchecked. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently. The other 25 rows name no file at all — storage keys, wire formats, prose — and a wrong number in one of those is still outside this gate's reach, which is why the sentence says 28/53 rather than 53/53.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
     resolves all 255 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.

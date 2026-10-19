@@ -2290,3 +2290,12 @@ services/trade/automationTurn.ts:69, MAX_PLANS_PER_DAY services/automation/Autom
 services/trade/automationTurn.ts:155, latestChartVerdict services/trade/chartData.ts:91. The gate prints
 23/53 with 37 pairs and a floor of 23; 30 rows remain line-resolved, and those are where the next wrong number
 would still be invisible.
+
+**Coverage 23 became 28: every arrow row that cites a file is content-checked now.** Binding the last five
+produced one more wrong number: row 6 cited App.tsx:2466 for the guard `surface !== 'agents'`, but that line is a
+prop — the guard is at **App.tsx:2428**, 38 lines away. Also bound and verified against the source:
+parseAppHash hooks/useSurfaceRouter.ts:101 with serializeAppHash :159, the `AgentsView` element opening at
+App.tsx:2566, `TradeChatPanel` rendered at components/trade/TradeView.tsx:1115, and the two row-minting calls
+withDetectedTradeType hooks/useTradeLogging.ts:305 and :665. What the gate still cannot reach: the 25 rows that
+name no file at all, and the docs say 28/53 rather than claiming the table is fully checked.
+
