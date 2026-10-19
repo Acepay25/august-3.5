@@ -677,6 +677,88 @@ try {
 const providers = deletedProviders
     ? LIVE.flatMap(d => providerClaims(fs.readFileSync(d, 'utf8'), d, deletedProviders, leftProviders))
     : [];
+// ── AGENTS.md numbers, measured the same way ─────────────────────────────────
+// AGENTS.md is the first file an agent reads, and its citations are scanned above,
+// but it also carries counts no rule reached: how many smoke tests Playwright runs,
+// the vitest census, and which npm steps exist in one workflow and not the other.
+// Each is recomputed from the tree — a claim that cannot be reproduced is a claim
+// the gate should refuse, not a sentence someone re-reads by eye.
+const AGENTS_FILE = path.join(ROOT, 'AGENTS.md');
+function smokeTests() {
+    return (fs.readFileSync(path.join(ROOT, 'e2e', 'smoke.spec.ts'), 'utf8').match(/^\s*test\(/gm) || []).length;
+}
+function trackedTestFiles() {
+    return execFileSync('git', ['ls-files', 'tests'], { cwd: ROOT, encoding: 'utf8' })
+        .split('\n').map(l => l.trim()).filter(l => /\.test\.[cm]?[jt]sx?$/.test(l)).length;
+}
+function wfRuns(rel) {
+    return new Set((fs.readFileSync(path.join(ROOT, rel), 'utf8').match(/npm run [a-z0-9:._-]+/g) || [])
+        .map(x => x.slice('npm run '.length)));
+}
+function asymmetry() {
+    const ci = wfRuns(path.join('.github', 'workflows', 'ci.yml'));
+    const release = wfRuns(path.join('.github', 'workflows', 'release.yml'));
+    return { ciOnly: [...ci].filter(x => !release.has(x)), relOnly: [...release].filter(x => !ci.has(x)) };
+}
+// A step is NAMED only as a whole token: the "test" inside "tests" or "typecheck"
+// is not the doc claiming CI has a bare `npm run test` step.
+function namesWholeWord(text, name) {
+    const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('(^|[^a-z0-9:._-])' + esc + '($|[^a-z0-9:._-])').test(text);
+}
+function agentsClaims(atext) {
+    const out = [];
+    const smoke = smokeTests();
+    for (const m of atext.matchAll(/(\d+)\s+smoke tests/g)) {
+        if (+m[1] !== smoke) out.push(`AGENTS.md says ${m[1]} smoke tests; e2e/smoke.spec.ts defines ${smoke}`);
+    }
+    if (smoke === 0) out.push('the smoke census measured 0 tests in e2e/smoke.spec.ts — the scan has no population');
+    const testFiles = trackedTestFiles();
+    const c = atext.match(/(\d+)\s+tests\s+in\s+(\d+)\s+files:\s*(\d+)\s+pass\s+in\s+(\d+)\s+and\s+(\d+)\s+skip/);
+    if (!c) out.push('AGENTS.md no longer states the vitest census in the form the gate can check');
+    else {
+        const [, t, f, p, pf, sk] = c;
+        if (+t !== +p + +sk) out.push(`AGENTS.md census: ${t} tests, but ${p} pass + ${sk} skip = ${+p + +sk}`);
+        if (+f !== +pf + 1) out.push(`AGENTS.md census: ${f} files, but ${pf} pass + 1 skipped file = ${+pf + 1}`);
+        if (+f !== testFiles) out.push(`AGENTS.md census says ${f} test files; git tracks ${testFiles} under tests/`);
+    }
+    if (testFiles < 400) out.push(`git ls-files tests returned ${testFiles} files; the census has no population to bind to`);
+    const { ciOnly, relOnly } = asymmetry();
+    // The asymmetry is only a claim while the doc prints its recipe beside it, so
+    // the names are checked in that paragraph — not "somewhere in a 160-line file".
+    const lines = atext.split('\n');
+    const at = lines.findIndex(l => l.includes('comm -13'));
+    const window = at < 0 ? '' : lines.slice(at, at + 15).join('\n');
+    if (!window) out.push('AGENTS.md no longer quotes the comm -13 recipe, so its workflow-asymmetry sentence binds to nothing');
+    // Floor: an empty asymmetry would make the loop below vacuously true.
+    if (ciOnly.length + relOnly.length < 4) out.push(`the workflow scan found only ${ciOnly.length + relOnly.length} asymmetric npm steps — the scan is broken, not the doc`);
+    for (const n of [...ciOnly, ...relOnly]) {
+        if (window && !namesWholeWord(window, n)) out.push(`AGENTS.md no longer names the asymmetric workflow step "${n}" beside its own recipe`);
+    }
+    return out;
+}
+// Controls mutate the REAL doc one number at a time. A control built from an
+// invented string can pass while the shipped sentence goes unchecked — here the
+// population IS this file, so every arm has to be a planted edit to it.
+const AGENTS_TEXT = fs.readFileSync(AGENTS_FILE, 'utf8');
+const plant = (re, rep) => agentsClaims(AGENTS_TEXT.replace(re, rep));
+const agentsArms = [
+    { msg: 'a +2 smoke-test count planted in the real sentence passed', check: () => plant(/(\d+)\s+smoke tests/, (m, d) => `${+d + 2} smoke tests`).some(m => /smoke tests; e2e/.test(m)) },
+    { msg: 'a census total planted 1 too high passed the arithmetic', check: () => plant(/(\d+)\s+tests\s+in\s+(\d+)\s+files:/, (m, t, f) => `${+t + 1} tests in ${f} files:`).some(m => /pass \+ \d+ skip =/.test(m)) },
+    { msg: 'a file count planted 7 off git ls-files passed', check: () => plant(/tests\s+in\s+(\d+)\s+files/, (m, f) => `tests in ${+f + 7} files`).some(m => /git tracks/.test(m)) },
+    { msg: 'a per-file pass count planted 1 off passed', check: () => plant(/pass\s+in\s+(\d+)/, (m, pf) => `pass in ${+pf + 1}`).some(m => /1 skipped file =/.test(m)) },
+    { msg: 'deleting the release-only step name from its own paragraph passed', check: () => plant(/`installer-smoke` is the only command/, () => 'the only command').some(m => /no longer names the asymmetric workflow step "installer-smoke"/.test(m)) },
+    { msg: 'a doc that stopped naming its own recipe passed', check: () => plant(/comm -13/, () => 'comm -NN').some(m => /no longer quotes the comm -13 recipe/.test(m)) },
+];
+const agentsControls = agentsArms.filter(a => !a.check()).map(a => a.msg);
+// Floor: the arm COUNT is a figure too. An arm quietly deleted from the list above
+// would make the pass silent, so the number of planted defects is asserted here.
+if (agentsArms.length < 6) agentsControls.push(`only ${agentsArms.length} AGENTS.md arms are planted; a rule with no defect to catch is not a rule`);
+if (agentsControls.some((c) => !c)) agentsControls.push('an AGENTS.md control arm produced an empty finding — it asserts nothing');
+const agents = agentsClaims(AGENTS_TEXT);
+agents.forEach(m => console.log(`  STALE CENSUS ${m}`));
+const asym = asymmetry();
+console.log(`agents-census: ${agents.length} AGENTS.md claim(s) disagree with the tree; ${agentsControls.length} of ${agentsArms.length} control arms failed — smoke tests ${smokeTests()}, test files ${trackedTestFiles()}, asymmetry ci-only [${asym.ciOnly.join(' ')}] release-only [${asym.relOnly.join(' ')}]`);
 providers.forEach(m => console.log(`  STALE CENSUS ${m}`));
 const stated = LIVE.filter(d => /lines\s+in\s+\d+\s+files/.test(plain(fs.readFileSync(d, 'utf8'), isHtml(d))));
 const rowStated = LIVE.filter(d => /arrow\s+table\s+is\s+\d+\s+rows/.test(plain(fs.readFileSync(d, 'utf8'), isHtml(d))));
@@ -696,6 +778,8 @@ if (!providersSkip && deletedProviders.size < 20) {
 }
 if (census.length) { console.log(`FLOW DOC ANCHORS FAIL — ${census.length} doc statement(s) quote a measurement their own recipe no longer produces. Re-run the recipe and restate; do not loosen the rule.`); process.exit(1); }
 if (providers.length) { console.log(`FLOW DOC ANCHORS FAIL — ${providers.length} statement(s) about the provider-directory census disagree with git/the tree.`); process.exit(1); }
+if (agentsControls.length) { console.log(`FLOW DOC ANCHORS FAIL — the AGENTS.md rule cannot see its own planted numbers: ${agentsControls.join('; ')}`); process.exit(1); }
+if (agents.length) { console.log(`FLOW DOC ANCHORS FAIL — ${agents.length} AGENTS.md statement(s) disagree with the tree. Re-measure and restate; do not loosen the rule.`); process.exit(1); }
 if (controls.length) { console.log('FAIL — the gate cannot see its own planted defects'); process.exit(1); }
 if (problems.length) { console.log(`FLOW DOC ANCHORS FAIL — ${problems.length} stale anchor(s)`); process.exit(1); }
 if (rep.symMiss.length > SYMMISS_CEILING) {
