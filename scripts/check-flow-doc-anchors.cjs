@@ -82,7 +82,12 @@ function linesOf(file) {
     return lineCache.get(file);
 }
 
-const strip = s => s.replace(/<[^>]*>/g, '');
+// Deleting a tag with NO separator glued adjacent runs into one token: html written
+// `<b>App</b><i>index.tsx:73-79` stripped to `Appindex.tsx:73-79`, which then failed
+// resolve() and was silently dropped — so 12 flow-doc citations were never checked at
+// all, and a deleted-file detector reported them as "no such file". A tag is a gap in
+// the text, so it becomes a space.
+const strip = s => s.replace(/<[^>]*>/g, ' ');
 
 /**
  * The symbol a doc line claims its citation points at, when the line names
