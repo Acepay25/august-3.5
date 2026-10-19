@@ -2169,7 +2169,7 @@ the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:69`; 
 progress panel now mints two rows (`market-data`, `analysis`), completed by
 `settleOpenSteps()` in the run's `finally` after the catch has marked any failure.
 
-**Push state:** 98 unpushed commits at this tip (measured as `git rev-list --count
+**Push state:** 99 unpushed commits at this tip (measured as `git rev-list --count
 origin/main..HEAD`, which is the only honest way to state it — the count grows with
 every commit, so re-measure rather than trust this number), nothing pushed this
 session; the earlier authorization covered only the first 16.
@@ -2317,12 +2317,19 @@ and 0 control failures), `npm run lint` (0 errors / 681 warnings under the ratch
 than left on inference: `npm run test` reads `Test Files 478 passed | 1 skipped (479)` and
 `Tests 4730 passed | 11 skipped (4741)` — which is the census `AGENTS.md` states, confirmed by the
 run and not only by arithmetic — `npm run typecheck` exits clean, and `vite build` succeeds in
-10.53s. Carried over are only the four browser gates (`boot-probe`, `render-probe`, `e2e`,
-`skill-approval-probe`), last executed at `8e4808a1` — carried **with the evidence named**, not
-because a previous paragraph said so: no byte of source, test, workflow or asset differs between
-that tip and this one, so the bundle they passed on is the bundle this tip builds. The `[MemoryFiles]
-notebook write FAILED` lines inside the vitest output are the suite's own injected quota faults —
-the write-failure surfacing is what those tests are testing.
+10.53s. Then the four browser gates were run here as well, so nothing on this page is inferred:
+`boot-probe` → "prod bundle boots, trade surface + Chart AI dock render, zero pageerrors";
+Playwright `e2e` → "5 passed (13.9s)", which is the smoke-test count `AGENTS.md` states;
+`render-probe` → every exchange renders and keeps its earlier rows in both conversation surfaces,
+malformed audit data drops no row, all four nav surfaces mount, Settings → Data backs up, exports
+and imports, **zero pageerrors**; `skill-approval-probe` → "25/25 checks passed; pageErrors=2".
+Each verdict was read from its own log line, not from a wrapper exit code.
+The `8e4808a1` diff recipe above is still worth keeping — it is the REASON these runs could not
+have been affected by the seven doc commits, and the reason a future reader need not re-run them
+when the diff is likewise inert. The `[MemoryFiles] notebook write FAILED` lines inside the vitest
+and skill-approval output are those suites' own injected quota faults — the write-failure
+surfacing is the thing under test, so they are the pass, not a failure, and the probe's
+`pageErrors=2` is the same pair.
 
 This is the same rule that revoked a carry-over earlier in this session — a carried claim dies at the
 first source edit — stated now in the direction that matters: the diff is what makes it survivable, and
