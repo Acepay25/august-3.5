@@ -14,7 +14,7 @@ import type { MemoryFile } from '../../types';
 
 /**
  * SkillViewerPanel — the `SKILL.md`-shaped reader (gap 1 of
- * docs/plans/ui-ux-target-plan-2026-10-11.md).
+ * docs/plan/open-items.md).
  *
  * The reference shows a skill as a rendered document: `Description` as its own
  * labelled field, the body below it, and `Save skill` / `Copy` in the header.

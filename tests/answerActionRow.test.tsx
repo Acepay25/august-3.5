@@ -121,7 +121,7 @@ describe('SpeakChip', () => {
     });
 
     it('carries a VISIBLE label — the row must not read "Copy 20731d"', () => {
-        // §1b.7 of ui-ux-target-plan-2026-10-11.md: the action row renders Copy
+        // §1b.7 of docs/plan/open-items.md: the action row renders Copy
         // as text and the speaker as a bare glyph, so the pair read as one
         // unlabelled smear. An affordance must say on screen what it is; the
         // aria-label alone leaves sighted users a symbol with no name.

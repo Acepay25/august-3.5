@@ -96,10 +96,6 @@ interface SettingsMenuProps {
     onSetVisionModel?: (modelId: string) => void;
     /** Resolved vision ProviderConfig (global → conversation → first ready). */
     visionConfig?: ProviderConfig | null;
-    moderatorProvider?: AIProvider;
-    moderatorModel?: string;
-    onSetModeratorProvider?: (provider: string) => void;
-    onSetModeratorModel?: (model: string) => void;
     // Dynamic Providers
     providerConfigs?: ProviderConfig[];
     /** False while provider configs are still loading — avoids the
@@ -467,10 +463,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         visionModel: props.visionModel,
                                         selectedOcrModel: props.selectedOcrModel,
                                         onSetVisionModel: props.onSetVisionModel,
-                                        moderatorProvider: props.moderatorProvider,
-                                        moderatorModel: props.moderatorModel,
-                                        onSetModeratorProvider: props.onSetModeratorProvider,
-                                        onSetModeratorModel: props.onSetModeratorModel,
                                         onUpdateProvider: props.onUpdateProvider,
                                         onAddCustomProvider: props.onAddCustomProvider,
                                         onRemoveProvider: props.onRemoveProvider,

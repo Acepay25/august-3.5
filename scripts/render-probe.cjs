@@ -864,12 +864,24 @@ async function main() {
                 Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')
                     .set.call(ta, needle);
                 ta.dispatchEvent(new Event('input', { bubbles: true }));
+            }, text);
+            // The send affordance enables in the render that FOLLOWS the input
+            // event; reading it in the same tick raced React and reported a
+            // dead composer on a healthy app. Wait for the enabled state, and
+            // still fail (5s budget) when the composer is genuinely stuck.
+            const sendReady = await page.waitForFunction(() => {
                 const btn = [...document.querySelectorAll('main button')].find(b => /send/i.test(
                     `${b.getAttribute('aria-label') || ''} ${b.title || ''} ${b.textContent || ''}`,
                 ));
-                if (!btn || btn.disabled) throw new Error('Agents send button unavailable');
-                btn.click();
-            }, text);
+                return !!btn && !btn.disabled;
+            }, null, { timeout: 5000 }).then(() => true).catch(() => false);
+            if (!sendReady) throw new Error('Agents send button unavailable');
+            await page.evaluate(() => {
+                const btn = [...document.querySelectorAll('main button')].find(b => /send/i.test(
+                    `${b.getAttribute('aria-label') || ''} ${b.title || ''} ${b.textContent || ''}`,
+                ));
+                if (btn) btn.click();
+            });
             await page.waitForFunction((seen) => document
                 .querySelectorAll('[data-testid="agent-message"]').length >= seen + 2,
             before, { timeout: 30000 });

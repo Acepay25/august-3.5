@@ -11,7 +11,7 @@ import type { ProviderConfig } from '../../types/provider';
 
 /**
  * MemoryTopicPanel — one notebook entry read as a document (gap 2 + gap 3 of
- * docs/plans/ui-ux-target-plan-2026-10-11.md).
+ * docs/plan/open-items.md).
  *
  * The reference's detail view leads with Last updated, then Summary, then the
  * bulleted Details, then Delete at the foot — and the "Tell Claude what to

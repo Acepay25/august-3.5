@@ -15,7 +15,7 @@
  *
  * Restore if you need to undo it: Settings → Data → the backup taken moments before
  * (its id and timestamp are in the returned report and in the console line), then
- * import that file. See docs/plans/workstream1-status.md for the exact steps.
+ * import that file. See docs/plan/open-items.md for the exact steps.
  */
 
 import { grandfatherExistingApprovals } from './SkillMemoryService';

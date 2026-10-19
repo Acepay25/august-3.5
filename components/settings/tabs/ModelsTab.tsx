@@ -23,10 +23,6 @@ export interface ModelsTabProps extends SettingsTabProps {
     selectedOcrModel?: string;
     onSetVisionModel?: (modelId: string) => void;
     onMemoryConfigChange?: (config: ProviderConfig | null) => void;
-    moderatorProvider?: AIProvider;
-    moderatorModel?: string;
-    onSetModeratorProvider?: (provider: string) => void;
-    onSetModeratorModel?: (model: string) => void;
     // Dynamic Providers
     onUpdateProvider?: (id: string, updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>>) => Promise<void>;
     onAddCustomProvider?: (provider: { name: string; baseUrl: string; apiKey: string; apiFormat: ApiFormat; models?: string[]; selectedModel?: string }) => Promise<void>;
@@ -50,10 +46,6 @@ const ModelsTab: React.FC<{ tab: ModelsTabProps }> = ({ tab: props }) => {
         visionModel,
         selectedOcrModel,
         onSetVisionModel,
-        moderatorProvider,
-        moderatorModel,
-        onSetModeratorProvider,
-        onSetModeratorModel,
         onUpdateProvider,
         onAddCustomProvider,
         onRemoveProvider,
@@ -122,31 +114,6 @@ const ModelsTab: React.FC<{ tab: ModelsTabProps }> = ({ tab: props }) => {
                     </p>
                 </div>
 
-                <div className="rounded-bubble border border-white/[0.07] bg-zinc-900/50 p-4">
-                    <div className="mb-2 text-ui-dense font-semibold uppercase tracking-[0.08em] text-zinc-500">
-                        Moderator
-                    </div>
-                    <ModelPicker
-                        providers={providerConfigs ?? []}
-                        value={moderatorProvider && moderatorModel ? `${moderatorProvider}::${moderatorModel}` : moderatorProvider || ''}
-                        onChange={(v) => {
-                            const separator = v.indexOf('::');
-                            if (separator >= 0) {
-                                const providerId = v.slice(0, separator);
-                                const modelId = v.slice(separator + 2);
-                                onSetModeratorProvider?.(providerId);
-                                onSetModeratorModel?.(modelId);
-                            } else {
-                                onSetModeratorProvider?.(v);
-                                const selectedCfg = (providerConfigs ?? []).find(c => c.id === v);
-                                if (selectedCfg && selectedCfg.models.length > 0) {
-                                    onSetModeratorModel?.(selectedCfg.selectedModel || selectedCfg.models[0]);
-                                }
-                            }
-                        }}
-                        mode="provider-model"
-                    />
-                </div>
             </div>
 
             {providerConfigs && onUpdateProvider && onAddCustomProvider && onRemoveProvider && onToggleProviderConfig ? (

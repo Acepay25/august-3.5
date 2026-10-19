@@ -7,7 +7,7 @@ import { join } from 'path';
  * replaced 9px/10px first (base − 5 / − 4), then 11px/12px/13px (base − 3 /
  * − 2 / − 1) — exact at the pre-redesign default `--ui-font-size: 14px`, so every
  * migration moved no pixels at that dial. The 2026-10-10 redesign moved the
- * default to 16px (docs/plans/redesign-plan-claude-chatgpt-haze-2026-10-10.md);
+ * default to 16px (docs/plan/open-items.md);
  * the ramp's shape is unchanged — every role is still dial-relative, which is
  * what this suite actually guards. Those five sizes were hundreds of occurrences across most
  * of the tree, which is exactly why the ramp could not scale while they

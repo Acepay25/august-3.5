@@ -1,6 +1,6 @@
 /**
  * memoryTopicEdits — the natural-language edit of a notebook entry (gap 3 of
- * docs/plans/ui-ux-target-plan-2026-10-11.md).
+ * docs/plan/open-items.md).
  *
  * The reference's memory detail carries a "Tell Claude what to change" box:
  * the trader writes an instruction in plain words, a model proposes the edit,

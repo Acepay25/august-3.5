@@ -101,7 +101,7 @@ describe('buildProposedTradeMessage', () => {
         expect(m.planId).toBe('btc-abc');
     });
     it('is a receipt, not a second report — the numbers are not restated', () => {
-        // §1b.2/§1b.3 of ui-ux-target-plan-2026-10-11.md: the logged text used
+        // §1b.2/§1b.3 of docs/plan/open-items.md: the logged text used
         // to print "@ 100, SL 90, TP 110" directly above a card that labels
         // those same numbers, and the copy of the analysis it carries drew the
         // decision card a SECOND time in the same turn. One fact, one carrier:
