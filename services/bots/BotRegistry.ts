@@ -74,21 +74,4 @@ export const BotRegistry = {
         });
     },
 
-    async seedIfEmpty(fallback: Array<{ providerId: string; model: string; role: AnalystRole; name: string }>): Promise<HermesBot[]> {
-        const storage = await loadRaw();
-        if (storage.bots.length > 0) return storage.bots;
-        const seeded: HermesBot[] = fallback.slice(0, 3).map(f => ({
-            id: newId(),
-            name: f.name,
-            role: f.role,
-            providerId: f.providerId,
-            model: f.model,
-            memoryScope: 'global' as const,
-            enabledTools: defaultToolsForRole(f.role),
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-        }));
-        await saveRaw({ bots: seeded, updatedAt: nowIso() });
-        return seeded;
-    },
 };
