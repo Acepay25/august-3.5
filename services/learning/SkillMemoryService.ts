@@ -319,7 +319,7 @@ export interface SkillMeta {
      *  Default 'all' (any seat may load it). Used to filter skills per seat
      *  at retrieval so a risk-scoped skill does not bleed into the macro
      *  lens. The lens filter is advisory by default: when the calling code
-     *  passes `activeLens` to retrieval, scope-'risk' skills are dropped
+     *  used to pass `activeLens`; the role system that supplied it is gone.
      *  from non-risk seat prompts. */
     lensScope?: 'macro' | 'technical' | 'risk' | 'all';
     /** Latest automated A/B verdict (SkillEvalService). 'hurts' demotes a
@@ -3483,28 +3483,13 @@ const countClosedTrades = (trades: LoggedTrade[]): number =>
  * MIN_SAMPLE_FOR_VETO counted trades of evidence (zero-evidence candidates
  * never reach the model, so they must not reach the trade either).
  */
-export type LensScopeForAnalysis = 'macro' | 'technical' | 'risk' | 'all';
-
-/** Map a `ModeratorLens` / `AnalystRole` to its lensScope string. */
-export const lensScopeFromRole = (role?: string): LensScopeForAnalysis => {
-    if (!role) return 'all';
-    const r = role.toLowerCase();
-    if (r.includes('macro') || r.includes('volatility')) return 'macro';
-    if (r.includes('technical') || r.includes('chart')) return 'technical';
-    if (r.includes('risk') || r.includes('execution')) return 'risk';
-    return 'all';
-};
+/** Map a legacy `ModeratorLens` label to its lensScope string. Stored skill
+ *  metadata is still parsed for readability; no seat filters on it any more. */
 
 /** A skill is in-scope for an active lens when its lensScope is 'all' or
  *  matches the active lens. When no active lens is provided, the filter
  *  is permissive (legacy call sites that don't pass an active lens should
  *  keep seeing the same skills as before — the lens filter is opt-in). */
-export const skillInScopeForLens = (m: SkillMeta, activeLens?: string): boolean => {
-    if (!activeLens) return true;
-    const scope = m.lensScope ?? 'all';
-    if (scope === 'all') return true;
-    return scope === lensScopeFromRole(activeLens);
-};
 
 export const applyNotebookSkillsToAnalysis = <T extends {
     coinName?: string;
@@ -3516,7 +3501,7 @@ export const applyNotebookSkillsToAnalysis = <T extends {
     originalConfidence?: string;
     riskVeto?: string;
     validationWarnings?: string[];
-}>(analysis: T, options?: { regime?: string; activeLens?: string; username?: string; runId?: string }): T => {
+}>(analysis: T, options?: { regime?: string; username?: string; runId?: string }): T => {
     // The ε-holdout must stand down here too. It already blanks PROMPT
     // injection and the predicate clamp on ~10% of runs, but the code veto
     // kept firing — so the "control" group received the exact intervention
@@ -3550,10 +3535,6 @@ export const applyNotebookSkillsToAnalysis = <T extends {
         .map(approvedSkillMeta)
         .filter((m): m is SkillMeta => Boolean(m && skillStrictlyMatchesSetup(m, setup)))
         .filter(m => (m.audience ?? 'all') !== 'moderator')
-        // Phase 3: lens-scope filter — a 'risk'-scoped skill is dropped
-        // when the active lens is the macro seat, and vice versa. Default
-        // 'all' skills still pass through unchanged.
-        .filter(m => skillInScopeForLens(m, options?.activeLens))
         .map(m => ({
             m,
             score: (m.status === 'confirmed' ? 2 : 1)

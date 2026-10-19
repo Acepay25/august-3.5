@@ -13,7 +13,7 @@
  * Best-effort by design: any failure leaves the previous doctrine untouched.
  */
 
-import { AnalystRole, LoggedTrade, TradeOutcome } from '../../types';
+import { LoggedTrade, TradeOutcome } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import {
     getMemoryFiles,
