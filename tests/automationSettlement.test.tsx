@@ -60,8 +60,8 @@ const cfg = (id: string, model: string): ProviderConfig => ({
 const automation = (over: Partial<AutomationConfig>): AutomationConfig => ({
     id: 'a1', name: 'Hourly sweep', enabled: true, schedule: { cron: '0 * * * *' },
     inputSource: 'template', promptTemplate: 'sweep BTC',
-    mode: 'standard', useLenses: false,
-    analystModels: [], moderatorModel: { providerId: '', modelId: '' },
+ mode: 'standard',
+ moderatorModel: { providerId: '', modelId: '' },
     createdAt: 0, updatedAt: 0, runCount: 0, ...over,
 });
 

@@ -25,6 +25,22 @@ export function isProviderReady(config: ProviderConfig): boolean {
  * First ready provider, or null when nothing is configured.
  * Used for default selection (summarization, moderator, vision, memory).
  */
+/** One entry per ready provider's selected model. This is the roster the
+ *  pipeline uses for provider-level fallbacks (no-models check, notebook quick
+ *  save, learning-injection ids, quota attribution) now that the multi-seat
+ *  ensemble is gone. */
+export interface ReadyProviderModel {
+    config: ProviderConfig;
+    name: string;
+    model: string;
+}
+
+export const readyProviderModels = (configs: readonly ProviderConfig[]): ReadyProviderModel[] =>
+    configs
+        .filter((c) => c.isEnabled && c.apiKey.trim().length > 0 && c.selectedModel && c.models.includes(c.selectedModel))
+        .map((c) => ({ config: c, name: c.name, model: c.selectedModel }))
+        .slice(0, 3);
+
 export function getFirstReadyProvider(configs: ProviderConfig[]): ProviderConfig | null {
     return configs.find(isProviderReady) ?? null;
 }

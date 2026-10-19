@@ -71,8 +71,8 @@ const cfg = (id: string, model: string): ProviderConfig => ({
 const automation = (over: Partial<AutomationConfig>): AutomationConfig => ({
     id: 'a1', name: 'Hourly sweep', enabled: true, schedule: { cron: '0 * * * *' },
     inputSource: 'template', promptTemplate: 'sweep BTC',
-    mode: 'standard', useLenses: false,
-    analystModels: [], moderatorModel: { providerId: 'p1', modelId: 'mod-1' },
+ mode: 'standard',
+ moderatorModel: { providerId: 'p1', modelId: 'mod-1' },
     createdAt: 0, updatedAt: 0, runCount: 0, ...over,
 });
 
@@ -241,9 +241,13 @@ describe('the product a scheduled run must keep producing', () => {
 describe('the route a scheduled run takes now', () => {
     const src = readFileSync('hooks/useAnalysisPipeline.ts', 'utf8');
 
-    it('an automation is no longer forced onto the ensemble, so stage 19 can delete it', () => {
-        expect(src).toMatch(/const runEnsembleEnabled = isEnsembleEnabled;/);
-        expect(src).not.toMatch(/isAutomationRun \|\| isEnsembleEnabled/);
+    it('an automation is no longer forced onto any mode — the flag is gone', () => {
+        // This used to REQUIRE the flag to still exist (`runEnsembleEnabled =
+        // isEnsembleEnabled`), a check that could only stay green while the mode
+        // did. The property now is its absence: a schedule is routed by
+        // isAutomationRun alone.
+        expect(src).not.toMatch(/runEnsembleEnabled/);
+        expect(src).not.toMatch(/isEnsembleEnabled/);
     });
 
     it('a schedule is claimed by its own arm before any ensemble block can run', () => {

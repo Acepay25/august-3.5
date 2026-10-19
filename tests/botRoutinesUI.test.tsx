@@ -30,8 +30,8 @@ const bot = (over: Partial<AgentBot>): AgentBot => ({
 const routine = (over: Partial<AutomationConfig>): AutomationConfig => ({
     id: over.id ?? `r${seq += 1}`, name: over.name ?? 'Morning brief', enabled: true,
     schedule: { cron: '0 9 * * 1-5' }, inputSource: 'template',
-    promptTemplate: 'brief me', mode: 'standard', useLenses: false,
-    analystModels: [], moderatorModel: { providerId: '', modelId: '' },
+ promptTemplate: 'brief me', mode: 'standard',
+ moderatorModel: { providerId: '', modelId: '' },
     createdAt: 0, updatedAt: 0, runCount: 0, ...over,
 });
 
@@ -71,27 +71,27 @@ describe('AutomationEditorModal — Run as bot', () => {
         const saved = onSave.mock.calls[0][0] as AutomationConfig;
         expect(saved.name).toBe('Morning routine');
         expect(saved.botId).toBe('b1');
-        expect(saved.analystModels).toEqual([]);
         expect(saved.moderatorModel).toEqual({ providerId: '', modelId: '' });
     });
 
-    it('switching back to the ensemble clears botId and re-requires the seats', () => {
+    it('switching back from a bot run saves the moderator-only route', () => {
         const onSave = vi.fn();
         render(
             <AutomationEditorModal
                 {...editorBase}
                 isVisible
-                initial={routine({ botId: 'b1' })}
+                initial={routine({ botId: 'b1', moderatorModel: { providerId: 'p1', modelId: 'm1' } })}
                 onSave={onSave}
                 bots={[bot({ id: 'b1', name: 'Macro' })]}
             />,
         );
         fireEvent.click(screen.getByTestId('automation-run-as-bot'));
-        fireEvent.click(screen.getByRole('option', { name: /No — run the full ensemble/ }));
+        fireEvent.click(screen.getByRole('option', { name: /No — run the analysis pipeline/ }));
         fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-        // Ensemble mode without analyst seats → validation error, not a save.
-        expect(onSave).not.toHaveBeenCalled();
-        expect(screen.getByText('Pick at least one analyst model.')).toBeTruthy();
+        expect(onSave).toHaveBeenCalledTimes(1);
+        const saved = onSave.mock.calls[0][0] as AutomationConfig;
+        expect(saved.botId).toBeUndefined();
+        expect(saved.moderatorModel).toEqual({ providerId: 'p1', modelId: 'm1' });
     });
 });
 
@@ -123,7 +123,7 @@ describe('AutomationRunCard — bot runs & skips', () => {
         expect(screen.getByText('Skipped').getAttribute('title')).toContain('not configured');
     });
 
-    it('keeps the ensemble analysis rendering byte-identical (regression guard)', () => {
+    it('keeps an analysis rendering byte-identical (regression guard)', () => {
         const { container } = render(<AutomationRunCard run={botRun({
             message: {
                 id: 'm1', role: MessageRole.AI, text: '', createdAt: '2026-09-02T09:00:05.000Z',

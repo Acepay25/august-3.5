@@ -48,8 +48,8 @@ const CONFIGS = [cfg('p1', 'm1')];
 const automation = (over: Partial<AutomationConfig>): AutomationConfig => ({
     id: 'a1', name: 'Morning brief', enabled: true, schedule: { cron: '0 9 * * *' },
     inputSource: 'template', promptTemplate: 'give the morning brief',
-    mode: 'standard', useLenses: false,
-    analystModels: [], moderatorModel: { providerId: '', modelId: '' },
+ mode: 'standard',
+ moderatorModel: { providerId: '', modelId: '' },
     createdAt: 0, updatedAt: 0, runCount: 0, ...over,
 });
 

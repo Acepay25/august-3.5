@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { createNewConversation, findReusableEmptyConversation } from '../utils/conversationUtils';
-import { loadLastModeratorPick } from '../services/ui/AnalystLensService';
+import { loadLastModeratorPick } from '../services/infrastructure/moderatorPick';
 import type { ConfirmOptions } from '../components/shared/ConfirmDialog';
 import type { Conversation, Message } from '../types';
 

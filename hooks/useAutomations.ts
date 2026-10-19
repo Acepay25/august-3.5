@@ -18,7 +18,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Conversation, ImageMetadata, Message, MessageRole } from '../types';
 import { ProviderConfig } from '../types/provider';
-import { AnalystLensConfig, AnalystRole } from '../types';
 import { AutomationConfig, AutomationRun } from '../types/automation';
 import {
     loadAutomationConfigs,
@@ -48,8 +47,6 @@ import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
 
 /** Per-run mode/model overrides (absent fields fall back to global settings). */
 export interface AutomationRunOverrides {
-    lensConfig?: AnalystLensConfig;
-    ensembleModelSelection?: { providerId: string; model: string }[];
     moderatorConfig?: ProviderConfig;
     moderatorModel?: string;
 }
@@ -149,28 +146,9 @@ export const buildAutomationOverrides = (
     providerConfigs: ProviderConfig[]
 ): AutomationRunOverrides => {
     const moderatorConfig = providerConfigs.find(p => p.id === config.moderatorModel.providerId);
-
-    if (config.useLenses && config.analystModels.length === 3) {
-        const [macro, technical, risk] = config.analystModels;
-        return {
-            lensConfig: {
-                enabled: true,
-                // The run's own trading style — 'swing' was hardcoded here,
-                // so automated lens runs could never use position/scalp/auto.
-                tradingStyle: config.lensTradingStyle ?? 'swing',
-                assignments: [
-                    { role: AnalystRole.MACRO_VOLATILITY, assignedProvider: macro.providerId, assignedModel: macro.modelId },
-                    { role: AnalystRole.TECHNICAL_ANALYST, assignedProvider: technical.providerId, assignedModel: technical.modelId },
-                    { role: AnalystRole.RISK_EXECUTION, assignedProvider: risk.providerId, assignedModel: risk.modelId },
-                ],
-            },
-            moderatorConfig: moderatorConfig ?? undefined,
-            moderatorModel: config.moderatorModel.modelId,
-        };
-    }
-
+    // A schedule answers with ONE model. The seat comes from the moderator pick;
+    // the analyst roster and its lens style were removed with the role system.
     return {
-        ensembleModelSelection: config.analystModels.map(m => ({ providerId: m.providerId, model: m.modelId })),
         moderatorConfig: moderatorConfig ?? undefined,
         moderatorModel: config.moderatorModel.modelId,
     };

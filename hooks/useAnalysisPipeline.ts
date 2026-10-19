@@ -3,17 +3,17 @@ import {
     Message, MessageRole, TradeOutcome, LoggedTrade, ImageMetadata,
     DebateTurn, Conversation, TradeAnalysis, TradeSummary,
     GlobalMemory, CustomInstructionsMap, CustomInstruction,
-    AnalystLensConfig, AnalysisStep, InsightKnowledgeBase,
+    AnalysisStep, InsightKnowledgeBase,
     PatternMemoryGateView,
 } from '../types';
 
 import { ProviderConfig } from '../types/provider';
+import { readyProviderModels } from '../utils/providerUtils';
 import { analyzeTradingView, streamQuickResponse } from '../services/providers/GenericAnalysisService';
 import type { ToolAction } from '../types/message';
 import { WireAuditEntry, type ReasoningEffort } from '../services/providers/reasoningControls';
-import { defaultToolsForRole } from '../types/bot';
 import { getActiveUsername } from '../utils/activeUser';
-import { getBots, getGroups, AgentTeamSeat } from '../services/agents/agentRoster';
+import { getBots, getGroups } from '../services/agents/agentRoster';
 
 // Analysis / validation / backtesting services
 import { tryFetchHybridDataFromPromptWithCalibration, generateHybridPromptInjection, HybridDataPacket } from '../services/analysis/HybridIntelligenceService';
@@ -62,13 +62,9 @@ import { generateWeightedVotingContext } from '../services/backtesting/ModelPerf
 import { threadForProvider } from '../utils/agentThreads';
 import { formatInvokedSkillSection, resolveInvokedSkills } from '../services/learning/SkillMemoryService';
 import { recordRegimeDay, marketRegimeToLedger } from '../services/learning/regimeLedger';
-import { EnsembleModelSelection } from '../services/ui/AnalystLensService';
-import { buildHybridEnvelope } from '../utils/debateEnvelopes';
 import { extractDebateTemplate, DebateTemplate } from '../utils/debateTemplates';
 import { parseComposerIntent, formatComposerSteer } from '../utils/composerMentions';
 import { beginPromptLane, endPromptLane } from '../services/infrastructure/PromptOverrideService';
-import { buildEnsembleAnalysts } from '../services/ui/EnsembleAnalystService';
-import { getEffectiveStyle } from '../services/ui/TradingStyleDetector';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { parseDmMarkers } from '../services/agents/botMailbox';
 import { classifyStepError, describeStepError } from '../utils/runStatus';
@@ -150,22 +146,9 @@ export interface UseAnalysisPipelineParams {
     isStrategiesEnabled: boolean;
     customInstructions: CustomInstructionsMap;
     isHybridIntelligenceEnabled: boolean;
-    lensConfig: AnalystLensConfig;
-    /**
-     * Ordinary 3-model picker used when Lenses are OFF — the selected models
-     * become the debate participants (mirrors lens role assignments).
-     */
-    ensembleModelSelection?: EnsembleModelSelection;
-    /** Custom Normal-mode base prompt (prompt editor); undefined = built-in master prompt. */
-    customEnsemblePrompt?: string | null;
-    /** Custom per-role lens prompts (prompt editor); missing roles use built-ins. */
-    customLensPrompts?: Record<string, string>;
     activeFrameworks: string[];
-    // Ensemble mode: when off, messages are casual chat with the selected
-    // model and the chart-analysis pipeline never runs.
-    isEnsembleEnabled: boolean;
-    // Casual-chat model: used when ensemble off; falls back to the first
-    // ready provider's model when empty/stale.
+    // Casual-chat model; falls back to the first ready provider's model when
+    // empty/stale.
     selectedChatModel: string;
     /** ── Bot Mode ──
      *  When a bot's 1:1 thread is open, casual sends run AS that bot:
@@ -270,11 +253,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         isHybridLoading, setIsHybridLoading,
         isRateLimited, setIsRateLimited,
         isGlobalMemoryEnabled, isStrategiesEnabled, customInstructions,
-        isHybridIntelligenceEnabled, lensConfig, activeFrameworks,
-        ensembleModelSelection,
-        customEnsemblePrompt,
-        customLensPrompts,
-        isEnsembleEnabled,
+        isHybridIntelligenceEnabled, activeFrameworks,
         selectedChatModel,
         getActiveBot,
         onBotReply,
@@ -387,16 +366,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         setAnalysisSteps([]);
     }, [activeConversationId]);
 
-    // Hybrid data and pipeline steps are ensemble-only. Clear any stale visual
-    // state immediately when the user switches back to casual chat mode.
-    useEffect(() => {
-        if (isEnsembleEnabled) return;
-        if (isHybridLoading) setIsHybridLoading(false);
-        if (currentHybridData !== null) setCurrentHybridData(null);
-        if (loadingMessage !== null) setLoadingMessage(null);
-        if (analysisSteps.length > 0) setAnalysisSteps([]);
-    }, [isEnsembleEnabled, isHybridLoading, currentHybridData, loadingMessage, analysisSteps.length]);
-
     // ─── Analysis Pipeline Step Tracking ───────────────────────────────────
     // Automation runs mute the step tracker entirely (automationSilentRef).
     const initAnalysisSteps = (steps: AnalysisStep[]) => {
@@ -493,8 +462,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             conversation: Conversation;
             /** Per-run overrides; absent fields fall back to global settings. */
             overrides?: {
-                lensConfig?: AnalystLensConfig;
-                ensembleModelSelection?: EnsembleModelSelection;
                 moderatorConfig?: ProviderConfig;
                 moderatorModel?: string;
             };
@@ -527,21 +494,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         fullAnalysis?: boolean;
     }): Promise<ChatRunOutcome> => {
         const isAutomationRun = !!options?.automation;
-        // Run-scoped mode/model overrides — automation runs may specify
-        // their own accuracy mode, lens config, analyst picks and moderator
-        // (fall back to the global settings when absent).
-        const runLensConfig = options?.automation?.overrides?.lensConfig ?? lensConfig;
-        const runEnsembleSelection = options?.automation?.overrides?.ensembleModelSelection ?? ensembleModelSelection;
+        // Run-scoped model overrides — a scheduled run may name its own
+        // moderator (fall back to the profile setting when absent).
         const runModeratorConfig = options?.automation?.overrides?.moderatorConfig ?? moderatorConfig;
         const runModeratorModel = options?.automation?.overrides?.moderatorModel ?? moderatorModel;
-        // Stage 20r: a scheduled run is NO LONGER forced onto the debate. The
-        // flag used to be true whenever this was an automation, whatever the
-        // trader had switched — which meant stage 19 could not delete the engine
-        // without taking the scheduler down with it. The route a schedule takes
-        // now is its own tool turn (the arm at the fork below), so this flag
-        // answers the question it always should have: does THIS SEND use the
-        // ensemble mode?
-        const runEnsembleEnabled = isEnsembleEnabled;
 
         // ── Composer + hybrid snapshots ──────────────────────────────────
         // These three used to be dependencies of this callback, which is the
@@ -594,15 +550,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // Ensemble participants are model-level entries, not just provider
         // entries. This allows several models from one provider while keeping
         // each result and reasoning trace separate.
-        // Build the analyst list (model-level entries). Extracted to a pure
-        // helper so the N-1 failure path is unit-testable; stale lens-assignment
-        // model ids are resolved against each provider's current model list.
-        const { analysts: enabledProviders } = buildEnsembleAnalysts(
-            providerConfigs,
-            runLensConfig,
-            runEnsembleSelection,
-            runEnsembleEnabled
-        );
+        // The provider pool: one entry per ready provider's selected model.
+        // Nothing fans out to multiple seats any more; this list answers the
+        // provider-level questions (is anything ready, which config pays for
+        // the notebook save, whose ids feed the learning block, which model a
+        // quota error names).
+        const enabledProviders = readyProviderModels(providerConfigs);
 
         // Group-member personas (the Team/group merge): resolve the personas
         // of bots that are members of ANY group, keyed provider+model, so
@@ -611,10 +564,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // composer's Talk-to selector writes); a bot that moved on gets the
         // general-analyst default rather than a stale persona. Read at fire
         // time — persona edits apply to the next send.
-                        // Role-scoped desk tools: a seat with a built-in team role inherits
-        // that role's tool preset (macro/technical/risk) on its opening;
-        // unroled seats, teamless runs, and Lens mode keep the FULL toolset
-        // (undefined) — personas never mix with the Lens engine.
                 // Legacy mandate rotation (ad-hoc ensembles, no active team). Hoisted
         // so the mid-debate replacement path can mirror the initial seats.
         
@@ -1155,24 +1104,11 @@ ${enhancedPrompt}`;
             devLog('[Hybrid Intelligence] ======= END =======');
 
             // ── What the SEND IS decides the branch; what it SAYS never did ────
-            // This gate used to test the prompt text for LIVE MARKET / STRATEGY /
-            // ANALYZE / CHART / SETUP, plus the image and update facts. Read
-            // closely, the five wording tests could not change a human send's
-            // route: this predicate was ANDed with `runEnsembleEnabled`, and
-            // `isEnsembleEnabled` also appeared INSIDE the predicate — so with the
-            // toggle on every send ran the pipeline whatever its wording, and with
-            // it off no wording could make one run it. The one route wording
-            // controlled was a scheduled run's, where `isAutomationRun` supplied
-            // the flag: the same automation answered casually when its prompt read
-            // "outlook" and fully when it read "setup", against this flag's own
-            // documented intent ("Automations always run the ensemble pipeline").
-            // Deleting the wording therefore changes exactly one thing — a
-            // scheduled run is an analysis run, always — and leaves a send with
-            // the toggle off as casual chat even with a screenshot attached, which
-            // is what it already was. The verdict, the levels and the journal row
-            // are now reachable as TOOLS from the casual arm (stage 20's point);
-            // the branch below is the mode's, not the prompt's, and stage 19
-            // deletes it.
+            // The routing predicate is the call itself: a scheduled run goes to
+            // the schedule arm below, and everything else answers through the
+            // tool turn. Prompt wording stopped being a route in stage 20c, and
+            // the ensemble toggle followed with the mode itself (owner ruling,
+            // 2026-10-19), so no branch remains for either to select.
             if (isAutomationRun) {
                 // ── 20r: A SCHEDULED RUN ANSWERS WITH ITS TOOLS ────────────────
                 // The arm sits BEFORE the mode fork, not inside it, so one config
@@ -1188,14 +1124,7 @@ ${enhancedPrompt}`;
                 const seat = automationSeatFor(
                     runModeratorConfig ?? undefined,
                     runModeratorModel,
-                    [
-                        ...(runEnsembleSelection ?? []),
-                        // Lens-mode configs carry their picks as role
-                        // assignments, not as an ensemble selection.
-                        ...(runLensConfig?.enabled
-                            ? (runLensConfig.assignments ?? []).map(a => ({ providerId: a.assignedProvider, model: a.assignedModel }))
-                            : []),
-                    ],
+                    [],
                     providerConfigs,
                 );
                 if (!seat) {
@@ -1562,7 +1491,7 @@ ${enhancedPrompt}`;
             // sees a replaced controller and skips this cleanup — the new run
             // owns the state from there on.
         }
-    }, [loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, memoryConfig, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, customInstructions,lensConfig, isHybridIntelligenceEnabled, isEnsembleEnabled, selectedChatModel, loggedTrades, insightKnowledgeBase, tradeSummaries, customEnsemblePrompt, customLensPrompts, ensembleModelSelection, isStrategiesEnabled, confirmDialog, toast]);
+    }, [loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, memoryConfig, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, customInstructions, isHybridIntelligenceEnabled, selectedChatModel, loggedTrades, insightKnowledgeBase, tradeSummaries, isStrategiesEnabled, confirmDialog, toast]);
 
     // ─── Cancel Analysis ───────────────────────────────────────────────────
     const handleCancelAnalysis = () => {

@@ -22,7 +22,7 @@ import {
     updateMemoryFileUnlocked,
     withNotebookWriteLock,
 } from './MemoryFilesService';
-import { BotRegistry } from '../bots/BotRegistry';
+import { getBots } from '../agents/agentRoster';
 import { formatSkillProcedure, parseIfThenClauses, skillHitRate } from '../../utils/ifThenSkill';
 import { maybePinWinningPromptLane } from '../../utils/promptVersionStats';
 import { CraftedSkill } from '../../schemas/learning';
@@ -3362,17 +3362,9 @@ export const syncClosedTradeToNotebook = async (
                     // for the chart-AI path, where no single bot owns the trade
                     // — reading the first roster entry's notes for a skill that
                     // another bot earned judged it against the wrong teammate.
-                    const ctxBotId = origin?.botId ?? await (async () => {
-                        // P0-3: the roster lives in Preferences via BotRegistry.
-                        // This used to read `localStorage.getItem('bots_v1_…')`
-                        // directly, which is a DIFFERENT store from Capacitor
-                        // Preferences on native — so on a device the read
-                        // returned nothing and the guess silently degraded.
-                        try {
-                            const bots = await BotRegistry.list();
-                            return bots[0]?.id || trade.id;
-                        } catch { return trade.id; }
-                    })();
+                    // agentRoster is the one roster the UI writes; its read is
+                    // synchronous and already defensive, so no await/retry here.
+                    const ctxBotId = origin?.botId ?? getBots()[0]?.id ?? trade.id;
                     // The default per-agent allowance: this judges the skill
                     // THIS bot earned, not a roster-wide merge. Passing no
                     // budget keeps the call shape every existing test mock of

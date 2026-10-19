@@ -11,9 +11,11 @@
 
 import type { RolePreset } from '../../components/chat/pixelAvatars';
 import type { BotFaceSpec } from '../../components/chat/BotFace';
-import type { BotMemoryScope } from '../../types/bot';
-import { AnalystRole } from '../../types/enums';
 import { getActiveUsername } from '../../utils/activeUser';
+
+/** Whose notebook a bot reads. Moved here with the bot type: it is the roster's
+ *  field, and the legacy Preferences store that also declared it is gone. */
+export type BotMemoryScope = 'global' | 'personal' | 'isolated';
 
 export interface AgentBot {
     id: string;
@@ -30,13 +32,7 @@ export interface AgentBot {
      *  without it the roster's scope contract was unimplementable, since the
      *  turn sites had no field to read and hardcoded 'global'. */
     memoryScope?: BotMemoryScope;
-    /** Debate persona: a built-in AnalystRole inherits that role's curated
-     *  prompt (optionally refined by customPrompt); omitted = the
-     *  general-analyst default. Formerly a TEAM-seat field — groups'
-     *  members carry it now (the Team/group merge). */
-    role?: AnalystRole;
-    /** Free-text trader instructions. On a built-in role they REFINE the
-     *  role prompt; unroled they REPLACE the default mandate. */
+    /** Free-text trader instructions. Absent = the general-analyst default. */
     customPrompt?: string;
     /** Avatar: a built-in geometric face, our pixel roles, 'auto', or an
      *  uploaded image clipped to a container shape (data URL). */
@@ -54,20 +50,6 @@ export interface AgentGroup {
     /** Member bot ids, in send order. */
     memberIds: string[];
     createdAt: string;
-}
-
-/** One analyst seat on a team: a provider model the harness will run. */
-export interface AgentTeamSeat {
-    providerId: string;
-    modelId: string;
-    /** Debate persona for this seat. A built-in AnalystRole inherits that
-     *  role's curated prompt; omit (or UNASSIGNED) for the general-analyst
-     *  default: full-scope market analysis aimed at the best signal, desk
-     *  tools + web search included. */
-    role?: AnalystRole;
-    /** Free-text trader instructions. On a built-in role they REFINE the
-     *  role prompt; on a general seat they REPLACE the default mandate. */
-    customPrompt?: string;
 }
 
 const BOTS_KEY = 'agents_bots_v1';
@@ -104,7 +86,23 @@ const write = <T,>(prefix: string, items: T[]): void => {
     notify();
 };
 
-export const getBots = (): AgentBot[] => read<AgentBot>(BOTS_KEY);
+export const getBots = (): AgentBot[] => {
+    // Migration (owner ruling, 2026-10-19): roles and per-role tool presets are
+    // gone. Stored rows are rewritten the first time they are read, so a profile
+    // stops carrying either field instead of being silently tolerated forever.
+    const raw = read<Record<string, unknown>>(BOTS_KEY);
+    let changed = false;
+    const bots = raw.map((row) => {
+        if (!('role' in row) && !('enabledTools' in row)) return row as unknown as AgentBot;
+        changed = true;
+        const clean = { ...row };
+        delete clean.role;
+        delete clean.enabledTools;
+        return clean as unknown as AgentBot;
+    });
+    if (changed) write(BOTS_KEY, bots);
+    return bots;
+};
 export const getGroups = (): AgentGroup[] => read<AgentGroup>(GROUPS_KEY);
 
 export const saveBot = (bot: AgentBot): void => write(BOTS_KEY, [...getBots(), bot]);

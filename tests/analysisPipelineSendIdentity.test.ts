@@ -62,7 +62,10 @@ describe('handleSendMessage — composer state is not a dependency', () => {
         // some other array in the file cannot masquerade as a pass.
         expect(list).toContain('toast');
         expect(list).toContain('confirmDialog');
-        expect(list).toContain('isEnsembleEnabled');
+        // The ensemble flag is gone from the params entirely; a dependency
+        // entry for it would be a dead dependency the parser should not find.
+        expect(list).not.toContain('isEnsembleEnabled');
+        expect(list).toContain('isHybridIntelligenceEnabled');
     });
 
     it('does not rebuild the send callback per keystroke or per stream frame', () => {

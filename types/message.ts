@@ -1,7 +1,6 @@
 // Message and conversation display types
 
 import { MessageRole, TradeOutcome, DebateSpeaker } from './enums';
-import { TradingStyle } from './lens';
 import { TradeAnalysis } from './analysis';
 
 export interface DebateTurn {
@@ -174,7 +173,6 @@ export interface Message {
 
   // Mode Tracking
   isLensMode?: boolean; // Was this analysis created with Analyst Lenses enabled?
-  tradingStyle?: Exclude<TradingStyle, 'auto'>; // Trading style used for this analysis
   /** Failed-run retry: id of the user message whose prompt + charts can
    *  rebuild and re-dispatch the run (renders a Retry button on the error
    *  bubble). Undefined on successful runs. */

@@ -53,8 +53,8 @@ const deps = (over: {
 
 const automation = (over: Partial<AutomationConfig> = {}): AutomationConfig => ({
     id: 'a1', name: 'Morning brief', enabled: true, schedule: { cron: '0 9 * * *' },
-    inputSource: 'template', mode: 'standard', useLenses: false,
-    analystModels: [], moderatorModel: { providerId: '', modelId: '' },
+ inputSource: 'template', mode: 'standard',
+ moderatorModel: { providerId: '', modelId: '' },
     createdAt: 0, updatedAt: 0, runCount: 0, ...over,
 });
 

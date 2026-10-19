@@ -37,7 +37,6 @@ const baseArgs = (): UseProfilePersistenceArgs => ({
     visionModel: '',
     isGlobalMemoryEnabled: false,
     isStrategiesEnabled: false,
-    isEnsembleEnabled: false,
     customInstructions: { general: [] } as any,
     isHybridIntelligenceEnabled: false,
     isAutoCapturing: false,

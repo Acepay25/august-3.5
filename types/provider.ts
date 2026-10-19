@@ -28,7 +28,6 @@ export interface ProviderConfig {
   models: string[];              // Available model IDs
   selectedModel: string;         // Currently selected model ID
   /** Models included when Ensemble mode is enabled (maximum three total). */
-  ensembleModels?: string[];
   /** Optional USD per 1k prompt tokens for run cost estimates. */
   inputUsdPer1k?: number;
   /** Optional USD per 1k completion tokens for run cost estimates. */

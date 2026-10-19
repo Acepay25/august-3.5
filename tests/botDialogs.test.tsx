@@ -5,7 +5,6 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { NewBotDialog } from '../components/chat/NewBotDialog';
 import { NewGroupDialog } from '../components/chat/NewGroupDialog';
 import { AgentBot, AgentGroup } from '../services/agents/agentRoster';
-import { AnalystRole } from '../types/enums';
 import { ProviderConfig } from '../types/provider';
 
 afterEach(cleanup);
@@ -88,35 +87,21 @@ describe('NewGroupDialog — edit mode', () => {
         fireEvent.click(screen.getByTestId('group-member-b3'));
         expect(save.disabled).toBe(false);
         fireEvent.click(save);
-        expect(onUpdate).toHaveBeenCalledWith('g1', ['b1', 'b2', 'b3'], {});
+        expect(onUpdate).toHaveBeenCalledWith('g1', ['b1', 'b2', 'b3']);
     });
 
-    it('a member role change enables Save and rides onUpdate as a botId→role patch', () => {
-        const onUpdate = vi.fn();
-        render(<NewGroupDialog {...base} initialGroup={grp} onUpdate={onUpdate} />);
-        const save = screen.getByTestId('create-group') as HTMLButtonElement;
-        // Membership untouched → role picker visible for checked members.
-        expect(screen.getByTestId('group-role-row-b1')).toBeTruthy();
-        expect(save.disabled).toBe(true);
-        fireEvent.click(screen.getByTestId('group-role-b1'));
-        fireEvent.click(screen.getByText('Risk'));
-        expect(save.disabled).toBe(false);
-        fireEvent.click(save);
-        expect(onUpdate).toHaveBeenCalledWith('g1', ['b1', 'b2'], { b1: 'risk_execution' });
+    it('a group carries membership only — no role rows are rendered', () => {
+        render(<NewGroupDialog {...base} initialGroup={grp} onUpdate={() => {}} />);
+        expect(screen.queryByTestId('group-role-row-b1')).toBeNull();
     });
 
-    it('create mode reports only the roles that differ from the bots’ stored persona', () => {
+    it('create mode reports the selected member ids and nothing else', () => {
         const onCreate = vi.fn();
-        const roled = [
-            bot({ id: 'b1', name: 'Scout', role: AnalystRole.RISK_EXECUTION }),
-            bot({ id: 'b2', name: 'Ledger' }),
-        ];
-        render(<NewGroupDialog open onClose={() => {}} onCreate={onCreate} bots={roled} />);
+        render(<NewGroupDialog open onClose={() => {}} onCreate={onCreate} bots={bots} />);
         fireEvent.click(screen.getByTestId('group-member-b1'));
         fireEvent.click(screen.getByTestId('group-member-b2'));
-        // b1 already carries Risk — leaving it untouched is not a change.
         fireEvent.click(screen.getByTestId('create-group'));
-        expect(onCreate).toHaveBeenCalledWith(['b1', 'b2'], {});
+        expect(onCreate).toHaveBeenCalledWith(['b1', 'b2']);
     });
 
     it('without edit props it stays the plain create dialog', () => {
@@ -126,7 +111,7 @@ describe('NewGroupDialog — edit mode', () => {
     });
 });
 
-describe('NewBotDialog — debate persona on the bot itself (Team/group merge)', () => {
+describe('NewBotDialog — trader instructions are the persona', () => {
     const base = {
         open: true,
         onClose: () => {},
@@ -134,28 +119,17 @@ describe('NewBotDialog — debate persona on the bot itself (Team/group merge)',
         providers: [provider({})],
     };
 
-    it('role picker + inherit + instructions ride the bot, not a team seat', () => {
+    it('has no role picker and sends the trader instructions verbatim', () => {
         const onCreate = vi.fn();
         render(<NewBotDialog {...base} onCreate={onCreate} />);
-        expect(screen.getByTestId('bot-role')).toBeTruthy();
-        // Inherit is absent on the general-analyst default (nothing to inherit).
+        // The built-in analyst roles are gone: no picker, nothing to inherit.
+        expect(screen.queryByTestId('bot-role')).toBeNull();
         expect(screen.queryByTestId('bot-inherit')).toBeNull();
-        // Pick Macro via the SelectMenu trigger.
-        fireEvent.click(screen.getByTestId('bot-role'));
-        fireEvent.click(screen.getByText('Macro'));
-        // Inherit fills the instructions box with the built-in role prompt.
-        fireEvent.click(screen.getByTestId('bot-inherit'));
-        const instructions = screen.getByTestId('bot-instructions') as HTMLTextAreaElement;
-        expect(instructions.value.length).toBeGreaterThan(20);
-        // Editing wins on conflict.
-        fireEvent.change(instructions, { target: { value: 'Focus on funding extremes.' } });
-        expect((screen.getByTestId('bot-instructions') as HTMLTextAreaElement).value).toBe('Focus on funding extremes.');
-        // The persona rides onCreate (the draft carries role + customPrompt).
+        fireEvent.change(screen.getByTestId('bot-instructions'), { target: { value: 'Focus on funding extremes.' } });
         fireEvent.change(screen.getByTestId('bot-name'), { target: { value: 'Macro Bot' } });
         fireEvent.click(screen.getByTestId('create-bot'));
-        expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({
-            role: 'macro_volatility',
-            customPrompt: 'Focus on funding extremes.',
-        }));
+        expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ customPrompt: 'Focus on funding extremes.' }));
+        const draft = onCreate.mock.calls[0][0] as Record<string, unknown>;
+        expect('role' in draft).toBe(false);
     });
 });

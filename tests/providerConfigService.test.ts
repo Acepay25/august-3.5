@@ -181,7 +181,6 @@ describe('ProviderConfigService', () => {
       });
       expect(updated[0].models).toEqual([]);
       expect(updated[0].selectedModel).toBe('');
-      expect(updated[0].ensembleModels).toEqual([]);
       // Pre-fix the ['default'] seed made this READY (apiKey present), so
       // callers sent model:'default' and 400'd on every call. It must stay
       // not-ready until the user refreshes/picks real models.

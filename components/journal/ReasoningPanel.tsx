@@ -4,7 +4,6 @@ import { getThinkingByTrade } from '../../services/infrastructure/ThinkingStoreS
 import { ThinkingRecord } from '../../types/thinking';
 import { TradeOutcome } from '../../types';
 import { ThinkingRecordCard } from './ThinkingRecordCard';
-import { ANALYST_LENS_LABEL, ANALYST_LENS_ORDER, resolveAnalystLens } from '../../utils/thinkingLens';
 
 interface ReasoningPanelProps {
   tradeId: string;
@@ -23,7 +22,10 @@ const OUTCOME_BADGE: Record<string, string> = {
 
 /**
  * Expandable reasoning panel for a trade (History tab).
- * Shows per-analyst reasoning + final output and the moderator synthesis.
+ *
+ * One flat list of the records that answered, then the moderator synthesis.
+ * The Macro / Technical / Risk buckets went with the analyst-role removal: a
+ * historical record may still carry a lens label, but nothing groups by it.
  */
 export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome, username }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -46,13 +48,6 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
 
   const analysts = records.filter(r => r.role === 'analyst');
   const moderator = records.find(r => r.role === 'moderator');
-
-  const byLens = ANALYST_LENS_ORDER
-    .map(lens => ({
-      lens,
-      items: analysts.filter(r => resolveAnalystLens(r) === lens),
-    }))
-    .filter(group => group.items.length > 0);
 
   return (
     <div className="border-t border-zinc-800 mt-4 pt-1">
@@ -84,21 +79,10 @@ export const ReasoningPanel: React.FC<ReasoningPanelProps> = ({ tradeId, outcome
             </p>
           ) : (
             <>
-              {byLens.map(group => (
-                <div key={group.lens} className="space-y-2">
-                  <p className="text-ui-xs font-bold uppercase tracking-wider text-zinc-500 px-0.5">
-                    {ANALYST_LENS_LABEL[group.lens]}
-                  </p>
-                  {group.items.map(record => (
-                    <ThinkingRecordCard key={record.id} record={record} />
-                  ))}
-                </div>
+              {analysts.map(record => (
+                <ThinkingRecordCard key={record.id} record={record} />
               ))}
-
-              {/* Moderator synthesis */}
-              {moderator && (
-                <ThinkingRecordCard key={moderator.id} record={moderator} />
-              )}
+              {moderator && <ThinkingRecordCard key={moderator.id} record={moderator} />}
             </>
           )}
         </div>

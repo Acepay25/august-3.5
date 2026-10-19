@@ -103,7 +103,7 @@ export async function loadProviderConfigs(): Promise<ProviderConfig[]> {
     const saved = await getPreferenceObject<ProviderConfig[]>(STORAGE_KEY);
     if (!Array.isArray(saved)) return getDefaultConfigs();
 
-    return Promise.all(saved.map(async (raw) => {
+    const configs = await Promise.all(saved.map(async (raw) => {
         const config = raw as Partial<ProviderConfig>;
         const apiFormat: ApiFormat = parseApiFormat(config.apiFormat);
         const models = Array.isArray(config.models)
@@ -117,9 +117,6 @@ export async function loadProviderConfigs(): Promise<ProviderConfig[]> {
         const selectedModel = typeof config.selectedModel === 'string' && models.includes(config.selectedModel)
             ? config.selectedModel
             : models[0];
-        const ensembleModels = Array.isArray(config.ensembleModels)
-            ? config.ensembleModels.filter((model): model is string => typeof model === 'string' && models.includes(model)).slice(0, 3)
-            : undefined;
         const id = typeof config.id === 'string' ? config.id : `legacy-${Date.now()}`;
 
         const storedKey = typeof config.apiKey === 'string' ? config.apiKey : '';
@@ -142,9 +139,15 @@ export async function loadProviderConfigs(): Promise<ProviderConfig[]> {
             isBuiltIn: config.isBuiltIn === true,
             models,
             selectedModel,
-            ...(ensembleModels ? { ensembleModels: ensembleModels.length > 0 ? ensembleModels : [selectedModel] } : {}),
         } satisfies ProviderConfig;
     }));
+    // Owner ruling 2026-10-19: the per-provider ensemble roster is gone. A
+    // stored row that still carries it is rewritten once, through the normal
+    // save path (which preserves undecryptable key ciphertexts).
+    if (saved.some((raw) => raw && typeof raw === 'object' && 'ensembleModels' in raw)) {
+        await saveProviderConfigs(configs).catch(() => undefined);
+    }
+    return configs;
 }
 
 /**
@@ -237,7 +240,6 @@ export async function addCustomProvider(provider: {
             isBuiltIn: false,
             models: provider.models ?? [],
             selectedModel: firstModel,
-            ensembleModels: firstModel ? [firstModel] : [],
         };
         const updated = [...configs, newConfig];
         await saveProviderConfigs(updated);
@@ -288,8 +290,7 @@ export async function removeModelFromProvider(providerId: string, modelId: strin
             if (c.id === providerId) {
                 const models = c.models.filter(m => m !== modelId);
                 const selectedModel = c.selectedModel === modelId ? (models[0] || '') : c.selectedModel;
-                const ensembleModels = (c.ensembleModels || [c.selectedModel]).filter(m => m !== modelId);
-                return { ...c, models, selectedModel, ensembleModels: ensembleModels.length > 0 ? ensembleModels : [selectedModel].filter(Boolean) };
+                return { ...c, models, selectedModel };
             }
             return c;
         });
@@ -310,8 +311,7 @@ export async function updateModelInProvider(providerId: string, oldModelId: stri
             if (c.id === providerId) {
                 const models = c.models.map(m => m === oldModelId ? trimmed : m);
                 const selectedModel = c.selectedModel === oldModelId ? trimmed : c.selectedModel;
-                const ensembleModels = (c.ensembleModels || [c.selectedModel]).map(m => m === oldModelId ? trimmed : m);
-                return { ...c, models, selectedModel, ensembleModels: [...new Set(ensembleModels)].slice(0, 3) };
+                return { ...c, models, selectedModel };
             }
             return c;
         });

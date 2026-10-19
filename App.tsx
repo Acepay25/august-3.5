@@ -8,11 +8,12 @@ reapplyIdleMotionClass();
 import { Message, MessageRole, TradeOutcome, Conversation, ImageMetadata, AIProvider, LoggedTrade } from './types';
 import { subscribeMemoryFilesChanged } from './services/learning/MemoryFilesService';
 import { runNotebookReview } from './services/learning/MemoryReviewService';
+import { stripRemovedAppSettings } from './services/infrastructure/legacySettings';
 import { useUserProfileLoader } from './hooks/useUserProfileLoader';
 import { useTradeJournalActions } from './hooks/useTradeJournalActions';
 import { useProfilePersistence } from './hooks/useProfilePersistence';
 import { useConversationHousekeeping } from './hooks/useConversationHousekeeping';
-import { useLensAndEnsembleConfig } from './hooks/useLensAndEnsembleConfig';
+import { useModeratorPick } from './hooks/useModeratorPick';
 import { useAgentThreads } from './hooks/useAgentThreads';
 import { useWatchAndAutopilot } from './hooks/useWatchAndAutopilot';
 import { buildProposedTradeMessage, type TradeProposal } from './services/trade/proposedTrade';
@@ -111,7 +112,7 @@ import { offlineQueue } from './services/infrastructure/OfflineQueueService';
 import { getPreference, setPreference, removePreference, PREF_KEYS } from './services/infrastructure/PreferencesService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
 import { ProviderConfig } from './types/provider';
-import { loadLastModeratorPick, saveLastModeratorPick } from './services/ui/AnalystLensService';
+import { loadLastModeratorPick, saveLastModeratorPick } from './services/infrastructure/moderatorPick';
 import { isProviderOnCooldown, providerCooldownRemainingMs } from './services/infrastructure/ProviderHealthService';
 import { stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
@@ -273,10 +274,6 @@ const App: React.FC = () => {
         isStrategiesEnabled, setIsStrategiesEnabled,
         customInstructions, setCustomInstructions,
         isHybridIntelligenceEnabled, setIsHybridIntelligenceEnabled,
-        lensConfig, setLensConfig,
-        ensembleModelSelection, setEnsembleModelSelection,
-        customEnsemblePrompt, setCustomEnsemblePrompt,
-        customLensPrompts, setCustomLensPrompts,
         insightKnowledgeBase, setInsightKnowledgeBase,
         activeFrameworks, setActiveFrameworks,
         summaryCharLimit, setSummaryCharLimit,
@@ -300,13 +297,10 @@ const App: React.FC = () => {
             const remainingMin = Math.ceil(providerCooldownRemainingMs(selected.id) / 60000);
             console.warn(`[Moderator] ${selected.name} benched (error cooldown, ~${remainingMin}m left) — using a fallback moderator this run.`);
         }
-        const analystIds = new Set(
-            (lensConfig?.assignments ?? []).map(a => a.assignedProvider).filter(Boolean)
-        );
-        const nonAnalystModerator = readyProviders.find(p => !analystIds.has(p.id) && !isProviderOnCooldown(p.id));
-        if (nonAnalystModerator) {
-            console.warn('[Moderator] No moderator selected — fell back to', nonAnalystModerator.name);
-            return nonAnalystModerator;
+        const fallbackModerator = readyProviders.find(p => !isProviderOnCooldown(p.id));
+        if (fallbackModerator) {
+            console.warn('[Moderator] No moderator selected — fell back to', fallbackModerator.name);
+            return fallbackModerator;
         }
         return readyProviders.find(p => !isProviderOnCooldown(p.id)) || (() => {
             // Every ready provider is benched: the run still
@@ -317,7 +311,7 @@ const App: React.FC = () => {
             id: 'none', name: 'None', apiKey: '', baseUrl: '', apiFormat: 'chat_completions' as const,
             isEnabled: false, isBuiltIn: true, models: [], selectedModel: '',
         };
-    }, [readyProviders, moderatorProviderId, lensConfig]);
+    }, [readyProviders, moderatorProviderId]);
 
     // ONE vision model for EVERY vision feature (chart OCR, post-trade
     // uploads, PDF book OCR). Resolution: the globally selected model
@@ -334,18 +328,6 @@ const App: React.FC = () => {
         }
         return readyProviders[0] || moderatorConfig;
     }, [readyProviders, visionModel, selectedOcrModel, moderatorConfig]);
-
-    // Ensemble mode: off = casual chat with the selected model (no chart
-    // analysis); on = full analysis/debate pipeline. Initialized once from
-    // the loaded provider count so existing multi-provider setups keep
-    // their current behavior. Declared early so useMarketData can gate its
-    // polling on it.
-    const [isEnsembleEnabled, setIsEnsembleEnabled] = useState(false);
-    const ensembleModelCount = useMemo(() => readyProviders.reduce((total, provider) => {
-        const selected = provider.ensembleModels?.filter(model => provider.models.includes(model))
-            ?? (provider.selectedModel ? [provider.selectedModel] : []);
-        return total + selected.length;
-    }, 0), [readyProviders]);
 
     const memoryConfigRef = useRef(memoryConfig);
     memoryConfigRef.current = memoryConfig;
@@ -476,19 +458,6 @@ const App: React.FC = () => {
             return !prev;
         });
     }, []);
-    const ensembleInitializedRef = useRef(false);
-    // Persisted per-profile ensemble choice (loaded by loadUserData, possibly
-    // after this effect fires on first mount — the ref bridges that race).
-    const persistedEnsembleModeRef = useRef<boolean | null>(null);
-    useEffect(() => {
-        if (!ensembleInitializedRef.current && readyProviders.length > 0) {
-            ensembleInitializedRef.current = true;
-            // The saved mode wins; the derived provider count is only the
-            // fallback for profiles that predate the setting.
-            setIsEnsembleEnabled(persistedEnsembleModeRef.current ?? (ensembleModelCount > 1));
-        }
-    }, [ensembleModelCount]);
-
     // Market data state and effects (extracted to hooks/useMarketData.ts)
     const marketData = useMarketData(isHybridIntelligenceEnabled);
     const {
@@ -805,11 +774,7 @@ const App: React.FC = () => {
         isHybridLoading, setIsHybridLoading,
         isRateLimited, setIsRateLimited,
         isGlobalMemoryEnabled, isStrategiesEnabled, customInstructions,
-        isHybridIntelligenceEnabled, lensConfig, activeFrameworks,
-        isEnsembleEnabled,
-        ensembleModelSelection,
-        customEnsemblePrompt,
-        customLensPrompts,
+        isHybridIntelligenceEnabled, activeFrameworks,
         selectedChatModel,
         getActiveBot: getActiveBotForPipeline,
         onBotReply: handleBotReplyForPipeline,
@@ -1098,7 +1063,7 @@ const App: React.FC = () => {
         createBot, createGroup, updateGroupMembers,
         deleteBot, deleteGroup,
     } = useAgentThreads({
-        activeUsername, setSelectedChatModel, setIsEnsembleEnabled, confirmDialog,
+        activeUsername, setSelectedChatModel, confirmDialog,
     });
 
 
@@ -1358,7 +1323,7 @@ const App: React.FC = () => {
         memoryConfig, memoryModel,
         isAnalysisInProgress,
         activeFrameworks, summaryCharLimit, summarizationProvider, summarizationModel,
-        visionModel, isGlobalMemoryEnabled, isStrategiesEnabled, isEnsembleEnabled,
+        visionModel, isGlobalMemoryEnabled, isStrategiesEnabled,
         customInstructions,
         isHybridIntelligenceEnabled, isAutoCapturing,
         isEntryNotHitCapturing, useAlgorithmicSummary, useAlgorithmicInsights,
@@ -1377,24 +1342,16 @@ const App: React.FC = () => {
 
 
 
-    // Lens / ensemble / moderator configuration (extracted to
-    // hooks/useLensAndEnsembleConfig.ts): persisted setters, ensemble
-    // seeding, and the catalog reconcile.
-    const {
-        handleSetModeratorProvider,
-        handleSetModeratorModel,
-        handleSetLensConfig,
-        handleSetEnsembleModelSelection,
-
-
-    } = useLensAndEnsembleConfig({
+    // The moderator pick survives the analyst-role removal: it still decides a
+    // scheduled run's answering seat, and the handler persists it per profile.
+    const { handleSetModeratorProvider, handleSetModeratorModel } = useModeratorPick({
         setConversationModeratorProvider, setConversationModeratorModel,
-        moderatorProviderId, moderatorModel, updateActiveConversation,
-        setLensConfig, lensConfig,
-        setEnsembleModelSelection, ensembleModelSelection,
-        setCustomEnsemblePrompt, setCustomLensPrompts,
-        providerConfigs, providerConfigsLoaded,
+        moderatorProviderId, moderatorModel,
     });
+
+    // The lens/ensemble settings are gone; delete the keys an older build left
+    // behind so no setting the app cannot explain survives the upgrade.
+    useEffect(() => { void stripRemovedAppSettings(); }, []);
 
     // The Agents desk is NOT seeded. Nothing here creates bots any more, so a
     // fresh profile opens on the empty rail AgentsView already renders and an
@@ -1786,12 +1743,6 @@ const App: React.FC = () => {
         resetAppState: userProfileResetAppState,
     } = useUserProfileLoader({
         handleCancelAnalysis,
-        lensConfig,
-        handleSetLensConfig,
-        ensembleModelSelection,
-        handleSetEnsembleModelSelection,
-        persistedEnsembleModeRef,
-        ensembleModelCount,
         providerConfigs,
         setConversationHistory,
         setActiveConversationId,
@@ -1813,7 +1764,6 @@ const App: React.FC = () => {
         setIsStrategiesEnabled,
         setCustomInstructions,
         setIsHybridIntelligenceEnabled,
-        setIsEnsembleEnabled,
         setIsAutoCapturing,
         setIsEntryNotHitCapturing,
         setAutopilotResolutions,

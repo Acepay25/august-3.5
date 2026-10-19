@@ -23,16 +23,19 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
     removePreference: vi.fn(async (key: string) => { delete store[key]; }),
 }));
 
-// P0-3: the roster moved to Preferences via BotRegistry; the raw localStorage
-// read below only survives for pre-migration installs and is NEVER consulted
-// on native (Capacitor Preferences and localStorage are two different places
-// there).
+// The roster is agentRoster's; these suites control it by replacing read access,
+// not by mocking a second store that no longer exists.
 const { mockBots } = vi.hoisted(() => ({ mockBots: [] as Array<{ id: string }> }));
-vi.mock('../services/bots/BotRegistry', () => ({
-    BotRegistry: {
-        list: vi.fn(async () => mockBots),
-    },
-}));
+vi.mock('../services/agents/agentRoster', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../services/agents/agentRoster')>();
+    // Additive: real rows (a test that seeds localStorage exercises the real
+    // read) plus the ids this suite names.
+    const merged = () => {
+        const real = actual.getBots();
+        return [...real.filter((b) => !mockBots.some((m) => m.id === b.id)), ...(mockBots as never[])];
+    };
+    return { ...actual, getBots: merged };
+});
 
 const { ctxCalls, worthCalls } = vi.hoisted(() => ({
     ctxCalls: [] as string[],

@@ -47,7 +47,7 @@ import type { ProviderConfig } from '../../types/provider';
 import { getBots } from './agentRoster';
 import { mineCoinFromPrompt, mineDirectionFromPrompt, minePatternFromPrompt } from '../../utils/patternMining';
 import { hasLessonLabel, parseLessonToken, stripLessonLabel } from '../../utils/lessonToken';
-import type { BotMemoryScope } from '../../types/bot';
+import type { BotMemoryScope } from './agentRoster';
 import { getHarnessSettings } from '../../utils/harnessSettings';
 
 /** Bots get the smallest honest slice — their persona/notes already ride the

@@ -355,9 +355,9 @@ describe('every raw-localStorage store is registered in ExportService', () => {
         // INVALIDATION_RULES, POST_MORTEM_INSIGHTS, LEARNING_WRITE_APPROVAL,
         // LEARNING_PENDING_RULES, PRICE_ALERTS) were deleted — nothing in the
         // app ever wrote them, and they were in the export sweep purely because
-        // they were listed here. 24 keeps the guard real without pinning it to
+        // they were listed here. 20 keeps the guard real without pinning it to
         // the exact size of a table whose job is to shrink.
-        expect(Object.keys(PREF_KEYS).length).toBeGreaterThan(24);
+        expect(Object.keys(PREF_KEYS).length).toBeGreaterThan(20);
     });
 
     it('registers every key whose owner writes localStorage directly', () => {
