@@ -2117,7 +2117,7 @@ Three stale labels were fixed in place: `hooks/useAppSettings.ts` and
 
 **Gate state on this tree, each read from its own marker, not a piped exit code:**
 Re-run here: typecheck, type-check-scripts, electron parse (both re-run on this tip: `tsc --noEmit` clean,
-`node --check` on all three electron files clean), flow-doc anchors (284 verified, — the same figure as before, reached by a different set of anchors,
+`node --check` on all three electron files clean), flow-doc anchors (286 verified, — the same figure as before, reached by a different set of anchors,
 0 unattributed, **0** comment-line and **0** symbol misses — both ceilings now zero, with 5
 citations listed as deliberate comment-as-claim exemptions — **0** census disagreements, and
 **0 of 6** AGENTS.md control arms failing, the new half that measures `AGENTS.md`'s own counts:
@@ -2169,7 +2169,7 @@ the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:69`; 
 progress panel now mints two rows (`market-data`, `analysis`), completed by
 `settleOpenSteps()` in the run's `finally` after the catch has marked any failure.
 
-**Push state:** 100 unpushed commits at this tip (measured as `git rev-list --count
+**Push state:** 101 unpushed commits at this tip (measured as `git rev-list --count
 origin/main..HEAD`, which is the only honest way to state it — the count grows with
 every commit, so re-measure rather than trust this number), nothing pushed this
 session; the earlier authorization covered only the first 16.
@@ -2367,3 +2367,7 @@ collectApprovalItems approvalInbox.ts:57, resolveInvokedSkills SkillMemoryServic
 pairing that insertion created: the same row also names approvalsWaiting, which is not on that line — a SYMBOL
 MISS, because pairing is positional. It now cites App.tsx:1920, where the useMemo actually is. 31 of 53 rows cite
 a file and every one of them binds a symbol; 22 name no file at all.
+
+**31 then 33.** Two more prose-only rows were bound after reading their source: deskThread is the export at
+utils/agentThreads.ts:118 and useLearningHeartbeat the hook at hooks/useLearningHeartbeat.ts:42. Rows citing a
+file: 33, every one bound; 20 rows name no file, floors moved to 33.
