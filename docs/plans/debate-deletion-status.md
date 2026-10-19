@@ -2117,11 +2117,12 @@ Three stale labels were fixed in place: `hooks/useAppSettings.ts` and
 
 **Gate state on this tree, each read from its own marker, not a piped exit code:**
 Re-run here: typecheck, type-check-scripts, electron parse (both re-run on this tip: `tsc --noEmit` clean,
-`node --check` on all three electron files clean), flow-doc anchors (253 verified,
+`node --check` on all three electron files clean), flow-doc anchors (255 verified,
 0 unattributed, **0** comment-line and **0** symbol misses — both ceilings now zero, with 5
-citations listed as deliberate comment-as-claim exemptions), vitest re-run on the
-tip and read out of the log's own summary block: `Test Files 477 passed | 1 skipped
-(478)`, `Tests 4715 passed | 11 skipped (4726)`, 237.67s — the skipped file is
+citations listed as deliberate comment-as-claim exemptions — and **0** census disagreements),
+vitest re-run on the tip AFTER the prompt deletion and read out of the log's own summary block:
+`Test Files 478 passed | 1 skipped
+(479)`, `Tests 4730 passed | 11 skipped (4741)` — the skipped file is
 `tests/lensWordCount.measure.test.ts` (11 measurements, skipped by design),
 lint (0 errors / 681 warnings under the ratchet — CI's step is now runnable
 locally because `docs/analysis/**` is ignored as the untracked scratch it is),
@@ -2129,15 +2130,21 @@ locally because `docs/analysis/**` is ignored as the untracked scratch it is),
 skill-approval probe — whose own log says `25/25 checks passed; pageErrors=2`.
 The two "notebook write FAILED (quota)" lines under that verdict are the probe's
 own injected fault: the write-failure surfacing is what it is testing, so they are
-the pass, not a failure. `installer-smoke` is CI-only by design. No gate is owed — and the split is explicit, because
-"green on this tree" has to say which gates were re-run here. Re-run on this tip: the four
-static gates, the anchor gate, repo-wide lint, and the full suite again after the gate work
-(`477 files passed / 1 skipped`, `4715 passed / 11 skipped`, 216.77s). Carried over from the
-last probed tip rather than re-executed, because it is provable that nothing they read changed:
-`git diff --name-only <that tip>..HEAD` returns only `AGENTS.md`, the two flow docs, this ledger
-and `scripts/check-flow-doc-anchors.cjs` — no `.ts`, `.tsx`, `.css`, `electron/` or
-`package.json` file — so the built bundle is the same bytes the probes passed on. Re-run the
-probes before trusting them again after ANY source edit, not after a doc edit.
+the pass, not a failure. `installer-smoke` is CI-only by design.
+
+**Every gate above was re-executed on this tip, not carried over (2026-10-19, after the prompt
+deletion).** The earlier version of this paragraph said the browser probes were carried because
+`git diff` between the probed tip and HEAD touched only docs and the gate script — that reasoning
+was sound then and is void now, because this stretch edited real source: `promptRegistry.ts`,
+`prompts/debatePrompts.ts` (deleted), `prompts/index.ts`, `prompts/analysisPrompts.ts`,
+`prompts/harnessContract.ts`, `constants/debateMarkers.ts` and `useAnalysisPipeline.ts`. The
+bundle is therefore not the bytes the previous probes passed on, and "carried over" was replaced
+by running them: `vite build` ✓ 34.07s, `boot-probe` OK (zero pageerrors), `render-probe` OK
+(zero pageerrors, all four nav surfaces, the coin pick still reaches the chart), Playwright e2e
+5 passed in 15.3s, `skill-approval-probe` 25/25 with its own two injected quota faults, repo-wide
+lint 0 errors / 681 warnings under the 889 cap. The rule that made this visible: a carried-over
+claim is only honest while the diff behind it is provably inert, and the first source edit
+revokes it.
 
 **Do not re-derive these** (each cost a turn this session and is already proven): the
 review's six defects are all closed in the current files; the post-mortem route is
@@ -2148,7 +2155,7 @@ the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:69`; 
 progress panel now mints two rows (`market-data`, `analysis`), completed by
 `settleOpenSteps()` in the run's `finally` after the catch has marked any failure.
 
-**Push state:** 51 unpushed commits at this tip (measured as `git rev-list --count
+**Push state:** 82 unpushed commits at this tip (measured as `git rev-list --count
 origin/main..HEAD`, which is the only honest way to state it — the count grows with
 every commit, so re-measure rather than trust this number), nothing pushed this
 session; the earlier authorization covered only the first 16.
