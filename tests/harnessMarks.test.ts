@@ -173,24 +173,36 @@ describe('who is speaking inside a user-role turn', () => {
             .toBe(`${HARNESS_TURN_MARK} Continue. No JSON, no tool tags.`);
     });
 
+    // The live writers of a user-role harness note are the four `harnessTurn()`
+    // sites in DeskToolsService. The prompts that used to explain the mark were the
+    // debate prompts, so this rule had no live subject — it now binds to the blocks
+    // the app actually sends, and the contract had to gain the sentence first.
+    const SENT = ['harnessContract.ts', 'analysisPrompts.ts', 'memoryPrompts.ts', 'learningPrompts.ts', 'chatPrompts.ts', 'lensRolePrompts.ts'];
+    const sentLines = SENT.flatMap(file => readFileSync(join('constants', 'prompts', file), 'utf8')
+        .split('\n').map(line => ({ file, line })));
+
     it('is named verbatim by every prompt that claims the user role', () => {
         // The exact failure mode the fence legend had: prose describing a marker
-        // from memory, then drifting from the marker actually emitted. Both Floor
-        // prompts assert what a user turn IS, so they must quote the real mark.
-        const prompts = readFileSync(join('constants', 'prompts', 'debatePrompts.ts'), 'utf8');
-        const claims = prompts.split('\n').filter(line => line.includes('chat "user" role'));
-        expect(claims.length).toBeGreaterThanOrEqual(2);
-        for (const line of claims) {
-            expect(line).toContain(HARNESS_TURN_MARK);
+        // from memory, then drifting from the marker actually emitted.
+        const claims = sentLines.filter(x => /user[- ]role/i.test(x.line));
+        // Floor of 1, not of 2: the two debate prompts that used to satisfy this are
+        // unreachable, so the population that matters is the always-sent contract.
+        expect(claims.length, 'no prompt the app sends claims the user role at all').not.toBe(0);
+        for (const c of claims) {
+            // The interpolation counts because this file pins the constant's value
+            // elsewhere, so `${HARNESS_TURN_MARK}` renders to the bytes a model reads.
+            expect(`${c.file}: ${c.line}`).toMatch(/HARNESS_TURN_MARK|HARNESS NOTE \(this app, not the trader\)/);
         }
     });
 
-    it('leaves the trader’s own steering as the unmarked, higher-authority case', () => {
-        // The prompts tell a seat that USER STEERING is the human. That only
-        // holds while the harness never uses the same label for itself.
-        const debate = readFileSync(join('constants', 'prompts', 'debatePrompts.ts'), 'utf8');
-        expect(debate).toContain('**USER STEERING');
-        expect(HARNESS_TURN_MARK).not.toMatch(/USER STEERING/);
+    it('leaves the trader’s own words as the unmarked, higher-authority case', () => {
+        // A seat can only obey the split if the contract says whose words are whose,
+        // and the harness never borrows the trader's own label for itself.
+        const contract = readFileSync(join('constants', 'prompts', 'harnessContract.ts'), 'utf8');
+        expect(contract).toContain('HARNESS_TURN_MARK');
+        expect(contract).toMatch(/not the trader/);
+        expect(contract).toMatch(/trader's own words/i);
+        expect(HARNESS_TURN_MARK).not.toMatch(/trader's request/i);
     });
 });
 

@@ -2190,3 +2190,15 @@ producer or accepting the summary's silence going forward; choosing "delete it" 
 gate and its fallback readers go with the fields. Deliberately NOT fixed here — removing
 the dead branch is the decision, not a cleanup, and the fallback readers would change what
 every later learning turn measures.
+
+**The user-role harness note had no live teacher (2026-10-19, later).** `harnessTurn()` is
+called at four desk-tool sites to stamp `HARNESS NOTE (this app, not the trader):` into
+user-role content, and the only prompts that ever named that marker were the debate prompts —
+unreachable after stage 19. Clause 5 of `constants/prompts/harnessContract.ts` now carries the
+rule (obey its facts; never read it as the trader's request or as new permission to trade;
+unmarked text outranks it on conflict), quoting `HARNESS_TURN_MARK` by interpolation so the
+sentence cannot drift from the emitted bytes. `tests/harnessMarks.test.ts`'s two path-bound
+arms moved onto the blocks the app actually sends, with the floor re-based on that population
+and a planted-paraphrase control added, since a scanner matching nothing reports no drift. This
+unblocks the debate-prompt deletion, which was held back precisely because those arms were the
+file's last consumer.
