@@ -2169,7 +2169,7 @@ the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:69`; 
 progress panel now mints two rows (`market-data`, `analysis`), completed by
 `settleOpenSteps()` in the run's `finally` after the catch has marked any failure.
 
-**Push state:** 91 unpushed commits at this tip (measured as `git rev-list --count
+**Push state:** 92 unpushed commits at this tip (measured as `git rev-list --count
 origin/main..HEAD`, which is the only honest way to state it — the count grows with
 every commit, so re-measure rather than trust this number), nothing pushed this
 session; the earlier authorization covered only the first 16.
@@ -2266,6 +2266,13 @@ So 48 rows are line-resolved and nothing more, and the run prints `arrow coverag
 figures so coverage cannot fall silently. Row 7 came out wrong outright: the lazy-surface `SurfaceSkeleton`
 boundaries are App.tsx:2456 TradeView, :2501 Journal, :2523 LearnView, :2539 StrategyStudio plus the
 automation modal at :2298 — not the :2493/:2538/:2560/:2602 the table had, which are a prop, a component
-open tag and two unrelated lines. Those five are now cited with the symbol beside each path. Raising 5
-toward 53 is per-row verification work, not a rule change, and the docs say that instead of implying the
-table is checked.
+open tag and two unrelated lines. Those five are now cited with the symbol beside each path. Raising coverage is per-row verification work, not a rule change, and the docs say that
+instead of implying the table is checked.
+
+**Then 5 became 14.** Nine more rows were rewritten into the bindable shape, each only after its symbol was
+found on the line it cites: the `index.tsx` mount chain (StrictMode :73, ErrorBoundary :74, ToastProvider :75 —
+the old `73-79` range proved nothing), `august_surface_v1`, `onSendBotTurn`, `onAnalyze`, `handleRunAnalysisFromChat`,
+`runFullAnalysis`, `runSeatTurn` at both :593 and :1078, `applyCasualStreamUpdate`, `notify`. Binding found another real
+defect: row 13 cited AgentsView.tsx:725 for `onAnalyze`, and the await is at **:722** (:725 is the `finally` of that
+same try) — fixed in both flow docs. Coverage now prints 14/53 with 22 pairs and a floor of 14, and 39 rows remain
+line-resolved only.
