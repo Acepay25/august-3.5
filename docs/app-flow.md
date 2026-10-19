@@ -488,6 +488,19 @@ card that forgets it was clicked offers a second journal row.
    were unverifiable); and a citation whose file is not in the tree is now REPORTED instead of
    swallowed, measured at 0 in these two docs and 3 in the dated stage ledger, where naming a
    deleted file is history and pointing at its line number is not a live claim.
+   A third rule polices the numbers these docs quote from a RECIPE rather than from this
+   gate's own output: the two grep censuses in section D, the size of the table in section
+   C and the provider-directory deletion list are each re-measured here by running the
+   recipe the doc itself names, so a sentence that keeps a stale figure is contradicted by
+   the figure its own recipe can no longer produce. That is what the outside review meant
+   by "unfalsifiable" — the deletion list is now checked name by name against git, and the
+   word "nine" in its sentence has to equal the number of files the doc actually lists.
+   Scope and two caveats, all measured on this tree: the rule reads the two flow docs only
+   (the stage ledger is dated history, as above); the provider sentences bind only their
+   FIRST match each, so a duplicated copy of one of those claims would go unchecked until
+   those are widened to match every occurrence; and the history-dependent half prints
+   SKIPPED rather than passing on a shallow clone, because CI's checkout is depth 1 and a
+   gate that cannot see git history must say so instead of reporting zero findings.
    **Coverage asymmetry, measured rather than trusted from prose:** the step runs
    in `ci.yml`, and `release.yml` does NOT run it — nor does it run the
    skill-approval probe, the bare typecheck, or CI's second suite job, while

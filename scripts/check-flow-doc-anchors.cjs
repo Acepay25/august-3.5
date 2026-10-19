@@ -524,6 +524,178 @@ if (stating.length !== 2) {
     process.exit(1);
 }
 if (quota.length) { console.log(`FLOW DOC ANCHORS FAIL — ${quota.length} doc statement(s) quote an anchor count the gate no longer measures. Re-run and restate; do not loosen the rule.`); process.exit(1); }
+
+// ── Census self-check: a quoted measurement must equal the recipe that made it ──
+// The flow docs quote numbers produced by a RECIPE — a grep census, a row count, a
+// `git log --diff-filter=D` deletion list. They rotted silently until this file
+// policed them: an earlier draft of section D asserted 189/57 and 105/~35, true the
+// day they were taken and untrue from the next deletion onward, and the outside
+// review could not falsify "one service replacing nine" at all, so it wrote
+// "unfalsifiable" and moved on.
+// The rule therefore EXECUTES the recipe out of the doc's own sentence rather than
+// hard-coding a figure: change the filter and the gate measures the new one; keep a
+// stale figure and the gate shows the number the recipe can no longer produce.
+// POPULATION for the grep recipes: every .ts/.tsx the anchor index walks (measured
+// 996 files — equal to `git ls-files '*.ts' '*.tsx'` and to the documented
+// `grep -rE … --include="*.ts" --include="*.tsx" .`, because nothing under
+// node_modules/.git carries these tokens). The floor below is what makes that
+// equality load-bearing: a walk that quietly found no files would still "measure".
+const { execFileSync } = require('child_process');
+const SRC = [...new Set(Object.values(INDEX.byName).flat())].filter(p => /\.(ts|tsx)$/.test(p));
+function censusOf(pattern) {
+    const re = new RegExp(pattern);
+    let lines = 0;
+    const files = new Set();
+    for (const p of SRC) {
+        for (const l of fs.readFileSync(path.join(ROOT, p), 'utf8').split('\n')) {
+            if (re.test(l)) { lines++; files.add(p); }
+        }
+    }
+    return { lines, files: files.size };
+}
+// Markup is AROUND the claim, so the printable mirror must bind the same numbers as
+// the markdown. But the two formats need different normalization: in a .md a `<` is
+// prose or a placeholder (`class <ProviderName>Service`), and a tag-stripping regex
+// then eats whole paragraphs — measured, the first version deleted the census
+// sentence AND the row-count sentence from the md, and the rule reported a clean
+// zero findings over an empty population. Stripping here rather than in strip(),
+// which has to preserve offsets for the anchor tiers.
+const plain = (t, html) => (html ? t.replace(/<[^>]*>/g, ' ') : t).replace(/[`*]/g, '');
+const isHtml = (d) => /\.html$/.test(d);
+const ONES = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19 };
+const TENS = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+function wordNum(w) {
+    const k = String(w).toLowerCase();
+    if (ONES[k]) return ONES[k];
+    if (TENS[k]) return TENS[k];
+    const hy = k.match(/^([a-z]+)-([a-z]+)$/);
+    if (hy && TENS[hy[1]] && ONES[hy[2]]) return TENS[hy[1]] + ONES[hy[2]];
+    const n = parseInt(k, 10);
+    return Number.isNaN(n) ? null : n;
+}
+// A table's row count, by whichever shape that file uses for the arrow table.
+const rowCount = (t) => (t.match(/^\|\s*\d+\s*\|/gm) || []).length || (t.match(/<tr><td>\d+<\/td>/g) || []).length;
+function censusClaims(text, label) {
+    const out = [];
+    const t = plain(text, isHtml(label));
+    const recipes = [...t.matchAll(/grep\s+-rE\s+"((?:[^"\\]|\\.)*)"/g)];
+    recipes.forEach((r, i) => {
+        // Bind to the nearest figure that is still inside THIS recipe's sentence:
+        // scanning forward without stopping at the next recipe would let a doc that
+        // lost one figure blame the next one for being wrong.
+        const stop = i + 1 < recipes.length ? recipes[i + 1].index : Math.min(t.length, r.index + r[0].length + 320);
+        const fig = t.slice(r.index + r[0].length, stop).match(/(\d+)\s+lines\s+in\s+(\d+)\s+files/);
+        if (!fig) return;                       // a recipe quoted for its lesson, not its number
+        const m = censusOf(r[1]);
+        if (+fig[1] !== m.lines || +fig[2] !== m.files) {
+            out.push(`${label}: grep -rE ${JSON.stringify(r[1])} measures ${m.lines} lines in ${m.files} files; the doc states ${fig[1]} in ${fig[2]}`);
+        }
+    });
+    // \s+ because tag-stripping leaves the gap the <b> stood in: the md reads
+    // "becomes **38**" and the mirror "becomes <b>38</b>" → "becomes  38".
+    for (const b of t.matchAll(/\bbecomes\s+(\d+)\b/g)) {
+        const rs = [...t.slice(0, b.index).matchAll(/grep\s+-rE\s+"((?:[^"\\]|\\.)*)"/g)].pop();
+        if (!rs) continue;
+        const loose = rs[1].replace(/\\b/g, '');
+        if (loose === rs[1]) continue;
+        const m = censusOf(loose);
+        if (+b[1] !== m.lines) out.push(`${label}: "becomes ${b[1]}" while the same recipe with the word boundary dropped measures ${m.lines}`);
+    }
+    for (const m of t.matchAll(/arrow\s+table\s+is\s+(\d+)\s+rows/g)) {
+        const n = rowCount(text);
+        if (+m[1] !== n) out.push(`${label}: states the arrow table is ${m[1]} rows; ${n} are in the file`);
+    }
+    return out;
+}
+// "One service replacing nine", made falsifiable: the doc NAMES the removed files, so
+// each name must appear in `git log --diff-filter=D` for that directory, and the three
+// counts in the sentence (the list, the total, the remainder) and the two counts of
+// what is left must all agree with the tree.
+function providerClaims(text, label, deleted, left) {
+    const out = [];
+    const t = plain(text, isHtml(label));
+    const head = t.match(/exactly\s+([A-Za-z0-9-]+)\s+provider-client\s+services\s+removed:\s*(.{0,700}?)(?:What\s+is\s+left|$)/s);
+    if (!head) return out;
+    const names = [...head[2].matchAll(/([A-Za-z][A-Za-z0-9]*)Service(?!\.\w)/g)].map(m => m[1] + 'Service');
+    const n = wordNum(head[1]);
+    if (n === null) out.push(`${label}: "exactly ${head[1]} provider-client services" is not a countable number`);
+    else if (n !== names.length) out.push(`${label}: says exactly ${n} provider-client services were removed but names ${names.length} (${names.join(', ')})`);
+    if (deleted) names.forEach(s => { if (!deleted.has(`${s}.ts`)) out.push(`${label}: names ${s} as removed from services/providers/, and no commit deletes it`) });
+    const tot = t.match(/([A-Za-z0-9-]+)\s+files\s+in\s+total\s+have\s+been\s+deleted\s+from\s+that\s+directory/);
+    if (tot && deleted) {
+        const v = wordNum(tot[1]);
+        if (v !== deleted.size) out.push(`${label}: says ${v} files in total were deleted from services/providers/; git names ${deleted.size}`);
+        const rest = t.match(/the\s+other\s+([A-Za-z0-9-]+)\s+were/);
+        if (rest && wordNum(rest[1]) !== deleted.size - names.length) {
+            out.push(`${label}: "the other ${rest[1]}" while the list is ${names.length} of ${deleted.size} (so ${deleted.size - names.length})`);
+        }
+    }
+    const leftC = t.match(/left\s+in\s+that\s+directory\s+is\s+([A-Za-z0-9-]+)\s+clients.*?plus\s+([A-Za-z0-9-]+)\s+helpers/s);
+    if (leftC) {
+        const c = wordNum(leftC[1]), h = wordNum(leftC[2]);
+        const clients = left.filter(f => /Service\.ts$/.test(f));
+        if (c === null || h === null) out.push(`${label}: the "left in that directory" counts are not countable numbers`);
+        else {
+            if (c !== clients.length) out.push(`${label}: says ${c} clients remain in services/providers/; ${clients.length} file(s) there end in Service.ts (${clients.join(', ')})`);
+            if (c + h !== left.length) out.push(`${label}: says ${c} clients plus ${h} helpers remain; the directory holds ${left.length} files`);
+        }
+    }
+    return out;
+}
+const LIVE = DOCS.filter(d => d.startsWith('docs/app-flow.'));
+const censusControls = [
+    ...((() => { const m = censusOf('postMortem'); return censusClaims(`grep -rE "postMortem" . measures ${m.lines} lines in ${m.files} files`, 'probe-right').length === 0 ? [] : ['a correct census figure was flagged']; })()),
+    ...((censusClaims('grep -rE "postMortem" . measures 99999 lines in 1 files', 'probe-wrong').length === 1 ? [] : ['a wrong census figure was missed'])),
+    ...((censusClaims('grep -rE "postMortem" . is how you size this, the trap is the boundary', 'probe-lesson').length === 0 ? [] : ['a recipe with no figure invented a finding'])),
+    // The mirror wraps FIGURES in tags, so a rule that only reads markdown is blind
+    // across the whole html copy. Planted with the <b> inside the figure itself:
+    // unnormalised, the regex cannot see the number at all.
+    ...((censusClaims('<p>grep -rE "postMortem" . measures <b>99999</b> lines in <b>1</b> files</p>', 'docs/app-flow.html').length === 1 ? [] : ['the html mirror is invisible to the census rule'])),
+    ...((() => { const b = censusOf('\\.postMortem\\b'); return censusClaims(`grep -rE "\\.postMortem\\b" measures ${b.lines} lines in ${b.files} files`, 'probe-bound-right').length === 0 ? [] : ['a correct boundary census was flagged']; })()),
+    ...((() => { const b = censusOf('\\.postMortem\\b'), l = censusOf('\\.postMortem'); return censusClaims(`grep -rE "\\.postMortem\\b" measures ${b.lines} lines in ${b.files} files. Drop the boundary and it becomes ${l.lines}`, 'probe-bound-ok').length === 0 ? [] : ['a correct boundary claim was flagged']; })()),
+    ...((censusClaims('grep -rE "\\.postMortem\\b" measures 34 lines in 23 files. Drop the boundary and it becomes 999', 'probe-bound-wrong').length === 1 ? [] : ['a wrong boundary figure was missed'])),
+    ...((censusClaims('the arrow table is 3 rows\n| 1 | a | b |\n| 2 | a | b |', 'probe-rows').length === 1 ? [] : ['a wrong row count was missed'])),
+    ...((censusClaims('the arrow table is 2 rows\n| 1 | a | b |\n| 2 | a | b |', 'probe-rows-right').length === 0 ? [] : ['a correct row count was flagged'])),
+    ...((censusClaims('<table><tr><td>7</td></tr><tr><td>8</td></tr></table>the arrow table is 5 rows', 'docs/app-flow.html').length === 1 ? [] : ['a wrong html row count was missed'])),
+    ...((wordNum('Twenty-four') === 24 && wordNum('nine') === 9 && wordNum('47') === 47 && wordNum('forty-two') === 42 ? [] : ['wordNum cannot read a count'])),
+    ...((providerClaims('names exactly two provider-client services removed: `AIProviderService` and `NotARealDeletedService`. What is left', 'probe-deleted', new Set(['AIProviderService.ts']), ['a.ts']).some(m => /NotARealDeletedService/.test(m)) ? [] : ['a fabricated deletion name passed'])),
+    ...((providerClaims('names exactly one provider-client service removed: `AIProviderService`. What is left', 'probe-deleted-ok', new Set(['AIProviderService.ts']), ['a.ts']).length === 0 ? [] : ['a true deletion name was flagged'])),
+    ...((providerClaims('names exactly nine provider-client services removed: `AIProviderService`. What is left. Twenty-four files in total have been deleted from that directory. the other fifteen were. left in that directory is two clients — `GenericProviderService.ts` plus four helpers', 'probe-counts', new Set(['AIProviderService.ts']), ['a.ts']).length >= 3 ? [] : ['a wrong provider count was missed'])),
+];
+const census = LIVE.flatMap(d => censusClaims(fs.readFileSync(d, 'utf8'), d));
+census.forEach(m => console.log(`  STALE CENSUS ${m}`));
+let deletedProviders = null, providersSkip = '';
+const leftProviders = fs.readdirSync(path.join(ROOT, 'services', 'providers')).filter(f => /\.ts$/.test(f));
+try {
+    const shallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], { cwd: ROOT, encoding: 'utf8' }).trim() === 'true';
+    if (shallow) providersSkip = 'SKIPPED (shallow clone: actions/checkout defaults to fetch-depth 1, so history-dependent counts do not exist here)';
+    else {
+        deletedProviders = new Set(execFileSync('git', ['log', '--diff-filter=D', '--name-only', '--format=', '--', 'services/providers/'],
+            { cwd: ROOT, encoding: 'utf8' }).split('\n').map(l => l.trim()).filter(l => l.startsWith('services/providers/') && l.includes('.')).map(l => l.split('/').pop()));
+    }
+} catch (e) { providersSkip = `SKIPPED (git unreadable: ${e.message.split('\n')[0]})`; }
+const providers = deletedProviders
+    ? LIVE.flatMap(d => providerClaims(fs.readFileSync(d, 'utf8'), d, deletedProviders, leftProviders))
+    : [];
+providers.forEach(m => console.log(`  STALE CENSUS ${m}`));
+const stated = LIVE.filter(d => /lines\s+in\s+\d+\s+files/.test(plain(fs.readFileSync(d, 'utf8'), isHtml(d))));
+const rowStated = LIVE.filter(d => /arrow\s+table\s+is\s+\d+\s+rows/.test(plain(fs.readFileSync(d, 'utf8'), isHtml(d))));
+console.log(`census: ${census.length} recipe figure(s) disagree with the measurement; ${censusControls.length} census control failure(s) (arms answer only when wrong); ${stated.length}/2 docs quote a grep census, ${rowStated.length}/2 state the table size; providers ${providers.length} finding(s) — ${providersSkip || `git names ${deletedProviders.size} deleted files, ${leftProviders.length} remain`}`);
+if (SRC.length < 500) { console.log(`FLOW DOC ANCHORS FAIL — the census walk sees ${SRC.length} source files; a census measured against that is not a measurement`); process.exit(1); }
+if (censusControls.some((c) => !c)) censusControls.push('a census control arm produced an empty finding — it asserts nothing');
+if (censusControls.length) { console.log(`FLOW DOC ANCHORS FAIL — the census rule cannot see its own planted numbers: ${censusControls.join('; ')}`); process.exit(1); }
+// Empty population is not a pass: this is the exact hole that let the self-quota rule
+// go green while both docs had stopped stating a count at all.
+if (stated.length !== 2 || rowStated.length < 1) {
+    console.log(`FLOW DOC ANCHORS FAIL — only ${stated.length} of 2 flow docs quote a grep census and ${rowStated.length} state the table size; the census rule has lost its population`);
+    process.exit(1);
+}
+if (!providersSkip && deletedProviders.size < 20) {
+    console.log(`FLOW DOC ANCHORS FAIL — git names only ${deletedProviders.size} deleted files under services/providers/; the deletion census has no population`);
+    process.exit(1);
+}
+if (census.length) { console.log(`FLOW DOC ANCHORS FAIL — ${census.length} doc statement(s) quote a measurement their own recipe no longer produces. Re-run the recipe and restate; do not loosen the rule.`); process.exit(1); }
+if (providers.length) { console.log(`FLOW DOC ANCHORS FAIL — ${providers.length} statement(s) about the provider-directory census disagree with git/the tree.`); process.exit(1); }
 if (controls.length) { console.log('FAIL — the gate cannot see its own planted defects'); process.exit(1); }
 if (problems.length) { console.log(`FLOW DOC ANCHORS FAIL — ${problems.length} stale anchor(s)`); process.exit(1); }
 if (rep.symMiss.length > SYMMISS_CEILING) {
