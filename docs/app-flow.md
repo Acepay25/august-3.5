@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**300 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**302 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 3 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -433,11 +433,11 @@ card that forgets it was clicked offers a second journal row.
 | 33 | App messages + dock entries → one thread | `entriesForSession services/trade/chatSessions.ts:531` |
 | 34 | chatStore → localStorage | `saveSessions services/trade/chatSessions.ts:419` → debounced key |
 | 35 | App → profile persistence → engine | `useProfilePersistence hooks/useProfilePersistence.ts:83` → `dbService` or `SqliteService` |
-| 36 | providers → Preferences, keys encrypted | `ProviderConfigService` |
+| 36 | providers → Preferences, keys encrypted | `saveProviderConfigs services/infrastructure/ProviderConfigService.ts:153` writes the whole roster and encrypts each key at rest on desktop |
 | 37 | every provider call → the policy | `GenericProviderService` → `providerRequestPolicy.cjs` |
 | 38 | dev calls → the proxy | the dev proxy mounts `__provider_proxy vite.config.ts:73` |
 | 39 | desktop calls → IPC → sseParser → chunks | `ipcMain electron/main.cjs:1240` → sseParser.cjs |
-| 40 | reasoning deltas → their own field | `chatTurnRunner` / `useAnalysisPipeline` → `ThinkingStoreService` |
+| 40 | reasoning deltas → their own field | chatTurnRunner and useAnalysisPipeline hand their deltas to `saveThinkingBatch services/infrastructure/ThinkingStoreService.ts:130` |
 | 41 | notebook writes → byte tiers | `MemoryFilesService` → `memoryBudget.ts` → `memoryHealth.ts` |
 | 42 | heartbeat → hygiene + idle sweep | `useLearningHeartbeat hooks/useLearningHeartbeat.ts:42` → `memoryHygiene.ts` → `skillIdleLifecycle.ts` |
 | 43 | approval tray → badge | `collectApprovalItems utils/approvalInbox.ts:57` → `approvalsWaiting App.tsx:1920` → Knowledge tab only |
@@ -477,10 +477,10 @@ card that forgets it was clicked offers a second journal row.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 300 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 302 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 300 anchors verified, and the gate
+   the gate's own output: these docs state 302 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -570,7 +570,7 @@ card that forgets it was clicked offers a second journal row.
    records the v1.0.20 TDZ crash as a splash hang. A page that dies before React
    mounts fails both gates, not just one.
 
-10. **The arrow table is 53 rows, and every citation in it resolves — and 48 of the 53 rows pair their citation with the symbol that must live on that line (23 → 28 → 31 → 33 → 43 → 48 across these passes), so those rows are checked for content, not just for a line that exists. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently. The other 5 rows name no file at all — storage keys, wire formats, prose — and a wrong number in one of those is still outside this gate's reach, which is why the sentence says 48/53 rather than 53/53.** An
+10. **The arrow table is 53 rows, and every citation in it resolves — and 50 of the 53 rows pair their citation with the symbol that must live on that line (23 → 28 → 31 → 33 → 43 → 48 → 50 across these passes), so those rows are checked for content, not just for a line that exists. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently. The other 3 rows name no file at all — storage keys, wire formats, prose — and a wrong number in one of those is still outside this gate's reach, which is why the sentence says 50/53 rather than 53/53.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
     resolves all 255 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
