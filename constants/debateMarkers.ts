@@ -3,8 +3,10 @@
  * and the pipeline matches/strips. One home so a prompt tweak can never
  * silently break this cross-module contract.
  *
- * These strings appear INSIDE model output. constants/prompts/debatePrompts.ts
- * instructs the model to emit them verbatim — keep both sides in sync.
+ * These strings appear INSIDE model output. The prompt file that used to order a
+ * model to emit them verbatim went with the debate engine, so this module is now
+ * the only home for the strings AND the matchers — a prompt that re-adopts one
+ * must quote it from here, never retype it.
  */
 
 export const MODERATOR_RETRY_MARKER = '<MODERATOR_RETRY>';
