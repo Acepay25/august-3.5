@@ -583,6 +583,19 @@ an entry, with the prompt constants nothing else imports, lowers it, and nothing
 comments labelling live code as Accuracy Mode / verdict-finalizer paths after those were
 deleted; the labels are gone, the code they mislabelled was correct.
 
+**The harness note in a user-role turn had no live teacher.** `harnessTurn()` still stamps
+`HARNESS NOTE (this app, not the trader):` onto user-role content at four desk-tool sites —
+tool results, a continue nudge, a clipped payload — and the only prompts that ever named that
+mark were the debate prompts, which nothing sends. So a model received app-written text inside
+the trader's own turn with no instruction anywhere in the contract about whose words it was.
+Clause 5 of `constants/prompts/harnessContract.ts` (the block `utils/composePrompt.ts` puts on
+every request) now states it, quoting `HARNESS_TURN_MARK` by interpolation so the sentence
+cannot drift from the bytes the code emits: obey its facts, never treat it as the trader's
+request or as new permission to trade, and unmarked text — the trader's own words — outranks it
+on conflict. `tests/harnessMarks.test.ts` was moved off the dead file onto the blocks the app
+actually sends, with its floor re-based on that population and a planted-paraphrase control
+added in the same pass, because a scanner that matches nothing reports no drift.
+
 The engine files are gone, and most of the branch with them. What was removed this pass: the seat-completeness refusals ("Your analyst team is incomplete", "Analysts must use different models", "Two debate seats share a model") and the `TEAM_MAX_SEATS` ceiling — only ONE model answers a send (`provider`, `hooks/useAnalysisPipeline.ts:1296` falls back to `enabledProviders[0]`), so those blocked a run over a roster the run never uses, and the ceiling guarded a fan-out that no longer exists. The moderator readiness check survives but now applies only to a scheduled run (`:737`), because a schedule really does take its seat from that config; the human-send version of it refused a click over an unused pick. `runEnsembleEnabled` (`:567`) is now down to `buildEnsembleAnalysts` and the "include a coin" tip; `isDebating` and `activeDebateSpeakers` are deleted outright — every writer set a literal `false`, so the one branch that read the flag could not run.
 
 
