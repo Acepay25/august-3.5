@@ -2169,7 +2169,7 @@ the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:69`; 
 progress panel now mints two rows (`market-data`, `analysis`), completed by
 `settleOpenSteps()` in the run's `finally` after the catch has marked any failure.
 
-**Push state:** 96 unpushed commits at this tip (measured as `git rev-list --count
+**Push state:** 97 unpushed commits at this tip (measured as `git rev-list --count
 origin/main..HEAD`, which is the only honest way to state it — the count grows with
 every commit, so re-measure rather than trust this number), nothing pushed this
 session; the earlier authorization covered only the first 16.
@@ -2310,7 +2310,7 @@ git diff --name-only 8e4808a1..HEAD
 
 which prints exactly five paths — `AGENTS.md`, `docs/app-flow.md`, `docs/app-flow.html`,
 `docs/plans/debate-deletion-status.md`, `scripts/check-flow-doc-anchors.cjs` — and nothing else.
-So: re-run here and green were `check-flow-doc-anchors` (276 anchors, 0 unattributed, 0 comment-line,
+So: re-run here and green were `check-flow-doc-anchors` (281 anchors, 0 unattributed, 0 comment-line,
 0 symbol misses, 0 census disagreements, 0 of 6 AGENTS arms failing, arrow coverage 28/53 with 44 pairs
 and 0 control failures), `npm run lint` (0 errors / 681 warnings under the ratchet) and
 `npm run typecheck:scripts`. Carried over are `vitest`, `vite build`, `boot-probe`, `render-probe`,
