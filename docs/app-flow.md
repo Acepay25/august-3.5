@@ -482,11 +482,15 @@ card that forgets it was clicked offers a second journal row.
    the gate's own output: these docs state 247 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    **Coverage asymmetry, measured rather than trusted from prose:** the step runs
-   in `ci.yml`, and `release.yml` does NOT run it — the release gate is missing
-   this one check from the chain it is described as repeating, so a tag can
-   publish with a dead line number in the flow docs while CI would have rejected
-   the same commit. Reconciling it (add the step, or amend the wording in
-   `AGENTS.md`) changes the publish path, so it is recorded rather than done.
+   in `ci.yml`, and `release.yml` does NOT run it — nor does it run the
+   skill-approval probe, the bare typecheck, or CI's second suite job, while
+   `installer-smoke` is the only gate release has and CI lacks. That set
+   difference is printed by a `comm -13` over the two workflow files' npm-run
+   lines, and `AGENTS.md` now states it there rather than repeating "the same
+   static + probe chain". A tag can therefore still publish with a dead line
+   number in these docs while CI would reject the same commit; adding the step to
+   `release.yml` would close that, and that half changes the publish path, so it
+   is recorded rather than done.
    Qualifying the citations that had no symbol
    of their own is what found
    six numbers that were right-shaped and wrong: `runSeatTurn` is called at
