@@ -72,6 +72,13 @@ export interface ModelMenuProps {
     onEffortChange?: (id: EffortChoice) => void;
     showEffort?: boolean;
     onRefreshModels?: () => void | Promise<void>;
+    /** The discovery state, when the host tracks it. `ModelPicker` owns the
+     *  refresh events, so the panel only prints the word — 'Refreshing…' /
+     *  'Updated!' — while a host that does not pass this gets the quiet icon. */
+    refreshState?: 'idle' | 'busy' | 'done';
+    /** Values already taken elsewhere, greyed and un-clickable. The panel seat
+     *  picker uses it so one model cannot be added to the compare twice. */
+    disabledValues?: ReadonlySet<string>;
     /** The single destination for "I want to configure providers". Two rows
      *  (`New provider` + `Manage models`) would be one place written twice. */
     onManageProviders?: () => void;
@@ -116,8 +123,8 @@ const computeProviderPanel = (main: Pos): ProviderPanelPos => {
 
 const ModelMenu: React.FC<ModelMenuProps> = ({
     providers, value, onChange, effort = 'auto', onEffortChange,
-    showEffort = true, onRefreshModels, onManageProviders,
-    anchor, onClose, returnFocusTo,
+    showEffort = true, onRefreshModels, refreshState = 'idle', disabledValues,
+    onManageProviders, anchor, onClose, returnFocusTo,
 }) => {
     const readyProviders = useMemo(() => providers.filter(isProviderReady), [providers]);
     const [activeProviderId, setActiveProviderId] = useState<string>(() => {
@@ -133,26 +140,45 @@ const ModelMenu: React.FC<ModelMenuProps> = ({
     const mainRef = useRef<HTMLDivElement>(null);
     const providerRef = useRef<HTMLDivElement>(null);
     const sliderRef = useRef<HTMLDivElement>(null);
+    const searchRef = useRef<HTMLInputElement>(null);
     const rowRefs = useRef(new Map<string, HTMLButtonElement>());
     const prowRefs = useRef(new Map<string, HTMLButtonElement>());
 
     const activeProvider = readyProviders.find(p => p.id === activeProviderId) ?? readyProviders[0] ?? null;
     const q = query.trim().toLowerCase();
+    const searching = q.length > 0;
+    /** A query is a FLAT index over every model of every ready provider, not
+     *  over the selected one: a search box that only answers for whichever
+     *  provider the pointer happens to rest on is a filter wearing a search
+     *  box's clothes. That is `ModelPicker`'s long-standing rule, and it is the
+     *  reason the two pickers could not stay two implementations. */
     const rows = useMemo(() => {
-        if (!activeProvider) return [];
-        return activeProvider.models
-            .filter(m => !q || m.toLowerCase().includes(q))
-            .filter(m => !freeOnly || isFreeModelId(m))
-            .map(m => ({
-                value: `${activeProvider.id}::${m}`,
-                id: m,
-                label: formatModelDisplayName(m),
-                free: isFreeModelId(m),
-                vision: isVisionModel(m),
-                starred: starred.includes(`${activeProvider.id}::${m}`),
-            }))
-            .sort((a, b) => Number(b.starred) - Number(a.starred));
-    }, [activeProvider, q, freeOnly, starred]);
+        const source: ProviderConfig[] = searching
+            ? readyProviders
+            : (activeProvider ? [activeProvider] : []);
+        const out: Array<{
+            value: string; id: string; label: string; providerName: string;
+            free: boolean; vision: boolean; starred: boolean; disabled: boolean;
+        }> = [];
+        for (const p of source) {
+            for (const m of p.models) {
+                const pair = `${p.id}::${m}`;
+                if (searching && !m.toLowerCase().includes(q)) continue;
+                if (freeOnly && !isFreeModelId(m)) continue;
+                out.push({
+                    value: pair,
+                    id: m,
+                    label: formatModelDisplayName(m),
+                    providerName: p.name,
+                    free: isFreeModelId(m),
+                    vision: isVisionModel(m),
+                    starred: starred.includes(pair),
+                    disabled: disabledValues?.has(pair) ?? false,
+                });
+            }
+        }
+        return out.sort((a, b) => Number(b.starred) - Number(a.starred));
+    }, [readyProviders, activeProvider, searching, q, freeOnly, starred, disabledValues]);
 
     // Measure once with the panel's REAL height before the first paint, so the
     // upward flip is decided on pixels that exist, not on an estimate.
@@ -187,6 +213,25 @@ const ModelMenu: React.FC<ModelMenuProps> = ({
     }, []);
 
     const close = useCallback((): void => { onClose(); }, [onClose]);
+
+    // The panel is `fixed`, so anything that moves the page detaches it from
+    // its trigger. Scrolling INSIDE the panel's own model list is not that
+    // event, and is ignored — `ModelPicker` has honoured this distinction since
+    // the flyout was portaled, and a panel that closes under its own scrollbar
+    // cannot be read.
+    useEffect(() => {
+        const onScroll = (e: Event): void => {
+            const t = e.target as Node | null;
+            if (t && (mainRef.current?.contains(t) || providerRef.current?.contains(t))) return;
+            onClose();
+        };
+        window.addEventListener('scroll', onScroll, true);
+        window.addEventListener('resize', onClose);
+        return () => {
+            window.removeEventListener('scroll', onScroll, true);
+            window.removeEventListener('resize', onClose);
+        };
+    }, [onClose]);
 
     const focusRow = (target: string | null): void => {
         if (!target) return;
@@ -262,6 +307,8 @@ const ModelMenu: React.FC<ModelMenuProps> = ({
             role="menu"
             aria-label="Provider"
             data-testid="model-menu-providers"
+            onMouseDownCapture={(e) => e.stopPropagation()}
+            onPointerDownCapture={(e) => e.stopPropagation()}
             onKeyDown={onProviderPanelKeyDown}
             style={{ top: providerPanelPos.top, left: providerPanelPos.left, width: PROVIDER_W }}
             className="fixed z-flyout rounded-bubble border border-white/10 bg-zinc-900 p-1 shadow-xl"
@@ -300,6 +347,14 @@ const ModelMenu: React.FC<ModelMenuProps> = ({
                 aria-label="Model and thinking effort"
                 data-testid="model-menu"
                 tabIndex={-1}
+                /* The panel is portaled to `document.body`, so every click in it
+                   is OUTSIDE the host that opened it. Modal and popover hosts
+                   close on any document-level outside-mousedown, and without
+                   these guards a seat picker would tear its own host down
+                   mid-pick — the reason `ModelPicker` has carried this since the
+                   flyout was portaled. */
+                onMouseDownCapture={(e) => e.stopPropagation()}
+                onPointerDownCapture={(e) => e.stopPropagation()}
                 onKeyDown={onMainKeyDown}
                 style={{ top: pos.top, left: pos.left, width: MAIN_W, maxHeight: pos.maxHeight }}
                 className="fixed z-flyout flex flex-col rounded-bubble border border-white/10 bg-zinc-900 shadow-xl outline-none"
@@ -318,6 +373,11 @@ const ModelMenu: React.FC<ModelMenuProps> = ({
 
                 <div className="flex shrink-0 items-center gap-2 px-3 pb-1 pt-2">
                     <span className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-600">Models</span>
+                    {searching && (
+                        <span className="text-ui-2xs tabular-nums text-zinc-500" data-testid="model-menu-count">
+                            {rows.length}
+                        </span>
+                    )}
                     <button type="button" data-testid="model-menu-free-only" aria-pressed={freeOnly}
                         onClick={() => setFree(!freeOnly)}
                         title="Show only free models in every model menu"
@@ -325,42 +385,64 @@ const ModelMenu: React.FC<ModelMenuProps> = ({
                         free only
                     </button>
                     {onRefreshModels && (
-                        <button type="button" data-testid="model-menu-refresh" aria-label="Refresh model list"
+                        <button type="button" data-testid="model-menu-refresh"
+                            aria-label="Refresh models"
                             onClick={() => { void onRefreshModels(); }}
-                            className="rounded-full p-1 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
-                            <RotateCw className="h-3.5 w-3.5" aria-hidden="true" />
+                            className="flex shrink-0 items-center gap-1 rounded-full p-1 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
+                            <RotateCw className={`h-3.5 w-3.5 shrink-0 ${refreshState === 'busy' ? 'animate-spin text-cyan-400' : ''}`} aria-hidden="true" />
+                            {refreshState !== 'idle' && (
+                                <span className={`text-ui-2xs font-medium ${refreshState === 'done' ? 'text-emerald-400' : ''}`}>
+                                    {refreshState === 'busy' ? 'Refreshing…' : 'Updated!'}
+                                </span>
+                            )}
                         </button>
                     )}
                 </div>
 
-                {activeProvider && activeProvider.models.length > 7 && (
+                {/* The search box appears when searching would pay for itself:
+                    more than one ready provider (a flat index can reach them all)
+                    or a long list on the selected one. */}
+                {(readyProviders.length > 1 || (activeProvider?.models.length ?? 0) > 7) && (
                     <div className="shrink-0 px-3 pb-1">
                         <input
+                            ref={searchRef}
                             value={query}
                             onChange={ev => setQuery(ev.target.value)}
                             onKeyDown={e => {
                                 e.stopPropagation();
-                                if (e.key === 'Escape') close();
+                                // Escape stops searching FIRST; a bare Escape with
+                                // no query closes the panel, which is what the
+                                // trader pressed it for.
+                                if (e.key === 'Escape') {
+                                    if (query) setQuery('');
+                                    else close();
+                                }
                             }}
-                            placeholder="Filter models…"
-                            aria-label="Filter models"
-                            className="w-full rounded-control border border-white/10 bg-zinc-800/60 px-2 py-1 text-ui-dense text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
+                            placeholder="Search models…"
+                            aria-label="Search models by name"
+                            data-testid="model-picker-search"
+                            className="w-full rounded-control border border-white/10 bg-zinc-800/60 px-2 py-1 text-left text-ui-dense text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
                         />
                     </div>
                 )}
 
-                <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-1 pb-1" data-testid="model-menu-rows">
+                <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-1 pb-1"
+                    data-testid={searching ? 'model-picker-results' : 'model-menu-rows'}>
                     {rows.map(row => (
-                        <div key={row.value} data-testid={`model-row-${row.id}`}
-                            className={`flex items-center gap-1 rounded-control pr-1.5 transition-colors hover:bg-white/[0.06] ${row.value === value ? 'bg-white/[0.04]' : ''}`}>
+                        <div key={row.value} data-testid={`model-row-${row.value}`}
+                            className={`flex items-center gap-1 rounded-control pr-1.5 transition-colors ${row.disabled ? '' : 'hover:bg-white/[0.06]'} ${row.value === value ? 'bg-white/[0.04]' : ''}`}>
                             <button type="button" role="menuitemradio" aria-checked={row.value === value}
                                 data-row-value={row.value}
                                 ref={el => { if (el) rowRefs.current.set(row.value, el); else rowRefs.current.delete(row.value); }}
+                                disabled={row.disabled}
                                 onClick={() => pick(row.value)}
-                                title={row.label}
-                                className="flex min-w-0 flex-1 items-center gap-2 rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-300">
+                                title={searching ? `${row.label} · ${row.providerName}` : row.label}
+                                className={`flex min-w-0 flex-1 items-center gap-2 rounded-control px-2 py-1.5 text-left text-ui-dense ${row.disabled ? 'cursor-not-allowed text-zinc-600' : 'text-zinc-300'}`}>
                                 <Check className={`h-3 w-3 shrink-0 ${row.value === value ? 'text-emerald-400' : 'opacity-0'}`} aria-hidden="true" />
                                 <span className="min-w-0 truncate" title={row.label}>{row.label}</span>
+                                {searching && (
+                                    <span className="shrink-0 truncate text-ui-2xs text-zinc-600" title={row.providerName}>{row.providerName}</span>
+                                )}
                             </button>
                             {row.vision && <StatusPill tone="info" kicker className="shrink-0 px-1.5 py-0 text-ui-2xs">Vision</StatusPill>}
                             {row.free && (
@@ -376,7 +458,9 @@ const ModelMenu: React.FC<ModelMenuProps> = ({
                     ))}
                     {rows.length === 0 && (
                         <p className="px-2 py-3 text-ui-dense text-zinc-600">
-                            {activeProvider ? `Nothing here matches “${query}”.` : 'No ready provider — add one in Settings.'}
+                            {searching
+                                ? `No model matches “${query}”.`
+                                : (activeProvider ? `No model on ${activeProvider.name}${freeOnly ? ' is free' : ''}.` : 'No ready provider — add one in Settings.')}
                         </p>
                     )}
                 </div>
