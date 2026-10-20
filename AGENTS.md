@@ -182,7 +182,7 @@ competing for the machine.
 │                           #   imported by renderer, vite dev proxy AND electron main
 ├── types/                  # analysis, trade, provider, progress, message, learning …
 ├── utils/                  # See "Canonical single-source modules" below
-├── tests/                  # Vitest suites — 5065 tests in 495 files: 5065 pass in 495 and 0 skip across 0 wholly-skipped files. Read from vitest's own summary block 2026-10-21, after the prior fix pass, the Phase 3/4 implementation pass (E-37 evidence floors, E-38 validity window, E-39 effort, E-40 decidedAt, E-41 leverage/liquidation, E-42 decline, E-43 minEdge, E-35 enforcement, E-18 automatic settlement, E-19 one plan object, E-20 replay, E-23 notebook recovery, E-24 Electron behaviour, E-44 notebook sharding), the context-window pass (a thinking-sized tool-round budget, the thinking-cut re-ask, automatic compaction, discovered context windows), the register sweep (the desk mandate composed from the tools a turn can actually call, the packet's stated age, the transcript live region, the focus-trap population gate, the prompt A/B lane writer) and E-51 Phases 1–4 (`tests/modelMenu.test.tsx` is the only NEW test file; `tests/chatEffortDial.test.tsx` covers the merged control, its chord and its guard, `tests/modelPicker.test.tsx` now that the picker mounts the same panel), plus the R:R/cost register pass, which found those two clusters already built by the earlier `tests/planE02.test.ts` / `tests/planE03.test.ts` and added 5 cases to `tests/chartDrawings.test.ts` and `tests/patternMemoryGate.test.ts` for the two copies that were still live. The file count is the tracked `*.test.*` count `npm run check-flow-doc-anchors` re-measures, so a new test file must land with the census that mentions it.
+├── tests/                  # Vitest suites — 5088 tests in 496 files: 5088 pass in 496 and 0 skip across 0 wholly-skipped files. Read from vitest's own summary block 2026-10-21, after the prior fix pass, the Phase 3/4 implementation pass (E-37 evidence floors, E-38 validity window, E-39 effort, E-40 decidedAt, E-41 leverage/liquidation, E-42 decline, E-43 minEdge, E-35 enforcement, E-18 automatic settlement, E-19 one plan object, E-20 replay, E-23 notebook recovery, E-24 Electron behaviour, E-44 notebook sharding), the context-window pass (a thinking-sized tool-round budget, the thinking-cut re-ask, automatic compaction, discovered context windows), the register sweep (the desk mandate composed from the tools a turn can actually call, the packet's stated age, the transcript live region, the focus-trap population gate, the prompt A/B lane writer), E-51 Phases 1–4 (`tests/modelMenu.test.tsx` is the only NEW test file; `tests/chatEffortDial.test.tsx` covers the merged control, its chord and its guard, `tests/modelPicker.test.tsx` now that the picker mounts the same panel), the R:R/cost register pass, which found those two clusters already built by the earlier `tests/planE02.test.ts` / `tests/planE03.test.ts` and added 5 cases to `tests/chartDrawings.test.ts` and `tests/patternMemoryGate.test.ts` for the two copies that were still live, and E-52 Phase 1 (`tests/turnStatus.test.ts` for the one grammar and the one tool vocabulary the turn's status line and the rows beneath it both read). The file count is the tracked `*.test.*` count `npm run check-flow-doc-anchors` re-measures, so a new test file must land with the census that mentions it.
 └── electron/               # main.cjs + preload.cjs (NOT covered by tsc)
 ```
 
@@ -196,6 +196,16 @@ is how the numbers drift apart:
 - `utils/runStatus.ts` — the run status vocabulary: one colour+word per state,
   error classification, and the error-text sanitizer. Never hardcode a status
   colour in a component.
+- `utils/turnStatus.ts` + `utils/toolKinds.ts` — what a turn is DOING, and the
+  vocabulary the desk's tools are named in. `parseToolLine` is the ONE reader
+  of the digest grammar the desk writes ("calling order book…" / "order book ·
+  detail"), so the tool rows and the turn's status line cannot disagree about
+  what the desk did; `turnActivityLabel` names the live activity ("Reading
+  the order book") and `turnWorkSummary` names the settled work. The map is
+  keyed by the tool's HUMAN LABEL, not its name — the transcript never carries
+  a name — and `tests/turnStatus.test.ts` measures it against the desk
+  service's own tool list, so a new tool cannot slip through unlabelled. An
+  unknown tool keeps its own label: never guess a verb for it.
 - `utils/finishReason.ts` — normalizes the four providers' stop signals onto one
   `FinishReason`, and brackets a run's truncation tally. Read the ceiling with
   `peekTruncations()`; don't re-derive it from a missing regex match.

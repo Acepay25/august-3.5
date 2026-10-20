@@ -10,11 +10,12 @@
  * line). Reads only the entry it is given — no dock state.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Lightbulb } from '../../shared/Icons';
 import type { ToolAction } from '../../../types/message';
 import { tipForSeed } from '../../../utils/tradingTips';
-import { splitReasoningAroundTools, stripTraceMarkers } from '../../../utils/traceText';
+import { splitReasoningAroundTools } from '../../../utils/traceText';
+import { turnActivityLabel, turnWorkSummary } from '../../../utils/turnStatus';
 import AnalyzedRow from '../../shared/AnalyzedRow';
 import ReasoningRow from '../../shared/ReasoningRow';
 import ToolActivityRow from '../../shared/ToolActivityRow';
@@ -24,37 +25,12 @@ import { getPayloadWriteFailure } from '../../../services/trade/toolPayloadStore
 /** What this turn's work actually was, named from the transcript it already
  *  produced — no model call, no new store.
  *
- *  `pairToolLines` yields the human labels the transcript shows ("order book",
- *  "indicators", "notebook recall"), so the block title is built from the same
- *  strings the rows below it display: what you read in the summary is exactly
- *  what you get when you open it. Duplicates are folded (four order-book calls
- *  are one mention), reasoning is named once, and the result is capped so a
- *  tool-heavy turn does not become a paragraph. */
-export const workSummaryLabel = (tools: string[], hasReasoning: boolean): string | null => {
-    const parts: string[] = [];
-    if (hasReasoning) parts.push('Read the chart');
-    const seen = new Set<string>();
-    for (const raw of tools) {
-        const line = stripTraceMarkers(raw ?? '').trim();
-        if (!line) continue;
-        // Strip the trailing outcome/detail so "order book · buy wall at 88k"
-        // contributes "order book", not the whole line.
-        const called = /^calling\s+(.+?)(…|$)/i.exec(line);
-        const head = (called ? called[1] : (line.split(' · ')[0] ?? '')).trim();
-        if (!head) continue;
-        const key = head.toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        parts.push(head);
-        // Keep SCANNING past the cap: "+N more" has to name how many were
-        // actually left out, not how many the loop happened to reach.
-    }
-    if (parts.length === 0) return null;
-    const shown = parts.slice(0, 4);
-    const more = parts.length - shown.length;
-    const label = shown.join(', ');
-    return more > 0 ? `${label} +${more}` : label;
-};
+ *  The grammar, the pairing and the naming all live in `utils/turnStatus.ts`,
+ *  because the transcript row and this summary are two readers of ONE
+ *  grammar: what the trader reads collapsed is exactly what they get when
+ *  they open it. This export stays so the existing callers keep working. */
+export const workSummaryLabel = (tools: string[], hasReasoning: boolean): string | null =>
+    turnWorkSummary(tools, hasReasoning);
 
 /** The shape this actually reads. The dock passes its `LiveEntry` straight
  *  in; the Chat surface adapts a pipeline `Message` onto the same fields.
@@ -83,9 +59,18 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
     const running = !!entry.streaming && !entry.text;
     const hasWork = reasoning.trim().length > 0 || entry.tools.length > 0;
     const hasActions = !!(entry.actions && entry.actions.length > 0);
+    // What the turn is doing RIGHT NOW — the status line's word, derived from
+    // the turn's own tool lines. It changes as the work changes, and it can
+    // only ever report what the tools did. Declared before the early return
+    // below, because a hook after one is a hook called conditionally.
+    const activity = useMemo(
+        () => turnActivityLabel(entry.tools, reasoning.trim().length > 0),
+        [entry.tools, reasoning],
+    );
     if (!hasWork && !hasActions) {
         // Nothing yet: the waiting tip covers
-        // the silent first moments of a turn.
+        // the silent first moments of a turn. It is the tip's ONLY home now —
+        // once there is work, the status line names the activity instead.
         return running ? (
             <p className="flex items-start gap-1.5 text-ui-dense leading-5 text-zinc-500" data-testid="thinking-placeholder">
                 <Lightbulb className="mt-0.5 h-3 w-3 shrink-0 text-zinc-600" aria-hidden="true" />
@@ -153,6 +138,7 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
                     toolsCount={entry.tools.length}
                     persistedMs={entry.workedMs}
                     title={workSummaryLabel(entry.tools, reasoning.trim().length > 0) ?? undefined}
+                    activity={activity}
                 >
                     {nodes}
                     {writeFailureNote && (

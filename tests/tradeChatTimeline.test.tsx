@@ -65,6 +65,27 @@ describe('AnalyzedRow (the Worked-for wrapper)', () => {
         expect(row.textContent).toMatch(/Analyzed/);
         expect(row.textContent).not.toMatch(/for \d+s/);
     });
+
+    it('names the ACTIVITY while it runs, not just "Analyzing"', () => {
+        // The reference's status line: a phrase that says what the desk is
+        // doing, so the line CHANGES as the work changes. "Analyzing" says
+        // only that the desk is busy.
+        const { rerender } = render(<AnalyzedRow running activity="Reading the order book"><p>timeline</p></AnalyzedRow>);
+        const row = document.querySelector('[data-testid="analyzed-row"]') as HTMLDetailsElement;
+        expect(row.textContent).toMatch(/Reading the order book · \d+s/);
+        expect(row.textContent).not.toMatch(/Analyzing/);
+
+        // It follows the work: the next tool changes the phrase.
+        rerender(<AnalyzedRow running activity="Running the screener"><p>timeline</p></AnalyzedRow>);
+        expect(row.textContent).toMatch(/Running the screener/);
+        expect(row.textContent).not.toMatch(/order book/);
+    });
+
+    it('falls back to the bare state when there is no activity to name', () => {
+        render(<AnalyzedRow running><p>timeline</p></AnalyzedRow>);
+        const row = document.querySelector('[data-testid="analyzed-row"]') as HTMLDetailsElement;
+        expect(row.textContent).toMatch(/Analyzing for \d+s/);
+    });
 });
 
 describe('work timeline in the Chart AI transcript', () => {
@@ -131,5 +152,30 @@ describe('work timeline in the Chart AI transcript', () => {
         expect(document.querySelector('[data-testid="analyzed-row"]')).toBeTruthy();
         expect(screen.getAllByText('watch price')).toHaveLength(1);
         expect(screen.queryByText('· calling…')).toBeNull();
+    });
+
+    it('names the ACTIVITY on the status line while the turn runs', () => {
+        // The end-to-end path: the desk's own tool lines become the words the
+        // trader reads. The summary below it names the same tool, so the two
+        // cannot drift — they read one grammar.
+        render(<TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a" onSelectChatModel={() => {}} />);
+        const sid = chatStore.getActiveId();
+        act(() => {
+            chatStore.mutate(sid, s => ({
+                ...s,
+                entries: [{
+                    id: 'a-live', role: 'ai', streaming: true,
+                    text: '',
+                    reasoning: 'thinking about the tape',
+                    tools: ['calling order book…', 'order book · ok'],
+                }],
+            }));
+        });
+        const row = document.querySelector('[data-testid="analyzed-row"]') as HTMLDetailsElement;
+        expect(row).toBeTruthy();
+        // The status line names the activity, and the live duration rides it.
+        expect(row.textContent).toMatch(/Reading the order book · \d+s/);
+        // …and NOT the bare state it replaced.
+        expect(row.textContent).not.toMatch(/Analyzing/);
     });
 });

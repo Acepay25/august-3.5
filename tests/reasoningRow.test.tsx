@@ -8,7 +8,7 @@ vi.mock('lucide-react', () => ({
     Lightbulb: () => <span data-testid="lightbulb-icon" />,
 }));
 
-describe('ReasoningRow (wrapping tip reference style)', () => {
+describe('ReasoningRow (the trace row, under the turn status line)', () => {
     it('renders nothing for empty thinking', () => {
         const { container } = render(<ReasoningRow thinking="   " />);
         expect(container.querySelector('.reasoning-row')).toBeNull();
@@ -37,14 +37,21 @@ describe('ReasoningRow (wrapping tip reference style)', () => {
         expect(document.querySelector('.reasoning-row')?.textContent).not.toContain('**');
     });
 
-    it('running: wrapping Tip line + live duration, NO ticker, stays closed', async () => {
+    it('running: the word Thinking + a live duration, NO tip, NO ticker, stays closed', async () => {
         const { container } = render(<ReasoningRow thinking={'step one\nstep two\nstep three'} running />);
         const row = container.querySelector('.reasoning-row');
         expect(row?.getAttribute('data-state')).toBe('running');
-        // The label is the rotating trader tip with a lightbulb glyph…
+        // A dim glyph marks the live row…
         expect(screen.getByTestId('lightbulb-icon')).toBeDefined();
-        expect(screen.getByText(/^Tip: /)).toBeDefined();
-        // …NO scrolling ticker preview — raw trace never leaks into the row.
+        // …and the row says what it is: a trace, and how long it has run.
+        expect(screen.getByText('Thinking')).toBeDefined();
+        // The rotating tip has ONE home — the waiting placeholder in
+        // ChatWorkTimeline, which shows before there is any work at all. Here
+        // the turn's status line (one level up) names the activity instead, so
+        // a second, competing line would be noise.
+        expect(screen.queryByText(/^Tip: /)).toBeNull();
+        expect(container.textContent).not.toContain('Tip:');
+        // NO scrolling ticker preview — raw trace never leaks into the row.
         expect(container.querySelector('.reasoning-row-clip')).toBeNull();
         expect(container.querySelector('.reasoning-row-line')).toBeNull();
         // The row stays closed until clicked; a live duration ticks.
@@ -56,7 +63,7 @@ describe('ReasoningRow (wrapping tip reference style)', () => {
 
     it('running + expanded shows the marker-stripped live trace', () => {
         render(<ReasoningRow thinking={'**mid-run** observation'} running />);
-        fireEvent.click(screen.getByText(/^Tip: /));
+        fireEvent.click(screen.getByText('Thinking'));
         expect(document.querySelector('.reasoning-row')?.textContent).toContain('mid-run observation');
         expect(document.querySelector('.reasoning-row')?.textContent).not.toContain('**');
     });
