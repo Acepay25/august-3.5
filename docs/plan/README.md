@@ -18,8 +18,9 @@ plan itself or the evidence behind it.
 
 | file | what it is | read it when |
 |---|---|---|
-| **[`open-items.md`](open-items.md)** | **THE PLAN'S WORKING LIST** — **121** open items (O-01…O-129) + **24** owner decisions (D-01…D-24), each with the `file:line` that proves it is still open at HEAD, each mapped to the proposal that covers it |
+| **[`open-items.md`](open-items.md)** | **THE PLAN'S WORKING LIST** — **122** open items (O-01…O-130) + **24** owner decisions (D-01…D-24), each with the `file:line` that proves it is still open at HEAD, each mapped to the proposal that covers it |
 | **[`implementation-record.md`](implementation-record.md)** | **WHAT LANDED** — the 2026-10-20 fix pass, item by item: where each change is, which gate verified it, the measured figures with the tip they were taken at, and **what it does not close** |
+| **[`model-menu-redesign.md`](model-menu-redesign.md)** | **E-51 — the proposer's new item.** The scan of the model dropdown as it stands (three controls, two designs, one untested), the gap against the DeepSeek Harness reference, the element-by-element mapping, **four owner rulings**, and four phased commits with their gates |
 | **[`full-audit.md`](full-audit.md)** | **THE EVIDENCE** — all seven sources merged into one 551 KB document with a 66-entry section index | you want the reasoning behind a claim |
 | [`audit/2026-10-19-00-index-and-method.md`](audit/2026-10-19-00-index-and-method.md) | the commit, the tree state, the tools, what could not be run, the coverage statement | you want to know how it was made and what it missed |
 | [`audit/2026-10-19-01-system-and-data-flow.md`](audit/2026-10-19-01-system-and-data-flow.md) | the architecture, the persisted-store inventory, the prompt inventory, the tool surface, security, reliability, performance, UX, quality gates | you are changing the system and need the map |

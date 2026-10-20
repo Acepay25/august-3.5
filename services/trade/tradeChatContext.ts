@@ -8,7 +8,7 @@
  */
 
 import { phtFullStamp, phtStamp } from '../../utils/timezone';
-import { clipNote } from '../../utils/harnessMarks';
+import { clipNote, dataUnavailable } from '../../utils/harnessMarks';
 import { charsForTokens, windowBudgetTokens } from '../../utils/tokenEstimate';
 
 export interface TradeChatContextInput {
@@ -40,6 +40,9 @@ export interface TradeChatContextInput {
      *  budget against the REAL window is the point — a 1M-window seat and a
      *  32k one should not be sent the same packet. */
     contextWindowTokens?: number;
+    /** Clock for the age stamp. Defaults to now; injectable so the sentence a
+     *  model reads about a packet's staleness is testable without a timer. */
+    nowMs?: number;
 }
 
 /**
@@ -78,9 +81,29 @@ export const formatFormingCandleLine = (candle: FormingCandle, interval?: string
     return `[LIVE CANDLE — the forming ${ivl}candle on the chart right now: O ${fmtPx(candle.open)} H ${fmtPx(candle.high)} L ${fmtPx(candle.low)} C ${fmtPx(candle.close)} (kline websocket, live). The packet's ${last}candle row is a REST snapshot — this one is current.]`;
 };
 
-export const buildTradeChatContext = ({ symbol, interval, packetMarkdown, fetchedAtMs, drawingsDescription, onScreenDescription, plansDescription, liveMarkPrice, formingCandle, contextWindowTokens }: TradeChatContextInput): string => {
+/** The packet's own age, in the sentence the model reads.
+ *
+ * `fetchedAtMs` alone asks the seat to subtract two clock times it cannot see,
+ * and the cache in `chatTurnRunner` legitimately serves a packet up to 8 s old.
+ * So the age is STATED, and past a minute it is named STALE with the remedy —
+ * the seat must not read an eight-second-old snapshot as the live tape. */
+export const packetAgeNote = (fetchedAtMs: number, nowMs: number): string => {
+    const ageSec = Math.max(0, Math.floor((nowMs - fetchedAtMs) / 1000));
+    if (ageSec < 60) return `${ageSec}s old`;
+    const mins = Math.floor(ageSec / 60);
+    return `${mins}m ${ageSec % 60}s old — STALE: this snapshot predates the last ${mins} minute(s); call get_market_packet or get_chart_view for a newer read before you state a price`;
+};
+
+export const buildTradeChatContext = ({ symbol, interval, packetMarkdown, fetchedAtMs, drawingsDescription, onScreenDescription, plansDescription, liveMarkPrice, formingCandle, contextWindowTokens, nowMs }: TradeChatContextInput): string => {
     const when = phtFullStamp(fetchedAtMs);
-    const rawPacket = (packetMarkdown || '').trim() || '(packet unavailable — the live fetch failed; say so and call the desk tools instead of guessing)';
+    // A failed fetch is the app's OWN sentinel, not a parenthetical: the same
+    // marker every other withheld read uses, so the seat cannot file an outage
+    // as "there was nothing to find" and the cache/evidence paths can test it.
+    const rawPacket = (packetMarkdown || '').trim() || dataUnavailable(
+        'market packet',
+        `the live fetch had returned nothing by ${when} PHT`,
+        'Nothing about this chart was measured, so its state is UNKNOWN — say so and call get_market_packet or get_chart_view instead of guessing',
+    );
     // The packet is the only unbounded section here, and it is the one this
     // block was previously concatenating with no cap at all — routine charts
     // rode 8-12k chars into EVERY message, including one-word questions.
@@ -102,7 +125,7 @@ export const buildTradeChatContext = ({ symbol, interval, packetMarkdown, fetche
         : '';
     const candleLine = formingCandle ? formatFormingCandleLine(formingCandle, interval) : '';
     return [
-        `[LIVE CHART CONTEXT — ${symbol} · ${interval} chart · fetched ${when} PHT (UTC+8) — code-calculated, treat as ground truth]`,
+        `[LIVE CHART CONTEXT — ${symbol} · ${interval} chart · fetched ${when} PHT (UTC+8), ${packetAgeNote(fetchedAtMs, nowMs ?? Date.now())} — code-calculated, treat as ground truth]`,
         stamp,
         candleLine,
         packet,
@@ -165,7 +188,13 @@ export const describeChartSnapshotForModel = (snap: {
 
 export const TRADE_CHAT_SYSTEM_PROMPT = [
     'You are the live chart copilot docked beside a Binance perpetuals chart in the August Trading terminal.',
-    'The user is looking at the chart right now; every message arrives with a fresh code-calculated market packet.',
+    // The promise has to be the one this file keeps. `chatTurnRunner` serves a
+    // cached packet up to 8 s old, and a failed fetch substitutes a
+    // DATA_UNAVAILABLE line — so "fresh" was never true of every message, and a
+    // seat that believes it will quote an eight-second snapshot as the tape.
+    // The age is now stated on the packet header itself (`packetAgeNote`), and
+    // this line says what the seat can actually rely on.
+    'The user is looking at the chart right now; every message carries a code-calculated market packet stamped with its own age, and the packet is marked DATA_UNAVAILABLE when the fetch failed — never treat it as the live print, and call a tool for anything newer.',
     'ALWAYS ground market claims in evidence: call the desk tools when the answer touches price, the order book, funding, open interest or anything time-sensitive — get_chart_view (everything on screen), get_market_packet (the full hybrid pull) or the granular lookups. Cite exact levels, name the timeframe, and never invent a number the packet lacks.',
     'PRICES: the packet is a REST snapshot and can lag the chart by seconds; if the packet price and the on-screen live mark disagree, the mark is current — treat the gap as snapshot age or perp basis, never as a fresh move, and confirm with get_chart_view before narrating one.',
     'ALWAYS consult the skills library — the index below and the recall / get_notebook_map tools — and APPLY the skills and strategies that match the current setup. A matching skill outranks improvisation; name the skill you applied and its edge. If no skill matches, say so.',

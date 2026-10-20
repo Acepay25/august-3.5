@@ -128,7 +128,10 @@ const SessionUsagePanel: React.FC = () => {
 };
 
 /**
- * The harness's model-behavior dials (effort, guard, cost caps, checklist).
+ * The harness's model-behavior dials (effort, the session guard, the edge
+ * floor, the default leverage, settlement, checklist). "Cost caps" named a
+ * dial that was deleted with the debate engine — a comment listing a control
+ * that is not on the panel is how the next reader re-adds one.
  * Stage 3 moved them out of the Data tab — they are analysis behavior, not
  * storage — and they now render in Settings → Analysis.
  */

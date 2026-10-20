@@ -77,12 +77,16 @@ describe('watch ticks', () => {
 });
 
 describe('composer mentions', () => {
-    it('parses @lanes and /skills then formats a steer line', () => {
+    it('keeps the skill slug and stops inventing a seat to address', () => {
+        // @Macro named one of the four built-in analyst seats, and all four are
+        // deleted; the mention still emitted "Address Macro only." into the
+        // prompt, so the model was told to speak to a thing that does not exist.
         const intent = parseComposerIntent('@Macro /fade-wick BTC 4h');
-        expect(intent.lanes).toEqual(['Macro']);
         expect(intent.skills).toEqual(['fade-wick']);
-        expect(intent.rest).toBe('BTC 4h');
-        expect(formatComposerSteer(intent)).toMatch(/Address Macro only/);
         expect(formatComposerSteer(intent)).toMatch(/fade-wick/);
+        expect(formatComposerSteer(intent)).not.toMatch(/Address/);
+        // The trader's own words survive a mention that routes nothing, instead
+        // of being stripped out of the text they typed.
+        expect(intent.rest).toBe('@Macro BTC 4h');
     });
 });

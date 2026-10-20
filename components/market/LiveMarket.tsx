@@ -42,6 +42,7 @@ import TradingChart, { type ChartInterval } from '../trade/TradingChart';
 import { MODEL_COLOR_NAMES, type ChartDrawing } from '../../services/trade/chartDrawings';
 import { useFuturesLiveFeed } from '../../hooks/useFuturesLiveFeed';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface LiveMarketProps {
     isVisible: boolean;
@@ -73,6 +74,11 @@ const PRICE_DOWN_CLASS = "font-mono tabular-nums text-ui-base sm:text-ui-lg font
 const LiveMarket: React.FC<LiveMarketProps> = ({ isVisible, onClose, onAnalyze, isEmbedded = false }) => {
     // Esc closes the overlay (was a navigation dead-end).
     useEscapeClose(isVisible && !isEmbedded, onClose);
+    // The full-screen overlay says `aria-modal="true"`, so Tab has to stay
+    // inside it — the embedded panel says nothing of the kind and must not be
+    // trapped: it sits beside the rest of the page, and a trap there would
+    // lock keyboard focus inside a column the trader is trying to leave.
+    const dialogRef = useFocusTrap<HTMLDivElement>(isVisible && !isEmbedded);
     const [symbol, setSymbol] = useState('ETHUSDT');
     // Renamed from `interval` — a state variable named `interval` shadows the
     // global setInterval, making any future bare setInterval(...) call throw
@@ -286,7 +292,7 @@ const [trendlineDrawings, setTrendlineDrawings] = useState<ChartDrawing[]>([]);
     const feedPolling = feed.status === 'polling';
 
     return (
-        <div role="dialog" aria-modal={isEmbedded ? undefined : 'true'} aria-label="Live Market" className={` flex flex-col ${isEmbedded ? 'h-full' : 'fixed inset-0 bg-zinc-950 z-modal animate-fade-in pb-[env(safe-area-inset-bottom)]'}`}>
+        <div ref={dialogRef} role="dialog" aria-modal={isEmbedded ? undefined : 'true'} aria-label="Live Market" className={` flex flex-col ${isEmbedded ? 'h-full' : 'fixed inset-0 bg-zinc-950 z-modal animate-fade-in pb-[env(safe-area-inset-bottom)]'}`}>
             {/* Header - 2 rows on mobile for spacious feel */}
             <div className="bg-zinc-900 border-b border-white/10 flex-shrink-0 shadow-lg shadow-black/20">
                 {/* Top Row - Title, Price & Close */}

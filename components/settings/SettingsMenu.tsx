@@ -176,7 +176,10 @@ const NAV_GROUPS: NavGroup[] = [
     {
         title: 'Setup',
         entries: [
-            { id: 'models', label: 'AI setup', icon: <AISettingsIcon className={NAV_ICON} />, keywords: 'provider api key model vision moderator memory ocr connect' },
+            // `moderator` went with the debate engine; leaving it in the keyword
+            // list made the search box surface AI setup for a word that names no
+            // control in it.
+            { id: 'models', label: 'AI setup', icon: <AISettingsIcon className={NAV_ICON} />, keywords: 'provider api key model vision memory ocr connect' },
         ],
     },
     {

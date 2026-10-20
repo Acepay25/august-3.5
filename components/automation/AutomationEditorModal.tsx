@@ -8,6 +8,7 @@ import ModelPicker from '../shared/ModelPicker';
 import { SelectMenu } from '../shared/SelectMenu';
 import type { AgentBot } from '../../services/agents/agentRoster';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 
 export interface ModelOption {
@@ -216,6 +217,10 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
     }, [frequencyMode, frequencyEvery, scheduleDays.length]);
 
     useEscapeClose(isVisible, requestClose);
+    // A 542-line CRUD modal with no trap lets Tab leave the dialog and land
+    // on the page behind it — the form is still open, and the focus is not
+    // where the eyes are. The hook restores focus on close (O-66).
+    const dialogRef = useFocusTrap<HTMLDivElement>(isVisible);
     if (!isVisible) return null;
 
     // The generated cron is the source of truth unless a custom cron was
@@ -235,7 +240,11 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
         // a bot-scoped routine runs the bot's own provider/model — the
         // ensemble seats do not apply.
         if (!runAsBot) {
-            if (!moderatorSelection) { setError('Pick the moderator model.'); return; }
+            // The field is labelled "Model" and it is the run's ONE answering
+            // seat — "moderator" is the debate role that was deleted with the
+            // engine (2026-10-19). An error naming a thing the form does not show
+            // reads as a different control being broken.
+            if (!moderatorSelection) { setError('Pick the model this run answers with.'); return; }
         }
 
         const moderatorModel = splitOption(moderatorSelection);
@@ -267,7 +276,10 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
             <div
                 className="w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar rounded-bubble border border-zinc-800 bg-zinc-950 shadow-2xl animate-fade-in"
                 onClick={(e) => e.stopPropagation()}
+                ref={dialogRef}
+                tabIndex={-1}
                 role="dialog"
+                aria-modal="true"
                 aria-label={initial ? `Edit automation ${initial.name}` : 'New automation'}
             >
                 {/* Header */}

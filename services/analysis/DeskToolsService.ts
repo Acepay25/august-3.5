@@ -1664,16 +1664,63 @@ export const CHART_ACTION_TOOL_DEFS: DeskToolDefinition[] = [
     },
 ];
 
-export const DESK_TOOLS_PROMPT = `
+/**
+ * The desk mandate, composed from the tools this turn can ACTUALLY call.
+ *
+ * `DESK_TOOLS_PROMPT` used to be one static string appended verbatim to every
+ * tool-bearing turn, and it ordered the seat to read `get_chart_view` before
+ * naming a shape and to name `draw_on_chart` to make a level visible. The Chat
+ * surface's allow-list refuses both calls, so a seat there was told to do a
+ * thing its own executor would refuse — which does not read to the model as
+ * "this home has no chart", it reads as a duty, and the turn either burns a
+ * round trying to fetch it or invents the shape. The offer-list filter already
+ * gated the DEFINITIONS; this gates the PROSE, the half no executor refuses.
+ *
+ * Pass `undefined` for "everything is offered" (the dock, the analysis send).
+ */
+export const deskToolsMandateFor = (offered?: readonly string[]): string => {
+    const has = (name: string): boolean => offered === undefined || offered.includes(name);
+    const canViewChart = has('get_chart_view');
+    const canDraw = has('draw_on_chart') || has('mark_trade_levels');
+    // The fallback names a tool that EXISTS here, in the order the seat can
+    // actually use: the picture, then the frames, then the numbers. Nothing is
+    // offered? Then the honest instruction is to say it looked at none.
+    const groundingTool = canViewChart
+        ? '`get_chart_view`'
+        : has('get_all_timeframes')
+            ? '`get_all_timeframes`'
+            : has('get_indicators')
+                ? '`get_indicators`'
+                : null;
+    const shapeRule = canViewChart
+        ? 'BEFORE YOU NAME A SHAPE: a pattern, a trendline, a swing high/low, "higher lows", a triangle or a broken structure requires `get_chart_view` (or `get_all_timeframes` to compare frames) on this turn.'
+        : groundingTool
+            // Said as what this home IS, not as a missing tool: a seat that
+            // reads a refusal as an absence still has to answer the question.
+            // The name is deliberately NOT written in backticks here — the test
+            // that pins "every tool the mandate names is a tool this turn can
+            // call" is only worth having if it holds without an exception.
+            ? `BEFORE YOU NAME A SHAPE: there is NO CHART to read on this home — the chart-view tool is not offered here, so a pattern, a trendline, a swing high/low, "higher lows" or a broken structure must come from ${groundingTool} on this turn, and you must say it came from the candles, not from the picture.`
+            : 'BEFORE YOU NAME A SHAPE: no market read is offered on this turn, so a pattern, a trendline or a broken structure would be invented, not read — name none of them and say you had nothing to look at.';
+    const drawingRule = canDraw
+        ? 'Naming `draw_on_chart` or `mark_trade_levels` is how a level becomes something the trader can see: pass the exact prices you are citing, never restated ones.'
+        : 'There is NO CANVAS on this home: nothing you name gets drawn, so a level is text the trader reads here. Pass the exact prices you are citing, never restated ones, and do not offer to draw.';
+
+    return `
 **DESK TOOLS (available anytime on this turn)**
 You can call live tools before you speak — opening analysis, rebuttal, clarification, or moderator verdict.
 Use them for: news/macro catalysts, funding/OI crowding, order-book walls, liquidations, BTC context on alts, session timing, or a fresh price print.
 The chart symbol is only the DEFAULT: every market tool accepts a \`symbol\` argument, so when the user asks about another coin ("what about eth, can we trade there?") pull that coin directly — get_market_packet or get_all_timeframes with symbol ETHUSDT gives the full multi-timeframe read without anyone switching charts.
 Your own trading memory is one of these tools: the recall tool searches your notebook (doctrine, rules, similar past trades) - call it when prior experience with this setup could change your stance.
-BEFORE YOU NAME A SHAPE: a pattern, a trendline, a swing high/low, "higher lows", a triangle or a broken structure requires \`get_chart_view\` (or \`get_all_timeframes\` to compare frames) on this turn. The market packet you are shown carries code-calculated summaries, and its printed candle rows depend on the surface you were opened in: the full packet prints EIGHT rows per timeframe, the compact one (used by surfaces that ask for brevity) prints NONE and keeps only the summaries. Either way — eight printed rows are not a chart, and a shape described from them is invented, not read. If the rows are not in front of you, call the tool; if you have not, either call it or say "inferred from the rows shown" and give it no confidence. Naming \`draw_on_chart\` or \`mark_trade_levels\` is how a level becomes something the trader can see: pass the exact prices you are citing, never restated ones.
+${shapeRule} The market packet you are shown carries code-calculated summaries, and its printed candle rows depend on the surface you were opened in: the full packet prints EIGHT rows per timeframe, the compact one (used by surfaces that ask for brevity) prints NONE and keeps only the summaries. Either way — eight printed rows are not a chart, and a shape described from them is invented, not read. If the rows are not in front of you, call ${groundingTool ?? 'nothing'}; if you have not, either call it or say "inferred from the rows shown" and give it no confidence. ${drawingRule}
 run_monte_carlo simulates a concrete plan: pass direction (long/short), entry, stop_loss, and take_profits (1–3 absolute prices). Optional atr is in price units; without it volatility is assumed from twice the stop distance, NOT fetched from the market. Optional timeframe is a label, num_simulations (100–5000) and max_steps (10–1000) control the run. For account drawdown estimates pass account_balance, position_size (margin in account currency), and leverage together. Report the simulation assumptions and timeout rate, not guaranteed or historical performance.
 Do not call tools you do not need. Prefer 0–2 calls. After tool results arrive, write your Floor reply from the findings — no JSON, no restated tool schemas.
 `;
+};
+
+/** The mandate for a turn that can call every desk tool (the dock, an analysis
+ *  send). Built from `deskToolsMandateFor` so the two cannot drift apart. */
+export const DESK_TOOLS_PROMPT = deskToolsMandateFor();
 
 /** Anthropic Messages API tool schema (from OpenAI-style defs). */
 export const toAnthropicTools = (tools: DeskToolDefinition[] = DESK_TOOL_DEFINITIONS): unknown[] =>
@@ -3906,8 +3953,12 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
  * to be told whose words those are. Analysis sends already compose the contract
  * and must not receive a second copy.
  */
-export function withDeskToolsSystemPrompt(messages: ChatMessage[], nativeTools: boolean): ChatMessage[] {
-    const block = `${DESK_TOOLS_PROMPT}${nativeTools ? '' : TEXT_TOOL_FALLBACK_PROMPT}`;
+export function withDeskToolsSystemPrompt(
+    messages: ChatMessage[],
+    nativeTools: boolean,
+    offeredTools?: readonly string[],
+): ChatMessage[] {
+    const block = `${deskToolsMandateFor(offeredTools)}${nativeTools ? '' : TEXT_TOOL_FALLBACK_PROMPT}`;
     const out = messages.map(m => ({ ...m }));
     const sysIdx = out.findIndex(m => m.role === 'system');
     if (sysIdx >= 0) {
@@ -3951,7 +4002,6 @@ export async function* streamChatWithDeskTools(
     clearDeskToolCache();
 
     const nativeTools = config.apiFormat === 'chat_completions';
-    const enriched = withDeskToolsSystemPrompt(messages, nativeTools);
     const {
         defaultSymbol,
         afterToolsNudge,
@@ -4007,6 +4057,18 @@ export async function* streamChatWithDeskTools(
             ...confirmedForgedToolDefinitions().map(d => d.function.name),
         ]
         : allowedTools;
+    // The mandate must describe THIS turn. `mergedAllowed` is exactly the set of
+    // names the loop will honour (an allow-list filters the definitions; without
+    // one, everything including the chart actions and the mailbox is offered),
+    // so it is what the prose gets composed from — see `deskToolsMandateFor`.
+    const offeredToolNames = mergedAllowed && mergedAllowed.length > 0
+        ? mergedAllowed
+        : [
+            ...DESK_TOOL_DEFINITIONS.map(d => d.function.name),
+            ...confirmedForgedToolDefinitions().map(d => d.function.name),
+            ...extraDefs.map(d => d.function.name),
+        ];
+    const enriched = withDeskToolsSystemPrompt(messages, nativeTools, offeredToolNames);
     // Discoverability: the capability block rides EVERY seat turn so models
     // learn they can DM; the inbox notice (unread count + read first)
     // appends only when mail is actually waiting.

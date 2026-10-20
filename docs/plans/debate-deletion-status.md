@@ -83,7 +83,7 @@ The goal is one tool-capable turn in **both** chat homes. Facts, so the next
 session does not re-derive them:
 
 - `streamChatWithDeskTools` is an **async generator** returning text deltas
-  (`services/analysis/DeskToolsService.ts:3933`), and **every option is optional**
+  (`services/analysis/DeskToolsService.ts:3984`), and **every option is optional**
   (`StreamWithDeskToolsOptions`). It self-gates on
   `getHarnessSettings().deskToolsEnabled`, and `withDeskToolsSystemPrompt` will not
   double-inject the DESK TOOLS block if the system message already carries it.
@@ -122,7 +122,7 @@ So the target is NOT "keep the branch and shrink it to one seat". It is:
   SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
-  `streamChatWithDeskTools` (`DeskToolsService.ts:3933`), which the dock's solo
+  `streamChatWithDeskTools` (`DeskToolsService.ts:3984`), which the dock's solo
   seat already runs at `chatTurnRunner.ts:641`.
 - **The verdict and the journal row become tools the model chooses to call**, not
   a pipeline stage it has to earn. What already exists: `present_trade`
@@ -730,7 +730,7 @@ than a stage-19 deletion: **the journal's scalp/swing filter had no producer**. 
 calling `withDetectedTradeType` at the two row-minting sites in `logTradeWithFeedback`
 and `logEntryNotHitTrade` — the label-only variant, so `validityDurationMinutes` stays
 untouched and OutcomeAutopilot's expiry window does not silently widen. The reader is
-`components/journal/TradeLog.tsx:535` (`trade.tradeType || trade.analysis?.tradeType`),
+`components/journal/TradeLog.tsx:540` (`trade.tradeType || trade.analysis?.tradeType`),
 which is why the row is the right host: every journal path lands there, a presented plan,
 a prose chip or a manual log alike.
 
@@ -744,7 +744,7 @@ watching the suite stay green:
    now stripped before matching, so a consumer must use the name in its body. That second
    hole briefly accused `harnessNoteLegend` of being orphaned — a false red from my own
    stripper closing an import run on a line ending in a backtick; the real call is
-   `DeskToolsService.ts:3222`. The control that caught it is the new
+   `DeskToolsService.ts:3269`. The control that caught it is the new
    `the reachability walk separates live from dead` test.
 
 Proof of load-bearing: producer reverted → `withDetectedTradeType` FAILS; restored →
@@ -805,7 +805,7 @@ three turn owners, fed by `usage`/`usageCalls` that `runToolTurn` folds out of t
 per-request `onUsage`. Pinned in `tests/toolTurn.test.ts` ("the measured usage fold") and
 guarded by a new `featuresAreWired` row; stubbing the fold turns those pins red.
 
-`notify()` now fires on the settled Full-analysis path (`useAnalysisPipeline.ts:1274`),
+`notify()` now fires on the settled Full-analysis path (`useAnalysisPipeline.ts:1292`),
 scoped to `options?.fullAnalysis === true` and excluded on a stopped turn, so an ordinary
 chat line stays quiet and a schedule (which already reports in its own row) is not doubled.
 `CompletionNotifications` therefore has no caller left and dies with the engine.
@@ -1005,7 +1005,7 @@ not a mechanical one — it removes reporting the trader can currently open.
 **2. `ensembleProgress` has no rendering reader but IS load-bearing on the failure path.**
 Census over all `.ts`/`.tsx`: minted at the block now at `useAnalysisPipeline.ts:1070` (the placeholder row itself was deleted with the engine), patched at
 `runOutcome.ts`'s debating branch, stripped at the SQLite boundary, and
-after `1bd501e` no component reads it (`App.tsx:1211` was the last, and that memo is
+after `1bd501e` no component reads it (`App.tsx:1218` was the last, and that memo is
 gone). But the `runOutcome` branch keyed on it writes the row's TEXT —
 "The analysis was cancelled." / "The ensemble could not continue before the debate
 started." — so deleting the mint without re-keying that guard strands an empty row on
@@ -1296,7 +1296,7 @@ toggle itself is persisted (`hooks/useProfilePersistence.ts`, `hooks/useUserProf
 (`tests/analysisPipelineSendIdentity.test.ts`, `tests/automationRouteCharacterization.test.tsx`,
 `tests/useProfilePersistence.test.tsx`). Deleting the hybrid pull also changes which coin the
 learning step receives, because the packet still feeds `assemblePipelineMemoryContext` at
-`hooks/useAnalysisPipeline.ts:1047` (the call; the import sits at :33).
+`hooks/useAnalysisPipeline.ts:1059` (the call; the import sits at :33).
 
 **Correction to what this doc and the flow doc currently assert about the A/B lane.** It is not
 "starved with no caller" in the product sense: `beginPromptLane` has no caller, so
@@ -1355,7 +1355,7 @@ with an offer to migrate that text into the general list before the tabs go.
 **Attempted #19's tail in an isolated worktree on 2026-10-18 and stopped at the third site — with
 two couplings the list above did not contain.** They are the reason this is a design pass and not a
 grep-and-delete:
-- `isEnsembleEnabled` gated **live market polling** too: `App.tsx:444` passed it to
+- `isEnsembleEnabled` gated **live market polling** too: `App.tsx:451` passed it to
   `hooks/useMarketData.ts`, which uses it at `:44` (clears `liveMarketConditions` when off), `:127`
   and `:161` (the Binance reachability check) and `:118`/`:192` (effect deps). So deleting the
   toggle silently kills the market ticker the header shows, unless the polling is re-parented onto
@@ -1737,7 +1737,7 @@ bytes on legacy rows — accepted over keeping a stripper for a key no writer ca
 
 Nine doc citations moved when these lines went. Each was re-measured by matching the HEAD
 line's content, and two were re-pointed at a real symbol instead of the bare `};` they used
-to land on (`useAnalysisPipeline.ts:970` for the automation guard, `:747` for the coin tip).
+to land on (`useAnalysisPipeline.ts:982` for the automation guard, `:747` for the coin tip).
 One failure mode the gate cannot see, recorded because it happened here: a citation that
 drifts onto a DIFFERENT non-blank line passes. The run-failure guard's own number did
 exactly that, so the two ledger sentences citing it were rewritten rather than renumbered.
@@ -2153,7 +2153,7 @@ revokes it.
 **Do not re-derive these** (each cost a turn this session and is already proven): the
 review's six defects are all closed in the current files; **and the item it filed as
 "Not verified" — section C's ordering — turned out to carry nine wrong line numbers.** The
-fetch gate is `hooks/useAnalysisPipeline.ts:970` (the docs said line 880 in one file and line 880
+fetch gate is `hooks/useAnalysisPipeline.ts:982` (the docs said line 880 in one file and line 880
 in the other, and `:890` is the automation mute flag, not a gate); the injection string is
 built at `:953` (preset path `:994`, not `:988`); it is read only by `devLog` at `:978`, `:979`
 and `:1166` (not `:973`/`:1160`); `assemblePipelineMemoryContext` is called at `:1021` with the
@@ -2265,7 +2265,7 @@ tsc 0; `vite build` ✓; flow-doc anchors 261 verified, 0 unattributed, 0 census
 file at all, and only 5 write the symbol beside the citation — the only shape the gate can bind to content.
 So 48 rows are line-resolved and nothing more, and the run prints `arrow coverage: 5/53` with a floor on both
 figures so coverage cannot fall silently. Row 7 came out wrong outright: the lazy-surface `SurfaceSkeleton`
-boundaries are App.tsx:153 TradeView, :2373 Journal, :2395 LearnView, :2411 StrategyStudio plus the
+boundaries are App.tsx:160 TradeView, :2373 Journal, :2395 LearnView, :2411 StrategyStudio plus the
 automation modal at :2298 — not the :2493/:2538/:2560/:2602 the table had, which are a prop, a component
 open tag and two unrelated lines. Those five are now cited with the symbol beside each path. Raising coverage is per-row verification work, not a rule change, and the docs say that
 instead of implying the table is checked.
@@ -2281,7 +2281,7 @@ line-resolved only.
 **Coverage 14 became 23, and it cost the docs three more wrong numbers.** Binding a row to its symbol means reading the line, so ten more rows
 went through the source: `runAutomation` is hooks/useAutomations.ts:381 (the table said :389), the `config.botId` fork is
 :423 (it said :431), and the row that attributes `Message.proposal` to the pipeline cited line 1293 of that
-file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1349. All three fixed in both flow docs. Newly bound and verified true:
+file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1367. All three fixed in both flow docs. Newly bound and verified true:
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44, the Enter branch at
 components/trade/panels/ChatComposer.tsx:146, systemPromptFor components/trade/TradeChatPanel.tsx:453 with
 TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:475, useBotThread hooks/useAnalysisPipeline.ts:1292,
@@ -2360,13 +2360,13 @@ silently: a reader-less field can regain a writer with one line of code and no a
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions
 services/trade/chatSessions.ts:419, collectApprovalItems utils/approvalInbox.ts:57, resolveInvokedSkills
 services/learning/SkillMemoryService.ts:494), and the gate caught the pairing that insertion created: the row
-also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1816, where the
+also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1823, where the
 useMemo actually is. 31 of 53 rows cite a file, all bound; 22 name no file at all.
 
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions chatSessions.ts:419,
 collectApprovalItems approvalInbox.ts:57, resolveInvokedSkills SkillMemoryService.ts:494), and the gate caught the
 pairing that insertion created: the same row also names approvalsWaiting, which is not on that line — a SYMBOL
-MISS, because pairing is positional. It now cites App.tsx:1816, where the useMemo actually is. 31 of 53 rows cite
+MISS, because pairing is positional. It now cites App.tsx:1823, where the useMemo actually is. 31 of 53 rows cite
 a file and every one of them binds a symbol; 22 name no file at all.
 
 **31 then 33.** Two more prose-only rows were bound after reading their source: deskThread is the export at

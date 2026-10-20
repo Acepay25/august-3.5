@@ -1,5 +1,50 @@
 import { describe, it, expect } from 'vitest';
-import { buildSkillsIndexForPrompt, buildTradeChatContext, describeChartSnapshotForModel, TRADE_CHAT_SYSTEM_PROMPT } from '../services/trade/tradeChatContext';
+import { buildSkillsIndexForPrompt, buildTradeChatContext, describeChartSnapshotForModel, packetAgeNote, TRADE_CHAT_SYSTEM_PROMPT } from '../services/trade/tradeChatContext';
+import { DATA_UNAVAILABLE_PREFIX, isDataUnavailable } from '../utils/harnessMarks';
+
+describe('the packet says how old it is (O-62)', () => {
+    const base = { symbol: 'BTCUSDT', interval: '15m', packetMarkdown: '## packet' };
+
+    it('states the age instead of asking the seat to subtract two clocks', () => {
+        const fetchedAt = 1_700_000_000_000;
+        const ctx = buildTradeChatContext({ ...base, fetchedAtMs: fetchedAt, nowMs: fetchedAt + 34_000 });
+        expect(ctx).toContain('fetched');
+        expect(ctx).toContain('34s old');
+    });
+
+    it('names a minute-old snapshot STALE and gives the remedy', () => {
+        const fetchedAt = 1_700_000_000_000;
+        const ctx = buildTradeChatContext({ ...base, fetchedAtMs: fetchedAt, nowMs: fetchedAt + 125_000 });
+        expect(ctx).toMatch(/2m 5s old — STALE/);
+        expect(ctx).toMatch(/call get_market_packet or get_chart_view/);
+    });
+
+    it('never reports a negative age for a clock that runs backwards', () => {
+        const fetchedAt = 1_700_000_000_000;
+        expect(packetAgeNote(fetchedAt, fetchedAt - 60_000)).toBe('0s old');
+    });
+
+    it('marks a failed fetch with the app’s own sentinel, not a parenthetical', () => {
+        // The one voice for withheld data: `isDataUnavailable` is what the cache
+        // and evidence paths test, so an outage can never freeze into a TTL or
+        // be filed by the seat as "there was nothing to find".
+        const ctx = buildTradeChatContext({ ...base, packetMarkdown: '', fetchedAtMs: Date.now(), nowMs: Date.now() });
+        expect(ctx).toContain(DATA_UNAVAILABLE_PREFIX);
+        const line = ctx.split('\n').find(l => l.startsWith(DATA_UNAVAILABLE_PREFIX));
+        expect(isDataUnavailable(line ?? '')).toBe(true);
+        expect(line).toMatch(/UNKNOWN/);
+        expect(line).toMatch(/get_market_packet or get_chart_view/);
+    });
+
+    it('the system prompt no longer promises a fresh packet on every message', () => {
+        // "fresh" was false the moment the 8-second cache existed, and an
+        // unlabelled false claim is the same defect class as the unlabelled zero
+        // in the cost model.
+        expect(TRADE_CHAT_SYSTEM_PROMPT).not.toMatch(/arrives with a fresh/);
+        expect(TRADE_CHAT_SYSTEM_PROMPT).toMatch(/stamped with its own age/);
+        expect(TRADE_CHAT_SYSTEM_PROMPT).toMatch(/DATA_UNAVAILABLE/);
+    });
+});
 
 describe('buildTradeChatContext (the model sees the chart)', () => {
     it('labels the packet with symbol, interval, and an exact PHT fetch time', () => {
@@ -69,7 +114,9 @@ describe('buildTradeChatContext (the model sees the chart)', () => {
 
     it('a failed packet fetch degrades to an explicit unavailable note', () => {
         const ctx = buildTradeChatContext({ symbol: 'ETHUSDT', interval: '1h', packetMarkdown: '   ', fetchedAtMs: Date.now() });
-        expect(ctx).toContain('packet unavailable');
+        // The note used to be a parenthetical only this test knew. It is the
+        // app's sentinel now, so the claim is the marker itself.
+        expect(ctx).toContain(DATA_UNAVAILABLE_PREFIX);
         expect(ctx).toContain('instead of guessing');
     });
 

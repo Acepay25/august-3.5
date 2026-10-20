@@ -67,7 +67,7 @@ import { formatInvokedSkillSection, resolveInvokedSkills } from '../services/lea
 import { recordRegimeDay, marketRegimeToLedger } from '../services/learning/regimeLedger';
 import { extractDebateTemplate, DebateTemplate } from '../utils/debateTemplates';
 import { parseComposerIntent, formatComposerSteer } from '../utils/composerMentions';
-import { beginPromptLane, endPromptLane } from '../services/infrastructure/PromptOverrideService';
+import { beginPromptLane, endPromptLane, promptCorpusVersion } from '../services/infrastructure/PromptOverrideService';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { parseDmMarkers } from '../services/agents/botMailbox';
 import { notify } from '../services/infrastructure/notify';
@@ -723,7 +723,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // block with nothing behind it. The check stays where the config is read.
         if (isAutomationRun && !isProviderReady(runModeratorConfig)) {
             appendBlockedRunNotice(
-                'This schedule has no model to answer with: pick a moderator model (Settings → AI Models), make sure it is enabled and has an API key, then run this again.'
+                'This schedule has no model to answer with: pick the model in Settings → AI setup, make sure it is enabled and has an API key, then run this again.'
             );
             return { ok: false };
         }
@@ -941,6 +941,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         automationSilentRef.current = isAutomationRun;
         if (isAutomationRun) automationMessagesRef.current = [];
         try {
+            // The prompt A/B lane is per-RUN and must open BEFORE any prompt is
+            // resolved: `getPrompt` reads the lane flag, so a lane begun after the
+            // first prompt is a coin flip that changes nothing. `endPromptLane()`
+            // already closes it in the `finally` below. Until this line existed the
+            // Settings → Analysis "Prompt A/B (control lane)" dial had a reader in
+            // the profile card and `beginPromptLane` had no caller at all — a
+            // visible control that could not do the thing it names. (O-55)
+            const promptLane = beginPromptLane();
+            // The corpus this run resolved, fingerprinted. Recorded so the journal
+            // row can be grouped by the prompt that produced it — the version and
+            // the lane are one measurement, not two. (O-47)
+            const promptVersion = promptCorpusVersion();
             const currentMessages = isAutomationRun
                 ? [...(options?.automation?.conversation.messages ?? []), userMessage]
                 : [...messagesRef.current, userMessage];
@@ -1259,6 +1271,12 @@ ${enhancedPrompt}`;
                     ...(out.proposal ? { proposal: out.proposal, planId: out.proposal.planId } : {}),
                     runStats: {
                         runId: `schedule-${userMessage.id}`,
+                        // The A/B pair the profile card summarizes: written here,
+                        // read by `useTradeLogging` when the plan is logged, so the
+                        // lane a trade was answered under survives into the journal
+                        // row instead of dying with the run.
+                        promptLane,
+                        promptVersion,
                         startedAt: new Date(turnStartedAt).toISOString(),
                         finishedAt: new Date(turnStartedAt + out.workedMs).toISOString(),
                         durationMs: out.workedMs,
@@ -1422,6 +1440,8 @@ ${enhancedPrompt}`;
                 ...(toolTurn && !toolTurn.interrupted ? {
                     runStats: {
                         runId: `desk-${streamingMessageId}`,
+                        promptLane,
+                        promptVersion,
                         startedAt: new Date(turnStartedAt).toISOString(),
                         finishedAt: new Date(turnStartedAt + toolTurn.workedMs).toISOString(),
                         durationMs: toolTurn.workedMs,

@@ -906,3 +906,55 @@ describe('a solo turn asked in the panel commits into its conversation', () => {
         expect(committed).toEqual([]);
     });
 });
+
+describe('the dock transcript is a live region (O-65)', () => {
+    /** Seed one AI row directly, in each streaming state, so the assertion is
+     *  about the container's semantics rather than the timing of a fake stream. */
+    const seed = (streaming: boolean) => {
+        const sid = chatStore.getActiveId();
+        chatStore.mutate(sid, s => ({
+            ...s,
+            entries: [{ id: 'row-1', role: 'ai' as const, text: 'BTC is pinned under the 100.6 ask.', tools: [], streaming }],
+        }));
+    };
+
+    it('names the transcript, announces politely, and holds busy until the answer settles', () => {
+        render(<TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a" onSelectChatModel={() => {}} />);
+        act(() => { seed(true); });
+
+        const log = screen.getByRole('log');
+        expect(log.getAttribute('aria-live')).toBe('polite');
+        expect(log.getAttribute('aria-label')).toBe('Chart AI conversation');
+        // While the row streams, the text changes on every token. Without this
+        // flag a screen reader re-reads the whole growing sentence each time —
+        // which is why "add aria-live" alone is not the fix.
+        expect(log.getAttribute('aria-busy')).toBe('true');
+
+        act(() => { seed(false); });
+        const settled = screen.getByRole('log');
+        expect(settled.getAttribute('aria-busy')).toBe('false');
+        expect(settled.textContent).toContain('pinned under the 100.6 ask');
+    });
+
+    it('is busy for the row that streams, not for the panel in general', () => {
+        render(<TradeChatPanel symbol="BTCUSDT" interval="15m" providers={[config]} selectedChatModel="model-a" onSelectChatModel={() => {}} />);
+        const sid = chatStore.getActiveId();
+        act(() => {
+            chatStore.mutate(sid, s => ({
+                ...s,
+                entries: [
+                    { id: 'done', role: 'ai' as const, text: 'settled row', tools: [] },
+                    { id: 'live', role: 'ai' as const, text: 'streaming row', tools: [], streaming: true },
+                ],
+            }));
+        });
+        expect(screen.getByRole('log').getAttribute('aria-busy')).toBe('true');
+        act(() => {
+            chatStore.mutate(sid, s => ({
+                ...s,
+                entries: s.entries.map(e => ({ ...e, streaming: false })),
+            }));
+        });
+        expect(screen.getByRole('log').getAttribute('aria-busy')).toBe('false');
+    });
+});

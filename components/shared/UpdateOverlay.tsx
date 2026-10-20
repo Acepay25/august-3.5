@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle, Wrench, Zap } from './Icons';
 import { useAutoUpdate } from '../../hooks/useAutoUpdate';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 /**
  * Full-screen overlay shown during the Electron auto-update flow, styled with
@@ -131,6 +132,13 @@ const UpdateOverlay: React.FC = () => {
         return () => window.clearTimeout(timer);
     }, [isElectron, status, quitNow]);
 
+    // The overlay claims `aria-modal`, so everything behind it is inert to a
+    // screen reader — the phase that asks for a decision therefore has to hold
+    // the keyboard too. Only 'downloaded' has a control to reach: trapping
+    // 'downloading' or 'installing' would swallow Tab against a card with
+    // nothing focusable in it for as long as the update runs.
+    const dialogRef = useFocusTrap<HTMLDivElement>(isElectron && status === 'downloaded');
+
     if (!isElectron) return null;
 
     // Only show overlay during active download/installation
@@ -140,6 +148,7 @@ const UpdateOverlay: React.FC = () => {
 
     return (
         <div
+            ref={dialogRef}
             className=" fixed inset-0 z-update flex items-center justify-center bg-zinc-950 animate-fade-in"
             role="dialog"
             aria-modal="true"
