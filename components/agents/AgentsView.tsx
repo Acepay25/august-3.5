@@ -267,6 +267,8 @@ const chatRowFrom = (m: Message, username: string, deskName: string): ChatRowVie
         // The payload ids, so the tool rows can open onto the real output —
         // the expander is the dock's one job the Chat surface could not do.
         toolIds: m.toolIds,
+        // What the wire was asked, so the row can say WHY a turn has no trace.
+        wireAudit: m.wireAudit,
         actions: m.toolActions,
         workedMs: typeof m.runStats?.durationMs === 'number' ? m.runStats.durationMs : undefined,
         // The thinking tier this answer was produced under, so the row can

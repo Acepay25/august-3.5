@@ -1475,6 +1475,10 @@ ${enhancedPrompt}`;
                         desk: [m.liveToolEvents?.desk, toolTurn.notice].filter(Boolean).join('\n'),
                     },
                 } : {}),
+                // What the wire was actually asked, so the row can say WHY
+                // this answer has no trace: the transport decided, and the
+                // decision is the only honest answer to that question.
+                ...(toolTurn?.wireAudit?.length ? { wireAudit: toolTurn.wireAudit } : {}),
             } : m), requestConversationId);
             // ── Completion notice for a run the trader asked for by name.
             // Before stage 19 this fired from the verdict finalizer; with the

@@ -41,9 +41,16 @@
  * fix; a probe reading it as one would be wrong.
  */
 
-import type { ProviderConfig, ReasoningEffort } from '../../types/provider';
+import type { ProviderConfig, ReasoningEffort, WireAuditEntry } from '../../types/provider';
 import type { ChatMessage, ChatRequestOptions } from './GenericProviderService';
 import { getHarnessSettings } from '../../utils/harnessSettings';
+
+/** The audit shape lives in the wire vocabulary (`types/provider.ts`) because
+ *  the answer's row has to carry it — a turn that returned no trace has to be
+ *  able to say WHY, and that fact outlives the request. This module owns the
+ *  DECISION that produces it and re-exports the type, so there is one shape
+ *  and not one per layer that mentions it. */
+export type { WireAuditEntry, WireAuditRoute } from '../../types/provider';
 
 // ─── Effort tiers ──────────────────────────────────────────────────────────
 
@@ -187,17 +194,8 @@ export const detectWireCapabilities = (
 
 // ─── Translation ────────────────────────────────────────────────────────────
 
-/** One audit line per call — what the wire actually received and why. */
-export interface WireAuditEntry {
-    /** Which capability route was applied ('none' = fail-closed no-op). */
-    route: 'xai-effort' | 'openai-effort' | 'glm-thinking' | 'deepseek-thinking' | 'anthropic-thinking' | 'responses-effort' | 'gemini-thinking' | 'none';
-    /** The harness effort tier that drove the translation. */
-    effort: ReasoningEffort;
-    /** Machine-readable outcome — the runStats / known-answer-probe substrate. */
-    applied: boolean;
-    /** Human-readable reason (surfaced in the DebateRunLog budget lines). */
-    reason: string;
-}
+/** One audit line per call — what the wire actually received and why. The
+ *  shape lives in `types/provider.ts`; it is re-exported above. */
 
 export interface ReasoningBodyPatch {
     /** Fields to merge into the request body (empty = fail-closed no-op). */

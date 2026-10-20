@@ -13,6 +13,7 @@
 import React, { useMemo } from 'react';
 import { Lightbulb } from '../../shared/Icons';
 import type { ToolAction } from '../../../types/message';
+import type { WireAuditEntry } from '../../../types/provider';
 import { tipForSeed } from '../../../utils/tradingTips';
 import { splitReasoningAroundTools } from '../../../utils/traceText';
 import { turnActivityLabel, turnKindSummary, turnWorkSummary } from '../../../utils/turnStatus';
@@ -20,6 +21,7 @@ import AnalyzedRow from '../../shared/AnalyzedRow';
 import ReasoningRow from '../../shared/ReasoningRow';
 import ToolActivityRow from '../../shared/ToolActivityRow';
 import ToolActionsRow from '../../chat/ToolActionsRow';
+import WireAuditRow from '../../shared/WireAuditRow';
 import { getPayloadWriteFailure } from '../../../services/trade/toolPayloadStore';
 
 /** What this turn's work actually was, named from the transcript it already
@@ -53,6 +55,9 @@ export interface ChatWorkView {
     workedMs?: number;
     /** One payload id per entry in `tools`, same order. */
     toolIds?: string[];
+    /** What the wire was actually asked, one entry per call. It is what lets
+     *  the card say WHY a turn has no trace. */
+    wireAudit?: WireAuditEntry[];
 }
 
 export interface ChatWorkTimelineProps {
@@ -64,6 +69,26 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
     const running = !!entry.streaming && !entry.text;
     const hasWork = reasoning.trim().length > 0 || entry.tools.length > 0;
     const hasActions = !!(entry.actions && entry.actions.length > 0);
+    // The wire's own record of what it was asked. It rides on the row because
+    // the answer has to be able to say WHY it has no trace — "the model didn't
+    // think" and "the model was never asked to think" were the same silence.
+    const wireAudit = entry.wireAudit ?? [];
+    const hasWire = wireAudit.length > 0;
+    // Only a SETTLED turn may be said to have no trace: while the answer is
+    // still streaming, the trace may be on its way.
+    const settled = !entry.streaming;
+    const noTrace = settled && reasoning.trim().length === 0;
+    // The route the wire applied on its LAST call — the answer's own call.
+    const lastRoute = hasWire ? wireAudit[wireAudit.length - 1] : null;
+    // The wire row belongs INSIDE the card when the turn did work: the card
+    // folds itself shut the moment the answer lands, so the record stays out
+    // of the way until the trader opens the work.
+    //
+    // It earns its own line ONLY in the one case silence misleads: the turn
+    // settled with no trace at all AND the wire applied no thinking route.
+    // Then the trader is silently getting no thinking, and the transport's own
+    // reason is the only thing that can tell them so.
+    const wireAlone = hasWire && !hasWork && noTrace && lastRoute?.applied === false;
     // What the turn is doing RIGHT NOW — the status line's word, derived from
     // the turn's own tool lines. It changes as the work changes, and it can
     // only ever report what the tools did. Declared before the early return
@@ -76,7 +101,7 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
     // CALLS, not lines — the transcript holds two lines per call, so a line
     // count would double every number the trader is told.
     const kindSummary = useMemo(() => turnKindSummary(entry.tools), [entry.tools]);
-    if (!hasWork && !hasActions) {
+    if (!hasWork && !hasActions && !wireAlone) {
         // Nothing yet: the waiting tip covers
         // the silent first moments of a turn. It is the tip's ONLY home now —
         // once there is work, the status line names the activity instead.
@@ -155,7 +180,15 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
                             {writeFailureNote}
                         </p>
                     )}
+                    {hasWire && (
+                        <WireAuditRow entries={wireAudit} noTrace={noTrace} />
+                    )}
                 </AnalyzedRow>
+            )}
+            {wireAlone && (
+                <div className="my-1.5 rounded-bubble border border-white/[0.06] bg-zinc-900/40 px-2.5 py-2">
+                    <WireAuditRow entries={wireAudit} noTrace={noTrace} />
+                </div>
             )}
             {hasActions && <ToolActionsRow actions={entry.actions!} />}
         </div>
