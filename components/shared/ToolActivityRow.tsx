@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Cpu, FileText, NotebookPen, Palette, Search, Target, Wrench } from './Icons';
 import { stripTraceMarkers } from '../../utils/traceText';
 import { pairToolRows, type ToolRowState } from '../../utils/turnStatus';
-import { toolKindLabel, toolKindOf, type ToolKind } from '../../utils/toolKinds';
+import { toolKindLabel, toolKindOf } from '../../utils/toolKinds';
+import { KIND_GLYPH } from './toolKindIcons';
 import Disclosure from './Disclosure';
 import { readToolPayload } from '../../services/trade/toolPayloadStore';
 import { readToolArtifact } from '../../services/analysis/toolArtifactStore';
@@ -37,16 +37,11 @@ export interface PairedToolRow {
  *  what the desk had DONE, only that it had done something. The kind is a
  *  property of the tool (`utils/toolKinds.ts`), and the glyph is how it shows
  *  here: one look tells you whether the desk was looking something up,
- *  working something out, or changing something. */
-const KIND_GLYPH: Record<ToolKind, React.FC<{ className?: string }>> = {
-    read: FileText,
-    search: Search,
-    compute: Cpu,
-    draw: Palette,
-    write: NotebookPen,
-    present: Target,
-    other: Wrench,
-};
+ *  working something out, or changing something.
+ *
+ *  The map itself lives in `components/shared/toolKindIcons.tsx`, so the
+ *  Settings catalogue and this row draw the SAME mark for the same kind. */
+export { KIND_GLYPH };
 
 /** A row AFTER the consecutive-fold: one or more same-label calls rendered as a
  *  single line. `count` is 1 for an unfolded row.
@@ -124,7 +119,7 @@ const ToolRowGroupView: React.FC<{ group: ToolRowGroup; running: boolean }> = ({
     // The kind of the step: what the desk DID. The glyph carries it on screen;
     // the name travels with the row for a screen reader and a tooltip.
     const kind = toolKindOf(group.label).kind;
-    const Glyph = KIND_GLYPH[kind] ?? Wrench;
+    const Glyph = KIND_GLYPH[kind];
     const kindName = toolKindLabel(kind);
 
     const line = (
