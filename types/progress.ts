@@ -1,4 +1,4 @@
-// Analysis pipeline progress types - Task UI step tracking
+// Run-status vocabulary shared by the engine and its surfaces.
 
 export type AnalysisStepStatus = 'pending' | 'running' | 'complete' | 'error' | 'stopped';
 
@@ -13,27 +13,3 @@ export type StepErrorKind =
     | 'parse_failed'
     | 'cancelled'
     | 'unknown';
-
-export interface AnalysisSubStep {
-  label: string;
-  detail?: string;
-  filename?: string;  // Rendered via TaskItemFile (basename only)
-}
-
-export interface AnalysisStep {
-  id: string;
-  title: string;
-  status: AnalysisStepStatus;
-  subSteps?: AnalysisSubStep[];
-  startTime?: number;
-  endTime?: number;
-  /** Why this step failed, as one readable sentence.
-   *
-   *  This field did not exist, so the UI could only paint a red ✕ with no
-   *  reason and a thrown run fell through to rendering raw provider text in
-   *  the chat. Any step that can fail must carry the reason with it. */
-  errorText?: string;
-  /** Machine-readable cause, so colour + word + an expandable detail can all
-   *  come from one place instead of being re-guessed at each render site. */
-  errorKind?: StepErrorKind;
-}

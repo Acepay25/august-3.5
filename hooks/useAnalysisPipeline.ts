@@ -3,7 +3,7 @@ import {
     Message, MessageRole, TradeOutcome, LoggedTrade, ImageMetadata,
     DebateTurn, Conversation, TradeAnalysis, TradeSummary,
     GlobalMemory, CustomInstructionsMap, CustomInstruction,
-    AnalysisStep, InsightKnowledgeBase,
+    InsightKnowledgeBase,
     PatternMemoryGateView,
 } from '../types';
 
@@ -65,7 +65,6 @@ import { parseComposerIntent, formatComposerSteer } from '../utils/composerMenti
 import { beginPromptLane, endPromptLane } from '../services/infrastructure/PromptOverrideService';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { parseDmMarkers } from '../services/agents/botMailbox';
-import { classifyStepError, describeStepError } from '../utils/runStatus';
 import { notify } from '../services/infrastructure/notify';
 
 // ─── Run Outcome ──────────────────────────────────────────────────────────────
@@ -295,7 +294,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const [input, setInput] = useState('');
         const [images, setImages] = useState<ImageMetadata[]>([]);
     const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
-    const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>([]);
     /** Journal mirror for zero-dep callbacks (desk-tool recall on solo runs). */
     const loggedTradesRef = useRef<LoggedTrade[]>(loggedTrades);
     useEffect(() => { loggedTradesRef.current = loggedTrades; }, [loggedTrades]);
@@ -360,71 +358,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         setSteeringNotes([]);
         setLoadingMessage(null);
         setIsAnalysisInProgress(false);
-        setAnalysisSteps([]);
     }, [activeConversationId]);
-
-    // ─── Analysis Pipeline Step Tracking ───────────────────────────────────
-    // Automation runs mute the step tracker entirely (automationSilentRef).
-    const initAnalysisSteps = (steps: AnalysisStep[]) => {
-        if (automationSilentRef.current) return;
-        setAnalysisSteps(steps.map(s => ({ ...s, status: 'pending' as const, startTime: undefined, endTime: undefined })));
-    };
-
-    const startStep = (id: string) => {
-        if (automationSilentRef.current) return;
-        setAnalysisSteps(prev => prev.map(s => s.id === id ? { ...s, status: 'running' as const, startTime: Date.now() } : s));
-    };
-
-    const completeStep = (id: string) => {
-        if (automationSilentRef.current) return;
-        setAnalysisSteps(prev => prev.map(s => s.id === id ? { ...s, status: 'complete' as const, endTime: Date.now() } : s));
-    };
-
-    /**
-     * Mark a step failed, WITH A REASON.
-     *
-     * `reason` is what the user sees expanded. Before the step type had an
-     * error field the UI could only paint a red ✕, and the only place the
-     * message existed at all was a chat bubble that rendered raw provider
-     * text. Every failure path should pass the error it is reacting to.
-     */
-    const failStep = (id: string, reason?: unknown) => {
-        if (automationSilentRef.current) return;
-        const classified = reason === undefined
-            ? { kind: 'unknown' as const, text: describeStepError('unknown') }
-            : classifyStepError(reason);
-        setAnalysisSteps(prev => prev.map(s => s.id === id
-            ? { ...s, status: 'error' as const, endTime: Date.now(), errorKind: classified.kind, errorText: classified.text }
-            : s));
-    };
-
-    /** Mark a step the user stopped. Neutral, not a failure. */
-    const stopStep = (id: string) => {
-        if (automationSilentRef.current) return;
-        setAnalysisSteps(prev => prev.map(s => s.id === id
-            ? { ...s, status: 'stopped' as const, endTime: Date.now(), errorKind: 'cancelled', errorText: describeStepError('cancelled') }
-            : s));
-    };
-
-    /**
-     * Close any row the run started but never explicitly completed. This is
-     * safe ONLY because the catch marks the failing step (and Stop marks the
-     * cancelled one) before the finally reaches this — 'error' and 'stopped'
-     * are terminal and are left alone. When the sweep was last unconditional,
-     * the catch could only fail 'analysis', so a failure in a later phase was
-     * painted "complete" and the panel lied about a broken run.
-     */
-    const settleOpenSteps = () => {
-        if (automationSilentRef.current) return;
-        setAnalysisSteps(prev => prev.map(s => s.status === 'running' || s.status === 'pending'
-            ? { ...s, status: 'complete' as const, endTime: Date.now() }
-            : s));
-    };
-
-    const addSubStep = (id: string, subStep: { label: string; detail?: string; filename?: string }) => {
-        if (automationSilentRef.current) return;
-        setAnalysisSteps(prev => prev.map(s => s.id === id ? { ...s, subSteps: [...(s.subSteps || []), subStep] } : s));
-    };
 
     // ─── Helper: active custom instructions ────────────────────────────────
     const getActiveCustomInstructions = () => {
@@ -842,19 +776,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // "apply skill X" without skill X's text is a wish, not an
             // instruction. Missing slugs are stated, never silently dropped.
                         
-            // The progress rows describe a run that actually pulls data: a
-            // schedule. A manual send answers from its tools, and a row that
-            // promises "Fetching market data" for a fetch that never happens is
-            // a lie about work in progress.
-            if (isAutomationRun) {
-                initAnalysisSteps([
-                    { id: 'market-data', title: 'Fetching market data', status: 'pending' },
-                    { id: 'analysis', title: 'Analyzing charts', status: 'pending' },
-                ]);
-            } else {
-                setAnalysisSteps([]);
-            }
-
             // HYBRID INTELLIGENCE: Inject real-time market data if enabled
             // Bayesian confidence cap computed by the hybrid fetch (calibration
             // pipeline) — enforced in processNewAnalysis below. Hoisted so the
@@ -874,7 +795,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 try {
                     devLog('[Hybrid Intelligence] Attempting to fetch data for prompt:', effectiveInput);
                     if (!isAutomationRun) setLoadingMessage('Fetching real-time market data...');
-                    startStep('market-data');
                     const hybridResult = await tryFetchHybridDataFromPromptWithCalibration(
                         effectiveInput,
                         GlobalLearningService.getCalibration()
@@ -916,7 +836,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 } catch (hybridError) {
                     if (!isCurrentRequest()) assertCurrentRequest();
                     if (!isAutomationRun) setIsHybridLoading(false);
-                    completeStep('market-data');
                     console.error('[Hybrid Intelligence] ERROR fetching market data:', hybridError);
                     if (!isAutomationRun) toast.warning('Hybrid data unavailable', 'Market data fetch failed — analysis will proceed without real-time data.');
                 }
@@ -926,10 +845,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 // the hybrid market data in their prompts.
                 hybridDataInjection = generateHybridPromptInjection(options.presetHybridData);
                 devLog('[Hybrid Intelligence] SKIPPED - Using preset data from auto-capture');
-                completeStep('market-data');
             } else {
                 devLog('[Hybrid Intelligence] SKIPPED - Feature not enabled');
-                completeStep('market-data');
             }
 
             // USER STRATEGIES (Settings → Strategies): enabled book summaries
@@ -1083,10 +1000,6 @@ ${enhancedPrompt}`;
 
             const gateInjection = '';
             // Local variable to avoid state closure issue
-            
-            // No symbol → the gate block never ran, so the market-data step
-            // (completed inside it) would stay 'pending' for the whole run.
-            if (!finalSymbol) completeStep('market-data');
 
             // Prepend Gate injection to enhanced prompt if available
             if (gateInjection) {
@@ -1211,7 +1124,6 @@ ${enhancedPrompt}`;
                 : enabledProviders[0];
                 setLoadingMessage("Thinking...");
             setIsAnalysisInProgress(true);
-            startStep('analysis');
             // Stream the reply into the bubble as it generates (perceived
             // speed) instead of appending it once after completion.
             const streamingMessageId = `ai-${Date.now()}`;
@@ -1386,11 +1298,6 @@ ${enhancedPrompt}`;
             // replaced the abort-controller ref — labeling that run's genuine
             // error as "cancelled" silently swallowed real failures.
             const cancelled = currentAbortController.signal.aborted;
-            // A user Stop is not a failure — it gets the neutral 'stopped'
-            // chrome. Only a real error carries the rose treatment, and now
-            // carries the reason with it.
-            if (cancelled) stopStep('analysis');
-            else failStep('analysis', error);
             // A pending replacement wait is void — a late click on the banner
             // must never resolve into a dead debate.
             replacementChoiceRef.current = null;
@@ -1474,12 +1381,6 @@ ${enhancedPrompt}`;
                 // (the assert threw before it) — reset here so the panel
                 // spinner can't spin until the next run.
                 setIsHybridLoading(false);
-                // The catch above marks the failing step and Stop marks the
-                // cancelled one, so a row still open here really did succeed.
-                // Nothing else completes 'analysis' any more: its completer
-                // lived inside the deleted engine, which left the spinner
-                // running forever on a run that worked.
-                settleOpenSteps();
                 analysisAbortController.current = null;
                 analysisConversationIdRef.current = null;
                 setIsAnalysisInProgress(false);
@@ -1569,19 +1470,11 @@ ${enhancedPrompt}`;
         input, setInput,
         images, setImages,
         loadingMessage, setLoadingMessage,
-        analysisSteps, setAnalysisSteps,
         currentVisionData, setCurrentVisionData,
         isDeepAnalysis, setIsDeepAnalysis,
 
         // Refs
         analysisAbortController,
-
-        // Step tracking helpers
-        initAnalysisSteps,
-        startStep,
-        completeStep,
-        failStep,
-        addSubStep,
 
         // Handlers
         handleSendMessage,
