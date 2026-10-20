@@ -960,3 +960,50 @@ not re-stated here: **G-3** (partly), **G-5**, **G-12**, **G-15** stay open,
 **Gates.** `check-flow-doc-anchors` 306 anchors, 0 unattributed, cited-line
 quality 0/0 · `lint` 0 errors / 655 warnings · the census in `AGENTS.md`
 restated to **5144 tests in 502 files** and re-measured by the gate.
+## 23. E-53 — the wire audit: what the provider was actually asked (2026-10-21)
+
+**Proposal:** `docs/plan/wire-audit.md` (E-53). **Covers:** **O-132**, and
+**G-5** and the actionable half of **G-3** from E-52.
+
+It was the owner's question after E-52 landed — *"what should we do to the one
+you did not close?"* — and the answer turned out to be that **the data already
+existed**. The transport has always decided, per request, which capability
+route it applied (an Anthropic thinking block, a Gemini thinking config, an
+OpenAI effort knob) and has always said why when it applied none ("model id
+not recognized as thinking-capable", "maxTokens below the 1024 thinking floor",
+"jsonMode excludes thinking"). It emitted that decision on every call, through
+`onWireAudit` — and **nothing collected it**: the pipeline declared the prop
+and supplied it to no one.
+
+**What landed.**
+
+- `types/provider.ts` now owns `WireAuditEntry` and `WireAuditRoute` — the
+  wire vocabulary, beside `ReasoningEffort`. `reasoningControls.ts`
+  RE-EXPORTS them, so every existing import keeps working and the shape lives
+  in one place: the service owns the DECISION, the type owns the vocabulary,
+  and a `Message` may carry the fact without depending on a service.
+- The turn collects the audit PER CALL — the way it collects usage — and it
+  rides out on the outcome beside the tier. One return, every path shares.
+- Both homes write it (the dock's settle, the pipeline's settled `Message`)
+  and both read it from the same field, so they cannot disagree about one
+  turn.
+- `components/shared/WireAuditRow.tsx` draws it: a turn with no trace says
+  WHY, in the transport's own words; a turn with a trace shows the route that
+  was applied, and the disclosure lists every call the turn made.
+
+**Where it stays quiet, on purpose.** Inside the folded work card when the
+turn did work — the card folds itself shut the moment the answer lands. On
+its own line ONLY in the case silence misleads: a settled turn with no trace
+AND no route applied. And a STREAMING turn is never said to have no trace:
+the trace may still be on its way, and claiming otherwise is a lie the trader
+would act on.
+
+**What this does NOT close.** The other half of **G-3** (a trace the provider
+was asked for and never returned), **G-12** (a long bot turn is a wall), and
+**G-15** (per-provider thinking joined flat — a row-model question, not a UI
+one: the traces are already a map, but the desk's tool markers are interleaved
+into the joined text and the tool rows are matched positionally).
+
+**Gates.** `typecheck` ok · `vitest` 5156 in 503 · `lint` 0 errors / 655
+warnings · `build` ok · `render-probe` ok, zero pageerrors ·
+`check-flow-doc-anchors` 306 anchors, 0 unattributed, cited-line quality 0/0.
