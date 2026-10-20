@@ -700,3 +700,64 @@ offer, so the pinned evidence is:
 session in a browser. Those states are covered by the registration rule (no
 chip, no count, no chord) and by the `showEffort: false` unit test, not by a
 keystroke.
+
+## 14. The R:R and cost rows — 12 closed, 2 copies actually fixed (2026-10-21)
+
+The owner asked to keep implementing. The next cluster on the plan's own order is
+Phase 2.2 (one R:R) and 2.3 (the cost model). **Verifying before building turned
+that into a different job than the register advertised**, and the difference is
+the point of this section.
+
+**`O-01`, `O-02`, `O-05`, `O-07`, `O-19`, `O-20`, `O-22`, `O-27` were already
+fixed** — E-02 and E-03 landed in an earlier pass with their own suites
+(`tests/planE02.test.ts`, `tests/planE03.test.ts`, `tests/proposalGate.test.ts`)
+and the rows simply never moved. `O-19`'s own grep recipe
+(`takerFee|makerFee|feeRate|commission|costBps`) returned **0 files** when the
+row was written and returns `utils/netRiskReward.ts` now. Had I implemented
+"the cost model" from the register instead of checking, this pass would have
+built a second one — the exact defect class the plan's §Phase 0.2 warns about.
+
+**Two copies were genuinely live, and they are fixed:**
+
+- `O-03` — the canvas `measured_move` label printed its own `reward/risk`.
+  It now measures with `plannedRiskReward` and prints through `fmtRiskReward`
+  (`services/trade/chartDrawings.ts:619`), so a drawn level and the card cannot
+  quote different ratios for one ticket once a ladder is out of order.
+- `O-04` — the pattern memory estimated a win from `analysis.takeProfit[0]`,
+  which is **array order**. It now prefers a corrected exit (what filled) and
+  otherwise takes `nearestTargetPrice`
+  (`services/learning/PatternMemorySynthesisService.ts:275`). Four new tests,
+  one of which is a parity pin against `plannedRiskReward` for the same plan.
+
+**A second defect fell out of the `O-04` fix, and it is the better find.** The
+old code accepted a target sitting exactly ON the entry as a real reward, so a
+"win" with `takeProfit[0] === entry` booked **+0.00R** — a win that earned
+nothing entered the pattern memory as a flat outcome. The canonical rule refuses
+a zero-distance target as "no reward", so the estimate now falls through to the
+1.5R default like any plan with nothing to measure. That behaviour is pinned by
+its own test (`falls back to the 1.5R estimate only when no target is usable`),
+which goes red on the old code — as do the other three, proved by reverting the
+one line in the tree (`expected 3 to be 1.4`).
+
+**Two rows are re-scoped rather than closed, and the reason is recorded.**
+`O-06` ("make the gate refuse, not just cap") is half-true now: a refusal was
+built, but in `proposalGate` — the path a presented trade actually takes — while
+`runValidationGate` still has zero production importers. Asking for THE gate to
+refuse is the E-02a/E-02b ruling, not a cleanup. `O-21` keeps its 150 %
+extended-stop rule as the unvalidated policy it is; what E-03 changed is that
+any breakeven quoted against it must now be computed net, so the row's 59.3 %
+figure is stale arithmetic rather than a live bug.
+
+### Gates
+
+Every one measured on this tree, read from its own `*_EXIT=` marker:
+
+| Gate | Result |
+| --- | --- |
+| `npm run typecheck` | ok, 0 errors |
+| `npm run lint` | **0 errors / 655 warnings** — unchanged from Phase 4, so the two fixes added no debt |
+| `npm run test` | **5065 tests in 495 files**, 0 failed, 0 skipped (5 more than Phase 4: the four `calculatePnlR` cases and the drawing-label case) |
+| `npm run build` | ok, entry **1376 KiB** — unchanged; `chartDrawings` reached `utils/riskReward` through a module already in the graph |
+| `npm run boot-probe` | ok, zero pageerrors |
+| `npm run render-probe` | **117 checks, 0 failures**, zero pageerrors |
+| `npm run check-flow-doc-anchors` | ok, 304 anchors verified, 0 unattributed, cited-line quality 0/0 |

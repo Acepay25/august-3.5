@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext, calculateSimilarity, addAttributedInsight, loadAttributedInsights } from '../services/learning/PatternMemorySynthesisService';
+import { calculatePnlR, generateMandatoryPatternCheck, generatePatternMemoryEnforcementContext, calculateSimilarity, addAttributedInsight, loadAttributedInsights } from '../services/learning/PatternMemorySynthesisService';
 import { LoggedTrade, TradeOutcome } from '../types';
+import { plannedRiskReward } from '../utils/riskReward';
 
 // B7 regression tests: calculatePnlR used parseFloat (comma-formatted prices
 // "69,000" → 69 → risk 0 → undefined R) and hardcoded -1.0 for every loss,
@@ -180,5 +181,64 @@ describe('generateMandatoryPatternCheck — extended-loss gate (B7)', () => {
     // true value).
     generatePatternMemoryEnforcementContext(setup, [t1, t2]);
     expect(timesUsed()).toBe(before + 1);
+  });
+});
+
+/**
+ * O-04 — the pattern memory estimated a win from `takeProfit[0]`, which is
+ * ARRAY ORDER. The model emits its ladder out of order, so the ledger could
+ * remember a trade as 3.10R while the card the trader acted on said 1.40R. The
+ * rule is now the canonical one: the target CLOSEST the entry, unless a
+ * corrected exit records what actually filled.
+ */
+describe('calculatePnlR — a win is measured against the same target the card quoted', () => {
+  const winTrade = (takeProfit: Array<{ price: string; percentage: string }>, corrected?: string): LoggedTrade => ({
+    id: `w-${Math.random()}`,
+    timestamp: new Date(Date.now() - 60_000).toISOString(),
+    outcome: TradeOutcome.WIN,
+    correctedTakeProfit: corrected,
+    analysis: {
+      coinName: 'BTCUSDT',
+      direction: 'Long',
+      tradeType: 'swing',
+      confidence: 'Medium',
+      probability: 60,
+      grade: 'B',
+      strategy: 'Trend continuation',
+      activeStrategies: [],
+      entryPoints: [{ description: 'retest', price: '69,500' }],
+      stopLoss: '69,000',
+      takeProfit,
+      marketConditions: { pattern: 'Breakout', candleBehavior: '', timeframeAlignment: '', rsi: '', macd: '', sentiment: '' },
+      historicalCorrelation: '',
+      validityDurationMinutes: 330,
+      createdAt: new Date(Date.now() - 60_000).toISOString(),
+    } as LoggedTrade['analysis'],
+  });
+
+  it('takes the NEAREST target when the ladder is out of order', () => {
+    // risk 500; index 0 is 71,000 (3.00R) but the closest is 70,200 (1.40R).
+    const trade = winTrade([{ price: '71,000', percentage: '50%' }, { price: '70,200', percentage: '50%' }]);
+    expect(calculatePnlR(trade)).toBe(1.4);
+  });
+
+  it('still prefers a corrected exit — that is what actually filled', () => {
+    const trade = winTrade(
+      [{ price: '71,000', percentage: '50%' }, { price: '70,200', percentage: '50%' }],
+      '71,000',
+    );
+    expect(calculatePnlR(trade)).toBe(3);
+  });
+
+  it('agrees with utils/riskReward for the same plan, which is the whole point', () => {
+    const ladder = [{ price: '71,000', percentage: '50%' }, { price: '70,200', percentage: '50%' }];
+    const trade = winTrade(ladder);
+    expect(calculatePnlR(trade)).toBe(plannedRiskReward({
+      entry: 69500, stopLoss: 69000, takeProfits: ladder.map(t => Number(t.price.replace(/,/g, ''))),
+    }));
+  });
+
+  it('falls back to the 1.5R estimate only when no target is usable', () => {
+    expect(calculatePnlR(winTrade([{ price: '69,500', percentage: '100%' }]))).toBe(1.5);
   });
 });

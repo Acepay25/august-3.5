@@ -8,6 +8,7 @@
 import { LoggedTrade, AIProvider } from '../../types';
 import { AttributedInsight } from '../../types/learning';
 import { parsePrice } from '../../utils/analysisUtils';
+import { nearestTargetPrice } from '../../utils/riskReward';
 import { baseOf } from '../../utils/symbol';
 import { familiesRelate } from '../../utils/patternMatch';
 import {
@@ -261,10 +262,19 @@ export function calculatePnlR(trade: LoggedTrade): number | undefined {
 
     // For wins, estimate based on typical TP (1.5-2R)
     if (outcome === 'WIN') {
-        // Check if we have corrected values
-        const tp = parsePrice(trade.correctedTakeProfit || analysis.takeProfit?.[0]?.price || '');
-        if (isFinite(tp) && entry) {
-            const reward = Math.abs(tp - entry);
+        // A corrected exit is what actually happened, so it wins. Otherwise the
+        // estimate is measured against the target CLOSEST the entry — the same
+        // rule the card prints. `takeProfit[0]` is ARRAY ORDER, and the model
+        // emits its ladder out of order, so the pattern memory used to remember
+        // as 3.10R a trade the trader had been shown at 1.40R (O-04). The two
+        // numbers describe the same ticket, which is the definition of a ledger
+        // that lies.
+        const corrected = parsePrice(trade.correctedTakeProfit || '');
+        const exitPrice = corrected !== entry && isFinite(corrected)
+            ? corrected
+            : nearestTargetPrice(entry, (analysis.takeProfit ?? []).map(t => parsePrice(t?.price ?? '')));
+        if (exitPrice !== null) {
+            const reward = Math.abs(exitPrice - entry);
             return +(reward / risk).toFixed(2);
         }
         return 1.5; // Default estimate for wins
