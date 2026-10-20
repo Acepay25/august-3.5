@@ -796,6 +796,29 @@ async function main() {
         await page.setViewportSize(probeViewport);
         await page.waitForTimeout(400);
 
+        // E-51 ruling D-B, in the browser rather than in a source regex. The
+        // chord is App-level keyboard handling, so no jsdom test can walk the
+        // path — keydown, guard, store, subscription, trigger label. Pressing
+        // the real key and reading the label is the only proof that the hint
+        // printed inside the panel names a chord that actually fires.
+        const dialBefore = await page.textContent('[data-testid="composer-model-chip"]');
+        await page.keyboard.press('Control+Shift+E');
+        await page.waitForTimeout(600);
+        const dialAfter = await page.textContent('[data-testid="composer-model-chip"]');
+        check('Ctrl/Cmd+Shift+E steps the thinking tier the composer prints',
+            !!dialBefore && !!dialAfter && dialBefore.trim() !== dialAfter.trim(),
+            `"${(dialBefore ?? 'no composer dial').trim()}" -> "${(dialAfter ?? '').trim()}"`);
+        // And it must come back: the ladder wraps, so six presses return to the
+        // tier the trader started on rather than parking at `max`.
+        for (let i = 0; i < 5; i += 1) {
+            await page.keyboard.press('Control+Shift+E');
+            await page.waitForTimeout(120);
+        }
+        const dialFull = await page.textContent('[data-testid="composer-model-chip"]');
+        check('six presses of the chord wrap the ladder back to where they started',
+            !!dialFull && dialFull.trim() === (dialBefore ?? '').trim(),
+            `after 6 presses: "${(dialFull ?? '').trim()}", started at "${(dialBefore ?? '').trim()}"`);
+
         // The expanded dock is the one layout in the app whose widths are
         // mutually exclusive as roles but ADDITIVE as math (chart fraction +
         // dock fraction + a fixed order book), so it is the one place a

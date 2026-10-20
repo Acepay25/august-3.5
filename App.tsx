@@ -78,7 +78,8 @@ import type { LearnTab } from './components/learn/LearnView';
 import SkillsLibrary from './components/skills/SkillsLibrary';
 const AgentsView = React.lazy(() => import('./components/agents/AgentsView'));
 import ModelChip from './components/shared/ModelChip';
-import ModelPicker from './components/shared/ModelPicker';
+import { effortDialUp } from './components/shared/effortDial';
+import { nextEffortTier } from './components/shared/effortScale';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { computeChatModelFallback, isProviderReady } from './utils/providerUtils';
 import { defaultLeverage } from './utils/conversationUtils';
@@ -1297,6 +1298,17 @@ const App: React.FC = () => {
             if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'b') {
                 e.preventDefault();
                 toggleNavRail();
+            }
+            // Ctrl/Cmd+Shift+E steps the composer's thinking tier (E-51 ruling
+            // D-B). It fires ONLY while a panel with an Effort section is on
+            // screen, and the key hint beside that label is printed in the same
+            // commit for the same reason: a chord bound where nothing shows the
+            // result is a key that lies about what it changes. A panel session
+            // and a bot turn render no dial, so neither answers to this — see
+            // components/shared/effortDial.ts.
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && effortDialUp() && e.key.toLowerCase() === 'e') {
+                e.preventDefault();
+                chatStore.setActiveEffort(nextEffortTier(chatStore.getActiveEffort()));
             }
             // Alt+1..5 jumps the nav-rail surfaces (Minara nav; Alt keeps
             // the browser/Electron Ctrl+number tab-switching intact).

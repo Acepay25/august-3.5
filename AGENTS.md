@@ -182,7 +182,7 @@ competing for the machine.
 │                           #   imported by renderer, vite dev proxy AND electron main
 ├── types/                  # analysis, trade, provider, progress, message, learning …
 ├── utils/                  # See "Canonical single-source modules" below
-├── tests/                  # Vitest suites — 5053 tests in 495 files: 5053 pass in 495 and 0 skip across 0 wholly-skipped files. Read from vitest's own summary block 2026-10-21, after the prior fix pass, the Phase 3/4 implementation pass (E-37 evidence floors, E-38 validity window, E-39 effort, E-40 decidedAt, E-41 leverage/liquidation, E-42 decline, E-43 minEdge, E-35 enforcement, E-18 automatic settlement, E-19 one plan object, E-20 replay, E-23 notebook recovery, E-24 Electron behaviour, E-44 notebook sharding), the context-window pass (a thinking-sized tool-round budget, the thinking-cut re-ask, automatic compaction, discovered context windows), the register sweep (the desk mandate composed from the tools a turn can actually call, the packet's stated age, the transcript live region, the focus-trap population gate, the prompt A/B lane writer) and E-51 Phases 1–3 (`tests/modelMenu.test.tsx` for the panel, `tests/chatEffortDial.test.tsx` rewritten for the tier on the merged control, `tests/modelPicker.test.tsx` rewritten now that the picker mounts the same panel). The file count is the tracked `*.test.*` count `npm run check-flow-doc-anchors` re-measures, so a new test file must land with the census that mentions it.
+├── tests/                  # Vitest suites — 5060 tests in 495 files: 5060 pass in 495 and 0 skip across 0 wholly-skipped files. Read from vitest's own summary block 2026-10-21, after the prior fix pass, the Phase 3/4 implementation pass (E-37 evidence floors, E-38 validity window, E-39 effort, E-40 decidedAt, E-41 leverage/liquidation, E-42 decline, E-43 minEdge, E-35 enforcement, E-18 automatic settlement, E-19 one plan object, E-20 replay, E-23 notebook recovery, E-24 Electron behaviour, E-44 notebook sharding), the context-window pass (a thinking-sized tool-round budget, the thinking-cut re-ask, automatic compaction, discovered context windows), the register sweep (the desk mandate composed from the tools a turn can actually call, the packet's stated age, the transcript live region, the focus-trap population gate, the prompt A/B lane writer) and E-51 Phases 1–4 (`tests/modelMenu.test.tsx` for the panel, `tests/chatEffortDial.test.tsx` for the merged control, its chord and its guard, `tests/modelPicker.test.tsx` now that the picker mounts the same panel). The file count is the tracked `*.test.*` count `npm run check-flow-doc-anchors` re-measures, so a new test file must land with the census that mentions it.
 └── electron/               # main.cjs + preload.cjs (NOT covered by tsc)
 ```
 
@@ -213,6 +213,18 @@ is how the numbers drift apart:
   overflow.
 - `shared/providerRequestPolicy.cjs` — thinking gates, temperature, and
   provider URL host policy for all transports.
+- `components/shared/effortScale.ts` + `components/shared/effortDial.ts` — the
+  thinking tier has ONE ladder (`EFFORT_CHOICES`, `effortChoiceOf`,
+  `nextEffortTier` — which wraps, so the chord is repeatable) and ONE record of
+  whether a dial is on screen. `Ctrl/Cmd+Shift+E` asks `effortDialUp()` before it
+  writes: a panel session and a bot turn render no dial, so they must not answer
+  to the key, and the hint printed beside the `EFFORT` label is the same string
+  the handler binds. Don't add a second tier list or bind the chord unguarded.
+- `components/shared/ModelMenu.tsx` — the one model menu. `ModelChip` (both
+  composers) and `ModelPicker` (Settings, automation, panel seats) mount it, so
+  the star list and the free-only preference follow the trader everywhere; a new
+  picker takes the panel, it does not grow a second flyout. `ModelPicker` keeps
+  only the trigger and the value shape its `mode` speaks.
 - `utils/harnessMarks.ts` — the one voice for text THIS app withholds from a
   model: the `DATA_UNAVAILABLE` sentinel, the clipping notes (which must name
   how much was kept vs existed), the spill receipt, and the fence legend built
