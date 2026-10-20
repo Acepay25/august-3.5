@@ -16,26 +16,18 @@
  */
 import React, { useState } from 'react';
 import { Check, ChevronDown } from './Icons';
-import type { ReasoningEffort } from '../../services/providers/reasoningControls';
+import { EFFORT_CHOICES, effortChoiceOf, type EffortChoice } from './effortScale';
 
-export const EFFORT_CHOICES: { id: ReasoningEffort | 'auto'; label: string }[] = [
-    { id: 'off', label: 'Off' },
-    { id: 'auto', label: 'Auto' },
-    { id: 'low', label: 'Low' },
-    { id: 'medium', label: 'Medium' },
-    { id: 'high', label: 'High' },
-    { id: 'max', label: 'Max' },
-];
-
-/** The trigger and the open menu show the same read for the same id — one
- *  lookup keeps them from drifting. */
-export const effortChoiceOf = (id: ReasoningEffort | 'auto'): typeof EFFORT_CHOICES[number] =>
-    EFFORT_CHOICES.find(c => c.id === id) ?? EFFORT_CHOICES[1];
+// The ladder has one owner — `effortScale.ts` — because the merged model panel
+// prints the tier on its trigger and edits it on a slider, and a chip that kept
+// its own copy of the labels would be a third place to disagree. Re-exported so
+// every existing importer reads the same symbols as before.
+export { EFFORT_CHOICES, effortChoiceOf, type EffortChoice };
 
 export interface EffortChipProps {
     /** The session's stored tier — `'auto'` when the user has never picked. */
-    value: ReasoningEffort | 'auto';
-    onChange: (id: ReasoningEffort | 'auto') => void;
+    value: EffortChoice;
+    onChange: (id: EffortChoice) => void;
 }
 
 const EffortChip: React.FC<EffortChipProps> = ({ value, onChange }) => {

@@ -324,3 +324,29 @@ export const writeFreeOnlyPref = (value: boolean): void => {
         // Ignore quota / private-mode failures — the toggle still works in-session.
     }
 };
+
+// -----------------------------------------------------------------------------
+// Starred models — the list every model menu sorts by. Owned beside the
+// free-only pref for the same reason: two panels, one preference. The dock's
+// chip and the merged panel must not each keep their own copy, or starring a
+// model in one silently stops sorting in the other.
+// -----------------------------------------------------------------------------
+
+export const STARRED_MODELS_KEY = 'august_starred_models_v1';
+
+export const readStarredModels = (): string[] => {
+    try {
+        const raw: unknown = JSON.parse(localStorage.getItem(STARRED_MODELS_KEY) ?? '[]');
+        return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+        return [];
+    }
+};
+
+export const writeStarredModels = (list: string[]): void => {
+    try {
+        localStorage.setItem(STARRED_MODELS_KEY, JSON.stringify(list));
+    } catch {
+        // Private mode / quota — the stars simply do not survive the session.
+    }
+};
