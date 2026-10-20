@@ -212,6 +212,12 @@ export interface Message {
    *  this, "the model didn't think" and "the model was never asked to think"
    *  were the same silence. */
   wireAudit?: WireAuditEntry[];
+  /** The turn FAILED, and this is why — the provider's own words, with the
+   *  cause underneath ("fetch failed · ENOTFOUND: getaddrinfo ENOTFOUND
+   *  api.example.com"). It is NOT the answer, and it is not a canned
+   *  sentence: a failed turn used to be written into the text field, so the
+   *  transcript showed the app's own hint as though the seat had said it. */
+  error?: string;
 
   // Mode Tracking
   isLensMode?: boolean; // Was this analysis created with Analyst Lenses enabled?

@@ -269,6 +269,8 @@ const chatRowFrom = (m: Message, username: string, deskName: string): ChatRowVie
         toolIds: m.toolIds,
         // What the wire was asked, so the row can say WHY a turn has no trace.
         wireAudit: m.wireAudit,
+        // A failed turn is a row of its own, not an answer.
+        error: m.error,
         actions: m.toolActions,
         workedMs: typeof m.runStats?.durationMs === 'number' ? m.runStats.durationMs : undefined,
         // The thinking tier this answer was produced under, so the row can

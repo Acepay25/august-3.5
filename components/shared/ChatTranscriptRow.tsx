@@ -55,6 +55,11 @@ export interface ChatRowView {
     /** What the wire was actually asked, one entry per call. It is what lets
      *  the row say WHY a turn has no trace. */
     wireAudit?: WireAuditEntry[];
+    /** The turn FAILED and this is the real reason. A row with an error is
+     *  NOT an answer: it renders the failure in the failure's own colour, so
+     *  the transcript never shows the app's error hint as though the seat
+     *  had said it. */
+    error?: string;
     /** Persistent side-effect status rows. */
     actions?: ToolAction[];
     /** Frozen work time in ms from `Message.runStats` — what the collapsed
@@ -124,8 +129,10 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
             className={`group/msg flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
         >
             <span className="mb-0.5 font-mono text-ui-2xs uppercase tracking-wider text-zinc-600">
-                {row.speaker ?? (isUser ? 'you' : 'desk')}
-                {row.timeLabel ? <> {' · '}{row.timeLabel}</> : null}
+                {/* A failed row has no speaker: nothing said it. The error
+                    block below carries its own label, and the time stays. */}
+                {row.error ? null : (row.speaker ?? (isUser ? 'you' : 'desk'))}
+                {row.timeLabel ? <> {row.error ? '' : '· '}{row.timeLabel}</> : null}
             </span>
 
             {isUser && row.images && row.images.length > 0 && (
@@ -145,6 +152,20 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                    disappeared. */
                 <div className="max-w-[62%] rounded-bubble bg-zinc-800 px-3 py-2 text-ui-base leading-relaxed text-zinc-100">
                     <FadingText text={body} streaming={!!row.streaming} />
+                </div>
+            ) : row.error ? (
+                /* A FAILED turn is not an answer. It is the provider's own
+                   words — the status, the message, the cause underneath — and
+                   it is drawn in the failure colour so the reader never
+                   mistakes the app's error for the seat's opinion. */
+                <div
+                    data-testid="chat-error-row"
+                    className="w-full max-w-full rounded-control border border-rose-500/25 bg-rose-500/[0.06] px-3 py-2 text-ui-base leading-relaxed text-rose-200"
+                >
+                    <span className="mb-0.5 block font-mono text-ui-2xs uppercase tracking-wider text-rose-400/80">
+                        request failed
+                    </span>
+                    {row.error}
                 </div>
             ) : (
                 <div className="w-full max-w-full text-zinc-200 text-ui-base leading-relaxed">

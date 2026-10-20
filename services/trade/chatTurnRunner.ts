@@ -964,10 +964,14 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 // An explicit Stop throws a transport AbortError — that is a
                 // user action, not a failure: the bubble keeps what streamed
                 // (already settled by runSeatTurn) instead of being stamped
-                // "The chart copilot could not answer…".
+                // with a failure row.
                 if (!controller.signal.aborted) {
                     const message = e instanceof Error ? e.message : String(e);
-                    mutate(sid, s => ({ ...s, entries: s.entries.map(en => en.id === aiEntry.id && !en.text ? { ...en, text: `The chart copilot could not answer: ${message}`, streaming: false, workedMs: workedMsFor(soloStartedAt) } : en) }));
+                    // The REAL reason, in the ERROR field and not the text: a
+                    // failed turn written into the answer reads as though the
+                    // seat had said the app's own hint, and it was committed to
+                    // the bot's memory as if it were an answer.
+                    mutate(sid, s => ({ ...s, entries: s.entries.map(en => en.id === aiEntry.id && !en.text ? { ...en, error: message, streaming: false, workedMs: workedMsFor(soloStartedAt) } : en) }));
                 }
             } finally {
                 mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? { ...en, streaming: false, ...(en.workedMs === undefined ? { workedMs: workedMsFor(soloStartedAt) } : {}) } : en)) }));

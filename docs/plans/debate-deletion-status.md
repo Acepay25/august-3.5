@@ -56,7 +56,7 @@ The two row types do **not** share the tool transcript's fields, measured 2026-1
   (`chatTurnRunner.ts:694` appends the digest line and its id **in the same patch**,
   because the desk loop's `results` order does not match the rendered lines — pairing
   by index silently attaches the wrong payload).
-- canonical row = `Message` (`types/message.ts`): has `thoughtProcesses` `:251`,
+- canonical row = `Message` (`types/message.ts`): has `thoughtProcesses` `:257`,
   `planId` `:350`, `toolActions?: ToolAction[]` `:355` — **no `tools`, no `toolIds`.**
 
 So an executor that emits one shared state object cannot serve both homes without
@@ -284,7 +284,7 @@ reading is expensive to undo.
   free seat was being told to match a chart it cannot see — it now takes a `where`
   argument and the dock's default is byte-identical (pinned as a control); and the
   slugs that travelled are recorded on the row (`Message.injectedSkills`,
-  `types/message.ts:320`) bounded to the 30 the index printed, so the record cannot
+  `types/message.ts:326`) bounded to the 30 the index printed, so the record cannot
   claim skills the model never saw. Tests: `tests/chatSurfacePrompt.test.ts` (10).
   Full suite: 496 files / 4922 tests, lint back on the 818/0 baseline after four
   `no-useless-assignment` errors from initialized-then-overwritten locals.
@@ -1587,7 +1587,7 @@ listed in a dependency array is a writer with no reader. `GlobalLearningService
 history card all still call it directly.
 
 **#21 — three sub-items, measured, none started.** `debateTurns` is declared at
-`types/message.ts:231` and `types/trade.ts:128`, written at
+`types/message.ts:237` and `types/trade.ts:128`, written at
 `hooks/useTradeLogging.ts:350` and `utils/watchList.ts:30`, and read by
 `hooks/useAnalysisPipeline.ts:908`,
 `hooks/useWatchAndAutopilot.ts:105`, `services/analysis/convictionDrift.ts:82`,
@@ -1758,7 +1758,7 @@ when it was ruled on.
 
 **The panel is reachable and working.** `components/trade/TradeChatPanel.tsx:956` renders a
 **"New panel · up to 5 models"** control, and a local `addSession(kind)` creates the session;
-`chatTurnRunner.ts:1005` builds the seats, refuses below two usable seats (`:1006`), opens a
+`chatTurnRunner.ts:1009` builds the seats, refuses below two usable seats (`:1010`), opens a
 `createDebateMailbox` (`:1023`), plans each turn with `planPanelTurn` (`:1035`), gives every
 seat its own mandate ("You are \"X\" on a 5-seat chart panel", `:1058`), streams each seat into
 its own bubble, and parses `@Name` mentions so a seat can pull another in mid-turn (`:1118`).
@@ -1782,7 +1782,7 @@ feature, not a leftover of the debate. Recorded here rather than executed silent
 described the size of the job, not what the job costs the trader.
 
 **What deleting it would actually take, now measured:** `SessionKind` loses `'panel'`
-(`services/trade/chatSessions.ts:102`) plus `panelModels`/`PanelSeatRef` and their load-time
+(`services/trade/chatSessions.ts:106`) plus `panelModels`/`PanelSeatRef` and their load-time
 sanitiser (`:258`); `services/trade/chatPanel.ts` dies whole (its only consumer is the seat
 loop); the seat arm of `chatTurnRunner.send` (`:989`–`:1140`) and both `kind === 'panel'`
 supervisor/seat-model reads (`:820`, `:1179`); `TradeChatPanel`'s `isPanel`, the picker overlay
@@ -2274,7 +2274,7 @@ instead of implying the table is checked.
 found on the line it cites: the `index.tsx` mount chain (StrictMode :73, ErrorBoundary :74, ToastProvider :75 —
 the old `73-79` range proved nothing), `august_surface_v1`, `onSendBotTurn`, `onAnalyze`, `handleRunAnalysisFromChat`,
 `runFullAnalysis`, `runSeatTurn` at both :593 and :1082, `applyCasualStreamUpdate`, `notify`. Binding found another real
-defect: row 13 cited AgentsView.tsx:768 for `onAnalyze`, and the await is at **:765** (:768 is the `finally` of that
+defect: row 13 cited AgentsView.tsx:770 for `onAnalyze`, and the await is at **:767** (:770 is the `finally` of that
 same try) — fixed in both flow docs. Coverage now prints 14/53 with 22 pairs and a floor of 14, and 39 rows remain
 line-resolved only.
 
@@ -2285,7 +2285,7 @@ file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:13
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44, the Enter branch at
 components/trade/panels/ChatComposer.tsx:146, systemPromptFor components/trade/TradeChatPanel.tsx:454 with
 TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:476, useBotThread hooks/useAnalysisPipeline.ts:1301,
-entriesForSession services/trade/chatSessions.ts:562, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:165
+entriesForSession services/trade/chatSessions.ts:567, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:165
 with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
 services/trade/automationTurn.ts:69, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices
 services/trade/automationTurn.ts:155, latestChartVerdict services/trade/chartData.ts:95. The gate prints
@@ -2358,12 +2358,12 @@ The point of printing the recipes is that an absence claim is exactly the kind o
 silently: a reader-less field can regain a writer with one line of code and no anchor moves.
 
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions
-services/trade/chatSessions.ts:437, collectApprovalItems utils/approvalInbox.ts:57, resolveInvokedSkills
+services/trade/chatSessions.ts:441, collectApprovalItems utils/approvalInbox.ts:57, resolveInvokedSkills
 services/learning/SkillMemoryService.ts:494), and the gate caught the pairing that insertion created: the row
 also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1823, where the
 useMemo actually is. 31 of 53 rows cite a file, all bound; 22 name no file at all.
 
-**Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions chatSessions.ts:437,
+**Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions chatSessions.ts:441,
 collectApprovalItems approvalInbox.ts:57, resolveInvokedSkills SkillMemoryService.ts:494), and the gate caught the
 pairing that insertion created: the same row also names approvalsWaiting, which is not on that line — a SYMBOL
 MISS, because pairing is positional. It now cites App.tsx:1823, where the useMemo actually is. 31 of 53 rows cite
