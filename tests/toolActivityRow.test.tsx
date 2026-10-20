@@ -4,7 +4,16 @@ import { render, screen } from '@testing-library/react';
 import ToolActivityRow, { pairToolLines, foldConsecutiveToolRows } from '../components/shared/ToolActivityRow';
 
 vi.mock('lucide-react', () => ({
+    // The kind marks live in components/shared/toolKindIcons.tsx, which draws
+    // them from this module — so the mock has to carry every kind's mark, not
+    // only the wrench the old one-glyph-for-everything rows wore.
     Wrench: () => <span data-testid="wrench-icon" />,
+    FileText: () => <span data-testid="file-text-icon" />,
+    Search: () => <span data-testid="search-icon" />,
+    Cpu: () => <span data-testid="cpu-icon" />,
+    Palette: () => <span data-testid="palette-icon" />,
+    NotebookPen: () => <span data-testid="notebook-pen-icon" />,
+    Target: () => <span data-testid="target-icon" />,
 }));
 
 describe('pairToolLines (call→result updates ONE row)', () => {
