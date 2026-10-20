@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Brain, Lightbulb } from './Icons';
 import { stripTraceMarkers, traceLines } from '../../utils/traceText';
 import { subscribeSharedTicker } from '../../hooks/useSharedTicker';
+import Disclosure from './Disclosure';
 
 export interface ReasoningRowProps {
     /** Full thinking / chain-of-thought text. */
@@ -133,72 +134,70 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
     const rowLabel = label !== 'Thinking' ? label : (running ? 'Thinking' : 'Thought');
 
     return (
-        <details
+        <Disclosure
             className={`reasoning-row ${open ? 'is-open' : ''} ${className}`.trim()}
-            data-state={running ? 'running' : 'ok'}
+            summaryClassName="reasoning-row-summary"
+            bodyClassName="reasoning-row-body custom-scrollbar"
+            state={running ? 'running' : 'ok'}
             open={open}
-            onToggle={e => setOpen((e.target as HTMLDetailsElement).open)}
+            onToggle={setOpen}
+            label={`${label} — ${open ? 'collapse' : 'expand'}`}
+            bodyRef={bodyRef}
+            onBodyScroll={() => {
+                const body = bodyRef.current;
+                if (!body) return;
+                bodyPinnedRef.current = body.scrollHeight - body.scrollTop - body.clientHeight < 24;
+            }}
+            summary={(
+                <>
+                    {running ? (
+                        <Lightbulb className="reasoning-row-glyph animate-pulse" aria-hidden="true" />
+                    ) : (
+                        <Brain className="reasoning-row-glyph" aria-hidden="true" />
+                    )}
+                    <span className="reasoning-row-label">{rowLabel}</span>
+                    {meta !== null && (
+                        // Settled reads as a sentence ("Thought for 14s"); live
+                        // keeps the dot separator so the ticking number doesn't
+                        // look like part of the label.
+                        <span className="reasoning-row-meta" aria-label={`${meta} of thinking`}>
+                            {running ? `· ${meta}` : `for ${meta}`}
+                        </span>
+                    )}
+                </>
+            )}
         >
-            <summary
-                className="reasoning-row-summary"
-                aria-label={`${label} — ${open ? 'collapse' : 'expand'}`}
-            >
-                {running ? (
-                    <Lightbulb className="reasoning-row-glyph animate-pulse" aria-hidden="true" />
-                ) : (
-                    <Brain className="reasoning-row-glyph" aria-hidden="true" />
-                )}
-                <span className="reasoning-row-label">{rowLabel}</span>
-                {meta !== null && (
-                    // Settled reads as a sentence ("Thought for 14s"); live
-                    // keeps the dot separator so the ticking number doesn't
-                    // look like part of the label.
-                    <span className="reasoning-row-meta" aria-label={`${meta} of thinking`}>
-                        {running ? `· ${meta}` : `for ${meta}`}
-                    </span>
-                )}
-            </summary>
-            <div
-                className="reasoning-row-body custom-scrollbar"
-                ref={bodyRef}
-                onScroll={() => {
-                    const body = bodyRef.current;
-                    if (!body) return;
-                    bodyPinnedRef.current = body.scrollHeight - body.scrollTop - body.clientHeight < 24;
-                }}
-            >
-                {/* While running the body stays plain (marker-stripped) text —
-                    re-parsing a growing trace into bullets every chunk is
-                    waste for a panel that is usually collapsed mid-run. The
-                    blinking caret makes the growth read as live speech. */}
-                {running ? (
-                    <div className="whitespace-pre-wrap break-words text-zinc-400">
-                        {stripTraceMarkers(trimmed)}
-                        <span className="reasoning-row-caret" aria-hidden="true" />
+            {/* While running the body stays plain (marker-stripped) text —
+                re-parsing a growing trace into bullets every chunk is
+                waste for a panel that is usually collapsed mid-run. The
+                blinking caret makes the growth read as live speech. */}
+            {running ? (
+                <div className="whitespace-pre-wrap break-words text-zinc-400">
+                    {stripTraceMarkers(trimmed)}
+                    <span className="reasoning-row-caret" aria-hidden="true" />
+                </div>
+            ) : (
+                <>
+                    <div className="space-y-1">
+                        {traceLines(traceShown).map((line, i) => (
+                            <div key={i} className="flex gap-2">
+                                <span aria-hidden="true" className="shrink-0 text-zinc-600">•</span>
+                                <span className="min-w-0 flex-1 break-words text-zinc-400">{line}</span>
+                            </div>
+                        ))}
                     </div>
-                ) : (
-                    <>
-                        <div className="space-y-1">
-                            {traceLines(traceShown).map((line, i) => (
-                                <div key={i} className="flex gap-2">
-                                    <span aria-hidden="true" className="shrink-0 text-zinc-600">•</span>
-                                    <span className="min-w-0 flex-1 break-words text-zinc-400">{line}</span>
-                                </div>
-                            ))}
-                        </div>
-                        {needsTrim && (
-                            <button
-                                type="button"
-                                onClick={() => setShowFullTrace(prev => !prev)}
-                                className="mt-1 text-ui-dense font-medium text-zinc-300 underline decoration-zinc-600 underline-offset-2 transition-colors hover:text-zinc-100"
-                            >
-                                {showFullTrace ? 'Show less' : 'Show more'}
-                            </button>
-                        )}
-                    </>
-                )}
-            </div>
-        </details>
+                    {needsTrim && (
+                        <button
+                            type="button"
+                            onClick={() => setShowFullTrace(prev => !prev)}
+                            className="mt-1 text-ui-dense font-medium text-zinc-300 underline decoration-zinc-600 underline-offset-2 transition-colors hover:text-zinc-100"
+                        >
+                            {showFullTrace ? 'Show less' : 'Show more'}
+                        </button>
+                    )}
+                </>
+            )}
+        </Disclosure>
     );
 };
 

@@ -812,6 +812,29 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* The block's header: it names what the bytes ARE, so a row that opens onto
+   a JSON blob says so before the trader reads a line of it. */
+.tool-row-output-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.tool-row-output-title {
+  font-size: var(--text-ui-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-zinc-500);
+}
+.tool-row-output-lang {
+  font-size: var(--text-ui-2xs);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--color-zinc-600);
+  border: 1px solid var(--color-zinc-700);
+  border-radius: 999px;
+  padding: 0 5px;
+  line-height: 1.4;
+}
 /* The honest refusal, matching the `imageOmitted` row's precedent: a tool row
    whose bytes were not kept SAYS so instead of opening onto a blank box that
    reads as an empty result. */
@@ -1309,6 +1332,34 @@ code,
 
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/* ── The automation card's reasoning disclosure ───────────────────────────
+   It used to be a `<button>` plus a grid-collapse `<div>` — a second
+   disclosure mechanism, older than the transcript's native `<details>`, and
+   the reason the same kind of content looked and behaved differently in two
+   places. It is now the SAME component (`components/shared/Disclosure.tsx`),
+   so the treatment below is all that is left of the old one. */
+.automation-run-reasoning > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-ui-xs);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-zinc-500);
+  transition: color 0.12s var(--ease-snappy);
+}
+.automation-run-reasoning > summary::-webkit-details-marker { display: none; }
+.automation-run-reasoning > summary:hover { color: var(--color-cyan-300); }
+.automation-run-reasoning-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
 }
 
 /* Grid-based collapse transition — avoids the max-height hack which

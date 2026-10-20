@@ -182,7 +182,7 @@ competing for the machine.
 │                           #   imported by renderer, vite dev proxy AND electron main
 ├── types/                  # analysis, trade, provider, progress, message, learning …
 ├── utils/                  # See "Canonical single-source modules" below
-├── tests/                  # Vitest suites — 5100 tests in 497 files: 5100 pass in 497 and 0 skip across 0 wholly-skipped files. Read from vitest's own summary block 2026-10-21, after the prior fix pass, the Phase 3/4 implementation pass (E-37 evidence floors, E-38 validity window, E-39 effort, E-40 decidedAt, E-41 leverage/liquidation, E-42 decline, E-43 minEdge, E-35 enforcement, E-18 automatic settlement, E-19 one plan object, E-20 replay, E-23 notebook recovery, E-24 Electron behaviour, E-44 notebook sharding), the context-window pass (a thinking-sized tool-round budget, the thinking-cut re-ask, automatic compaction, discovered context windows), the register sweep (the desk mandate composed from the tools a turn can actually call, the packet's stated age, the transcript live region, the focus-trap population gate, the prompt A/B lane writer), E-51 Phases 1–4 (`tests/modelMenu.test.tsx` is the only NEW test file; `tests/chatEffortDial.test.tsx` covers the merged control, its chord and its guard, `tests/modelPicker.test.tsx` now that the picker mounts the same panel), the R:R/cost register pass, which found those two clusters already built by the earlier `tests/planE02.test.ts` / `tests/planE03.test.ts` and added 5 cases to `tests/chartDrawings.test.ts` and `tests/patternMemoryGate.test.ts` for the two copies that were still live, and E-52 Phases 1–2 (`tests/turnStatus.test.ts` for the one grammar and the one tool vocabulary the turn's status line and the rows beneath it both read, and `tests/answerEffortTier.test.tsx` for the thinking tier's path from the executor to the answer's row). The file count is the tracked `*.test.*` count `npm run check-flow-doc-anchors` re-measures, so a new test file must land with the census that mentions it.
+├── tests/                  # Vitest suites — 5115 tests in 498 files: 5115 pass in 498 and 0 skip across 0 wholly-skipped files. Read from vitest's own summary block 2026-10-21, after the prior fix pass, the Phase 3/4 implementation pass (E-37 evidence floors, E-38 validity window, E-39 effort, E-40 decidedAt, E-41 leverage/liquidation, E-42 decline, E-43 minEdge, E-35 enforcement, E-18 automatic settlement, E-19 one plan object, E-20 replay, E-23 notebook recovery, E-24 Electron behaviour, E-44 notebook sharding), the context-window pass (a thinking-sized tool-round budget, the thinking-cut re-ask, automatic compaction, discovered context windows), the register sweep (the desk mandate composed from the tools a turn can actually call, the packet's stated age, the transcript live region, the focus-trap population gate, the prompt A/B lane writer), E-51 Phases 1–4 (`tests/modelMenu.test.tsx` is the only NEW test file; `tests/chatEffortDial.test.tsx` covers the merged control, its chord and its guard, `tests/modelPicker.test.tsx` now that the picker mounts the same panel), the R:R/cost register pass, which found those two clusters already built by the earlier `tests/planE02.test.ts` / `tests/planE03.test.ts` and added 5 cases to `tests/chartDrawings.test.ts` and `tests/patternMemoryGate.test.ts` for the two copies that were still live, and E-52 Phases 1–3 (`tests/turnStatus.test.ts` for the one grammar and the one tool vocabulary the turn's status line and the rows beneath it both read, `tests/answerEffortTier.test.tsx` for the thinking tier's path from the executor to the answer's row, and `tests/disclosure.test.tsx` for the one expandable panel). The file count is the tracked `*.test.*` count `npm run check-flow-doc-anchors` re-measures, so a new test file must land with the census that mentions it.
 └── electron/               # main.cjs + preload.cjs (NOT covered by tsc)
 ```
 
@@ -199,13 +199,23 @@ is how the numbers drift apart:
 - `utils/turnStatus.ts` + `utils/toolKinds.ts` — what a turn is DOING, and the
   vocabulary the desk's tools are named in. `parseToolLine` is the ONE reader
   of the digest grammar the desk writes ("calling order book…" / "order book ·
-  detail"), so the tool rows and the turn's status line cannot disagree about
-  what the desk did; `turnActivityLabel` names the live activity ("Reading
-  the order book") and `turnWorkSummary` names the settled work. The map is
-  keyed by the tool's HUMAN LABEL, not its name — the transcript never carries
-  a name — and `tests/turnStatus.test.ts` measures it against the desk
+  detail"), and `pairToolRows` is the ONE pairing of a call with its result —
+  ONE PAIRED ROW IS ONE CALL, because the transcript holds two lines per call
+  and a line count doubles every number the trader is told. `turnActivityLabel`
+  names the live activity ("Reading the order book"), `turnKindSummary` counts
+  the work by kind ("3 reads, 1 search") and `turnWorkSummary` names it. The
+  map is keyed by the tool's HUMAN LABEL, not its name — the transcript never
+  carries a name — and `tests/turnStatus.test.ts` measures it against the desk
   service's own tool list, so a new tool cannot slip through unlabelled. An
   unknown tool keeps its own label: never guess a verb for it.
+- `components/shared/Disclosure.tsx` — the ONE expandable panel, and it is a
+  native `<details>`: a toggle without JavaScript, keyboard-operable for free,
+  and what the transcript's CSS and screen-reader behaviour were written
+  against. The thinking row, the tool-output expander and the automation card's
+  reasoning all use it — the card's used to be a `<button>` plus a
+  grid-collapse `<div>`, a second mechanism for the same kind of thing. It owns
+  the SHAPE and nothing about what goes inside: the summary, the body, the
+  classes and the ref are the caller's.
 - `utils/finishReason.ts` — normalizes the four providers' stop signals onto one
   `FinishReason`, and brackets a run's truncation tally. Read the ceiling with
   `peekTruncations()`; don't re-derive it from a missing regex match.

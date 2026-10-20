@@ -27,7 +27,7 @@
  */
 
 import { stripTraceMarkers } from './traceText';
-import { toolKindOf } from './toolKinds';
+import { KIND_ORDER, toolKindCount, toolKindOf, type ToolKind } from './toolKinds';
 
 /** A tool row's state. Derived from the line's TEXT, never stored separately —
  *  the digest line is the only record of what happened. */
@@ -97,20 +97,104 @@ export const turnActivityLabel = (lines: string[], hasReasoning: boolean): strin
     return hasReasoning ? 'Thinking' : null;
 };
 
+/** One paired row: a CALL and its result, merged. `sources` are the indices in
+ *  the original line list that produced it — the `calling…` line and/or the
+ *  result line.
+ *
+ *  That bookkeeping is load-bearing, not decoration: a payload id is stamped on
+ *  the RESULT line, while the `calling…` line never has one. Without the
+ *  source indices the id cannot be found again — a positional lookup lands on
+ *  the calling line, and the expander silently never appears. */
+export interface PairedToolRow {
+    label: string;
+    detail: string;
+    state: ToolRowState;
+    sources: number[];
+}
+
+/**
+ * Pair a call with its result, index-aware.
+ *
+ * A `calling X…` line OPENS a row and the matching result line (`X · detail`
+ * / `X · failed`) UPDATES it in place — the transcript never shows the call
+ * and the outcome as two separate lines. Matching is by human label in FIFO
+ * order (parallel calls of the same tool pair up in issue order). Old
+ * persisted grammars degrade gracefully: an unmatched result renders
+ * standalone, an unmatched `calling` stays a calling row.
+ *
+ * ONE PAIR ROW = ONE CALL. That is the fact the turn's summary counts: the
+ * transcript holds two lines per call (the call and its result), so counting
+ * LINES doubles every number the trader is told.
+ */
+export const pairToolRows = (lines: string[]): PairedToolRow[] => {
+    const rows: PairedToolRow[] = [];
+    const open = new Map<string, PairedToolRow[]>();
+    lines.forEach((raw, index) => {
+        const parsed = parseToolLine(raw);
+        if (!parsed) return;
+        if (parsed.state === 'calling') {
+            const row = { label: parsed.label, detail: parsed.detail, state: parsed.state, sources: [index] };
+            const queue = open.get(row.label) ?? [];
+            queue.push(row);
+            open.set(row.label, queue);
+            rows.push(row);
+            return;
+        }
+        const queue = open.get(parsed.label);
+        if (queue && queue.length > 0) {
+            const row = queue.shift()!;
+            row.state = parsed.state;
+            row.detail = parsed.detail;
+            row.sources.push(index);
+        } else {
+            rows.push({ label: parsed.label, detail: parsed.detail, state: parsed.state, sources: [index] });
+        }
+    });
+    return rows;
+};
+
+/**
+ * What kinds of work the turn did, counted by CALL: "4 reads, 1 search".
+ *
+ * The reference's settled summary says what it did in typed counts ("Ran 4
+ * commands, read a file") — because a trader who reads only the collapsed row
+ * should still know whether the desk LOOKED things up or WROTE something.
+ * August could not say that: a step carried no kind at all, so the only
+ * honest summary was a count of lines.
+ */
+export const turnKindSummary = (lines: string[]): string | null => {
+    const rows = pairToolRows(lines);
+    if (rows.length === 0) return null;
+    const counts = new Map<ToolKind, number>();
+    for (const row of rows) {
+        const kind = toolKindOf(row.label).kind;
+        counts.set(kind, (counts.get(kind) ?? 0) + 1);
+    }
+    const parts: string[] = [];
+    for (const kind of KIND_ORDER) {
+        const n = counts.get(kind);
+        if (!n) continue;
+        parts.push(toolKindCount(kind, n));
+    }
+    return parts.length > 0 ? parts.join(', ') : null;
+};
+
 /**
  * What the turn DID, named from the transcript it already produced — no model
  * call, no new store.
  *
  * The rows below show these labels, so the summary names the same strings:
  * what the trader reads collapsed is exactly what they get when they open it.
- * Duplicates are folded (four order-book calls are one mention), reasoning is
- * named once, and the list is capped so a tool-heavy turn does not become a
- * paragraph — and "+N" names how many were left out, not how many the loop
- * happened to reach.
+ * Duplicates are folded (four order-book calls are one mention) and the list
+ * is capped so a tool-heavy turn does not become a paragraph — and "+N" names
+ * how many were left out, not how many the loop happened to reach.
+ *
+ * These are the NAMES; the COUNTS live in {@link turnKindSummary}, which
+ * counts by kind. The two answer different questions, and the settled row
+ * shows both: "3 reads, 1 search, order book, indicators".
  */
-export const turnWorkSummary = (tools: string[], hasReasoning: boolean): string | null => {
+export const turnWorkSummary = (tools: string[]): string | null => {
     const parts: string[] = [];
-    if (hasReasoning) parts.push('Read the chart');
     const seen = new Set<string>();
     for (const raw of tools ?? []) {
         const parsed = parseToolLine(raw);

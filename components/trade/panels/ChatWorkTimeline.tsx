@@ -15,7 +15,7 @@ import { Lightbulb } from '../../shared/Icons';
 import type { ToolAction } from '../../../types/message';
 import { tipForSeed } from '../../../utils/tradingTips';
 import { splitReasoningAroundTools } from '../../../utils/traceText';
-import { turnActivityLabel, turnWorkSummary } from '../../../utils/turnStatus';
+import { turnActivityLabel, turnKindSummary, turnWorkSummary } from '../../../utils/turnStatus';
 import AnalyzedRow from '../../shared/AnalyzedRow';
 import ReasoningRow from '../../shared/ReasoningRow';
 import ToolActivityRow from '../../shared/ToolActivityRow';
@@ -29,8 +29,13 @@ import { getPayloadWriteFailure } from '../../../services/trade/toolPayloadStore
  *  because the transcript row and this summary are two readers of ONE
  *  grammar: what the trader reads collapsed is exactly what they get when
  *  they open it. This export stays so the existing callers keep working. */
-export const workSummaryLabel = (tools: string[], hasReasoning: boolean): string | null =>
-    turnWorkSummary(tools, hasReasoning);
+export const workSummaryLabel = (tools: string[]): string | null =>
+    turnWorkSummary(tools);
+
+/** What the turn's work was, counted by KIND — "4 reads, 1 search". The
+ *  settled row's headline, and the one thing a trader reading only the
+ *  collapsed row can learn about it. */
+export const workKindSummary = (tools: string[]): string | null => turnKindSummary(tools);
 
 /** The shape this actually reads. The dock passes its `LiveEntry` straight
  *  in; the Chat surface adapts a pipeline `Message` onto the same fields.
@@ -67,6 +72,10 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
         () => turnActivityLabel(entry.tools, reasoning.trim().length > 0),
         [entry.tools, reasoning],
     );
+    // The settled headline: what the desk did, counted by kind. It counts
+    // CALLS, not lines — the transcript holds two lines per call, so a line
+    // count would double every number the trader is told.
+    const kindSummary = useMemo(() => turnKindSummary(entry.tools), [entry.tools]);
     if (!hasWork && !hasActions) {
         // Nothing yet: the waiting tip covers
         // the silent first moments of a turn. It is the tip's ONLY home now —
@@ -135,9 +144,9 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
             {hasWork && (
                 <AnalyzedRow
                     running={running}
-                    toolsCount={entry.tools.length}
+                    summary={kindSummary}
                     persistedMs={entry.workedMs}
-                    title={workSummaryLabel(entry.tools, reasoning.trim().length > 0) ?? undefined}
+                    title={workSummaryLabel(entry.tools) ?? undefined}
                     activity={activity}
                 >
                     {nodes}

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AutomationRun } from '../../types/automation';
 import { ChevronDownIcon, LoadingIcon } from '../shared/Icons';
+import Disclosure from '../shared/Disclosure';
 import MarkdownContent from '../shared/MarkdownContent';
 import StatusPill from '../ui/StatusPill';
 import { phtStamp } from '../../utils/timezone';
@@ -134,19 +135,27 @@ const AutomationRunCard: React.FC<{
                 {run.message?.thoughtProcesses && Object.keys(run.message.thoughtProcesses).length > 0 ? (
                     <div className="mt-3 pt-3 border-t border-white/5 space-y-1">
                         {run.message?.thoughtProcesses && Object.keys(run.message.thoughtProcesses).length > 0 && (
-                            <div>
-                                <button onClick={() => setShowReasoning(!showReasoning)} className="text-ui-xs uppercase font-bold tracking-widest text-zinc-500 hover:text-cyan-300 flex items-center gap-1 transition-colors">
-                                    Reasoning ({Object.keys(run.message.thoughtProcesses).length}) <ChevronDownIcon className={`w-3 h-3 transition-transform ${showReasoning ? 'rotate-180' : ''}`} />
-                                </button>
-                                <div className={`collapsible-content ${showReasoning ? 'expanded' : ''} space-y-2`}>
-                                    {Object.entries(run.message.thoughtProcesses).map(([key, text]) => (
-                                        <div key={key} className="p-2.5 bg-zinc-950 border border-white/5 rounded-control">
-                                            <p className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-600 mb-1">{modelIdToName[key] ?? key}</p>
-                                            <p className="text-ui-dense text-zinc-400 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto custom-scrollbar">{String(text)}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+                            <Disclosure
+                                className="automation-run-reasoning"
+                                summaryClassName="automation-run-reasoning-summary"
+                                bodyClassName="automation-run-reasoning-body"
+                                open={showReasoning}
+                                onToggle={setShowReasoning}
+                                label={`Reasoning (${Object.keys(run.message.thoughtProcesses).length}) — ${showReasoning ? 'collapse' : 'expand'}`}
+                                summary={(
+                                    <>
+                                        Reasoning ({Object.keys(run.message.thoughtProcesses).length})
+                                        <ChevronDownIcon className={`w-3 h-3 transition-transform ${showReasoning ? 'rotate-180' : ''}`} />
+                                    </>
+                                )}
+                            >
+                                {Object.entries(run.message.thoughtProcesses).map(([key, text]) => (
+                                    <div key={key} className="p-2.5 bg-zinc-950 border border-white/5 rounded-control">
+                                        <p className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-600 mb-1">{modelIdToName[key] ?? key}</p>
+                                        <p className="text-ui-dense text-zinc-400 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto custom-scrollbar">{String(text)}</p>
+                                    </div>
+                                ))}
+                            </Disclosure>
                         )}
                     </div>
                 ) : null}

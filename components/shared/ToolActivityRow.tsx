@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { Wrench } from './Icons';
+import { Cpu, FileText, NotebookPen, Palette, Search, Target, Wrench } from './Icons';
 import { stripTraceMarkers } from '../../utils/traceText';
-import { parseToolLine, type ToolRowState } from '../../utils/turnStatus';
+import { pairToolRows, type ToolRowState } from '../../utils/turnStatus';
+import { toolKindLabel, toolKindOf, type ToolKind } from '../../utils/toolKinds';
+import Disclosure from './Disclosure';
 import { readToolPayload } from '../../services/trade/toolPayloadStore';
 import { readToolArtifact } from '../../services/analysis/toolArtifactStore';
-import { findArtifactIdIn } from '../../utils/harnessMarks';
 
 export interface ToolActivityRowProps {
     /** Human-readable tool-event lines ("calling order book…", "order book · buy wall …"). */
@@ -29,6 +30,24 @@ export interface PairedToolRow {
     state: ToolRowState;
 }
 
+/** The glyph each kind of step carries.
+ *
+ *  A step used to wear one wrench for everything, so a READ and a WRITE looked
+ *  identical on screen — and a trader reading the transcript could not tell
+ *  what the desk had DONE, only that it had done something. The kind is a
+ *  property of the tool (`utils/toolKinds.ts`), and the glyph is how it shows
+ *  here: one look tells you whether the desk was looking something up,
+ *  working something out, or changing something. */
+const KIND_GLYPH: Record<ToolKind, React.FC<{ className?: string }>> = {
+    read: FileText,
+    search: Search,
+    compute: Cpu,
+    draw: Palette,
+    write: NotebookPen,
+    present: Target,
+    other: Wrench,
+};
+
 /** A row AFTER the consecutive-fold: one or more same-label calls rendered as a
  *  single line. `count` is 1 for an unfolded row.
  *
@@ -49,46 +68,11 @@ export interface ToolRowGroup {
     payloadIds: string[];
 }
 
-/** Pairing, index-aware. Same FIFO label matching as {@link pairToolLines}, but
- *  each row remembers which entries of the ORIGINAL line list produced it — the
- *  `calling…` line and/or its result line.
- *
- *  That bookkeeping is load-bearing, not decoration: a payload id is stamped on
- *  the RESULT line, while `pairToolLines` merges that result into the row the
- *  calling line opened. Without the source indices the id cannot be found again
- *  — a positional lookup lands on the calling line, which never has one, and the
- *  expander silently never appears. */
-const pairToolRows = (
-    lines: string[],
-): Array<PairedToolRow & { sources: number[] }> => {
-    const rows: Array<PairedToolRow & { sources: number[] }> = [];
-    const open = new Map<string, Array<PairedToolRow & { sources: number[] }>>();
-    lines.forEach((raw, index) => {
-        // The grammar is read ONCE, in `utils/turnStatus.ts` — the same
-        // reader the turn's status line and its work summary use. A second
-        // parser here is how the row and the summary stop agreeing.
-        const parsed = parseToolLine(raw);
-        if (!parsed) return;
-        if (parsed.state === 'calling') {
-            const row = { label: parsed.label, detail: parsed.detail, state: parsed.state, sources: [index] };
-            const queue = open.get(row.label) ?? [];
-            queue.push(row);
-            open.set(row.label, queue);
-            rows.push(row);
-            return;
-        }
-        const queue = open.get(parsed.label);
-        if (queue && queue.length > 0) {
-            const row = queue.shift()!;
-            row.state = parsed.state;
-            row.detail = parsed.detail;
-            row.sources.push(index);
-        } else {
-            rows.push({ label: parsed.label, detail: parsed.detail, state: parsed.state, sources: [index] });
-        }
-    });
-    return rows;
-};
+/** Pairing, index-aware. The pairing itself lives in `utils/turnStatus.ts` —
+ *  the ONE reader of the digest grammar — so the rows, the turn's status line
+ *  and the turn's summary are three readers of one fact. A second pairing
+ *  here is how a row and the summary stop agreeing about what was called. */
+export { pairToolRows };
 
 /** What one expandable row shows when opened, resolved once per row.
  *
@@ -137,10 +121,15 @@ const ToolRowGroupView: React.FC<{ group: ToolRowGroup; running: boolean }> = ({
     // The folded line shows the LAST member's detail — the most recent outcome —
     // with the count beside it naming how many calls the line stands for.
     const detail = group.details[group.details.length - 1] ?? '';
+    // The kind of the step: what the desk DID. The glyph carries it on screen;
+    // the name travels with the row for a screen reader and a tooltip.
+    const kind = toolKindOf(group.label).kind;
+    const Glyph = KIND_GLYPH[kind] ?? Wrench;
+    const kindName = toolKindLabel(kind);
 
     const line = (
-        <div className="flex items-center gap-1.5 text-ui-xs leading-4 text-zinc-500">
-            <Wrench className={`h-3 w-3 shrink-0 ${anyFailed ? 'text-rose-400/70' : 'text-zinc-600'}`} aria-hidden="true" />
+        <div className="flex items-center gap-1.5 text-ui-xs leading-4 text-zinc-500" data-kind={kind}>
+            <Glyph className={`h-3 w-3 shrink-0 ${anyFailed ? 'text-rose-400/70' : 'text-zinc-600'}`} aria-hidden="true" />
             <span className={`shrink-0 ${anyCalling ? 'text-zinc-500' : anyFailed ? 'text-rose-300' : 'text-zinc-400'}`}>
                 {group.label}
             </span>
@@ -160,23 +149,42 @@ const ToolRowGroupView: React.FC<{ group: ToolRowGroup; running: boolean }> = ({
     if (!expandable) return line;
 
     return (
-        <details
+        <Disclosure
             className="tool-row"
-            data-testid="tool-row"
-            data-fold-count={group.count}
+            summaryClassName="tool-row-summary"
+            bodyClassName="tool-row-body"
+            testId="tool-row"
+            detailsProps={{ 'data-fold-count': group.count, 'data-kind': kind }}
             open={open}
-            onToggle={e => setOpen((e.target as HTMLDetailsElement).open)}
+            onToggle={setOpen}
+            label={`${group.label} (${kindName})${group.count > 1 ? ` ×${group.count}` : ''} — ${open ? 'collapse' : 'expand'}`}
+            bodyProps={{ role: 'region', 'aria-label': `${group.label} output` }}
+            summary={line}
         >
-            <summary className="tool-row-summary" aria-label={`${group.label}${group.count > 1 ? ` ×${group.count}` : ''} — ${open ? 'collapse' : 'expand'}`}>
-                {line}
-            </summary>
-            <div className="tool-row-body" role="region" aria-label={`${group.label} output`}>
-                {group.payloadIds.map((id, i) => (
-                    <PayloadForKey key={`${id}-${i}`} toolCallId={id} />
-                ))}
-            </div>
-        </details>
+            {group.payloadIds.map((id, i) => (
+                <PayloadForKey key={`${id}-${i}`} toolCallId={id} />
+            ))}
+        </Disclosure>
     );
+};
+
+/** What the bytes are, in the word a reader would use.
+ *
+ *  Most desk tools answer with JSON, and a trader who opens a row expecting
+ *  a sentence and finds a JSON blob has been told nothing about what they are
+ *  looking at. The chip says which, and it is DERIVED from the bytes — never
+ *  asserted by the tool, which does not say what format it answered in. */
+const languageOf = (text: string): string => {
+    const trimmed = text.trim();
+    if (!trimmed) return 'text';
+    const first = trimmed[0];
+    if (first !== '{' && first !== '[') return 'text';
+    try {
+        JSON.parse(trimmed);
+        return 'JSON';
+    } catch {
+        return 'text';
+    }
 };
 
 /** One member of a folded group, resolved only while open. A member with no id
@@ -184,10 +192,19 @@ const ToolRowGroupView: React.FC<{ group: ToolRowGroup; running: boolean }> = ({
 const PayloadForKey: React.FC<{ toolCallId: string }> = ({ toolCallId }) => {
     const body = useMemo(() => (toolCallId ? resolvePayload(toolCallId) : null), [toolCallId]);
     if (!body) return null;
-    return body.text ? (
-        <pre className="tool-row-output">{body.text}</pre>
-    ) : (
-        <p className="tool-row-refused">{body.refused ?? 'full result not kept'}</p>
+    if (!body.text) {
+        return <p className="tool-row-refused">{body.refused ?? 'full result not kept'}</p>;
+    }
+    return (
+        <>
+            {/* The header names the block: the row says which tool, this says
+                what you are looking at, and the chip says what shape it is. */}
+            <div className="tool-row-output-head">
+                <span className="tool-row-output-title">Output</span>
+                <span className="tool-row-output-lang">{languageOf(body.text)}</span>
+            </div>
+            <pre className="tool-row-output">{body.text}</pre>
+        </>
     );
 };
 
