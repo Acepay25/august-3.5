@@ -46,6 +46,9 @@ import { DISCLAIMER_SHORT } from '../../constants/disclaimer';
 import * as chatStore from '../../services/trade/chatStore';
 import ChatTranscriptRow, { type ChatRowView } from '../shared/ChatTranscriptRow';
 import { BotAvatar } from '../chat/BotAvatar';
+import DetailModal from '../shared/DetailModal';
+import AgentDetailCard from './AgentDetailCard';
+import { formatModelDisplayName } from '../../utils/providerUtils';
 import SymbolPicker from '../trade/SymbolPicker';
 import TimeframeBar from '../trade/TimeframeBar';
 import type { ChartInterval } from '../trade/TradingChart';
@@ -507,6 +510,9 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const { attachments, fileInputRef, attachFiles, remove: removeAttachment, clear: clearAttachments, openPicker, images: attachedImages } = useChatAttachments();
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [renameDraft, setRenameDraft] = useState('');
+    /** Which agent's FULL card is open. The launch list names the agent; this
+     *  is where the trader reads what it actually is. Null = closed. */
+    const [detailBotId, setDetailBotId] = useState<string | null>(null);
     const scroller = useRef<HTMLDivElement | null>(null);
     // Jump-to-latest (the command palette's "Jump to latest analysis"
     // rehomed): the control shows only when the trader has scrolled away from
@@ -688,6 +694,18 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         : conversationRows.slice(0, 8);
 
     const activeBot = selection.kind === 'bot' ? bots.find(b => b.id === selection.botId) ?? null : null;
+    /** The agent whose full card is open, and the trace of its last turn —
+     *  the two things a trader wants before handing a turn to it. */
+    const detailBot = detailBotId ? bots.find(b => b.id === detailBotId) ?? null : null;
+    const detailTrace = useMemo(() => {
+        if (!detailBot) return undefined;
+        const own = threadForProvider(messages, detailBot.providerId, detailBot.modelId, detailBot.id);
+        for (let i = own.length - 1; i >= 0; i -= 1) {
+            const t = messageTraceText(own[i]);
+            if (t) return t;
+        }
+        return undefined;
+    }, [detailBot, messages]);
     const activeGroup = selection.kind === 'group' ? groups.find(g => g.id === selection.groupId) ?? null : null;
     const activeStat = activeBot ? statFor(activeBot.id) : undefined;
     // WS-3.1's scope contract, read off the bot rather than assumed.
@@ -768,10 +786,16 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const renderBotRow = (r: BotRow): React.ReactNode => {
         const routines = botRoutines?.[r.bot.id] ?? [];
         const open = openRoutines === r.bot.id;
+        // The LAUNCH LIST's job: say what the agent is FOR, so the trader
+        // picks the right one instead of guessing from a name. The role is
+        // the agent's title, or the first line of its description — and when
+        // it has neither, the row says so rather than borrowing the last
+        // message as a stand-in for a role.
+        const role = (r.bot.title || r.bot.description || '').split('\n')[0].trim();
         return (
             <Row key={r.bot.id}
                 active={selection.kind === 'bot' && selection.botId === r.bot.id}
-                title={r.bot.name} preview={r.preview} time={relTime(r.time)} unread={r.unread}
+                title={r.bot.name} preview={role || r.preview} time={relTime(r.time)} unread={r.unread}
                 working={workingBotId === r.bot.id} pinned={pins.includes(r.bot.id)}
                 attention={attentionMap?.[r.bot.id]}
                 stat={statFor(r.bot.id)?.skillsAuthored}
@@ -780,6 +804,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                 onPin={() => togglePin(r.bot.id)}
                 onClick={() => selectThread({ kind: 'bot', botId: r.bot.id })}
                 actions={[
+                    { label: 'Details', onSelect: () => setDetailBotId(r.bot.id) },
                     { label: pins.includes(r.bot.id) ? 'Unpin' : 'Pin', onSelect: () => togglePin(r.bot.id) },
                     ...(onRenameBot ? [{
                         label: 'Rename',
@@ -1569,6 +1594,26 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     </>
                 )}
             </section>
+            {/* The agent's FULL card — the reader the launch list opens. It
+                mounts OUTSIDE the pane, because an overlay that mounts inside
+                the scroller is measured as the pane's own content. */}
+            <DetailModal
+                isOpen={!!detailBot}
+                onClose={() => setDetailBotId(null)}
+                title={detailBot?.name ?? ''}
+                subtitle={detailBot?.title || (detailBot ? formatModelDisplayName(detailBot.modelId) : undefined)}
+                icon={detailBot ? <BotAvatar bot={detailBot} size={36} /> : undefined}
+                closeLabel="Close agent details"
+                footer="A read-only view of the agent. Press Escape to close."
+            >
+                {detailBot && (
+                    <AgentDetailCard
+                        bot={detailBot}
+                        skillsAuthored={statFor(detailBot.id)?.skillsAuthored}
+                        trace={detailTrace}
+                    />
+                )}
+            </DetailModal>
         </div>
     );
 };

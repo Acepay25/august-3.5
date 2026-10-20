@@ -754,7 +754,9 @@ describe('WS-6 §5 row context menu', () => {
         const menu = screen.getByTestId('row-menu-popover');
         expect(menu.getAttribute('role')).toBe('menu');
         expect([...menu.querySelectorAll('[role="menuitem"]')].map(b => b.textContent)).toEqual(
-            ['Pin', 'Rename', 'Routines (1)', 'Delete bot'],
+            // "Details" leads: it is the row's own READER, and the actions
+            // that change the agent come after the one that only shows it.
+            ['Details', 'Pin', 'Rename', 'Routines (1)', 'Delete bot'],
         );
         fireEvent.click(screen.getByRole('menuitem', { name: 'Delete bot' }));
         expect(onDeleteBot).toHaveBeenCalledWith('b1');
