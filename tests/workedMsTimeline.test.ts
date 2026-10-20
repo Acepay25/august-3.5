@@ -129,27 +129,27 @@ describe('the block names its work from the transcript', () => {
         return mod.workSummaryLabel;
     };
 
-    it('names reasoning once and folds duplicate tool labels', async () => {
+    it('names the tools, folding duplicate labels', async () => {
         const f = await label();
-        expect(f(['order book · a', 'order book · b', 'order book · c', 'indicators · d'], true))
-            .toBe('Read the chart, order book, indicators');
+        expect(f(['order book · a', 'order book · b', 'order book · c', 'indicators · d']))
+            .toBe('order book, indicators');
     });
 
     it('strips the trailing outcome so the title is the tool, not the result line', async () => {
         const f = await label();
-        expect(f(['calling order book…', 'order book · buy wall at 88k'], false))
+        expect(f(['calling order book…', 'order book · buy wall at 88k']))
             .toBe('order book');
     });
 
     it('caps a tool-heavy turn rather than becoming a paragraph', async () => {
         const f = await label();
-        const out = f(['t1', 't2', 't3', 't4', 't5', 't6'], false);
+        const out = f(['t1', 't2', 't3', 't4', 't5', 't6']);
         expect(out).toBe('t1, t2, t3, t4 +2');
     });
 
     it('is null when there is no work to name', async () => {
         const f = await label();
-        expect(f([], false)).toBeNull();
-        expect(f(['   '], false)).toBeNull();
+        expect(f([])).toBeNull();
+        expect(f(['   '])).toBeNull();
     });
 });

@@ -7,7 +7,11 @@ export interface AnalyzedRowProps {
      *  timeline stays OPEN live and the duration ticks. */
     running?: boolean;
     className?: string;
-    toolsCount?: number;
+    /** What the work was, counted by KIND — "4 reads, 1 search". This is the
+     *  settled row's headline: it says what the desk DID, in the typed counts
+     *  the reference uses ("Ran 4 commands, read a file"). Omitted when the
+     *  turn called no tool. */
+    summary?: string | null;
     /** The turn's frozen work time in ms, persisted at settle. Used ONLY when
      *  the clock is not ticking: precedence is live tick > this > nothing.
      *  A reloaded turn has no live clock, so this is what keeps its
@@ -33,7 +37,7 @@ export interface AnalyzedRowProps {
  * covers the pre-answer work phase only — it starts at turn start and
  * freezes when the answer text begins.
  */
-const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = '', toolsCount, persistedMs, title, activity, children }) => {
+const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = '', summary, persistedMs, title, activity, children }) => {
     const [open, setOpen] = useState(running);
     const wasRunningRef = useRef(running);
     const startedAtRef = useRef<number | null>(running ? Date.now() : null);
@@ -80,7 +84,13 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
     // The reference's two states: running = the "••• verb-ing · 25s" status
     // line; settled with tools = "Ran 4 commands, read a file". Duration only
     // stands alone when there is no action count to lead with.
-    const ranTools = toolsCount !== undefined && toolsCount > 0;
+    //
+    // The settled headline is the KIND sentence ("4 reads, 1 search"), not a
+    // bare count of calls: a count of calls says the desk was BUSY, and a
+    // typed count says what it did — which is the one thing a trader reading
+    // only the collapsed row cannot get from the answer.
+    const workSummary = (summary ?? '').trim();
+    const ranTools = workSummary.length > 0;
     // The RUNNING label is the ACTIVITY, not the state: "Reading the order
     // book" says what the desk is doing, "Analyzing" only says it is busy.
     // The separator follows the same rule as the settled form — a detail
@@ -89,7 +99,7 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
     const label = running
         ? (runningActivity || 'Analyzing')
         : ranTools
-            ? `Ran ${toolsCount} ${toolsCount === 1 ? 'command' : 'commands'}`
+            ? workSummary
             : 'Analyzed';
     const detail = running
         ? (seconds !== null ? (runningActivity ? ` · ${seconds}s` : ` for ${seconds}s`) : '')

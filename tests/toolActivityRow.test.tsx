@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import ToolActivityRow, { pairToolLines, foldConsecutiveToolRows } from '../components/shared/ToolActivityRow';
 
@@ -163,5 +163,68 @@ describe('ToolActivityRow (paired inline rows)', () => {
     it('renders nothing without lines', () => {
         const { container } = render(<ToolActivityRow lines={[]} />);
         expect(container.querySelector('[data-testid="tool-activity"]')).toBeNull();
+    });
+});
+
+describe('a step carries its KIND', () => {
+    it('marks the row with the kind of work it was', () => {
+        // A read and a write used to wear the same wrench, so the trader could
+        // not tell what the desk had DONE — only that it had done something.
+        render(<ToolActivityRow lines={['calling order book…', 'order book · ok']} />);
+        const row = document.querySelector('[data-testid="tool-activity"] > div');
+        expect(row?.getAttribute('data-kind')).toBe('read');
+    });
+
+    it('names the kind to a screen reader, not only in a glyph', () => {
+        render(<ToolActivityRow lines={['calling chart draw…', 'chart draw · ok']} payloadIds={['p1']} />);
+        // The glyph carries it on screen; the name travels with the row.
+        const summary = document.querySelector('.tool-row-summary');
+        expect(summary?.getAttribute('aria-label')).toContain('(draw)');
+    });
+
+    it('marks a write as a write', () => {
+        render(<ToolActivityRow lines={['calling skill proposal…', 'skill proposal · ok']} />);
+        const row = document.querySelector('[data-testid="tool-activity"] > div');
+        expect(row?.getAttribute('data-kind')).toBe('write');
+    });
+});
+
+describe('the output block says what it is', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        localStorage.setItem('last_active_user', 'payload-user');
+    });
+
+    it('names the block "Output" and says the shape of the bytes', async () => {
+        // A trader who opens a row expecting a sentence and finds a JSON blob
+        // has been told nothing about what they are looking at. The chip is
+        // DERIVED from the bytes, never asserted by the tool.
+        const store = await import('../services/trade/toolPayloadStore');
+        store.saveToolPayload({
+            toolCallId: 'c-json',
+            name: 'get_order_book',
+            label: 'order book · ok',
+            ok: true,
+            artifact: null,
+            text: '{"buyWalls":[{"price":94000}]}',
+        } as never);
+        render(<ToolActivityRow lines={['calling order book…', 'order book · ok']} payloadIds={['', 'c-json']} />);
+        expect(screen.getByText('Output')).toBeDefined();
+        expect(screen.getByText('JSON')).toBeDefined();
+    });
+
+    it('says "text" when the bytes are prose', async () => {
+        const store = await import('../services/trade/toolPayloadStore');
+        store.saveToolPayload({
+            toolCallId: 'c-text',
+            name: 'get_indicators',
+            label: 'indicators · ok',
+            ok: true,
+            artifact: null,
+            text: 'RSI 54.2 — neutral',
+        } as never);
+        render(<ToolActivityRow lines={['calling indicators…', 'indicators · ok']} payloadIds={['', 'c-text']} />);
+        expect(screen.getByText('text')).toBeDefined();
+        expect(screen.queryByText('JSON')).toBeNull();
     });
 });

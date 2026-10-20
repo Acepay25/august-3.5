@@ -177,7 +177,7 @@ describe('radius tokens own every non-token radius', () => {
 
     const THEME_RADIUS_INVENTORY = [
         '1.5px', '1px', '1px', '1px', '2px', '2px', '4px', '4px',
-        '999px', '999px', '999px', '999px', '999px', '999px', '999px', '999px',
+        '999px', '999px', '999px', '999px', '999px', '999px', '999px', '999px', '999px',
         'var(--radius-bubble)',
         'var(--radius-control)', 'var(--radius-control)', 'var(--radius-control)', 'var(--radius-control)',
     ].sort();

@@ -14,6 +14,7 @@ import { readFileSync } from 'fs';
 import {
     parseToolLine,
     turnActivityLabel,
+    turnKindSummary,
     turnWorkSummary,
     type ParsedToolLine,
 } from '../utils/turnStatus';
@@ -89,26 +90,56 @@ describe('turnWorkSummary — what the turn DID', () => {
     it('names the tools the rows below it show, deduped', () => {
         const got = turnWorkSummary(
             ['calling order book…', 'order book · ok', 'calling indicators…', 'indicators · ok'],
-            false,
         );
         expect(got).toBe('order book, indicators');
-    });
-
-    it('names the reasoning once, when there was any', () => {
-        expect(turnWorkSummary(['calling order book…'], true)).toBe('Read the chart, order book');
     });
 
     it('caps the list and says how many were left out', () => {
         const got = turnWorkSummary(
             ['a · ok', 'b · ok', 'c · ok', 'd · ok', 'e · ok', 'f · ok'],
-            false,
         );
         expect(got).toBe('a, b, c, d +2');
     });
 
     it('has nothing to say when the turn did nothing', () => {
-        expect(turnWorkSummary([], false)).toBeNull();
-        expect(turnWorkSummary(['', '  '], false)).toBeNull();
+        expect(turnWorkSummary([])).toBeNull();
+        expect(turnWorkSummary(['', '  '])).toBeNull();
+    });
+});
+
+describe('turnKindSummary — the counts, by KIND', () => {
+    it('counts CALLS, not lines — the transcript holds two lines per call', () => {
+        // One call = a `calling…` line and a result line. A summary that
+        // counted lines would tell the trader the desk called a tool twice
+        // for every call it made.
+        expect(turnKindSummary(['calling order book…', 'order book · ok'])).toBe('1 read');
+        expect(turnKindSummary([
+            'calling order book…', 'order book · ok',
+            'calling order book…', 'order book · ok',
+        ])).toBe('2 reads');
+    });
+
+    it('counts each kind separately, in a fixed order', () => {
+        const got = turnKindSummary([
+            'calling web search…', 'web search · ok',
+            'calling order book…', 'order book · ok',
+            'calling indicators…', 'indicators · ok',
+            'calling screener…', 'screener · ok',
+        ]);
+        expect(got).toBe('2 reads, 1 search, 1 calculation');
+    });
+
+    it('uses the singular for one', () => {
+        expect(turnKindSummary(['calling chart draw…', 'chart draw · ok'])).toBe('1 draw');
+    });
+
+    it('has nothing to say when no tool was called', () => {
+        expect(turnKindSummary([])).toBeNull();
+        expect(turnKindSummary(['', '   '])).toBeNull();
+    });
+
+    it('counts a failed call too — the desk tried, and that is work', () => {
+        expect(turnKindSummary(['calling order book…', 'order book · failed'])).toBe('1 read');
     });
 });
 

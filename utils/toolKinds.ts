@@ -30,6 +30,43 @@
 /** The coarse bucket a tool falls into. */
 export type ToolKind = 'read' | 'search' | 'compute' | 'draw' | 'write' | 'present' | 'other';
 
+/** The order the kinds are named in — a fixed order so two turns that did the
+ *  same work say it the same way. */
+export const KIND_ORDER: readonly ToolKind[] = ['read', 'search', 'compute', 'draw', 'write', 'present', 'other'];
+
+/** The noun a group sentence counts in ("4 reads", "1 search"). It belongs to
+ *  the KIND, not to the tool, so it is one table rather than forty. */
+const KIND_COUNT_NOUN: Record<ToolKind, { one: string; many: string }> = {
+    read: { one: 'read', many: 'reads' },
+    search: { one: 'search', many: 'searches' },
+    compute: { one: 'calculation', many: 'calculations' },
+    draw: { one: 'draw', many: 'draws' },
+    write: { one: 'write', many: 'writes' },
+    present: { one: 'plan', many: 'plans' },
+    other: { one: 'step', many: 'steps' },
+};
+
+/** The kind's own name — what the row's glyph MEANS. The glyph carries it on
+ *  screen; this carries it to a screen reader and a tooltip. */
+const KIND_LABEL: Record<ToolKind, string> = {
+    read: 'read',
+    search: 'search',
+    compute: 'compute',
+    draw: 'draw',
+    write: 'write',
+    present: 'present',
+    other: 'step',
+};
+
+/** The kind's name, in the word a trader would use. */
+export const toolKindLabel = (kind: ToolKind): string => KIND_LABEL[kind] ?? KIND_LABEL.other;
+
+/** "4 reads" / "1 read" — the count and the noun, together. */
+export const toolKindCount = (kind: ToolKind, n: number): string => {
+    const noun = KIND_COUNT_NOUN[kind] ?? KIND_COUNT_NOUN.other;
+    return `${n} ${n === 1 ? noun.one : noun.many}`;
+};
+
 export interface ToolKindInfo {
     kind: ToolKind;
     /** The activity phrase the status line shows while this tool works. */

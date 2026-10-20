@@ -117,9 +117,12 @@ describe('work timeline in the Chart AI transcript', () => {
         const row = document.querySelector('[data-testid="analyzed-row"]') as HTMLDetailsElement;
         expect(row).toBeTruthy();
         expect(row.open).toBe(false);
-        // With tool rounds the summary leads with the action count (the
-        // reference's "Ran 4 commands, read a file"), not "Analyzed".
-        expect(row.textContent).toMatch(/Ran \d+ commands/);
+        // With tool rounds the summary leads with the TYPED counts (the
+        // reference's "Ran 4 commands, read a file"), not "Analyzed". One
+        // chart-view call is ONE call — the transcript holds two lines for it
+        // (the call and its result), and a line count would have said 2.
+        expect(row.textContent).toMatch(/1 read/);
+        expect(row.textContent).not.toMatch(/Analyzed/);
 
         // …which holds TWO Thought rows (before + after the tool round)…
         expect(screen.getAllByText('Thought')).toHaveLength(2);
