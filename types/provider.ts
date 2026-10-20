@@ -28,6 +28,45 @@ export type ApiFormat = 'chat_completions' | 'messages' | 'responses' | 'google'
 export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'max' | 'auto';
 
 /**
+ * Which capability route the transport applied to one request.
+ *
+ *  - 'anthropic-thinking' / 'gemini-thinking' — a thinking block was sent
+ *  - 'openai-effort' / 'xai-effort' / 'responses-effort' — an effort knob
+ *  - 'glm-thinking' / 'deepseek-thinking' — the vendors' own switches
+ *  - 'none' — no route applied, and the reason says why
+ */
+export type WireAuditRoute =
+    | 'xai-effort'
+    | 'openai-effort'
+    | 'glm-thinking'
+    | 'deepseek-thinking'
+    | 'anthropic-thinking'
+    | 'responses-effort'
+    | 'gemini-thinking'
+    | 'none';
+
+/**
+ * One audit line per call — what the wire actually received, and why.
+ *
+ * It lives HERE, in the wire vocabulary, because the answer's row has to carry
+ * it: a turn that returned no trace has to be able to say WHY (no route, a
+ * closed gate, a model that does not think), and that fact outlives the
+ * request. The services that decide the route
+ * (`services/providers/reasoningControls.ts`) own the DECISION and re-export
+ * this type, so there is one shape — not one per layer that mentions it.
+ */
+export interface WireAuditEntry {
+    /** Which capability route was applied ('none' = fail-closed no-op). */
+    route: WireAuditRoute;
+    /** The harness effort tier that drove the translation. */
+    effort: ReasoningEffort;
+    /** Machine-readable outcome — the runStats / known-answer-probe substrate. */
+    applied: boolean;
+    /** Human-readable reason (surfaced in the DebateRunLog budget lines). */
+    reason: string;
+}
+
+/**
  * Configuration for a single AI provider.
  * Built-in providers have isBuiltIn=true and cannot be deleted.
  * Custom providers have isBuiltIn=false and can be added/removed freely.

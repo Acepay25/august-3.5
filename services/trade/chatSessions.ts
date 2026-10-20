@@ -16,7 +16,7 @@
 import { getActiveUsername } from '../../utils/activeUser';
 import type { Message, ToolAction } from '../../types/message';
 import { MessageRole } from '../../types/enums';
-import type { ReasoningEffort } from '../../types/provider';
+import type { ReasoningEffort, WireAuditEntry } from '../../types/provider';
 import { messageTraceText } from '../../utils/traceText';
 
 /** One turn in a session. `role` stays 'user' | 'ai' for storage
@@ -31,6 +31,9 @@ export interface StoredChatEntry {
     speaker?: string;
     /** Chain-of-thought trace (the dock's collapsible Thought row). */
     reasoning?: string;
+    /** What the wire was actually asked, one entry per call. It is what lets
+     *  the answer say WHY it has no trace. */
+    wireAudit?: WireAuditEntry[];
     /** Model side-effects (proposals/writes) surfaced as status rows. */
     actions?: ToolAction[];
     /** Attached image (screenshot or upload) shown in the transcript,
@@ -493,6 +496,7 @@ export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
         // session's own bot, so a stale name here would fight it.
         speaker: undefined,
         reasoning: trace.length > 0 ? trace : undefined,
+        wireAudit: m.wireAudit,
         actions: m.toolActions,
         // `proposal` is deliberately NOT projected. The dock keeps its card on the
         // RUNTIME entry only (`chatStore.LiveEntry`, not `StoredChatEntry`) so a

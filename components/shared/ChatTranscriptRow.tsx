@@ -29,7 +29,7 @@ import KeyLevelsCard from '../trade/KeyLevelsCard';
 import { parseKeyLevels, type ModelKeyLevel } from '../../services/trade/keyLevels';
 import type { TradeAnalysis } from '../../types';
 import type { ToolAction } from '../../types/message';
-import type { ReasoningEffort } from '../../types/provider';
+import type { ReasoningEffort, WireAuditEntry } from '../../types/provider';
 
 export type ChatRowRole = 'user' | 'ai';
 
@@ -52,6 +52,9 @@ export interface ChatRowView {
      *  opens onto the REAL output the tool returned, so a row without one
      *  stays a plain row. */
     toolIds?: string[];
+    /** What the wire was actually asked, one entry per call. It is what lets
+     *  the row say WHY a turn has no trace. */
+    wireAudit?: WireAuditEntry[];
     /** Persistent side-effect status rows. */
     actions?: ToolAction[];
     /** Frozen work time in ms from `Message.runStats` — what the collapsed
@@ -106,6 +109,7 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
         reasoning: row.reasoning,
         tools: row.toolLines ?? [],
         toolIds: row.toolIds,
+        wireAudit: row.wireAudit,
         streaming: row.streaming,
         text: row.text,
         actions: row.actions,

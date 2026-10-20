@@ -746,6 +746,11 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             // It comes out of the executor rather than being resolved again
             // here: one turn, one tier, one source.
             effort: outcome.effort,
+            // What the wire was actually asked, for the same reason: the
+            // answer row has to be able to say WHY a turn came back with no
+            // trace, and the transport's own decision is the only honest
+            // answer to that.
+            ...(outcome.wireAudit?.length ? { wireAudit: outcome.wireAudit } : {}),
             ...(outcome.interrupted
                 // A stopped turn keeps whatever text was already painted: a
                 // hidden-pass seat that never spoke must not reveal its partial

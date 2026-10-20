@@ -2,7 +2,7 @@
 
 import { MessageRole, TradeOutcome, DebateSpeaker } from './enums';
 import { TradeAnalysis } from './analysis';
-import type { ReasoningEffort } from './provider';
+import type { ReasoningEffort, WireAuditEntry } from './provider';
 
 export interface DebateTurn {
   speaker: DebateSpeaker;
@@ -204,6 +204,14 @@ export interface Message {
    *  has one, and a guard line never will. The id is where the BYTES are; the
    *  line is what the seat saw — two questions, zipped by position. */
   toolIds?: string[];
+  /** What the wire was actually asked, one entry per call the turn made.
+   *
+   *  It is what lets the answer say WHY it has no trace: the transport
+   *  already decided which capability route it applied, and when it applied
+   *  none it said why ("model id not recognized as thinking-capable"). Before
+   *  this, "the model didn't think" and "the model was never asked to think"
+   *  were the same silence. */
+  wireAudit?: WireAuditEntry[];
 
   // Mode Tracking
   isLensMode?: boolean; // Was this analysis created with Analyst Lenses enabled?

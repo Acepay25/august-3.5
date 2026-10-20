@@ -25,7 +25,7 @@
  *    far was the attempt, not the answer.
  */
 
-import type { ProviderConfig } from '../../types/provider';
+import type { ProviderConfig, WireAuditEntry } from '../../types/provider';
 import type { ChatMessage } from '../providers/GenericProviderService';
 import { streamChatWithDeskTools, stripTextToolCalls } from '../analysis/DeskToolsService';
 import type { StreamWithDeskToolsOptions } from '../analysis/DeskToolsService';
@@ -89,6 +89,17 @@ export interface ToolTurnOutcome {
      *  carried out of the executor has to be re-derived by every writer —
      *  which is how two rows end up claiming different tiers for one turn. */
     effort: ReasoningEffort;
+    /** What the wire was actually asked, one entry per call the turn made.
+     *
+     *  The transport ALREADY emits these — `onWireAudit` fires on every
+     *  request with the capability route it applied and, when it applied
+     *  none, WHY. Nothing collected them, so the answer's row could not say
+     *  why a turn came back with no trace. They ride out here, on the one
+     *  return every path shares, for the same reason the effort does: a fact
+     *  that is not carried out of the executor has to be re-derived by every
+     *  writer — which is how two rows end up claiming different things for
+     *  one turn. */
+    wireAudit?: WireAuditEntry[];
 }
 
 export interface ToolTurnRequest {
@@ -111,7 +122,7 @@ export interface ToolTurnRequest {
 }
 
 /** What the turn produced before usage is folded in. */
-type InnerOutcome = Omit<ToolTurnOutcome, 'usage' | 'usageCalls' | 'effort'>;
+type InnerOutcome = Omit<ToolTurnOutcome, 'usage' | 'usageCalls' | 'effort' | 'wireAudit'>;
 
 /**
  * The one turn executor, with token accounting measured rather than inferred.
@@ -127,6 +138,11 @@ export const runToolTurn = async (req: ToolTurnRequest): Promise<ToolTurnOutcome
     let usage = emptyTokenUsage();
     let usageCalls = 0;
     const callerOnUsage = req.transport.onUsage;
+    // The wire audit, collected per CALL — the same discipline as the usage
+    // above: one turn makes several requests, and a turn's record has to say
+    // what EACH of them asked for.
+    const wireAudit: WireAuditEntry[] = [];
+    const callerOnWireAudit = req.transport.onWireAudit;
     const outcome = await runToolTurnInner({
         ...req,
         transport: {
@@ -136,12 +152,23 @@ export const runToolTurn = async (req: ToolTurnRequest): Promise<ToolTurnOutcome
                 usageCalls += 1;
                 callerOnUsage?.(frame);
             },
+            onWireAudit: (entry: WireAuditEntry) => {
+                wireAudit.push(entry);
+                callerOnWireAudit?.(entry);
+            },
         },
     });
     // The effort rides out HERE, on the one return every path shares: the
     // inner executor never sees a tier, so there is exactly one place that
-    // stamps it and every caller records the same value.
-    return { ...outcome, usage, usageCalls, effort: req.effort };
+    // stamps it and every caller records the same value. The wire audit
+    // rides out beside it, for the same reason.
+    return {
+        ...outcome,
+        usage,
+        usageCalls,
+        effort: req.effort,
+        wireAudit: wireAudit.length > 0 ? wireAudit : undefined,
+    };
 };
 
 const runToolTurnInner = async (req: ToolTurnRequest): Promise<InnerOutcome> => {
