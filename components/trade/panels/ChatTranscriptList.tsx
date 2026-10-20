@@ -23,6 +23,7 @@ import MemoryProvenanceStrip from '../../chat/MemoryProvenanceStrip';
 import KeyLevelsCard from '../KeyLevelsCard';
 import { proposalStateOf as sharedProposalStateOf, rememberProposalState } from '../../../services/trade/proposalDisposition';
 import { CopyChip, FadingText, PinChip, RetryChip, ThinkingTierChip } from '../../shared/chatChips';
+import AnswerBody from '../../shared/AnswerBody';
 
 /** Per-entry disposition of a model proposal card ('logged' / 'dismissed')
  *  moved to `services/trade/proposalDisposition` when the Chat surface grew a
@@ -172,7 +173,16 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                     ) : (
                         <div className="space-y-1">
                             {e.speaker && (
-                                <p className="font-mono text-ui-2xs uppercase tracking-widest text-zinc-500">{formatSeatLabel(e.speaker.split(':')[1] ?? e.speaker)}</p>
+                                /* WHO said it, quietly. The reference stamps
+                                    nothing above a message; August has to name
+                                    the seat, so it keeps a label — but it
+                                    stops SHOUTING it. The uppercase monospace
+                                    stamp on every row read like a log line in
+                                    a conversation. */
+                                <p className="flex items-center gap-1.5 text-ui-2xs text-zinc-500">
+                                    <span className="h-1 w-1 shrink-0 rounded-full bg-zinc-600" aria-hidden="true" />
+                                    {formatSeatLabel(e.speaker.split(':')[1] ?? e.speaker)}
+                                </p>
                             )}
                             <ChatWorkTimeline entry={e} />
                             {/* An interrupted run is a half-written answer with no
@@ -194,7 +204,7 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                             )}
                             <div className="text-ui-base leading-relaxed text-zinc-200">
                                 {shownText
-                                    ? <FadingText text={shownText} streaming={!!e.streaming} />
+                                    ? <AnswerBody text={shownText} streaming={!!e.streaming} />
                                     : null}
                             </div>
                             {shownText && !e.streaming && (

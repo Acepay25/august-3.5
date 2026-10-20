@@ -1007,3 +1007,53 @@ into the joined text and the tool rows are matched positionally).
 **Gates.** `typecheck` ok · `vitest` 5156 in 503 · `lint` 0 errors / 655
 warnings · `build` ok · `render-probe` ok, zero pageerrors ·
 `check-flow-doc-anchors` 306 anchors, 0 unattributed, cited-line quality 0/0.
+## 24. E-54 — The reference's voice: the answer is prose, and the row stops shouting (2026-10-21)
+
+**Proposal:** `docs/plan/reference-voice.md` (E-54). **Covers:** **O-133**.
+
+It was the owner's report after E-52 landed — *"the current UI is nowhere near
+similar to the reference image… the chart ai still look the same and even the
+chat surface"* — and it was true: **not one of E-52's eighteen gaps was about
+the face of the thing.** The transcript said the right things and wore the
+same chrome as before.
+
+**What the reference does, and August did not:**
+
+- The answer is a **serif prose column** — a reading face, not the
+  interface's sans. Every answer in the reference set is.
+- **Nothing is stamped above a message.** The reference identifies a turn by
+  the turn; August stamped every row — user rows included — with an uppercase
+  monospace label, and printed the time **twice** (in the stamp and in the
+  row's own action row).
+- The work says it is **running**, in the app's running hue: the reference's
+  activity dots are warm, August's were grey.
+- And there was **no one home** for any of it: the Chat surface and the
+  Chart AI dock each rendered their own row, which is how the two drifted
+  apart in the first place.
+
+**What landed.**
+
+- `components/shared/AnswerBody.tsx` (new) is the **ONE home for the answer's
+  voice**, and both conversation surfaces mount it. The model's answer is
+  prose and wears the serif; the trader's own message stays in the UI sans —
+  in the reference the human's bubble is interface, not prose.
+- The row **stopped shouting**: the seat is named by a quiet dot and a name,
+  and the time moved out of the label into the action row, where it was
+  already printed and where the reference puts it.
+- The running dots are **warm** (the app's running hue is amber).
+- `FadingText` now **adds** the caller's class to the base rules instead of
+  replacing them, so a caller can say "this answer is serif" without losing
+  the size and the paragraph rhythm every answer shares.
+- `docs/ui-doctrine.md` records the amendment in words: the answer IS a
+  display moment. The boundary is written down too — the trader's words, the
+  work card, the chips and the composer stay in the UI sans.
+
+**What this does NOT close.** The Chart AI dock's empty state (the reference
+set has none to copy); the work card's interior (the reference's is a
+hairline-separated list of steps); a **text** serif (the app's DM Serif Text
+is a display face with one weight, so a bold level is a synthetic bold — a
+font decision, not a styling tweak); and E-52's **G-12** and **G-15**.
+
+**Gates.** `typecheck` ok · `vitest` 5174 in 505 · `lint` 0 errors / 656
+warnings · `build` ok · `render-probe` ok, zero pageerrors ·
+`check-flow-doc-anchors` 306 anchors, 0 unattributed, cited-line quality 0/0.
