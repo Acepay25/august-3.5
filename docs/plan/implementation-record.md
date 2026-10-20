@@ -307,3 +307,158 @@ and vLLM use:
   (`CONTEXT FULL: … over a N-token ceiling`), but the app does not then summarize
   the dropped history into a digest. Semantic summarization of compacted turns is
   a separate feature and is not built here.
+
+## 9. The register sweep (2026-10-20)
+
+No new plan id. This pass does two things the plan asked for and nobody had
+done: it **closes the rows whose defect was still open in the code**, and it
+**re-measures the rows whose evidence had gone stale**, including several that
+were already fixed by an earlier commit and left marked OPEN. Every closure names
+the `file:line` that proves the fix is in the tree at this commit, and every
+correction says which figure was wrong and what the measurement was.
+
+**A rule this pass followed, stated because it changed outcomes:** a register row
+is a claim about the tree, not a claim about history. Three rows were already
+closed by commits that predate them (`O-54` by `c311dd32`, `O-90`/`O-91` by
+`91b09eb4`/`8682019d`); two rows' `file:line`s had moved while the statement did
+not (`O-75`, `O-59`); and one row was **false in the pessimistic direction**
+(`O-72`: the step ladder is not "muted", it has no importer at all, and neither
+does the thought reader). Checking before implementing is what kept this pass from
+re-building a cost cap the app had already stopped shipping.
+
+### What landed, and where
+
+| Row | The defect | What landed | Verified by |
+| --- | --- | --- | --- |
+| **O-55**, **O-47** | The A/B lane and the prompt fingerprint had three readers and no writer, so the profile card's control/live split and every `promptVersion` on a journal row were `undefined`. | `hooks/useAnalysisPipeline.ts:951` opens the lane per run and `:955` stamps the corpus; both `runStats` builders persist the pair (`:1278-1279`, `:1443-1444`), which is what `hooks/useTradeLogging.ts:428-429` copies onto the trade. The fingerprint is `promptCorpusVersion()` in `services/infrastructure/PromptOverrideService.ts` — it hashes the EDITED-corpus state, so it is stable across builds and moves the moment the trader edits a prompt. It deliberately does NOT hash `PROMPT_REGISTRY`: importing the registry into the run path grew the entry chunk by 18.7 kB and the bundle ratchet is not a thing to loosen. | `tests/promptOverrideService.test.ts`: the lane's three branches, the fingerprint's stability and variation, and two source pins that the writers are still called from the pipeline |
+| **O-60** | The desk mandate ordered the seat to call `get_chart_view`, and the Chat surface's allow-list refuses it — a duty the executor would not honour, which reads to the model as an obligation rather than an absence. | The mandate is composed from the offer set: `deskToolsMandateFor(offered)` (`services/analysis/DeskToolsService.ts:1681`), `withDeskToolsSystemPrompt(…, offeredTools)` (`:3956`), the offer list built at `:4064` from `mergedAllowed` before falling back to the definitions. A home with no chart is told there is NO CHART to read here and must cite the candles; a home with no market read at all is told to name no shape. | `tests/deskSystemPrompt.test.ts` — the invariant that every tool the mandate NAMES is a tool this turn can call — plus the updated source assertion in `tests/promptContract.test.ts` |
+| **O-62** | The prompt promised a *fresh* packet; the code served an 8-second cache and, on a failed fetch, a bare "packet unavailable". | The fence stamps its own age — `packetAgeNote()` at `services/trade/tradeChatContext.ts:90` says `Ns old`, and past a minute `… — STALE: this snapshot predates the last N minute(s); call get_market_packet or get_chart_view for a newer read before you state a price` (into the header at `:128`). A failed fetch writes the `DATA_UNAVAILABLE` sentinel (`:102`) whose text says the state is UNKNOWN rather than missing. The system prompt now claims an age-stamped packet, not a fresh one. | `tests/tradeChatContext.test.ts` (the age, the sentinel, and the prompt's own sentence about it) |
+| **O-65** | Nothing near a streaming transcript was a live region, so an arriving answer was never announced. | `role="log" aria-live="polite" aria-busy=…` on both homes' scroll containers — `components/trade/TradeChatPanel.tsx:1080`, `components/agents/AgentsView.tsx:1346` — each with an `aria-label` naming the conversation. Per-row live regions were rejected deliberately: one per message re-announces the whole transcript on every token. | `tests/tradeChatPanelHarness.test.tsx`, the surface-switch case in `tests/surfaceSwitch.test.tsx` |
+| **O-66** | Seven of eighteen dialogs rendered `role="dialog"` with no trap, no `aria-modal`, no restore. | Five modals now trap and are proven by mounting each one and asserting focus lands inside — `AutomationEditorModal`, `ThinkingModal`, `ImageViewerModal`, `NewBotDialog`, `NewGroupDialog` — plus the two the audit missed: the full-screen `LiveMarket` overlay (`components/market/LiveMarket.tsx:81`, and NOT when it is the embedded panel) and the update overlay's decidable phase (`components/shared/UpdateOverlay.tsx:140`, because `downloading` and `installing` contain nothing focusable and a trap there swallows Tab for minutes). The header's session popover stays a disclosure on purpose — `components/shared/Header.tsx:217` writes no `aria-modal` and Escape/outside-click dismiss it — and now carries `aria-controls` on its trigger. | `tests/useFocusTrap.test.tsx`: the five mounts, and a **population** gate that lexes every `.tsx` under `components/` plus `App.tsx` with the shared `jsxScan` and refuses any element that writes `aria-modal` without carrying the `useFocusTrap()` ref on that same tag. Reach is floored at the 18 measured sites, six named members must be in the set, two planted defects prove both finding branches fire, and a disclosure-only fixture proves it does not over-refuse. |
+| **O-53** | Four user-visible strings still named the deleted engine. | The editor's validation error is "Pick the model this run answers with." under a plain "Model" label (`components/automation/AutomationEditorModal.tsx:247`, `:508`); the journal's pre-merge badge reads `Ensemble (legacy)` (`components/journal/TradeLog.tsx:352`); the monthly card header says "Grade the panel — legacy debate rows only" (`components/journal/MonthlyReportCard.tsx:62`) and `services/learning/monthlyReport.ts` labels those columns legacy; `moderator` is out of the Settings search keywords. | grep over `components/**.tsx` — the two words survive only as code identifiers, in comments, and on these legacy-labelled rows |
+| **O-73** | "The desk home, which runs the longest jobs, has no Stop." | It has one, on both homes: `aria-label={busy ? 'Stop' : 'Send'}` at `components/trade/panels/ChatComposer.tsx:213` and the `(busy \|\| analysisRunning)` form at `components/agents/AgentsView.tsx:1515`. Recorded as verified rather than newly built — the row's premise is retired, and `ChatComposer.tsx:51-54` documents that a Stop which aborts only the chat turn is a lie. | read at the two cited lines |
+| **O-54**, **O-90**, **O-91**, **O-92** | Rows the code had already out-fixed. | The cost-cap setting is deleted at both ends (`debateCostCapUsd` has no declaration and no reader; the panel says so at `components/settings/SessionUsagePanel.tsx:132`); `surface-census.cjs` measures each surface at its own `ROOTS` entry (`:215`) and Settings at its dialog root; `ui-inspect.cjs` contains no `7` at all and reads the live switch population; the dead default `NavRail` import is gone (`App.tsx:128` imports only `AccountRow` and the collapse constant, both used). | grep, plus `tests/deadControlsGuard.test.ts:145`, which pins that no `<NavRail` is ever rendered |
+
+### Corrections to the register (the numbers were the point)
+
+- **O-69** — "17 call sites, 0 pass `action=`" was wrong on both halves. Measured
+  today: **14** sites, and **1** passes `action=` (the journal's "Nothing is
+  classified yet" offers "Show all trades" — `components/journal/TradeLog.tsx:724`).
+  The prop exists and renders (`components/ui/EmptyState.tsx:14`, `:93-101`); what
+  is missing is 13 decisions about what each empty state's next action actually
+  IS, which is the trader's call, not a sweep.
+- **O-71** — 20 `fallback={null}` is now **17**, measured.
+- **O-72** — the ladder is not "imported but not mounted". `AnalysisProgress.tsx`
+  and `ThinkingModal.tsx` both have **zero** production importers. Recorded as
+  worse than the register said, and folded into **E-50**'s orphan census.
+- **O-129** — `debatePods.ts` comes off the list (deleted; it is one of the 25
+  files `git log --diff-filter=D` names under `services/providers/`) and
+  `ThinkingModal.tsx` goes on it. Every figure in the row predates the debate
+  deletion, the roster deletion and the context-window pass, so the graph must be
+  re-run before the E-50 batches are cut.
+- **O-75** — `'Logging in 15s'` moved from `:55` to
+  `hooks/useWatchSideEffects.ts:70`, and `tests/planE18Settlement.test.ts:101`
+  pins that exact copy, so the countdown is a tested behavior rather than an
+  accident. Still the trader's number to choose.
+- **O-59** — the definitions array is now `services/analysis/DeskToolsService.ts:871`,
+  spanning `:871-1485`, and carries **35** `name:` fields, not 39 (measured by
+  brace depth over that span). The ~7,864-token figure is the audit's own estimate
+  and has not been re-derived here.
+- **`docs/app-flow.md`** — the provider-directory census said "twenty-four files…
+  the other fifteen". `git log --diff-filter=D --name-only --format= --
+  services/providers/` names **25**, of which 9 were provider clients, so the
+  sentence now says twenty-five and sixteen and enumerates the sixteen. The
+  anchor gate's own census rule caught it; the paragraph is now the recipe's
+  output rather than a remembered number.
+
+### The gates this sweep ran, with their own figures
+
+Every exit code below is read from the log's own `*_EXIT=` marker, not from a
+pipeline. The first column is the run that measured the sweep tree; the
+combined-tree re-run (sweep + E-51 Phase 1) is in §10.
+
+| Gate | Result |
+| --- | --- |
+| `npm run typecheck` | `TYPECHECK_EXIT=0`, no diagnostics |
+| `npm run lint` | **0 errors / 657 warnings** (the ratchet cap is 659, so the pass had to *lower* the count — it went from 659 to 657) |
+| `npm run test` | **5028 tests in 494 files**, 0 failed (298 s idle) |
+| `npm run check-flow-doc-anchors` | **303 anchors verified, 0 unattributed**; cited-line quality 0/0; providers census **0 findings — git names 25 deleted files, 6 remain** |
+| `npm run build` | ok, entry **1367 KiB** by the guard's own `bytes/1024` measurement (ceiling 1400) |
+| `npm run boot-probe` | ok, prod bundle boots, trade surface + dock render, zero pageerrors |
+| `npm run render-probe` | **113 checks, 0 failures**, zero pageerrors |
+
+Not re-run here, and saying so instead of implying it: `skill-approval-probe`
+(drives the approvals inbox, which this sweep does not touch) and
+`installer-smoke`. §8 records their last measurements.
+
+## 10. E-51 Phase 1 — the merged model panel, unwired (2026-10-20)
+
+`docs/plan/model-menu-redesign.md` is **untracked work the owner wrote** on
+2026-10-20 (all four rulings answered, nothing implemented). This is Phase 1 of
+its four, whose whole point is that the panel is extracted and tested with
+**no surface wired to it** — the composer, the Chat surface and `ModelPicker`
+keep their present controls until Phases 2 and 3 replace them.
+
+| File | What it is |
+| --- | --- |
+| `components/shared/ModelMenu.tsx` | new: the portaled panel. Provider row with the constant `API` badge (ruling D-C) that opens a right-hand provider panel on click **and** hover; the active provider's models only, ready providers only; `Vision` from `isVisionModel`, `free` from `isFreeModelId`, the star toggle, the shared free-only pref, one `Manage providers` row (not the reference's two names for one destination); a six-stop `role="slider"` whose `aria-valuetext` is the tier LABEL, never the index; Escape contained to the innermost panel; roving arrow-key focus with Home/End; focus returns to the trigger. |
+| `components/shared/effortScale.ts` | new: the ladder moved out of `EffortChip` (`EFFORT_CHOICES`, `effortChoiceOf`, plus `effortIndexOf` / `effortAtIndex` for the slider), re-exported from `EffortChip` so every existing importer is unchanged. One owner, because the trigger will print the tier and the slider will edit it. |
+| `utils/providerUtils.ts` | `STARRED_MODELS_KEY`, `readStarredModels`, `writeStarredModels` beside the free-only pref — the star list was a `localStorage` literal copied into two components. Same key, same bytes; a ModelChip star still sorts the panel's list. |
+| `components/shared/ModelChip.tsx` | the star read/write now goes through that owner. No behaviour change. |
+| `App.tsx` | unchanged. The dead `import ModelPicker` (O-130's G-7, one occurrence, nothing renders it) is **still there on purpose**: `App.tsx` is the file the flow docs cite by line number more than any other, and deleting one line near the top invalidates every one of them at once. Phase 2 rewrites this file's composer wiring anyway and re-anchors `docs/app-flow.md` as part of its own gate list, so the import goes out with the pass that can pay for the re-measurement. Verified: removing it here turned `App.tsx:2014` into a comment line and the anchor gate said so. |
+| `tests/modelMenu.test.tsx` | new: 15 tests, mounting the panel only. |
+
+### The two gates that bound this work, and what they caught
+
+`radiusRamp` and `themeContrast`'s clipped-text rule both went red on the new
+file, and both were **right**:
+
+- two `API` badges were written `rounded` — an off-token radius, and that gate
+  holds its floor **by name** (`FLOOR_INVENTORY`), so a new entry fails the
+  inventory even if the count somehow fit. Now `rounded-control`.
+- three `truncate` spans clipped text whose full value was only reachable by
+  the ancestor's `title`. The rule wants the clipped element itself to name the
+  text. Each span now carries its own `title`.
+
+The ceilings were not moved. `BASELINE = 9` and the clipped-text ceiling of `0`
+are both still what they were before this file existed.
+
+### Correctness notes found by reading, not by a red gate
+
+- **The layout effect must not depend on the `anchor` object.** A parent that
+  builds its own `DOMRect` each render would re-run the measure every render,
+  and `setPos(freshObject)` is an identity change, so it would be an infinite
+  loop, not a reposition. The deps are the anchor's three numbers now, and the
+  setter returns `prev` unless a coordinate actually moved. The test suite
+  cannot see this (it passes a module-level constant), which is exactly why it
+  is written down here.
+- **`ArrowLeft` was unreachable** behind the `if (providersOpen) return` guard —
+  the inner panel could be opened but not backed out of by keyboard. The guard
+  now handles Left before returning.
+- **The Escape-containment test can fail.** Proved by deleting
+  `e.stopPropagation()` from the panel's key handler: the planted document-level
+  listener then fires and the test goes red (`1 failed | 14 passed`), and it
+  passes again when the line is restored. A containment assertion that cannot
+  fail would be documenting nothing.
+
+### Gates
+
+All measured on the final tree (sweep + Phase 1), each read from its own
+`*_EXIT=` marker:
+
+| Gate | Result |
+| --- | --- |
+| `npm run typecheck` | ok, 0 errors |
+| `npm run typecheck:scripts` / `typecheck:electron` | ok, 0 errors |
+| `npm run lint` | **0 errors / 657 warnings** (cap 659) |
+| `npm run test` | **5043 tests in 495 files**, 0 failed, 0 skipped (384 s) |
+| `npm run build` | ok, entry **1367 KiB** — unchanged, because nothing imports `ModelMenu` yet, so it is not in the startup graph |
+| `npm run boot-probe` | ok, zero pageerrors |
+| `npm run render-probe` | **113 checks, 0 failures** — run against the combined tree, and it is the gate that would have caught a composer regression had Phase 1 accidentally touched one |
+| `npm run e2e` | 5 passed |
+| `npm run check-flow-doc-anchors` | **303 anchors verified, 0 unattributed**; cited-line quality 0/0 |
+
+**What Phase 1 does NOT do:** no surface changed. `ModelChip`, `EffortChip` and
+`ModelPicker` still render where they render today, so the trader sees nothing
+different, and `O-130`/`O-68` are **not** closed — the panel is one
+implementation until Phase 3 makes `ModelPicker` mount it too.

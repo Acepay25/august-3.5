@@ -16,9 +16,7 @@
 import React, { useState } from 'react';
 import { Check, ChevronDown, StarIcon } from './Icons';
 import type { ProviderConfig } from '../../types/provider';
-import { formatModelDisplayName, isFreeModelId, isProviderReady } from '../../utils/providerUtils';
-
-const STARRED_KEY = 'august_starred_models_v1';
+import { formatModelDisplayName, isFreeModelId, isProviderReady, readStarredModels, writeStarredModels } from '../../utils/providerUtils';
 
 export interface ModelChipProps {
     providers: ProviderConfig[];
@@ -39,15 +37,11 @@ const ModelChip: React.FC<ModelChipProps> = ({
 }) => {
     const [query, setQuery] = useState('');
     const [open, setOpen] = useState(false);
-    const [starred, setStarred] = useState<string[]>(() => {
-        try { return JSON.parse(localStorage.getItem(STARRED_KEY) ?? '[]') as string[]; }
-        catch { return []; }
-    });
+    const [starred, setStarred] = useState<string[]>(readStarredModels);
     const toggleStar = (v: string): void => {
         setStarred(prev => {
             const next = prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v];
-            try { localStorage.setItem(STARRED_KEY, JSON.stringify(next)); }
-            catch { /* private mode — stars just do not persist */ }
+            writeStarredModels(next);
             return next;
         });
     };
