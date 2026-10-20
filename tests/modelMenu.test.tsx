@@ -11,7 +11,7 @@
  * yet (Phase 2 does that), so a regression here cannot reach the trader — and a
  * defect found here is cheaper than one found in a composer.
  *
- * Rows are addressed by `data-testid="model-row-<raw model id>"` rather than by
+ * Rows are addressed by `data-testid="model-row-<providerId>::<modelId>"` rather than by
  * their visible text on purpose: `formatModelDisplayName` pretty-prints the
  * slug ("deepseek-chat" → "Deepseek Chat"), and a test that hardcodes the
  * pretty form breaks when the pretty-printer is corrected.
@@ -44,9 +44,12 @@ const PROVIDERS: ProviderConfig[] = [
     mkProvider({ id: 'keyless', name: 'Keyless One', apiKey: '', isEnabled: false, models: ['ghost-model'] }),
 ];
 
-const rowOf = (modelId: string): HTMLElement => screen.getByTestId(`model-row-${modelId}`);
-const pickButton = (modelId: string): HTMLElement =>
-    within(rowOf(modelId)).getByRole('menuitemradio');
+/** Rows are keyed by the pair, because a model id on its own is not unique
+ *  across providers — the same slug on two providers is two choices. */
+const rowOf = (providerId: string, modelId: string): HTMLElement =>
+    screen.getByTestId(`model-row-${providerId}::${modelId}`);
+const pickButton = (providerId: string, modelId: string): HTMLElement =>
+    within(rowOf(providerId, modelId)).getByRole('menuitemradio');
 
 interface HarnessProps {
     effort?: EffortChoice;
@@ -107,34 +110,34 @@ describe('ModelMenu — the models section', () => {
 
     it('lists the active provider\'s models ONLY, and a provider with no key is not offered', () => {
         render(<Harness />);
-        expect(rowOf('deepseek-chat')).toBeTruthy();
-        expect(rowOf('deepseek-reasoner')).toBeTruthy();
-        expect(screen.queryByTestId('model-row-tencent/hy3:free')).toBeNull();
-        expect(screen.queryByTestId('model-row-ghost-model')).toBeNull();
+        expect(rowOf('deepseek', 'deepseek-chat')).toBeTruthy();
+        expect(rowOf('deepseek', 'deepseek-reasoner')).toBeTruthy();
+        expect(screen.queryByTestId('model-row-openrouter::tencent/hy3:free')).toBeNull();
+        expect(screen.queryByTestId('model-row-keyless::ghost-model')).toBeNull();
     });
 
     it('badges the vision model and the free model, and checks the selected row', () => {
         render(<Harness />);
-        expect(pickButton('deepseek-chat').getAttribute('aria-checked')).toBe('true');
-        expect(pickButton('deepseek-reasoner').getAttribute('aria-checked')).toBe('false');
-        expect(within(rowOf('deepseek-chat')).queryByText('Vision')).toBeNull();
+        expect(pickButton('deepseek', 'deepseek-chat').getAttribute('aria-checked')).toBe('true');
+        expect(pickButton('deepseek', 'deepseek-reasoner').getAttribute('aria-checked')).toBe('false');
+        expect(within(rowOf('deepseek', 'deepseek-chat')).queryByText('Vision')).toBeNull();
         fireEvent.click(screen.getByTestId('model-menu-provider-row'));
         fireEvent.click(within(screen.getByTestId('model-menu-providers'))
             .getByRole('menuitemradio', { name: /OpenRouter/ }));
-        expect(within(rowOf('xiaomi/mimo-v2-flash:vision')).getByText('Vision')).toBeTruthy();
-        expect(within(rowOf('tencent/hy3:free')).getByText('free')).toBeTruthy();
+        expect(within(rowOf('openrouter', 'xiaomi/mimo-v2-flash:vision')).getByText('Vision')).toBeTruthy();
+        expect(within(rowOf('openrouter', 'tencent/hy3:free')).getByText('free')).toBeTruthy();
         // Nothing from the old provider is left in the list.
-        expect(screen.queryByTestId('model-row-deepseek-chat')).toBeNull();
+        expect(screen.queryByTestId('model-row-deepseek::deepseek-chat')).toBeNull();
     });
 
     it('stars a model, persists the pair id, and sorts it to the top', async () => {
         render(<Harness />);
-        fireEvent.click(within(rowOf('deepseek-reasoner')).getByRole('button', { name: /^Star / }));
+        fireEvent.click(within(rowOf('deepseek', 'deepseek-reasoner')).getByRole('button', { name: /^Star / }));
         expect(JSON.parse(localStorage.getItem(STARRED_MODELS_KEY) ?? '[]')).toContain('deepseek::deepseek-reasoner');
         await waitFor(() => expect(screen.getByTestId('model-menu-rows').children[0])
-            .toHaveAttribute('data-testid', 'model-row-deepseek-reasoner'));
+            .toHaveAttribute('data-testid', 'model-row-deepseek::deepseek-reasoner'));
         // And it unstars to the stored list again.
-        fireEvent.click(within(rowOf('deepseek-reasoner')).getByRole('button', { name: /^Unstar / }));
+        fireEvent.click(within(rowOf('deepseek', 'deepseek-reasoner')).getByRole('button', { name: /^Unstar / }));
         await waitFor(() => expect(JSON.parse(localStorage.getItem(STARRED_MODELS_KEY) ?? '[]')).toEqual([]));
     });
 
@@ -144,7 +147,7 @@ describe('ModelMenu — the models section', () => {
         expect(localStorage.getItem(FREE_ONLY_STORAGE_KEY)).toBe('1');
         expect(screen.getByTestId('model-menu-free-only').getAttribute('aria-pressed')).toBe('true');
         // Neither DeepSeek model is free, so the list is now empty of them.
-        expect(screen.queryByTestId('model-row-deepseek-chat')).toBeNull();
+        expect(screen.queryByTestId('model-row-deepseek::deepseek-chat')).toBeNull();
     });
 });
 
@@ -160,7 +163,7 @@ describe('ModelMenu — the provider panel', () => {
         expect(screen.getByTestId('model-menu-provider-row').getAttribute('aria-expanded')).toBe('true');
         fireEvent.click(within(panel).getByRole('menuitemradio', { name: /OpenRouter/ }));
         expect(screen.queryByTestId('model-menu-providers')).toBeNull();
-        expect(rowOf('tencent/hy3:free')).toBeTruthy();
+        expect(rowOf('openrouter', 'tencent/hy3:free')).toBeTruthy();
     });
 
     it('offers ONE destination for provider config, not two', () => {
@@ -198,7 +201,7 @@ describe('ModelMenu — the effort section', () => {
         expect(screen.queryByTestId('model-menu-effort')).toBeNull();
         expect(screen.queryByTestId('effort-slider')).toBeNull();
         // The models section is untouched by the rule.
-        expect(rowOf('deepseek-chat')).toBeTruthy();
+        expect(rowOf('deepseek', 'deepseek-chat')).toBeTruthy();
     });
 });
 
@@ -207,15 +210,15 @@ describe('ModelMenu — the keyboard', () => {
         render(<Harness />);
         const menu = screen.getByTestId('model-menu');
         // Focus entered the panel on the SELECTED row.
-        expect(document.activeElement).toBe(pickButton('deepseek-chat'));
+        expect(document.activeElement).toBe(pickButton('deepseek', 'deepseek-chat'));
         fireEvent.keyDown(menu, { key: 'ArrowDown' });
-        expect(document.activeElement).toBe(pickButton('deepseek-reasoner'));
+        expect(document.activeElement).toBe(pickButton('deepseek', 'deepseek-reasoner'));
         fireEvent.keyDown(menu, { key: 'End' });
-        expect(document.activeElement).toBe(pickButton('deepseek-reasoner'));
+        expect(document.activeElement).toBe(pickButton('deepseek', 'deepseek-reasoner'));
         fireEvent.keyDown(menu, { key: 'Home' });
-        expect(document.activeElement).toBe(pickButton('deepseek-chat'));
+        expect(document.activeElement).toBe(pickButton('deepseek', 'deepseek-chat'));
         fireEvent.keyDown(menu, { key: 'ArrowUp' });
-        expect(document.activeElement).toBe(pickButton('deepseek-chat'));
+        expect(document.activeElement).toBe(pickButton('deepseek', 'deepseek-chat'));
     });
 
     it('Right opens the provider panel and Left closes it', () => {
@@ -255,7 +258,7 @@ describe('ModelMenu — the keyboard', () => {
     it('picking a model writes the pair and closes', () => {
         const onPick = vi.fn();
         render(<Harness onPick={onPick} />);
-        fireEvent.click(pickButton('deepseek-reasoner'));
+        fireEvent.click(pickButton('deepseek', 'deepseek-reasoner'));
         expect(onPick).toHaveBeenCalledWith('deepseek::deepseek-reasoner');
         expect(screen.queryByTestId('model-menu')).toBeNull();
     });

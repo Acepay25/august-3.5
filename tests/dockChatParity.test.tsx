@@ -20,7 +20,7 @@ import { readFileSync } from 'fs';
 const panelSrc = readFileSync('components/trade/TradeChatPanel.tsx', 'utf8');
 const viewSrc = readFileSync('components/trade/TradeView.tsx', 'utf8');
 const appSrc = readFileSync('App.tsx', 'utf8');
-const pickerSrc = readFileSync('components/shared/ModelPicker.tsx', 'utf8');
+const pickerSrc = readFileSync('components/shared/ModelMenu.tsx', 'utf8');
 
 /** The dock's "Start"/customization menu body. */
 const newMenu = (): string => {

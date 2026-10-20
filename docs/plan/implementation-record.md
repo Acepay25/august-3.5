@@ -541,3 +541,88 @@ keeps its `ModelPicker`/`SymbolPicker`/`SelectMenu` half. The dead
 — it costs a doc re-anchor, and Phase 3 rewrites that file's picker anyway.
 `O-56`/`E-39`'s *default* tier is untouched: this makes the tier visible and
 settable beside the model, which is the UI half the proposal claims.
+
+## 12. E-51 Phase 3 — one implementation: the picker mounts the same panel (2026-10-21)
+
+`ModelPicker` is now a trigger. Its two-column hover flyout, its own free-only
+checkbox, its own positioner and its own portal are gone; the body is the same
+`ModelMenu` the composers mount, so there is one model menu in the app (G-4).
+The 625-line file is 200.
+
+What the picker had that the panel did not, and so had to be inherited rather
+than merely deleted:
+
+- **The flat cross-provider search.** `ModelMenu` listed only the selected
+  provider's models, which is right for a composer and wrong for a box that
+  implies "find it wherever it lives". The rows are now keyed by the
+  `provider::model` PAIR (`data-testid="model-row-alpha::gpt-4o"`) because the
+  same slug on two providers is two choices, and a search hit names its provider
+  in WORDS — the old flyout printed the raw provider id there, which is not
+  something a trader can read off a list.
+- **`disabledValues`.** The panel seat picker greys a model that already holds a
+  seat; the row renders `disabled`, and the click is refused rather than silently
+  ignored.
+- **The discovery feedback word.** `ModelMenu` had an icon-only refresh;
+  `ModelPicker` had 'Refreshing…' / 'Updated!'. The panel now takes a
+  `refreshState` prop and prints the word while it is not idle, so the icon
+  stays quiet in the composer and a Settings user still sees that discovery ran.
+- **`mode`.** `provider-model` writes `"p::m"`; `model-only` opens on the
+  provider that owns the stored id and writes the bare `"m"` back.
+  `provider-only` — declared, never rendered anywhere — is deleted (G-7).
+- **One `Manage providers` row**, only when the host can route to Settings. A row
+  with no handler is the dead affordance this repo's probes keep catching.
+- **`onMouseDownCapture`/`onPointerDownCapture` stopPropagation moved WITH the
+  flyout into `ModelMenu`.** This is not cosmetic: the picker sits inside
+  `AutomationEditorModal`, whose host closes on any document-level
+  outside-mousedown, and the panel is portaled to `document.body` — without the
+  guard the modal tears itself down mid-pick.
+- **Close on scroll and resize**, ignoring a scroll inside the panel's own list.
+  A `fixed` panel that stays put while the page moves under it is detached
+  chrome.
+
+**A behaviour deliberately NOT "fixed" while passing through.** The old picker
+flagged a stale pick as `· unavailable` when its PROVIDER was not ready, and
+said nothing when a qualified pair named a model the catalog did not list. That
+asymmetry looks like an oversight and is not: a user-typed custom model id is a
+real selection that answers even when `/models` never listed it, so marking it
+unavailable would refuse to run a model that works. A test pins the direction
+(`does NOT flag a model id the catalog omits but the provider can still serve`)
+so the next reader does not "tidy" it into a false alarm.
+
+**A latent bug the rewrite removed.** The old refresh effect returned a cleanup
+closure from the `august:model-refresh-end` HANDLER, where nothing reads it, so
+the 2 s 'Updated!' timer was never cleared and could flip state on an unmounted
+picker. The new effect owns the timer and clears it on unmount.
+
+### Retargeted source guards
+
+Two repo-wide source pins named `ModelPicker` for behaviour that now lives in
+`ModelMenu`; both were moved rather than deleted, and one was loosened in the
+direction of the property it defends:
+
+- `tests/flyoutMarginSingleSource.test.ts` walks `ModelMenu.tsx` + `SelectMenu.tsx`
+  now. Its "neither declares its own" arm asserted the exact alias line
+  `const VIEWPORT_MARGIN = FLYOUT_VIEWPORT_MARGIN;`, which is a SPELLING, not the
+  rule; it now refuses a local NUMBER and separately requires each file to
+  subtract the shared constant, so an import nobody uses still fails.
+- `tests/dockChatParity.test.tsx` reads the `text-left` search pin from
+  `ModelMenu.tsx`.
+- `components/shared/flyoutLayout.ts`'s own docblock named `ModelPicker` as one of
+  the two positioners; it says `ModelMenu` now. A stale name lies after a move.
+
+### Gates, measured on this tree
+
+| Gate | Result |
+| --- | --- |
+| `npm run typecheck` / `typecheck:scripts` | ok, 0 errors |
+| `npm run lint` | **0 errors / 656 warnings** (cap 659; deleting the flyout removed one warning) |
+| `npm run test` | **5053 tests in 495 files**, 0 failed, 0 skipped |
+| `npm run build` | ok, entry **1376 KiB** (ceiling 1400) — +2 KiB over Phase 2 |
+| `npm run boot-probe` | ok, zero pageerrors |
+| `npm run render-probe` | **115 checks, 0 failures**, zero pageerrors |
+
+`tests/modelPicker.test.tsx` went 13 → 21 tests: the readiness parity guard is
+unchanged in intent (it still asserts against
+`providerUtils.isProviderReady`, not a snapshot of its rule), and the added
+coverage is exactly what the merge promised — one panel, no second portal, no
+second copy of the preferences, and the two value shapes.

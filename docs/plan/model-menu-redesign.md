@@ -1,12 +1,13 @@
 # E-51 — The composer's model menu: one control for provider, model and effort
 
 **Status:** IN PROGRESS — **all four rulings ANSWERED (owner, 2026-10-20)**;
-**Phases 1 and 2 landed 2026-10-20/21** (`implementation-record.md` §10–§11),
-Phases 3 and 4 have not. The §0 scan below describes the tree BEFORE this work
-and is kept as written: `EffortChip.tsx` is deleted, `ModelChip` mounts the new
-`ModelMenu`, and both composers now carry one control in the card. See §3 for
-what each answer commits, and §11 of the record for the one criterion this pass
-could NOT measure (the unwrapped dock row).
+**Phases 1, 2 and 3 landed 2026-10-21** (`implementation-record.md` §10–§12);
+Phase 4 — the shortcut and the hint — has not. The §0 scan below describes the
+tree BEFORE this work and is kept as written: `EffortChip.tsx` is deleted,
+`ModelChip` and `ModelPicker` both mount the one `ModelMenu`, and both composers
+carry a single control in the card. See §3 for what each answer commits, and
+§11 of the record for the one criterion this pass could NOT measure (the
+unwrapped dock row).
 **Owner:** the trader. **Covers:** **O-68** (the pickers are unusable without sight) and
 the doctrine's *one home per concern* rule.
 **Adjacent to, and deliberately not fixing:** **O-56 / E-39** — the *default* tier for a

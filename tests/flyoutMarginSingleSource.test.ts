@@ -15,27 +15,28 @@ import { FLYOUT_VIEWPORT_MARGIN } from "../components/shared/flyoutLayout";
  * the kind of inconsistency that gets reported as "the menus look off" with no
  * way to point at the cause.
  *
- * Both are the shared RULE only. The positioning itself remains two
- * implementations, and deliberately so: `ModelPicker` clamps horizontally and
- * is handed a trigger rect, `SelectMenu` measures the window directly and
- * estimates its own height. That difference is stated in the module so the
- * next reader treats it as a decision rather than an oversight.
+ * The pair moved on 2026-10-21: `ModelPicker`'s body became `ModelMenu` (E-51
+ * Phase 3), so the two files that position a flyout are now `ModelMenu` and
+ * `SelectMenu`, and the naming of THIS guard follows that. What did not move is
+ * the rule it defends — no flyout may invent a margin — and the two positioning
+ * implementations are still two on purpose, which `flyoutLayout.ts` states.
  */
 
-const picker = readFileSync("components/shared/ModelPicker.tsx", "utf8");
+const panel = readFileSync("components/shared/ModelMenu.tsx", "utf8");
 const menu = readFileSync("components/shared/SelectMenu.tsx", "utf8");
 const layout = readFileSync("components/shared/flyoutLayout.ts", "utf8");
 
 describe("the flyout margin has one home", () => {
   it("neither component declares its own", () => {
-    for (const src of [picker, menu]) {
-      expect(src).not.toMatch(/^\s*const VIEWPORT_MARGIN = \d+;/m);
-      expect(src).toMatch(/const VIEWPORT_MARGIN = FLYOUT_VIEWPORT_MARGIN;/);
+    for (const src of [panel, menu]) {
+      // The property, not the spelling: a local alias is fine, a local NUMBER
+      // is the defect. `ModelMenu` subtracts the imported constant directly.
+      expect(src).not.toMatch(/const VIEWPORT_MARGIN = \d+;/);
     }
   });
 
   it("both import the canonical value", () => {
-    expect(picker).toMatch(/import \{ FLYOUT_VIEWPORT_MARGIN \} from '\.\/flyoutLayout'/);
+    expect(panel).toMatch(/import \{ FLYOUT_VIEWPORT_MARGIN \} from '\.\/flyoutLayout'/);
     expect(menu).toMatch(/import \{ FLYOUT_VIEWPORT_MARGIN \} from '\.\/flyoutLayout'/);
   });
 
@@ -46,10 +47,10 @@ describe("the flyout margin has one home", () => {
     expect(layout).toMatch(/FLYOUT_VIEWPORT_MARGIN = 8/);
   });
 
-  it("both still USE it, so the alias is not decorative", () => {
-    // The components kept their local name for readability. Asserting only
-    // the import would pass even if every usage had been deleted.
-    expect(picker).toMatch(/- VIEWPORT_MARGIN/);
+  it("both still USE it, so the import is not decorative", () => {
+    // Asserting only the import would pass even if every usage had been
+    // deleted — which is what a component rewrite does by accident.
+    expect(panel).toMatch(/- FLYOUT_VIEWPORT_MARGIN/);
     expect(menu).toMatch(/- VIEWPORT_MARGIN/);
   });
 
