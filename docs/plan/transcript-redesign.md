@@ -124,10 +124,15 @@ Stated here so the register is not read as more than it is.
   now names the *trace* rather than the turn, so a row that is closed is
   visibly closed. But a row that has **no** trace and a row whose trace the
   model withheld are still the same shape. The honest fix needs a marker the
-  provider sends, not a UI decision.
-- **G-5** (`onWireAudit` never supplied) is **not** closed. The hook is still
-  declared and still unsupplied: it is the seam for a wire-audit panel, and
-  building that panel is a separate proposal.
+  provider sends, not a UI decision. **→ Closed further by E-53**
+  (`docs/plan/wire-audit.md`): the transport's own decision IS that marker,
+  and the answer now says WHY there is no trace. What remains is the narrower
+  case — a trace the provider was asked for and never returned.
+- **G-5** (`onWireAudit` never supplied) is **not** closed by this pass. The
+  hook is still declared and still unsupplied: it is the seam for a wire-audit
+  panel, and building that panel is a separate proposal. **→ Closed by E-53**
+  (`docs/plan/wire-audit.md`): the audit rides out on the turn's outcome and
+  the row draws it.
 - **G-12** (a long bot turn is a wall) is **not** closed. The kinds and the
   one disclosure make the wall legible; they do not shorten it. Folding a long
   turn is a behaviour change with its own trade-offs, and it did not earn its
@@ -135,5 +140,9 @@ Stated here so the register is not read as more than it is.
 - **G-15** (per-provider thinking joined flat) is **not** closed. The trace is
   now read through one seam (`utils/traceText.ts`) instead of two, which is
   the precondition; the per-seat separation is the next step.
-- **R-D** (the file/artifact viewer) is **deferred by ruling**, not closed.
+- **R-D** (the file/artifact viewer) is **deferred by ruling**, not closed. The
+  evidence is stronger than the ruling assumed: the artifact store holds the
+  tool's own TEXT (up to 400k chars), and the tool row's expander already
+  pages it back when the payload store kept only a clip — so there is no file
+  to view.
 - **O-56 / E-39** — the *default* tier for a trade decision — is untouched.
