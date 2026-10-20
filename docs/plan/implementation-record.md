@@ -462,3 +462,82 @@ All measured on the final tree (sweep + Phase 1), each read from its own
 `ModelPicker` still render where they render today, so the trader sees nothing
 different, and `O-130`/`O-68` are **not** closed — the panel is one
 implementation until Phase 3 makes `ModelPicker` mount it too.
+
+## 11. E-51 Phase 2 — the composers mount the merged control (2026-10-21)
+
+This is the first commit of the pass that changes what the trader sees. Rulings
+D-A (the trigger moves INTO the composer card), D-C (a constant `API` badge) and
+D-D (the tier printed on the trigger) land here; D-B's shortcut stays scheduled
+for Phase 4 so the key hint is never shown before the chord exists.
+
+| File | What changed |
+| --- | --- |
+| `components/shared/ModelChip.tsx` | rewritten: it is now the trigger AND the anchor. The label reads `Provider · Model · High` (D-D) and the accessible name reads the same three things; the panel body is `ModelMenu`, portaled and anchored to the trigger's rect. The compact form (dock, 384px) truncates; the wide form (Chat surface) does not. |
+| `components/shared/EffortChip.tsx` | **deleted** (`git rm`). The tier is set on the slider in the model panel; keeping a second control for one value is the defect the proposal names (G-3). Its ladder had already moved to `effortScale.ts`, so nothing else moved with it. |
+| `components/trade/panels/ChatComposer.tsx` | the footer row under the card is gone; the control sits in the toolbar row inside `data-testid="composer-model-and-send"`, left of send, and `ml-auto` moved from the send button to that pair so send stays bottom-right when the row wraps. The disclaimer keeps its own line. |
+| `components/agents/AgentsView.tsx` | same move, and the bot rule now travels WITH the control: `modelPicker` is a render prop receiving `{ showEffort }`, because "a bot turn has no Effort section" needs `activeBot`, which only this surface has. `effortPicker` is deleted. |
+| `App.tsx` | `SessionEffortChip` became `SessionModelChip` (still module-scope, still the only thing that touches `chatStore` on that surface's mount — the latch bug in its comment is why), the injection passes `showEffort` through, and the Chat surface's inline `setSelectedChatModel(v); chatStore.setActiveSoloModel(v)` pair became one `changeChatSoloModel` callback — the two writes the dock's own callback performs, spelled once. |
+| `tests/chatEffortDial.test.tsx` | rewritten rather than deleted: the chip's radio-menu tests go (the panel's slider tests live in `tests/modelMenu.test.tsx`), and the five wiring pins that named `EffortChip`/`effortPicker`/`SessionEffortChip` now name the merged control — including `expect(fs.existsSync('components/shared/EffortChip.tsx')).toBe(false)`, so the deletion cannot be quietly undone. The transport pins (three wires, one shared rule) are untouched. |
+| `tests/agentsSurface.test.tsx` | the injected-picker test now renders through the render prop and asserts the picker lands INSIDE the send pair, and that `showEffort` arrives as a real boolean. |
+| `scripts/chip-shot.cjs` | rewritten for the new testids, and it now asserts behaviour rather than only pixels: the trigger must END in a tier word (D-D), starring must move a row to first, and the slider must expose `aria-valuemax=5` and a non-empty `aria-valuetext`. |
+| `scripts/render-probe.cjs` | new checks for the move (below). |
+
+### What the new probe checks learned on the way
+
+Two of my own first drafts were **false green**, and both are the bug class this
+repo has been bitten by before, so they are written down rather than fixed
+silently:
+
+- Every narrowed-width measurement reported `row 0px … send right 0 of card 0`
+  and PASSED. Below its breakpoint the Trade surface does not lay the dock out
+  at all, so the numbers were a zero-size rectangle, not a fit. A
+  `found: false` guard now refuses to grade an unlaid-out composer and says so in
+  the detail.
+- A "both states measured" check passed while reporting `wrapped + wrapped`,
+  because a hidden `display:none` file input contributed a third distinct `top`
+  and made the single-line row read as wrapped. Line detection now counts
+  VISIBLE children only.
+- The plan asked for the claim in "both the wrapped and the unwrapped state", and
+  **the unwrapped state is UNMET, not assumed**: the dock's toolbar measures the
+  same ~333px at 1100px and 1280px viewports (the column is a chart fraction, not
+  a viewport fraction), and a 208px trigger plus a 32px send cannot fit beside
+  `+` and `Scan → skills`, so the row always wraps in the dock. The probe asserts
+  the two properties that hold in whichever state exists — no horizontal overflow,
+  and send right-most AND bottom-most — at the run width and at three narrower
+  ones, prints a `NOTE` that the unwrapped state is unmeasurable, and does not
+  claim otherwise. (If the dock is ever made genuinely wider, the sweep starts
+  reporting a single line on its own.)
+
+### Gates, measured on this tree
+
+| Gate | Result |
+| --- | --- |
+| `npm run typecheck` / `typecheck:scripts` | ok, 0 errors |
+| `npm run lint` | **0 errors / 657 warnings** (cap 659) |
+| `npm run test` | **5042 tests in 495 files**, 0 failed, 0 skipped |
+| `npm run build` | ok, entry **1374 KiB** (ceiling 1400, stale below 1260) — **+7 KiB, which is the honest cost of Phase 2**: `ModelMenu` was unreachable in Phase 1 and therefore not in the startup graph at all, and now every composer imports it. The ratchet still binds with 26 KiB of headroom, and it was NOT raised. |
+| `npm run boot-probe` | ok, zero pageerrors |
+| `npm run render-probe` | **115 checks, 0 failures**, zero pageerrors (was 113; the two new ones are the composer row at the run width and at 1100px) |
+| `npm run probe:chip` | ok against a dev server on :4193 — `trigger label: "B.AI · Auto"`, `model popover top=380 bottom=800 viewport=900 FITS`, `after starring, first row: Kimi k3`, `effort slider stops=5 valuetext=Auto` |
+| `npm run check-flow-doc-anchors` | **304 anchors verified, 0 unattributed**; cited-line quality 0/0 |
+
+The anchor count moved 303 → 305 → **304** during this pass, and both moves were
+measurements, not drift: Phase 2 shifted `App.tsx` by ~16 lines, so the tool
+re-resolved 36 citations; re-pointing the html's `:2365` onto the existing
+`{surface === 'trade' && (` anchor merged two distinct numbers into one, dropping
+the unique count by 1. Two citations that the gate CANNOT see were corrected while
+in there: `App.tsx:1217` claimed to be `latestChartVerdict(messages)` and is a
+group-edit line (the real one is `:1229`), and `:303` claimed to be
+`moderatorConfig` (the real one is `:310`). A citation the gate cannot check is
+still a claim, and this one was false.
+
+### What Phase 2 does NOT close
+
+`O-130` moves to **in progress**, not closed: `ModelPicker` is still a second
+implementation (Settings, the automation editor, the seat picker), so the shared
+free-only/star preferences still do not follow the trader everywhere, and `O-68`
+keeps its `ModelPicker`/`SymbolPicker`/`SelectMenu` half. The dead
+`import ModelPicker` in `App.tsx` is still there for the same reason as in Phase 1
+— it costs a doc re-anchor, and Phase 3 rewrites that file's picker anyway.
+`O-56`/`E-39`'s *default* tier is untouched: this makes the tier visible and
+settable beside the model, which is the UI half the proposal claims.

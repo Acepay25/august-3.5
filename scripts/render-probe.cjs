@@ -712,6 +712,90 @@ async function main() {
         check('a stopped turn leaves one row, not a placeholder beside an answer',
             stopAfter <= stopBefore + 1, `${stopBefore} -> ${stopAfter} answer rows`);
 
+        // E-51 ruling D-A moved the model control INTO the composer card,
+        // immediately left of the send button. That is a layout claim, so no
+        // jsdom test can make it and no unit test should be trusted for it: the
+        // toolbar row must not overflow its container, and send must stay the
+        // right-most element — at the dock's own width AND when a narrower
+        // column forces the `flex-wrap` row onto a second line.
+        const measureComposerRow = () => page.evaluate(() => {
+            const group = document.querySelector('[data-testid="composer-model-and-send"]');
+            if (!group) return { found: false, why: 'no composer-model-and-send in the dock' };
+            const row = group.parentElement;
+            const send = group.lastElementChild;
+            const chip = group.firstElementChild;
+            if (!row || !send || !chip) return { found: false, why: 'the pair lost a member' };
+            const rr = row.getBoundingClientRect();
+            const sr = send.getBoundingClientRect();
+            // A zero-size measurement is not a pass. Below its breakpoint the
+            // Trade surface hides this dock entirely, and a check that reads 0
+            // for every number answers a question about nothing.
+            if (rr.width < 40 || sr.width < 8) {
+                return { found: false, why: `not laid out here (row ${Math.round(rr.width)}px, send ${Math.round(sr.width)}px)` };
+            }
+            const visible = (el) => {
+                const r = el.getBoundingClientRect();
+                return r.width > 0 && r.height > 0;
+            };
+            let widestRight = sr.right;
+            let lowestBottom = sr.bottom;
+            for (const el of row.querySelectorAll('*')) {
+                if (!visible(el)) continue;
+                const r = el.getBoundingClientRect();
+                if (r.right > widestRight) widestRight = r.right;
+                if (r.bottom > lowestBottom) lowestBottom = r.bottom;
+            }
+            const lines = new Set([...row.children].filter(visible)
+                .map(c => Math.round(c.getBoundingClientRect().top)));
+            return {
+                found: true,
+                overflow: Math.round(row.scrollWidth - row.clientWidth),
+                sendIsRightMost: widestRight <= sr.right + 1.5,
+                sendIsBottomMost: lowestBottom <= sr.bottom + 1.5,
+                wrapped: lines.size > 1,
+                detail: `row ${Math.round(rr.width)}px over ${lines.size} line(s), `
+                    + `scroll-overflow ${Math.round(row.scrollWidth - row.clientWidth)}, `
+                    + `send right ${Math.round(sr.right)}/bottom ${Math.round(sr.bottom)} of card `
+                    + `${Math.round(rr.right)}/${Math.round(rr.bottom)}`,
+            };
+        });
+
+        const atRunWidth = await measureComposerRow();
+        check('the dock composer holds the model control and the send, send in the bottom-right',
+            atRunWidth.found === true && atRunWidth.overflow <= 0
+            && atRunWidth.sendIsRightMost === true && atRunWidth.sendIsBottomMost === true,
+            atRunWidth.found
+                ? `${atRunWidth.detail}, ${atRunWidth.wrapped ? 'WRAPPED' : 'single line'}`
+                : atRunWidth.why);
+
+        // The plan asked for this claim "in both the wrapped and the unwrapped
+        // state". Only one of those is reachable here, and saying so is the
+        // honest half: the dock's toolbar measures ~333px at every window width
+        // this probe can set (the column is a chart fraction, not a viewport
+        // fraction — 1100px and 1280px both give the same 333px row), and a
+        // 208px trigger plus a 32px send cannot fit beside the + and
+        // Scan→skills chips. So the row ALWAYS wraps in the dock, and what this
+        // probe can actually prove is the two properties that must hold in
+        // whichever state exists: no horizontal overflow, and send stays the
+        // right-most and bottom-most element. The unwrapped state is UNMET, not
+        // assumed — widen the dock for real (the expand-over-chart mode) and the
+        // sweep below starts reporting a single line on its own.
+        const probeViewport = page.viewportSize() ?? { width: 1280, height: 720 };
+        const seen = [`run width: ${atRunWidth.found ? `${atRunWidth.detail}, ${atRunWidth.wrapped ? 'WRAPPED' : 'single line'}` : atRunWidth.why}`];
+        for (const w of [1100, 980, 900]) {
+            await page.setViewportSize({ width: w, height: probeViewport.height });
+            await page.waitForTimeout(500);
+            const m = await measureComposerRow();
+            if (!m.found) { seen.push(`${w}px: ${m.why} (unmeasurable, not a pass)`); continue; }
+            seen.push(`${w}px: ${m.detail}, ${m.wrapped ? 'wrapped' : 'single line'}`);
+            check(`the ${w}px dock composer keeps send right-most and bottom-most`,
+                m.overflow <= 0 && m.sendIsRightMost === true && m.sendIsBottomMost === true, m.detail);
+        }
+        console.log(`  composer row sweep — ${seen.join(' | ')}`);
+        console.log('  NOTE the unwrapped composer state is UNMET: the dock toolbar is ~333px at every width this probe can set.');
+        await page.setViewportSize(probeViewport);
+        await page.waitForTimeout(400);
+
         // The expanded dock is the one layout in the app whose widths are
         // mutually exclusive as roles but ADDITIVE as math (chart fraction +
         // dock fraction + a fixed order book), so it is the one place a

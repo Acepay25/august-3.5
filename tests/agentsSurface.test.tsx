@@ -381,10 +381,19 @@ describe('WS-6 rail completeness', () => {
         expect(sectionText()).not.toContain('Team');
     });
 
-    it('mounts the model picker App hands in, instead of a chip that leaves the surface', () => {
-        renderBots(<AgentsView {...base} modelPicker={<button data-testid="model-picker">Gemini · flash</button>} />);
+    it('mounts the model control App hands in, inside the send row, with the bot rule threaded through', () => {
+        let received: unknown = 'never called';
+        renderBots(<AgentsView {...base} modelPicker={({ showEffort }) => {
+            received = showEffort;
+            return <button data-testid="model-picker">Gemini · flash</button>;
+        }} />);
         expect(screen.getByTestId('model-picker')).toBeTruthy();
         expect(screen.queryByTestId('composer-model')).toBeNull();
+        // E-51 Phase 2: the panel needs to know whether this turn is a bot's,
+        // and only this surface's selection does. The type is the contract.
+        expect(typeof received).toBe('boolean');
+        expect(screen.getByTestId('composer-model-and-send')
+            .contains(screen.getByTestId('model-picker'))).toBe(true);
     });
 
     /**

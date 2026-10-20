@@ -1,85 +1,88 @@
 /**
- * The thinking-effort dial, shared by both chat homes.
+ * The thinking tier on the composer's model control, shared by both chat homes.
  *
- * The Chart AI dock has had this chip for a long time; the Chat surface did not,
+ * The Chart AI dock had an effort dial for a long time; the Chat surface did not,
  * and the tier the dock showed was honoured by the dock's own transport while
  * the Chat surface's casual request hardcoded the task default. Two consequences,
- * both fixed here and both pinned below: a surface with no dial cannot ask for
- * reasoning it will later be shown as a text scratchpad, and a dial whose value
- * lives in one component's `useState` is a label that drifts the moment the other
- * home is opened (the dock unmounts on a surface switch).
+ * both pinned below: a surface with no dial cannot ask for reasoning it will
+ * later be shown as a text scratchpad, and a dial whose value lives in one
+ * component's `useState` is a label that drifts the moment the other home is
+ * opened (the dock unmounts on a surface switch).
  *
- * The chip's own behavior is rendered; the wiring between the two homes is a
- * source contract, because mounting the dock means standing up its whole
- * orchestrator to observe one field read.
+ * E-51 Phase 2 merged the dial INTO the model control: the tier rides the
+ * trigger's label (ruling D-D) and is edited on the slider in the same panel
+ * that picks the model, because `low` switches thinking off on the GLM and
+ * DeepSeek routes — a tier read apart from the model it changes is a tier the
+ * trader cannot reason about. The panel's own behaviour (six stops,
+ * `aria-valuetext`, Escape containment, the bot-turn rule) is pinned in
+ * `tests/modelMenu.test.tsx`; what lives here is the label and the WIRING,
+ * because mounting the dock means standing up its whole orchestrator to observe
+ * one field read.
  */
 
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import fs from 'node:fs';
-import EffortChip, { EFFORT_CHOICES, effortChoiceOf } from '../components/shared/EffortChip';
+import ModelChip from '../components/shared/ModelChip';
+import { EFFORT_CHOICES, effortChoiceOf } from '../components/shared/effortScale';
+import type { ProviderConfig } from '../types/provider';
 
 const tiers = EFFORT_CHOICES.map(c => c.id);
 
-describe('EffortChip', () => {
-    it('names the current tier in the trigger, in words', () => {
-        render(<EffortChip value="high" onChange={() => {}} />);
-        expect(screen.getByLabelText('Thinking effort: High')).toBeInTheDocument();
-        // A tier is not a number of bars and never a raw id on screen.
-        expect(screen.getByTestId('composer-effort-chip').textContent).not.toMatch(/high/);
+const PROVIDERS: ProviderConfig[] = [{
+    id: 'deepseek', name: 'DeepSeek', apiKey: 'sk-test', baseUrl: 'https://x.test/v1',
+    apiFormat: 'chat_completions', isEnabled: true, isBuiltIn: false,
+    models: ['deepseek-reasoner'], selectedModel: 'deepseek-reasoner',
+} as ProviderConfig];
+
+/** jsdom lays nothing out, and the panel positions off the trigger's rect. */
+const stubRect = (): void => {
+    HTMLElement.prototype.getBoundingClientRect = () => ({
+        top: 600, bottom: 632, left: 40, right: 200, width: 160, height: 32, x: 40, y: 600, toJSON: () => ({}),
+    }) as DOMRect;
+};
+
+describe('the tier on the merged model control', () => {
+    it('names provider, model and tier on the trigger, in words', () => {
+        stubRect();
+        render(<ModelChip providers={PROVIDERS} value="deepseek::deepseek-reasoner"
+            onChange={() => {}} effort="high" onEffortChange={() => {}} />);
+        const trigger = screen.getByTestId('composer-model-chip');
+        // The pretty-printed model name is asserted through the label's SHAPE,
+        // not by hardcoding `formatModelDisplayName`'s output — that function is
+        // a table of known tokens and changes on purpose.
+        expect(trigger).toHaveAccessibleName(/^Model DeepSeek · .+ · High$/);
+        // A tier is never a raw id on screen, and the id is not the label either.
+        expect(trigger.textContent).not.toMatch(/deepseek-reasoner/);
     });
 
     it('reads an unset tier as Auto, which is what the wire has always sent', () => {
-        render(<EffortChip value="auto" onChange={() => {}} />);
-        expect(screen.getByLabelText('Thinking effort: Auto')).toBeInTheDocument();
+        stubRect();
+        render(<ModelChip providers={PROVIDERS} value="deepseek::deepseek-reasoner"
+            onChange={() => {}} effort="auto" onEffortChange={() => {}} />);
+        expect(screen.getByTestId('composer-model-chip').textContent).toContain('Auto');
         expect(effortChoiceOf('nonsense' as never).id).toBe('auto');
     });
 
-    it('opens a radio menu with exactly the current tier checked', () => {
-        render(<EffortChip value="medium" onChange={() => {}} />);
-        expect(screen.queryByTestId('effort-menu')).toBeNull();
-        fireEvent.click(screen.getByTestId('composer-effort-chip'));
-        const menu = screen.getByTestId('effort-menu');
-        expect(menu).toHaveAttribute('role', 'menu');
-        const items = within(menu).getAllByRole('menuitemradio');
-        expect(items.map(el => el.textContent?.trim())).toEqual(EFFORT_CHOICES.map(c => c.label));
-        expect(items.filter(el => el.getAttribute('aria-checked') === 'true')).toHaveLength(1);
-        expect(within(menu).getByRole('menuitemradio', { name: 'Medium' }))
-            .toHaveAttribute('aria-checked', 'true');
+    it('drops the tier from the label when the host has no dial to show', () => {
+        stubRect();
+        render(<ModelChip providers={PROVIDERS} value="deepseek::deepseek-reasoner"
+            onChange={() => {}} effort="high" onEffortChange={() => {}} showEffort={false} />);
+        const trigger = screen.getByTestId('composer-model-chip');
+        expect(trigger.textContent).not.toMatch(/High/);
+        fireEvent.click(trigger);
+        expect(screen.queryByTestId('model-menu-effort')).toBeNull();
     });
 
-    it('reports the tier the trader picked and closes', () => {
-        const onChange = vi.fn();
-        render(<EffortChip value="auto" onChange={onChange} />);
-        fireEvent.click(screen.getByTestId('composer-effort-chip'));
-        fireEvent.click(within(screen.getByTestId('effort-menu')).getByRole('menuitemradio', { name: 'Max' }));
-        expect(onChange).toHaveBeenCalledWith('max');
-        expect(screen.queryByTestId('effort-menu')).toBeNull();
-    });
-
-    it('closes on Escape without picking, and the key does not escape to the app', () => {
-        const onChange = vi.fn();
-        render(
-            <div onKeyDown={() => onChange('REACHED-THE-APP')}>
-                <EffortChip value="low" onChange={onChange} />
-            </div>,
-        );
-        fireEvent.click(screen.getByTestId('composer-effort-chip'));
-        // Unhandled, Escape bubbles to the app-level shortcut that CANCELS a
-        // running analysis while the trader merely closed a menu.
-        fireEvent.keyDown(screen.getByTestId('effort-menu'), { key: 'Escape' });
-        expect(screen.queryByTestId('effort-menu')).toBeNull();
-        expect(onChange).not.toHaveBeenCalledWith('REACHED-THE-APP');
-    });
-
-    it('closes when the rest of the screen is clicked', () => {
-        render(<EffortChip value="low" onChange={() => {}} />);
-        fireEvent.click(screen.getByTestId('composer-effort-chip'));
-        const backdrop = document.querySelector('.fixed.inset-0');
-        expect(backdrop, 'a menu you can only leave by picking an item is a trap').not.toBeNull();
-        fireEvent.click(backdrop as Element);
-        expect(screen.queryByTestId('effort-menu')).toBeNull();
+    it('the slider in the same panel writes the tier the trigger prints', () => {
+        stubRect();
+        const onEffort = vi.fn();
+        render(<ModelChip providers={PROVIDERS} value="deepseek::deepseek-reasoner"
+            onChange={() => {}} effort="medium" onEffortChange={onEffort} />);
+        fireEvent.click(screen.getByTestId('composer-model-chip'));
+        fireEvent.keyDown(screen.getByTestId('effort-slider'), { key: 'ArrowRight' });
+        expect(onEffort).toHaveBeenCalledWith('high');
     });
 
     it('offers every tier the transport can route', () => {
@@ -95,13 +98,25 @@ describe('both chat homes drive the one stored tier', () => {
     const runnerSrc = fs.readFileSync('services/trade/chatTurnRunner.ts', 'utf8');
     const casualSrc = fs.readFileSync('services/providers/GenericAnalysisService.ts', 'utf8');
 
-    it('the dock mounts the shared chip instead of a private copy of the menu', () => {
-        expect(composerSrc).toMatch(/import EffortChip from '..\/..\/shared\/EffortChip';/);
-        expect(composerSrc).toMatch(/<EffortChip value=\{effort\} onChange=\{changeEffort\} \/>/);
+    it('the dock mounts the tier INTO the model control, and has no separate dial', () => {
+        expect(composerSrc).toMatch(/import ModelChip from '..\/..\/shared\/ModelChip';/);
+        expect(composerSrc).toMatch(/effort=\{effort\} onEffortChange=\{changeEffort\} compact/);
+        // The standalone chip is deleted, not left mounted somewhere else.
+        expect(composerSrc).not.toMatch(/EffortChip/);
+        expect(fs.existsSync('components/shared/EffortChip.tsx')).toBe(false);
         // The menu used to be shell state; one owner of `open` means the two
-        // chips cannot disagree about which popover is showing.
+        // controls cannot disagree about which popover is showing.
         expect(composerSrc).not.toMatch(/showEffortMenu/);
         expect(panelSrc).not.toMatch(/showEffortMenu/);
+    });
+
+    it('the control sits in the card, immediately left of send (ruling D-A)', () => {
+        // Not a footer row under it: the pair is what right-aligns, and the send
+        // keeps the composer's bottom-right corner. render-probe measures the
+        // same claim in pixels, because no source regex can.
+        expect(composerSrc).toMatch(/data-testid="composer-model-and-send"/);
+        expect(agentsSrc).toMatch(/data-testid="composer-model-and-send"/);
+        expect(composerSrc).not.toMatch(/The reference footer, harness-style/);
     });
 
     it('the dock reads the tier off the session row, not out of useState', () => {
@@ -110,21 +125,27 @@ describe('both chat homes drive the one stored tier', () => {
         expect(panelSrc).toMatch(/chatStore\.mutate\(activeId, sess => \(\{ \.\.\.sess, effort: next \}\)\)/);
     });
 
-    it('the Chat surface mounts the same chip, and hides it for a bot turn', () => {
-        expect(agentsSrc).toMatch(/effortPicker\?: React\.ReactNode;/);
-        expect(agentsSrc).toMatch(/\{!activeBot && effortPicker\}/);
+    it('the Chat surface gets the same control, and the bot rule travels with it', () => {
+        expect(agentsSrc).toMatch(/modelPicker\?: \(opts: \{ showEffort: boolean \}\) => React\.ReactNode;/);
+        expect(agentsSrc).toMatch(/\{modelPicker\?\.\(\{ showEffort: !activeBot \}\)\}/);
         // A bot answers through the mailbox transport, which never reads this
-        // dial; showing the chip there would advertise a gesture that is not
-        // wired.
-        expect(agentsSrc).toMatch(/\{modelPicker\}/);
+        // dial; offering to edit it there would advertise a gesture that is
+        // not wired. The rule is now a section that is absent, not a chip that
+        // is hidden — the control owns it either way.
+        expect(agentsSrc).not.toMatch(/effortPicker/);
     });
 
-    it('App mounts the chip on the session value and sends that same value', () => {
-        expect(appSrc).toMatch(/effortPicker=\{[\s\S]{0,700}<SessionEffortChip \/>/);
+    it('App mounts the control on the session value and sends that same value', () => {
+        expect(appSrc).toMatch(/modelPicker=\{\(\{ showEffort \}\) => \(/);
+        expect(appSrc).toMatch(/<SessionModelChip[\s\S]*?showEffort=\{showEffort\} \/>/);
         // ONE analysis entry for both homes, so exactly one place reads the
         // stored tier at send time. Two wrappers was the old shape, and they
         // drifted (one ran into a private message list).
         expect(appSrc.match(/reasoningEffort: chatStore\.getActiveEffort\(\)/g)).toHaveLength(1);
+        // And one writer for the model pair, used by the Chat surface's chip
+        // instead of re-spelling the two statements inline (G-4).
+        expect(appSrc).toMatch(/const changeChatSoloModel = useCallback\(\(value: string\): void => \{/);
+        expect(appSrc).not.toMatch(/setSelectedChatModel\(v\); chatStore\.setActiveSoloModel\(v\);/);
     });
 
     it('nobody subscribes App itself to the session store', () => {

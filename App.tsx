@@ -78,7 +78,6 @@ import type { LearnTab } from './components/learn/LearnView';
 import SkillsLibrary from './components/skills/SkillsLibrary';
 const AgentsView = React.lazy(() => import('./components/agents/AgentsView'));
 import ModelChip from './components/shared/ModelChip';
-import EffortChip from './components/shared/EffortChip';
 import ModelPicker from './components/shared/ModelPicker';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { computeChatModelFallback, isProviderReady } from './utils/providerUtils';
@@ -185,7 +184,8 @@ const BACKUP_WATCHDOG_REPEAT_MS = 2 * 60 * 60 * 1000;
 const BACKUP_WATCHDOG_EVERY_MS = 2 * 60 * 1000;
 
 /**
- * The Chat surface's thinking dial, subscribed HERE rather than in App's body.
+ * The Chat surface's model control — provider, model and the thinking dial,
+ * subscribed HERE rather than in App's body.
  *
  * `chatStore` latches the username it loaded for on its FIRST touch and rehashes
  * onto a different one the next time it writes. App renders before a profile is
@@ -198,10 +198,26 @@ const BACKUP_WATCHDOG_EVERY_MS = 2 * 60 * 1000;
  *
  * The snapshot is the tier itself, so the subscription re-renders on a real
  * change and not on every streaming patch of the session store.
+ *
+ * `showEffort` is handed IN rather than read here because a bot turn answers on
+ * the bot's own config through a transport that never reads the dial, and only
+ * the surface's own selection knows whether this turn is a bot's (E-51 §2).
  */
-const SessionEffortChip: React.FC = () => {
+const SessionModelChip: React.FC<{
+    providers: ProviderConfig[];
+    value: string;
+    onChange: (value: string) => void;
+    onRefreshModels?: () => Promise<void>;
+    issue: string | null;
+    fallbackLabel?: string;
+    showEffort: boolean;
+}> = ({ providers, value, onChange, onRefreshModels, issue, fallbackLabel, showEffort }) => {
     const effort = useSyncExternalStore(chatStore.subscribe, chatStore.getActiveEffort, chatStore.getActiveEffort);
-    return <EffortChip value={effort} onChange={chatStore.setActiveEffort} />;
+    return (
+        <ModelChip providers={providers} value={value} onChange={onChange}
+            onRefreshModels={onRefreshModels} issue={issue} fallbackLabel={fallbackLabel}
+            effort={effort} onEffortChange={chatStore.setActiveEffort} showEffort={showEffort} />
+    );
 };
 
 const App: React.FC = () => {
@@ -669,6 +685,14 @@ const App: React.FC = () => {
     const [selectedChatModel, setSelectedChatModel] = useState(() => {
         try { return localStorage.getItem(PREF_KEYS.CASUAL_CHAT_MODEL) || ''; } catch { return ''; }
     });
+    /** The one model-change writer for every chat home: the app-wide default AND
+     *  the active session row. The dock and the Chat surface used to each spell
+     *  this pair — two statements for one decision, which is how two homes start
+     *  answering with different models. (E-51 Phase 2, G-4.) */
+    const changeChatSoloModel = useCallback((value: string): void => {
+        setSelectedChatModel(value);
+        chatStore.setActiveSoloModel(value);
+    }, []);
     const chatModelReadyRef = useRef(false);
     useEffect(() => {
         let cancelled = false;
@@ -2574,23 +2598,20 @@ const App: React.FC = () => {
                                         setGroupEditTarget(target);
                                         setIsNewGroupOpen(true);
                                     }}
-                                    modelPicker={(
-                                        /* The dock's chip, not a plainer twin of
-                                           it: one pill naming the model, opening a
-                                           searchable, grouped, star-able menu. */
-                                        <ModelChip providers={providerConfigs} value={selectedChatModel}
-                                            onChange={v => { setSelectedChatModel(v); chatStore.setActiveSoloModel(v); }}
+                                    modelPicker={({ showEffort }) => (
+                                        /* The dock's control, not a plainer twin of
+                                           it: one trigger naming the provider, the
+                                           model AND the tier, opening one panel that
+                                           edits all three. The writes are the pair
+                                           the dock writes (`changeChatSoloModel`), and
+                                           the tier is subscribed inside the node — see
+                                           SessionModelChip. */
+                                        <SessionModelChip providers={providerConfigs} value={selectedChatModel}
+                                            onChange={changeChatSoloModel}
                                             onRefreshModels={refreshModelCatalog}
                                             issue={chatModelFallback.issue}
-                                            fallbackLabel={chatModelFallback.providerName} />
-                                    )}
-                                    effortPicker={(
-                                        /* The dock's other chip, on the same row, on
-                                           the same stored value: this tier is what the
-                                           send above reads, so the label and the
-                                           request cannot disagree. Subscribed inside
-                                           the node — see SessionEffortChip. */
-                                        <SessionEffortChip />
+                                            fallbackLabel={chatModelFallback.providerName}
+                                            showEffort={showEffort} />
                                     )}
                                     modelFallback={chatModelFallback.notice}
                                     railExpanded={isNavRailOpen}
