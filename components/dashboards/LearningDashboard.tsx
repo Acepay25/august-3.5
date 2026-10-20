@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import { BrainCircuit } from '../shared/Icons';
 import { LoggedTrade, TradeOutcome } from '../../types';
+import { decidedAtOf } from '../../utils/journalAnalytics';
 import { computeLearningProfile } from '../../services/learning/SelfLearningService';
 import { initMemoryFiles, getMemoryFiles, computeTopLessons } from '../../services/learning/MemoryFilesService';
 import { listSkills, reviewSkillEffectiveness, applyReviewRecommendation, refineSkillNow } from '../../services/learning/SkillMemoryService';
@@ -102,7 +103,7 @@ export const LearningDashboard: React.FC<LearningDashboardProps> = ({ trades, us
     const windowedTrades = useMemo(() => {
         if (windowDays === 0) return trades;
         const cutoff = Date.now() - windowDays * 86_400_000;
-        return trades.filter(t => new Date(t.timestamp).getTime() >= cutoff);
+        return trades.filter(t => new Date(decidedAtOf(t)).getTime() >= cutoff);
     }, [trades, windowDays]);
 
     const closedWindowed = useMemo(() => windowedTrades.filter(isClosed), [windowedTrades]);

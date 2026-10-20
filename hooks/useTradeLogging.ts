@@ -1,12 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Message, MessageRole, TradeOutcome, LoggedTrade, TradeSummary, ImageMetadata, AIProvider, BenchmarkAlpha } from '../types';
+import { Message, TradeOutcome, LoggedTrade, TradeSummary, ImageMetadata, AIProvider, BenchmarkAlpha } from '../types';
 import { captureOutcomeComparison } from '../services/ui/AutoCaptureService';
 import { toLeveragedExcursionPct } from '../services/backtesting/outcomeEngine';
 import * as MemoryService from '../services/learning/MemoryService';
 import { insightTextForTrade } from '../utils/tradeInsightBrief';
 import { ProviderConfig } from '../types/provider';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
-import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
+import { defaultLeverage } from '../utils/conversationUtils';
 import { parsePrice } from '../utils/analysisUtils';
 import { trackTradeOutcome, getTradeProviders, creditedWinForAnalyst, recordProviderConfidenceCalibration } from '../services/backtesting/ModelPerformanceService';
 import { computeRMultiple } from '../utils/disciplineAnalytics';
@@ -21,6 +21,10 @@ import { appendWatchEpisode } from '../utils/watchList';
 import { getActiveUsername } from '../utils/activeUser';
 import { withDetectedTradeType } from '../services/analysis/ScalpDetectionService';
 import * as chatStore from '../services/trade/chatStore';
+import { getHarnessSettings } from '../utils/harnessSettings';
+import { computeContractSize } from '../utils/ticketSize';
+import { netRiskReward, roundTripCostR, stopDistancePercent } from '../utils/netRiskReward';
+import { modelStatedSize } from '../services/trade/proposedTrade';
 
 // Maximum number of trade summaries (Recent Insights) to keep - enforces FIFO when limit reached
 export const MAX_TRADE_SUMMARIES = 100;
@@ -267,7 +271,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     // ─── Trade Logging ────────────────────────────────────────────────────
 
     // Helper function to log trade (called by all capture handlers)
-    const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount?: number; pnlPercent?: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; slOptimizationData?: SLOptimizationData; journalTags?: CaptureJournalTags; benchmark?: BenchmarkAlpha; outcomeResolvedAt?: string; excursions?: { maePercent: number; mfePercent: number }; realizedR?: number; }) => {
+    const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount?: number; pnlPercent?: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; slOptimizationData?: SLOptimizationData; journalTags?: CaptureJournalTags; benchmark?: BenchmarkAlpha; outcomeResolvedAt?: string; excursions?: { maePercent: number; mfePercent: number }; realizedR?: number; resolutionSource?: 'autopilot' | 'manual'; }) => {
         // The regime this trade was settled in, resolved once in the agreed
         // order: the live hybrid packet, else the regime ledger's observation
         // for this coin on this day (or the nearest earlier one), else the
@@ -286,12 +290,71 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         });
         const marketRegime = resolvedRegime.regime ?? undefined;
 
-        const leverageUsed = activeConversationLeverage || DEFAULT_LEVERAGE;
+        const leverageUsed = activeConversationLeverage || defaultLeverage();
         // Excursions arrive as RAW price percent from whichever engine measured
         // them; the row stores them the same way the post-mortem writes them —
         // leveraged — so one trade cannot have two "worst move" numbers.
         const mae = toLeveragedExcursionPct(feedback.excursions?.maePercent, leverageUsed);
         const mfe = toLeveragedExcursionPct(feedback.excursions?.mfePercent, leverageUsed);
+
+        // ─── The SUGGESTED size ────────────────────────────────────────────
+        // The trader's OWN equity and risk %, against the plan's stop
+        // distance. The model never touches this number: the sizing rule can
+        // only ever DOWNGRADE a ticket (a gate cap, a confidence downgrade, a
+        // veto), never scale one up, and with no equity configured it fails
+        // closed to zero rather than inventing a position for a user who
+        // never set an account. (audit item E-12)
+        //
+        // Graded on the plan's OWN analysis, not the labelled copy below:
+        // `withDetectedTradeType` only adds a scalp/swing label, and the
+        // sizing reads the confidence, the direction and the gate — none of
+        // which the label touches.
+        const harnessSettings = getHarnessSettings();
+        const ticket = computeContractSize(
+            message.analysis!,
+            harnessSettings.equityUsd,
+            leverageUsed,
+            harnessSettings.riskPercent,
+        );
+        // Fail closed: with no equity there is a REASON and no numbers. A
+        // confident-looking size for an unconfigured account is the exact
+        // failure this replaces.
+        const sizeFields = ticket.equityUsd > 0
+            ? {
+                suggestedRiskUsd: ticket.riskUsd,
+                suggestedNotionalUsd: ticket.notionalUsd,
+                suggestedSizeReason: ticket.reason,
+            }
+            : { suggestedSizeReason: ticket.reason };
+
+        // The size the MODEL stated, in its own words, recorded SEPARATELY so
+        // the journal can compare the two. The app's suggestion never depends
+        // on it — a model can neither inflate nor shrink the ticket it sees.
+        const statedSize = modelStatedSize(message.analysis?.historicalCorrelation);
+
+        // ─── The COST ──────────────────────────────────────────────────────
+        // The round-trip fee, in R, charged against this plan's stop
+        // distance, and the NET R beside the GROSS `realizedR`.
+        //
+        // `realizedR` stays GROSS on purpose: it is the price-measured
+        // number the outcome engines produced, and rewriting it would make
+        // the row disagree with the tape it was measured against. `netR` is
+        // the cost-adjusted sibling, and it is the one a strategy ledger
+        // should accumulate — every expectancy in this app used to be gross,
+        // so a 0.10 % round trip against a 1 % stop was invisible. (E-03)
+        const rowEntryPrice = parsePrice(message.analysis?.entryPoints?.[0]?.price || '') || 0;
+        const rowStopPrice = parsePrice(feedback.correctedStopLoss || message.analysis?.stopLoss || '') || 0;
+        const stopDistancePct = stopDistancePercent(rowEntryPrice, rowStopPrice);
+        const grossR = typeof feedback.realizedR === 'number' && Number.isFinite(feedback.realizedR)
+            ? feedback.realizedR
+            : undefined;
+        const cost = roundTripCostR({ stopDistancePct });
+        const net = grossR !== undefined ? netRiskReward({ grossR, stopDistancePct }) : null;
+        // The slippage is NOT modelled and the row says so — an unlabelled
+        // zero would read as a claim the model never made.
+        const costFields = cost.known && cost.costR !== null
+            ? { costR: cost.costR, slippageModeled: false as const }
+            : { slippageModeled: false as const, costUnknown: cost.unknown ?? ('stop-distance' as const) };
 
         const loggedTrade: LoggedTrade = {
             id: message.id,
@@ -305,6 +368,10 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             analysis: withDetectedTradeType(message.analysis!),
             outcome: outcome,
             timestamp: new Date().toISOString(),
+            /** The decision time, carried beside the write time. Every
+             *  time-bucketed view reads this; `timestamp` stays the row's
+             *  provenance. */
+            decidedAt: message.analysis?.createdAt || message.createdAt || new Date().toISOString(),
             /** The plan this row came from — the same id the level-watch armed
              *  on. Set at LOG time, so it exists before any post-mortem runs. */
             ...(message.planId ? { planId: message.planId } : {}),
@@ -312,6 +379,9 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
              *  autopilot detection at T logged at T+1h must not read as if the
              *  result was known at log time. */
             outcomeResolvedAt: feedback.outcomeResolvedAt ?? new Date().toISOString(),
+            /** Provenance: an automatic settlement must never pass for the
+             *  trader's own call. A manual capture/confirm is 'manual'. */
+            resolutionSource: feedback.resolutionSource ?? 'manual',
             leverage: leverageUsed,
             investmentAmount: undefined,
             pnlAmount: feedback.pnlAmount,
@@ -338,6 +408,14 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             ...(typeof feedback.realizedR === 'number' && Number.isFinite(feedback.realizedR)
                 ? { realizedR: feedback.realizedR, rSource: 'autopilot' as const }
                 : {}),
+            // The cost, and the net R beside the gross one above.
+            ...costFields,
+            ...(net && net.known && net.netR !== null ? { netR: net.netR } : {}),
+            // The app's suggested size, and the model's own stated size kept
+            // apart from it.
+            ...sizeFields,
+            ...(statedSize.riskUsd !== undefined ? { modelStatedRiskUsd: statedSize.riskUsd } : {}),
+            ...(statedSize.notionalUsd !== undefined ? { modelStatedNotionalUsd: statedSize.notionalUsd } : {}),
             modelsUsed: message.modelsUsed,
             thoughtProcesses: message.thoughtProcesses,
 
@@ -407,7 +485,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                 const tpStr = tpPrices.length > 0 ? tpPrices.join(' / ') : '—';
                 const symbol = analysis.coinName || '—';
                 const dir = String(analysis.direction || '');
-                const leverage = activeConversationLeverage || DEFAULT_LEVERAGE;
+                const leverage = activeConversationLeverage || defaultLeverage();
                 const loggedLine = `[HARNESS] Trade logged: ${symbol} ${dir} @ ${entryStr}, SL ${analysis.stopLoss || '—'}, TP ${tpStr}, leverage ${leverage}x · ${outcome}${message.userPriorCall ? ' (user-prior: ' + message.userPriorCall.direction + ' @ ' + message.userPriorCall.confidencePct + '%)' : ''}`;
                 const targetSid = chatStore.findSessionByEntryId(message.id) || undefined;
                 chatStore.addOpenTrade({
@@ -649,7 +727,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     // ─── Entry Not Hit Capture Handlers ───────────────────────────────────
 
     // Helper to log Entry Not Hit trade (called when user confirms capture choice)
-    const logEntryNotHitTrade = useCallback(async (candidate: { message: Message; correctedEntry?: string }) => {
+    const logEntryNotHitTrade = useCallback(async (candidate: { message: Message; correctedEntry?: string }, resolutionSource: 'autopilot' | 'manual' = 'manual') => {
         if (!candidate.message.analysis) return;
 
         // Update message outcome
@@ -665,7 +743,9 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             analysis: withDetectedTradeType(candidate.message.analysis),
             outcome: TradeOutcome.ENTRY_NOT_HIT,
             timestamp: new Date().toISOString(),
-            leverage: activeConversationLeverage || DEFAULT_LEVERAGE,
+            decidedAt: candidate.message.analysis.createdAt || candidate.message.createdAt || new Date().toISOString(),
+            resolutionSource,
+            leverage: activeConversationLeverage || defaultLeverage(),
             correctedEntry: candidate.correctedEntry,
             modelsUsed: candidate.message.modelsUsed,
             patternMemoryGate: candidate.message.patternMemoryGate,
@@ -781,6 +861,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             outcomeResolvedAt: resolved?.at,
             excursions: resolved?.excursions,
             realizedR: resolved?.realizedR,
+            resolutionSource: 'autopilot',
         });
         // Every other logging path (capture modal auto/skip, entry-not-hit)
         // starts the post-mortem right after logging — the autopilot
@@ -797,7 +878,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     }, [logTradeWithFeedback, pushTradeClosedEvent, isAutoCapturing]);
 
     const confirmAutopilotEntryNotHit = useCallback((message: Message) => {
-        logEntryNotHitTrade({ message });
+        logEntryNotHitTrade({ message }, 'autopilot');
     }, [logEntryNotHitTrade]);
 
     // (pushTradeClosedEvent is declared above so confirmAutopilotOutcome can

@@ -22,6 +22,10 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
   setPreferenceObject: vi.fn(async (key: string, value: unknown) => {
     store[key] = value;
   }),
+  setPreference: vi.fn(async (key: string, value: unknown) => {
+    store[key] = value;
+  }),
+  getAllKeys: vi.fn(async () => Object.keys(store)),
   removePreference: vi.fn(async (key: string) => {
     delete store[key];
   }),
@@ -52,6 +56,9 @@ import {
   withNotebookWriteLock,
   createMemoryFileUnlocked,
   getMemoryFilesOwner,
+  listNotebookCorruptSidecars,
+  restoreNotebookFromCorruptSidecar,
+  notebookChecksum,
 } from '../services/learning/MemoryFilesService';
 import { getPreference } from '../services/infrastructure/PreferencesService';
 import { getMemoryFilesContext } from '../services/learning/MemoryRetrievalService';
@@ -678,5 +685,129 @@ describe('MemoryFilesService', () => {
         getMock.mockImplementation((originalImpl ?? (async () => null)) as never);
       }
     });
+  });
+});
+
+// ─── E-23: recovery affordance ──────────────────────────────────────────────
+describe('notebook recovery sidecars', () => {
+  it('preserves a corrupt blob as a sidecar and leaves the main key untouched', async () => {
+    store = {};
+    store['memory_files_v1_erin'] = '{"version":1,"folders":[{"id":"f1","na';
+    await initMemoryFiles('erin');
+
+    expect(store['memory_files_v1_erin']).toBe('{"version":1,"folders":[{"id":"f1","na');
+    const sidecars = await listNotebookCorruptSidecars('erin');
+    expect(sidecars).toHaveLength(1);
+    expect(sidecars[0].reason).toBe('unparseable JSON');
+    expect(sidecars[0].bytes).toBeGreaterThan(10);
+
+    // The preserved copy is the exact original bytes, so it is repairable.
+    const saved = store[sidecars[0].key] as { raw: string };
+    expect(saved.raw).toBe('{"version":1,"folders":[{"id":"f1","na');
+  });
+
+  it('restores a preserved copy as the live notebook, then loads it', async () => {
+    store = {};
+    const raw = JSON.stringify({
+      version: 1,
+      folders: [{ id: 'f1', name: 'notes', order: 0 }],
+      files: [{ id: 'x', folderId: 'f1', name: 'recovered.md', content: 'back', enabled: true, createdAt: 1, updatedAt: 1 }],
+    });
+    const key = `memory_files_corrupt_v1_frank_${Date.now()}`;
+    store[key] = { capturedAt: new Date().toISOString(), reason: 'checksum mismatch', raw };
+
+    const ok = await restoreNotebookFromCorruptSidecar('frank', key);
+    expect(ok).toBe(true);
+    // The restore writes the raw bytes, then the normal loader migrates them
+    // to the sharded manifest — the recovered file is what matters.
+    expect((store['memory_files_v1_frank'] as { version?: number }).version).toBe(2);
+    expect(findFile('recovered.md')?.content).toBe('back');
+  });
+
+  it('refuses a sidecar from another user, or one whose bytes are not a notebook', async () => {
+    store = {};
+    store['memory_files_corrupt_v1_grace_1'] = { raw: '{"folders":[],"files":[]}' };
+    expect(await restoreNotebookFromCorruptSidecar('henry', 'memory_files_corrupt_v1_grace_1')).toBe(false);
+
+    store['memory_files_corrupt_v1_grace_2'] = { raw: '"not a notebook"' };
+    expect(await restoreNotebookFromCorruptSidecar('grace', 'memory_files_corrupt_v1_grace_2')).toBe(false);
+  });
+
+  it('writes a version, a saved-at and a checksum on every persist', async () => {
+    store = {};
+    await initMemoryFiles('ivy');
+    const saved = store['memory_files_v1_ivy'] as { checksum?: string; savedAt?: string; version?: number; folders: unknown[]; files: unknown[] };
+    expect(saved.version).toBe(2);
+    expect(saved.savedAt).toBeTruthy();
+    expect(saved.checksum).toBe(notebookChecksum(saved as never));
+
+    // A tampered checksum is REPORTED and preserved, but the readable data is
+    // still loaded — integrity is evidence, not permission to drop bytes.
+    store['memory_files_v1_ivy'] = { ...saved, checksum: 'deadbeef' };
+    await initMemoryFiles('ivy');
+    expect(getMemoryFiles().folders.map(f => f.name)).toContain('skills');
+    const sidecars = await listNotebookCorruptSidecars('ivy');
+    expect(sidecars.some(s => s.reason === 'checksum mismatch')).toBe(true);
+  });
+});
+
+// ─── E-44: the notebook is sharded by category ──────────────────────────────
+describe('notebook sharding', () => {
+  it('keeps skills out of the manifest and loads them back from the shard', async () => {
+    store = {};
+    await initMemoryFiles('jo');
+    const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
+    await createMemoryFile(skills.id, 'alpha.md', '# Alpha\n\nA repeatable edge.', 'jo');
+
+    const manifest = store['memory_files_v1_jo'] as {
+      version: number;
+      files: { name: string }[];
+      shards?: Record<string, { key: string; checksum: string; fileIds: string[] }>;
+    };
+    expect(manifest.version).toBe(2);
+    expect(manifest.files.map(f => f.name)).not.toContain('alpha.md');
+    expect(manifest.shards?.[skills.id]).toBeTruthy();
+
+    const shardKey = manifest.shards![skills.id].key;
+    const shard = store[shardKey] as { files: { name: string; content: string }[]; checksum: string };
+    expect(shard.files.map(f => f.name)).toContain('alpha.md');
+    expect(shard.files.find(f => f.name === 'alpha.md')?.content).toBe('# Alpha\n\nA repeatable edge.');
+    expect(shard.checksum).toBe(notebookChecksum({ folders: [], files: shard.files } as never));
+
+    // Reload from the manifest + shard, not from the live cache.
+    await initMemoryFiles('jo');
+    expect(findFile('alpha.md', 'skills')?.content).toBe('# Alpha\n\nA repeatable edge.');
+  });
+
+  it('migrates a v1 one-blob notebook without losing a byte, then reloads it', async () => {
+    store = {};
+    store['memory_files_v1_kim'] = {
+      version: 1,
+      folders: [
+        { id: 'skills', name: 'skills', order: 0 },
+        { id: 'rules', name: 'rules', order: 1 },
+      ],
+      files: [
+        { id: 's1', folderId: 'skills', name: 'exact-skill.md', content: 'skill bytes\nwith lines', enabled: true, createdAt: 1, updatedAt: 1 },
+        { id: 'r1', folderId: 'rules', name: 'exact-rule.md', content: 'rule bytes\nwith lines', enabled: true, createdAt: 1, updatedAt: 1 },
+      ],
+    };
+
+    await initMemoryFiles('kim');
+    // Both entries survive the split.
+    expect(findFile('exact-skill.md', 'skills')?.content).toBe('skill bytes\nwith lines');
+    expect(findFile('exact-rule.md', 'rules')?.content).toBe('rule bytes\nwith lines');
+
+    const manifest = store['memory_files_v1_kim'] as { version: number; files: { name: string }[]; shards?: Record<string, { key: string }> };
+    expect(manifest.version).toBe(2);
+    expect(manifest.files.map(f => f.name)).toContain('exact-rule.md');
+    expect(manifest.files.map(f => f.name)).not.toContain('exact-skill.md');
+    const shard = store[manifest.shards!.skills.key] as { files: { name: string; content: string }[] };
+    expect(shard.files.find(f => f.name === 'exact-skill.md')?.content).toBe('skill bytes\nwith lines');
+
+    // A fresh boot reads the split shape back into one notebook.
+    await initMemoryFiles('kim');
+    expect(findFile('exact-skill.md', 'skills')?.content).toBe('skill bytes\nwith lines');
+    expect(findFile('exact-rule.md', 'rules')?.content).toBe('rule bytes\nwith lines');
   });
 });

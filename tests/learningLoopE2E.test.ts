@@ -217,10 +217,12 @@ describe('the loop, end to end', () => {
         //    records the attribution the evidence join depends on.
         const setup = { coin: 'BTCUSDT', direction: 'Short', family: 'Family A' };
         const slug = skill.file.name.replace(/\.md$/i, '');
-        const opening = getMemoryFilesContext(setup, undefined, 'analyst', 'opening', { runId: RUN });
+        // A record says "the model saw it", so only a context that really
+        // travels may write one — the send site opts in.
+        const opening = getMemoryFilesContext(setup, undefined, 'analyst', 'opening', { runId: RUN, recordInjections: true });
         expect(opening).toContain(slug);
         expect(opening).toContain('untested');
-        const ctx = getMemoryFilesContext(setup, undefined, 'analyst', 'verdict', { runId: RUN });
+        const ctx = getMemoryFilesContext(setup, undefined, 'analyst', 'verdict', { runId: RUN, recordInjections: true });
         expect(ctx).toContain(slug);
         expect(ctx).toContain('no counted evidence yet');
         await new Promise(r => setTimeout(r, 30));
@@ -229,7 +231,7 @@ describe('the loop, end to end', () => {
 
         // 4b. An ε-holdout run must NOT see it — the control group is the only
         //     thing that makes the skill's eventual lift claim honest.
-        const held = getMemoryFilesContext(setup, undefined, 'analyst', 'verdict', { runId: HOLDOUT_RUN });
+        const held = getMemoryFilesContext(setup, undefined, 'analyst', 'verdict', { runId: HOLDOUT_RUN, recordInjections: true });
         expect(shouldSkillHoldout(HOLDOUT_RUN)).toBe(true);
         expect(held).not.toContain(slug);
 

@@ -68,7 +68,7 @@ describe('reviewSkillEffectiveness', () => {
 
         const strongCandidate = await skillFile(
             'skill-strong-candidate.md',
-            skillContent({ status: 'candidate', kind: 'repeat', wins: 6, losses: 1 }),
+            skillContent({ status: 'candidate', kind: 'repeat', wins: 18, losses: 4 }),
             'review-test',
         );
         const weakRepeat = await skillFile(
@@ -115,7 +115,7 @@ describe('reviewSkillEffectiveness', () => {
         await initMemoryFiles('review-lift');
         const healthy = await skillFile(
             'skill-healthy.md',
-            skillContent({ status: 'confirmed', kind: 'repeat', wins: 8, losses: 2 }),
+            skillContent({ status: 'confirmed', kind: 'repeat', wins: 18, losses: 4 }),
             'review-lift',
         );
         const review = reviewSkillEffectiveness({
@@ -159,7 +159,7 @@ describe('reviewSkillEffectiveness', () => {
         await initMemoryFiles('review-injected');
         const candidate = await skillFile(
             'skill-candidate.md',
-            skillContent({ status: 'candidate', kind: 'repeat', wins: 6, losses: 1 }),
+            skillContent({ status: 'candidate', kind: 'repeat', wins: 18, losses: 4 }),
             'review-injected',
         );
         const withTelemetry = reviewSkillEffectiveness({ injectedFileNames: new Set() })
@@ -170,7 +170,7 @@ describe('reviewSkillEffectiveness', () => {
         // Injected skills keep their promote under the same telemetry.
         const injected = await skillFile(
             'skill-injected.md',
-            skillContent({ status: 'candidate', kind: 'repeat', wins: 6, losses: 1 }),
+            skillContent({ status: 'candidate', kind: 'repeat', wins: 18, losses: 4 }),
             'review-injected',
         );
         const ok = reviewSkillEffectiveness({ injectedFileNames: new Set(['skill-injected.md']) })

@@ -17,7 +17,7 @@ import { setSqliteDb, runExclusiveWrite, WritePermit } from './SqliteServiceHelp
 // static import here is safe (no cycle: ThinkingStoreService never imports
 // SqliteService itself).
 import { getAllThinkingRecordsByUser, saveThinkingBatch } from './ThinkingStoreService';
-import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
+import { LEGACY_LEVERAGE } from '../../utils/conversationUtils';
 import { parsePrice } from '../../utils/analysisUtils';
 
 /**
@@ -439,7 +439,7 @@ export const sqliteGetUserProfile = async (username: string): Promise<UserProfil
             ocrModel: '',
             moderatorProviderId: settings.moderatorProvider || '', // legacy column name compat
             moderatorModel: '',
-            leverage: DEFAULT_LEVERAGE,
+            leverage: LEGACY_LEVERAGE,
             ...settings // Override defaults with saved settings
         } as Conversation;
 
@@ -899,7 +899,7 @@ export const sqliteListConversations = async (
             // The Conversation type declares these non-optional — rows saved
             // before the fields existed (or by the IndexedDB path) lack them,
             // and consumers dereference them directly.
-            leverage: settings.leverage ?? DEFAULT_LEVERAGE,
+            leverage: settings.leverage ?? LEGACY_LEVERAGE,
             ocrModel: settings.ocrModel ?? '',
             moderatorProviderId: settings.moderatorProviderId ?? '',
             moderatorModel: settings.moderatorModel ?? '',

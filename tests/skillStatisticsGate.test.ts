@@ -145,9 +145,9 @@ const makeTrade = (id: string, outcome: TradeOutcome, realizedR?: number): Logge
   timestamp: new Date().toISOString(),
 });
 
-/** An 11-sample candidate: 9W/2L plus the WIN fed below → 10W/2L at N=12.
- *  The raw ladder (0.6) and the cold-start CI (Wilson lower ≈ 0.60) both clear
- *  it, so whatever happens next is decided by the R ledger alone. */
+/** A 23-sample candidate: 18W/4L plus the WIN fed below → 19W/4L at N=23.
+ *  The raw ladder (0.6) and the cold-start CI both clear it, so whatever
+ *  happens next is decided by the R ledger alone. */
 const seedSkill = async (name: string, r: { netR?: number; rSampled?: number } = {}): Promise<string> => {
   const folder = getMemoryFiles().folders.find(f => f.name === 'skills')!;
   const rLines = r.rSampled
@@ -159,8 +159,8 @@ kind: repeat
 coin: BTCUSDT
 direction: Long
 family: Family A
-wins: 9
-losses: 2
+wins: 18
+losses: 4
 consecutiveLosses: 0
 tradeIds: seed-a,seed-b
 ifCondition: BTC long in Family A
@@ -187,17 +187,17 @@ describe('the R ledger gates promotion', () => {
     await initMemoryFiles(USER);
   });
 
-  it('blocks a skill whose measured R does not pay, even at 10W/2L', async () => {
-    // 10 wins of +0.1R against 2 losses of -1R: an 83% win rate and -0.08R per
-    // trade. The win-rate ladder cannot see this — it is the signature of a
-    // small target behind a wide stop.
+  it('blocks a skill whose measured R does not pay, even at 19W/4L', async () => {
+    // 19 wins of +0.1R against 4 losses of -1R: a high win rate and negative
+    // expectancy. The win-rate ladder cannot see this — it is the signature of
+    // a small target behind a wide stop.
     const fileId = await seedSkill('expectancy-blocked.md', { netR: -0.9, rSampled: 10 });
     const win = makeTrade('eb-1', TradeOutcome.WIN, 0.1);
     await applySkillEvidence(win, USER, [win]);
 
     const meta = readMeta(fileId);
-    expect(meta.wins).toBe(10);
-    expect(meta.losses).toBe(2);
+    expect(meta.wins).toBe(19);
+    expect(meta.losses).toBe(4);
     expect(meta.rSampled).toBe(EXPECTANCY_MIN_R_SAMPLE + 3);
     expect(meta.netR).toBeCloseTo(-0.8, 2);
     // The record itself clears the ladder floor and the cold-start CI — only
@@ -263,8 +263,8 @@ describe('the control group is counted, not just listed', () => {
     expect(meta.controlWins).toBe(1);
     expect(meta.controlLosses).toBe(2);
     // Never mixed into the skill's own record.
-    expect(meta.wins).toBe(9);
-    expect(meta.losses).toBe(2);
+    expect(meta.wins).toBe(18);
+    expect(meta.losses).toBe(4);
   });
 
   it('a replayed control trade does not double-count the baseline', async () => {

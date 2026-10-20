@@ -7,10 +7,12 @@ This file contains guidelines and commands for agentic coding agents working in 
 **`docs/plan/` is the plan, and it is the place to look before proposing work.** It holds:
 
 - `docs/plan/README.md` — the index, the five-phase execution order with the gate for every
-  step, the fourteen owner questions with proposed defaults, and the rules for working it
+  step, the owner questions with proposed defaults (three answered), and the rules for working it
 - `docs/plan/open-items.md` — the working list: every open item the deleted plan corpus
   named, each with the `file:line` that proves it is still open, each mapped to the
   proposal that covers it
+- `docs/plan/implementation-record.md` — what has already landed in a pass, where it landed,
+  and which gate verified it
 - `docs/plan/full-audit.md` — the evidence, all seven sources merged, with a section index
 - `docs/plan/audit/` — the seven sources, individually
 
@@ -19,6 +21,12 @@ items are rulings the trader must make, and the plan says which way it would rec
 **the `docs/analysis/` directory is scratch, not a home for anything durable** — it is
 ignored by the lint config and has been un-tracked on purpose; a plan that must survive
 belongs in `docs/plan/`.
+
+**One place to look, one way to propose.** `docs/plan/` is the working list and
+`docs/plan/full-audit.md` is the evidence behind it; a proposal must cite the id it
+covers — the `O-nn` item in `docs/plan/open-items.md`, or the `E-nn` / `N-nn` proposal in
+`docs/plan/audit/` — so the plan and the code cannot drift apart silently.
+`docs/plan/implementation-record.md` says what has already landed, and how it was verified.
 
 The previous audit's reports are preserved on the `archive/prior-audit-2026-10-18` branch,
 which exists so that `git gc` cannot prune them.
@@ -174,7 +182,7 @@ competing for the machine.
 │                           #   imported by renderer, vite dev proxy AND electron main
 ├── types/                  # analysis, trade, provider, progress, message, learning …
 ├── utils/                  # See "Canonical single-source modules" below
-├── tests/                  # Vitest suites — 4671 tests in 472 files: 4671 pass in 472 and 0 skip across 0 wholly-skipped files. Read from vitest's own summary block 2026-10-20, after the trader-facing fix pass added the screenshot-attachment, symbol-scoped verdict, foreground-notification and plan-only-turn tests, and the follow-up added the roster-group, cost, artifact-scope, harness-contract, abort and live-utility tests.
+├── tests/                  # Vitest suites — 4992 tests in 494 files: 4992 pass in 494 and 0 skip across 0 wholly-skipped files. Read from vitest's own summary block 2026-10-20, after the prior fix pass, the Phase 3/4 implementation pass (E-37 evidence floors, E-38 validity window, E-39 effort, E-40 decidedAt, E-41 leverage/liquidation, E-42 decline, E-43 minEdge, E-35 enforcement, E-18 automatic settlement, E-19 one plan object, E-20 replay, E-23 notebook recovery, E-24 Electron behaviour, E-44 notebook sharding) and the context-window pass (a thinking-sized tool-round budget, the thinking-cut re-ask, automatic compaction, discovered context windows). The file count is the tracked `*.test.*` count `npm run check-flow-doc-anchors` re-measures, so a new test file must land with the census that mentions it.
 └── electron/               # main.cjs + preload.cjs (NOT covered by tsc)
 ```
 
@@ -191,6 +199,18 @@ is how the numbers drift apart:
 - `utils/finishReason.ts` — normalizes the four providers' stop signals onto one
   `FinishReason`, and brackets a run's truncation tally. Read the ceiling with
   `peekTruncations()`; don't re-derive it from a missing regex match.
+- `utils/contextWindow.ts` + `services/providers/contextCompact.ts` — the model's
+  context window and the automatic compaction that respects it. Resolve the
+  window with `resolveContextWindow()` (user override → a limit the provider
+  stated in a rejection → the window `/models` reported for that model id → the
+  1,000,000 default) and never re-derive it from a model name. Size outbound
+  history with `compactForWire()` before sending: it shortens old tool payloads
+  first, then prose, then drops whole tool rounds, keeps every `tool_calls` block
+  with its replies (a split pair 400s the transcript at every OpenAI-compatible
+  gateway), and returns the notice to show the trader. The transport retries once
+  on a context-length rejection and records the limit it stated — that is what
+  makes an optimistic default safe, so do not add a smaller default to "fix" an
+  overflow.
 - `shared/providerRequestPolicy.cjs` — thinking gates, temperature, and
   provider URL host policy for all transports.
 - `utils/harnessMarks.ts` — the one voice for text THIS app withholds from a

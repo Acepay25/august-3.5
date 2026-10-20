@@ -82,7 +82,7 @@ import EffortChip from './components/shared/EffortChip';
 import ModelPicker from './components/shared/ModelPicker';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { computeChatModelFallback, isProviderReady } from './utils/providerUtils';
-import { DEFAULT_LEVERAGE } from './utils/conversationUtils';
+import { defaultLeverage } from './utils/conversationUtils';
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
 import { type ThreadSelection, threadForProvider } from './utils/agentThreads';
 import {
@@ -112,7 +112,7 @@ import { getPreference, setPreference, removePreference, PREF_KEYS } from './ser
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
 import { ProviderConfig } from './types/provider';
 import { isProviderOnCooldown, providerCooldownRemainingMs } from './services/infrastructure/ProviderHealthService';
-import { stopAutoBackup, createBackup } from './services/infrastructure/BackupService';
+import { stopAutoBackup, createBackup, getBackups, type BackupMetadata } from './services/infrastructure/BackupService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { useSurfaceRouter } from './hooks/useSurfaceRouter';
 import type { AppSurface } from './hooks/useSurface';
@@ -161,6 +161,21 @@ const SurfaceSkeleton: React.FC = () => (
  *  is a property of the window, not of who is signed into it, and two profiles
  *  on one machine should see the same rail they left behind. */
 const NAV_RAIL_KEY = 'nav_rail_width_v1';
+
+// ─── Backup freshness watchdog ───────────────────────────────────────────────
+// `createBackup` catches its own error and returns NULL (BackupService.ts:223-226),
+// so a caller's `.catch()` never even fires — a failed backup was invisible.
+// The 30-minute scheduler ignores that null too, so the trader's "I have a
+// backup every 30 minutes" belief could be wrong for as long as the app ran.
+//
+// These are the watchdog's own numbers. The cadence is BackupService's
+// AUTO_BACKUP_INTERVAL_MS (30 minutes); the grace is one extra round, so a
+// single slow write is not an alarm; the repeat is long, because a broken
+// cadence does not need re-announcing every 40 minutes.
+const BACKUP_CADENCE_MS = 30 * 60 * 1000;
+const BACKUP_WATCHDOG_GRACE_MS = 10 * 60 * 1000;
+const BACKUP_WATCHDOG_REPEAT_MS = 2 * 60 * 60 * 1000;
+const BACKUP_WATCHDOG_EVERY_MS = 2 * 60 * 1000;
 
 /**
  * The Chat surface's thinking dial, subscribed HERE rather than in App's body.
@@ -561,7 +576,7 @@ const App: React.FC = () => {
         onJournalAutoRefresh: handleJournalAutoRefresh,
     });
 
-    const [leverageInput, setLeverageInput] = useState<string>(String(DEFAULT_LEVERAGE));
+    const [leverageInput, setLeverageInput] = useState<string>(String(defaultLeverage()));
     // The three leverage handlers useConversationLeverage used to return are
     // gone: nothing called them. The state stays — the composer and the desk
     // both bind to it — but the hook is pure derivation with no effects, so
@@ -1491,6 +1506,13 @@ const App: React.FC = () => {
     const handleLogProposedTrade = useCallback(async (proposal: TradeProposal): Promise<boolean> => {
         const gate = await ensureStamp(proposal, loggedTrades);
         const stamped: TradeProposal = { ...proposal, gate };
+        if (gate.refusal) {
+            // The card disables its own button, but a schedule, a replayed row
+            // or a stale transcript can still reach this writer. The refusal
+            // is the trader's own edge floor, not a warning.
+            toast.error('Plan refused by your edge floor', gate.refusal);
+            return false;
+        }
         if (gate.status === 'unavailable') {
             const ok = await confirmDialog({
                 title: 'The gate could not be checked',
@@ -1923,13 +1945,86 @@ const App: React.FC = () => {
             lastExitBackupRef.current = Date.now();
             if (activeUsernameRef.current) {
                 // Best-effort: IndexedDB transactions started in beforeunload
-                // usually complete in Chromium; a failed write is non-fatal.
-                void createBackup(activeUsernameRef.current).catch(() => {});
+                // usually complete in Chromium, and a failed write is
+                // non-fatal — the 30-minute auto-backup is the real safety
+                // net. But it is NOT silent: `createBackup` swallows its own
+                // error and resolves to null, so the null IS the failure
+                // signal and it used to be dropped on the floor here.
+                // The window is closing, so a toast is not an option — the
+                // console is the signal, and it names what was lost.
+                void createBackup(activeUsernameRef.current)
+                    .then((metadata) => {
+                        if (metadata) return;
+                        console.error(
+                            '[App] Exit backup FAILED — the last journal snapshot was NOT written. '
+                            + 'The most recent auto-backup is the only copy on disk.',
+                        );
+                    })
+                    .catch((err) => {
+                        console.error(
+                            '[App] Exit backup FAILED — the last journal snapshot was NOT written. '
+                            + 'The most recent auto-backup is the only copy on disk.',
+                            err,
+                        );
+                    });
             }
         };
         window.addEventListener('beforeunload', onBeforeUnload);
         return () => window.removeEventListener('beforeunload', onBeforeUnload);
     }, []);
+
+    // ── Backup freshness watchdog ───────────────────────────────────────────
+    // A failed backup used to produce NO signal at all: `createBackup` returns
+    // null on failure and the 30-minute scheduler ignores that null, so the
+    // trader believed they had a backup cadence and learned the truth only
+    // when they needed a restore. This watches the one signal the backup
+    // store already publishes — the newest backup's timestamp — and says so
+    // out loud when the cadence stops.
+    //
+    // It NEVER writes anything: it is a watchdog, not a backup, so it cannot
+    // double the cadence or change what lands on disk.
+    useEffect(() => {
+        if (!activeUsername) return;
+        let cancelled = false;
+        // When the current grace window opened, and how long it is.
+        let watchingSince = Date.now();
+        let graceMs = BACKUP_CADENCE_MS + BACKUP_WATCHDOG_GRACE_MS;
+        // The newest backup seen so far. Zero means "none yet".
+        let newestBackupAt = 0;
+
+        const check = async (): Promise<void> => {
+            let backups: BackupMetadata[];
+            try {
+                backups = await getBackups(activeUsername);
+            } catch {
+                return; // the backup store is unreadable — the watchdog is best-effort
+            }
+            if (cancelled) return;
+            const newest = backups.reduce(
+                (max, b) => Math.max(max, Date.parse(b.timestamp) || 0),
+                0,
+            );
+            if (newest > newestBackupAt) {
+                // A backup landed — the cadence is alive. Re-arm the window.
+                newestBackupAt = newest;
+                watchingSince = Date.now();
+                graceMs = BACKUP_CADENCE_MS + BACKUP_WATCHDOG_GRACE_MS;
+                return;
+            }
+            if (Date.now() - watchingSince < graceMs) return;
+            // A whole round (plus slack) passed with nothing written.
+            watchingSince = Date.now();
+            graceMs = BACKUP_WATCHDOG_REPEAT_MS;
+            toast.error(
+                'Auto-backup has not run',
+                'No new backup has been written for over 40 minutes, so the last snapshot on disk may be out of date. Open Settings → Data to back up now.',
+            );
+        };
+
+        void check();
+        const id = window.setInterval(() => { void check(); }, BACKUP_WATCHDOG_EVERY_MS);
+        return () => { cancelled = true; window.clearInterval(id); };
+    }, [activeUsername, toast]);
 
 
 
@@ -2100,7 +2195,7 @@ const App: React.FC = () => {
                 <ScenarioSimulator
                     message={simulatorCandidate}
                     loggedTrades={loggedTrades}
-                    leverage={activeConversation?.leverage || DEFAULT_LEVERAGE}
+                    leverage={activeConversation?.leverage || defaultLeverage()}
                     onClose={() => setSimulatorCandidate(null)}
                 />
             )}

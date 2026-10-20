@@ -7,7 +7,7 @@ import { LoggedTrade, TradeOutcome } from '../../types';
 import ImageViewerModal from '../modals/ImageViewerModal';
 import { EmptyState } from '../ui/EmptyState';
 import StatusPill, { VerdictReviewPill, type PillTone } from '../ui/StatusPill';
-import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
+import { defaultLeverage } from '../../utils/conversationUtils';
 import { captureEfficiencyPct } from '../../utils/disciplineAnalytics';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import SetupLifecycleCard from '../analysis/SetupLifecycleCard';
@@ -71,7 +71,7 @@ const TradeDetailView: React.FC<{
     const { analysis, outcome, timestamp, postMortem, postMortemImages, correctedEntry, correctedStopLoss, correctedTakeProfit, pnlAmount, pnlPercent, modelsUsed, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, groqAlt2ModelUsed, openrouterModelUsed, moderatorModel, leverage } = trade;
     const { direction, stopLoss, stopLossPercentage, entryPoints, takeProfit, activeStrategies, coinName, invalidationCriteria } = analysis;
     const [viewerImageUrl, setViewerImageUrl] = useState<string | null>(null);
-    const [localLeverage, setLocalLeverage] = useState<string>(String(leverage || DEFAULT_LEVERAGE));
+    const [localLeverage, setLocalLeverage] = useState<string>(String(leverage || defaultLeverage()));
     // PnL edit state — autopilot-logged trades only carry a percent, so the
     // dollar figure often needs a manual fill.
     const [pnlDraftAmount, setPnlDraftAmount] = useState<string>(pnlAmount !== undefined ? String(pnlAmount) : '');
@@ -84,7 +84,7 @@ const TradeDetailView: React.FC<{
 
     const handleLeverageBlur = () => {
         let val = parseInt(localLeverage, 10);
-        if (isNaN(val)) val = DEFAULT_LEVERAGE;
+        if (isNaN(val)) val = defaultLeverage();
         val = Math.max(1, Math.min(125, val));
         setLocalLeverage(String(val));
         if (val !== leverage) {

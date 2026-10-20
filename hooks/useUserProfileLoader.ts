@@ -39,7 +39,7 @@ import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { runMigrations, checkDataIntegrity, createStartupBackup, logIntegrityEvent } from '../services/validation/DataIntegrityService';
 import { startAutoBackup } from '../services/infrastructure/BackupService';
 import { getPreferenceObject, PREF_KEYS } from '../services/infrastructure/PreferencesService';
-import { createNewConversation, DEFAULT_LEVERAGE } from '../utils/conversationUtils';
+import { createNewConversation, LEGACY_LEVERAGE } from '../utils/conversationUtils';
 import { recalculateAnalysisMetrics } from '../utils/analysisUtils';
 import { getFirstReadyProvider } from '../utils/providerUtils';
 import { DEFAULT_FRAMEWORKS } from '../constants/models';
@@ -367,7 +367,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 if (isStale()) return;
 
                 const correctedConvs = (profile.conversations || []).map(conv => {
-                    const leverage = conv.leverage || DEFAULT_LEVERAGE;
+                    const leverage = conv.leverage || LEGACY_LEVERAGE;
                     const correctedMessages = (conv.messages || []).map(msg =>
                         msg.analysis
                             ? { ...msg, analysis: recalculateAnalysisMetrics(msg.analysis, leverage) }
@@ -379,7 +379,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 const convs = correctedConvs.length > 0 ? correctedConvs : [createNewConversation()];
                 setConversationHistory(convs);
 
-                const loadedTrades = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || DEFAULT_LEVERAGE }));
+                const loadedTrades = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || LEGACY_LEVERAGE }));
                 setLoggedTrades(loadedTrades);
                 syncConfluenceFromTradeLog(loadedTrades);
 
@@ -435,7 +435,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                     }
                 }
 
-                const tradeLogData = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || DEFAULT_LEVERAGE }));
+                const tradeLogData = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || LEGACY_LEVERAGE }));
                 syncFromTradeLog(tradeLogData);
                 syncRollingWindowFromTradeLog(tradeLogData);
 

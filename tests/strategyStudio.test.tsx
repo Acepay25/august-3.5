@@ -107,11 +107,9 @@ describe('a skill the human approved through the real path', () => {
         } as never, 'BTCUSDT', USER, undefined, 'human');
         const { listSkills } = await import('../services/learning/SkillMemoryService');
         const found = listSkills().map(x => x.file.name);
-        // eslint-disable-next-line no-console
         console.log('INGEST', JSON.stringify(r), 'LIST', JSON.stringify(found));
         render(<ToastProvider><StrategyStudio trades={[trade]} username={USER} /></ToastProvider>);
         const table = await screen.findByTestId('strategy-studio-skills');
-        // eslint-disable-next-line no-console
         console.log('TABLE_TEXT', JSON.stringify(table.textContent));
         expect(table.textContent).toMatch(/fade\s*short/i);
     });

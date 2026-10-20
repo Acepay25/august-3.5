@@ -99,6 +99,35 @@ const undecryptableCiphertexts = new Map<string, string>();
  * Load all provider configs. Returns empty array if none configured.
  * API keys are decrypted transparently when the desktop bridge is available.
  */
+/** A stored rate: any finite non-negative number, `0` included (a free model is
+ *  a real price). Anything else is "not set", never a silent 0. */
+function nonNegativeNumber(value: unknown): number | undefined {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+/** A positive integer — the shape a context window has to be. */
+function positiveNumber(value: unknown): number | undefined {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
+}
+
+/** A capability override is tri-state by design: `undefined` means "decide by
+ *  detection", so a stored string or a stray `1` must NOT become `true`. */
+function triState(value: unknown): boolean | undefined {
+    return value === true ? true : value === false ? false : undefined;
+}
+
+/** id → window, keeping only plausible entries. A corrupt map must not take the
+ *  provider row down with it. */
+function parseModelContextWindows(value: unknown): Record<string, number> | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const out: Record<string, number> = {};
+    for (const [id, raw] of Object.entries(value as Record<string, unknown>)) {
+        const tokens = positiveNumber(raw);
+        if (id && tokens) out[id] = tokens;
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export async function loadProviderConfigs(): Promise<ProviderConfig[]> {
     const saved = await getPreferenceObject<ProviderConfig[]>(STORAGE_KEY);
     if (!Array.isArray(saved)) return getDefaultConfigs();
@@ -139,6 +168,23 @@ export async function loadProviderConfigs(): Promise<ProviderConfig[]> {
             isBuiltIn: config.isBuiltIn === true,
             models,
             selectedModel,
+            // The optional fields are read back with the same coercions the
+            // editor applies, and they are COPIED because this literal is what
+            // the rest of the app sees: a field left out here is silently lost
+            // on every app start while the save path keeps writing it. That is
+            // not hypothetical — `contextWindowTokens`, `thinkingCapable`,
+            // `jsonSchemaCapable` and the two pricing rates were all being
+            // dropped, so a window the trader typed (or a limit discovery
+            // learned) held for the session and vanished on restart, and
+            // `utils/contextWindow` fell back to its assumed default.
+            // Compaction decides how much history survives, so it has to be
+            // sized off the number the provider editor shows.
+            inputUsdPer1k: nonNegativeNumber(config.inputUsdPer1k),
+            outputUsdPer1k: nonNegativeNumber(config.outputUsdPer1k),
+            thinkingCapable: triState(config.thinkingCapable),
+            jsonSchemaCapable: triState(config.jsonSchemaCapable),
+            contextWindowTokens: positiveNumber(config.contextWindowTokens),
+            modelContextWindows: parseModelContextWindows(config.modelContextWindows),
         } satisfies ProviderConfig;
     }));
     // Owner ruling 2026-10-19: the per-provider ensemble roster is gone. A
@@ -553,6 +599,40 @@ export async function discoverProviderModels(config: {
     apiKey: string;
     apiFormat: ApiFormat;
 }): Promise<string[]> {
+    return (await discoverProviderModelCatalog(config)).ids;
+}
+
+/** Model ids PLUS whatever the provider said about each one's context window. */
+export interface DiscoveredModelCatalog {
+    ids: string[];
+    /** modelId → context window in tokens. Sparse: only models the provider
+     *  actually reported a window for. An absent key means "no claim", NOT
+     *  "small window" — `utils/contextWindow` falls through to the measured
+     *  limit or the default, and a false zero here would compact a 1M model to
+     *  nothing. */
+    windows: Record<string, number>;
+}
+
+/**
+ * Discover the provider's models and their context windows.
+ *
+ * `discoverProviderModels` is this function's ids-only face, kept because that
+ * is what the model editor and the catalog refresh need; the windows are for
+ * `utils/contextWindow.resolveContextWindow`, which otherwise has to choose
+ * between a number the trader typed and an assumption.
+ *
+ * The field names below are what the gateways actually send, and they are not
+ * one standard: OpenRouter/Together use `context_length`, Groq `context_window`,
+ * llama.cpp `context_length`, vLLM `max_model_len`, Ollama's `/api/show`
+ * `context_length`, Gemini `inputTokenLimit`. A provider that uses none of them
+ * (OpenAI, DeepSeek, Anthropic) yields no windows — which is precisely the case
+ * the assumed default and the measured-limit recovery exist for.
+ */
+export async function discoverProviderModelCatalog(config: {
+    baseUrl: string;
+    apiKey: string;
+    apiFormat: ApiFormat;
+}): Promise<DiscoveredModelCatalog> {
     const key = (config.apiKey || '').trim();
     if (!(config.baseUrl || '').trim()) throw new Error('Base URL is required to discover models.');
     // Keyless LOCAL providers (Ollama / LM Studio) answer /models with no
@@ -576,5 +656,65 @@ export async function discoverProviderModels(config: {
     if (ids.length === 0) {
         throw new Error('The provider returned no models — its /models endpoint may be unsupported.');
     }
-    return ids;
+    return { ids, windows: parseDiscoveredModelWindows(parsed) };
+}
+
+/** The keys a context window hides under, across the families this app talks
+ *  to. Ordered by how specific they are: `context_length` is what a gateway
+ *  that knows its own model reports, `max_model_len` is vLLM's, and
+ *  `input_token_limit` is Google's. `total_tokens`/`max_tokens` are
+ *  deliberately NOT here — those are request caps, not the window, and reading
+ *  a 4096 output cap as a context window would make every turn compact itself
+ *  into amnesia. */
+const WINDOW_KEYS = [
+    'context_length',
+    'context_window',
+    'context_size',
+    'max_context_length',
+    'model_context_window',
+    'max_model_len',
+    // Google spells its two camelCase; llama.cpp and the OpenAI-compat gateways
+    // snake. A list that covers one family silently reports "unknown" for the
+    // other, and unknown means the app goes back to the assumed 1M default.
+    'inputTokenLimit',
+    'input_token_limit',
+] as const;
+
+const readWindow = (source: Record<string, unknown> | undefined): number | null => {
+    if (!source) return null;
+    for (const key of WINDOW_KEYS) {
+        const v = source[key];
+        if (typeof v === 'number' && Number.isFinite(v) && v >= 512 && v <= 100_000_000) {
+            return Math.floor(v);
+        }
+    }
+    // Nested shapes: { limits: { context_length } } (NVIDIA NIM),
+    // { limit: { context_length } } (some proxies), { details: { ... } }.
+    for (const bag of ['limits', 'limit', 'details', 'metadata', 'model_limits']) {
+        const nested = source[bag];
+        if (nested && typeof nested === 'object') {
+            const found = readWindow(nested as Record<string, unknown>);
+            if (found) return found;
+        }
+    }
+    return null;
+};
+
+/** id → window, from any /models body shape `parseDiscoveredModelIds` reads. */
+export function parseDiscoveredModelWindows(body: unknown): Record<string, number> {
+    const out: Record<string, number> = {};
+    const items: unknown[] = Array.isArray(body)
+        ? body
+        : body && typeof body === 'object'
+            ? (['data', 'models', 'result', 'model_list', 'items', 'list']
+                .map(k => (body as Record<string, unknown>)[k])
+                .find(Array.isArray) ?? [])
+            : [];
+    for (const item of items) {
+        const id = extractModelId(item);
+        if (!id) continue;
+        const window = readWindow(item && typeof item === 'object' ? item as Record<string, unknown> : undefined);
+        if (window) out[id] = window;
+    }
+    return out;
 }

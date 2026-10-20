@@ -20,10 +20,22 @@
  * rest of the session, which is the cheap version of anchoring on real usage.
  */
 
-/** Fallback assumption when a provider declares no window. Half of 128K —
- *  conservative on purpose: it is used to size how much memory we DARE inject,
- *  so a wrong guess must shrink the allowance, not overflow the request. */
-export const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS = 65_536;
+import { DEFAULT_CONTEXT_WINDOW_TOKENS } from './contextWindow';
+
+/** Fallback assumption when a provider declares no window.
+ *
+ * 1,000,000 (owner ruling, 2026-10-20) — and the number is SAFE here only
+ * because every injection budget this feeds is `min(cap, window × fraction)`
+ * and both caps already bind well below 1M: 2 %/900 tokens for retrieved
+ * memory, 10 %/6,000 for the market packet. Raising it therefore changes no
+ * injected byte; `tests/contextWindow.test.ts` pins that claim rather than
+ * trusting it. It used to be 65,536 ("half of 128K, conservative on purpose")
+ * which was the right assumption for the same reason: the caps bound at 45K
+ * and above, so below them the fraction, not the default, decided.
+ * See `utils/contextWindow.ts` for what the window is used for NOW — the
+ * outbound ceiling — and for the compaction plus the measured-limit fallback
+ * that make an optimistic ceiling survivable. */
+export const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS = DEFAULT_CONTEXT_WINDOW_TOKENS;
 
 /** Historical chars-per-token used across the app. Kept as the floor of the
  *  estimate so this module never budgets MORE optimistically than before. */

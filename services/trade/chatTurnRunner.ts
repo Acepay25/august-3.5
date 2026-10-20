@@ -44,6 +44,7 @@ import { recordBotTurnOutcome } from '../agents/botLearning';
 import * as watchService from './watchService';
 import { parsePriceWatch, parseTimeWake, describeWatchesForModel } from './chartTriggers';
 import { phtClock } from '../../utils/timezone';
+import { truncationNotice, withTruncationWindow } from '../../utils/finishReason';
 import { ensureNotifyPermission } from '../infrastructure/notify';
 import { recordSessionForReview, runSessionSkillReview, runThesisResolver, type ReviewableSession } from '../learning/sessionSkillReview';
 import { runTraderLearner } from '../learning/traderLearner';
@@ -117,6 +118,7 @@ const TRADE_TOOLS = [
     'amend_memory', 'forge_tool', 'scan_chart_skills',
     // Chart-action set: the model draws on the live chart (levels, lines).
     'draw_on_chart', 'draw_detected', 'mark_trade_levels', 'clear_chart_drawings', 'present_trade',
+    'decline_trade',
     // Watch/schedule harness: real-time price triggers + time wake-ups.
     'watch_price', 'wake_me', 'cancel_watch',
     // Collaboration memory: this environment's MEMORY.md analogue — the model
@@ -634,7 +636,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             allowedTools: TRADE_TOOLS,
             maxTokens: TASK_BUDGETS.chat,
             temperature: 0.4,
-            reasoningEffort: resolveComposerEffort(effort),
+            reasoningEffort: resolveComposerEffort(effort, 'tradingDecision'),
             chartInterval: interval,
             chartLevels,
             chartDrawings: allDrawings,
@@ -696,16 +698,22 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 onAction?.(`${action.ok ? action.verb : 'rejected'} ${action.tool === 'revise_skill' || action.tool === 'propose_skill' ? `skill ${action.label}` : action.tool === 'write_memory_note' ? `memory note ${action.label}` : action.tool === 'amend_memory' ? `memory amendment ${action.label}` : action.tool === 'forge_tool' ? `tool ${action.label}` : action.label}`);
             },
         };
-        const outcome = await runToolTurn({
+        // The truncation tally is per-RUN, and this is the run. Without a window
+        // open, `recordFinishReason` counts nothing and a provider that stopped
+        // at the token ceiling is indistinguishable from one that finished — a
+        // truncated body is a SUCCESS-shaped response, so nothing else in the
+        // transport reports it. Bracket the seat's turn so the line the trader
+        // reads is a measured fact, not a guess from a missing sentence.
+        const { value: outcome, summary } = await withTruncationWindow(async () => await runToolTurn({
             config,
             messages,
             signal: controller.signal,
             startedAt: turnStartedAt,
-            effort: resolveComposerEffort(effort),
+            effort: resolveComposerEffort(effort, 'tradingDecision'),
             keepTextHidden: hidePass ? panelCouldStillBePass : undefined,
             transport,
             events,
-        });
+        }));
         recordToolTurnUsage({
             startedAt: turnStartedAt,
             workedMs: outcome.workedMs,
@@ -719,6 +727,10 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 outputUsdPer1k: config.outputUsdPer1k,
             },
         });
+        // A cut-off answer is said on the row it belongs to: the seat's text
+        // may end mid-sentence, and the trader must be able to tell that from
+        // an answer that simply finished.
+        const cutOff = truncationNotice(summary);
         patch(e => ({
             ...e,
             streaming: false,
@@ -735,6 +747,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                         : (e.reasoning || outcome.reasoning),
                 }),
             ...(outcome.notice ? { tools: [...e.tools, outcome.notice] } : {}),
+            ...(cutOff ? { tools: [...e.tools, cutOff] } : {}),
         }));
         return outcome.carry;
     };

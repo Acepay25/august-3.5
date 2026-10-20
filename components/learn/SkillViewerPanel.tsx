@@ -10,6 +10,7 @@ import {
     EXPECTANCY_MIN_R_SAMPLE,
     type SkillMeta,
 } from '../../services/learning/SkillMemoryService';
+import type { SkillReviewFinding, SkillReviewVerdict } from '../../services/learning/skillReview';
 import type { MemoryFile } from '../../types';
 
 /**
@@ -40,6 +41,30 @@ export interface SkillViewerRecord {
     meta: SkillMeta;
 }
 
+/**
+ * The four review verdicts, and how each is WORDED.
+ *
+ * These are not run statuses, so `utils/runStatus.ts` does not apply — that
+ * module is the vocabulary for a RUN. A skill verdict answers a different
+ * question: "is this file healthy?". The wording is the load-bearing part:
+ * a **ghost** is a defect (the file is in the notebook and in no list), while
+ * a **dormant** skill is a WARNING — a general rule is *meant* to be unscoped
+ * — and a **clipped** one is a warning too (the seat gets half a procedure).
+ */
+const VERDICT_LABEL: Record<SkillReviewVerdict, string> = {
+    fine: 'Fine',
+    dormant: 'Dormant',
+    clipped: 'Clipped',
+    ghost: 'Ghost',
+};
+
+const VERDICT_TONE: Record<SkillReviewVerdict, string> = {
+    fine: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+    dormant: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+    clipped: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+    ghost: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+};
+
 /** Outcome line, or the honest words for what is missing. Expectancy is the
  *  hard case: below EXPECTANCY_MIN_R_SAMPLE sampled outcomes it is UNMEASURED,
  *  which is not break-even, so it says so rather than printing a zero. */
@@ -67,7 +92,19 @@ const scopeOf = (meta: SkillMeta): Array<[string, string]> => {
     return rows;
 };
 
-const SkillViewerPanel: React.FC<{ skill: SkillViewerRecord; onClose?: () => void }> = ({ skill, onClose }) => {
+const SkillViewerPanel: React.FC<{
+    skill: SkillViewerRecord;
+    onClose?: () => void;
+    /**
+     * The format review's finding for THIS skill, when one has been run.
+     *
+     * It arrives as a prop rather than being computed here, for two reasons:
+     * the review is a whole-notebook pass (`reviewAllSkills`) that the
+     * catalog runs, and a panel that imported the notebook store would drag
+     * Capacitor and the Electron bridge into every reader of this component.
+     */
+    review?: SkillReviewFinding;
+}> = ({ skill, onClose, review }) => {
     const { file, meta } = skill;
     const [copied, setCopied] = useState(false);
     const status = STATUS_BADGE[meta.status] ?? STATUS_BADGE.candidate;
@@ -121,6 +158,61 @@ const SkillViewerPanel: React.FC<{ skill: SkillViewerRecord; onClose?: () => voi
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar px-3 py-3">
+                {/* THE FORMAT REVIEW'S VERDICT — when the catalog has run one.
+                    A browser that showed only the good news would be the same
+                    defect as a skill file that parses: the problem is exactly
+                    what a reader cannot see. */}
+                {review && (
+                    <section
+                        aria-labelledby="skill-viewer-review-label"
+                        data-testid="skill-viewer-review"
+                        className="mb-3 rounded-control border border-zinc-800/80 bg-zinc-900/60 p-2.5"
+                    >
+                        <div className="flex items-center gap-2">
+                            <span className={`rounded-full border px-2 py-0.5 text-ui-2xs font-semibold ${VERDICT_TONE[review.verdict]}`}>
+                                {VERDICT_LABEL[review.verdict]}
+                            </span>
+                            <h4 id="skill-viewer-review-label" className="text-ui-2xs font-semibold uppercase tracking-wider text-zinc-500">
+                                Format review
+                            </h4>
+                        </div>
+                        <p className="mt-1.5 text-ui-dense text-zinc-300">{review.evidence}</p>
+                        {review.reasons.length > 0 && (
+                            <ul className="mt-1.5 flex flex-col gap-0.5 pl-2">
+                                {review.reasons.map((reason, i) => (
+                                    <li key={i} className="text-ui-2xs text-zinc-500">· {reason}</li>
+                                ))}
+                            </ul>
+                        )}
+                        {review.repair && (
+                            <div className="mt-2 border-t border-zinc-800/80 pt-2">
+                                <p className="text-ui-2xs text-zinc-400">{review.repair.summary}</p>
+                                {review.repair.widens && (
+                                    <p className="mt-1 text-ui-2xs text-amber-300">
+                                        This repair widens the skill&rsquo;s reach — it would become a skill the models can use.
+                                        It is a proposal, not an action: nothing has been written.
+                                    </p>
+                                )}
+                                <details className="mt-1.5">
+                                    <summary className="cursor-pointer text-ui-2xs text-zinc-400 hover:text-zinc-200">
+                                        Show the proposed change
+                                    </summary>
+                                    <div className="mt-1.5 grid grid-cols-1 gap-2">
+                                        <div>
+                                            <p className="text-ui-2xs uppercase tracking-wider text-zinc-500">Now</p>
+                                            <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-control border border-zinc-800/80 bg-zinc-950 p-2 font-mono text-ui-2xs text-zinc-400">{review.repair.before}</pre>
+                                        </div>
+                                        <div>
+                                            <p className="text-ui-2xs uppercase tracking-wider text-zinc-500">Proposed</p>
+                                            <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-control border border-zinc-800/80 bg-zinc-950 p-2 font-mono text-ui-2xs text-zinc-300">{review.repair.after}</pre>
+                                        </div>
+                                    </div>
+                                </details>
+                            </div>
+                        )}
+                    </section>
+                )}
+
                 {/* DESCRIPTION — its own labelled field, above the body, because
                     it is the retrieval trigger the matcher reads. */}
                 <section aria-labelledby="skill-viewer-description-label">

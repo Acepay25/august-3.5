@@ -143,13 +143,19 @@ describe('both chat homes drive the one stored tier', () => {
     });
 
     it('both chat transports map the tier through one shared rule', () => {
-        expect(runnerSrc).toMatch(/reasoningEffort: resolveComposerEffort\(effort\)/);
+        // The dock and the Chat surface can both present a plan, so their
+        // "auto" resolves through tradingDecision — not the casual chat tier
+        // (E-39). A trader's explicit pick still passes through untouched.
+        expect(runnerSrc).toMatch(/reasoningEffort: resolveComposerEffort\(effort, 'tradingDecision'\)/);
         expect(casualSrc).toMatch(/reasoningEffort: resolveComposerEffort\(effort\)/);
         // 20b added a THIRD casual transport — the Chat surface's desk turn.
         // One dial, three wires: a transport that skipped the shared rule would
         // show a tier on the chip and send another on the wire.
         const surfaceSrc = fs.readFileSync('services/trade/chatSurfaceTurn.ts', 'utf8');
-        expect(surfaceSrc).toMatch(/reasoningEffort: resolveComposerEffort\(req\.effort\)/);
+        expect(surfaceSrc).toMatch(/reasoningEffort: resolveComposerEffort\(req\.effort, 'tradingDecision'\)/);
+        // A scheduled run that can present gets the schedule's top tier.
+        const automationSrc = fs.readFileSync('services/trade/automationTurn.ts', 'utf8');
+        expect(automationSrc).toMatch(/resolveComposerEffort\(undefined, 'automatedTradingDecision'\)/);
         // No transport may keep its own copy of the chat default.
         expect(runnerSrc).not.toMatch(/effortForTask\('chat'\)/);
         expect(surfaceSrc).not.toMatch(/effortForTask\('chat'\)/);

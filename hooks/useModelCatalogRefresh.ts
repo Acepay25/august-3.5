@@ -16,9 +16,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ProviderConfig } from '../types/provider';
-import { discoverProviderModels } from '../services/infrastructure/ProviderConfigService';
+import { discoverProviderModelCatalog } from '../services/infrastructure/ProviderConfigService';
 import { getPreferenceObject, setPreferenceObject } from '../services/infrastructure/PreferencesService';
-import { mergeDiscoveredModels, sortModelsFreeFirst } from '../utils/providerUtils';
+import {
+    mergeDiscoveredModels,
+    mergeModelContextWindows,
+    sameModelContextWindows,
+    sortModelsFreeFirst,
+} from '../utils/providerUtils';
 import { isLocalBaseUrl } from '../shared/providerRequestPolicy.cjs';
 
 const LAST_SWEEP_KEY = 'model_catalog_sweep_v1';
@@ -74,11 +79,12 @@ export const useModelCatalogRefresh = (
             // Query enabled providers concurrently for fast, responsive discovery
             const results = await Promise.allSettled(
                 targets.map(async provider => {
-                    const discovered = await discoverProviderModels({
+                    const catalog = await discoverProviderModelCatalog({
                         baseUrl: provider.baseUrl,
                         apiKey: provider.apiKey,
                         apiFormat: provider.apiFormat,
                     });
+                    const discovered = catalog.ids;
                     // Where the endpoint lists the whole catalog, it IS the
                     // source of truth and pruning deprecated ids is correct.
                     // A local server is the exception: Ollama's /api/tags
@@ -96,11 +102,21 @@ export const useModelCatalogRefresh = (
                         && provider.models.every((m, idx) => m === nextModels[idx]);
                     const existing = new Set(provider.models);
                     const fresh = discovered.filter(m => !existing.has(m));
-                    if (!isUnchanged && nextModels.length > 0) {
-                        const updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>> = { models: nextModels };
+                    // The windows ride the SAME write: `/models` is the only
+                    // place this app can learn a model's real context length
+                    // without the trader typing it, and the answer to "how much
+                    // history may I send" decides whether a long turn compacts
+                    // or overflows.
+                    const nextWindows = mergeModelContextWindows(provider.modelContextWindows, catalog.windows);
+                    const windowsChanged = !sameModelContextWindows(provider.modelContextWindows, nextWindows);
+                    if ((!isUnchanged && nextModels.length > 0) || windowsChanged) {
+                        const updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>> = isUnchanged
+                            ? {}
+                            : { models: nextModels };
                         if (provider.selectedModel && !nextModels.includes(provider.selectedModel)) {
                             updates.selectedModel = nextModels[0] || '';
                         }
+                        if (windowsChanged) updates.modelContextWindows = nextWindows;
                         await updateRef.current(provider.id, updates);
                     }
                     return { providerId: provider.id, freshCount: fresh.length };

@@ -24,7 +24,7 @@ vi.mock('../services/learning/MemoryModelService', () => ({
 }));
 
 import { initMemoryFiles, getMemoryFiles } from '../services/learning/MemoryFilesService';
-import { maybeUpsertSkill, MIN_CLUSTER_FOR_SKILL } from '../services/learning/SkillMemoryService';
+import { maybeUpsertSkill, MIN_CLUSTER_FOR_SKILL, MIN_SAMPLE_CONFIRMED, MIN_SAMPLE_FOR_VETO } from '../services/learning/SkillMemoryService';
 import type { LoggedTrade, TradeAnalysis, TradeOutcome } from '../types';
 
 const USER = 'no-claim-user';
@@ -76,5 +76,23 @@ describe('maybeUpsertSkill no-claim gate', () => {
     const created = await maybeUpsertSkill(trades[2], trades, USER);
     expect(created).not.toBeNull();
     expect(created!.content).toContain('Wait for the 15m reclaim');
+  });
+
+  it('waits for the RAISED floor — nine trades mint nothing, ten do (E-37)', async () => {
+    expect(MIN_CLUSTER_FOR_SKILL).toBe(10);
+    expect(MIN_SAMPLE_CONFIRMED).toBe(20);
+    expect(MIN_SAMPLE_FOR_VETO).toBe(10);
+
+    const pm = '**Key Lesson:** Wait for the 15m reclaim before entering.';
+    const nine = Array.from({ length: MIN_CLUSTER_FOR_SKILL - 1 }, (_, i) =>
+      makeTrade(`n-${i}`, 'LOSS' as TradeOutcome, pm)
+    );
+    expect(await maybeUpsertSkill(nine[2], nine, USER)).toBeNull();
+    expect(getMemoryFiles().files.filter(f => f.folderId === 'skills')).toHaveLength(0);
+
+    const ten = Array.from({ length: MIN_CLUSTER_FOR_SKILL }, (_, i) =>
+      makeTrade(`t-${i}`, 'LOSS' as TradeOutcome, pm)
+    );
+    expect(await maybeUpsertSkill(ten[2], ten, USER)).not.toBeNull();
   });
 });

@@ -16,7 +16,7 @@
  * Preferences key.
  */
 
-import { getPreference, setPreferenceObject, removePreference } from '../infrastructure/PreferencesService';
+import { getPreference, getPreferenceObject, setPreference, setPreferenceObject, removePreference, getAllKeys } from '../infrastructure/PreferencesService';
 import { LoggedTrade, MemoryFile, MemoryFolder, TradeOutcome, UserProfile } from '../../types';
 import { isMeaningfulLabel } from '../../utils/meaningfulLabel';
 import {
@@ -29,13 +29,53 @@ import {
 } from '../../utils/memoryBudget';
 
 const MEMORY_KEY_PREFIX = 'memory_files_v1_';
+/** Shard payloads: `memory_files_v2_<user>_<shard>`. The v1 key keeps the
+ *  folders, the small files and the shard manifest. */
+const SHARD_KEY_PREFIX = 'memory_files_v2_';
+/** The categories large and frequent enough to be worth splitting out. The
+ *  rest stay in the manifest so a rule edit does not rewrite the skills. */
+const SHARDED_FOLDER_NAMES = new Set(['skills', 'trader-diary']);
+/** A preserved copy of a notebook blob the loader could not trust. */
+const CORRUPT_KEY_PREFIX = 'memory_files_corrupt_v1_';
 /** Diaries keep only the most recent entries so the injected file stays tight. */
 const MAX_DIARY_ENTRIES = 50;
 
+export interface NotebookShardMeta {
+    key: string;
+    checksum: string;
+    bytes: number;
+    fileIds: string[];
+}
+
 export interface MemoryFilesStore {
-    version: 1;
+    version: 1 | 2;
     folders: MemoryFolder[];
     files: MemoryFile[];
+    /** v2 only: one entry per sharded folder name. */
+    shards?: Record<string, NotebookShardMeta>;
+    /** FNV-1a of the folders+files payload. Absent on rows written before
+     *  this field existed; a mismatch is reported, never a reason to drop the
+     *  trader's bytes. */
+    checksum?: string;
+    savedAt?: string;
+}
+
+/** A cheap integrity fingerprint over the notebook's own bytes. */
+export const notebookChecksum = (store: Pick<MemoryFilesStore, 'folders' | 'files'>): string => {
+    let hash = 2166136261;
+    const text = JSON.stringify({ folders: store.folders, files: store.files });
+    for (let i = 0; i < text.length; i += 1) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, '0');
+};
+
+export interface NotebookCorruptSidecar {
+    key: string;
+    capturedAt?: string;
+    reason?: string;
+    bytes: number;
 }
 
 /** Synchronous cache — populated by initMemoryFiles and every mutation. */
@@ -156,7 +196,47 @@ const initMemoryFilesUnlocked = async (username: string): Promise<void> => {
                 stored = null;
             }
             if (stored && Array.isArray(stored.folders) && Array.isArray(stored.files)) {
-                adoptCache(stored);
+                // Integrity is REPORTED, never a reason to drop bytes: a
+                // hand-repaired or older blob may predate the checksum, and a
+                // mismatch on a readable notebook is still the trader's data.
+                if (typeof stored.checksum === 'string' && stored.checksum !== notebookChecksum(stored)) {
+                    console.warn(`[MemoryFiles] Notebook for "${username}" failed its checksum; loading it anyway and preserving a sidecar copy.`);
+                    await preserveCorruptNotebook(username, raw, 'checksum mismatch');
+                }
+                if (stored.version === 2 && stored.shards) {
+                    // Read the shards back into the ONE in-memory notebook the
+                    // rest of the app knows. A shard that will not parse is
+                    // preserved, not silently treated as an empty folder.
+                    const merged = [...stored.files];
+                    for (const [shardName, meta] of Object.entries(stored.shards)) {
+                        let shardRaw: string | null = null;
+                        try {
+                            shardRaw = await getPreference(meta.key);
+                            const parsedShard = shardRaw ? JSON.parse(shardRaw) as { files?: unknown; checksum?: unknown } : null;
+                            if (!parsedShard || !Array.isArray(parsedShard.files)) throw new Error('not a shard');
+                            if (typeof parsedShard.checksum === 'string'
+                                && parsedShard.checksum !== notebookChecksum({ folders: [], files: parsedShard.files as MemoryFile[] })) {
+                                // The bytes are readable, so they are still loaded;
+                                // the mismatch is preserved as evidence, like the
+                                // manifest's own checksum.
+                                console.warn(`[MemoryFiles] Shard "${shardName}" for "${username}" failed its checksum; loading it anyway and preserving a sidecar copy.`);
+                                await preserveCorruptNotebook(username, shardRaw ?? '', `shard ${shardName} checksum mismatch`, meta.key);
+                            }
+                            merged.push(...parsedShard.files as MemoryFile[]);
+                        } catch {
+                            console.warn(`[MemoryFiles] Shard "${shardName}" for "${username}" is unreadable; preserving a sidecar and keeping the rest of the notebook.`);
+                            await preserveCorruptNotebook(username, shardRaw ?? '', `shard ${shardName} unreadable`, meta.key);
+                        }
+                    }
+                    adoptCache({ ...stored, files: merged });
+                } else {
+                    adoptCache(stored);
+                    // Migrate the one-blob notebook into the manifest + shards
+                    // BEFORE anything writes: the v1 bytes stay as the backup
+                    // until the shards are written and read back by persist().
+                    memoryCache.version = 2;
+                    await persist(username);
+                }
                 await ensureHarnessFoldersUnlocked(username);
                 // A load that changes nothing never persists, and the pressure
                 // read is what refuses new files — so measure on the read path too,
@@ -167,9 +247,11 @@ const initMemoryFilesUnlocked = async (username: string): Promise<void> => {
             // Corrupt or foreign blob: serve an in-memory seed so the app
             // works, but NEVER persist it — the bytes on disk are the only
             // copy of whatever the user had, and overwriting them is the one
-            // unrecoverable outcome. Left untouched, a repaired/restored blob
-            // is picked up on the next boot.
-            console.warn(`[MemoryFiles] Notebook for "${username}" is unparseable; serving an empty in-memory notebook and leaving the stored blob UNTOUCHED.`);
+            // unrecoverable outcome. A sidecar preserves those bytes in a
+            // second place; the original key stays untouched so a repaired
+            // blob is picked up on the next boot.
+            console.warn(`[MemoryFiles] Notebook for "${username}" is unparseable; serving an empty in-memory notebook and preserving a sidecar copy; the stored blob is UNTOUCHED.`);
+            await preserveCorruptNotebook(username, raw, 'unparseable JSON');
             adoptCache(freshSeed());
             return;
         }
@@ -188,6 +270,82 @@ const initMemoryFilesUnlocked = async (username: string): Promise<void> => {
 
 /** The notebook the sync cache currently holds, as loaded by initMemoryFiles. */
 export const getMemoryFilesOwner = (): string | null => memoryCacheOwner;
+
+/**
+ * Preserve a notebook blob the loader could not trust. The MAIN key is never
+ * touched — this is a second copy, so a repair/restore has something to read
+ * after the trader's next write. At most five sidecars per user are kept.
+ */
+const preserveCorruptNotebook = async (
+    username: string,
+    raw: string,
+    reason: string,
+    sourceKey = `${MEMORY_KEY_PREFIX}${username}`,
+): Promise<void> => {
+    try {
+        const key = `${CORRUPT_KEY_PREFIX}${username}_${Date.now()}`;
+        await setPreferenceObject(key, {
+            capturedAt: new Date().toISOString(),
+            sourceKey,
+            reason,
+            raw,
+        });
+        const keys = (await getAllKeys())
+            .filter(k => k.startsWith(`${CORRUPT_KEY_PREFIX}${username}_`))
+            .sort();
+        for (const old of keys.slice(0, Math.max(0, keys.length - 5))) {
+            await removePreference(old).catch(() => { /* best-effort */ });
+        }
+    } catch (e) {
+        // A sidecar is a second chance, not the first: never break boot for it.
+        console.warn('[MemoryFiles] Could not preserve a corrupt-notebook sidecar:', e);
+    }
+};
+
+/** The preserved copies a recovery affordance can offer. */
+export const listNotebookCorruptSidecars = async (username: string): Promise<NotebookCorruptSidecar[]> => {
+    try {
+        const keys = (await getAllKeys())
+            .filter(k => k.startsWith(`${CORRUPT_KEY_PREFIX}${username}_`))
+            .sort()
+            .reverse();
+        const out: NotebookCorruptSidecar[] = [];
+        for (const key of keys) {
+            const rec = await getPreferenceObject<{ capturedAt?: string; reason?: string; raw?: string }>(key);
+            if (!rec) continue;
+            out.push({
+                key,
+                ...(rec.capturedAt ? { capturedAt: rec.capturedAt } : {}),
+                ...(rec.reason ? { reason: rec.reason } : {}),
+                bytes: typeof rec.raw === 'string' ? rec.raw.length : 0,
+            });
+        }
+        return out;
+    } catch {
+        return [];
+    }
+};
+
+/**
+ * Put a preserved blob back as the live notebook. It is written RAW (the
+ * original bytes, checksum and all) and then re-loaded through the normal
+ * path, so a copy that is itself unreadable is refused instead of replacing
+ * a good notebook with another broken one.
+ */
+export const restoreNotebookFromCorruptSidecar = async (username: string, key: string): Promise<boolean> => {
+    try {
+        if (!key.startsWith(`${CORRUPT_KEY_PREFIX}${username}_`)) return false;
+        const rec = await getPreferenceObject<{ raw?: string }>(key);
+        if (!rec || typeof rec.raw !== 'string') return false;
+        const parsed = JSON.parse(rec.raw) as MemoryFilesStore;
+        if (!Array.isArray(parsed.folders) || !Array.isArray(parsed.files)) return false;
+        await setPreference(`${MEMORY_KEY_PREFIX}${username}`, rec.raw);
+        await initMemoryFiles(username);
+        return true;
+    } catch {
+        return false;
+    }
+};
 
 /** Current notebook state (for the Settings UI and prompt injection). */
 export const getMemoryFiles = (): MemoryFilesStore => memoryCache;
@@ -246,7 +404,56 @@ const persist = async (username: string): Promise<void> => {
             await removePreference(`${MEMORY_KEY_PREFIX}${owner}`);
         } else {
             measureIntoCache();
-            await setPreferenceObject(`${MEMORY_KEY_PREFIX}${owner}`, memoryCache);
+            // Version + checksum ride the write, so a later load can tell a
+            // complete blob from a partial one without guessing.
+            const savedAt = new Date().toISOString();
+            // Split the large, frequently-written categories out of the
+            // manifest. The cache keeps every file; only the STORED shape is
+            // partitioned, so every reader of getMemoryFiles() is unchanged.
+            const folderNameById = new Map(memoryCache.folders.map(f => [f.id, f.name]));
+            const coreFiles: MemoryFile[] = [];
+            const byShard = new Map<string, MemoryFile[]>();
+            for (const file of memoryCache.files) {
+                const name = folderNameById.get(file.folderId) ?? '';
+                if (SHARDED_FOLDER_NAMES.has(name)) {
+                    byShard.set(file.folderId, [...(byShard.get(file.folderId) ?? []), file]);
+                } else {
+                    coreFiles.push(file);
+                }
+            }
+            const shards: Record<string, NotebookShardMeta> = {};
+            for (const [folderId, files] of byShard) {
+                const key = `${SHARD_KEY_PREFIX}${owner}_${slugifyName(folderId) || folderId}`;
+                const payload = {
+                    version: 2,
+                    shard: folderId,
+                    files,
+                    checksum: notebookChecksum({ folders: [], files }),
+                    savedAt,
+                };
+                await setPreferenceObject(key, payload);
+                shards[folderId] = {
+                    key,
+                    checksum: payload.checksum,
+                    bytes: JSON.stringify(payload).length,
+                    fileIds: files.map(f => f.id),
+                };
+            }
+            // The manifest is written LAST: a failed shard write leaves the
+            // previous manifest pointing at the previous shards, so one full
+            // shard cannot take the whole notebook down with it.
+            const manifest: MemoryFilesStore = {
+                version: 2,
+                folders: memoryCache.folders,
+                files: coreFiles,
+                ...(Object.keys(shards).length > 0 ? { shards } : {}),
+                savedAt,
+                checksum: notebookChecksum({ folders: memoryCache.folders, files: coreFiles }),
+            };
+            memoryCache.version = 2;
+            memoryCache.savedAt = savedAt;
+            memoryCache.checksum = notebookChecksum(memoryCache);
+            await setPreferenceObject(`${MEMORY_KEY_PREFIX}${owner}`, manifest);
         }
     } catch (e) {
         // Record, then rethrow: every caller's handling of a failed write is

@@ -47,4 +47,36 @@ describe('HarnessControls new settings', () => {
         fireEvent.change(input, { target: { value: '1' } });
         expect(getHarnessSettings().skillLibraryCap).toBe(5);
     });
+
+    it('default leverage is 10× out of the box and persists clamped (E-41)', () => {
+        localStorage.clear();
+        expect(getHarnessSettings().defaultLeverage).toBe(10);
+        render(<HarnessControls />);
+        const input = screen.getByTestId('harness-default-leverage');
+
+        fireEvent.change(input, { target: { value: '25' } });
+        expect(getHarnessSettings().defaultLeverage).toBe(25);
+
+        fireEvent.change(input, { target: { value: '999' } });
+        expect(getHarnessSettings().defaultLeverage).toBe(125);
+
+        fireEvent.change(input, { target: { value: '0' } });
+        expect(getHarnessSettings().defaultLeverage).toBe(1);
+    });
+
+    it('minimum net edge defaults to 0 and persists (E-43)', () => {
+        localStorage.clear();
+        expect(getHarnessSettings().minEdgeR).toBe(0);
+        render(<HarnessControls />);
+        const input = screen.getByTestId('harness-min-edge');
+        fireEvent.change(input, { target: { value: '0.25' } });
+        expect(getHarnessSettings().minEdgeR).toBe(0.25);
+        fireEvent.change(input, { target: { value: '-2' } });
+        expect(getHarnessSettings().minEdgeR).toBe(-2);
+    });
+
+    it('outcome settlement defaults to SHADOW — the plan\'s first month (E-18)', () => {
+        localStorage.clear();
+        expect(getHarnessSettings().outcomeSettlement).toBe('shadow');
+    });
 });

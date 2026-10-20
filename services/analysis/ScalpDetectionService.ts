@@ -9,6 +9,7 @@
 
 import { TradeAnalysis, LoggedTrade, TradeOutcome } from '../../types';
 import { parsePrice } from '../../utils/analysisUtils';
+import { plannedRiskRewardSigned } from '../../utils/riskReward';
 
 // ============================================================================
 // TYPES
@@ -160,26 +161,38 @@ export const validateScalpTrade = (
     // model output — which is part of why this service was never wired in.
     const entryPrice = parsePrice(analysis.entryPoints?.[0]?.price || '') || 0;
     const slPrice = parsePrice(analysis.stopLoss || '') || 0;
-    const tp1Price = parsePrice(analysis.takeProfit?.[0]?.price || '') || 0;
+    // ALL the targets, and the ratio is measured against the one NEAREST the
+    // entry — the canonical rule (`utils/riskReward`). This service used to
+    // read `takeProfit[0]` and re-derive the ratio itself, which made it a
+    // SECOND implementation of the planned R:R (audit finding F-11): a model
+    // that listed its targets farthest-first was graded here against the
+    // farthest one while the card and the journal quoted the nearest.
+    const targets = (analysis.takeProfit ?? [])
+        .map(tp => parsePrice(tp.price || '') || 0)
+        .filter(tp => tp > 0);
 
     // Rule 1: Scalp-specific R:R check (relaxed to 1:1)
-    if (entryPrice > 0 && slPrice > 0 && tp1Price > 0) {
+    if (entryPrice > 0 && slPrice > 0 && targets.length > 0) {
+        // The direction the arithmetic is signed with is the plan's own. A
+        // Neutral plan has no side, and the old `isLong` test treated it as a
+        // Short — kept here so the shape of the answer does not change.
         const isLong = analysis.direction === 'Long';
-        const risk = isLong ? entryPrice - slPrice : slPrice - entryPrice;
-        const reward = isLong ? tp1Price - entryPrice : entryPrice - tp1Price;
+        const planned = plannedRiskRewardSigned({
+            entry: entryPrice,
+            stopLoss: slPrice,
+            takeProfits: targets,
+            direction: isLong ? 'Long' : 'Short',
+        });
 
-        if (risk <= 0 || reward <= 0) {
+        if (planned.inverted) {
             // Inverted levels: SL/TP on the wrong side of entry must be
             // flagged, not silently skipped (the old `risk > 0` guard ignored
             // them entirely, letting inverted-SL scalps pass undowngraded).
             warnings.push(' INVALID SETUP: Stop loss / take profit on the wrong side of entry');
             shouldDowngrade = true;
-        } else {
-            const rrRatio = reward / risk;
-            if (rrRatio < SCALP_THRESHOLDS.minScalpRR) {
-                warnings.push(` SCALP R:R ${rrRatio.toFixed(2)}:1 below minimum 1:1`);
-                shouldDowngrade = true;
-            }
+        } else if (planned.ratio < SCALP_THRESHOLDS.minScalpRR) {
+            warnings.push(` SCALP R:R ${planned.ratio.toFixed(2)}:1 below minimum 1:1`);
+            shouldDowngrade = true;
         }
     }
 
@@ -224,19 +237,33 @@ export const validateSwingTrade = (
     // Parse prices (see the scalp validator above: no entry is a real shape)
     const entryPrice = parsePrice(analysis.entryPoints?.[0]?.price || '') || 0;
     const slPrice = parsePrice(analysis.stopLoss || '') || 0;
-    const tp1Price = parsePrice(analysis.takeProfit?.[0]?.price || '') || 0;
+    // All the targets — the ratio is measured against the one NEAREST the
+    // entry, the canonical rule (`utils/riskReward`). This validator used to
+    // read `takeProfit[0]` and re-derive the ratio itself, making it a THIRD
+    // implementation of the planned R:R (audit finding F-11).
+    const targets = (analysis.takeProfit ?? [])
+        .map(tp => parsePrice(tp.price || '') || 0)
+        .filter(tp => tp > 0);
 
     // Rule 1: Swing requires minimum 1.5:1 R:R
-    if (entryPrice > 0 && slPrice > 0 && tp1Price > 0) {
+    if (entryPrice > 0 && slPrice > 0 && targets.length > 0) {
+        // The same direction the arithmetic is signed with as the scalp
+        // validator above — a Neutral plan has no side, and the old `isLong`
+        // test treated it as a Short.
         const isLong = analysis.direction === 'Long';
-        const risk = isLong ? entryPrice - slPrice : slPrice - entryPrice;
-        const reward = isLong ? tp1Price - entryPrice : entryPrice - tp1Price;
+        const planned = plannedRiskRewardSigned({
+            entry: entryPrice,
+            stopLoss: slPrice,
+            takeProfits: targets,
+            direction: isLong ? 'Long' : 'Short',
+        });
 
-        if (risk > 0 && reward > 0) {
-            const rrRatio = reward / risk;
-            if (rrRatio < SCALP_THRESHOLDS.minSwingRR) {
-                warnings.push(` SWING: R:R ${rrRatio.toFixed(2)}:1 below recommended ${SCALP_THRESHOLDS.minSwingRR}:1`);
-            }
+        // A swing's inverted levels are NOT flagged here (the scalp validator
+        // does flag them) — that asymmetry is the shape this service has
+        // always had, and changing it is a different decision from making the
+        // ratio canonical.
+        if (!planned.inverted && planned.ratio > 0 && planned.ratio < SCALP_THRESHOLDS.minSwingRR) {
+            warnings.push(` SWING: R:R ${planned.ratio.toFixed(2)}:1 below recommended ${SCALP_THRESHOLDS.minSwingRR}:1`);
         }
     }
 

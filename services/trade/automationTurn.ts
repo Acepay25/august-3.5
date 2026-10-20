@@ -162,7 +162,7 @@ export const runAutomationTurn = async (req: AutomationTurnRequest): Promise<Aut
     const toolLines: string[] = [];
     const failedTools: string[] = [];
     const actions: ToolAction[] = [];
-    const effort = resolveComposerEffort(undefined);
+    const effort = resolveComposerEffort(undefined, 'automatedTradingDecision');
     let proposal: TradeProposal | undefined;
     let sawTool = false;
     let plansPresented = 0;

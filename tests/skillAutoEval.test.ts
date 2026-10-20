@@ -290,8 +290,8 @@ kind: avoid
 coin: BTCUSDT
 direction: Short
 family: Family A
-wins: 2
-losses: 6
+wins: 5
+losses: 20
 ifCondition: BTC short setup in Family A
 thenAction: skip the short
 evalVerdict: hurts (0/2)

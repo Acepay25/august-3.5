@@ -5,10 +5,20 @@ import {
     FTMO_SESSION_GUARD,
     SessionGuardConfig,
 } from '../services/validation/SessionGuardService';
+import type { OutcomeSettlement } from './outcomeSettlement';
 
 export interface HarnessSettings {
     equityUsd: number;
     riskPercent: number;
+    /** New sessions and tickets start here. The old app-wide default was 100×,
+     *  which makes a 1 % wick a total loss; this is the trader's setting now,
+     *  defaulted to 10×. Historical rows keep the leverage they were stamped
+     *  with (`LEGACY_LEVERAGE` covers a row that never did). */
+    defaultLeverage: number;
+    /** Refuse a plan whose net expectancy at its own probability is at or
+     *  below this, in R. 0 refuses only negative/zero edge; the trader can
+     *  demand a positive floor. The card names the number it refused on. */
+    minEdgeR: number;
     promptAbRate: PromptAbRate;
     pinnedPromptLane?: 'live' | 'control';
     /** Analysts may call live desk tools (search, derivatives, session) before the brief. Default on. */
@@ -34,12 +44,16 @@ export interface HarnessSettings {
      *  withdraws approval from every `prior: 'book'` skill at once, which is the
      *  whole point of gating the shelf rather than stamping 12 rows. */
     starterLibraryEnabled: boolean;
-    /** The user's off-switch over CODE-SIDE enforcement — the confidence caps and
+    /** The trader's off-switch over CODE-SIDE enforcement — the confidence caps and
      *  the confirmed-avoid veto that `applyNotebookSkillsToAnalysis` /
      *  `confirmedAvoidForSetup` apply. It did not exist: a confirmed `avoid` skill
      *  could HALT a verdict with no way to say no. Default ON. Injection is governed
      *  by the approval gate, not by this. */
     skillEnforcementEnabled: boolean;
+    /** What happens when the autopilot detects an outcome: record it after a
+     *  15s Undo window, only notify, or the shadow month (show, never record).
+     *  Per-coin approval rules still win over this. */
+    outcomeSettlement: OutcomeSettlement;
     /**
      * Whether the loop may DRAFT playbooks on its own — after-turn session
      * review, bot closed-trade learning, and whole-chart scans. These paths
@@ -81,6 +95,14 @@ export const getHarnessSettings = (): HarnessSettings => {
         riskPercent: typeof stored.riskPercent === 'number' && stored.riskPercent > 0
             ? Math.min(10, Math.max(0.1, stored.riskPercent))
             : 1,
+        defaultLeverage: typeof stored.defaultLeverage === 'number' && Number.isFinite(stored.defaultLeverage)
+            ? Math.min(125, Math.max(1, Math.round(stored.defaultLeverage)))
+            : 10,
+        // Default 0: refuse only a plan whose edge is not positive. A trader
+        // who wants a margin raises it; nothing else interprets the number.
+        minEdgeR: typeof stored.minEdgeR === 'number' && Number.isFinite(stored.minEdgeR)
+            ? Math.min(5, Math.max(-5, stored.minEdgeR))
+            : 0,
         promptAbRate: rate === 0 || rate === 0.1 || rate === 0.5 ? rate : 0.1,
         pinnedPromptLane: stored.pinnedPromptLane === 'live' || stored.pinnedPromptLane === 'control'
             ? stored.pinnedPromptLane
@@ -97,6 +119,13 @@ export const getHarnessSettings = (): HarnessSettings => {
         // read as the app losing its rules.
         starterLibraryEnabled: stored.starterLibraryEnabled !== false,
         skillEnforcementEnabled: stored.skillEnforcementEnabled !== false,
+        // Shadow first (E-18): resolve and SHOW every detected outcome, record
+        // nothing. The trader flips to 'automatic' after the disagreement rate
+        // between the detector and their own confirmation is known. Choosing
+        // 'automatic' here by default would skip the plan's safety month.
+        outcomeSettlement: stored.outcomeSettlement === 'automatic' || stored.outcomeSettlement === 'confirm'
+            ? stored.outcomeSettlement
+            : 'shadow',
         // Opt-IN, deliberately: an absent key means the loop does not draft on
         // its own. The old behaviour (always drafting) is what this turns off.
         autoDraftingEnabled: stored.autoDraftingEnabled === true,

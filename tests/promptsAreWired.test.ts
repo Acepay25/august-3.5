@@ -56,9 +56,13 @@ const UNREACHABLE = registryIds.filter(id => READERS[id].length === 0);
 
 // 2026-10-19: the ids a real call site reads. A prompt the app composes must
 // never lose this wire while its entry is still on screen.
+// 2026-10-20 (E-08): `learning.skill_refine` and `learning.skill_worth` joined
+// this list — both call sites read them, and neither was a registry entry, so
+// the Settings editor could neither show nor reset an override for them.
 const MUST_STAY_WIRED = [
     'analysis.master', 'analysis.compact', 'analysis.risk_rules',
     'analysis.memory_enforcement', 'learning.chart_scan', 'learning.skill_craft',
+    'learning.skill_refine', 'learning.skill_worth',
     'notebook.chat_note', 'notebook.note', 'strategy.ocr_page', 'strategy.summarize_pdf',
 ];
 
@@ -66,10 +70,13 @@ const MUST_STAY_WIRED = [
  *  their service (moving them into the registry would import a module that
  *  already imports `getPrompt`, a cycle). Naming them here makes the inverse
  *  direction testable: a new unregistered live prompt is a failure, not a
- *  silent Settings gap. */
-const INTERNAL_PROMPTS = new Set([
-    'learning.skill_refine',
-    'learning.skill_worth',
+ *  silent Settings gap.
+ *
+ *  EMPTY as of 2026-10-20 (E-08): the last two exemptions were promoted to
+ *  registry entries, so the Settings editor can now show and reset them. The
+ *  mechanism stays — a future prompt that must stay internal gets named here
+ *  with its reason, and the exemption is checked for rot below. */
+const INTERNAL_PROMPTS = new Set<string>([
 ]);
 
 const liveIds = (() => {
@@ -85,7 +92,7 @@ const UNREACHABLE_CEILING = 0;
 
 describe('every prompt offered in Settings is one the app actually reads', () => {
     it('finds the registry, and the scanner has a population', () => {
-        expect(registryIds.length).toBe(10);
+        expect(registryIds.length).toBe(12);
         expect(WIRED.length).toBeGreaterThanOrEqual(MUST_STAY_WIRED.length);
         // A scanner that matched nothing would report every id unreachable and
         // still "pass" the ceiling if the ceiling were loose enough.

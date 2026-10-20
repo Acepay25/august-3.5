@@ -57,7 +57,14 @@ export const computeTicketSize = (analysis: TradeAnalysis): TicketSize => {
         label: 'none', fraction: 0, reason: 'Skill veto',
         adjustments: [{ type: 'skill-veto', label: 'Skill veto — a learned notebook rule blocks this setup', fractionEffect: 0 }],
     };
-    const cap = analysis.gateResult?.confidenceCap;
+    // The gate cap can arrive two ways: the pipeline's `gateResult` (a full
+    // two-stage scan) or a presented plan's `gate` stamp (the ProposalGate the
+    // proposal card carries). Both mean the same thing — the risk gate bounded
+    // the confidence — so the sizing must honour either, or a presented plan
+    // would be sized at FULL while the analysis path sized the same plan at
+    // HALF. An `unavailable` gate carries a cap of 1 (uncapped), so it never
+    // downgrades.
+    const cap = analysis.gateResult?.confidenceCap ?? analysis.gate?.confidenceCap;
     if (typeof cap === 'number' && cap < 0.7) {
         const label = `Gate cap ${Math.round(cap * 100)}%`;
         return {

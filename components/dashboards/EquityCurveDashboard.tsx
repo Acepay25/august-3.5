@@ -21,6 +21,7 @@ import { chartColor } from '../../utils/themeColors';
 import React, { useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 import { LoggedTrade, TradeOutcome } from '../../types';
+import { decidedAtOf } from '../../utils/journalAnalytics';
 
 interface EquityCurveDashboardProps {
     trades: LoggedTrade[];
@@ -31,7 +32,7 @@ export const EquityCurveDashboard: React.FC<EquityCurveDashboardProps> = ({ trad
         const decided = trades
             .filter(t => (t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS) && typeof t.pnlPercent === 'number')
             .slice()
-            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+            .sort((a, b) => new Date(decidedAtOf(a)).getTime() - new Date(decidedAtOf(b)).getTime());
         let cumulative = 0;
         let peak = 0;
         let worstDd = 0;
@@ -40,7 +41,7 @@ export const EquityCurveDashboard: React.FC<EquityCurveDashboardProps> = ({ trad
             peak = Math.max(peak, cumulative);
             worstDd = Math.min(worstDd, cumulative - peak);
             return {
-                label: new Date(t.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                label: new Date(decidedAtOf(t)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
                 equity: Math.round(cumulative * 10) / 10,
                 drawdown: Math.round((cumulative - peak) * 10) / 10,
             };

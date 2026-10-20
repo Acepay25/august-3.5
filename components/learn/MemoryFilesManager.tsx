@@ -21,6 +21,9 @@ import {
     moveMemoryFolder,
     SUGGESTIONS_FILE_NAME,
     subscribeMemoryFilesChanged,
+    listNotebookCorruptSidecars,
+    restoreNotebookFromCorruptSidecar,
+    type NotebookCorruptSidecar,
 } from '../../services/learning/MemoryFilesService';
 
 interface MemoryFilesManagerProps {
@@ -58,6 +61,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [isReviewing, setIsReviewing] = useState(false);
     const [newFileName, setNewFileName] = useState('');
+    const [corruptSidecars, setCorruptSidecars] = useState<NotebookCorruptSidecar[]>([]);
 
     const activeUser = username || 'default';
 
@@ -78,6 +82,32 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
     }, [activeUser, refresh]);
 
     useEffect(() => subscribeMemoryFilesChanged(() => refresh()), [refresh]);
+
+    useEffect(() => {
+        let cancelled = false;
+        void listNotebookCorruptSidecars(activeUser).then(rows => {
+            if (!cancelled) setCorruptSidecars(rows);
+        });
+        return () => { cancelled = true; };
+    }, [activeUser, refresh]);
+
+    const handleRestoreSidecar = useCallback(async (sidecar: NotebookCorruptSidecar) => {
+        const ok = await confirm({
+            title: 'Restore this preserved notebook?',
+            message: `This replaces the live notebook with the copy preserved ${sidecar.capturedAt ? new Date(sidecar.capturedAt).toLocaleString() : 'earlier'}. The current notebook is kept until your next write.`,
+            confirmLabel: 'Restore copy',
+            destructive: true,
+        });
+        if (!ok) return;
+        const restored = await restoreNotebookFromCorruptSidecar(activeUser, sidecar.key);
+        if (restored) {
+            refresh();
+            setCorruptSidecars(await listNotebookCorruptSidecars(activeUser));
+            toast.success('Notebook restored', 'The preserved copy is live again.');
+        } else {
+            toast.error('Could not restore', 'That preserved copy is not a readable notebook.');
+        }
+    }, [activeUser, confirm, refresh, toast]);
 
     const selectedFile = selectedFileId ? files.find(f => f.id === selectedFileId) ?? null : null;
 
@@ -280,6 +310,33 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                     {stats.enabledCount} enabled · {stats.charCount.toLocaleString()} chars
                 </span>
             </div>
+
+            {corruptSidecars.length > 0 && (
+                <div className="shrink-0 mb-6 rounded-bubble border border-amber-500/30 bg-amber-500/[0.06] p-4" data-testid="notebook-recovery">
+                    <p className="text-ui-base font-semibold text-amber-300">A notebook copy was preserved</p>
+                    <p className="mt-1 text-ui-sm text-zinc-400">
+                        The loader could not verify the notebook and kept a sidecar copy. Your stored notebook was not overwritten.
+                    </p>
+                    <div className="mt-2 space-y-1.5">
+                        {corruptSidecars.map(s => (
+                            <div key={s.key} className="flex items-center justify-between gap-3 rounded-control border border-white/10 bg-zinc-900/60 px-2.5 py-1.5">
+                                <span className="font-mono text-ui-xs text-zinc-400">
+                                    {s.capturedAt ? new Date(s.capturedAt).toLocaleString() : s.key}
+                                    {s.reason ? ` · ${s.reason}` : ''}
+                                    {s.bytes ? ` · ${s.bytes.toLocaleString()} chars` : ''}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => { void handleRestoreSidecar(s); }}
+                                    className="shrink-0 rounded-control bg-amber-600/90 px-2.5 py-1 text-ui-dense font-medium text-white hover:bg-amber-500"
+                                >
+                                    Restore this copy
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <div className="flex flex-wrap items-end gap-4 shrink-0 mb-8">
                 {/* The Memory Model picker moved to Settings →

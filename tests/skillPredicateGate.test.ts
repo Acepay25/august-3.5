@@ -184,7 +184,7 @@ describe('predicate gate — clamp eligibility', () => {
 
     it('holds a candidate AVOID back until it earns a record, but never a repeat', () => {
         const thin = skill({ ...firing, status: 'candidate', wins: 0, losses: 1 });
-        const proven = skill({ ...firing, status: 'candidate', wins: 1, losses: 1 });
+        const proven = skill({ ...firing, status: 'candidate', wins: 5, losses: 5 });
         const freshRepeat = skill({ ...firing, kind: 'repeat', status: 'candidate', wins: 0, losses: 0 });
         expect(predicateBearingSkills([thin], 'BTC')).toHaveLength(0);
         expect(predicateBearingSkills([proven], 'BTC')).toHaveLength(1);

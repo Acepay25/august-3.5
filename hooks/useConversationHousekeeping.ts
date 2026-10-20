@@ -10,7 +10,17 @@ export interface UseConversationHousekeepingArgs {
     activeConversationId: string | null;
     setActiveConversationId: React.Dispatch<React.SetStateAction<string | null>>;
     updateMessages: (updater: (prev: Message[]) => Message[], conversationId?: string) => void;
-    handleCancelAnalysis: () => void;
+    /**
+     * Stop a run.
+     *
+     * With a conversation id, it stops THAT conversation's run and nothing
+     * else. With no id, it stops the run the trader can see (the active
+     * conversation's) plus any run that belongs to a different trader.
+     *
+     * The optional id is what lets a DELETE stop the deleted conversation's
+     * run while leaving every other thread's run alone.
+     */
+    handleCancelAnalysis: (conversationId?: string) => void;
     confirmDialog: (opts: ConfirmOptions) => Promise<boolean>;
     toast: { success: (title: string, message?: string) => void };
 }
@@ -53,7 +63,11 @@ export const useConversationHousekeeping = (args: UseConversationHousekeepingArg
             },
         });
         if (ok) {
-            handleCancelAnalysis();
+            // Every conversation is going, so every conversation's run stops —
+            // each one named, so a run in a thread the trader is not looking at
+            // is stopped too. (The old code cancelled only the ACTIVE run and
+            // left the rest streaming into conversations that no longer exist.)
+            for (const c of conversationHistory) handleCancelAnalysis(c.id);
             const newConv = createNewConversation();
             setConversationHistory([newConv]);
             setActiveConversationId(newConv.id);
@@ -64,7 +78,13 @@ export const useConversationHousekeeping = (args: UseConversationHousekeepingArg
     // Reuse an existing blank session instead of minting another empty one —
     // "New" from a filled session should return to the unused blank tab.
     const handleNewConversation = useCallback(() => {
-        handleCancelAnalysis();
+        // A new thread does NOT stop what is running in the old one. The run
+        // belongs to the conversation it was typed in, and its answer is
+        // written back into that conversation — so opening another thread
+        // moves the view, not the run. (This used to cancel, which is the
+        // defect E-45 names: the machinery to survive a switch was already
+        // in the pipeline, and this call killed the run before it could be
+        // used.)
         const reusable = findReusableEmptyConversation(conversationHistory, activeConversationId);
         if (reusable) {
             if (reusable.id !== activeConversationId) {
@@ -83,7 +103,7 @@ export const useConversationHousekeeping = (args: UseConversationHousekeepingArg
         }
         setConversationHistory(prev => [newConv, ...prev]);
         setActiveConversationId(newConv.id);
-    }, [handleCancelAnalysis, conversationHistory, activeConversationId, activeConversation, setConversationHistory, setActiveConversationId]);
+    }, [conversationHistory, activeConversationId, activeConversation, setConversationHistory, setActiveConversationId]);
 
     // F3: Ctrl/Cmd+N = new conversation. ("/" used to focus the composer; the
     // #chat-composer element it looked up was deleted in 78bc027, so the branch
@@ -100,20 +120,32 @@ export const useConversationHousekeeping = (args: UseConversationHousekeepingArg
         return () => document.removeEventListener('keydown', onKey);
     }, [handleNewConversation]);
 
+    /**
+     * Load a conversation — a VIEW change, not a run's death.
+     *
+     * This used to cancel the running analysis, which is the defect E-45
+     * names: the pipeline already binds every async write to the conversation
+     * the request started in, so the answer was designed to land in the thread
+     * it was typed in — and the cancel killed it before that could happen.
+     * Switching threads now moves the view; the run keeps going, and the
+     * thread it belongs to says so while you are away.
+     */
     const handleLoadConversation = useCallback((id: string) => {
         if (id !== activeConversationId) {
-            handleCancelAnalysis();
             setActiveConversationId(id);
         }
-    }, [activeConversationId, handleCancelAnalysis, setActiveConversationId]);
+    }, [activeConversationId, setActiveConversationId]);
 
     const handleDeleteConversations = (ids: string[]) => {
         // Single source of truth: filter from the same list we store, so the
         // active-conversation fallback can't reference a stale snapshot.
         const remaining = conversationHistory.filter(c => !ids.includes(c.id));
         setConversationHistory(remaining);
+        // A DELETED conversation's run must stop — its answer would land in a
+        // thread that no longer exists. Only the deleted ones: a run in
+        // another thread is none of this delete's business.
+        for (const id of ids) handleCancelAnalysis(id);
         if (activeConversationId && ids.includes(activeConversationId)) {
-            handleCancelAnalysis();
             if (remaining.length > 0) {
                 setActiveConversationId(remaining[0].id);
             } else {

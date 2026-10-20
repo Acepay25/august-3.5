@@ -94,7 +94,6 @@ const DELIBERATELY_UNBACKED = new Map<string, string>([
     ['skills_grid_pins_v1', 'pinned strategies on the Skills grid — UI layout, rebuilt from the catalog'],
     // JSON, and arguably real data. NOT backed up today; listed so the gap is
     // visible and re-decidable instead of invisible. Not this change's call.
-    ['approval_rules_v1', 'NOT backed up: the inbox rules gate every auto-apply — worth a decision'],
     ['trade_session_model_v1', 'NOT backed up: per-session chart model overlay; sibling trade_session_drawings_v1_ IS allow-listed'],
 ]);
 
@@ -153,20 +152,11 @@ const isWriteSite = (site: CallSite): boolean => site.method === 'set';
  * is, and the test below fails if an entry gets registered for real.
  */
 const AWAITING_BACKUP_DECISION = new Map<string, string>([
-    ['desk_idle_motion_v1', 'furniture: reduced-motion preference'],
-    ['last_active_user', 'a plain string pointer, not a record'],
-    // Registered in step 9 (2026-10-05): `trade_watches_v1`,
-    // `trade_level_arms_v1`, `trade_level_hits_v1`, `trade_drawings_v1`,
-    // `trade_session_drawings_v1`, `desk_tools_forged_v1`, `trading_checklist_v1`,
-    // `trade_tf_bar_v1`, `trade_chat_sessions_v1` (images stripped at export) and
-    // `harness_settings_v1` — which is NOT Preferences-owned as this file assumed:
-    // `utils/harnessSettings.ts:79` writes localStorage directly, and an export
-    // with an empty Preferences store proved it was absent from every backup.
-    // `trade_tool_payloads_v1` too — the real tool output behind an expanded
-    // transcript row (`services/trade/toolPayloadStore.ts`), written straight
-    // through localStorage once per tool call.
-    ['trade_chat_active_v1', 'TRADING POINTER, still unbacked on purpose: chatStore.ts:160 writes a PLAIN string (a session id), which the sweep cannot JSON.parse, so it exports nothing — and mirroring a parsed value back would write `"s-1"` where the owner reads `s-1`. Needs a raw-string envelope in the backup format, not a prefix entry.'],
-    ['thinking_leak_bin_v1', 'telemetry: withheld reasoning bin'],
+    // Registered by the Q4 ruling (owner, 2026-10-20): desk_idle_motion_v1,
+    // last_active_user, trade_chat_active_v1 and thinking_leak_bin_v1 moved to
+    // RAW_LOCAL_STORAGE_PREFIXES, and the raw-string envelope carries the
+    // plain-string values. Only the crash breadcrumbs remain deliberately out
+    // of the backup.
     ['lastPromiseError', 'crash breadcrumb'],
     ['lastGlobalError', 'crash breadcrumb'],
     ['lastCrashError', 'crash breadcrumb'],
@@ -395,15 +385,15 @@ describe('every raw-localStorage store is registered in ExportService', () => {
         expect(writes.length).toBeGreaterThan(10);
         expect(writes.filter(s => isRawLocalStorageKey(s.shape)).length).toBeGreaterThan(5);
         // The backlog is doing real work: without it the rule above would be
-        // enforcing nothing, and it must shrink rather than grow. Step 9 registered
-        // nine trading namespaces, so this asserts BOTH directions — it came down
-        // from the 17 this file recorded, and it is still a real list, not an empty
-        // one kept to make the rule above pass vacuously.
+        // enforcing nothing, and it must shrink rather than grow. The Q4
+        // ruling moved four of the seven namespaces onto the RAW list, leaving
+        // the three crash breadcrumbs — so the floor is smaller but still real.
+        // A new store still has to be argued into the table above.
         const backlogNamespaces = new Set(sites
             .filter(isWriteSite)
             .filter(s => !isRawLocalStorageKey(s.shape) && !isExempt(s.shape) && awaitsDecision(s.shape))
             .map(s => s.shape));
-        expect(backlogNamespaces.size).toBeGreaterThan(5);
+        expect(backlogNamespaces.size).toBeGreaterThan(0);
         expect(backlogNamespaces.size).toBeLessThan(17);
     });
 

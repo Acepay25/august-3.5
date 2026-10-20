@@ -81,6 +81,17 @@ describe('AgentsView layout', () => {
         expect(pane).not.toMatch(/Pick an agent to open it as a Chart AI session/);
     });
 
+    it('a brand-new profile sees an empty roster, not the deleted seed bots (W3.1)', () => {
+        renderBots(<AgentsView {...base} bots={[]} groups={[]} />);
+        const rail = screen.getByTestId('agents-rail').textContent ?? '';
+        // The three built-in seats were deleted on 2026-10-19. Nothing put
+        // them back, and this is the assertion that would fail if they were.
+        for (const gone of ['Macro', 'Technical', 'Risk']) {
+            expect(rail).not.toContain(gone);
+        }
+        expect(rail).not.toMatch(/Scout|Raven/);
+    });
+
     it('surfaces the roster actions the old rail owned', () => {
         const bots = [bot({ id: 'b1', name: 'Sweeper' })];
         const onDeleteBot = vi.fn();

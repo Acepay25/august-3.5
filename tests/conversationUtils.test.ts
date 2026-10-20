@@ -24,9 +24,9 @@ describe('conversationUtils', () => {
       expect(conv.messages).toHaveLength(0);
     });
 
-    it('has a default leverage of 100 (app-wide default)', () => {
+    it('has the trader\'s default leverage, 10× out of the box (E-41)', () => {
       const conv = createNewConversation();
-      expect(conv.leverage).toBe(100);
+      expect(conv.leverage).toBe(10);
     });
 
     it('has a createdAt-style timestamp set to now', () => {

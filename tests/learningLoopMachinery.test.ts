@@ -84,7 +84,7 @@ const makeTrade = (id: string, outcome: TradeOutcome, overrides: Partial<LoggedT
  *  evidence-attribution test into a decay test. */
 const daysAgo = (n: number): string => new Date(Date.now() - n * 86_400_000).toISOString();
 
-const seedSkill = async (name: string, frontmatter = ''): Promise<string> => {
+const seedSkill = async (name: string, frontmatter = '', wins = 1, losses = 6): Promise<string> => {
     await initMemoryFiles(USER);
     const skills = getMemoryFiles().folders.find(f => f.name === 'skills')!;
     const file = await createMemoryFile(skills.id, name, `---
@@ -92,8 +92,8 @@ status: confirmed
 kind: avoid
 coin: BTCUSDT
 direction: Short
-wins: 1
-losses: 6
+wins: ${wins}
+losses: ${losses}
 approvedBy: grandfathered
 ifCondition: BTC short setup
 thenAction: skip the short
@@ -466,7 +466,9 @@ describe('sequential eval verdict gating', () => {
     it("a single 'hurts' run does NOT demote through the evidence path either (override respects the streak)", async () => {
         // Fresh lastEvidenceAt so staleness decay doesn't shrink the sample
         // below MIN_SAMPLE_CONFIRMED — this test isolates the eval override.
-        const fileId = await seedSkill('seq-override-a.md', `lastEvidenceAt: ${new Date().toISOString()}\n`);
+        // The seeded sample is ≥ the RAISED floor (E-37), so the candidate
+        // cannot be demoted by the floor instead of by the streak under test.
+        const fileId = await seedSkill('seq-override-a.md', `lastEvidenceAt: ${new Date().toISOString()}\n`, 5, 20);
         await recordEvalVerdict(fileId, { verdict: 'hurts', flips: 3, alignedFlips: 0 }, USER);
         expect(readMeta(fileId).evalStreak).toBe(1);
         // An INJECTED evidence trade arrives between eval runs. The pre-fix
@@ -477,7 +479,7 @@ describe('sequential eval verdict gating', () => {
         await applySkillEvidence(win, USER, [win]);
         const meta = readMeta(fileId);
         expect(meta.status).toBe('confirmed');
-        expect(meta.wins).toBe(2); // full credit counted
+        expect(meta.wins).toBe(6); // full credit counted
     });
 
     it("a confirmed 'hurts' streak (×2) still demotes through the evidence path, stamped as an eval demotion", async () => {
@@ -519,12 +521,12 @@ status: candidate
 kind: avoid
 coin: BTCUSDT
 direction: Short
-wins: 1
-losses: 9
+wins: 2
+losses: 20
 approvedBy: grandfathered
 ifCondition: BTC short setup
 thenAction: skip the short
-tradeIds: a,b,c,d,e,f,g,h,i,j
+tradeIds: a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v
 approvedBy: grandfathered
 evalVerdict: hurts
 evalStreak: 2
@@ -544,7 +546,7 @@ lastEvidenceAt: ${now}
         const win = makeTrade('np-1', 'WIN' as TradeOutcome);
         await applySkillEvidence(win, USER, [win]);
         const pinned = readMeta(file.id);
-        expect(pinned.wins).toBe(2); // the trade was counted…
+        expect(pinned.wins).toBe(3); // the trade was counted…
         expect(pinned.status).toBe('candidate'); // …but the pin holds the tier
         // Rehabilitation stays available: two consecutive 'helps' flips the
         // verdict off 'hurts' and restores the tier.
@@ -766,9 +768,16 @@ approvedBy: grandfathered
         expect(next.confidence).toBe('High');
     });
 
+    it('a nine-evidence candidate stays quiet: the floor is a floor, not a suggestion', async () => {
+        await seedCandidate('nine-ev-avoid.md', 4, 5);
+        const next = applyNotebookSkillsToAnalysis(analysis());
+        expect(next.confidence).toBe('High');
+        expect(next.validationWarnings ?? []).toEqual([]);
+    });
+
     it('caps High → Low once the candidate has MIN_SAMPLE_FOR_VETO counted trades', async () => {
-        expect(MIN_SAMPLE_FOR_VETO).toBe(2);
-        await seedCandidate('two-ev-avoid.md', 1, 1);
+        expect(MIN_SAMPLE_FOR_VETO).toBe(10);
+        await seedCandidate('ten-ev-avoid.md', 5, 5);
         const next = applyNotebookSkillsToAnalysis(analysis());
         expect(next.confidence).toBe('Low');
         // Still a size-down warning, never a hard veto.

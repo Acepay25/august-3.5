@@ -26,6 +26,8 @@ import { getBots } from '../agents/agentRoster';
 import { formatSkillProcedure, parseIfThenClauses, skillHitRate } from '../../utils/ifThenSkill';
 import { maybePinWinningPromptLane } from '../../utils/promptVersionStats';
 import { CraftedSkill } from '../../schemas/learning';
+import { netRiskReward, stopDistancePercent } from '../../utils/netRiskReward';
+import { parsePrice } from '../../utils/analysisUtils';
 import { formatCraftedSkillBody, refineSkillFromLosses } from './SkillCraftService';
 import {
     recordWorthGateApproval,
@@ -69,6 +71,39 @@ import { getSkillLibraryCap, getHarnessSettings } from '../../utils/harnessSetti
 export type SkillStatus = 'candidate' | 'confirmed' | 'retired';
 export type SkillKind = 'repeat' | 'avoid';
 
+/**
+ * The version a skill file declares for ITSELF.
+ *
+ * The Agent Skills convention has no version key; Hermes/Claude skills often
+ * carry one. A skill that can be re-authored, imported from another tool and
+ * re-imported needs to say which revision of itself it is, or a reader cannot
+ * tell "this file was rewritten" from "this file is an old revision of the
+ * same skill". Absent on every file written before this key existed — and
+ * absent means "no version claimed", never "version zero".
+ */
+export const SKILL_FILE_VERSION = '1';
+
+/**
+ * WHAT a skill NEEDS, as opposed to the `audience` / `lensScope` /
+ * `manualOnly` family, which says WHO may see it.
+ *
+ * The portable face carries it as one JSON string (a JSON string is a valid
+ * YAML 1.2 double-quoted scalar, so it stays a plain scalar like every other
+ * key here — no nested YAML, no arrays, nothing a hand-edit can break).
+ * Absent = no constraint: the retrieval treats a skill with no
+ * `compatibility` exactly as it treated one before this field existed, which
+ * is the only safe default — a constraint that silently appeared would
+ * un-inject a working skill.
+ */
+export interface SkillCompatibility {
+    /** Tool names the skill needs (e.g. 'run_screener'). */
+    requiresTools?: string[];
+    /** Environment variable names the skill needs. */
+    requiresEnv?: string[];
+    /** Platforms the skill supports (e.g. 'web', 'native'). */
+    platforms?: string[];
+}
+
 export interface SkillMeta {
     status: SkillStatus;
     kind: SkillKind;
@@ -77,6 +112,9 @@ export interface SkillMeta {
      *  (or the IF/THEN pair), consumed by index lines, the recall tool, the
      *  grid subtitle and LLM judges. Absent on legacy skills. */
     description?: string;
+    /** The revision of THIS skill the file declares (see `SKILL_FILE_VERSION`).
+     *  Portable: it travels with the skill when it is shared or imported. */
+    version?: string;
     /** Provenance: id of the LOGGED TRADE whose closed-out cluster produced
      *  this skill — the deep-link back to "where did this belief come from".
      *  (Trades carry no link to their originating ensemble message, so the
@@ -99,8 +137,35 @@ export interface SkillMeta {
      *  NOT break-even — so a zero here must never be read as a score. Missing R
      *  is never filled with a +/-1 stand-in: that collapses this counter into
      *  `wins - losses` and reimports the binary grading expectancy exists to
-     *  replace. */
+     *  replace.
+     *
+     *  NET of the modelled round-trip cost (`utils/netRiskReward.ts`) wherever
+     *  that cost was computable. The cost is charged on a LOSS too — you paid
+     *  the fees and got stopped — so a −1 R loss at a 0.10 R cost is −1.10,
+     *  not −1.00. Where the cost could NOT be computed (no stop distance on
+     *  the trade) the outcome contributes its GROSS R, so the sum sits BETWEEN
+     *  the true net and the gross: it OVERSTATES the net, because a cost that
+     *  was never charged never subtracted. `netRKnown: false` is what says so,
+     *  so a gross number is never read under a net label. A missing cost is
+     *  NEVER stored as a zero cost. */
     netR?: number;
+    /** The GROSS sum of the same measured outcomes, before any cost. Kept
+     *  beside `netR` because the two answer different questions and the gross
+     *  one is the one a reader wants when they ask "what did the market do"
+     *  rather than "what did the skill keep".
+     *
+     *  Absent on every file written before this key existed — and absent
+     *  means "the gross was never separated", never "the gross is zero". */
+    grossR?: number;
+    /** Whether `netR` is a true NET sum: true only when EVERY counted
+     *  outcome had a computable round-trip cost. False means `netR` is NOT a
+     *  net figure — it is the sum with each uncosted outcome contributing its
+     *  GROSS R — and `netRUnknown` says why. Undefined means the file predates
+     *  the cost model (and is read as a gross figure, never as a net). */
+    netRKnown?: boolean;
+    /** Why the net could not be computed (e.g. 'stop-distance'). Absent when
+     *  `netRKnown` is true. */
+    netRUnknown?: string;
     /** How many counted outcomes fed `netR`. Gates every expectancy read. */
     rSampled?: number;
     /** Running count of consecutive LOSS outcomes (reset by any WIN). A
@@ -316,6 +381,17 @@ export interface SkillMeta {
      *  load this skill. Default 'all'. The moderator audience no longer runs,
      *  so 'moderator' survives only on legacy files. */
     audience?: 'analyst' | 'moderator' | 'all';
+    /** WHAT this skill needs — the other half of the invocation-control
+     *  family. `audience` / `lensScope` / `manualOnly` say WHO may see it;
+     *  this says what the seat must HAVE for the skill to be usable at all
+     *  (a tool it does not expose, an env var that is not set, a platform it
+     *  does not run on). Portable: it travels with the skill.
+     *
+     *  Absent = no constraint, which is exactly how every skill behaved
+     *  before this key existed. A constraint must never appear by accident:
+     *  a skill that silently stopped being injected would look like a dead
+     *  belief, and nothing in the app would say why. */
+    compatibility?: SkillCompatibility;
     /** Latest automated A/B verdict (SkillEvalService). 'hurts' demotes a
      *  confirmed skill back to candidate on the next evidence pass. */
     evalVerdict?: 'helps' | 'mixed' | 'hurts' | 'inconclusive';
@@ -349,8 +425,15 @@ export interface SkillMeta {
     }>;
 }
 
-export const MIN_CLUSTER_FOR_SKILL = 3;
-export const MIN_SAMPLE_CONFIRMED = 5;
+/**
+ * Evidence floors, raised BEFORE the automatic outcome loop starts feeding
+ * them (E-37). The old floors were tuned for a world with no outcomes: a
+ * three-trade cluster could mint a skill and a five-trade sample could
+ * confirm one. The promotion rate is expected to fall; that is the point —
+ * a confident rule built on three trades is noise with a name.
+ */
+export const MIN_CLUSTER_FOR_SKILL = 10;
+export const MIN_SAMPLE_CONFIRMED = 20;
 export const MIN_SAMPLE_RETIRE = 6;
 /** Counted outcomes kept in the alpha-decay window (`recentOutcomes`). */
 export const RECENT_WINDOW = 12;
@@ -375,8 +458,11 @@ export const CONTROL_ID_TAIL = 20;
  * may size a trade down. Prompt injection already excludes zero-evidence
  * skills; enforcement must not reach further than the model can see, or a
  * freshly-spawned candidate with no record caps confidence on a single match.
+ *
+ * Raised 2 → 10 with E-37: two trades are not a sample, and this gate can
+ * zero a real setup. Do not lower it to make a fixture pass.
  */
-export const MIN_SAMPLE_FOR_VETO = 2;
+export const MIN_SAMPLE_FOR_VETO = 10;
 /** Consecutive losses on a CONFIRMED skill before the LLM refinement pass. */
 export const REFINE_AFTER_CONSECUTIVE_LOSSES = 3;
 /**
@@ -396,8 +482,28 @@ export const REFINE_MIN_SPAN_HOURS = 48;
 const folderName = (folderId: string): string =>
     getMemoryFiles().folders.find(f => f.id === folderId)?.name ?? '';
 
+/**
+ * The Agent Skills convention's file name for the skill in a skill DIRECTORY.
+ *
+ * August's notebook is FLAT (folders of `.md` entries, no tree), so a
+ * spec-shaped skill cannot live in a directory of its own — but the CONVENTION
+ * file name is still the one a trader will drop in, and the CONTENT parser
+ * already understands a spec-only file (`name` + `description` frontmatter).
+ * So the name is recognised explicitly rather than by accident.
+ */
+export const SPEC_SKILL_FILE_NAME = 'SKILL.md';
+
+/**
+ * A file in the skills folder IS a skill file.
+ *
+ * The extension test is case-INSENSITIVE: the convention's name is upper
+ * case (`SKILL.md`) and a hand-edited or tool-written file can carry an upper
+ * case extension (`NOTES.MD`). A file that is rejected here is invisible to
+ * every list, every retrieval and the Health card — the one surface where
+ * being wrong is unrecoverable, because the trader is never told.
+ */
 export const isSkillFile = (file: MemoryFile): boolean =>
-    folderName(file.folderId) === 'skills' && file.name.endsWith('.md');
+    folderName(file.folderId) === 'skills' && /\.md$/i.test(file.name);
 
 export const listSkillSlugs = (): string[] =>
     getMemoryFiles().files.filter(isSkillFile).map(f => f.name.replace(/\.md$/i, ''));
@@ -423,7 +529,7 @@ export const listSkillSlugs = (): string[] =>
  * `name` is derived from the title at write time, never parsed — a title can
  * be renamed without the identity key drifting.
  */
-const LEDGER_MARKER = '# august:skill-ledger';
+export const LEDGER_MARKER = '# august:skill-ledger';
 
 /** JSON strings are also valid YAML 1.2 double-quoted scalars. This keeps
  * arbitrary titles, descriptions, timestamps, and prose safe when they
@@ -579,6 +685,33 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
     return {
         status,
         kind,
+        version: pick('version'),
+        compatibility: (() => {
+            const raw = pick('compatibility');
+            if (!raw) return undefined;
+            try {
+                const parsed: unknown = JSON.parse(raw);
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+                const shape = parsed as Record<string, unknown>;
+                const list = (key: string): string[] | undefined => {
+                    const value = shape[key];
+                    if (!Array.isArray(value)) return undefined;
+                    const items = value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+                    return items.length ? items : undefined;
+                };
+                const compat: SkillCompatibility = {
+                    ...(list('requiresTools') ? { requiresTools: list('requiresTools') } : {}),
+                    ...(list('requiresEnv') ? { requiresEnv: list('requiresEnv') } : {}),
+                    ...(list('platforms') ? { platforms: list('platforms') } : {}),
+                };
+                // An empty object means "no constraint" — which is what an
+                // absent key means, so it is stored as absent.
+                return Object.keys(compat).length ? compat : undefined;
+            } catch {
+                // A hand-edited or corrupt value must not poison the file.
+                return undefined;
+            }
+        })(),
         coin: pick('coin'),
         timeframe: pick('timeframe'),
         source: pick('source'),
@@ -594,9 +727,37 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         regime: pick('regime'),
         wins: num('wins'),
         losses: num('losses'),
-        netR: (() => {
-            const raw = parseFloat(pick('netR') || '');
-            return Number.isFinite(raw) ? raw : undefined;
+        // ── the R ledger: gross, net, and whether the net is a true net ──
+        // `grossR` is the key that says which face of the ledger a file is
+        // on. A file that carries it was written by a version that separates
+        // the two; a file that carries ONLY `netR` predates the cost model,
+        // and its `netR` IS the gross — so it is read as the gross and
+        // flagged, never quietly relabelled as a net.
+        ...(() => {
+            const netRaw = parseFloat(pick('netR') || '');
+            const net = Number.isFinite(netRaw) ? netRaw : undefined;
+            const grossRaw = parseFloat(pick('grossR') || '');
+            const gross = Number.isFinite(grossRaw) ? grossRaw : undefined;
+            if (net === undefined) {
+                return { netR: undefined, grossR: gross, netRKnown: undefined, netRUnknown: undefined };
+            }
+            if (gross === undefined) {
+                // LEGACY: the stored `netR` is the gross. Keep the number
+                // where every reader expects it, and name it honestly.
+                return {
+                    netR: net,
+                    grossR: net,
+                    netRKnown: false,
+                    netRUnknown: pick('netRUnknown') || 'legacy-gross',
+                };
+            }
+            const known = pick('netRKnown');
+            return {
+                netR: net,
+                grossR: gross,
+                netRKnown: known === 'true' ? true : false,
+                netRUnknown: pick('netRUnknown') || undefined,
+            };
         })(),
         rSampled: (() => {
             const raw = parseInt(pick('rSampled') || '', 10);
@@ -764,6 +925,39 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         })(),
     };
 }
+
+/**
+ * The spec's `name:` key, read straight off the frontmatter.
+ *
+ * `parseSkillMarkdown` deliberately does NOT return it: August derives `name`
+ * from the TITLE at write time, so a renamed title moves the identity with it.
+ * That is right for a file August wrote and wrong for a file another tool
+ * wrote — the Agent Skills convention puts the identity in `name:` and treats
+ * the file name as incidental. So the key is read here, separately, for the
+ * one thing that needs it: telling a spec-shaped file's own name apart from
+ * the notebook file name it landed under.
+ */
+export const frontmatterName = (content: string): string | undefined => {
+    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (!match) return undefined;
+    const line = match[1].match(/^name:[ \t]*(.+)$/mi)?.[1];
+    const decoded = decodeFrontmatterScalar(line);
+    return decoded ? decoded.trim() : undefined;
+};
+
+/**
+ * A file that is BOTH named like the convention's skill file AND carries
+ * content the parser accepts.
+ *
+ * The name alone is not enough: a `SKILL.md` that does not parse is a GHOST
+ * (see `services/learning/skillReview.ts`), and the review is what says so.
+ * The content check is what makes the answer honest in both directions — a
+ * `SKILL.md` that parses is spec-shaped, and one that does not is reported,
+ * not silently skipped.
+ */
+export const isSpecShapedSkillFile = (file: MemoryFile): boolean =>
+    file.name.toLowerCase() === SPEC_SKILL_FILE_NAME.toLowerCase()
+    && parseSkillMarkdown(file.content) !== null;
 
 /**
  * Whether a skill's notebook file should carry `enabled: true`.
@@ -1058,6 +1252,9 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
     const portable: string[] = [
         `name: ${yamlString(name)}`,
         `description: ${yamlString(description)}`,
+        // The spec's required pair leads the file; `version` is the skill's own
+        // revision of itself, and it travels with the skill (portable).
+        `version: ${yamlString(meta.version ?? SKILL_FILE_VERSION)}`,
         `kind: ${yamlString(meta.kind)}`,
         ...(meta.coin ? [`coin: ${yamlString(meta.coin)}`] : []),
         ...(meta.timeframe ? [`timeframe: ${yamlString(meta.timeframe)}`] : []),
@@ -1075,6 +1272,14 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.sizing ? [`sizing: ${yamlString(meta.sizing.replace(/\n/g, ' '))}`] : []),
         ...(meta.prior ? [`prior: ${yamlString(meta.prior)}`] : []),
         ...(meta.audience && meta.audience !== 'all' ? [`audience: ${yamlString(meta.audience)}`] : []),
+        // ── WHAT the skill needs (the other half of invocation control) ──
+        // One plain JSON string, so it stays a scalar like every other key
+        // here — a JSON string is a valid YAML 1.2 double-quoted scalar, so a
+        // hand-edit cannot break the block. Absent = no constraint, which is
+        // exactly how every skill behaved before this key existed.
+        ...(meta.compatibility && Object.keys(meta.compatibility).length
+            ? [`compatibility: ${yamlString(JSON.stringify(meta.compatibility))}`]
+            : []),
         // ── provenance of the procedure's acceptance (portable: WHO said yes) ──
         ...(meta.approvedBy ? [`approvedBy: ${yamlString(meta.approvedBy)}`] : []),
         ...(meta.approvedAt ? [`approvedAt: ${yamlString(meta.approvedAt)}`] : []),
@@ -1095,7 +1300,21 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.consecutiveLosses > 0 ? [`consecutiveLosses: ${meta.consecutiveLosses}`] : []),
         ...(meta.recentOutcomes ? [`recentOutcomes: ${yamlString(meta.recentOutcomes)}`] : []),
         ...(meta.netR !== undefined && meta.rSampled && meta.rSampled > 0
-            ? [`netR: ${meta.netR.toFixed(2)}`, `rSampled: ${meta.rSampled}`]
+            ? [
+                // The NET sum, at the cost model's precision (4 dp) — a 0.10 R
+                // round trip must not be rounded away by a 2 dp write.
+                `netR: ${round4(meta.netR)}`,
+                // The GROSS sum beside it, so nothing that needs the raw market
+                // result has to subtract the cost back out.
+                ...(meta.grossR !== undefined ? [`grossR: ${round4(meta.grossR)}`] : []),
+                // Whether `netR` is a true net or a FLOOR (some outcomes could
+                // not be costed). Written whenever the pair is written, because
+                // a reader who cannot tell the two apart is reading a gross
+                // number under a net label.
+                `netRKnown: ${meta.netRKnown === true}`,
+                ...(meta.netRUnknown ? [`netRUnknown: ${yamlString(meta.netRUnknown)}`] : []),
+                `rSampled: ${meta.rSampled}`,
+            ]
             : []),
         ...(meta.suspendedAt ? [`suspendedAt: ${yamlString(meta.suspendedAt)}`] : []),
         ...(meta.disabledByUser ? ['disabledByUser: true'] : []),
@@ -1390,6 +1609,10 @@ export const appendRecentOutcome = (meta: SkillMeta, win: boolean): void => {
     meta.recentOutcomes = ((meta.recentOutcomes ?? '') + (win ? 'W' : 'L')).slice(-RECENT_WINDOW);
 };
 
+/** Four-decimal rounding — the precision the cost model works at (a 0.10 R
+ *  round trip against a 1 % stop needs it, and the ledger sums many of them). */
+const round4 = (n: number): number => Math.round(n * 10000) / 10000;
+
 /**
  * Count ONE followed W/L on a skill: lifetime counters, loss streak,
  * alpha-decay window and the monotonic evidence counter — in one place.
@@ -1407,8 +1630,22 @@ export const appendRecentOutcome = (meta: SkillMeta, win: boolean): void => {
  * persisting it, and every one whose validation never resolved an exit — have
  * no trustworthy R. Those simply do not feed the expectancy ledger, which is
  * why `rSampled` is tracked separately from `wins + losses`.
+ *
+ * `cost` carries what the trade knows about the round trip: its own `netR`
+ * (written by the journal write path, which computed it with the same cost
+ * model) and the trade's `stopDistancePct` for the fallback. It is OPTIONAL,
+ * and its absence is meaningful rather than neutral: with a net, the outcome
+ * is charged the modelled round trip and `netR` becomes a true net; without
+ * one, the cost is UNKNOWN, the outcome contributes its gross R, and `netR`
+ * is a non-net with `netRKnown: false` saying so. A missing cost is never
+ * written as a zero cost.
  */
-export const countTradeOutcome = (meta: SkillMeta, win: boolean, r?: number): void => {
+export const countTradeOutcome = (
+    meta: SkillMeta,
+    win: boolean,
+    r?: number,
+    cost?: { netR?: number; stopDistancePct?: number },
+): void => {
     if (win) {
         meta.wins += 1;
         meta.consecutiveLosses = 0;
@@ -1417,11 +1654,98 @@ export const countTradeOutcome = (meta: SkillMeta, win: boolean, r?: number): vo
         meta.consecutiveLosses += 1;
     }
     if (typeof r === 'number' && Number.isFinite(r)) {
-        meta.netR = Math.round(((meta.netR ?? 0) + r) * 100) / 100;
+        // ── the ledger is NET now (audit finding F-13) ──
+        // The accumulator used to sum GROSS R into a field called `netR`, so
+        // the name lied and every expectancy in the app was gross. The cost
+        // model (`utils/netRiskReward.ts`) is the ONE place that knows what a
+        // round trip costs in R; it charges the cost on a LOSS too, because a
+        // stopped-out trade still paid the fees.
+        //
+        // The trade's OWN net is preferred — the journal write path already
+        // computed it with the same model, and one cost computation per trade
+        // is one cost computation, not two that can disagree. The recompute is
+        // the fallback for a row that never went through that path.
+        //
+        // When the cost CANNOT be computed — no stop distance on the trade —
+        // the outcome contributes its GROSS R and the sum stops being a true
+        // net: it sits between the net and the gross, OVERSTATING the net
+        // because a cost that was never charged never subtracted.
+        // `netRKnown: false` is what says so, so a gross number is never read
+        // under a net label. A missing cost is NEVER stored as a zero cost.
+        //
+        // ONE more case, and it is the same rule: a ledger that was WRITTEN
+        // before the cost model holds a gross sum that cannot be converted —
+        // the legacy trades' stop distances are gone, so their costs are
+        // unknowable. Such a ledger keeps its unit (gross) and every outcome
+        // added to it is added gross, so the sum never mixes two units. The
+        // marker is `netRUnknown: 'legacy-gross'`.
+        const gross = r;
+        meta.grossR = round4((meta.grossR ?? 0) + gross);
+        if (meta.netRUnknown === 'legacy-gross') {
+            // A gross ledger stays gross.
+            meta.netR = round4((meta.netR ?? 0) + gross);
+            meta.netRKnown = false;
+        } else {
+            const net = resolveNetR(gross, cost);
+            if (net.netR !== null) {
+                meta.netR = round4((meta.netR ?? 0) + net.netR);
+                // Undefined until the first counted outcome; once false it stays
+                // false, because ONE uncosted outcome makes the whole sum a
+                // non-net.
+                if (meta.netRKnown === undefined) meta.netRKnown = true;
+            } else {
+                meta.netR = round4((meta.netR ?? 0) + gross);
+                meta.netRKnown = false;
+                meta.netRUnknown = net.unknown ?? 'stop-distance';
+            }
+        }
         meta.rSampled = (meta.rSampled ?? 0) + 1;
     }
     appendRecentOutcome(meta, win);
     meta.evidenceCount = Math.max(meta.evidenceCount ?? 0, meta.tradeIds.length) + 1;
+};
+
+/**
+ * The net R of ONE outcome, or null when the cost could not be computed.
+ *
+ * `cost.netR` is the trade row's own net (`LoggedTrade.netR`), written by the
+ * journal write path with the same cost model — preferred, so the cost is
+ * computed once per trade. `cost.stopDistancePct` is the fallback for a row
+ * that never went through that path.
+ */
+const resolveNetR = (
+    grossR: number,
+    cost?: { netR?: number; stopDistancePct?: number },
+): { netR: number | null; unknown?: string } => {
+    if (cost && typeof cost.netR === 'number' && Number.isFinite(cost.netR)) {
+        return { netR: cost.netR };
+    }
+    if (cost && typeof cost.stopDistancePct === 'number' && cost.stopDistancePct > 0) {
+        const res = netRiskReward({ grossR, stopDistancePct: cost.stopDistancePct });
+        if (res.known && res.netR !== null) return { netR: res.netR };
+        return { netR: null, unknown: res.unknown };
+    }
+    return { netR: null, unknown: 'stop-distance' };
+};
+
+/**
+ * The stop distance of a trade, in PERCENT — the unit the cost model wants
+ * (a 1 % stop is `1`, not `0.01`).
+ *
+ * Undefined when the trade carries no usable levels, which is the common case
+ * for the rows the app cannot price (a hand-logged trade, a plan whose entry
+ * never resolved). Undefined is honest: the cost model turns it into an
+ * explicit "unknown", and the ledger records that the figure is not a true
+ * net rather than pretending the round trip was free.
+ */
+const tradeStopDistancePct = (trade: LoggedTrade): number | undefined => {
+    const entry = parsePrice(String(trade.analysis?.entryPoints?.[0]?.price ?? ''));
+    const stop = parsePrice(String(trade.analysis?.stopLoss ?? ''));
+    if (!Number.isFinite(entry) || !Number.isFinite(stop)) return undefined;
+    // The unit lives with the cost model (`stopDistancePercent`), so the
+    // journal write path and this one cannot drift.
+    const pct = stopDistancePercent(entry, stop);
+    return pct > 0 ? pct : undefined;
 };
 
 /** Minimum R-sampled outcomes before expectancy is worth showing. Matches the
@@ -1439,6 +1763,16 @@ export const EXPECTANCY_CONFLICT_WINRATE = 0.5;
 /**
  * Average R per measured outcome, or undefined when there is nothing honest to
  * report. Callers must render undefined as "not yet measured" — never as 0R.
+ *
+ * The figure it divides is `meta.netR`, which is NET of the modelled
+ * round-trip cost wherever that cost was computable and GROSS where it was
+ * not. It is NOT blocked when the flag says so (`netRKnown === false`): the
+ * promotion gate below stands aside on an undefined expectancy, so refusing
+ * to report here would LOOSEN the gate — a skill with a clearly negative
+ * record would sail through on its win rate. The number it does report sits
+ * between the true net and the gross, so it still catches a losing skill.
+ * `netRKnown` is for the READER (a UI that wants to say "not a true net"),
+ * not for the gate.
  */
 export const skillExpectancyR = (
     meta: Pick<SkillMeta, 'netR' | 'rSampled'>,
@@ -1731,7 +2065,7 @@ const applySkillEvidenceUnlocked = async (
         // CONDITIONAL, not fading; the per-regime split below routes
         // divergence to a re-scope proposal instead of decay.
         applyEvidenceDecay(meta, trade.marketRegime);
-        countTradeOutcome(meta, trade.outcome === TradeOutcome.WIN, trade.realizedR);
+        countTradeOutcome(meta, trade.outcome === TradeOutcome.WIN, trade.realizedR, { netR: trade.netR, stopDistancePct: tradeStopDistancePct(trade) });
         // Per-regime split, written alongside the global counters —
         // the substrate that lets a conditional pattern be RE-SCOPED instead
         // of decayed into oblivion.
@@ -1997,9 +2331,18 @@ export const halveCounts = (meta: SkillMeta, times: number): void => {
                 // reads +0.89R, and halving to 4R over 4 would quote +1.00R
                 // from evidence that just lost half its authority.
                 const net = meta.netR ?? 0;
-                meta.netR = Math.round(net * (meta.rSampled / sampledBefore) * 100) / 100;
+                meta.netR = round4(net * (meta.rSampled / sampledBefore));
+                // The GROSS sum decays with the same sample — it is the same
+                // evidence, so leaving it behind would report a gross figure
+                // earned from twice the authority the net figure has.
+                if (meta.grossR !== undefined) {
+                    meta.grossR = round4(meta.grossR * (meta.rSampled / sampledBefore));
+                }
             } else {
                 meta.netR = undefined;
+                meta.grossR = undefined;
+                meta.netRKnown = undefined;
+                meta.netRUnknown = undefined;
                 meta.rSampled = undefined;
             }
         }
@@ -2161,7 +2504,7 @@ const maybeMergeSkillUnlocked = async (
                 // floor reads the pre-append tradeIds length. Merge folds
                 // used to bump W/L only, so alpha-decay never saw this
                 // evidence and the provenance counter missed it too.
-                countTradeOutcome(latestMeta, trade.outcome === TradeOutcome.WIN, trade.realizedR);
+                countTradeOutcome(latestMeta, trade.outcome === TradeOutcome.WIN, trade.realizedR, { netR: trade.netR, stopDistancePct: tradeStopDistancePct(trade) });
                 latestMeta.tradeIds = [...latestMeta.tradeIds, trade.id];
                 // Merge-driven transitions ride the temporal ledger like every
                 // other path so skillStatusAt replay sees them. Stamp BEFORE
@@ -2452,7 +2795,7 @@ const ingestCraftedSkillUnlocked = async (
         if (!meta.tradeIds.includes(trade.id)) {
             // Full accounting (decay window + evidence counter included) —
             // the craft path used to bump raw counters only.
-            countTradeOutcome(meta, trade.outcome === TradeOutcome.WIN, trade.realizedR);
+            countTradeOutcome(meta, trade.outcome === TradeOutcome.WIN, trade.realizedR, { netR: trade.netR, stopDistancePct: tradeStopDistancePct(trade) });
             meta.tradeIds = [...meta.tradeIds, trade.id];
         }
         meta.kind = kind;
@@ -2675,7 +3018,7 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
                 // Full accounting: counters, streak, decay window and the
                 // evidence counter (this path bumped W/L + the decay window
                 // but not the streak or the counter).
-                countTradeOutcome(meta, trade.outcome === TradeOutcome.WIN, trade.realizedR);
+                countTradeOutcome(meta, trade.outcome === TradeOutcome.WIN, trade.realizedR, { netR: trade.netR, stopDistancePct: tradeStopDistancePct(trade) });
                 meta.tradeIds = [...meta.tradeIds, trade.id];
             }
             meta.thenAction = clause.thenAction;

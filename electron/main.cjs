@@ -152,6 +152,48 @@ let mainWindow = null;
 const activeProviderRequests = new Map();
 
 // =============================================================================
+// IPC SENDER-FRAME TRUST — the ONE guard every privileged channel goes through
+// =============================================================================
+// The preload bridge (electron/preload.cjs) is exposed to WHATEVER document is
+// loaded in the window, so "which frame asked" is the only thing that tells
+// the app apart from something that merely looks like it. A remote iframe, a
+// second window, or a devtools view all reach the same bridge.
+//
+// The trusted frame is the main window's MAIN frame and nothing else. The
+// comparison is by frame OBJECT identity, not by origin — a same-origin
+// iframe is a different frame object, so it is refused too.
+//
+// A refused call returns the SAME shape the handler returns on its own
+// failure path, so the renderer's handling is identical for a trusted and an
+// untrusted sender. The trusted path is untouched: the handler body is called
+// exactly as before, with the same arguments.
+const isTrustedSenderFrame = (event) => {
+    if (!event || !mainWindow || mainWindow.isDestroyed()) return false;
+    const frame = event.senderFrame;
+    if (!frame) return false;
+    const contents = mainWindow.webContents;
+    if (!contents || !contents.mainFrame) return false;
+    return frame === contents.mainFrame;
+};
+
+/**
+ * Register an IPC handler behind the sender-frame guard.
+ * `refuse` is what a refused call returns; every channel passes the value its
+ * own handler already returns on failure (null for the crypto calls, false
+ * for the boolean ones, {ok:false} for the provider ones), so the refusal is
+ * indistinguishable from the handler's own error path to the renderer.
+ */
+const trustedHandle = (channel, handler, refuse) => {
+    ipcMain.handle(channel, (event, ...args) => {
+        if (!isTrustedSenderFrame(event)) {
+            console.warn(`[main] refused IPC "${channel}" — the sender frame is not the app window`);
+            return typeof refuse === 'function' ? refuse() : refuse;
+        }
+        return handler(event, ...args);
+    });
+};
+
+// =============================================================================
 // PROVIDER TRANSPORT — main-process requests avoid renderer CORS restrictions
 // =============================================================================
 
@@ -1145,8 +1187,12 @@ function setupAutoUpdater() {
         sendUpdateStatus();
     });
 
-    // IPC handlers — called from the renderer via the preload bridge
-    ipcMain.handle('update:check', async () => {
+    // IPC handlers — called from the renderer via the preload bridge.
+    // Every one of them goes through `trustedHandle`, which refuses a sender
+    // frame that is not the app window's main frame (see the guard above).
+    const refused = { error: 'Refused — the request did not come from the app window.' };
+
+    trustedHandle('update:check', async () => {
         if (isInstallerSmoke) return updateInfo; // smoke runs must never contact the update service
         try {
             await autoUpdater.checkForUpdates();
@@ -1156,9 +1202,9 @@ function setupAutoUpdater() {
             sendUpdateStatus();
             return updateInfo;
         }
-    });
+    }, () => ({ ...updateInfo, status: 'error', ...refused }));
 
-    ipcMain.handle('update:download', async () => {
+    trustedHandle('update:download', async () => {
         if (isInstallerSmoke) return updateInfo; // smoke runs must never download an update
         try {
             await autoUpdater.downloadUpdate();
@@ -1168,9 +1214,9 @@ function setupAutoUpdater() {
             sendUpdateStatus();
             return updateInfo;
         }
-    });
+    }, () => ({ ...updateInfo, status: 'error', ...refused }));
 
-    ipcMain.handle('update:install', () => {
+    trustedHandle('update:install', () => {
         if (isInstallerSmoke) return false; // smoke runs must never launch an installer
         // Only install when an update was actually downloaded — quitAndInstall
         // with nothing downloaded throws synchronously inside setImmediate
@@ -1207,18 +1253,22 @@ function setupAutoUpdater() {
         pendingInstallerQuit = doQuit;
         setTimeout(doQuit, 5000);
         return true;
-    });
+    }, () => false);
 
     // Renderer's "animation done — quit now" ack for the install above.
-    ipcMain.on('update:quit-now', () => {
+    ipcMain.on('update:quit-now', (event) => {
+        if (!isTrustedSenderFrame(event)) {
+            console.warn('[main] refused IPC "update:quit-now" — the sender frame is not the app window');
+            return;
+        }
         if (pendingInstallerQuit) pendingInstallerQuit();
     });
 
-    ipcMain.handle('update:get-status', () => updateInfo);
+    trustedHandle('update:get-status', () => updateInfo, () => updateInfo);
 
-    ipcMain.handle('app:get-version', () => app.getVersion());
+    trustedHandle('app:get-version', () => app.getVersion(), () => '');
 
-    ipcMain.handle('provider:discover', async (_event, config) => {
+    trustedHandle('provider:discover', async (_event, config) => {
         if (isInstallerSmoke) {
             return { ok: false, message: 'Provider discovery is disabled during installer smoke.' };
         }
@@ -1235,9 +1285,9 @@ function setupAutoUpdater() {
                 message: error instanceof Error ? error.message : 'Model discovery failed.',
             };
         }
-    });
+    }, () => ({ ok: false, message: 'Refused — the request did not come from the app window.' }));
 
-    ipcMain.handle('provider:chat', async (event, request) => {
+    trustedHandle('provider:chat', async (event, request) => {
         if (isInstallerSmoke) {
             return { ok: false, message: 'Provider requests are disabled during installer smoke.' };
         }
@@ -1258,16 +1308,16 @@ function setupAutoUpdater() {
                 message: error instanceof Error ? error.message : 'Provider request failed.',
             };
         }
-    });
+    }, () => ({ ok: false, message: 'Refused — the request did not come from the app window.' }));
 
-    ipcMain.handle('provider:cancel', (_event, requestId) => {
+    trustedHandle('provider:cancel', (_event, requestId) => {
         if (typeof requestId !== 'string') return false;
         const controller = activeProviderRequests.get(requestId);
         if (!controller) return false;
         controller.abort();
         activeProviderRequests.delete(requestId);
         return true;
-    });
+    }, () => false);
 
     // =========================================================================
     // SECRET ENCRYPTION — API keys at rest
@@ -1276,7 +1326,7 @@ function setupAutoUpdater() {
     // the OS keychain (DPAPI on Windows, Keychain on macOS) via safeStorage.
     // Payloads are prefixed "enc:v1:" so the renderer can tell encrypted
     // values from legacy plaintext and fall back gracefully when unavailable.
-    ipcMain.handle('crypto:encrypt', (_event, plaintext) => {
+    trustedHandle('crypto:encrypt', (_event, plaintext) => {
         try {
             if (typeof plaintext !== 'string' || !plaintext || !safeStorage.isEncryptionAvailable()) return null;
             return 'enc:v1:' + safeStorage.encryptString(plaintext).toString('base64');
@@ -1284,9 +1334,9 @@ function setupAutoUpdater() {
             console.warn('[main] crypto:encrypt failed:', err);
             return null;
         }
-    });
+    }, () => null);
 
-    ipcMain.handle('crypto:decrypt', (_event, payload) => {
+    trustedHandle('crypto:decrypt', (_event, payload) => {
         try {
             if (typeof payload !== 'string' || !payload.startsWith('enc:v1:')) return null;
             return safeStorage.decryptString(Buffer.from(payload.slice(7), 'base64'));
@@ -1294,7 +1344,7 @@ function setupAutoUpdater() {
             console.warn('[main] crypto:decrypt failed:', err);
             return null;
         }
-    });
+    }, () => null);
 }
 
 // =============================================================================

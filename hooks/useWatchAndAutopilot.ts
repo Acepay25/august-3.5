@@ -3,7 +3,7 @@ import { collectWatchedSignals, toggleWatchOnMessage } from '../utils/watchList'
 import { buildRiskBook, formatRiskBookBadge } from '../utils/riskBook';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
 import { OutcomeAutopilotService, type AutopilotResolution } from '../services/ui/OutcomeAutopilotService';
-import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
+import { defaultLeverage } from '../utils/conversationUtils';
 import { TradeOutcome } from '../types';
 import type { Conversation, LoggedTrade, Message } from '../types';
 
@@ -133,10 +133,10 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
     // chunk — register() re-arms the 60s detection loop, so the old effect
     // perpetually reset the timers while a debate streamed.
     const autopilotRegisteredRef = useRef<Set<string>>(new Set());
-    const autopilotLeverageRef = useRef<number>(DEFAULT_LEVERAGE);
+    const autopilotLeverageRef = useRef<number>(defaultLeverage());
 
     useEffect(() => {
-        const leverage = activeConversation?.leverage || DEFAULT_LEVERAGE;
+        const leverage = activeConversation?.leverage || defaultLeverage();
         if (autopilotLeverageRef.current !== leverage) {
             // Leverage changed — re-register everything with the new value.
             autopilotRegisteredRef.current.clear();

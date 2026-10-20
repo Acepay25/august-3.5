@@ -60,6 +60,29 @@ export const RR_VALIDATION_PASS_SCORE = 80;
 export const RR_VALIDATION_FAIL_SCORE = 30;
 
 // =============================================================================
+// RISK/REWARD THRESHOLDS
+// =============================================================================
+
+/**
+ * The minimum planned R:R each confidence tier must clear.
+ *
+ * These are the gate's BAR, and they were previously a table inline inside
+ * `AccuracyValidationService.validateRiskReward` — the one place in this file
+ * whose thresholds were not with the others. They live here now so the whole
+ * validation sensitivity surface is readable in one place.
+ *
+ * The ratio being compared is the CANONICAL planned R:R (nearest take-profit
+ * ÷ stop, `utils/riskReward`), so the bar is judged against the same number
+ * the trader reads on the card.
+ */
+export const MIN_RATIO_BY_CONFIDENCE: Record<'High' | 'Medium' | 'Low' | 'Avoid', number> = {
+    High: 2.0,
+    Medium: 1.5,
+    Low: 1.2,
+    Avoid: 1.0,
+};
+
+// =============================================================================
 // SESSION RISK
 // =============================================================================
 

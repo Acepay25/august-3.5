@@ -8,6 +8,8 @@ plan itself or the evidence behind it.
 
 - **Started:** 2026-10-19 · **Audit baseline:** `6a41a9f7` · **Plan corpus:** committed with the 2026-10-20 fix pass — findings that depend on the working tree are labelled *worktree-specific*.
 - **Status:** most of it is a reviewed, sequenced proposal. Items already implemented are marked **DONE** (e.g. O-52); D-24 records a design approval, not an implementation.
+- **Second implementation pass (2026-10-20):** the remaining Phase 1 items, all of Phase 3, and the data-independent Phase 4 items landed. `implementation-record.md` §7 is the authoritative list of what landed, where, and with which gate; the `O-nn` rows below remain the audit's snapshot rather than a row-by-row status rewrite. **The candidate log (E-42b) is the one planned item still gated** — D-24 waits for the shadow month.
+- **Third pass (2026-10-20, owner-reported defect, not a plan id):** *"if the model executes too many tools or thinks too much it don't generate the final response."* `implementation-record.md` §8 is the ledger: the thinking-sized round budget, the one automatic re-ask when a round is cut off, automatic compaction of the outbound history, and the context window resolved from the trader's override → a limit the provider stated in a rejection → the window `/models` reported → the owner's new 1,000,000 default. It closes **O-74**, and it fixed a stored-data bug on the way: `loadProviderConfigs` was dropping `contextWindowTokens`, `thinkingCapable`, `jsonSchemaCapable` and both pricing rates on every app start.
 - **Owner:** the trader. 24 of the items are rulings only the trader can make — **three are now answered** (the fee tier, the `docs/analysis/` question, and the plan-document deletion). See §4.
 
 ---
@@ -17,6 +19,7 @@ plan itself or the evidence behind it.
 | file | what it is | read it when |
 |---|---|---|
 | **[`open-items.md`](open-items.md)** | **THE PLAN'S WORKING LIST** — **121** open items (O-01…O-129) + **24** owner decisions (D-01…D-24), each with the `file:line` that proves it is still open at HEAD, each mapped to the proposal that covers it |
+| **[`implementation-record.md`](implementation-record.md)** | **WHAT LANDED** — the 2026-10-20 fix pass, item by item: where each change is, which gate verified it, the measured figures with the tip they were taken at, and **what it does not close** |
 | **[`full-audit.md`](full-audit.md)** | **THE EVIDENCE** — all seven sources merged into one 551 KB document with a 66-entry section index | you want the reasoning behind a claim |
 | [`audit/2026-10-19-00-index-and-method.md`](audit/2026-10-19-00-index-and-method.md) | the commit, the tree state, the tools, what could not be run, the coverage statement | you want to know how it was made and what it missed |
 | [`audit/2026-10-19-01-system-and-data-flow.md`](audit/2026-10-19-01-system-and-data-flow.md) | the architecture, the persisted-store inventory, the prompt inventory, the tool surface, security, reliability, performance, UX, quality gates | you are changing the system and need the map |
@@ -124,10 +127,11 @@ three of them are blocked behind a decision.
 
 ---
 
-## 4. The fourteen questions only the trader can answer
+## 4. The questions only the trader can answer
 
 Each has a proposed default in `audit/2026-10-19-05-ordering-and-open-questions.md` §4, so silence
-is not a blocker. In one line each:
+is not a blocker. In one line each. **Three are answered**; the rest stand, and this list
+closes none of them.
 
 1. **Does a trade outcome need a human click?** — *default: automatic, with provenance and a
    correction path, after a shadow month.* **This is the highest-leverage decision in the
@@ -145,11 +149,24 @@ is not a blocker. In one line each:
    the two row components.*
 8. **Should old post-mortems stay readable?** — *default: yes.*
 9. **How many minds answer "Full analysis"?** — *default: one, tool-driven.*
-10. **What replaces the analysis branch?** — *default: the tool turn, plus the contract.*
-11. **The gate scan: inside `present_trade`, or its own tool?** — *default: its own tool.*
-12. **The `reasoningEffort` side-channel?** — *default: keep it, and fix the default tier.*
-13. **Which tools are meaningless without a chart?** — *default: the 8 chart tools stay dock-only.*
+10. ~~**Is `docs/analysis/` a live location, or scratch?**~~ — ✅ **ANSWERED (2026-10-20): scratch.** The eslint ignore is right, the directory is un-tracked on purpose, and the plan lives at **`docs/plan/`** — tracked, indexed from `AGENTS.md` and `README.md`. The previous generation's reports are preserved on the branch **`archive/prior-audit-2026-10-18`**, so `git gc` can no longer prune them.
+11. **Should the history be rewritten to drop the 52 MB of APKs?** — *default: not now; delete
+    the merged branches first, then decide at the next major version boundary.*
+12. **Is the 1-second trade-surface clock needed, and is the root's 60 Hz re-render
+    acceptable?** — *default: move the clock to a leaf and the transcript off the root; measure
+    before and after, and keep the code simple if the numbers say it does not matter.*
+13. **Do the old pre-2026-10-18 trades count as evidence for the calibration ledger and the
+    provider ranking?** — *default: count them for history, not for calibration.*
 14. ~~**Which tracked documents may be deleted?**~~ — ✅ **ANSWERED AND EXECUTED (2026-10-20): 18 plan documents were DELETED, not archived**, and the deletions are **staged, not committed**. The dated history ledger was kept because the anchor gate scans it.
+
+### Four more the code already poses
+
+These are not in the ordering report's numbered list; they are real, and they are open.
+
+15. **What replaces the analysis branch?** — *default: the tool turn, plus the contract.*
+16. **The gate scan: inside `present_trade`, or its own tool?** — *default: its own tool.*
+17. **The `reasoningEffort` side-channel?** — *default: keep it, and fix the default tier.*
+18. **Which tools are meaningless without a chart?** — *default: the 8 chart tools stay dock-only.*
 
 ---
 

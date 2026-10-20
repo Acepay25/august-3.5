@@ -43,7 +43,7 @@ import { readBotSystemMarkdown, readBotMemoryMarkdown } from '../services/bots/B
 import { buildBotSharedMemoryContext, recordBotTurnOutcome } from '../services/agents/botLearning';
 import type { LoggedTrade } from '../types';
 import { streamQuickResponse } from '../services/providers/GenericAnalysisService';
-import { DEFAULT_LEVERAGE } from '../utils/conversationUtils';
+import { defaultLeverage } from '../utils/conversationUtils';
 
 /** Per-run mode/model overrides (absent fields fall back to global settings). */
 export interface AutomationRunOverrides {
@@ -449,7 +449,7 @@ export function useAutomations(params: UseAutomationsParams) {
             ocrModel: '',
             moderatorProviderId: config.moderatorModel.providerId,
             moderatorModel: config.moderatorModel.modelId,
-            leverage: DEFAULT_LEVERAGE,
+            leverage: defaultLeverage(),
             threadSummary: undefined,
         };
 

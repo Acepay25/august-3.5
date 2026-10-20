@@ -27,6 +27,8 @@ import { HARNESS_CONTRACT_PROMPT } from '../../constants/prompts';
 import { executeForgedTool, confirmedForgedToolDefinitions } from '../tools/toolForge';
 import type { ChatMessage, ChatRequestOptions } from '../providers/GenericProviderService';
 import { sendChatTurn, streamChatRequest } from '../providers/GenericProviderService';
+import { compactForWire } from '../providers/contextCompact';
+import { stepEffortDown, type ReasoningEffort } from '../providers/reasoningControls';
 import { calculateCorrelationRisk } from './CorrelationRiskService';
 import {
     extractSymbolFromPrompt,
@@ -217,6 +219,27 @@ export const DESK_TURN_WRAPUP_AT = 0.8;
 export const DESK_TOOL_TIMEOUT_MS = 20_000;
 
 /**
+ * Output budget for ONE tool round, and why it is no longer 4096.
+ *
+ * A round's job is a tool call, so it used to get a quarter of the answer's
+ * room. On a reasoning route that number is spent INSIDE THE CHAIN OF THOUGHT:
+ * thinking counts against `max_tokens` on DeepSeek, GLM, Anthropic and the
+ * o-family, so a seat asked to decide at `high` or `max` could reach the ceiling
+ * mid-thought and return a message with no call and no text. The loop read that
+ * as "the seat chose not to call a tool", ended the turn, and the trader got an
+ * empty answer wearing a "THE PROVIDER STOPPED EARLY" line — the bug this
+ * constant is the front half of.
+ *
+ * 8192 is `TASK_BUDGETS.chat`: the same room the final answer gets, because a
+ * thinking model needs the room to think AND emit. Still clamped by the
+ * caller's own budget, so a 400-token clarification turn stays 400. The back
+ * half of the fix is `thinkingRepairSent` in the loop: when even this runs out,
+ * the round is re-asked with the thinking stepped down rather than returned as
+ * nothing.
+ */
+export const DESK_ROUND_MAX_TOKENS = 8192;
+
+/**
  * Run one desk-tool call inside its own deadline and under the seat's Stop.
  *
  * Neither exit throws past the batch: an assistant turn that asked for a tool
@@ -299,6 +322,33 @@ const appendTurnNotice = (messages: ChatMessage[], text: string): void => {
         // changing the subject mid-turn.
         messages[idx] = { ...last, content: `${last.content}\n\n${harnessTurn(text)}` };
     }
+};
+
+/**
+ * Fit an outbound array to THIS model's context window before it goes on the
+ * wire, and say out loud what was cut.
+ *
+ * A tool turn grows its own request: every round adds an assistant call plus a
+ * market payload per call, and the Chat surface hands in the whole stored
+ * conversation. Nothing used to look at the running total, so the turn died as
+ * either a provider 400 or a `finish_reason: length` answer with no answer in
+ * it — both of which the trader experiences as "it never replied".
+ * `services/providers/contextCompact.ts` holds the policy; this is the channel
+ * that reports it, on the same tool-event line the transcript already paints.
+ */
+const compactOutbound = (
+    config: ProviderConfig,
+    messages: ChatMessage[],
+    maxTokens: number | undefined,
+    report?: (line: string) => void,
+): ChatMessage[] => {
+    const result = compactForWire(config, messages, { outputReserveTokens: maxTokens });
+    // Report the cut OR the failure to cut. A window too small for the mandate
+    // plus the current turn leaves the compactor nothing to do, and that is the
+    // one case where silence reads as "the request is fine" right before the
+    // provider refuses it.
+    if (report && (result.changed || result.stillOver > 0) && result.notice) report(result.notice);
+    return result.messages;
 };
 
 
@@ -1531,6 +1581,28 @@ export const CHART_ACTION_TOOL_DEFS: DeskToolDefinition[] = [
                     invalidation: { type: 'string', description: 'What would prove the idea wrong.' },
                 },
                 required: ['direction', 'entry', 'stopLoss', 'takeProfits'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'decline_trade',
+            description:
+                'Decline to present a trade and leave a HOLD record with your reason and the levels you rejected. Use this when you have looked at the tape and the setup is not worth taking — a skip is a decision, and the harness must be able to ask later whether it skipped a winner. Do NOT call this just because the user asked a question; use it only when you actually evaluated a setup and chose not to take it.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    symbol: { type: 'string', description: 'Instrument, e.g. BTCUSDT (default: the chart symbol).' },
+                    direction: { type: 'string', enum: ['Long', 'Short', 'Neutral'], description: 'The side you rejected, or Neutral if neither.' },
+                    reason: { type: 'string', description: 'Why the setup is not worth taking, in one or two sentences.' },
+                    entry: { type: 'number', description: 'The entry you would have used, if any.' },
+                    stopLoss: { type: 'number', description: 'The stop you rejected, if any.' },
+                    takeProfits: { type: 'array', items: { type: 'number' }, description: 'The targets you rejected, if any.' },
+                    invalidation: { type: 'string', description: 'What would have changed your mind.' },
+                },
+                required: ['reason'],
                 additionalProperties: false,
             },
         },
@@ -2913,6 +2985,37 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     : { coin, direction: direction ?? 'any', sample: 0, note: `No closed trades logged for ${coin}${direction ? ` ${direction}` : ''}.` }, null, 2);
                 break;
             }
+            case 'decline_trade': {
+                // A skip is a decision. Record it with its reason and the
+                // levels that were rejected, so a later pass can ask whether
+                // the harness skipped a winner.
+                try {
+                    const { recordDecline } = await import('../trade/declineLog');
+                    const record = recordDecline({
+                        symbol: call.arguments.symbol || context.defaultSymbol || fallback,
+                        direction: call.arguments.direction,
+                        reason: call.arguments.reason,
+                        entry: call.arguments.entry,
+                        stopLoss: call.arguments.stopLoss,
+                        takeProfits: call.arguments.takeProfits,
+                        invalidation: call.arguments.invalidation,
+                        source: 'desk',
+                    });
+                    if (!record) {
+                        return rejectedResult(call, 'decline_trade rejected: a symbol and a reason are required, and the record must reach storage.');
+                    }
+                    content = JSON.stringify({
+                        recorded: true,
+                        id: record.id,
+                        symbol: record.symbol,
+                        direction: record.direction,
+                        note: 'HOLD recorded. Nothing was presented and no journal row exists; the skip is now auditable.',
+                    });
+                } catch (err) {
+                    return rejectedResult(call, `decline_trade rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
             case 'get_trade_log': {
                 const rawLimit = Number(call.arguments.limit);
                 const limit = Number.isFinite(rawLimit)
@@ -3361,6 +3464,11 @@ export async function runDeskToolLoop(params: {
     const turnStartedAt = Date.now();
     const callHistory: string[] = [];
     let wrapUpSent = false;
+    /** A round that was cut off by its own thinking has been re-asked once, at a
+     *  lower tier. One, because a second is a retry of the same failure. */
+    let thinkingRepairSent = false;
+    /** The tier the NEXT round asks for, after a thinking-cut repair. */
+    let repairEffort: ReasoningEffort | undefined;
     for (let round = 0; round < MAX_DESK_TOOL_ROUNDS; round++) {
         const forgedDefs = confirmedForgedToolDefinitions();
         const allDefs = forgedDefs.length > 0
@@ -3386,12 +3494,19 @@ export async function runDeskToolLoop(params: {
             toolChoice: nativeTools
                 ? (round === 0 && requireFirstToolRound && effectiveTools?.length ? 'required' : 'auto')
                 : undefined,
-            // Tool rounds stay shorter than the final analysis stream.
-            maxTokens: Math.min(options?.maxTokens ?? 4096, 4096),
+            maxTokens: Math.min(options?.maxTokens ?? DESK_ROUND_MAX_TOKENS, DESK_ROUND_MAX_TOKENS),
+            // Only a repaired round overrides; otherwise the caller's tier rides
+            // the wire exactly as it was set.
+            ...(repairEffort ? { reasoningEffort: repairEffort } : {}),
         };
+        // Every round re-fits the array: the payloads THIS turn appended are the
+        // reason it needs refitting, and the oldest ones are the reason it can.
+        // Compacting here rather than once at entry is what stops an eight-round
+        // turn from growing past the window in round five.
+        const outbound = compactOutbound(config, messages, roundOptions.maxTokens, onToolEvent);
         const turn = streamTurn
-            ? await runStreamingTurn(streamTurn, config, messages, roundOptions, onTextDelta)
-            : await sendTurn(config, messages, roundOptions);
+            ? await runStreamingTurn(streamTurn, config, outbound, roundOptions, onTextDelta)
+            : await sendTurn(config, outbound, roundOptions);
         reasoning = [reasoning, turn.reasoning].filter(Boolean).join('\n');
         finalText = turn.text || '';
 
@@ -3435,6 +3550,41 @@ export async function runDeskToolLoop(params: {
                             + '<tool_call name="TOOL_NAME">{"arg":"value"}</tool_call>\n'
                             + 'One JSON object (real quotes), one block per tool, closed with </tool_call>. '
                             + 'Re-emit your tool call(s) now - no prose, and never invent tool results.'),
+                });
+                continue;
+            }
+            // A THINKING-CUT ROUND: no call, no word, and the wire says the
+            // message stopped at its own token ceiling. This is what a
+            // reasoning route looks like when the chain of thought eats the
+            // round budget — the seat is not finished thinking, it is out of
+            // room. Returning here would end the turn with an empty answer, and
+            // an empty answer reads to the trader as the app having failed to
+            // reply, so the round is re-asked ONCE with the thinking stepped
+            // down a tier and the reply asked for in words.
+            //
+            // `finishReason === 'unknown'` counts too: a gateway that sends no
+            // stop signal has not said it finished, and treating silence as a
+            // clean finish is how this bug hid. The step-down stays for the rest
+            // of the turn — the tier that just failed is not the tier to climb
+            // back into.
+            if (
+                !finalText.trim()
+                && (turn.truncated || turn.finishReason === 'unknown')
+                && !thinkingRepairSent
+                && round < MAX_DESK_TOOL_ROUNDS - 1
+                && !options?.signal?.aborted
+            ) {
+                thinkingRepairSent = true;
+                repairEffort = stepEffortDown(options?.reasoningEffort ?? 'high');
+                onStreamReset?.();
+                onToolEvent?.(`thinking hit the round's token ceiling with nothing to show · re-asking at ${repairEffort}`);
+                messages.push({
+                    role: 'user',
+                    content: harnessTurn(
+                        'YOUR LAST MESSAGE WAS CUT OFF before you finished thinking, so nothing arrived. '
+                        + 'Do not re-reason from the start. Emit ONE tool call with the fewest arguments, '
+                        + 'or write the reply you already have and say what you did not look up.',
+                    ),
                 });
                 continue;
             }
@@ -3805,7 +3955,6 @@ export async function* streamChatWithDeskTools(
     const {
         defaultSymbol,
         afterToolsNudge,
-        enabled: _enabled,
         chartInterval,
         chartLevels,
         chartDrawings,
@@ -4024,10 +4173,35 @@ export async function* streamChatWithDeskTools(
                 || 'Tool results are above. Continue your Floor turn now from the findings. No JSON, no tool tags.'),
         });
     }
+    // The turn produced NOTHING: no tool ran and not one word came back. The
+    // continuation is the last thing that can answer, so it must not go out at
+    // the thinking tier that just failed, and it must be told to write prose
+    // instead of trying another lookup. This is the trader-facing half of the
+    // fix: without it the turn ends empty and the only thing the row says is
+    // that the provider stopped early.
+    const producedNothing = !loop.finalText.trim() && loop.usedTools.length === 0;
+    if (producedNothing) {
+        finalMessages.push({
+            role: 'user',
+            content: harnessTurn('Answer in prose now. Do not call a tool and do not re-reason: '
+                + 'write what you already have, and say plainly what you did not look up.'),
+        });
+    }
+    const continuationOptions = producedNothing
+        ? { ...chatOptions, reasoningEffort: stepEffortDown(chatOptions.reasoningEffort ?? 'high') }
+        : chatOptions;
     if (options?.signal?.aborted) {
         const abort = new Error('The turn was stopped.');
         abort.name = 'AbortError';
         throw abort;
     }
-    yield* streamChatRequest(config, finalMessages, chatOptions);
+    // The continuation is the biggest request of the turn — every payload the
+    // rounds collected PLUS the answer's own output budget — and it is the one
+    // the trader is waiting for. Fit it here rather than let it arrive as a
+    // truncated answer with a "provider stopped early" line and no reply.
+    yield* streamChatRequest(
+        config,
+        compactOutbound(config, finalMessages, continuationOptions.maxTokens, line => onToolEvent?.(line)),
+        continuationOptions,
+    );
 }

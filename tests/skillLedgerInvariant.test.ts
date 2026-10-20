@@ -55,7 +55,6 @@ const USER = 'ledger-user';
 
 const makeTrade = (id: string, outcome: TradeOutcome): LoggedTrade => ({
     id,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     analysis: {
         coinName: 'BTCUSDT',
         direction: 'Short',
@@ -128,10 +127,9 @@ describe('Skill status changes always stamp the temporal ledger', () => {
     });
 
     it('evidence-driven transition stamps reason "evidence" and replays', async () => {
-        const { fileId } = await seedSkill({ name: 'btc-short-repeat.md', kind: 'repeat', wins: 6, losses: 1 });
-        // WIN → sample 8, winRate 0.875 → candidate becomes confirmed. (The
-        // Wilson CI gate needs N≥8 and the cold-start band to exclude
-        // 50% — 7W/1L clears it; the old 5-sample threshold magic is gone.)
+        const { fileId } = await seedSkill({ name: 'btc-short-repeat.md', kind: 'repeat', wins: 18, losses: 4 });
+        // WIN → sample 24, winRate 0.79 → candidate becomes confirmed. (The
+        // Wilson CI gate needs N≥8 and the cold-start band to exclude 50%.)
         await applySkillEvidence(makeTrade('ev-1', TradeOutcome.WIN), USER);
 
         const meta = readMeta(fileId);
@@ -147,16 +145,16 @@ describe('Skill status changes always stamp the temporal ledger', () => {
     });
 
     it('worth-gate merge stamps reason "worth-gate merge"', async () => {
-        const { fileId } = await seedSkill({ name: 'btc-short-avoid.md', kind: 'avoid', wins: 1, losses: 6 });
-        // LOSS folds in → sample 8, winRate 0.125 → avoid skill confirms
+        const { fileId } = await seedSkill({ name: 'btc-short-avoid.md', kind: 'avoid', wins: 5, losses: 18 });
+        // LOSS folds in → sample 24, winRate 0.21 → avoid skill confirms
         // (Wilson cold-start: N≥8 and the band excludes 50%).
         const trade = makeTrade('m-1', TradeOutcome.LOSS);
         await maybeMergeSkill('btc-short-avoid.md', trade, [trade], USER);
 
         const meta = readMeta(fileId);
         expect(meta.status).toBe('confirmed');
-        expect(meta.wins).toBe(1);
-        expect(meta.losses).toBe(7);
+        expect(meta.wins).toBe(5);
+        expect(meta.losses).toBe(19);
         expectLedgerWellFormed(meta);
         const last = meta.history![meta.history!.length - 1];
         expect(last.status).toBe('confirmed');

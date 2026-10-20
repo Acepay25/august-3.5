@@ -21,7 +21,11 @@ const CHUNK_OVERLAP = 3_000;
 // extracted (worker cost) but silently never summarized.
 const MAX_CHUNKS = 7;
 
-const DEFAULT_SUMMARIZE_PROMPT = `You are a trading-strategy extractor. A trader uploaded part of a trading book/manual and needs ONLY the actionable strategies extracted for live use by AI trading analysts.
+// Exported so `constants/promptRegistry.ts` can IMPORT the built-in default
+// instead of restating it. A second copy here is how "Reset to default" in
+// Settings installed a STALE prompt — the old copy dropped the mandatory
+// `Family` line, so every uploaded strategy parsed with no strategyFamily.
+export const DEFAULT_SUMMARIZE_PROMPT = `You are a trading-strategy extractor. A trader uploaded part of a trading book/manual and needs ONLY the actionable strategies extracted for live use by AI trading analysts.
 
 Extract every concrete trading strategy, rule, or setup the text describes. Describe EACH one against the same strategy template (the "151 Trading Strategies" format) so strategies from different books stay comparable:
 

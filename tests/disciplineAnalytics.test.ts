@@ -136,7 +136,7 @@ describe('effectiveRMultiple', () => {
     it('re-derives R from the row rather than trusting a pre-leverage-fix figure', () => {
         // Legacy rows carry rMultiple as pnlPercent / RAW stop move — a
         // leveraged percent over an unleveraged distance, so up to
-        // DEFAULT_LEVERAGE (100×) too large. The inputs survive on the row, so
+        // the legacy 100× default too large. The inputs survive on the row, so
         // R is recomputed instead of averaged in inflated.
         const legacy = trade({
             outcome: TradeOutcome.WIN,

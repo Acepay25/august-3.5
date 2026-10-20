@@ -64,12 +64,15 @@ export type LiveSession = Omit<ChatSession, 'entries'> & {
 
 /** The immutable snapshot React reads via useSyncExternalStore. `running` is
  *  the set of session ids with a live stream, so the composer knows what's
- *  busy without a second subscription. `signals` is the pending harness
- *  signal queue (see takeHarnessSignals). */
+ *  busy without a second subscription. `conversationRunning` is the same idea
+ *  for the CHAT SURFACE's runs, keyed by conversation id. `signals` is the
+ *  pending harness signal queue (see takeHarnessSignals). */
 export interface ChatSnapshot {
     sessions: LiveSession[];
     activeId: string;
     running: Record<string, true>;
+    /** Live Chat-surface runs, keyed by CONVERSATION id. */
+    conversationRunning: Record<string, true>;
     signals: string[];
 }
 
@@ -82,11 +85,27 @@ let loaded = false;
 let loadedFor = '';
 let pendingSignals: string[] = [];
 const controllers = new Map<string, AbortController>();
+/**
+ * The CHAT SURFACE's live runs, keyed by CONVERSATION id.
+ *
+ * The map above is keyed by SESSION id (a dock chat session). A Chat-surface
+ * run belongs to a CONVERSATION — the trader's thread — and the two id spaces
+ * are different, so they get their own map rather than sharing one: a shared
+ * map would let a session id and a conversation id collide, and one run's Stop
+ * would abort the other.
+ *
+ * WHY THE STORE AT ALL: the hook that owns these runs is App-level and never
+ * unmounts, but the BADGE that says "this conversation is still running" is
+ * rendered by a component the App does not thread props into — a module
+ * singleton is the only channel that reaches it. That is the same reason the
+ * dock's run state lives here (see the file header).
+ */
+const conversationControllers = new Map<string, AbortController>();
 const listeners = new Set<() => void>();
 let saveTimer = 0;
 let storageWatched = false;
 
-let snapshot: ChatSnapshot = { sessions, activeId, running: {}, signals: [] };
+let snapshot: ChatSnapshot = { sessions, activeId, running: {}, conversationRunning: {}, signals: [] };
 
 /** Last-open session id, per user — so a reload returns to the same chat. */
 const activeKey = (user: string): string => `trade_chat_active_v1_${user}`;
@@ -94,7 +113,9 @@ const activeKey = (user: string): string => `trade_chat_active_v1_${user}`;
 const rebuild = (): void => {
     const running: Record<string, true> = {};
     for (const id of controllers.keys()) running[id] = true;
-    snapshot = { sessions, activeId, running, signals: pendingSignals };
+    const conversationRunning: Record<string, true> = {};
+    for (const id of conversationControllers.keys()) conversationRunning[id] = true;
+    snapshot = { sessions, activeId, running, conversationRunning, signals: pendingSignals };
 };
 
 // ── Memory caps (mirror trimForStorage) ─────────────────────────────────────
@@ -130,6 +151,14 @@ const emit = (): void => {
     rebuild();
     for (const l of listeners) l();
     schedulePersist();
+};
+
+/** Notify subscribers WITHOUT scheduling a persist. The run registries hold
+ *  nothing persistable — a live run is not a fact about the transcript — so
+ *  they must not drag the debounced save along on every state change. */
+const publish = (): void => {
+    rebuild();
+    for (const l of listeners) l();
 };
 
 /** Persist the settled transcript. An entry that is still streaming is
@@ -499,6 +528,54 @@ export const endRun = (sid: string): void => {
     emit();
 };
 
+// ── Conversation-keyed runs (the Chat surface's runs) ───────────────────────
+//
+// The Chat surface's run is OWNED BY THE CONVERSATION IT WAS TYPED IN, so a
+// conversation switch moves the view and leaves the run alone. These are the
+// store-side half of that: the owner-checked release, a per-conversation Stop,
+// and the "is anything running" read the badge needs.
+
+/** Register a live run against the CONVERSATION it belongs to. */
+export const beginConversationRun = (conversationId: string, controller: AbortController): void => {
+    if (!conversationId) return;
+    conversationControllers.set(conversationId, controller);
+    publish();
+};
+
+/** End a conversation run ONLY if the store still holds THIS run's controller.
+ *  Same rule as `endRunOwned` above, and for the same reason: a blind delete
+ *  would clear a NEWER run's slot and leave it un-stoppable. */
+export const endConversationRunOwned = (conversationId: string, controller: AbortController): void => {
+    if (conversationControllers.get(conversationId) === controller) endConversationRun(conversationId);
+};
+
+export const endConversationRun = (conversationId: string): void => {
+    if (!conversationControllers.has(conversationId)) return;
+    conversationControllers.delete(conversationId);
+    publish();
+};
+
+/** Explicit Stop: abort ONE conversation's run, and only that one. */
+export const abortConversationRun = (conversationId: string): void => {
+    conversationControllers.get(conversationId)?.abort();
+};
+
+/** Abort EVERY conversation run — the profile switch's job: a different
+ *  trader's data must not receive the previous trader's answer. */
+export const abortAllConversationRuns = (): void => {
+    if (conversationControllers.size === 0) return;
+    for (const c of conversationControllers.values()) c.abort();
+    conversationControllers.clear();
+    publish();
+};
+
+/** Is this one conversation running? */
+export const isConversationRunning = (conversationId: string): boolean =>
+    conversationControllers.has(conversationId);
+
+/** Is ANY conversation running? — the surface-level badge's question. */
+export const anyConversationRunning = (): boolean => conversationControllers.size > 0;
+
 /** Explicit Stop: abort the active session's run (the button's job). */
 export const abortActive = (): void => {
     const ctrl = controllers.get(activeId);
@@ -509,6 +586,8 @@ export const abortActive = (): void => {
 export const __resetForTests = (): void => {
     for (const c of controllers.values()) c.abort();
     controllers.clear();
+    for (const c of conversationControllers.values()) c.abort();
+    conversationControllers.clear();
     listeners.clear();
     if (saveTimer) window.clearTimeout(saveTimer);
     saveTimer = 0;
@@ -517,5 +596,5 @@ export const __resetForTests = (): void => {
     loaded = false;
     loadedFor = '';
     pendingSignals = [];
-    snapshot = { sessions, activeId, running: {}, signals: [] };
+    snapshot = { sessions, activeId, running: {}, conversationRunning: {}, signals: [] };
 };

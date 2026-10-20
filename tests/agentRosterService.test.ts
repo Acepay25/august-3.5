@@ -54,6 +54,19 @@ describe('agentRoster deletion (service layer)', () => {
 });
 
 
+describe('the roster is never seeded', () => {
+    it('a clean store stays empty — reading creates neither bots nor groups', () => {
+        expect(getBots()).toEqual([]);
+        expect(getGroups()).toEqual([]);
+        // …and it does not write a key behind the trader's back: the seeding
+        // deletion was invisible to every test because nothing asserted the
+        // absence. This is that assertion (W3.1).
+        const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i) ?? '');
+        expect(keys.filter(k => k.startsWith('agents_bots_v1'))).toEqual([]);
+        expect(keys.filter(k => k.startsWith('agents_groups_v1'))).toEqual([]);
+    });
+});
+
 describe('findBotById', () => {
     it('finds a bot by id or returns undefined', () => {
         const bots = [bot('b1', 'Scout'), bot('b2', 'Raven')];

@@ -813,9 +813,21 @@ export interface MemoryContextOptions {
      *  used by the A/B eval so the "baseline minus skill" arm genuinely
      *  omits the skill under test. */
     excludeSkillName?: string;
-    /** Skip recordMemoryInjection — synthetic contexts
-     *  (A/B evals) must not pollute the attribution telemetry that
-     *  applySkillEvidence trusts for credit-granting windows. */
+    /** Record the injection in the attribution ledger — OPT IN.
+     *
+     *  A record says "the model saw skill X in this run", and the ledger
+     *  (skill evidence, lift, the dashboard) grants a skill credit for every
+     *  recorded injection. So a record may only be written for a block that
+     *  was ACTUALLY SENT. This used to default to ON, and the pipeline
+     *  assembles a full retrieval (matched skill body, risk rules, similar
+     *  setups, the skill-trigger note) into a prompt it then never sends —
+     *  so the ledger credited skills for context the model never read, and
+     *  the "enforcement" evidence was fiction.
+     *
+     *  Callers that really send the block opt in explicitly:
+     *  `services/agents/botLearning.ts` (a bot's shared-memory context, which
+     *  rides its prompt). The A/B eval arms opt OUT (synthetic contexts must
+     *  not fall inside a future trade's attribution window). */
     recordInjections?: boolean;
     /** Per-run id used to seed the reproducible ε-holdout decision.
      *  Omitted ⇒ this retrieval never holds out (conservative default). */
@@ -945,10 +957,14 @@ export function getMemoryFilesContext(
 
     // Telemetry (fire-and-forget): record what was REALLY injected so skill
     // evidence, lift and the dashboard reflect injections, not setup matches.
-    // Synthetic contexts (A/B eval arms) pass
-    // recordInjections:false — their fresh timestamps must never fall inside
-    // a future trade's attribution window and grant phantom credit.
-    if (injected.length > 0 && options?.recordInjections !== false) {
+    //
+    // OPT IN, not opt out. A record grants a skill credit for the run, so it
+    // may only be written for a block that was ACTUALLY SENT — and the
+    // pipeline assembles this whole retrieval into a prompt it never sends.
+    // The default is therefore FALSE, and a send site says `recordInjections:
+    // true` (the bot's shared-memory context does) while a synthetic context
+    // says nothing at all.
+    if (injected.length > 0 && options?.recordInjections === true) {
         void (async () => {
             try {
                 const { recordMemoryInjection } = await import('./MemoryInjectionService');

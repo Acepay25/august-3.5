@@ -246,7 +246,7 @@ export const computeRMultiple = (
  *
  * Re-derived rather than trusting the stored `rMultiple` because rows logged
  * before `computeRMultiple` learned about leverage carry a figure up to
- * DEFAULT_LEVERAGE (100×) too large — `pnlPercent` is leveraged while the
+ * the legacy 100× default too large — `pnlPercent` is leveraged while the
  * entry→stop distance is not. Nothing on the row marks which era it came from,
  * so there is no safe version fence; deriving from the same inputs answers both
  * correctly. Only where the inputs are missing (a hand-entered R) does the

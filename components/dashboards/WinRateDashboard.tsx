@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { BarChart3 } from '../shared/Icons';
 import { LoggedTrade, TradeOutcome } from '../../types';
+import { decidedAtOf } from '../../utils/journalAnalytics';
 import { EmptyState } from '../ui/EmptyState';
 import StatusPill from '../ui/StatusPill';
 import { buildCalibrationLedger, ledgerFramingLine, brierQuality } from '../../services/validation/CalibrationLedgerService';
@@ -114,7 +115,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             const end = new Date(customEndDate);
             end.setHours(23, 59, 59, 999); // Include entire end day
             return trades.filter(t => {
-                const tradeDate = new Date(t.timestamp);
+                const tradeDate = new Date(decidedAtOf(t));
                 return tradeDate >= start && tradeDate <= end;
             });
         } else if (selectedPreset === 0) {
@@ -122,7 +123,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
         } else {
             const cutoffDate = new Date();
             cutoffDate.setDate(cutoffDate.getDate() - selectedPreset);
-            return trades.filter(t => new Date(t.timestamp) >= cutoffDate);
+            return trades.filter(t => new Date(decidedAtOf(t)) >= cutoffDate);
         }
     }, [trades, selectedPreset, isCustomRange, customStartDate, customEndDate]);
 

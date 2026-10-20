@@ -34,6 +34,11 @@ import { useStreamThrottlers } from './analysisPipeline/streamThrottlers';
 import { isNotebookQuickSaveRequest, runNotebookQuickSave } from './analysisPipeline/notebookQuickSave';
 import { classifyRunFailure, mapRunFailureMessages, resolveQuotaFlaggedModel, sanitizeFallbackErrorMessage } from './analysisPipeline/runOutcome';
 import { runChatSurfaceTurn } from '../services/trade/chatSurfaceTurn';
+import {
+    beginConversationRun,
+    endConversationRunOwned,
+    abortConversationRun,
+} from '../services/trade/chatStore';
 import { automationSeatFor, runAutomationTurn } from '../services/trade/automationTurn';
 import type { ToolTurnOutcome } from '../services/trade/toolTurn';
 import type { PredicateGateResult } from '../services/learning/skillPredicateGate';
@@ -91,6 +96,42 @@ import { notify } from '../services/infrastructure/notify';
  */
 export interface ChatRunOutcome {
     ok: boolean;
+}
+
+// ─── Per-conversation run ownership (E-45) ───────────────────────────────────
+
+/** The key a run with no conversation of its own is filed under — a scheduled
+ *  run, which writes into a private message list and never touches a thread. */
+const AUTOMATION_RUN_KEY = '__automation__';
+
+/** The key a run with no conversation id at all is filed under. Distinct from
+ *  AUTOMATION_RUN_KEY so the two can never share a slot. */
+const NO_CONVERSATION_KEY = '__no_conversation__';
+
+/** The registry key for a conversation. `null` and `undefined` are the same
+ *  "no conversation" bucket, so a run cannot be filed under two keys. */
+const runKeyFor = (conversationId: string | null | undefined): string =>
+    conversationId || NO_CONVERSATION_KEY;
+
+/**
+ * One conversation's live run.
+ *
+ * `controller` — the abort handle, so a Stop reaches THIS run and not
+ * another. `owner` — the trader who started it; a run never writes across a
+ * profile change. `loadingMessage` / `steeringQueue` / `inFlight` — the facts
+ * the UI shows, kept per conversation so a switch shows the other thread's
+ * state instead of clearing it.
+ */
+interface ConversationRun {
+    controller: AbortController;
+    /** The conversation this run belongs to — null for a scheduled run, which
+     *  writes into a private message list and owns no thread. */
+    conversationId: string | null;
+    /** The trader this run belongs to. A run started by another trader is
+     *  never allowed to land in the current trader's data. */
+    owner: string;
+    loadingMessage: string | null;
+    inFlight: boolean;
 }
 
 // ─── Params Interface ──────────────────────────────────────────────────────────
@@ -297,7 +338,16 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     /** Journal mirror for zero-dep callbacks (desk-tool recall on solo runs). */
     const loggedTradesRef = useRef<LoggedTrade[]>(loggedTrades);
     useEffect(() => { loggedTradesRef.current = loggedTrades; }, [loggedTrades]);
-    const steeringQueueRef = useRef<string[]>([]);
+    /**
+     * Parked sends, per CONVERSATION.
+     *
+     * The queue belongs to the THREAD, not to the run: a correction parked
+     * while a run is live must still be there after that run ends (the drain
+     * reads it), so it cannot live in the run's record. One map, keyed the
+     * same way the runs are — a parked word drains into the thread it was
+     * typed in, never into whichever thread happens to be on screen.
+     */
+    const steeringRef = useRef<Map<string, string[]>>(new Map());
     const [steeringNotes, setSteeringNotes] = useState<string[]>([]);
     /** Per-seat steering: seat name → one queued note, drained per turn. */
     const seatSteeringRef = useRef<Record<string, string>>({});
@@ -319,22 +369,39 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     const [isDeepAnalysis, setIsDeepAnalysis] = useState<boolean>(false);
 
     // ─── Refs ──────────────────────────────────────────────────────────────
-    const analysisAbortController = useRef<AbortController | null>(null);
-    const analysisConversationIdRef = useRef<string | null>(null);
+    /**
+     * One live run, per CONVERSATION.
+     *
+     * This used to be ONE `analysisAbortController` ref for the whole app, and
+     * an effect on `activeConversationId` that aborted it on any conversation
+     * change. That made the Chat surface's run the opposite of the dock's: the
+     * dock's session state is hoisted into `services/trade/chatStore.ts` and its
+     * controller is per-session, so an answer survives a surface switch, while
+     * the Chat surface's run died the moment you looked at another thread.
+     *
+     * The machinery to survive a switch was already here — every async write
+     * goes through `updateRequestMessages`, which binds the write to the
+     * conversation the request started in — so the run was DESIGNED to land its
+     * answer in the thread it was typed in, and the effect killed it before
+     * that could ever happen. The registry makes the ownership explicit: a run
+     * belongs to a conversation, and a conversation switch moves the VIEW.
+     */
+    const runsRef = useRef<Map<string, ConversationRun>>(new Map());
+    /** The conversation on screen, as a ref — the async paths need to know
+     *  which conversation is active long after the closure that started them
+     *  went stale. Written during render on purpose (the `composerModeRef`
+     *  precedent in AGENTS.md): it is committed state, not a prop that a
+     *  concurrent render could tear. */
+    const activeConversationIdRef = useRef<string | null>(activeConversationId);
+    activeConversationIdRef.current = activeConversationId;
     // Automation runs: private message list (results never touch the main
     // conversation) + silent flag (step tracker / loading UI stay muted).
     const automationMessagesRef = useRef<Message[]>([]);
     const automationSilentRef = useRef(false);
-    // Synchronous double-submit guard: `isAnalysisInProgress` (state) is only
-    // flipped deep inside the async run, so a second Enter in the window
-    // between submit and the first await passed both guards, appended a
-    // duplicate user message and aborted run #1. Set synchronously before any
-    // await; cleared in the finally.
-    const analysisInFlightRef = useRef(false);
-    // Latest handleSendMessage closure, for the queued-send drain effect at
-    // the bottom of this hook — the drain fires after commit, so it must
-    // call through the freshest closure, not the one that started the run.
-    // Assigned after handleSendMessage below.
+    /** Latest handleSendMessage closure, for the queued-send drain effect at
+     *  the bottom of this hook — the drain fires after commit, so it must
+     *  call through the freshest closure, not the one that started the run.
+     *  Assigned after handleSendMessage below. */
     const drainSendRef = useRef<((text?: string) => Promise<ChatRunOutcome>) | null>(null);
     // ─── RAF-throttled casual-chat stream update ──────────────────────────
     // The four debate writers this call used to hand back died with the
@@ -343,22 +410,93 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                                 throttledCasualStream,
             } = useStreamThrottlers({ updateMessages });
 
-    useEffect(() => {
-        const requestConversationId = analysisConversationIdRef.current;
-        if (requestConversationId === null || requestConversationId === activeConversationId) return;
+    /**
+     * Write a run fact into the run's OWN conversation, and mirror it into the
+     * shared React state ONLY when that conversation is the one on screen.
+     *
+     * This is the whole of "per-conversation" in one shape: the map is the
+     * truth, the React state is the ACTIVE VIEW of it. A background
+     * conversation's loading line and steering queue change without touching
+     * what the trader is looking at; when they switch to it, the effect below
+     * paints its state.
+     */
+    const setLoadingFor = useCallback((conversationId: string | null, msg: string | null): void => {
+        const key = runKeyFor(conversationId);
+        const run = runsRef.current.get(key);
+        if (run) run.loadingMessage = msg;
+        if (key === runKeyFor(activeConversationIdRef.current)) setLoadingMessage(msg);
+    }, []);
 
-        analysisAbortController.current?.abort();
-        analysisAbortController.current = null;
-        analysisConversationIdRef.current = null;
-        analysisInFlightRef.current = false; // keep the double-submit guard consistent
-        // Parked sends belong to the conversation they were typed in — the
-        // queue is memory, not an outbox. Leaving them would drain into the
-        // WRONG conversation when the abort settles.
-        steeringQueueRef.current = [];
-        setSteeringNotes([]);
-        setLoadingMessage(null);
-        setIsAnalysisInProgress(false);
+    const setSteeringFor = useCallback((conversationId: string | null, queue: string[]): void => {
+        const key = runKeyFor(conversationId);
+        steeringRef.current.set(key, queue);
+        if (key === runKeyFor(activeConversationIdRef.current)) setSteeringNotes(queue);
+    }, []);
+
+    /** The parked sends of one conversation, or an empty list. */
+    const steeringFor = useCallback((conversationId: string | null): string[] =>
+        steeringRef.current.get(runKeyFor(conversationId)) ?? [], []);
+
+    /**
+     * The app-level "is a run happening" flag, which the surfaces read for
+     * their Stop button and the scheduler reads for its busy guard.
+     *
+     * It means "THE CONVERSATION ON SCREEN is running" — plus a scheduled
+     * run, which has no conversation of its own. It must NOT mean "some
+     * background conversation is running": a run in a thread you are not
+     * looking at would otherwise turn this thread's send button into a Stop
+     * button, and the scheduler would refuse to fire for a chat you cannot
+     * even see.
+     */
+    const syncProgressFlag = useCallback((): void => {
+        const activeKey = runKeyFor(activeConversationIdRef.current);
+        const activeRun = runsRef.current.get(activeKey);
+        const scheduledLive = runsRef.current.get(AUTOMATION_RUN_KEY) !== undefined;
+        setIsAnalysisInProgress(Boolean(activeRun?.inFlight) || scheduledLive);
+    }, []);
+
+    /**
+     * A conversation switch moves the VIEW. It does not kill the run.
+     *
+     * The old effect aborted the run here, and cleared the loading message,
+     * the step tracker, the in-progress flag and the steering queue. That was
+     * the defect E-45 names: the run was built to land its answer in the
+     * conversation it was typed in (`updateRequestMessages` binds every async
+     * write to `requestConversationId`), and this effect killed it before that
+     * machinery could be used.
+     *
+     * What the switch does now is show THAT conversation's state: a thread
+     * that is still thinking says so, a thread that has parked a correction
+     * shows the parked correction, and a thread with nothing running says
+     * nothing at all.
+     */
+    useEffect(() => {
+        const key = runKeyFor(activeConversationId);
+        const run = runsRef.current.get(key);
+        setLoadingMessage(run?.loadingMessage ?? null);
+        setSteeringNotes(steeringRef.current.get(key) ?? []);
+        setIsAnalysisInProgress(Boolean(run?.inFlight) || runsRef.current.get(AUTOMATION_RUN_KEY) !== undefined);
     }, [activeConversationId]);
+
+    /**
+     * Abort ONE run, by its registry key, and release everything it owns.
+     *
+     * The single place a run dies, so the release cannot be half-done: the
+     * controller is aborted, the record is dropped, the store's copy is
+     * released (owner-checked — a newer run in the same conversation must not
+     * lose its slot), and the app-level flag is re-synced.
+     */
+    const cancelRunAt = (key: string): void => {
+        const run = runsRef.current.get(key);
+        if (!run) return;
+        run.controller.abort();
+        run.inFlight = false;
+        run.loadingMessage = null;
+        runsRef.current.delete(key);
+        if (run.conversationId) abortConversationRun(run.conversationId);
+        setLoadingFor(run.conversationId, null);
+        syncProgressFlag();
+    };
 
     // ─── Helper: active custom instructions ────────────────────────────────
     const getActiveCustomInstructions = () => {
@@ -453,7 +591,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 
         const isSummarizing = composerImages.some(img => img.isLoading);
 
-        if (isAnalysisInProgress || analysisInFlightRef.current) {
+        // The guard is per CONVERSATION: a run in another thread must not
+        // block a send here, and a run here must not be visible as a Stop
+        // button in a thread the trader is not looking at.
+        const activeRunKey = runKeyFor(activeConversationId);
+        const activeRunInFlight = runsRef.current.get(activeRunKey)?.inFlight === true;
+        if (isAnalysisInProgress || activeRunInFlight) {
             // Drafting stays enabled during a run, but a send attempt while a
             // debate is live must not silently eat the message (the composer
             // only disables during loadingMessage, which is null mid-debate).
@@ -467,8 +610,13 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 const draft = typeof customPrompt === 'string' ? customPrompt : composerInput;
                 if (draft.trim()) {
                     const intent = parseComposerIntent(draft.trim());
-                    steeringQueueRef.current = [...steeringQueueRef.current, formatComposerSteer(intent) || draft.trim()];
-                    setSteeringNotes(steeringQueueRef.current);
+                    // Parked into THIS conversation's queue. A correction typed
+                    // in one thread must drain into that thread, so the queue is
+                    // keyed the same way the runs are.
+                    setSteeringFor(activeConversationId, [
+                        ...steeringFor(activeConversationId),
+                        formatComposerSteer(intent) || draft.trim(),
+                    ]);
                     setInput('');
                 }
             }
@@ -609,20 +757,37 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // Live-backtest summary (block-scoped result is captured here so the
         // final message update below can persist it on runStats).
         setIsRateLimited(false);
-        analysisAbortController.current?.abort();
+        // The run belongs to the conversation it was typed in. Aborting the
+        // PREVIOUS run of THIS conversation is correct (a second send in the
+        // same thread supersedes the first); aborting ANOTHER conversation's
+        // run is exactly the defect E-45 removes.
+        //
+        // A SCHEDULED run owns no thread: it writes into a private message
+        // list, so it is filed under its own key. Filing it under the active
+        // conversation would (a) light that thread's "running" badge for a run
+        // that never writes to it, and (b) let a manual send in that thread
+        // abort the schedule — which is a behaviour change the schedule's own
+        // route did not ask for.
+        const requestConversationId = activeConversationId;
+        const requestRunKey = isAutomationRun ? AUTOMATION_RUN_KEY : runKeyFor(activeConversationId);
+        const previousRun = runsRef.current.get(requestRunKey);
+        previousRun?.controller.abort();
         const currentAbortController = new AbortController();
-        analysisAbortController.current = currentAbortController;
-        analysisConversationIdRef.current = activeConversationId;
-        // Synchronous in-flight marker — see analysisInFlightRef above.
-        analysisInFlightRef.current = true;
-        steeringQueueRef.current = [];
-        setSteeringNotes([]);
+        const runOwner = getActiveUsername();
+        runsRef.current.set(requestRunKey, {
+            controller: currentAbortController,
+            conversationId: isAutomationRun ? null : requestConversationId,
+            owner: runOwner,
+            loadingMessage: null,
+            inFlight: true,
+        });
+        if (!isAutomationRun) beginConversationRun(requestConversationId ?? '', currentAbortController);
+        setSteeringFor(requestConversationId, []);
         seatSteeringRef.current = {};
         stoppedSeatsRef.current = new Set();
         // Bind every async message write to the conversation that started the
         // request. This remains correct even if the user switches conversations
         // before a provider response or stream chunk arrives.
-        const requestConversationId = activeConversationId;
         const updateRequestMessages = (updater: (prevMessages: Message[]) => Message[]): void => {
             if (isAutomationRun) {
                 // Automation runs keep a PRIVATE message list — the main
@@ -630,10 +795,21 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 automationMessagesRef.current = updater(automationMessagesRef.current);
                 return;
             }
+            // A run never writes across a profile change. The profile switch
+            // (hooks/useUserProfileLoader.ts) cancels BEFORE the username
+            // flips, so its cancel cannot see that the trader changed; THIS is
+            // the guard that actually holds — by the time a run writes, the new
+            // profile is the active one, and the previous trader's answer must
+            // not land in it.
+            if (runOwner !== getActiveUsername()) {
+                currentAbortController.abort();
+                return;
+            }
             updateMessages(updater, requestConversationId);
         };
         const isCurrentRequest = (): boolean =>
-            analysisAbortController.current === currentAbortController && !currentAbortController.signal.aborted;
+            runsRef.current.get(requestRunKey)?.controller === currentAbortController
+            && !currentAbortController.signal.aborted;
 
         // Throw when the request goes stale (user cancel or conversation
         // switch). Plain early-returns/breaks bypassed the catch block's
@@ -794,7 +970,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             if (isAutomationRun && runHybridEnabled && !options?.presetHybridData) {
                 try {
                     devLog('[Hybrid Intelligence] Attempting to fetch data for prompt:', effectiveInput);
-                    if (!isAutomationRun) setLoadingMessage('Fetching real-time market data...');
+                    if (!isAutomationRun) setLoadingFor(requestConversationId, 'Fetching real-time market data...');
                     const hybridResult = await tryFetchHybridDataFromPromptWithCalibration(
                         effectiveInput,
                         GlobalLearningService.getCalibration()
@@ -1045,7 +1221,10 @@ ${enhancedPrompt}`;
                     );
                     return { ok: false };
                 }
-                setIsAnalysisInProgress(true);
+                // A schedule is live: it has no thread of its own, so the
+                // app-level flag is re-derived rather than set — the flag means
+                // "the conversation on screen is running, or a schedule is".
+                syncProgressFlag();
                 const turnStartedAt = Date.now();
                 const out = await runAutomationTurn({
                     config: seat.config,
@@ -1122,8 +1301,11 @@ ${enhancedPrompt}`;
             const provider = chosen
                 ? { config: { ...chosen, selectedModel: chatModel }, name: chosen.name, model: chatModel, useImages: false, thoughtsKey: chosen.id }
                 : enabledProviders[0];
-                setLoadingMessage("Thinking...");
-            setIsAnalysisInProgress(true);
+                setLoadingFor(requestConversationId, "Thinking...");
+            // The app-level flag is re-derived, not set: it means "the
+            // conversation on screen is running (or a schedule is)", so it can
+            // never be left saying "running" for a thread the trader has left.
+            syncProgressFlag();
             // Stream the reply into the bubble as it generates (perceived
             // speed) instead of appending it once after completion.
             const streamingMessageId = `ai-${Date.now()}`;
@@ -1321,7 +1503,7 @@ ${enhancedPrompt}`;
                 // previous run can never clear the flag on a newer run.
                 const rateLimitRunController = currentAbortController;
                 window.setTimeout(() => {
-                    if (analysisAbortController.current === rateLimitRunController) {
+                    if (runsRef.current.get(requestRunKey)?.controller === rateLimitRunController) {
                         setIsRateLimited(false);
                     }
                 }, 60_000);
@@ -1375,16 +1557,20 @@ ${enhancedPrompt}`;
         } finally {
             endPromptLane();
             automationSilentRef.current = false;
-            if (analysisAbortController.current === currentAbortController) {
-                setLoadingMessage(null);
+            // Release THIS run only. A run that is not the owner of its key
+            // has already been replaced by a newer one in the same
+            // conversation, which owns the state from there on.
+            if (runsRef.current.get(requestRunKey)?.controller === currentAbortController) {
+                const run = runsRef.current.get(requestRunKey);
+                if (run) run.inFlight = false;
+                runsRef.current.delete(requestRunKey);
+                if (run?.conversationId) endConversationRunOwned(run.conversationId, currentAbortController);
                 // Cancelling during the hybrid fetch skipped setIsHybridLoading
                 // (the assert threw before it) — reset here so the panel
                 // spinner can't spin until the next run.
                 setIsHybridLoading(false);
-                analysisAbortController.current = null;
-                analysisConversationIdRef.current = null;
-                setIsAnalysisInProgress(false);
-                analysisInFlightRef.current = false;
+                setLoadingFor(requestConversationId, null);
+                syncProgressFlag();
             }
             // NOTE: queued sends are NOT drained here. The drain (see the
             // effect below) keys on the isAnalysisInProgress false-transition
@@ -1395,17 +1581,59 @@ ${enhancedPrompt}`;
             // sees a replaced controller and skips this cleanup — the new run
             // owns the state from there on.
         }
-    }, [loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, memoryConfig, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, customInstructions, isHybridIntelligenceEnabled, selectedChatModel, loggedTrades, insightKnowledgeBase, tradeSummaries, isStrategiesEnabled, confirmDialog, toast]);
+    }, [loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, memoryConfig, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, customInstructions, isHybridIntelligenceEnabled, selectedChatModel, loggedTrades, insightKnowledgeBase, tradeSummaries, isStrategiesEnabled, confirmDialog, toast, setLoadingFor, setSteeringFor, steeringFor, syncProgressFlag]);
 
     // ─── Cancel Analysis ───────────────────────────────────────────────────
-    const handleCancelAnalysis = () => {
-        if (analysisAbortController.current) {
-            analysisAbortController.current.abort();
-                setLoadingMessage(null);
-            setIsAnalysisInProgress(false);
-            analysisInFlightRef.current = false;
+    /**
+     * Stop a run.
+     *
+     * With an id, it stops THAT conversation's run and nothing else — that is
+     * what deleting a conversation needs, and what a surface that names its
+     * conversation needs.
+     *
+     * With no id, it stops the run the trader can SEE: the ACTIVE
+     * conversation's. A background conversation's run keeps going — that is
+     * the whole point of the registry — and the trader can switch to it and
+     * stop it there.
+     *
+     * It ALSO stops any run that belongs to a DIFFERENT trader. The profile
+     * switch (`hooks/useUserProfileLoader.ts`) calls this with no id, and it
+     * does so BEFORE the username flips, so the cancel alone cannot see that
+     * the trader changed; the owner check below is the backstop, and the
+     * write-path guard in `updateRequestMessages` is the one that actually
+     * holds.
+     */
+    const handleCancelAnalysis = (conversationId?: string): void => {
+        if (conversationId !== undefined) {
+            cancelRunAt(runKeyFor(conversationId));
+            return;
+        }
+        cancelRunAt(runKeyFor(activeConversationIdRef.current));
+        const currentUser = getActiveUsername();
+        for (const [key, run] of [...runsRef.current]) {
+            if (run.owner !== currentUser) cancelRunAt(key);
         }
     };
+
+    /**
+     * The profile switch's hard stop.
+     *
+     * The switch cancels BEFORE the username flips, so `handleCancelAnalysis`
+     * cannot see the change on that call. This effect can: by the time it
+     * runs, the new profile is the active one, and a run that belongs to the
+     * PREVIOUS trader is aborted before it can write a word into the new
+     * trader's data.
+     *
+     * It runs on every render on purpose — the username is not React state
+     * here, so there is nothing to depend on. The loop is bounded: the abort
+     * removes the record, so the next pass finds nothing to do.
+     */
+    useEffect(() => {
+        const currentUser = getActiveUsername();
+        for (const [key, run] of [...runsRef.current]) {
+            if (run.owner !== currentUser) cancelRunAt(key);
+        }
+    });
 
     // ─── Chat Management ───────────────────────────────────────────────────
     const handleClearChat = async (conversationId?: string) => {
@@ -1450,20 +1678,27 @@ ${enhancedPrompt}`;
     // switch effect above), so parked words never drain into the wrong
     // thread; the queue is memory in one mount, not an outbox.
     drainSendRef.current = handleSendMessage;
-    const wasRunActiveRef = useRef(false);
+    /**
+     * Which conversations had a live run, so the drain knows whose queue to
+     * empty. Per conversation, because the queue is: a correction parked in
+     * one thread drains into that thread.
+     */
+    const wasRunActiveRef = useRef<Set<string>>(new Set());
     useEffect(() => {
-        if (isAnalysisInProgress) {
-            wasRunActiveRef.current = true;
+        const key = runKeyFor(activeConversationId);
+        const live = runsRef.current.get(key)?.inFlight === true;
+        if (live) {
+            wasRunActiveRef.current.add(key);
             return;
         }
-        if (!wasRunActiveRef.current) return;
-        wasRunActiveRef.current = false;
-        const queuedDrain = steeringQueueRef.current;
+        if (!wasRunActiveRef.current.has(key)) return;
+        wasRunActiveRef.current.delete(key);
+        const queuedDrain = steeringRef.current.get(key) ?? [];
         if (queuedDrain.length === 0) return;
-        steeringQueueRef.current = [];
-        setSteeringNotes([]);
+        steeringRef.current.set(key, []);
+        setSteeringFor(activeConversationId, []);
         void drainSendRef.current?.(queuedDrain.join('\n'));
-    }, [isAnalysisInProgress]);
+    }, [activeConversationId, isAnalysisInProgress]);
 
     return {
         // State
@@ -1473,8 +1708,8 @@ ${enhancedPrompt}`;
         currentVisionData, setCurrentVisionData,
         isDeepAnalysis, setIsDeepAnalysis,
 
-        // Refs
-        analysisAbortController,
+        // Refs — the live runs are owned per conversation now
+        // (see runsRef); there is no single app-wide controller to hand out.
 
         // Handlers
         handleSendMessage,
@@ -1487,8 +1722,13 @@ ${enhancedPrompt}`;
         handleReplacementChoice,
         steeringNotes,
         handleRemoveSteeringNote: (index: number) => {
-            steeringQueueRef.current = steeringQueueRef.current.filter((_, i) => i !== index);
-            setSteeringNotes(steeringQueueRef.current);
+            // Removes from the ACTIVE conversation's queue — the one the note
+            // is drawn in.
+            const key = runKeyFor(activeConversationIdRef.current);
+            const queue = steeringRef.current.get(key) ?? [];
+            const next = queue.filter((_, i) => i !== index);
+            steeringRef.current.set(key, next);
+            setSteeringFor(activeConversationIdRef.current, next);
         },
         // Steer or bench one seat mid-debate.
         handleSteerSeat: (seatName: string, note: string) => {

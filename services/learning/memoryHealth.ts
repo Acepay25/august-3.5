@@ -65,6 +65,16 @@ export interface HealthSkillBucket {
     staleEvidence: number;
     /** Auto-authored by a bot rather than the chart AI. */
     fromBots: number;
+    /** Skill files in the skills folder that do NOT parse — the "ghosts".
+     *  A ghost is in the notebook, in the backup and in the export, and appears
+     *  in NO list: not the skills index, not the retrieval, not this card. The
+     *  count of files against the count of parsed metas IS the ghost count, and
+     *  until now this report computed it and threw it away.
+     *
+     *  Optional because the bucket is also built by callers that do not read
+     *  the notebook (the card's own fixtures); absent means "not counted",
+     *  never "zero ghosts". */
+    ghosts?: number;
 }
 
 export interface HealthQueue {
@@ -150,6 +160,7 @@ const bucketSkills = (metas: SkillMeta[]): HealthSkillBucket => {
     const out: HealthSkillBucket = {
         total: metas.length, candidate: 0, confirmed: 0, retired: 0,
         unproven: 0, bookSeeds: 0, hurtsVerdict: 0, staleEvidence: 0, fromBots: 0,
+        ghosts: 0,
     };
     for (const m of metas) {
         // A book seed is a curated prior, not a belief this trader is still
@@ -179,6 +190,13 @@ export const buildMemoryHealthReport = async (username: string): Promise<MemoryH
     const metas = skillFiles
         .map(f => parseSkillMarkdown(f.content))
         .filter((m): m is SkillMeta => Boolean(m));
+    // The GHOST count: the skill files that do not parse. It was computed
+    // right here and thrown away — the difference between "files in the
+    // skills folder" and "skills the app can read" is exactly the number of
+    // files that sit in the notebook, in the backup and in the export while
+    // appearing in NO list. A ghost is invisible by construction, so the only
+    // way it becomes visible is a card that counts it.
+    const ghostSkills = skillFiles.length - metas.length;
 
     const folderName = new Map(folders.map(f => [f.id, f.name]));
     const byFolder = new Map<string, HealthFolder>();
@@ -267,6 +285,10 @@ export const buildMemoryHealthReport = async (username: string): Promise<MemoryH
 
     const diaryFiles = files.filter(f => folderName.get(f.folderId) === 'trader-diary');
     const skills = bucketSkills(metas);
+    // The ghost count rides with the skill bucket, so the Health card can
+    // show it as a number beside the other skill counts and not only as a
+    // line of prose.
+    skills.ghosts = ghostSkills;
     // P1-4: clusters the worth gate could not judge. Reading the ledger is how
     // "the loop stopped learning new skills" becomes visible instead of
     // looking like "there was nothing to learn".
@@ -308,6 +330,15 @@ export const buildMemoryHealthReport = async (username: string): Promise<MemoryH
     }
     if (skills.staleEvidence > 0) {
         flags.push(`${skills.staleEvidence} learned skill${skills.staleEvidence === 1 ? '' : 's'} with no counted evidence in ${EVIDENCE_STALE_DAYS}+ days.`);
+    }
+    // A skill file that does not parse is a GHOST: it is in the notebook, in
+    // the backup and in the export, and it is in NO list — not the skills
+    // index, not the retrieval, not this card. Until now the report computed
+    // that count and threw it away, so a malformed skill was the one failure
+    // the Health tab could not see. It is a file the trader can fix by hand,
+    // so it says where to look.
+    if (ghostSkills > 0) {
+        flags.push(`${ghostSkills} skill file${ghostSkills === 1 ? '' : 's'} could not be parsed — ${ghostSkills === 1 ? 'it is' : 'they are'} in the notebook and in every backup, but in no list.`);
     }
     if (queues.needsRewrite > 0) {
         flags.push(`${queues.needsRewrite} proposal${queues.needsRewrite === 1 ? '' : 's'} need a rewritten clause before anything can act on them.`);
