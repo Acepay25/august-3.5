@@ -48,3 +48,30 @@ export const traceLines = (text: string): string[] =>
  */
 export const splitReasoningAroundTools = (reasoning: string): string[] =>
     reasoning.split(/\s*\[Desk tools\][^\n]*\n?/g);
+
+/**
+ * Every trace a message carries, as one string — the Thinking row's text.
+ *
+ * `thoughtProcesses` is the LIVE map. `reasoningProcesses` was the DELETED
+ * debate engine's own lane, and the two used to be joined at every read
+ * site, which is how a dead field stayed alive for years: three readers, no
+ * writer. The key is off the `Message` type now, so nothing may write it —
+ * but rows persisted before the engine was deleted still carry the
+ * moderator's trace in it, and dropping it unread would blank the Thinking
+ * row on those old transcripts. So it is read HERE, once, and folded in.
+ *
+ * The legacy lane is read through a cast, deliberately: a field nobody may
+ * write is a field nobody may depend on, and the cast keeps that promise
+ * local to this function instead of spreading a second vocabulary.
+ */
+export const messageTraceText = (m: {
+    thoughtProcesses?: Record<string, string>;
+}): string => {
+    const legacy = Object.values(
+        (m as { reasoningProcesses?: Record<string, string> }).reasoningProcesses ?? {},
+    );
+    const live = Object.values(m.thoughtProcesses ?? {});
+    return [...legacy, ...live]
+        .filter(t => !!t && t.trim().length > 0)
+        .join('\n\n');
+};

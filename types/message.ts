@@ -2,6 +2,7 @@
 
 import { MessageRole, TradeOutcome, DebateSpeaker } from './enums';
 import { TradeAnalysis } from './analysis';
+import type { ReasoningEffort } from './provider';
 
 export interface DebateTurn {
   speaker: DebateSpeaker;
@@ -114,6 +115,17 @@ export interface RunStats {
   promptTokens?: number;
   completionTokens?: number;
   costUsd?: number;
+  /** The thinking tier this run was sent under — the RESOLVED tier, not the
+   *  raw composer setting: 'auto' is a request to pick, and the row must show
+   *  what was actually picked. It is written by the same resolution the
+   *  request used (`resolveComposerEffort`), so the answer and the wire can
+   *  never disagree about how hard the model was asked to think.
+   *
+   *  This is a fact ABOUT THE ANSWER, which is why it lives on the run: a
+   *  trader reading an old transcript can see that it was produced under a
+   *  different tier than today's, and a run's cost cannot be compared to
+   *  another run's without it. */
+  effort?: ReasoningEffort;
 }
 
 /** One analyst's entry in the run ledger. */
@@ -160,7 +172,14 @@ export interface Message {
   // Ensemble fields — keyed by provider id (ProviderConfig.id)
   modelsUsed?: Record<string, string>;       // providerId → model id used
   thoughtProcesses?: Record<string, string>; // providerId → thought process text
-  reasoningProcesses?: Record<string, string>; // provider/model → provider reasoning content
+  //
+  // The DELETED debate engine's own lane (`reasoningProcesses`) used to sit
+  // here beside `thoughtProcesses`, and the two were joined at read time. It
+  // is gone from the type: nothing writes it, and a field nobody may write
+  // is a field nobody may depend on. Rows persisted before the engine was
+  // deleted still carry the moderator's trace in it, so it is read exactly
+  // once — `utils/traceText.ts` → `messageTraceText` — and folded into the
+  // live map there. Do not reintroduce the key.
 
   debateTurns?: DebateTurn[]; // Holds the live debate conversation
   /** True while a single-model reply is actively streaming into the bubble.

@@ -212,7 +212,7 @@ interface TradeChatPanelProps {
      *  `answer === undefined` is the trader's question; a string is the
      *  settled answer. Fired twice, so the question shows in the other
      *  surface while it is still being answered. */
-    onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string, workedMs?: number) => void;
+    onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string, workedMs?: number, effort?: ReasoningEffort) => void;
     /** Commit a SOLO turn asked HERE into the conversation this session is bound
      *  to, keyed by the entry's own id. See `ChatTurnRunnerDeps.onSoloTurnCommit`
      *  — without it the merged thread is readable from this pane but nothing a

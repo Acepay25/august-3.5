@@ -22,7 +22,7 @@ import InlineVerdict from '../../analysis/InlineVerdict';
 import MemoryProvenanceStrip from '../../chat/MemoryProvenanceStrip';
 import KeyLevelsCard from '../KeyLevelsCard';
 import { proposalStateOf as sharedProposalStateOf, rememberProposalState } from '../../../services/trade/proposalDisposition';
-import { CopyChip, FadingText, PinChip, RetryChip } from '../../shared/chatChips';
+import { CopyChip, FadingText, PinChip, RetryChip, ThinkingTierChip } from '../../shared/chatChips';
 
 /** Per-entry disposition of a model proposal card ('logged' / 'dismissed')
  *  moved to `services/trade/proposalDisposition` when the Chat surface grew a
@@ -204,6 +204,11 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                                     carried, so a mouse user could never see
                                     them. */
                                 <div className="flex items-center gap-2">
+                                    {/* The tier this answer was produced under —
+                                        the same muted chip the Chat surface
+                                        shows, so the two homes say the same
+                                        thing about the same turn. */}
+                                    {e.effort && <ThinkingTierChip effort={e.effort} />}
                                     <CopyChip text={shownText} />
                                     {onToggleWatch && analysisId && pinnedMessageIds && (
                                         <PinChip pinned={pinnedMessageIds.has(analysisId)}

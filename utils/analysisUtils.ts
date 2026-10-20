@@ -921,24 +921,6 @@ export const extractSignalStrategyText = (
 };
 
 /**
- * The moderator's chain-of-thought, keyed several ways depending on the phase
- * (`moderator` / `Moderator`). Merge the lanes so the bubble's Thinking row
- * streams the full trace regardless of which callback filled it.
- */
-export const extractModeratorThinking = (
-    reasoningProcesses?: Record<string, string>,
-    thoughtProcesses?: Record<string, string>,
-): string => {
-    const lanes = [
-        reasoningProcesses?.moderator,
-        reasoningProcesses?.Moderator,
-        thoughtProcesses?.moderator,
-        thoughtProcesses?.Moderator,
-    ].filter((lane): lane is string => Boolean(lane && lane.trim()));
-    return [...new Set(lanes)].join('\n\n').trim();
-};
-
-/**
  * Last moderator turn that is actually a verdict (not a clarification dump).
  * Falls back to cleaned strategy text when debate turns are missing.
  */

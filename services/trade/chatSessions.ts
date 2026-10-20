@@ -16,7 +16,8 @@
 import { getActiveUsername } from '../../utils/activeUser';
 import type { Message, ToolAction } from '../../types/message';
 import { MessageRole } from '../../types/enums';
-import type { ReasoningEffort } from '../providers/reasoningControls';
+import type { ReasoningEffort } from '../../types/provider';
+import { messageTraceText } from '../../utils/traceText';
 
 /** One turn in a session. `role` stays 'user' | 'ai' for storage
  *  compatibility; an ai entry may belong to one panel seat (speaker). */
@@ -71,6 +72,20 @@ export interface StoredChatEntry {
      *  what the seat saw and the id is where the bytes are — two questions, and
      *  the renderer zips them by position. */
     toolIds?: string[];
+    /** The thinking tier this answer was produced under — the RESOLVED tier
+     *  the request went out with. It is a fact about the ANSWER, so it lives
+     *  on the entry and survives a reload like `workedMs` does.
+     *
+     *  NOT the session's `effort`: that one is the composer's CURRENT setting
+     *  (what the next turn will send), this one is the RECORD of what the
+     *  turn that produced this row actually sent. Two answers in one session
+     *  can carry different values, and that is the point — the trader can see
+     *  that the tier changed under them.
+     *
+     *  ENTRY field, not a session one, for the same asymmetry reason: a new
+     *  session field would be stripped by `loadSessions`' explicit rebuild on
+     *  the next write, while a new entry field survives with no loader change. */
+    effort?: ReasoningEffort;
     /** This run was interrupted (explicit Stop, or a failure mid-turn). An ENTRY
      *  field, not a session one, for the same asymmetry reason as `workedMs`: a
      *  new session field would be stripped by `loadSessions`' explicit rebuild on
@@ -459,10 +474,7 @@ export const saveSessions = (sessions: ChatSession[], pinnedIds: readonly string
  * is the other half — the single merge that makes both homes read ONE thread.
  */
 export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
-    const traces = [
-        ...Object.values(m.reasoningProcesses ?? {}),
-        ...Object.values(m.thoughtProcesses ?? {}),
-    ].filter(t => !!t && t.trim().length > 0);
+    const trace = messageTraceText(m);
     const at = m.createdAt ? Date.parse(m.createdAt) : NaN;
     return {
         id: m.id,
@@ -472,7 +484,7 @@ export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
         // Left unset on purpose: the dock stamps the answering seat from the
         // session's own bot, so a stale name here would fight it.
         speaker: undefined,
-        reasoning: traces.length > 0 ? traces.join('\n\n') : undefined,
+        reasoning: trace.length > 0 ? trace : undefined,
         actions: m.toolActions,
         // `proposal` is deliberately NOT projected. The dock keeps its card on the
         // RUNTIME entry only (`chatStore.LiveEntry`, not `StoredChatEntry`) so a
@@ -487,6 +499,10 @@ export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
         // the dock stamps `workedMs` directly on the entry, so an undefined
         // here is normal for a dock-native turn, not a missing value.
         workedMs: typeof m.runStats?.durationMs === 'number' ? m.runStats.durationMs : undefined,
+        // …and the tier it was produced under, for the same reason: a row
+        // opened in the dock from a Chat-surface conversation keeps the fact
+        // that the answer was produced under a different tier.
+        effort: m.runStats?.effort,
         // A row with an unparseable timestamp keeps `at` undefined rather than
         // stamping it as 0: the memory-attribution window join treats a real
         // stamp as meaningful and 0 as noise.

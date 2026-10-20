@@ -41,7 +41,7 @@
  * fix; a probe reading it as one would be wrong.
  */
 
-import type { ProviderConfig } from '../../types/provider';
+import type { ProviderConfig, ReasoningEffort } from '../../types/provider';
 import type { ChatMessage, ChatRequestOptions } from './GenericProviderService';
 import { getHarnessSettings } from '../../utils/harnessSettings';
 
@@ -50,8 +50,13 @@ import { getHarnessSettings } from '../../utils/harnessSettings';
 /** Harness-level reasoning effort. 'auto' = no override (legacy behavior).
  *  'off' = explicitly ask the model NOT to think (composer toggle): routed
  *  per capability class (Anthropic skips the thinking block, GLM/DeepSeek
- *  send thinking:disabled, the rest step to the lowest effort). */
-export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'max' | 'auto';
+ *  send thinking:disabled, the rest step to the lowest effort).
+ *
+ *  The UNION lives in `types/provider.ts` — a `Message` and a stored chat
+ *  entry both carry the tier that produced them, and the wire vocabulary is
+ *  the one place both can reach. Re-exported here so every existing
+ *  `from './reasoningControls'` import still resolves to the same union. */
+export type { ReasoningEffort };
 
 /** Role→effort schedule (P2). Openings reason hard; quick answers don't. */
 export const EFFORT_BY_TASK = {

@@ -10,9 +10,11 @@
  * not need a group class to make them appear.
  */
 import React, { useEffect, useState } from 'react';
-import { Check, Copy, Pin, RotateCcw, Square, Volume2 } from './Icons';
+import { Brain, Check, Copy, Pin, RotateCcw, Square, Volume2 } from './Icons';
 import { copyText } from '../../utils/clipboard';
 import MarkdownContent from './MarkdownContent';
+import { effortChoiceOf } from './effortScale';
+import type { ReasoningEffort } from '../../types/provider';
 
 /** Hover chip on USER bubbles: re-run the turn from this message — the
  *  stale answer(s) after it are dropped and the model regenerates with
@@ -123,6 +125,33 @@ export const PinChip: React.FC<{ pinned: boolean; onToggle: () => void }> = ({ p
         <span>{pinned ? 'Pinned' : 'Pin'}</span>
     </button>
 );
+
+/** The thinking tier this answer was produced under.
+ *
+ *  A MUTED chip, not a control: the tier was decided when the turn was sent
+ *  (the composer's dial, or the task's own schedule), and the row's job is to
+ *  REPORT it, not to offer a second place to change it. It says the thing the
+ *  answer's text cannot: this was produced at a different tier than the one
+ *  next to it, and a cost compared across two answers means nothing without
+ *  it.
+ *
+ *  The label comes from the ONE ladder (`effortScale.ts`), the same table the
+ *  composer's panel and its trigger read — a chip that spelled the tier its
+ *  own way would drift from the control that set it. */
+export const ThinkingTierChip: React.FC<{ effort: ReasoningEffort; className?: string }> = ({ effort, className = '' }) => {
+    const label = effortChoiceOf(effort).label;
+    return (
+        <span
+            data-testid="thinking-tier-chip"
+            title={`Thinking tier: ${label}`}
+            aria-label={`Thinking tier: ${label}`}
+            className={`flex items-center gap-1 rounded-control px-1.5 py-0.5 text-ui-2xs text-zinc-600 ${className}`.trim()}
+        >
+            <Brain className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span>{label}</span>
+        </span>
+    );
+};
 
 /** Every character the store holds, every render. The reveal used to be a
  *  requestAnimationFrame-driven prefix of the text, which silently withheld

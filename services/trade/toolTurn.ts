@@ -82,6 +82,13 @@ export interface ToolTurnOutcome {
     /** How many usage frames arrived — so a caller can tell one round from four
      *  without re-deriving it from tool lines. */
     usageCalls: number;
+    /** The thinking tier this turn was actually sent under — the RESOLVED one,
+     *  because the caller resolved it before the request left. It rides out
+     *  with the outcome so the answer can RECORD it: the row the trader reads
+     *  says how hard the model was asked to think, and a fact that is not
+     *  carried out of the executor has to be re-derived by every writer —
+     *  which is how two rows end up claiming different tiers for one turn. */
+    effort: ReasoningEffort;
 }
 
 export interface ToolTurnRequest {
@@ -104,7 +111,7 @@ export interface ToolTurnRequest {
 }
 
 /** What the turn produced before usage is folded in. */
-type InnerOutcome = Omit<ToolTurnOutcome, 'usage' | 'usageCalls'>;
+type InnerOutcome = Omit<ToolTurnOutcome, 'usage' | 'usageCalls' | 'effort'>;
 
 /**
  * The one turn executor, with token accounting measured rather than inferred.
@@ -131,7 +138,10 @@ export const runToolTurn = async (req: ToolTurnRequest): Promise<ToolTurnOutcome
             },
         },
     });
-    return { ...outcome, usage, usageCalls };
+    // The effort rides out HERE, on the one return every path shares: the
+    // inner executor never sees a tier, so there is exactly one place that
+    // stamps it and every caller records the same value.
+    return { ...outcome, usage, usageCalls, effort: req.effort };
 };
 
 const runToolTurnInner = async (req: ToolTurnRequest): Promise<InnerOutcome> => {
