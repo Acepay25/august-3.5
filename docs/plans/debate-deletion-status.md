@@ -694,7 +694,7 @@ and `featuresAreWired`, `harnessFeatures`, `scalpDetection`,
 `automationRouteCharacterization`, `analysisPipelineSendIdentity` green.
 
 Still blocked: `verdictFinalizer.ts` (the ~15 application sites above), and the engine
-cluster it feeds. Also two comments now make a false claim — `components/agents/AgentsView.tsx:242`
+cluster it feeds. Also two comments now make a false claim — `components/agents/AgentsView.tsx:245`
 and the second comment, `components/shared/ChatTranscriptRow.tsx:18`, cite `verdictFinalizer.ts` as where a
 verdict payload is written, and it has no production caller. Not edited this pass (no turn to
 verify the sentence around them); fix with the re-home.
@@ -2274,7 +2274,7 @@ instead of implying the table is checked.
 found on the line it cites: the `index.tsx` mount chain (StrictMode :73, ErrorBoundary :74, ToastProvider :75 —
 the old `73-79` range proved nothing), `august_surface_v1`, `onSendBotTurn`, `onAnalyze`, `handleRunAnalysisFromChat`,
 `runFullAnalysis`, `runSeatTurn` at both :593 and :1082, `applyCasualStreamUpdate`, `notify`. Binding found another real
-defect: row 13 cited AgentsView.tsx:748 for `onAnalyze`, and the await is at **:745** (:748 is the `finally` of that
+defect: row 13 cited AgentsView.tsx:766 for `onAnalyze`, and the await is at **:763** (:766 is the `finally` of that
 same try) — fixed in both flow docs. Coverage now prints 14/53 with 22 pairs and a floor of 14, and 39 rows remain
 line-resolved only.
 

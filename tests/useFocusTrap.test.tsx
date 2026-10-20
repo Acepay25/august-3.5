@@ -98,7 +98,7 @@ describe('DataCaptureModal focus-trap wiring', () => {
  * allocated but never attached, which froze Tab document-wide.
  */
 import AutomationEditorModal from '../components/automation/AutomationEditorModal';
-import ThinkingModal from '../components/analysis/ThinkingModal';
+import DetailModal from '../components/shared/DetailModal';
 import ImageViewerModal from '../components/modals/ImageViewerModal';
 import NewBotDialog from '../components/chat/NewBotDialog';
 import { NewGroupDialog } from '../components/chat/NewGroupDialog';
@@ -122,8 +122,8 @@ describe('the modals the audit named as untrapped (O-66)', () => {
         await expectFocusInsideDialog(screen.getByRole('dialog'));
     });
 
-    it('ThinkingModal — the chain-of-thought reader', async () => {
-        render(<ThinkingModal isOpen onClose={() => {}} title="Thought" content="the model's reasoning" />);
+    it('DetailModal — the full-detail reader (the chain-of-thought reader)', async () => {
+        render(<DetailModal isOpen onClose={() => {}} title="Thought" content="the model's reasoning" />);
         await expectFocusInsideDialog(screen.getByRole('dialog'));
     });
 
@@ -215,7 +215,7 @@ describe('every element that declares the page inert is the trap container (O-66
         // `aria-modal` the tree writes outside a comment, measured; the named
         // members are the ones the audit listed plus the ones it missed.
         expect(SITES.length).toBeGreaterThanOrEqual(18);
-        const named = ['AutomationEditorModal', 'ThinkingModal', 'ImageViewerModal', 'LiveMarket', 'UpdateOverlay', 'StrategySearch'];
+        const named = ['AutomationEditorModal', 'DetailModal', 'ImageViewerModal', 'LiveMarket', 'UpdateOverlay', 'StrategySearch'];
         for (const comp of named) {
             expect(SITES.some(s => s.file.includes(comp)), `${comp} is not in the scanned modal set`).toBe(true);
         }
