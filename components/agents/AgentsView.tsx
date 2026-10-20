@@ -61,6 +61,7 @@ import {
 } from '../../utils/agentThreads';
 import { MessageRole } from '../../types/enums';
 import type { Message } from '../../types/message';
+import { messageTraceText } from '../../utils/traceText';
 import StatusPill from '../ui/StatusPill';
 // The shell's own column width, imported rather than repeated: this surface's
 // sidebar and the rail are ONE shell, and two numbers is how the hop started
@@ -234,21 +235,12 @@ const relTimeMs = (ms: number): string => {
 /** Adapt a pipeline `Message` onto the shared row view, so this surface and
  *  the Chart AI dock render one transcript furniture rather than two.
  *
- *  Everything here is data the pipeline already wrote: per-seat reasoning and
- *  thought traces, the tool side-effects, attached images, the analysis. The
- *  two joins worth naming:
- *
- *  - `reasoningProcesses` and `thoughtProcesses` are separate per-provider
- *    maps, so the traces are joined in provider order rather than guessed at.
- *  - `liveToolEvents` is keyed by speaker and is nulled when the turn settles
- *    (`verdictFinalizer.ts`), so it only exists mid-stream; `toolActions` is
- *    what survives and is what the status rows render.
- */
+ *  Everything here is data the pipeline already wrote: the thought trace, the
+ *  tool side-effects, attached images, the analysis. The trace is joined by
+ *  `messageTraceText` — ONE seam that folds the deleted debate engine's
+ *  legacy lane in, so this surface and the dock read the same trace. */
 const chatRowFrom = (m: Message, username: string, deskName: string): ChatRowView => {
-    const traces = [
-        ...Object.values(m.reasoningProcesses ?? {}),
-        ...Object.values(m.thoughtProcesses ?? {}),
-    ].filter(t => !!t && t.trim().length > 0);
+    const trace = messageTraceText(m);
     return {
         id: m.id,
         role: m.role === MessageRole.USER ? 'user' : 'ai',
@@ -257,10 +249,14 @@ const chatRowFrom = (m: Message, username: string, deskName: string): ChatRowVie
         timeLabel: relTime(m.createdAt),
         streaming: !!m.isStreaming,
         images: m.images,
-        reasoning: traces.length > 0 ? traces.join('\n\n') : undefined,
+        reasoning: trace.length > 0 ? trace : undefined,
         toolLines: Object.values(m.liveToolEvents ?? {}).flat(),
         actions: m.toolActions,
         workedMs: typeof m.runStats?.durationMs === 'number' ? m.runStats.durationMs : undefined,
+        // The thinking tier this answer was produced under, so the row can
+        // show it — the run's own record of how hard the model was asked to
+        // think, which no amount of reading the text can recover.
+        effort: m.runStats?.effort,
         // A planId-stamped row is the "Logged from Chart AI" RECEIPT of a
         // proposal whose decision card is already on screen — under the answer
         // that proposed it here, and on the dock's proposal card. Its analysis

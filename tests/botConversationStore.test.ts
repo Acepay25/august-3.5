@@ -159,7 +159,10 @@ describe('a turn asked in the dock reaches the Chat surface', () => {
         // Two calls, not one: the question should be visible in the other
         // surface WHILE it is being answered.
         expect(panelSrc).toMatch(/onBotTurnCommit\?\.\(bot, text\);/);
-        expect(panelSrc).toMatch(/onBotTurnCommit\?\.\(bot, text, settledText, workedMsFor\(soloStartedAt\)\);/);
+        // The settled call carries the work time AND the tier the turn ran
+        // under, so the other home's row says the same thing about the same
+        // answer that this one does.
+        expect(panelSrc).toMatch(/onBotTurnCommit\?\.\(bot, text, settledText, workedMsFor\(soloStartedAt\), turnEffort\);/);
     });
 
     it('commits the measured work time so the other surface shows the same duration', () => {

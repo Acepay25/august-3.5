@@ -13,6 +13,21 @@
 export type ApiFormat = 'chat_completions' | 'messages' | 'responses' | 'google';
 
 /**
+ * Harness-level reasoning effort — the thinking tier a request was sent under.
+ *  - 'off'   = explicitly ask the model NOT to think (composer toggle)
+ *  - 'auto'  = no override; the task's own schedule decides
+ *  - 'low' … 'max' = an explicit rung on the ladder
+ *
+ * It lives HERE, in the wire vocabulary, because a `Message` and a stored
+ * chat entry both have to carry the tier that produced them: the answer row
+ * shows the tier the desk was given, and that fact outlives the request. The
+ * services that resolve it (`services/providers/reasoningControls.ts`) own the
+ * SCHEDULE and the resolution, and re-export this type, so there is one
+ * union — not one per layer that mentions it.
+ */
+export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'max' | 'auto';
+
+/**
  * Configuration for a single AI provider.
  * Built-in providers have isBuiltIn=true and cannot be deleted.
  * Custom providers have isBuiltIn=false and can be added/removed freely.

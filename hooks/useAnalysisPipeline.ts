@@ -1280,6 +1280,11 @@ ${enhancedPrompt}`;
                         startedAt: new Date(turnStartedAt).toISOString(),
                         finishedAt: new Date(turnStartedAt + out.workedMs).toISOString(),
                         durationMs: out.workedMs,
+                        // The tier the schedule actually ran under, carried out
+                        // of the executor — a schedule answers with the SAME
+                        // tools as a human turn, so its row shows the tier
+                        // too.
+                        effort: out.effort,
                     },
                     imageSummaries: userMessage.imageSummaries,
                 };
@@ -1445,6 +1450,10 @@ ${enhancedPrompt}`;
                         startedAt: new Date(turnStartedAt).toISOString(),
                         finishedAt: new Date(turnStartedAt + toolTurn.workedMs).toISOString(),
                         durationMs: toolTurn.workedMs,
+                        // The thinking tier the answer was produced under. It
+                        // comes out of the executor, so the row and the wire
+                        // can never claim different tiers for one turn.
+                        effort: toolTurn.effort,
                         // The wire reported these; the row keeps the measured
                         // numbers instead of making the compare panel show "—".
                         promptTokens: toolTurn.usage.promptTokens,

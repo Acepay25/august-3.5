@@ -261,7 +261,7 @@ export interface ChatTurnRunnerDeps {
      *  it; a later price touch comes back as a [HARNESS SIGNAL] turn). */
     onPlanPresented?: (plan: WatchPlan, turn?: PanelTurnContext) => void;
     /** Commit a bot turn asked HERE into the canonical conversation. */
-    onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string, workedMs?: number) => void;
+    onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string, workedMs?: number, effort?: ReasoningEffort) => void;
     /** Commit a SOLO (desk) turn asked HERE into the conversation this session is
      *  bound to — under the entry's OWN id.
      *
@@ -274,7 +274,7 @@ export interface ChatTurnRunnerDeps {
      *  Without this the merge is one-way: the pane reads the conversation but a
      *  question asked in it never lands there, so flipping the pill back made the
      *  exchange look like it had never happened. */
-    onSoloTurnCommit?: (row: { id: string; role: 'user' | 'ai'; text: string; workedMs?: number }, conversationId: string) => void;
+    onSoloTurnCommit?: (row: { id: string; role: 'user' | 'ai'; text: string; workedMs?: number; effort?: ReasoningEffort }, conversationId: string) => void;
     /** Launches the FULL ensemble pipeline from this chat. It writes its rows
      *  into the ACTIVE conversation — the same thread the Chat surface renders —
      *  so this resolves when the run ends and carries no answer text. */
@@ -315,6 +315,13 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         clearAttachments, setDraft, setContextAt, addModelDrawings,
         clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onSoloTurnCommit, onRunAnalysis, onAnalysisError,
     } = deps;
+
+    /** The tier every turn in this runner resolves to. ONE resolution, read by
+     *  the transport, the tool turn and the row that records it — so a turn,
+     *  its request and its transcript row cannot claim three different tiers.
+     *  The runner is rebuilt when the composer's tier changes (it is a
+     *  dependency of the memo that builds this), so this cannot go stale. */
+    const turnEffort = resolveComposerEffort(effort, 'tradingDecision');
 
     const mutate = (id: string, fn: (s: LiveSession) => LiveSession): void => {
         chatStore.mutate(id, fn);
@@ -636,7 +643,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             allowedTools: TRADE_TOOLS,
             maxTokens: TASK_BUDGETS.chat,
             temperature: 0.4,
-            reasoningEffort: resolveComposerEffort(effort, 'tradingDecision'),
+            reasoningEffort: turnEffort,
             chartInterval: interval,
             chartLevels,
             chartDrawings: allDrawings,
@@ -709,7 +716,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             messages,
             signal: controller.signal,
             startedAt: turnStartedAt,
-            effort: resolveComposerEffort(effort, 'tradingDecision'),
+            effort: turnEffort,
             keepTextHidden: hidePass ? panelCouldStillBePass : undefined,
             transport,
             events,
@@ -735,6 +742,10 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             ...e,
             streaming: false,
             workedMs: outcome.workedMs,
+            // The tier the turn was sent under, so the answer row can show it.
+            // It comes out of the executor rather than being resolved again
+            // here: one turn, one tier, one source.
+            effort: outcome.effort,
             ...(outcome.interrupted
                 // A stopped turn keeps whatever text was already painted: a
                 // hidden-pass seat that never spoke must not reveal its partial
@@ -978,13 +989,13 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 // the conversation as though the seat had said something.
                 const settled = !!settledText.trim() && !/^Running the full ensemble/.test(settledText);
                 if (bot) {
-                    if (settled) onBotTurnCommit?.(bot, text, settledText, workedMsFor(soloStartedAt));
+                    if (settled) onBotTurnCommit?.(bot, text, settledText, workedMsFor(soloStartedAt), turnEffort);
                 } else if (settled && session.conversationId) {
                     // Under the id the pane is ALREADY showing this answer by, so
                     // the Chat thread gains the row and this pane does not double
                     // it — see `onSoloTurnCommit`.
                     onSoloTurnCommit?.(
-                        { id: aiEntry.id, role: 'ai', text: settledText, workedMs: workedMsFor(soloStartedAt) },
+                        { id: aiEntry.id, role: 'ai', text: settledText, workedMs: workedMsFor(soloStartedAt), effort: turnEffort },
                         session.conversationId,
                     );
                 }

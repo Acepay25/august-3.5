@@ -21,11 +21,12 @@
 import React from 'react';
 import { InterruptedRunNotice } from './InterruptedRunNotice';
 import ChatWorkTimeline, { type ChatWorkView } from '../trade/panels/ChatWorkTimeline';
-import { CopyChip, FadingText, PinChip, RetryChip, SpeakChip } from './chatChips';
+import { CopyChip, FadingText, PinChip, RetryChip, SpeakChip, ThinkingTierChip } from './chatChips';
 import KeyLevelsCard from '../trade/KeyLevelsCard';
 import { parseKeyLevels, type ModelKeyLevel } from '../../services/trade/keyLevels';
 import type { TradeAnalysis } from '../../types';
 import type { ToolAction } from '../../types/message';
+import type { ReasoningEffort } from '../../types/provider';
 
 export type ChatRowRole = 'user' | 'ai';
 
@@ -58,6 +59,10 @@ export interface ChatRowView {
     /** The prompt that was interrupted, so "Edit prompt" can prefill the
      *  composer with what the user actually asked rather than a blank box. */
     interruptedPrompt?: string;
+    /** The thinking tier the answer was produced under — shown as a muted
+     *  chip on the action row. Absent on rows written before the tier was
+     *  recorded; a row that does not know shows nothing rather than a guess. */
+    effort?: ReasoningEffort;
 }
 
 export interface ChatTranscriptRowProps {
@@ -180,6 +185,10 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
 
             <div className="mt-1 flex items-center gap-1">
                 {isUser && onRetry && <RetryChip onRetry={onRetry} />}
+                {/* The tier this answer was produced under. It leads the row
+                    because it is a fact about the ANSWER, not an action on it —
+                    the actions below are the ones that change something. */}
+                {!isUser && row.effort && <ThinkingTierChip effort={row.effort} />}
                 <CopyChip text={row.text} />
                 {!isUser && <SpeakChip text={row.text} />}
                 {!isUser && onTogglePin && (

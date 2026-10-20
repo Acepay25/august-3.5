@@ -172,7 +172,12 @@ describe('both chat homes drive the one stored tier', () => {
         // The dock and the Chat surface can both present a plan, so their
         // "auto" resolves through tradingDecision — not the casual chat tier
         // (E-39). A trader's explicit pick still passes through untouched.
-        expect(runnerSrc).toMatch(/reasoningEffort: resolveComposerEffort\(effort, 'tradingDecision'\)/);
+        //
+        // The dock resolves ONCE, at the top of the runner, and the transport
+        // reads that value: the request, the tool turn and the row that
+        // records the tier must not be able to disagree about it.
+        expect(runnerSrc).toMatch(/const turnEffort = resolveComposerEffort\(effort, 'tradingDecision'\);/);
+        expect(runnerSrc).toMatch(/reasoningEffort: turnEffort/);
         expect(casualSrc).toMatch(/reasoningEffort: resolveComposerEffort\(effort\)/);
         // 20b added a THIRD casual transport — the Chat surface's desk turn.
         // One dial, three wires: a transport that skipped the shared rule would

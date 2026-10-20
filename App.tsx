@@ -110,7 +110,7 @@ import { useUserProfiles } from './hooks/useUserProfiles';
 import { offlineQueue } from './services/infrastructure/OfflineQueueService';
 import { getPreference, setPreference, removePreference, PREF_KEYS } from './services/infrastructure/PreferencesService';
 // AI Learning Services - Adaptive Learning, Mistake Patterns, Insight Extraction
-import { ProviderConfig } from './types/provider';
+import { ProviderConfig, type ReasoningEffort } from './types/provider';
 import { isProviderOnCooldown, providerCooldownRemainingMs } from './services/infrastructure/ProviderHealthService';
 import { stopAutoBackup, createBackup, getBackups, type BackupMetadata } from './services/infrastructure/BackupService';
 import { useWatchSideEffects } from './hooks/useWatchSideEffects';
@@ -1707,7 +1707,7 @@ const App: React.FC = () => {
      *  answer. Two calls rather than one, so the question is visible in the
      *  other surface while it is still being answered.
      */
-    const commitDockBotTurn = useCallback((bot: AgentBot, prompt: string, answer?: string, workedMs?: number): void => {
+    const commitDockBotTurn = useCallback((bot: AgentBot, prompt: string, answer?: string, workedMs?: number, effort?: ReasoningEffort): void => {
         const at = new Date().toISOString();
         const row: Message = answer === undefined
             ? { id: `dbu-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: MessageRole.USER, text: prompt, createdAt: at }
@@ -1723,7 +1723,7 @@ const App: React.FC = () => {
                 // "Analyzed for Ns" this dock row did — and so it survives a
                 // reload. Without it the Chat rail's runStats is the only source
                 // and a dock-native answer shows no duration there.
-                ...(typeof workedMs === 'number' ? { runStats: { runId: `dock-${bot.id}-${Date.now()}`, startedAt: at, finishedAt: at, durationMs: workedMs } } : {}),
+                ...(typeof workedMs === 'number' ? { runStats: { runId: `dock-${bot.id}-${Date.now()}`, startedAt: at, finishedAt: at, durationMs: workedMs, ...(effort ? { effort } : {}) } } : {}),
             };
         updateMessages(prev => [...prev, row], activeConversationId ?? null);
     }, [updateMessages, activeConversationId]);
@@ -1740,7 +1740,7 @@ const App: React.FC = () => {
      *  Deliberately un-stamped: no `botId`, no `modelsUsed`. A desk answer is the
      *  desk's, and `deskThread` drops only rows a bot positively owns. */
     const commitSoloChatTurn = useCallback((
-        row: { id: string; role: 'user' | 'ai'; text: string; workedMs?: number },
+        row: { id: string; role: 'user' | 'ai'; text: string; workedMs?: number; effort?: ReasoningEffort },
         conversationId: string,
     ): void => {
         const at = new Date().toISOString();
@@ -1750,7 +1750,7 @@ const App: React.FC = () => {
             text: row.text,
             createdAt: at,
             ...(row.role === 'ai' && typeof row.workedMs === 'number'
-                ? { runStats: { runId: `desk-${row.id}`, startedAt: at, finishedAt: at, durationMs: row.workedMs } }
+                ? { runStats: { runId: `desk-${row.id}`, startedAt: at, finishedAt: at, durationMs: row.workedMs, ...(row.effort ? { effort: row.effort } : {}) } }
                 : {}),
         }], conversationId);
     }, [updateMessages]);

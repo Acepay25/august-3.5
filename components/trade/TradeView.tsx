@@ -47,6 +47,7 @@ import TradeChatPanel, { ChartAiDockRail } from './TradeChatPanel';
 import RightPanel from '../shell/RightPanel';
 import { useRightPanel } from '../../hooks/useRightPanel';
 import type { PanelTurnContext } from './TradeChatPanel';
+import type { ReasoningEffort } from '../../types/provider';
 import SymbolPicker from './SymbolPicker';
 import ScreenerPanel from './ScreenerPanel';
 import type { AgentBot } from '../../services/agents/agentRoster';
@@ -90,10 +91,10 @@ interface TradeViewProps {
     coachCount?: number;
     /** A bot's existing conversation, so a bot opened in the dock inherits it. */
     botThreadRows?: Message[];
-    onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string, workedMs?: number) => void;
+    onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string, workedMs?: number, effort?: ReasoningEffort) => void;
     /** A solo turn asked in the dock has to reach the conversation too, or the
      *  merged thread stays one-way on this surface exactly as it did on Chat. */
-    onSoloTurnCommit?: (row: { id: string; role: 'user' | 'ai'; text: string; workedMs?: number }, conversationId: string) => void;
+    onSoloTurnCommit?: (row: { id: string; role: 'user' | 'ai'; text: string; workedMs?: number; effort?: ReasoningEffort }, conversationId: string) => void;
     /** The App conversation the dock's bound session stands in for, so the chart
      *  and the Chat surface show ONE thread rather than two transcripts.
      *  Read through `entriesForSession`; absent ⇒ the dock is its own chat. */
