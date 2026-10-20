@@ -21,12 +21,18 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import fs from 'node:fs';
 import ModelChip from '../components/shared/ModelChip';
-import { EFFORT_CHOICES, effortChoiceOf } from '../components/shared/effortScale';
+import { EFFORT_CHOICES, effortChoiceOf, effortShortcutHint, nextEffortTier } from '../components/shared/effortScale';
+import { effortDialUp, resetEffortDial } from '../components/shared/effortDial';
 import type { ProviderConfig } from '../types/provider';
+
+// The dial registry is module state, so a mounted chip in one test would keep
+// the chord "legal" for the next file.
+beforeEach(resetEffortDial);
+afterEach(cleanup);
 
 const tiers = EFFORT_CHOICES.map(c => c.id);
 
@@ -44,8 +50,7 @@ const stubRect = (): void => {
 };
 
 describe('the tier on the merged model control', () => {
-    it('names provider, model and tier on the trigger, in words', () => {
-        stubRect();
+    it('names provider, model and tier on the trigger, in words', () => {        stubRect();
         render(<ModelChip providers={PROVIDERS} value="deepseek::deepseek-reasoner"
             onChange={() => {}} effort="high" onEffortChange={() => {}} />);
         const trigger = screen.getByTestId('composer-model-chip');
@@ -181,5 +186,88 @@ describe('both chat homes drive the one stored tier', () => {
         expect(runnerSrc).not.toMatch(/effortForTask\('chat'\)/);
         expect(surfaceSrc).not.toMatch(/effortForTask\('chat'\)/);
         expect(casualSrc).toMatch(/effortForTask\('chat'\)/); // getQuickResponse is not a composer
+    });
+});
+
+/**
+ * E-51 ruling D-B — the `Ctrl/Cmd+Shift+E` chord, bound in the same commit as
+ * the hint that advertises it.
+ *
+ * The reference client's shortcut is a GLOBAL thinking toggle. Here it is legal
+ * only while a composer actually shows the tier: a panel session has no dial
+ * (its seats pick their own models) and a bot turn has none either (a bot
+ * answers on its own config through a transport that never reads the field), so
+ * a chord that wrote a tier in those states would change something nothing
+ * reads back. That is the same class of lie as a key hint for an unbound key,
+ * which is why the hint and the binding ship together and why the binding asks
+ * `effortDial.ts` before it acts.
+ */
+describe('the Ctrl/Cmd+Shift+E chord', () => {
+    const appSrc = fs.readFileSync('App.tsx', 'utf8');
+
+    it('walks the ladder in order and wraps at the top', () => {
+        expect(nextEffortTier('off')).toBe('auto');
+        expect(nextEffortTier('auto')).toBe('low');
+        expect(nextEffortTier('medium')).toBe('high');
+        expect(nextEffortTier('high')).toBe('max');
+        // Wrapping is what makes the chord repeatable instead of a one-way ramp
+        // that strands the dial at `max` with no way back except the panel.
+        expect(nextEffortTier('max')).toBe('off');
+    });
+
+    it('names the keycap the machine actually has', () => {
+        expect(effortShortcutHint('MacIntel')).toBe('⌘⇧E');
+        expect(effortShortcutHint('Win32')).toBe('Ctrl+Shift+E');
+        expect(effortShortcutHint('Linux x86_64')).toBe('Ctrl+Shift+E');
+    });
+
+    it('prints the hint beside the EFFORT label and in the slider’s accessible name', () => {
+        stubRect();
+        render(<ModelChip providers={PROVIDERS} value="deepseek::deepseek-reasoner"
+            onChange={() => {}} effort="high" onEffortChange={() => {}} />);
+        fireEvent.click(screen.getByTestId('composer-model-chip'));
+        const hint = effortShortcutHint(`${navigator.userAgent} ${navigator.platform ?? ''}`);
+        const section = screen.getByTestId('model-menu-effort');
+        expect(section.textContent).toContain(hint);
+        expect(screen.getByRole('slider').getAttribute('aria-label')).toContain(hint);
+    });
+
+    it('is legal only while a composer shows the dial, and stops when it unmounts', async () => {
+        expect(effortDialUp()).toBe(false);
+        stubRect();
+        const view = render(<ModelChip providers={PROVIDERS} value="deepseek::deepseek-reasoner"
+            onChange={() => {}} effort="high" onEffortChange={() => {}} />);
+        // The panel is not open: the chip still shows the tier on its trigger,
+        // and that is what the chord edits, so the key is live already.
+        await waitFor(() => expect(effortDialUp()).toBe(true));
+        view.unmount();
+        expect(effortDialUp()).toBe(false);
+    });
+
+    it('a bot turn, which answers on its own config, never raises it', async () => {
+        stubRect();
+        render(<ModelChip providers={PROVIDERS} value="deepseek::deepseek-reasoner"
+            onChange={() => {}} effort="high" onEffortChange={() => {}} showEffort={false} />);
+        await Promise.resolve();
+        expect(effortDialUp()).toBe(false);
+    });
+
+    it('App binds it, guarded by that flag, writing the one stored row', () => {
+        // The guard and the binding are ONE condition: a chord bound but not
+        // guarded would fire on a bot turn, and a guarded chord never bound is
+        // the dead hint this repo keeps catching.
+        expect(appSrc).toMatch(/\(e\.ctrlKey \|\| e\.metaKey\) && e\.shiftKey && !e\.altKey && effortDialUp\(\) && e\.key\.toLowerCase\(\) === 'e'/);
+        expect(appSrc).toMatch(/chatStore\.setActiveEffort\(nextEffortTier\(chatStore\.getActiveEffort\(\)\)\)/);
+        expect(appSrc).toMatch(/import \{ effortDialUp \} from '\.\/components\/shared\/effortDial'/);
+    });
+
+    it('the double-release guard keeps the count sane', async () => {
+        stubRect();
+        const view = render(<ModelChip providers={PROVIDERS} value="deepseek::deepseek-reasoner"
+            onChange={() => {}} effort="low" onEffortChange={() => {}} />);
+        await waitFor(() => expect(effortDialUp()).toBe(true));
+        view.unmount();
+        view.unmount();
+        expect(effortDialUp()).toBe(false);
     });
 });

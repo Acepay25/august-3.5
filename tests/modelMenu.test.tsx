@@ -184,7 +184,9 @@ describe('ModelMenu — the effort section', () => {
         expect(slider.getAttribute('aria-valuemax')).toBe('5');
         expect(slider.getAttribute('aria-valuenow')).toBe('4');
         expect(slider.getAttribute('aria-valuetext')).toBe('High');
-        expect(slider.getAttribute('aria-label')).toBe('Thinking effort');
+        // The hint rides the accessible name, per docs/ui-doctrine.md: a key
+        // shown only in a <kbd> is invisible to the reader this control is for.
+        expect(slider.getAttribute('aria-label')).toMatch(/^Thinking effort \(/);
         expect(screen.getByTestId('model-menu-effort').textContent).toMatch(/Effort/);
         fireEvent.keyDown(slider, { key: 'ArrowRight' });
         expect(onEffort).toHaveBeenLastCalledWith('max');

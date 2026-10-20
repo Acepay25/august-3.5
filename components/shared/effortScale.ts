@@ -42,3 +42,17 @@ export const effortIndexOf = (id: EffortChoice): number => {
 
 export const effortAtIndex = (i: number): EffortChoice =>
     EFFORT_CHOICES[Math.min(Math.max(i, 0), EFFORT_CHOICES.length - 1)].id;
+
+/** Step one rung up, wrapping at the top. The `Ctrl/Cmd+Shift+E` chord is the
+ *  whole ladder in one key, so it must be defined for every rung — including
+ *  from `max` back to `off`, which is what makes the chord repeatable rather
+ *  than a one-way ramp that strands the dial at the top. */
+export const nextEffortTier = (id: EffortChoice): EffortChoice =>
+    EFFORT_CHOICES[(effortIndexOf(id) + 1) % EFFORT_CHOICES.length].id;
+
+/** The hint the panel prints beside the label. macOS shows the glyphs because
+ *  that is what the keycap says on the machine the trader is holding — and a
+ *  hint that names a key the keyboard does not have is a lie of the same family
+ *  as an unbound shortcut. */
+export const effortShortcutHint = (platform: string): string =>
+    /Mac|iPhone|iPad/i.test(platform) ? '⌘⇧E' : 'Ctrl+Shift+E';

@@ -44,6 +44,7 @@ import {
     effortAtIndex,
     effortChoiceOf,
     effortIndexOf,
+    effortShortcutHint,
     type EffortChoice,
 } from './effortScale';
 
@@ -202,6 +203,15 @@ const ModelMenu: React.FC<ModelMenuProps> = ({
     // rather than a closure over `returnFocusTo`.
     const returnFocusRef = useRef<HTMLElement | null>(returnFocusTo);
     useEffect(() => { returnFocusRef.current = returnFocusTo; });
+
+    // Ruling D-B: the hint printed beside the label names the chord App binds.
+    // The registration that MAKES that chord legal lives in `ModelChip`, which
+    // owns the dial for as long as a composer shows it — not here, where this
+    // element exists only while the menu is open. See `effortDial.ts` for why a
+    // panel seat or a bot turn must not answer to it.
+    const shortcutHint = effortShortcutHint(
+        typeof navigator === 'undefined' ? '' : `${navigator.userAgent} ${navigator.platform ?? ''}`,
+    );
     useEffect(() => {
         const el = rows.length > 0
             ? rowRefs.current.get(value) ?? rowRefs.current.get(rows[0].value) ?? mainRef.current
@@ -467,15 +477,18 @@ const ModelMenu: React.FC<ModelMenuProps> = ({
 
                 {showEffort && (
                     <div className="shrink-0 border-t border-white/5 px-3 pb-3 pt-2" data-testid="model-menu-effort">
-                        <div className="mb-1.5 flex items-center justify-between">
-                            <span className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-600">Effort</span>
+                        <div className="mb-1.5 flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-1.5 text-ui-2xs font-bold uppercase tracking-widest text-zinc-600">
+                                Effort
+                                <kbd className="rounded-control border border-white/10 px-1 text-ui-2xs font-normal tracking-normal text-zinc-500">{shortcutHint}</kbd>
+                            </span>
                             <span className="text-ui-dense font-medium text-zinc-200">{effortChoiceOf(effort).label}</span>
                         </div>
                         <div
                             ref={sliderRef}
                             role="slider"
                             tabIndex={0}
-                            aria-label="Thinking effort"
+                            aria-label={`Thinking effort (${shortcutHint})`}
                             aria-valuemin={0}
                             aria-valuemax={EFFORT_CHOICES.length - 1}
                             aria-valuenow={effortIndexOf(effort)}

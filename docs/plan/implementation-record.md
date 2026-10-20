@@ -626,3 +626,77 @@ unchanged in intent (it still asserts against
 `providerUtils.isProviderReady`, not a snapshot of its rule), and the added
 coverage is exactly what the merge promised — one panel, no second portal, no
 second copy of the preferences, and the two value shapes.
+
+## 13. E-51 Phase 4 — the chord, the hint, and the last dead import (2026-10-21)
+
+Ruling D-B asked for `Ctrl+Shift+E` "later", with the hint in the SAME commit as
+the binding so a key the trader was told about was never a key nobody bound.
+This is that commit, and it closes E-51's four phases.
+
+**What the chord does.** It steps the ACTIVE CHAT SESSION's thinking tier —
+`chatStore.setActiveEffort(nextEffortTier(chatStore.getActiveEffort()))`, the
+same stored row the slider writes, so the trigger's label moves the instant the
+key is pressed and the value the next turn sends cannot disagree with what is on
+screen. The ladder wraps (`max → off`), because a one-way ramp would strand the
+dial at the top with no way back except opening the panel.
+
+**Why it is guarded, and what the guard is.** `components/shared/effortDial.ts`
+is a refcount that `ModelChip` raises for as long as it SHOWS the tier, and the
+App-level handler asks it before acting. Not a boolean, because both chat homes
+can be mounted with one hidden — the surface that unmounts must not switch the
+key off for the one still on screen. A panel session never registers (`isPanel`
+hides the chip) and a bot turn never registers (`showEffort: false`), so the
+chord cannot write a tier that nothing reads back. That is the same class of lie
+as an unbound hint, approached from the other side.
+
+**The hint travels with the platform.** `effortShortcutHint(platform)` prints
+`⌘⇧E` on macOS and `Ctrl+Shift+E` elsewhere, beside the `EFFORT` label and inside
+the slider's accessible name (`docs/ui-doctrine.md:48` asks for the second, not
+just the first), so a screen-reader user hears the chord that the sighted user
+reads off a keycap.
+
+**G-7, at last.** The dead `import ModelPicker` at `App.tsx:82` is gone. It was
+deferred out of Phases 1–3 for the reason in §10 and §12 — one line near the top
+of `App.tsx` invalidates every line-anchored citation the flow docs hold against
+that file — and this phase pays for it deliberately, because Phase 4's own gate
+list is the doc re-anchor. 28 tokens re-resolved from the gate's report, cited-line
+quality back to 0 comment landings and 0 symbol misses, and the unique-anchor
+count holds at **304**.
+
+### What the gates can and cannot see
+
+The chord is App-level keyboard handling, and mounting `App` in jsdom is not on
+offer, so the pinned evidence is:
+
+- `tests/chatEffortDial.test.tsx` — 7 new tests. `nextEffortTier` walks the
+  ladder and wraps; `effortShortcutHint` names the right keycap per platform;
+  the hint is rendered beside the label AND inside `aria-label`; the refcount
+  rises while a dial is on screen, stays down for a bot turn, and falls back to
+  zero on unmount (twice, because a double release must not sink the count).
+- The same file pins the BINDING and its GUARD as one condition in `App.tsx`
+  (`… && e.shiftKey && !e.altKey && effortDialUp() && e.key.toLowerCase() === 'e'`)
+  and the write as one call into `chatStore`. A chord bound but unguarded, or
+  guarded but unbound, fails that pin.
+- `npm run render-probe` presses the real key in a real browser and requires the
+  dock's trigger label to move — `"Mock · Auto" -> "Mock · Low"` — and then
+  presses it six times and requires the label to be back where it started, which
+  is the wrap, not a ramp. That is the only gate that walks the whole path
+  (keydown → guard → store → subscription → label).
+
+### Gates, measured on this tree
+
+| Gate | Result |
+| --- | --- |
+| `npm run typecheck` / `typecheck:scripts` / `typecheck:electron` | ok, 0 errors |
+| `npm run lint` | **0 errors / 655 warnings** (cap 659; the deleted dead import took one with it) |
+| `npm run test` | **5060 tests in 495 files**, 0 failed, 0 skipped |
+| `npm run build` | ok, entry **1376 KiB** — unchanged from Phase 3 |
+| `npm run boot-probe` | ok, zero pageerrors |
+| `npm run render-probe` | **117 checks, 0 failures**, zero pageerrors (was 115: the chord and its wrap) |
+| `npm run e2e` | 5 passed |
+| `npm run check-flow-doc-anchors` | **304 anchors verified, 0 unattributed**, cited-line quality 0/0 |
+
+**Honest limit:** nothing exercises the chord against a bot turn or a panel
+session in a browser. Those states are covered by the registration rule (no
+chip, no count, no chord) and by the `showEffort: false` unit test, not by a
+keystroke.

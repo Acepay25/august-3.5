@@ -1,13 +1,15 @@
 # E-51 — The composer's model menu: one control for provider, model and effort
 
-**Status:** IN PROGRESS — **all four rulings ANSWERED (owner, 2026-10-20)**;
-**Phases 1, 2 and 3 landed 2026-10-21** (`implementation-record.md` §10–§12);
-Phase 4 — the shortcut and the hint — has not. The §0 scan below describes the
-tree BEFORE this work and is kept as written: `EffortChip.tsx` is deleted,
-`ModelChip` and `ModelPicker` both mount the one `ModelMenu`, and both composers
-carry a single control in the card. See §3 for what each answer commits, and
-§11 of the record for the one criterion this pass could NOT measure (the
-unwrapped dock row).
+**Status:** LANDED — **all four rulings ANSWERED (owner, 2026-10-20)** and
+**all four phases committed 2026-10-21** (`implementation-record.md` §10–§13):
+the panel (§10), both composers mounting it in the card (§11), `ModelPicker`
+mounting the same panel (§12), and the chord with its hint (§13). The §0 scan
+below describes the tree BEFORE this work and is kept as written, because it is
+the measurement the plan was built on: `EffortChip.tsx` is deleted, `ModelChip`
+and `ModelPicker` both mount the one `ModelMenu`, and both composers carry a
+single control in the card. See §3 for what each answer commits, §11 of the
+record for the one criterion this pass could NOT measure (the unwrapped dock
+row), and §13 for what no gate presses.
 **Owner:** the trader. **Covers:** **O-68** (the pickers are unusable without sight) and
 the doctrine's *one home per concern* rule.
 **Adjacent to, and deliberately not fixing:** **O-56 / E-39** — the *default* tier for a

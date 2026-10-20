@@ -18,9 +18,10 @@
  * stored-value writes, and the star list — and the testid `composer-model-chip`,
  * which two npm-scripted Playwright harnesses drive.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown } from './Icons';
 import ModelMenu, { type ModelMenuAnchor } from './ModelMenu';
+import { releaseEffortDial, retainEffortDial } from './effortDial';
 import type { EffortChoice } from './effortScale';
 import { effortChoiceOf } from './effortScale';
 import type { ProviderConfig } from '../../types/provider';
@@ -59,6 +60,16 @@ const ModelChip: React.FC<ModelChipProps> = ({
     const [open, setOpen] = useState(false);
     const [anchor, setAnchor] = useState<ModelMenuAnchor | null>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
+
+    // Ruling D-B: this composer is what makes `Ctrl/Cmd+Shift+E` legal. It
+    // registers for as long as it SHOWS the tier — a panel session (`isPanel`
+    // hides the chip) or a bot turn (`showEffort: false`) never registers, so
+    // the chord cannot edit a value nothing reads back.
+    useEffect(() => {
+        if (!showEffort || !onEffortChange || !effort) return;
+        retainEffortDial();
+        return () => { releaseEffortDial(); };
+    }, [showEffort, onEffortChange, effort]);
 
     const ready = providers.filter(isProviderReady);
     const pairId = value.split('::')[0];
