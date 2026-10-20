@@ -38,6 +38,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Inbox, MessageSquare, Pencil, PanelLeftClose, Paperclip, Pin, Plus, Search, StopIcon, Timer, Trash2, Users } from '../shared/Icons';
+import JumpToLatestFab, { JUMP_AWAY_PX } from '../shared/JumpToLatestFab';
 import { ModelFallbackBanner } from '../trade/panels/ChatComposer';
 import type { ProviderConfig } from '../../types/provider';
 import { useChatAttachments, type PipelineImage } from '../../hooks/useChatAttachments';
@@ -508,9 +509,14 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const [renameDraft, setRenameDraft] = useState('');
     const scroller = useRef<HTMLDivElement | null>(null);
     // Jump-to-latest (the command palette's "Jump to latest analysis"
-    // rehomed): the pill shows only when the trader has scrolled away from
-    // the newest row, and one click returns.
+    // rehomed): the control shows only when the trader has scrolled away from
+    // the newest row, and one click returns. The same control the Chart AI
+    // dock mounts — one home for the concern.
     const [showJump, setShowJump] = useState(false);
+    /** Whether the transcript may still follow the newest row. Un-pinned when
+     *  the trader scrolls away, so a streaming answer does not carry the row
+     *  they are reading off the screen. */
+    const stickToBottomRef = useRef(true);
     /** Re-render trigger for the module-scope proposal dispositions: the
      *  decision itself lives in `services/trade/proposalDisposition` so it
      *  survives a surface switch AND is shared with the Chart AI dock, which
@@ -534,11 +540,18 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const onScrollerScroll = useCallback((): void => {
         const el = scroller.current;
         if (!el) return;
-        setShowJump(el.scrollHeight - el.scrollTop - el.clientHeight > 240);
+        // ONE rule for both homes: the transcript follows the newest row until
+        // the trader has scrolled JUMP_AWAY_PX away from it, then it stops and
+        // the jump control appears. A transcript that keeps moving under a
+        // trader who is reading it cannot be read.
+        const away = el.scrollHeight - el.scrollTop - el.clientHeight > JUMP_AWAY_PX;
+        stickToBottomRef.current = !away;
+        setShowJump(away);
     }, []);
     const jumpToLatest = useCallback((): void => {
         const el = scroller.current;
         if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
+        stickToBottomRef.current = true;
         setShowJump(false);
     }, []);
     const paneRef = useRef<HTMLElement | null>(null);
@@ -695,7 +708,9 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
     useEffect(() => {
         const el = scroller.current;
-        if (el) el.scrollTop = el.scrollHeight;
+        // Follow the newest row — but only while the trader is still near it.
+        // Un-pinned, the transcript keeps the row the trader is reading.
+        if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
     }, [thread.length]);
 
     const send = useCallback(async (): Promise<void> => {
@@ -1450,10 +1465,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             )}
                         </div>
                         {showJump && (
-                            <button type="button" data-testid="jump-to-latest" onClick={jumpToLatest}
-                                className="absolute bottom-3 right-4 z-10 flex items-center gap-1 rounded-full border border-white/10 bg-zinc-800/95 px-3 py-1 text-ui-dense font-medium text-zinc-200 shadow-lg transition-colors hover:bg-zinc-700">
-                                ↓ Latest
-                            </button>
+                            <JumpToLatestFab visible running={false} onJump={jumpToLatest} />
                         )}
                         </div>
 

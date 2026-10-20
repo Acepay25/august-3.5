@@ -203,8 +203,12 @@ describe('interactive elements do not nest', () => {
         // Chat surface's title bar could render the SAME button once the global
         // band stopped spanning the window. Its root is a bare <button>, which
         // is precisely what this inventory is for.
+        // `JumpToLatestFab` joined on 2026-10-21: the one jump-to-latest
+        // control both conversation homes mount. Its root is a bare <button>
+        // too — a floating control that IS the button, with no wrapper to put
+        // one inside.
         expect([...forbidsRoot].sort().join(',')).toBe(
-            'ActionButton,CheckForUpdatesRow,CopyChip,ExportTray,NavExpandButton,NavTabButton,PinChip,RailButton,RetryChip,SpeakChip,SupervisorIndicator,ToggleSwitch',
+            'ActionButton,CheckForUpdatesRow,CopyChip,ExportTray,JumpToLatestFab,NavExpandButton,NavTabButton,PinChip,RailButton,RetryChip,SpeakChip,SupervisorIndicator,ToggleSwitch',
         );
         // This list is a MEASUREMENT, and it moved when the walker learned to skip a
         // `//` comment sitting between attributes (`CustomInstructionsEditor.tsx:194`
