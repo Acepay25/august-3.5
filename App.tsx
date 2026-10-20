@@ -733,9 +733,7 @@ const App: React.FC = () => {
         // is why no reference resolves back to this destructure member.
         images, setImages,
         setLoadingMessage,
-        setAnalysisSteps,
         currentVisionData,
-        initAnalysisSteps, startStep, completeStep,
         handleSendMessage,
         handleCancelAnalysis,
         handleClearChat,

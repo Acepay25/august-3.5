@@ -8,8 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import type { AnalysisStep, AnalysisStepStatus } from '../types';
+import type { AnalysisStepStatus } from '../types';
 import {
     RUN_STATUS_PRESENTATION,
     classifyStepError,
@@ -18,7 +17,6 @@ import {
     sanitizeErrorText,
     stepErrorLabel,
 } from '../utils/runStatus';
-import AnalysisProgress from '../components/analysis/AnalysisProgress';
 
 const STATUSES: AnalysisStepStatus[] = ['pending', 'running', 'complete', 'stopped', 'error'];
 
@@ -129,78 +127,5 @@ describe('stepErrorLabel', () => {
             expect(stepErrorLabel(kind)).toBeTruthy();
         }
         expect(stepErrorLabel(undefined)).toBe('Failed');
-    });
-});
-
-describe('AnalysisProgress renders the reason', () => {
-    const step = (over: Partial<AnalysisStep>): AnalysisStep => ({
-        id: 'debate', title: 'Ensemble debate', status: 'complete', ...over,
-    });
-
-    // Steps only render while the run is active; once it settles the card
-    // collapses into the summary bar (covered by the last case below).
-    const active = (steps: AnalysisStep[]) => render(
-        <AnalysisProgress steps={steps} isActive onCancel={() => { }} embedded />,
-    );
-
-    it('shows the error text for a failed step', () => {
-        active([step({
-            status: 'error',
-            errorKind: 'provider_rate_limit',
-            errorText: describeStepError('provider_rate_limit', 'Too Many Requests'),
-        })]);
-        expect(screen.getByText('Ensemble debate')).toBeTruthy();
-        expect(screen.getByRole('status').textContent).toMatch(/rate-limited this request/i);
-    });
-
-    it('shows the failure word next to the colour', () => {
-        active([step({ status: 'error', errorKind: 'provider_auth', errorText: 'nope' })]);
-        expect(screen.getByText('Key rejected')).toBeTruthy();
-    });
-
-    it('renders a stopped step without any failure wording', () => {
-        active([step({ status: 'stopped' })]);
-        expect(screen.getByText('Stopped')).toBeTruthy();
-        expect(screen.queryByText(/Failed/)).toBeNull();
-    });
-
-    it('a settled run that failed says "Task failed", never "Task completed"', () => {
-        // The header used to be a hard-coded "Task completed" and stay
-        // collapsed, so a half-failed run reported itself as a success.
-        render(
-            <AnalysisProgress
-                steps={[
-                    step({ id: 'market-data', title: 'Market data', status: 'complete', startTime: 0, endTime: 1000 }),
-                    step({
-                        id: 'debate',
-                        title: 'Ensemble debate',
-                        status: 'error',
-                        errorKind: 'provider_rate_limit',
-                        errorText: 'rate limited',
-                        startTime: 1000,
-                        endTime: 2000,
-                    }),
-                ]}
-                isActive={false}
-                onCancel={() => { }}
-                embedded
-            />,
-        );
-        expect(screen.getByText('Task failed')).toBeTruthy();
-        expect(screen.queryByText('Task completed')).toBeNull();
-        // And it names which step broke and how.
-        expect(screen.getByText(/Ensemble debate: rate limited/i)).toBeTruthy();
-    });
-
-    it('a settled run with no failures still reports completion', () => {
-        render(
-            <AnalysisProgress
-                steps={[step({ status: 'complete', startTime: 0, endTime: 1500 })]}
-                isActive={false}
-                onCancel={() => { }}
-                embedded
-            />,
-        );
-        expect(screen.getByText('Task completed')).toBeTruthy();
     });
 });
