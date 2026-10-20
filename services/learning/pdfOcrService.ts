@@ -17,7 +17,9 @@ import { getPrompt } from '../infrastructure/PromptOverrideService';
 import { TASK_BUDGETS } from '../providers/taskBudgets';
 import { PdfPageToOcr } from '../infrastructure/pdfTextExtractor';
 
-const DEFAULT_OCR_PAGE_PROMPT = `You are a precise OCR engine. Transcribe ALL text visible in this page image of a trading book, exactly as written — headings, body text, tables, captions, numbers, and footnotes.
+// Exported so `constants/promptRegistry.ts` can IMPORT the built-in default
+// instead of restating it — the two copies were a silent-drift hazard.
+export const DEFAULT_OCR_PAGE_PROMPT = `You are a precise OCR engine. Transcribe ALL text visible in this page image of a trading book, exactly as written — headings, body text, tables, captions, numbers, and footnotes.
 
 Rules:
 - Preserve line breaks between paragraphs.

@@ -17,7 +17,8 @@
 
 import { TechnicalIndicators, ConfluenceResult, RegimeAnalysis, AdvancedVolumeAnalysis } from '../analysis/TechnicalAnalysisService';
 import { clamp100 } from '../../utils/math';
-import { sanitizeLevelOrdering } from '../../utils/levelOrder';
+import { firstTargetDistance, plannedRiskRewardSigned } from '../../utils/riskReward';
+import { MIN_RATIO_BY_CONFIDENCE } from './ValidationConstants';
 import { HybridDataPacket } from '../analysis/HybridIntelligenceService';
 import { generateCorrelationRiskPrompt } from '../analysis/CorrelationRiskService';
 import {
@@ -186,40 +187,57 @@ export const validateMultiTimeframeConfluence = (
  * - Also validates that stop loss is at least 1x ATR from entry
  *
  * DIRECTION-AWARE (Tier-0 #7): when `direction` is supplied, risk and reward
- * are SIGNED distances through the shared ordering gate (`sanitizeLevelOrdering`)
- * — a Long with the stop ABOVE entry (or a target below it) no longer masks
- * itself behind `Math.abs` with a healthy-looking ratio; it fails validation.
- * The optional parameter keeps legacy direction-less callers compiling; those
- * retain the old absolute-value behavior (the sanitizer has already repaired
- * ordering upstream by then).
+ * are SIGNED distances — a Long with the stop ABOVE entry (or a target below
+ * it) no longer masks itself behind `Math.abs` with a healthy-looking ratio;
+ * it fails validation. The optional parameter keeps legacy direction-less
+ * callers compiling; those retain the old absolute-value behavior (the
+ * sanitizer has already repaired ordering upstream by then).
+ *
+ * THE RATIO IS THE CANONICAL ONE (audit finding F-11). This function used to
+ * measure against `takeProfits[0]` — the model's FIRST target, by array
+ * order — while the card and the journal quoted the take-profit NEAREST the
+ * entry. A model that listed its targets farthest-first was therefore graded
+ * against the farthest one, and the trader read a different number on the
+ * card than the gate had scored. The arithmetic now lives in ONE place,
+ * `utils/riskReward.plannedRiskRewardSigned`, and for a plan that is not
+ * inverted the ratio it returns is the same number, to the last digit, that
+ * `plannedRiskReward` puts on the card.
  */
 export const validateRiskReward = (
     entryPrice: number,
     stopLoss: number,
-    takeProfit1: number,
+    takeProfits: number | number[],
     atr: number,
     proposedConfidence: ConfidenceLevel,
     direction?: TradeDirection
 ): RiskRewardValidation => {
     const warnings: string[] = [];
 
-    // Direction-aware ordering gate — shared rule source in utils/levelOrder.
-    const order = direction
-        ? sanitizeLevelOrdering(direction, entryPrice, stopLoss, [takeProfit1])
-        : null;
-    const orderingInvalid = !!order && !order.ok;
+    // A single target (the legacy call shape) and a whole ladder ask the same
+    // question: which target is the ratio measured against? The canonical
+    // answer is the one NEAREST the entry.
+    const targets = (Array.isArray(takeProfits) ? takeProfits : [takeProfits])
+        .filter((tp): tp is number => Number.isFinite(tp) && tp > 0);
 
-    // Signed risk/reward when the direction is known; legacy absolute values
-    // only for direction-less callers.
-    const risk = direction
-        ? (direction === 'Long' ? entryPrice - stopLoss : stopLoss - entryPrice)
-        : Math.abs(entryPrice - stopLoss);
-    const reward = direction
-        ? (direction === 'Long' ? takeProfit1 - entryPrice : entryPrice - takeProfit1)
-        : Math.abs(takeProfit1 - entryPrice);
+    // A tradeable direction signs the distances. `TradeDirection` is typed
+    // 'Long' | 'Short', but the gate casts a plan's own direction into it and
+    // that can be 'Neutral' at runtime — a plan with no side has no signed
+    // R:R, so it falls through to the absolute-value path below.
+    const tradeable = direction === 'Long' || direction === 'Short';
+    const planned = tradeable
+        ? plannedRiskRewardSigned({ entry: entryPrice, stopLoss, takeProfits: targets, direction })
+        : null;
+
     // Magnitudes for the distance checks below (ATR tightness, percent width).
-    const riskMagnitude = Math.abs(risk);
-    const ratio = risk > 0 ? reward / risk : 0;
+    const riskMagnitude = Math.abs(entryPrice - stopLoss);
+    // The legacy absolute-value path: no stated direction to sign with, so the
+    // ratio is the magnitude ratio over the nearest target.
+    const legacyReward = firstTargetDistance(entryPrice, targets) ?? 0;
+    const ratio = planned
+        ? planned.ratio
+        : (riskMagnitude > 0 && legacyReward > 0
+            ? Math.round((legacyReward / riskMagnitude) * 100) / 100
+            : 0);
 
     // Calculate stop loss as percentage
     const stopLossPercent = (riskMagnitude / entryPrice) * 100;
@@ -228,23 +246,16 @@ export const validateRiskReward = (
     const atrBasedStopSuggestion = atr * 1.5;
 
     // Minimum R:R requirements by confidence
-    const minRatioByConfidence: Record<ConfidenceLevel, number> = {
-        'High': 2.0,
-        'Medium': 1.5,
-        'Low': 1.2,
-        'Avoid': 1.0
-    };
-
-    const minRequired = minRatioByConfidence[proposedConfidence];
+    const minRequired = MIN_RATIO_BY_CONFIDENCE[proposedConfidence];
 
     // Validate R:R
     let isValid = ratio >= minRequired;
 
-    if (orderingInvalid && order) {
+    if (planned?.inverted) {
         // Inverted plan: no measurable risk/reward exists in the stated
         // direction — hard invalid regardless of any ratio.
         isValid = false;
-        warnings.push(` INVERTED PLAN (${direction}): ${order.fixes.join('; ')}`);
+        warnings.push(` INVERTED PLAN (${direction}): ${planned.fixes.join('; ')}`);
     } else if (ratio < minRequired) {
         warnings.push(`R:R ratio (${ratio.toFixed(2)}) below required minimum (${minRequired}) for ${proposedConfidence} confidence`);
     }
@@ -272,8 +283,10 @@ export const validateRiskReward = (
         stopLossPercent,
         atrBasedStopSuggestion,
         warnings,
-        ...(order ? { orderingValid: order.ok } : {}),
-        ...(orderingInvalid && order ? { orderingFixes: order.fixes } : {}),
+        ...(planned
+            ? { orderingValid: planned.orderingValid }
+            : (direction ? { orderingValid: true } : {})),
+        ...(planned?.inverted ? { orderingFixes: planned.fixes } : {}),
     };
 };
 

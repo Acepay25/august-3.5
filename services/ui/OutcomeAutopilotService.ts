@@ -21,7 +21,7 @@ import { getActiveUsername } from '../../utils/activeUser';
 import { verifyHistoricalOutcome, extractSymbolFromAnalysis } from './AutoCaptureService';
 import { trackSLOutcome, SLOptimizationData } from '../backtesting/StopLossOptimizerService';
 import { parsePrice, leveragedMovePercent } from '../../utils/analysisUtils';
-import { DEFAULT_LEVERAGE } from '../../utils/conversationUtils';
+import { LEGACY_LEVERAGE } from '../../utils/conversationUtils';
 import { PriceAlertService } from './PriceAlertService';
 
 export interface AutopilotResolution {
@@ -188,7 +188,7 @@ class OutcomeAutopilotServiceClass {
      */
     register(messageId: string, analysis: TradeAnalysis, leverage: number): void {
         if (this.processed.has(messageId) || this.dismissed.has(messageId)) return;
-        const lev = leverage || DEFAULT_LEVERAGE;
+        const lev = leverage || LEGACY_LEVERAGE;
         const existing = this.registrations.get(messageId);
         if (existing) {
             // Symmetric re-hold: the update can swap in an analysis for a NEW

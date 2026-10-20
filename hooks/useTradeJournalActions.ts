@@ -6,6 +6,7 @@ import { getThinkingTradeId, updateThinkingOutcome, deleteThinkingByTrade } from
 import { OutcomeAutopilotService } from '../services/ui/OutcomeAutopilotService';
 import { insightTextForTrade } from '../utils/tradeInsightBrief';
 import { recalculateAnalysisMetrics } from '../utils/analysisUtils';
+import { sanitizeErrorText } from '../utils/runStatus';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
 import type { ConfirmOptions } from '../components/shared/ConfirmDialog';
 import type { LoggedTrade, TradeOutcome, TradeSummary } from '../types';
@@ -23,7 +24,16 @@ export interface UseTradeJournalActionsArgs {
     loggedTradesRef: React.MutableRefObject<LoggedTrade[]>;
     activeUsernameRef: React.MutableRefObject<string | null>;
     confirmDialog: (opts: ConfirmOptions) => Promise<boolean>;
-    toast: { success: (title: string, message?: string) => void };
+    toast: {
+        success: (title: string, message?: string) => void;
+        /** Used to SURFACE a failed write — a pattern-memory sync that never
+         *  lands is a lost learning event, and it must not be silent.
+         *
+         *  Optional so a caller that only has `success` still type-checks;
+         *  App always provides it, and a caller that does not still gets the
+         *  console report — the failure is never swallowed either way. */
+        error?: (title: string, message?: string) => void;
+    };
     /** The debounced AI-Review re-run trigger (owned by App, shared with
      *  useTradeLogging — stable identity so its memoized callbacks hold). */
     handleJournalAutoRefresh: () => void;
@@ -82,6 +92,26 @@ export const useTradeJournalActions = (args: UseTradeJournalActionsArgs): UseTra
         useAlgorithmicInsights, summaryCharLimit,
     } = args;
 
+    /**
+     * A pattern-memory sync is a WRITE to the trader's notebook, so a failure
+     * loses a learning event — and the notebook can then describe trades that
+     * no longer exist. It used to be swallowed outright (`.catch(() => {})`),
+     * which made that loss invisible.
+     *
+     * The repo's rule is explicit — "Never add a swallow-and-continue around
+     * a notebook write; surface it, like `memoryHealth` does" — so this
+     * reports it: the console for the record, and a toast the trader sees.
+     * The error text goes through the app's own sanitizer, so a raw
+     * provider/storage message never reaches the UI.
+     */
+    const reportPatternMemoryFailure = (err: unknown): void => {
+        console.error('[TraderNotebook] pattern-memory.md sync failed:', err);
+        toast.error?.(
+            'Pattern memory not updated',
+            `The notebook's pattern memory could not be written, so it may still describe trades that no longer exist. ${sanitizeErrorText(err)}`.trim(),
+        );
+    };
+
     const handleDeleteTrades = (ids: string[]) => {
         const idSet = new Set(ids);
         const nextTrades = loggedTrades.filter(t => !idSet.has(t.id));
@@ -90,7 +120,7 @@ export const useTradeJournalActions = (args: UseTradeJournalActionsArgs): UseTra
         setTradeSummaries(nextSummaries);
         if (nextTrades.length === 0) {
             setFinalTradeSummary(null);
-            void syncPatternMemory(null, activeUsernameRef.current || 'default').catch(() => {});
+            void syncPatternMemory(null, activeUsernameRef.current || 'default').catch(reportPatternMemoryFailure);
         } else if (nextTrades.length !== loggedTrades.length) {
             // The AI Review was synthesized from the old trade set — re-run
             // it so Pattern Memory never describes deleted trades.
@@ -132,7 +162,7 @@ export const useTradeJournalActions = (args: UseTradeJournalActionsArgs): UseTra
             setLoggedTrades([]);
             setTradeSummaries([]);
             setFinalTradeSummary(null);
-            void syncPatternMemory(null, activeUsernameRef.current || 'default').catch(() => {});
+            void syncPatternMemory(null, activeUsernameRef.current || 'default').catch(reportPatternMemoryFailure);
             // AFTER the undo grace window — an undo restores the trades, so
             // their artifacts must survive until the delete is final.
             window.setTimeout(() => {
@@ -338,9 +368,20 @@ export const useTradeJournalActions = (args: UseTradeJournalActionsArgs): UseTra
     // records so outcome-correlated reasoning stays accurate.
     const handleUpdateTradeOutcome = useCallback((id: string, outcome: TradeOutcome) => {
         // A human correcting the outcome IS the moment it became known — later
-        // than any detector's stamp, which is now stale by definition.
+        // than any detector's stamp, which is now stale by definition. The
+        // previous value is kept on the row: an automatic settlement the
+        // trader overruled must stay auditable, and a correction no longer
+        // passes for the original call.
+        const correctedAt = new Date().toISOString();
         setLoggedTrades(prev => prev.map(t => (t.id === id
-            ? { ...t, outcome, outcomeResolvedAt: new Date().toISOString() }
+            ? {
+                ...t,
+                ...(t.outcome !== outcome
+                    ? { correctedFrom: t.outcome, correctedAt, resolutionSource: 'correction' as const }
+                    : {}),
+                outcome,
+                outcomeResolvedAt: correctedAt,
+            }
             : t)));
         const trade = loggedTradesRef.current.find(t => t.id === id);
         if (trade) {
@@ -376,7 +417,7 @@ export const useTradeJournalActions = (args: UseTradeJournalActionsArgs): UseTra
         try {
             if (loggedTrades.length === 0) {
                 setFinalTradeSummary(null);
-                void syncPatternMemory(null, activeUsernameRef.current || 'default').catch(() => {});
+                void syncPatternMemory(null, activeUsernameRef.current || 'default').catch(reportPatternMemoryFailure);
                 return;
             }
             let summary = '';
@@ -387,9 +428,7 @@ export const useTradeJournalActions = (args: UseTradeJournalActionsArgs): UseTra
 
             setFinalTradeSummary(summary);
             const notebookUser = activeUsernameRef.current || 'default';
-            void syncPatternMemory(summary || null, notebookUser, loggedTrades).catch(err => {
-                console.warn('[TraderNotebook] pattern-memory.md sync failed:', err);
-            });
+            void syncPatternMemory(summary || null, notebookUser, loggedTrades).catch(reportPatternMemoryFailure);
         } catch (e) {
             console.error("Summary regeneration failed", e);
         } finally {

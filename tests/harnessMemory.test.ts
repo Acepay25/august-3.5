@@ -113,28 +113,29 @@ describe('Harness memory (skills + retrieval)', () => {
   });
 
   it('does NOT confirm a skill on its own birth cluster, however large', async () => {
-    // 8 WINS in one cluster. Pre-fix this born `confirmed` outright.
-    const wins = Array.from({ length: 8 }, (_, i) => freshTrade({
+    // A full MIN_CLUSTER_FOR_SKILL of WINS in one cluster. Pre-fix this born
+    // `confirmed` outright; the birth cluster is source material, not evidence.
+    const wins = Array.from({ length: MIN_CLUSTER_FOR_SKILL }, (_, i) => freshTrade({
       id: `w-${i}`,
       outcome: TradeOutcome.WIN,
     }));
-    const created = await maybeUpsertSkill(wins[7], wins, 'test-user');
+    const created = await maybeUpsertSkill(wins[wins.length - 1], wins, 'test-user');
     expect(created).not.toBeNull();
     const meta = parseSkillMarkdown(created!.content)!;
     expect(meta.kind).toBe('repeat');
-    expect(meta.wins).toBe(8);
-    // The whole 8 IS the birth cluster — none of it is post-injection.
-    expect(meta.birthEvidence).toEqual(expect.objectContaining({ wins: 8, clusterSize: 8 }));
+    expect(meta.wins).toBe(MIN_CLUSTER_FOR_SKILL);
+    // The whole cluster IS the birth cluster — none of it is post-injection.
+    expect(meta.birthEvidence).toEqual(expect.objectContaining({ wins: MIN_CLUSTER_FOR_SKILL, clusterSize: MIN_CLUSTER_FOR_SKILL }));
     expect(followedEvidence(meta)).toEqual({ wins: 0, losses: 0 });
     expect(meta.status).toBe('candidate');
   });
 
   it('promotes once the skill earns post-injection evidence on its own', async () => {
-    const wins = Array.from({ length: 8 }, (_, i) => freshTrade({
+    const wins = Array.from({ length: MIN_CLUSTER_FOR_SKILL }, (_, i) => freshTrade({
       id: `w-${i}`,
       outcome: TradeOutcome.WIN,
     }));
-    const created = await maybeUpsertSkill(wins[7], wins, 'test-user');
+    const created = await maybeUpsertSkill(wins[wins.length - 1], wins, 'test-user');
     const fileId = created!.id;
 
     // Three more wins. No injection telemetry is seeded, so attribution
@@ -145,10 +146,10 @@ describe('Harness memory (skills + retrieval)', () => {
       await applySkillEvidence(t, 'test-user', [t]);
     }
     const meta = parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === fileId)!.content)!;
-    expect(meta.wins).toBe(11);
+    expect(meta.wins).toBe(MIN_CLUSTER_FOR_SKILL + 3);
     expect(followedEvidence(meta)).toEqual({ wins: 3, losses: 0 });
-    // Three followed samples do NOT clear MIN_SAMPLE_CONFIRMED (5), so it must
-    // still be a candidate. This asserts the gate is REAL, not merely moved.
+    // Three followed samples do NOT clear MIN_SAMPLE_CONFIRMED (20), so it
+    // must still be a candidate. This asserts the gate is REAL, not moved.
     expect(meta.status).toBe('candidate');
   });
 
@@ -205,12 +206,12 @@ kind: avoid
 coin: BTCUSDT
 direction: Short
 family: Family A
-wins: 2
-losses: 5
+wins: 5
+losses: 20
 approvedBy: grandfathered
 ifCondition: BTC short setup
 thenAction: enter the short after the 15m reclaim
-${extra}tradeIds: a,b,c,d,e,f,g
+${extra}tradeIds: a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y
 ---
 
 # Avoid BTCUSDT Short Family A
@@ -268,7 +269,7 @@ ${extra}tradeIds: a,b,c,d,e,f,g
     expect(meta.shadow?.seen).toBe(0);
     // The refined skill starts a fresh streak; evidence still landed.
     expect(meta.consecutiveLosses).toBe(0);
-    expect(meta.losses).toBe(7);
+    expect(meta.losses).toBe(22);
   });
 
   it('does not refine on the first consecutive loss', async () => {
@@ -292,7 +293,7 @@ ${extra}tradeIds: a,b,c,d,e,f,g
     const file = getMemoryFiles().files.find(f => f.name.includes('btc') && f.name.includes('avoid'))!;
     const meta = parseSkillMarkdown(file.content)!;
     expect(meta.consecutiveLosses).toBe(0);
-    expect(meta.wins).toBe(3); // fresh evidence -> no decay
+    expect(meta.wins).toBe(6); // fresh evidence -> no decay
   });
 
   it('keeps the skill untouched when the refinement LLM call fails', async () => {
@@ -306,7 +307,7 @@ ${extra}tradeIds: a,b,c,d,e,f,g
     const meta = parseSkillMarkdown(file.content)!;
     expect(meta.body).toContain('Wait for the 15m reclaim');
     // Evidence landed even though refinement failed.
-    expect(meta.losses).toBe(6);
+    expect(meta.losses).toBe(21);
   });
 
   it('exports the refinement threshold constant', () => {

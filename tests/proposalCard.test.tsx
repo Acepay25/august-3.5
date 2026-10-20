@@ -55,6 +55,20 @@ describe('the card while the scan is still running', () => {
         expect(screen.getByTestId('trade-proposal-card').textContent).not.toContain('High');
     });
 
+    it('shows the isolated-liquidation buffer beside the stop (E-41)', () => {
+        // The app's new default is 10×; a 5 % stop leaves 5 % to liquidation.
+        renderCard(proposal());
+        expect(screen.getByTestId('proposal-liq-buffer')).toHaveTextContent(/Liq buffer 5\.0%/);
+        // At the OLD 100× default the stop is already past liquidation, and
+        // the card says so instead of staying silent.
+        cleanup();
+        render(
+            <TradeProposalCard proposal={proposal()} canLog leverage={100}
+                onLog={vi.fn()} onCancel={vi.fn()} />,
+        );
+        expect(screen.getByTestId('proposal-liq-buffer')).toHaveTextContent(/SL is past isolated liquidation at 100x/);
+    });
+
     it('the Log button still works while the scan is pending', () => {
         const onLog = vi.fn();
         render(<TradeProposalCard proposal={proposal()} canLog onLog={onLog} onCancel={vi.fn()} />);
@@ -71,6 +85,26 @@ describe('the card while the scan is still running', () => {
 });
 
 describe('the card once the stamp has landed', () => {
+    it('a REFUSED plan quotes the number and disables the Log button', () => {
+        const onLog = vi.fn();
+        render(<TradeProposalCard
+            proposal={proposal({
+                gate: {
+                    status: 'evaluated', confidenceCap: 0.5, reason: '50% cap',
+                    stampedAt: new Date().toISOString(),
+                    refusal: 'net expectancy -0.44R at 44% is at or below your 0.00R floor',
+                    netEdgeR: -0.44, minEdgeThresholdR: 0,
+                },
+            })}
+            canLog onLog={onLog} onCancel={vi.fn()}
+        />);
+        expect(screen.getByTestId('proposal-refused')).toHaveTextContent(/net expectancy -0.44R/);
+        const btn = screen.getByRole('button', { name: /Refused by your edge floor/ });
+        expect(btn).toBeDisabled();
+        fireEvent.click(btn);
+        expect(onLog).not.toHaveBeenCalled();
+    });
+
     it('renders the CAPPED probability and tier, from the row builder', () => {
         renderCard(proposal({
             gate: { status: 'evaluated', confidenceCap: 0.5, reason: '50% cap', stampedAt: new Date().toISOString() },
@@ -88,7 +122,8 @@ describe('the card once the stamp has landed', () => {
         }));
         expect(screen.getByTestId('proposal-gate-unavailable')).toHaveTextContent('UNCAPPED');
         expect(screen.getByTestId('proposal-gate-unavailable')).toHaveTextContent('confirm');
-        // Still never a fabricated zero.
-        expect(screen.getByTestId('trade-proposal-card').textContent).not.toMatch(/\b0%/);
+        // Unavailable means UNCAPPED, not zero: the model's own 72% is shown
+        // with the warning, never a fabricated 0%.
+        expect(screen.getByTestId('proposal-confidence')).toHaveTextContent('72%');
     });
 });

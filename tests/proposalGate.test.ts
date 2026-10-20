@@ -17,8 +17,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { GateInput, GateOutput } from '../services/validation/GateKeeperService';
 import { fetchGateInputData, runProgrammaticGate } from '../services/validation/GateKeeperService';
 import type { ProposalGate, TradeProposal } from '../services/trade/proposedTrade';
-import { ensureStamp, beginGateScan, cancelGateScan, isStampFresh, runGateScan, GATE_FETCH_TIMEOUT_MS, GATE_STAMP_STALE_MS } from '../services/trade/proposalGate';
+import { ensureStamp, beginGateScan, cancelGateScan, isStampFresh, runGateScan, gateReceiptLine, GATE_FETCH_TIMEOUT_MS, GATE_STAMP_STALE_MS } from '../services/trade/proposalGate';
 import { buildProposedTradeAnalysis } from '../services/trade/proposedTrade';
+import { saveHarnessSettings } from '../utils/harnessSettings';
 
 vi.mock('../services/validation/GateKeeperService', () => ({
     fetchGateInputData: vi.fn(),
@@ -73,6 +74,35 @@ describe('runGateScan', () => {
         expect(gate.confidenceCap).toBe(0.5);
         expect(gate.reason).toContain('50% cap');
         expect(Date.parse(gate.stampedAt)).not.toBeNaN();
+    });
+
+    it('REFUSES a plan whose net edge at its own probability is at or below the floor (E-43)', async () => {
+        // 44 % at 0.5R on a 1 % stop: −0.44R after the round trip.
+        const p = proposal({ entry: 100, stopLoss: 99, takeProfits: [100.5], confidence: 'Low' });
+        const gate = await runGateScan(p, []);
+        expect(gate.refusal).toMatch(/net expectancy -0\.44R/);
+        expect(gate.netEdgeR).toBeCloseTo(-0.44, 2);
+        expect(gate.minEdgeThresholdR).toBe(0);
+        expect(gateReceiptLine(gate)).toMatch(/REFUSED/);
+        const row = buildProposedTradeAnalysis({ ...p, gate });
+        expect(row.validationWarnings?.join(' ')).toMatch(/REFUSED by the min-edge gate/);
+    });
+
+    it('does NOT refuse a positive-edge plan', async () => {
+        const gate = await runGateScan(proposal(), []);
+        expect(gate.refusal).toBeUndefined();
+        expect(gate.netEdgeR).toBeGreaterThan(0);
+    });
+
+    it('honours the TRADER floor, and names it in the refusal', async () => {
+        saveHarnessSettings({ minEdgeR: 2 });
+        try {
+            const gate = await runGateScan(proposal(), []);
+            expect(gate.refusal).toMatch(/your 2\.00R floor/);
+            expect(gate.minEdgeThresholdR).toBe(2);
+        } finally {
+            saveHarnessSettings({ minEdgeR: 0 });
+        }
     });
 
     it('fetches by the PLAN symbol, not whatever the surface is showing', async () => {

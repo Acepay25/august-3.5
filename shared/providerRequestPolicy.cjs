@@ -21,9 +21,11 @@
  *    thinking is active (Anthropic rejects temperature alongside thinking).
  *  - Gemini thinking params (includeThoughts + 8192 budget, unchanged).
  *  - Provider URL host policy: HTTPS only for remote hosts; plain HTTP is
- *    allowed for loopback, RFC1918 private LAN, and link-local addresses so
- *    keyless local servers (Ollama / LM Studio / llama.cpp) work identically
- *    on web, dev proxy, and the packaged desktop app.
+ *    allowed for loopback and RFC1918 private LAN addresses so keyless local
+ *    servers (Ollama / LM Studio / llama.cpp) work identically on web, dev
+ *    proxy, and the packaged desktop app. The link-local range
+ *    (169.254.0.0/16, fe80::/10) is REFUSED OUTRIGHT — it is the cloud
+ *    metadata range, not a LAN.
  *  - isLocalBaseUrl — the "keyless = ready" exemption predicate.
  *  - normalizeProviderUrl — validate + strip the endpoint path suffix off a
  *    configured baseUrl (six suffixes; the dev proxy used to strip four, so a
@@ -185,6 +187,55 @@ function anthropicThinkingFields(input) {
     };
 }
 
+/**
+ * The EFFECTIVE temperature per (API format × thinking state). This is the
+ * one table the app promises, and the transport tests assert it:
+ *
+ *   format            | thinking active | temperature sent
+ *   ------------------|-----------------|-----------------
+ *   chat_completions  | n/a             | explicit, else 0.7
+ *   responses         | n/a             | explicit, else 0.7
+ *   google            | n/a             | explicit, else 0.7
+ *   messages          | no              | explicit, else 0.7
+ *   messages          | yes             | OMITTED (Anthropic 400s on both)
+ *
+ * Before this existed the trader could see "0.4" beside a call that sent
+ * nothing at all, because the messages transport drops temperature when
+ * thinking is on. The caller gets the requested value AND what actually
+ * went on the wire, so the distinction is never silent.
+ *
+ * @param {{
+ *   apiFormat?: string,
+ *   temperature?: number,
+ *   modelId?: string,
+ *   displayName?: string,
+ *   capabilityOverride?: boolean,
+ *   maxTokens?: number,
+ *   jsonMode?: boolean,
+ *   reasoningEffort?: string,
+ * }} input
+ * @returns {{ temperature: number | undefined, requested: number, omittedBecause: 'thinking' | null }}
+ */
+function effectiveTemperature(input) {
+    const opts = input || {};
+    const requested = typeof opts.temperature === 'number' ? opts.temperature : ANTHROPIC_DEFAULT_TEMPERATURE;
+    if (opts.apiFormat !== 'messages') {
+        return { temperature: requested, requested, omittedBecause: null };
+    }
+    const fields = anthropicThinkingFields({
+        modelId: opts.modelId,
+        displayName: opts.displayName,
+        capabilityOverride: opts.capabilityOverride,
+        maxTokens: opts.maxTokens,
+        temperature: opts.temperature,
+        jsonMode: opts.jsonMode,
+        reasoningEffort: opts.reasoningEffort,
+    });
+    return fields.temperature === undefined
+        ? { temperature: undefined, requested, omittedBecause: 'thinking' }
+        : { temperature: fields.temperature, requested, omittedBecause: null };
+}
+
 // ─── Gemini thinking ────────────────────────────────────────────────────────
 
 const GEMINI_THINKING_BUDGETS = {
@@ -253,14 +304,43 @@ const isPrivateIp = (hostname) =>
     /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
     /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(hostname);
 const isLinkLocalIp = (hostname) => /^169\.254\.\d{1,3}\.\d{1,3}$/.test(hostname);
+/** IPv6 link-local — fe80::/10. The WHATWG URL parser hands the hostname over
+ *  in brackets, so both forms are matched. */
+const isIpv6LinkLocal = (hostname) => /^fe[89ab][0-9a-f]:/i.test(String(hostname || '').replace(/^\[|\]$/g, ''));
 
 /**
- * Loopback / RFC1918 / link-local host test. Local model servers (Ollama,
- * LM Studio, llama.cpp…) are commonly served over plain HTTP on the loopback
- * OR another machine on the LAN — blocking the private ranges made those
- * setups unreachable, and the packaged app used to carry a stricter
- * localhost-only variant of this rule than the web app (the drift this
- * module removes).
+ * The CLOUD-METADATA range, refused outright.
+ *
+ * 169.254.169.254 is where the AWS / GCP / Azure instance metadata service
+ * answers, and it hands CREDENTIALS to anything that can reach it. The range
+ * is also the address an OS auto-assigns when DHCP fails — so it is NOT the
+ * "private LAN" a model server would be configured on (loopback and the
+ * RFC1918 ranges are). A user whose local model server sits on such a host
+ * has `localhost` and the LAN address available instead, so nothing real is
+ * lost by refusing it.
+ *
+ * It has to be refused over HTTPS TOO, not just over plain HTTP: HTTPS is
+ * allowed for every host, so a "no plain HTTP off-LAN" rule alone leaves
+ * 169.254.169.254 reachable. `services/tools/toolForge.ts` has always refused
+ * this range for forged tools, and PRIVACY.md:84-87 says cloud-metadata hosts
+ * are refused — that claim is now true of the provider policy as well.
+ *
+ * @param {string} hostname
+ * @returns {boolean}
+ */
+function isLinkLocalHost(hostname) {
+    const host = String(hostname || '').toLowerCase();
+    return isLinkLocalIp(host) || isIpv6LinkLocal(host);
+}
+
+/**
+ * Loopback / RFC1918 host test. Local model servers (Ollama, LM Studio,
+ * llama.cpp…) are commonly served over plain HTTP on the loopback OR another
+ * machine on the LAN — blocking the private ranges made those setups
+ * unreachable, and the packaged app used to carry a stricter localhost-only
+ * variant of this rule than the web app (the drift this module removes).
+ *
+ * Link-local is deliberately NOT in this set — see isLinkLocalHost.
  *
  * @param {string} hostname
  * @returns {boolean}
@@ -268,7 +348,7 @@ const isLinkLocalIp = (hostname) => /^169\.254\.\d{1,3}\.\d{1,3}$/.test(hostname
 function isPrivateOrLoopbackHost(hostname) {
     const host = String(hostname || '').toLowerCase();
     if (!host) return false;
-    return LOCAL_HOSTS.has(host) || isLoopbackIp(host) || isPrivateIp(host) || isLinkLocalIp(host);
+    return LOCAL_HOSTS.has(host) || isLoopbackIp(host) || isPrivateIp(host);
 }
 
 /**
@@ -284,13 +364,14 @@ function httpAllowedForHost(hostname) {
 
 /**
  * The security core of the provider-URL policy: absolute http(s) URL, HTTPS
- * by default, HTTP only for private/loopback hosts, no embedded credentials.
- * Used for initial request URLs AND — critically — re-validated on every
- * manual redirect hop in the Electron main process (net.fetch defaults to
- * following redirects, which let a configured endpoint 302 the MAIN process
- * to internal/HTTP targets: SSRF). Query strings are NOT checked here:
- * legitimate redirect targets may carry them (initial URLs get the stricter
- * no-query treatment in the transports' own normalization).
+ * by default, HTTP only for private/loopback hosts, no embedded credentials,
+ * and never the cloud-metadata range. Used for initial request URLs AND —
+ * critically — re-validated on every manual redirect hop in the Electron main
+ * process (net.fetch defaults to following redirects, which let a configured
+ * endpoint 302 the MAIN process to internal/HTTP targets: SSRF). Query
+ * strings are NOT checked here: legitimate redirect targets may carry them
+ * (initial URLs get the stricter no-query treatment in the transports' own
+ * normalization).
  *
  * @param {string} rawUrl
  * @returns {boolean}
@@ -302,6 +383,8 @@ function isSafeProviderTargetUrl(rawUrl) {
     } catch {
         return false;
     }
+    // The cloud-metadata range is refused over HTTPS as well as HTTP.
+    if (isLinkLocalHost(parsed.hostname)) return false;
     if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isPrivateOrLoopbackHost(parsed.hostname))) {
         return false;
     }
@@ -365,6 +448,11 @@ const PROVIDER_URL_PATH_SUFFIXES = [
  */
 function normalizeProviderUrl(rawUrl) {
     const parsed = new URL(String(rawUrl || '').trim());
+    // The cloud-metadata range first, and on its own message: "must use HTTPS"
+    // would be a confusing answer for a host that may not be reached at all.
+    if (isLinkLocalHost(parsed.hostname)) {
+        throw new Error('Provider URLs cannot point at a link-local address (169.254.x.x). That range includes the cloud metadata service.');
+    }
     if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isPrivateOrLoopbackHost(parsed.hostname))) {
         throw new Error('Provider URLs must use HTTPS. HTTP is allowed only for localhost and private LAN addresses.');
     }
@@ -470,9 +558,11 @@ const PROVIDER_REQUEST_POLICY = {
     claudeThinkingBudgetTokens,
     anthropicShouldSendThinking,
     anthropicThinkingFields,
+    effectiveTemperature,
     geminiThinkingParams,
     geminiThinkingBudget,
     isPrivateOrLoopbackHost,
+    isLinkLocalHost,
     httpAllowedForHost,
     isSafeProviderTargetUrl,
     isLocalBaseUrl,

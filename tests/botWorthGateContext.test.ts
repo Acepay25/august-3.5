@@ -83,9 +83,9 @@ import type { LoggedTrade, TradeAnalysis } from '../types';
 
 const USER = 'gate-ctx-user';
 
-/** Three closed trades on one cluster, so MIN_CLUSTER_FOR_SKILL (3) is met and
+/** Ten closed trades on one cluster, so MIN_CLUSTER_FOR_SKILL (10) is met and
  *  the worth-gate branch actually runs. */
-const cluster: LoggedTrade[] = ['g1', 'g2', 'g3'].map(id => ({
+const cluster: LoggedTrade[] = Array.from({ length: 10 }, (_, i) => `g${i + 1}`).map(id => ({
     id,
     analysis: {
         coinName: 'BTCUSDT', direction: 'Short', detectedPatternFamily: 'Family A',

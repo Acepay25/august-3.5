@@ -198,7 +198,7 @@ export const canShare = async (): Promise<boolean> => {
 };
 
 
-import { getAllKeys, getPreferenceObject, setPreferenceObject, PREF_KEYS } from './PreferencesService';
+import { getAllKeys, getPreferenceObject, setPreference, setPreferenceObject, PREF_KEYS } from './PreferencesService';
 import { ProviderConfig } from '../../types/provider';
 import { validateProviderUrl } from '../../utils/providerUrlValidation';
 import { saveProviderConfigs } from './ProviderConfigService';
@@ -356,10 +356,27 @@ const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
     //   and harnessSettings.ts:79 — which is a RAW owner too, not a Preferences
     //   one: it was assumed "covered via Preferences" and a real export with an
     //   empty Preferences store proved it was not in the backup at all.
-    // Left OUT deliberately: desk_idle_motion_v1, last_active_user,
-    // thinking_leak_bin_v1 and the three crash breadcrumbs — furniture and
-    // telemetry, not the trader's data.
+    // The Q4 ruling (owner, 2026-10-20) moved the five
+    // restore-listed-but-not-raw namespaces INTO the backup, together with the
+    // auto-apply policy. They are small; the cost is a few hundred bytes, and
+    // a restore that silently drops the trader's motion preference, open
+    // threads, last user or withheld-reasoning bin is the exact half-migration
+    // this list exists to prevent. The three crash breadcrumbs
+    // (lastPromiseError, lastGlobalError, lastCrashError) stay OUT — telemetry,
+    // not the trader's data.
+    'trade_sidebar_open_v1',
+    'agent_threads_opened_v1',
+    'desk_idle_motion_v1',
+    'thinking_leak_bin_v1',
+    'last_active_user',
+    'approval_rules_v1',
+    // A plain session-id string. It used to be excluded because the sweep
+    // JSON-parses raw values and the mirror would have written `"s-1"` where
+    // the owner reads `s-1`. The raw-string envelope below carries it (and the
+    // plain flags above) without changing the owner's bytes.
+    'trade_chat_active_v1',
     'trade_watches_v1',
+    'trade_declines_v1',
     'trade_level_arms_v1',
     'trade_level_hits_v1',
     'trade_drawings_v1',
@@ -478,6 +495,24 @@ export const isRawLocalStorageKey = (key: string): boolean =>
     RAW_LOCAL_STORAGE_PREFIXES.some(p =>
         key === p || key.startsWith(`${p}_`) || key.startsWith(`${p}:`));
 
+/**
+ * A raw localStorage value that is not JSON — a username, a session id, a
+ * `'0'`/`'1'` flag. The sweep cannot parse it and the generic mirror would
+ * quote it (`"s-1"`) where the owner reads the bare bytes. The envelope keeps
+ * the exact string without pretending it is a JSON value.
+ *
+ * It is a reserved backup shape, not a data model: it only ever appears for a
+ * key that is on RAW_LOCAL_STORAGE_PREFIXES, and import unwraps it before any
+ * writer sees it.
+ */
+export const RAW_STRING_ENVELOPE = '__augustRawLocalStorageString';
+
+const rawStringEnvelope = (value: string): Record<string, string> => ({ [RAW_STRING_ENVELOPE]: value });
+
+const isRawStringEnvelope = (value: unknown): value is Record<string, string> =>
+    typeof value === 'object' && value !== null
+    && typeof (value as Record<string, unknown>)[RAW_STRING_ENVELOPE] === 'string';
+
 /** The value as its owner would read it, or null when neither store has it. */
 const readSweptValue = async (key: string): Promise<unknown> => {
     // Raw-localStorage owners (profile memory, learning rules, the agent
@@ -499,7 +534,15 @@ const readSweptValue = async (key: string): Promise<unknown> => {
             const raw = typeof localStorage === 'undefined'
                 ? null
                 : localStorage.getItem(key);
-            if (raw !== null) return JSON.parse(raw);
+            if (raw !== null) {
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    // Plain bytes (a username, a session id, a flag). Carry the
+                    // exact string instead of dropping the key or corrupting it.
+                    return rawStringEnvelope(raw);
+                }
+            }
         } catch { /* fall through to the Preferences copy */ }
     }
     return getPreferenceObject(key);
@@ -511,7 +554,9 @@ const mirrorToLocalStorage = (key: string, value: unknown): void => {
     if (!isRawLocalStorageKey(key)) return;
     try {
         if (typeof localStorage === 'undefined') return;
-        localStorage.setItem(key, JSON.stringify(value));
+        localStorage.setItem(key, isRawStringEnvelope(value)
+            ? value[RAW_STRING_ENVELOPE]
+            : JSON.stringify(value));
     } catch (e) {
         // Quota here is not a restore failure: the Preferences copy is written
         // and reported. Say so, rather than marking the key failed.
@@ -683,6 +728,8 @@ const RESTORABLE_PREFERENCE_KEYS: ReadonlySet<string> = new Set<string>([
 const RESTORABLE_PREFERENCE_KEY_PREFIXES: readonly string[] = [
     // Learning / memory (username-scoped)
     'memory_files_v1_',
+    'memory_files_v2_',
+    'memory_files_corrupt_v1_',
     'memory_injections_v1_',
     'learning_rules_v2_',
     'global_learning_state_',
@@ -730,6 +777,7 @@ const RESTORABLE_PREFERENCE_KEY_PREFIXES: readonly string[] = [
     'trade_level_hits_v1',
     'trade_level_arms_v1',
     'trade_watches_v1',
+    'trade_declines_v1',
     'trade_chat_sessions_v1_',
     'trade_chat_active_v1_',
     'trade_drawings_v1_',
@@ -940,6 +988,14 @@ export const importPreferencesData = async (
             const writeValue = key.startsWith('trade_chat_sessions_v1')
                 ? mergeChatSessionsWithLive(key, value)
                 : value;
+            if (isRawStringEnvelope(writeValue)) {
+                // The owner reads the raw bytes. Write those, not the JSON
+                // spelling of a string, to Preferences and to localStorage.
+                await setPreference(key, writeValue[RAW_STRING_ENVELOPE]);
+                mirrorToLocalStorage(key, writeValue);
+                report.keysWritten += 1;
+                continue;
+            }
             if (typeof writeValue === 'object') {
                 await setPreferenceObject(key, writeValue);
             } else {

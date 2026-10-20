@@ -178,7 +178,13 @@ const readSkillContent = (page, fileName) => page.evaluate((name) => {
     try {
         const store = JSON.parse(localStorage.getItem(nk) || '{}');
         const skills = (store.folders || []).find(f => f.name === 'skills');
-        const file = (store.files || []).find(f => f.folderId === skills?.id && f.name === name);
+        // E-44: large categories move to a v2 shard; the manifest lists its key.
+        const shardKey = skills ? store.shards?.[skills.id]?.key : null;
+        let files = store.files || [];
+        if (shardKey) {
+            try { files = files.concat(JSON.parse(localStorage.getItem(shardKey) || '{}').files || []); } catch { /* shard unreadable */ }
+        }
+        const file = files.find(f => f.folderId === skills?.id && f.name === name);
         return file?.content || '';
     } catch { return ''; }
 }, fileName);
@@ -216,10 +222,17 @@ const readSkillFiles = (page) => page.evaluate(() => {
     try {
         const store = JSON.parse(raw);
         const skills = (store.folders || []).find(f => f.name === 'skills');
+        // The manifest keeps folders and small files; skills live in a v2
+        // shard (E-44), so read both before calling the file list.
+        const shardKey = skills ? store.shards?.[skills.id]?.key : null;
+        let allFiles = store.files || [];
+        if (shardKey) {
+            try { allFiles = allFiles.concat(JSON.parse(localStorage.getItem(shardKey) || '{}').files || []); } catch { /* shard unreadable */ }
+        }
         return {
             key: nk,
             folders: (store.folders || []).map(f => f.name),
-            files: skills ? (store.files || []).filter(f => f.folderId === skills.id).map(f => f.name) : [],
+            files: skills ? allFiles.filter(f => f.folderId === skills.id).map(f => f.name) : [],
         };
     } catch (e) { return { key: nk, folders: [], files: [], error: String(e) }; }
 });

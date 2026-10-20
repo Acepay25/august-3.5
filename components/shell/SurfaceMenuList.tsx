@@ -19,9 +19,11 @@
  * being the mixed tray.
  */
 
-import React from 'react';
+import React, { useSyncExternalStore } from 'react';
 import {ActivityIcon, FileTextIcon, LayersIcon, BotIcon, GraduationCap} from '../shared/Icons';
 import Tip from '../ui/Tip';
+import RunBusyBadge from '../chat/RunBusyBadge';
+import { subscribe, getSnapshot } from '../../services/trade/chatStore';
 
 import type { AppSurface } from '../../hooks/useSurface';
 
@@ -102,7 +104,24 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
     badges,
     collapsed = false,
     hideSurfaces = false,
-}) => (
+}) => {
+    /**
+     * Is a conversation still running?
+     *
+     * A Chat-surface run now survives a conversation switch (E-45: the run
+     * belongs to the conversation it was typed in, and a switch moves the
+     * view), so a run can be alive in a thread the trader is not looking at.
+     * The Chat row says so — otherwise a background answer reads as a hang.
+     *
+     * A BOOLEAN snapshot: React bails out of the re-render when nothing
+     * changed, so the nav does not repaint on every streamed token.
+     */
+    const chatRunning = useSyncExternalStore(
+        subscribe,
+        () => Object.keys(getSnapshot().conversationRunning).length > 0,
+    );
+
+    return (
     <nav
         aria-label="Surfaces"
         data-testid="surface-menu"
@@ -116,11 +135,18 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
         {!hideSurfaces && SURFACE_ITEMS.map(({ id, label, shortcut, Icon }) => {
             const active = surface === id;
             const badge = badges?.[id];
+            /* The busy sentence is spoken through the row's accessible name,
+               the same way the badge count is — the dot itself is decoration
+               (aria-hidden), and a dot a screen reader cannot read is not an
+               announcement. */
+            const busy = id === 'agents' && chatRunning;
             /* aria-label replaces the row's content for assistive tech, so the
                shortcut has to be spelled out here — at 280px the visible <kbd>
                would otherwise exist for the mouse only, and in the collapsed
                rail there is no visible content at all. */
-            const accessibleName = badge
+            const accessibleName = busy
+                ? `${label}. A conversation is still running${badge ? `, ${badge.detail}` : ''}, shortcut ${shortcut}`
+                : badge
                 ? `${label}. ${badge.detail}, shortcut ${shortcut}`
                 : `${label}, shortcut ${shortcut}`;
             const row = (
@@ -156,6 +182,10 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
                     </span>
                     {!collapsed && <span className="flex-1 truncate" title={label}>{label}</span>}
                     {!collapsed && badge && <Badge badge={badge} />}
+                    {/* "Still running" — the dot rides the row, and the sentence
+                        is in the row's accessible name above. The colour comes
+                        from the run-status vocabulary, never typed here. */}
+                    {busy && <RunBusyBadge className="ml-1" aria-hidden="true" />}
                     {!collapsed && (
                         <kbd className="shrink-0 opacity-0 transition-opacity duration-[120ms] group-hover:opacity-100 group-focus-visible:opacity-100 rounded-control border border-white/5 bg-zinc-800 px-1.5 py-0.5 font-mono text-ui-2xs text-zinc-500">{shortcut}</kbd>
                     )}
@@ -195,6 +225,7 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
         {/* Switch profile moved to the account row (NavRail): profile actions
             belong on the profile row, not as a sixth nav entry. */}
     </nav>
-);
+    );
+};
 
 export default React.memo(SurfaceMenuList);

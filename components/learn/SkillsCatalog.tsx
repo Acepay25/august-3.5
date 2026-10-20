@@ -1,10 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, Lightbulb, Plus, RefreshCw, Search, Settings } from '../shared/Icons';
+import { AlertTriangle, Check, Lightbulb, Plus, RefreshCw, Search, Settings } from '../shared/Icons';
 import {
     listSkills,
     skillEnabledFlag,
     type SkillMeta,
 } from '../../services/learning/SkillMemoryService';
+import {
+    reviewAllSkills,
+    type SkillReviewFinding,
+    type SkillReviewReport,
+    type SkillReviewVerdict,
+} from '../../services/learning/skillReview';
+import { queueLearningProposal } from '../../utils/learningQueue';
 
 /**
  * SkillsCatalog — the reference Customize → Skills screen, on August's own data.
@@ -76,13 +83,70 @@ const describeRosterSync = (prev: CatalogSkill[] | null, next: CatalogSkill[]): 
 /** A deterministic tint per collection, from the theme's own ramp. The reference
  *  gives each skill a distinct vivid gradient; August has no per-skill colour
  *  data and inventing six gradients would be decoration with no meaning. The
- *  tile carries an icon on a neutral surface instead. */
-const tileClass = (enabled: boolean, kind: SkillMeta['kind']): string => {
+ *  tile carries an icon on a neutral surface instead. */const tileClass = (enabled: boolean, kind: SkillMeta['kind']): string => {
     const base = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-control border';
     if (!enabled) return `${base} border-zinc-800 bg-zinc-900 text-zinc-600`;
     return kind === 'avoid'
         ? `${base} border-rose-500/30 bg-rose-500/10 text-rose-300`
         : `${base} border-emerald-500/30 bg-emerald-500/10 text-emerald-300`;
+};
+
+/**
+ * The review's four verdicts, and how each one is WORDED.
+ *
+ * These are NOT run statuses, so `utils/runStatus.ts` does not apply to them —
+ * that module is the vocabulary for a RUN (queued / running / done / stopped /
+ * failed). A skill verdict is a different question: "is this file healthy?".
+ * The wording is the load-bearing part, because two of the four are warnings
+ * and one is a defect:
+ *
+ *  - **ghost** — the file is in the skills folder and does not parse. It is in
+ *    the backup and the export and in NO list: not the index, not the
+ *    retrieval, not the Health card. It is a defect, and the only one.
+ *  - **dormant** — it parses, but it names no setup it applies to, so it will
+ *    not fire. A WARNING, not a defect: a general rule is *meant* to be
+ *    unscoped. It also holds one of the 30 index slots in file order.
+ *  - **clipped** — the recall card drops characters, so the seat gets half a
+ *    procedure in every prompt. A warning.
+ *  - **fine** — everything checks out.
+ */
+const VERDICT_LABEL: Record<SkillReviewVerdict, string> = {
+    fine: 'Fine',
+    dormant: 'Dormant',
+    clipped: 'Clipped',
+    ghost: 'Ghost',
+};
+
+/** One line for the trader, per verdict. The reason it says "names no setup"
+ *  and NOT "never fired" is the run-cap: the injection log is run-capped, so
+ *  absence from it is the same fact as "aged out of the window" and proves
+ *  nothing (`services/learning/memoryHealth.ts:15-18`). */
+const VERDICT_HINT: Record<SkillReviewVerdict, string> = {
+    fine: 'Every format check passes.',
+    dormant: 'Names no setup it applies to — it will not fire, and it holds one of the 30 index slots.',
+    clipped: 'The recall card drops characters — the seat gets half a procedure.',
+    ghost: 'In the notebook, in the backup, and in no list at all.',
+};
+
+/** The theme's own semantic ramp: rose for the defect, amber for the two
+ *  warnings, zinc for the quiet one. The same families `tileClass` uses. */
+const VERDICT_TONE: Record<SkillReviewVerdict, string> = {
+    fine: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+    dormant: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+    clipped: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+    ghost: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+};
+
+/** The report's one-line summary. Every number is counted, never estimated. */
+const describeReview = (report: SkillReviewReport): string => {
+    const { fine, dormant, clipped, ghost } = report.counts;
+    const total = fine + dormant + clipped + ghost;
+    if (total === 0) return 'No skill files to review.';
+    const parts = [`${fine} fine`];
+    if (dormant) parts.push(`${dormant} dormant`);
+    if (clipped) parts.push(`${clipped} clipped`);
+    if (ghost) parts.push(`${ghost} ghost`);
+    return `Reviewed ${total} skill file${total === 1 ? '' : 's'}: ${parts.join(', ')}.`;
 };
 
 export interface SkillsCatalogProps {
@@ -102,6 +166,10 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSki
     const [collection, setCollection] = useState<string>('all');
     /** The last manual re-read, in words. null until the user presses Refresh. */
     const [syncNote, setSyncNote] = useState<string | null>(null);
+    /** The last format review, or null until the user presses Review. */
+    const [review, setReview] = useState<SkillReviewReport | null>(null);
+    /** What the review said, and what the trader did about it. */
+    const [reviewNote, setReviewNote] = useState<string | null>(null);
 
     const reload = (manual = false): void => {
         try {
@@ -127,6 +195,86 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSki
     };
 
     useEffect(reload, []);
+
+    /**
+     * "Review all my skills" — a DETERMINISTIC read of every file in the skills
+     * folder, and nothing else.
+     *
+     * The review finds the files the app cannot: `listSkills()` DROPS a skill
+     * that does not parse, so a malformed file sits in the notebook, in the
+     * backup and in the export while appearing in NO list — not the index, not
+     * the retrieval, not the Health card. The same file, imported, is rejected
+     * WITH A REASON. Two opposite answers for one file, depending on how it
+     * arrived.
+     *
+     * THIS BUTTON WRITES NOTHING. Not the notebook, not a skill. It reads the
+     * files and reports; a repair is a PROPOSAL, and it goes into the existing
+     * approval queue where the human acts on it — never straight into the
+     * notebook. That is the plan's rule and it is the safe one: a
+     * reconstruction GIVES a skill a reach it did not have (it can suddenly be
+     * matched and injected), so it must be confirmed by a person, one skill at
+     * a time.
+     */
+    const runReview = (): void => {
+        try {
+            const report = reviewAllSkills();
+            setReview(report);
+            setReviewNote(describeReview(report));
+        } catch {
+            setReview(null);
+            setReviewNote('Could not read the skill files');
+        }
+    };
+
+    /**
+     * Queue ONE repair as a proposal. The notebook is not touched: the queue
+     * is where a human decision lives, and the queue's dedupe key means the
+     * same repair is not proposed twice.
+     */
+    const proposeRepair = (finding: SkillReviewFinding): void => {
+        const repair = finding.repair;
+        if (!repair) return;
+        const queued = queueLearningProposal({
+            kind: repair.queueKind,
+            skillSlug: finding.slug,
+            text: `${repair.summary}\n${repair.reason}`
+                + `\nSkill: ${finding.name}`
+                + `\n${repair.widens
+                    ? 'This repair WIDENS the skill\'s reach: it would become a skill the models can use. It is inactive until you approve it.'
+                    : 'This repair only narrows the skill\'s reach.'}`
+                + '\nNothing has been written — the notebook is unchanged until you approve this in the queue.',
+            fingerprint: `skill-review|${repair.queueKind}|${finding.slug}|${repair.kind}`,
+            payload: {
+                source: 'skill-review',
+                evidence: repair.reason,
+                widens: repair.widens,
+                old: { content: repair.before },
+                new: { content: repair.after },
+            },
+        });
+        setReviewNote(queued
+            ? `Proposed a repair for ${finding.name}. It is waiting for you in the queue — nothing was written.`
+            : `A repair for ${finding.name} is already waiting in the queue.`);
+    };
+
+    /** The problems, worst first: the defect before the warnings. */
+    const problems = useMemo(() => {
+        const rank: Record<SkillReviewVerdict, number> = { ghost: 0, clipped: 1, dormant: 2, fine: 3 };
+        return (review?.findings ?? [])
+            .filter(f => f.verdict !== 'fine')
+            .sort((a, b) => rank[a.verdict] - rank[b.verdict]);
+    }, [review]);
+
+    /** The review's finding for each skill, by slug — so a roster row can
+     *  carry its own verdict. */
+    const verdictBySlug = useMemo(() => {
+        const map = new Map<string, SkillReviewFinding>();
+        for (const finding of review?.findings ?? []) {
+            if (finding.verdict === 'fine') continue;
+            map.set(finding.slug, finding);
+        }
+        return map;
+    }, [review]);
 
     /** Collections that actually hold skills. An empty tab is never drawn. */
     const collections = useMemo(() => {
@@ -180,6 +328,12 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSki
                         className="flex h-8 w-8 hit-target items-center justify-center rounded-control text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
                         <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
+                    <button type="button" onClick={runReview} aria-label="Review all my skills"
+                        title="Review all my skills — check every skill file's format"
+                        className="flex h-8 items-center gap-1 rounded-control border border-zinc-700 bg-zinc-800 px-2 text-ui-dense text-zinc-300 transition-colors hover:border-zinc-600 hover:text-zinc-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
+                        <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                        Review
+                    </button>
                     {onOpenSettings && (
                         <button type="button" onClick={onOpenSettings} aria-label="Skill settings" title="Skill settings"
                             className="flex h-8 w-8 hit-target items-center justify-center rounded-control text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
@@ -195,6 +349,80 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSki
                     )}
                 </div>
             </div>
+
+            {/* The review report. It appears only after the trader asks for
+                it, and it is a REPORT: nothing here has been written. The
+                block also appears on a FAILED read — a silent failure would
+                leave the trader thinking the button did nothing. */}
+            {(review || reviewNote) && (
+                <div className="mt-3 rounded-control border border-zinc-800/80 bg-zinc-950/60 p-3" data-testid="skills-review">
+                    <p className="text-ui-dense text-zinc-400" role="status" data-testid="skills-review-note">
+                        {reviewNote ?? describeReview(review!)}
+                    </p>
+                    {!review ? null : problems.length === 0 ? (
+                        <p className="mt-2 text-ui-dense text-zinc-500">
+                            Every skill file parses, names a setup it applies to, and fits its recall card.
+                        </p>
+                    ) : (
+                        <ul className="mt-2 flex flex-col gap-2">
+                            {problems.map(finding => (
+                                <li key={finding.fileId} data-testid="skills-review-row" className="rounded-control border border-zinc-800/80 bg-zinc-900/60 p-2.5">
+                                    <div className="flex items-start gap-2">
+                                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-ui-2xs font-semibold ${VERDICT_TONE[finding.verdict]}`}>
+                                            {VERDICT_LABEL[finding.verdict]}
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block truncate font-mono text-ui-dense text-zinc-300" title={finding.name}>
+                                                {finding.name}
+                                            </span>
+                                            <span className="mt-0.5 block text-ui-dense text-zinc-400">{finding.evidence}</span>
+                                        </span>
+                                    </div>
+                                    {finding.reasons.length > 0 && (
+                                        <ul className="mt-1.5 flex flex-col gap-0.5 pl-2">
+                                            {finding.reasons.map((reason, i) => (
+                                                <li key={i} className="text-ui-2xs text-zinc-500">· {reason}</li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                    {finding.repair && (
+                                        <div className="mt-2 border-t border-zinc-800/80 pt-2">
+                                            <p className="text-ui-2xs text-zinc-400">
+                                                {finding.repair.summary}
+                                            </p>
+                                            {finding.repair.widens && (
+                                                <p className="mt-1 text-ui-2xs text-amber-300">
+                                                    This repair widens the skill&rsquo;s reach — it would become a skill the models can use.
+                                                </p>
+                                            )}
+                                            <details className="mt-1.5">
+                                                <summary className="cursor-pointer text-ui-2xs text-zinc-400 hover:text-zinc-200">
+                                                    Show the proposed change
+                                                </summary>
+                                                <div className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                    <div>
+                                                        <p className="text-ui-2xs uppercase tracking-wider text-zinc-500">Now</p>
+                                                        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-control border border-zinc-800/80 bg-zinc-950 p-2 font-mono text-ui-2xs text-zinc-400">{finding.repair.before}</pre>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-ui-2xs uppercase tracking-wider text-zinc-500">Proposed</p>
+                                                        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-control border border-zinc-800/80 bg-zinc-950 p-2 font-mono text-ui-2xs text-zinc-300">{finding.repair.after}</pre>
+                                                    </div>
+                                                </div>
+                                            </details>
+                                            <button type="button" onClick={() => proposeRepair(finding)}
+                                                aria-label={`Propose the repair for ${finding.name}`}
+                                                className="mt-2 flex h-8 items-center gap-1 rounded-control border border-zinc-700 bg-zinc-800 px-2.5 text-ui-dense text-zinc-200 transition-colors hover:border-zinc-600 hover:text-zinc-50 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
+                                                Propose this repair
+                                            </button>
+                                        </div>
+                                    )}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            )}
 
             {/* Segmented collection tabs — a real partition, so no empty groups. */}
             {collections.length > 1 && (
@@ -267,6 +495,20 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSki
                             ) : (
                                 <span className="shrink-0 text-ui-2xs text-zinc-600" title="Not injected — disabled or suspended">
                                     off
+                                </span>
+                            )}
+                            {/* The row says what the review found, so a problem is
+                                visible where the skill is — not only in the
+                                report. A ghost has no row at all (it is not in
+                                the list), which is exactly why the report
+                                exists. */}
+                            {verdictBySlug.get(s.name.replace(/\.md$/i, '')) && (
+                                <span
+                                    data-testid="skills-row-verdict"
+                                    className={`shrink-0 rounded-full border px-1.5 py-0.5 text-ui-2xs font-semibold ${VERDICT_TONE[verdictBySlug.get(s.name.replace(/\.md$/i, ''))!.verdict]}`}
+                                    title={verdictBySlug.get(s.name.replace(/\.md$/i, ''))!.evidence}
+                                >
+                                    {VERDICT_LABEL[verdictBySlug.get(s.name.replace(/\.md$/i, ''))!.verdict]}
                                 </span>
                             )}
                         </li>

@@ -38,6 +38,8 @@ import { applyReasoningToChatParams, buildReasoningPatch, detectWireCapabilities
 // a static cycle.
 import '../learning/harnessLessons';
 import { extractFinishReason, FinishReason, normalizeFinishReason, recordFinishReason, truncatesOutput } from '../../utils/finishReason';
+import { compactForWire } from './contextCompact';
+import { contextLengthLimitFromError, recordMeasuredContextWindow } from '../../utils/contextWindow';
 import { emitTokenUsage, extractTokenUsage, TokenUsage } from '../../utils/tokenUsage';
 import { observePromptRatio } from '../../utils/tokenEstimate';
 import type { ElectronUpdateStatus } from '../../types/electron';
@@ -161,6 +163,13 @@ export interface ChatRequestOptions {
      *  the validator; a rejected format degrades (json_object → none), it
      *  never blocks the call. Ignored by the other wire formats. */
     jsonSchema?: { name?: string; schema: Record<string, unknown> };
+    /** The outbound history was compacted to fit this model's context window.
+     *  Fires on the automatic recovery path only (a provider that rejected the
+     *  request and stated its limit), and never mid-stream — a retry happens
+     *  only before the first delta. A caller that paints a transcript should
+     *  show the line: the seat's request lost bytes, and a silent rewrite of
+     *  the trader's own history is the kind of thing this app names. */
+    onContextCompact?: (line: string) => void;
 }
 
 export interface ChatTurnResult {
@@ -1239,6 +1248,56 @@ export async function sendChatRequest(
     messages: ChatMessage[],
     options?: ChatRequestOptions
 ): Promise<string> {
+    try {
+        return await sendChatRequestOnce(config, messages, options);
+    } catch (error) {
+        const retry = contextRecoveryMessages(config, messages, options, error);
+        if (!retry) throw error;
+        return sendChatRequestOnce(config, retry, options);
+    }
+}
+
+/**
+ * The one automatic recovery a context-window rejection deserves.
+ *
+ * Every provider in this app states the window in the rejection it returns for
+ * a prompt that does not fit — "maximum context length is 128000 tokens",
+ * "prompt is too long: 210000 tokens > 200000 maximum". That number is better
+ * evidence than anything the app has: `resolveContextWindow` is otherwise
+ * reading a field the trader typed, a value `/models` reported, or the 1M
+ * default, and the default is deliberately optimistic. So on this one error the
+ * wire teaches the app its own assumption, and the turn is retried once against
+ * a history compacted to the limit that was just stated.
+ *
+ * Returns null when the error is not a context rejection, or when compaction
+ * has nothing left to cut — retrying identical bytes against an identical limit
+ * would produce the identical error, and the caller deserves the provider's
+ * message rather than a second one.
+ */
+function contextRecoveryMessages(
+    config: ProviderConfig,
+    messages: ChatMessage[],
+    options: ChatRequestOptions | undefined,
+    error: unknown,
+): ChatMessage[] | null {
+    const message = (error as { message?: unknown })?.message;
+    const limit = contextLengthLimitFromError(typeof message === 'string' ? message : '');
+    if (!limit) return null;
+    recordMeasuredContextWindow(config.id, config.selectedModel, limit);
+    const compacted = compactForWire(config, messages, {
+        outputReserveTokens: options?.maxTokens,
+        windowTokens: limit,
+    });
+    if (!compacted.changed) return null;
+    if (compacted.notice) options?.onContextCompact?.(compacted.notice);
+    return compacted.messages;
+}
+
+async function sendChatRequestOnce(
+    config: ProviderConfig,
+    messages: ChatMessage[],
+    options?: ChatRequestOptions
+): Promise<string> {
     assertHasKey(config);
     const effectiveConfig = {
         ...config,
@@ -1405,6 +1464,20 @@ export async function sendChatRequest(
  * Other formats return text only — callers may fall back to the text tool protocol.
  */
 export async function sendChatTurn(
+    config: ProviderConfig,
+    messages: ChatMessage[],
+    options?: ChatRequestOptions
+): Promise<ChatTurnResult> {
+    try {
+        return await sendChatTurnOnce(config, messages, options);
+    } catch (error) {
+        const retry = contextRecoveryMessages(config, messages, options, error);
+        if (!retry) throw error;
+        return sendChatTurnOnce(config, retry, options);
+    }
+}
+
+async function sendChatTurnOnce(
     config: ProviderConfig,
     messages: ChatMessage[],
     options?: ChatRequestOptions
@@ -1731,6 +1804,29 @@ export async function* streamChatRequest(
     messages: ChatMessage[],
     options?: ChatRequestOptions
 ): AsyncGenerator<string, void, unknown> {
+    let yielded = false;
+    try {
+        for await (const delta of streamChatRequestOnce(config, messages, options)) {
+            yielded = true;
+            yield delta;
+        }
+    } catch (error) {
+        // A retry only exists while the bubble is still empty. Once a delta has
+        // been painted, re-answering would append a SECOND reply to the first
+        // one, and a context rejection that arrives mid-stream is a different
+        // problem (the provider's own output cap, not the prompt).
+        if (yielded) throw error;
+        const retry = contextRecoveryMessages(config, messages, options, error);
+        if (!retry) throw error;
+        yield* streamChatRequestOnce(config, retry, options);
+    }
+}
+
+async function* streamChatRequestOnce(
+    config: ProviderConfig,
+    messages: ChatMessage[],
+    options?: ChatRequestOptions
+): AsyncGenerator<string, void, unknown> {
     assertHasKey(config);
     const effectiveConfig = {
         ...config,
@@ -1754,7 +1850,7 @@ export async function* streamChatRequest(
             }
             // Shell without the chunk channel (old preload), or a jsonMode
             // stream the chunk bridge cannot represent — buffered as before.
-            yield await sendChatRequest(effectiveConfig, messages, options);
+            yield await sendChatRequestOnce(effectiveConfig, messages, options);
             return;
         }
         // Dev browser on localhost: route through the CORS-avoiding Vite
@@ -1775,7 +1871,7 @@ export async function* streamChatRequest(
                 return;
             }
             // Other formats: non-streaming through the proxy (existing behavior).
-            const full = await sendChatRequest(effectiveConfig, messages, options);
+            const full = await sendChatRequestOnce(effectiveConfig, messages, options);
             yield full;
             return;
         }
@@ -1795,7 +1891,7 @@ export async function* streamChatRequest(
         // Fallback for non-OpenAI-compat formats: fetch then yield once.
         // Inside the try so its errors flow through toFriendlyProviderError
         // (previously this sat after the catch and bypassed friendly mapping).
-        const full = await sendChatRequest(effectiveConfig, messages, options);
+        const full = await sendChatRequestOnce(effectiveConfig, messages, options);
         yield full;
     } catch (error) {
         throw toFriendlyProviderError(error, effectiveConfig.name);

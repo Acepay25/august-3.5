@@ -153,8 +153,30 @@ describe('buildRecentTradesBrief header stats', () => {
         })]);
         expect(b.rows[0].loggedAt).toBe('2026-10-06T08:15:00.000Z');
         expect(b.rows[0].tags).toEqual(['moved_stop', 'execution']);
-        expect(b.from).toBe(b.rows[0].loggedAt);
-        expect(b.to).toBe(b.rows[0].loggedAt);
+        expect(b.from).toBe(b.rows[0].decidedAt);
+        expect(b.to).toBe(b.rows[0].decidedAt);
+    });
+
+    it('orders by DECISION time, not write time (E-40)', () => {
+        // Decided Monday, confirmed/row-written Friday. The write time must
+        // not reorder the tape or the window.
+        const decidedMonday = trade({
+            id: 'monday',
+            timestamp: '2026-10-09T09:00:00.000Z',
+            decidedAt: '2026-10-05T09:00:00.000Z',
+            outcome: TradeOutcome.WIN,
+        });
+        const decidedTuesday = trade({
+            id: 'tuesday',
+            timestamp: '2026-10-06T09:00:00.000Z',
+            decidedAt: '2026-10-06T09:00:00.000Z',
+            outcome: TradeOutcome.LOSS,
+        });
+        const b = buildRecentTradesBrief([decidedMonday, decidedTuesday]);
+        expect(b.rows.map(r => r.id)).toEqual(['monday', 'tuesday']);
+        expect(b.from).toBe('2026-10-05T09:00:00.000Z');
+        expect(b.rows[0].loggedAt).toBe('2026-10-09T09:00:00.000Z');
+        expect(b.rows[0].line.startsWith('2026-10-05')).toBe(true);
     });
 });
 

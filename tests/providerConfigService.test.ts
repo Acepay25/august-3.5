@@ -22,7 +22,9 @@ import {
   updateModelInProvider,
   getReadyProviders,
   discoverProviderModels,
+  discoverProviderModelCatalog,
 } from '../services/infrastructure/ProviderConfigService';
+import { mergeModelContextWindows, sameModelContextWindows } from '../utils/providerUtils';
 import type { ProviderConfig } from '../types/provider';
 
 const makeConfig = (overrides: Partial<ProviderConfig> = {}): ProviderConfig => ({
@@ -64,6 +66,63 @@ describe('ProviderConfigService', () => {
       store = [makeConfig({ id: 'gemini', name: 'Gemini', apiFormat: 'google', baseUrl: 'https://generativelanguage.googleapis.com/v1beta' })];
       const loaded = await loadProviderConfigs();
       expect(loaded[0].apiFormat).toBe('google');
+    });
+
+    it('carries every OPTIONAL field across a restart', async () => {
+      // The save path spreads the whole object, so these were written to
+      // Preferences and then dropped on the way back in: a window the trader
+      // typed, or one discovery learned, held for the session and vanished on
+      // restart. `utils/contextWindow` sizes automatic compaction off exactly
+      // this number, so a lost override means a 128K seat gets treated as 1M.
+      store = [makeConfig({
+        inputUsdPer1k: 0.6,
+        outputUsdPer1k: 1.8,
+        thinkingCapable: false,
+        jsonSchemaCapable: true,
+        contextWindowTokens: 131_072,
+        modelContextWindows: { 'model-1': 262_144 },
+      })];
+      const loaded = await loadProviderConfigs();
+      expect(loaded[0]).toMatchObject({
+        inputUsdPer1k: 0.6,
+        outputUsdPer1k: 1.8,
+        thinkingCapable: false,
+        jsonSchemaCapable: true,
+        contextWindowTokens: 131_072,
+        modelContextWindows: { 'model-1': 262_144 },
+      });
+    });
+
+    it('a `0` rate is a price, not an absence', async () => {
+      store = [makeConfig({ inputUsdPer1k: 0, outputUsdPer1k: 0 })];
+      const loaded = await loadProviderConfigs();
+      expect(loaded[0].inputUsdPer1k).toBe(0);
+      expect(loaded[0].outputUsdPer1k).toBe(0);
+    });
+
+    it('refuses a corrupt optional field without losing the row', async () => {
+      // A hand-edited or half-written store must not be able to hand the app a
+      // 0-token window or a "thinkingCapable = 'yes'" that reads as true.
+      store = [makeConfig({
+        contextWindowTokens: '128000' as unknown as number,
+        modelContextWindows: null as unknown as Record<string, number>,
+        thinkingCapable: 'yes' as unknown as boolean,
+        inputUsdPer1k: -1,
+      })];
+      const loaded = await loadProviderConfigs();
+      expect(loaded[0].id).toBe('prov-a');
+      expect(loaded[0].contextWindowTokens).toBeUndefined();
+      expect(loaded[0].modelContextWindows).toBeUndefined();
+      expect(loaded[0].thinkingCapable).toBeUndefined();
+      expect(loaded[0].inputUsdPer1k).toBeUndefined();
+    });
+
+    it('drops an implausible window from a stored map, keeps the plausible one', async () => {
+      store = [makeConfig({
+        modelContextWindows: { 'model-1': 8_192, 'model-2': 0, 'model-3': 'big' } as unknown as Record<string, number>,
+      })];
+      const loaded = await loadProviderConfigs();
+      expect(loaded[0].modelContextWindows).toEqual({ 'model-1': 8_192 });
     });
   });
 
@@ -441,5 +500,106 @@ describe('ProviderConfigService', () => {
       expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:11434/v1/models');
       expect(fetchMock.mock.calls[2][0]).toBe('http://localhost:11434/api/tags');
     });
+  });
+});
+
+describe('discovered context windows', () => {
+  // The window a model reports is the only evidence about that model the app
+  // does not have to guess at. These are the field names the gateways in this
+  // app's reach actually use — and the absence case matters as much as the
+  // present one: a model with no reported window must stay UNKNOWN (sparse),
+  // never zero, because a 0-token window would compact every turn to nothing.
+  const ok = (body: unknown) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify(body),
+  } as Response);
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reads context_length (OpenRouter, Together, llama.cpp)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok({
+      data: [{ id: 'deepseek/deepseek-v3', context_length: 131_072 }],
+    }));
+    const catalog = await discoverProviderModelCatalog({ baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'sk-or', apiFormat: 'chat_completions' });
+    expect(catalog.ids).toEqual(['deepseek/deepseek-v3']);
+    expect(catalog.windows).toEqual({ 'deepseek/deepseek-v3': 131_072 });
+  });
+
+  it('reads context_window (Groq) and max_model_len (vLLM)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok({
+      data: [
+        { id: 'llama-3.3-70b-versatile', context_window: 128_265 },
+        { id: 'Qwen/Qwen2.5-7B-Instruct', max_model_len: 32_768 },
+      ],
+    }));
+    const catalog = await discoverProviderModelCatalog({ baseUrl: 'https://api.groq.com/openai/v1', apiKey: 'gsk', apiFormat: 'chat_completions' });
+    expect(catalog.windows).toEqual({
+      'llama-3.3-70b-versatile': 128_265,
+      'Qwen/Qwen2.5-7B-Instruct': 32_768,
+    });
+  });
+
+  it('reads a nested limits object and Google inputTokenLimit', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(ok({ data: [{ id: 'nvidia/llama-3.1-nemotron', limits: { context_length: 1_048_576 } }] }))
+      .mockResolvedValueOnce(ok({ models: [{ name: 'models/gemini-2.5-pro', inputTokenLimit: 1_048_576 }] }));
+    const nested = await discoverProviderModelCatalog({ baseUrl: 'https://integrate.api.nvidia.com/v1', apiKey: 'nv', apiFormat: 'chat_completions' });
+    expect(nested.windows).toEqual({ 'nvidia/llama-3.1-nemotron': 1_048_576 });
+    const google = await discoverProviderModelCatalog({ baseUrl: 'https://generativelanguage.googleapis.com/v1beta', apiKey: 'gk', apiFormat: 'google' });
+    expect(google.windows).toEqual({ 'gemini-2.5-pro': 1_048_576 });
+  });
+
+  it('stays SILENT about a model that reports no window', async () => {
+    // OpenAI, DeepSeek and Anthropic answer /models with ids and nothing else.
+    // `max_tokens` and `max_completion_tokens` are REQUEST caps, not the window:
+    // reading 4096 as a context window would make the app compact a 128K model
+    // into amnesia, so they are deliberately not in the key list.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok({
+      data: [
+        { id: 'gpt-4o', max_tokens: 4_096, supported_endpoint_parameters: { max_tokens: 4_096 } },
+        { id: 'gpt-4o-mini' },
+      ],
+    }));
+    const catalog = await discoverProviderModelCatalog({ baseUrl: 'https://api.openai.com/v1', apiKey: 'sk-oai', apiFormat: 'chat_completions' });
+    expect(catalog.ids).toEqual(['gpt-4o', 'gpt-4o-mini']);
+    expect(catalog.windows).toEqual({});
+  });
+
+  it('refuses an implausible reported window instead of believing it', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok({
+      data: [{ id: 'tiny', context_length: 4 }, { id: 'huge', context_length: 1e15 }, { id: 'nan', context_length: null }],
+    }));
+    const catalog = await discoverProviderModelCatalog({ baseUrl: 'https://x.example/v1', apiKey: 'k', apiFormat: 'chat_completions' });
+    expect(catalog.windows).toEqual({});
+  });
+
+  it('keeps discoverProviderModels an ids-only face of the same fetch', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok({
+      data: [{ id: 'a', context_length: 8_192 }, { id: 'b' }],
+    }));
+    const ids = await discoverProviderModels({ baseUrl: 'https://x.example/v1', apiKey: 'k', apiFormat: 'chat_completions' });
+    expect(ids).toEqual(['a', 'b']);
+    // One endpoint hit, not two: the windows ride the same response.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('mergeModelContextWindows / sameModelContextWindows', () => {
+  it('lets a fresh report win and keeps what the provider stopped reporting', () => {
+    const merged = mergeModelContextWindows(
+      { 'a': 8_192, 'b': 32_768 },
+      { 'b': 65_536, 'c': 4_096 },
+    );
+    expect(merged).toEqual({ a: 8_192, b: 65_536, c: 4_096 });
+  });
+
+  it('sees no change when the sweep repeats itself, so nothing is written', () => {
+    expect(sameModelContextWindows({ a: 8_192 }, { a: 8_192 })).toBe(true);
+    expect(sameModelContextWindows(undefined, {})).toBe(true);
+    expect(sameModelContextWindows({ a: 8_192 }, { a: 8_192, b: 1 })).toBe(false);
+    expect(sameModelContextWindows({ a: 8_192 }, { a: 16_384 })).toBe(false);
   });
 });

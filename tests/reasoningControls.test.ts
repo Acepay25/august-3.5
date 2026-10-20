@@ -35,6 +35,9 @@ describe('EFFORT_BY_TASK schedule (P2)', () => {
         expect(EFFORT_BY_TASK.moderatorVerdict).toBe('max');
         expect(EFFORT_BY_TASK.clarification).toBe('low');
         expect(EFFORT_BY_TASK.chat).toBe('low');
+        // The two paths that can present a plan are NOT the casual tier.
+        expect(EFFORT_BY_TASK.tradingDecision).toBe('high');
+        expect(EFFORT_BY_TASK.automatedTradingDecision).toBe('max');
         expect(EFFORT_BY_TASK.postMortem).toBe('medium');
         expect(EFFORT_BY_TASK.ocr).toBe('low');
     });
@@ -68,6 +71,14 @@ describe('resolveComposerEffort (the shared chat mapping)', () => {
     it('maps unset and auto to the chat task default', () => {
         expect(resolveComposerEffort()).toBe(EFFORT_BY_TASK.chat);
         expect(resolveComposerEffort('auto')).toBe(EFFORT_BY_TASK.chat);
+    });
+
+    it('resolves a plan-capable turn through its own task, not casual chat', () => {
+        expect(resolveComposerEffort(undefined, 'tradingDecision')).toBe('high');
+        expect(resolveComposerEffort('auto', 'tradingDecision')).toBe('high');
+        expect(resolveComposerEffort(undefined, 'automatedTradingDecision')).toBe('max');
+        // An explicit composer pick still wins over the task default.
+        expect(resolveComposerEffort('low', 'tradingDecision')).toBe('low');
     });
 
     it('passes every real tier through untouched', () => {

@@ -32,6 +32,11 @@ vi.mock('../services/analysis/KlineService', () => ({
 }));
 vi.mock('../services/learning/SkillMemoryService', () => ({
     listSkills: (...args: unknown[]) => (listSkillsMock as (...a: unknown[]) => unknown)(...args),
+    // E-35 wiring lives in presentTradeTool; this suite is about the dock's
+    // receipts, so the deterministic layer is a pass-through here.
+    applyNotebookSkillsToAnalysis: (analysis: unknown) => analysis,
+    confirmedAvoidForSetup: () => null,
+    skillFileNameFor: () => null,
 }));
 vi.mock('../utils/activeUser', () => ({
     getActiveUsername: () => 'alice',

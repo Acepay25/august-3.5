@@ -171,3 +171,125 @@ describe('streamChatRequest over the chunk bridge', () => {
         expect(deltas).toEqual(['Hello world']);
     });
 });
+
+// ─── Automatic recovery from a context-window rejection ─────────────────────
+// The one error class where the provider states the number the app needed. A
+// 400 that says "maximum context length is 4096 tokens" must not surface as a
+// dead turn: the limit is remembered, the history is compacted to it, and the
+// request is made again. A rejection that is NOT about the window must not be
+// retried at all — rewriting the trader's transcript for a rate limit would be
+// its own bug.
+
+import { measuredContextWindow, resetMeasuredContextWindows, resolveContextWindow } from '../utils/contextWindow';
+
+const longConversation = (): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> => {
+    const pad = 'x'.repeat(2_400);
+    const out: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+        { role: 'system', content: 'the mandate' },
+    ];
+    for (let i = 0; i < 4; i++) {
+        out.push({ role: 'user', content: `${pad} question ${i}` });
+        out.push({ role: 'assistant', content: `${pad} answer ${i}` });
+    }
+    out.push({ role: 'user', content: 'and now?' });
+    return out;
+};
+
+describe('context-window rejection recovery over the desktop bridge', () => {
+    const windowConfig = baseConfig({ id: 'p1', name: 'Provider One', selectedModel: 'model-a', models: ['model-a'] });
+
+    beforeEach(() => { resetMeasuredContextWindows(); });
+
+    it('learns the limit, compacts and retries once', async () => {
+        let attempt = 0;
+        providerChat = vi.fn(async (request: BridgePayload) => {
+            calls.push(request);
+            attempt += 1;
+            if (attempt === 1) {
+                return {
+                    ok: false,
+                    status: 400,
+                    message: 'Maximum context length is 4096 tokens. However, your messages resulted in 9000 tokens.',
+                } as unknown as Awaited<ReturnType<BridgeChatFn>>;
+            }
+            return { ok: true, text: 'an answer after compaction' } as Awaited<ReturnType<BridgeChatFn>>;
+        }) as unknown as BridgeChatFn;
+        window.electronAPI = { isElectron: true, providerChat, cancelProviderChat: vi.fn(async () => true) };
+
+        const lines: string[] = [];
+        const text = await sendChatRequest(windowConfig, longConversation(), { onContextCompact: l => lines.push(l) });
+
+        expect(text).toBe('an answer after compaction');
+        expect(calls).toHaveLength(2);
+        const retried = calls[1].messages as { content?: string }[];
+        expect(retried.length).toBeLessThan((calls[0].messages as unknown[]).length);
+        expect(lines.join('\n')).toMatch(/COMPACTED FOR THE CONTEXT WINDOW/);
+        // The lesson persists for the rest of the session, and it WINS over the
+        // 1M assumption that let the request be sent in the first place.
+        expect(measuredContextWindow('p1', 'model-a')).toBe(4_096);
+        expect(resolveContextWindow(windowConfig)).toMatchObject({ tokens: 4_096, source: 'measured' });
+    });
+
+    it('does not retry a 400 that is not about the window', async () => {
+        providerChat = vi.fn(async (request: BridgePayload) => {
+            calls.push(request);
+            return { ok: false, status: 400, message: 'The requested model does not exist.' } as unknown as Awaited<ReturnType<BridgeChatFn>>;
+        }) as unknown as BridgeChatFn;
+        window.electronAPI = { isElectron: true, providerChat, cancelProviderChat: vi.fn(async () => true) };
+
+        await expect(sendChatRequest(windowConfig, longConversation(), {})).rejects.toThrow(/does not exist/);
+        expect(calls).toHaveLength(1);
+        expect(measuredContextWindow('p1', 'model-a')).toBeNull();
+    });
+
+    it('does not retry when compaction would cut nothing', async () => {
+        // Three short messages fit any stated window. Retrying identical bytes
+        // against an identical limit only delays the error the trader needs.
+        providerChat = vi.fn(async (request: BridgePayload) => {
+            calls.push(request);
+            return { ok: false, status: 400, message: "This model's maximum context length is 128000 tokens. However, your request contains 400000 input tokens and 400000 cached tokens. Please reduce the number of tokens in your prompt." } as unknown as Awaited<ReturnType<BridgeChatFn>>;
+        }) as unknown as BridgeChatFn;
+        window.electronAPI = { isElectron: true, providerChat, cancelProviderChat: vi.fn(async () => true) };
+
+        await expect(sendChatRequest(windowConfig, [{ role: 'user', content: 'hi' }], {})).rejects.toThrow(/128000/);
+        expect(calls).toHaveLength(1);
+    });
+
+    it('never retries a stream once a delta has been painted', async () => {
+        // Re-answering into a bubble that already shows text would append a
+        // SECOND reply. The guard is on "anything was yielded", not on the
+        // error's shape, so a mid-stream ceiling stays a single honest failure.
+        type Chunk = { requestId: string; type: 'text' | 'reasoning'; delta: string };
+        let bridgeChunk: ((chunk: Chunk) => void) | null = null;
+        let attempt = 0;
+        window.electronAPI = {
+            isElectron: true,
+            providerChat: vi.fn(async (request: BridgePayload) => {
+                calls.push(request);
+                attempt += 1;
+                const rid = request.requestId as string;
+                if (attempt === 1) {
+                    bridgeChunk?.({ requestId: rid, type: 'text', delta: 'partial ' });
+                    return {
+                        ok: false,
+                        status: 400,
+                        message: 'Maximum context length is 4096 tokens. However, your messages resulted in 9000 tokens.',
+                    } as unknown as Awaited<ReturnType<BridgeChatFn>>;
+                }
+                return { ok: true, text: 'second answer' } as unknown as Awaited<ReturnType<BridgeChatFn>>;
+            }) as unknown as BridgeChatFn,
+            cancelProviderChat: vi.fn(async () => true),
+            onProviderChunk: vi.fn((cb: (chunk: Chunk) => void) => {
+                bridgeChunk = cb;
+                return () => { bridgeChunk = null; };
+            }) as never,
+        };
+
+        const deltas: string[] = [];
+        await expect((async () => {
+            for await (const d of streamChatRequest(windowConfig, longConversation(), {})) deltas.push(d);
+        })()).rejects.toThrow(/context length/i);
+        expect(calls).toHaveLength(1);
+        expect(deltas.join('')).toMatch(/partial/);
+    });
+});

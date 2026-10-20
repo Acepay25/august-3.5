@@ -459,8 +459,8 @@ status: confirmed
 kind: repeat
 coin: BTCUSDT
 direction: Short
-wins: 4
-losses: 2
+wins: 20
+losses: 5
 lastEvidenceAt: ${new Date().toISOString()}
 tradeIds: t-lift-3
 ifCondition: btc london sweep short

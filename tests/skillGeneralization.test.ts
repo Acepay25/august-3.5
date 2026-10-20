@@ -39,8 +39,8 @@ coin: ${coin}
 direction: Short
 family: ${family}
 regime: ${regime}
-wins: 2
-losses: 5
+wins: 5
+losses: 20
 tradeIds: ${name}-a,${name}-b,${name}-c,${name}-d,${name}-e,${name}-f,${name}-g
 ---
 
@@ -115,8 +115,8 @@ describe('generalizeSkillCluster', () => {
         expect(made!.family).toBe('breakout');
         expect(made!.regime).toBe('ranging');
         expect(made!.status).toBe('candidate');
-        expect(made!.wins).toBe(4);
-        expect(made!.losses).toBe(10);
+        expect(made!.wins).toBe(10);
+        expect(made!.losses).toBe(40);
         expect(made!.evidenceCount).toBe(14);
 
         // Sources are retired + tagged.
@@ -152,8 +152,8 @@ coin: ETHUSDT
 direction: Long
 family: breakout
 regime: ranging
-wins: 2
-losses: 5
+wins: 5
+losses: 20
 tradeIds: e1,e2,e3,e4,e5,e6,e7
 ---
 

@@ -59,7 +59,7 @@ describe('sequential-eval promotion of fresh candidates', () => {
     });
 
     it('promotes a fresh candidate after 2 consecutive helps when sample is sufficient', async () => {
-        const id = await seedCandidate('fresh', 2, 4); // sample 6 >= MIN_SAMPLE_CONFIRMED
+        const id = await seedCandidate('fresh', 8, 12); // sample 20 >= MIN_SAMPLE_CONFIRMED
         await recordEvalVerdict(id, helps, USERNAME);
         expect(readMeta(id).status).toBe('candidate'); // streak 1 — not yet
         await recordEvalVerdict(id, helps, USERNAME);
@@ -95,6 +95,6 @@ describe('sequential-eval promotion of fresh candidates', () => {
     });
 
     it('exposes the shared sample threshold', () => {
-        expect(MIN_SAMPLE_CONFIRMED).toBe(5);
+        expect(MIN_SAMPLE_CONFIRMED).toBe(20);
     });
 });

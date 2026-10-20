@@ -11,7 +11,8 @@
  * the chat session in `chatStore`, not in whichever component set it last.
  *
  * `auto` is deliberately still a choice: it means "whatever this task defaults
- * to" (`effortForTask('chat')`), which is what the dock has always sent.
+ * to" (`effortForTask('tradingDecision')` for the dock and the Chat surface —
+ * the two homes that can present a plan), not a hidden fixed tier.
  */
 import React, { useState } from 'react';
 import { Check, ChevronDown } from './Icons';

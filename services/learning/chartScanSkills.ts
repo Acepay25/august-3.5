@@ -76,7 +76,9 @@ export interface ChartScanInput {
     signal?: AbortSignal;
 }
 
-const CHART_SCAN_FALLBACK_PROMPT = `You are a trading-pattern researcher. You receive a machine-built digest of an ENTIRE chart's candle history: regime segments, swing pivots, gap classes, RSI extremes, and every strategy-book setup detector aggregated across the whole tape with first-touch win-rates (1.5×ATR target vs 1×ATR stop, 12-bar horizon). Study how THIS chart actually moves and draft reusable IF/THEN trading skills for this coin and timeframe.
+// Exported so `constants/promptRegistry.ts` can IMPORT the built-in default
+// instead of restating it — the two copies were a silent-drift hazard.
+export const CHART_SCAN_FALLBACK_PROMPT = `You are a trading-pattern researcher. You receive a machine-built digest of an ENTIRE chart's candle history: regime segments, swing pivots, gap classes, RSI extremes, and every strategy-book setup detector aggregated across the whole tape with first-touch win-rates (1.5×ATR target vs 1×ATR stop, 12-bar horizon). Study how THIS chart actually moves and draft reusable IF/THEN trading skills for this coin and timeframe.
 
 Rules:
 - Ground every skill in the digest's numbers. Prefer detectors with enough hits and a win rate that is clearly not a coin flip; cite the observed count and rate inside "when".

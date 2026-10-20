@@ -26,7 +26,6 @@ import {
 import { TASK_BUDGETS } from './taskBudgets';
 import { EFFORT_BY_TASK, effortForTask, resolveComposerEffort, WireAuditEntry, type ReasoningEffort } from './reasoningControls';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
-import { getMemoryFilesContext } from '../learning/MemoryRetrievalService';
 import { composePrompt } from '../../utils/composePrompt';
 import { clipNote } from '../../utils/harnessMarks';
 import { getHarnessSettings } from '../../utils/harnessSettings';
@@ -635,7 +634,17 @@ export async function streamQuickResponse(
     // here guarantees the live bubble never shows scratchpad markup.
     const pump = async (maxTokens: number): Promise<void> => {
         const gate = createThinkingStreamGate();
-        for await (const chunk of streamChatRequest(config, messages, { maxTokens, signal, onReasoning: noteReasoning, reasoningEffort: resolveComposerEffort(effort) })) {
+        for await (const chunk of streamChatRequest(config, messages, {
+            maxTokens,
+            signal,
+            onReasoning: noteReasoning,
+            reasoningEffort: resolveComposerEffort(effort),
+            // A history this app shortened to fit the model's window is said in
+            // the thinking channel, which this surface already shows. NOT routed
+            // through `noteReasoning`: that flag decides whether the empty-reply
+            // retry runs, and a compaction line is not the model having thought.
+            onContextCompact: line => onReasoning?.(`\n${line}\n`),
+        })) {
             if (!chunk) continue;
             const gated = gate.push(chunk);
             if (gated.thinking) noteReasoning(gated.thinking);

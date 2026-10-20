@@ -22,7 +22,6 @@ vi.mock('../services/infrastructure/PreferencesService', () => ({
 
 // Provider layer mocked so no LLM call can leak into the integrity check.
 vi.mock('../services/providers/GenericProviderService', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getQuickResponse: vi.fn(async () => ''),
 }));
 vi.mock('../services/infrastructure/ProviderConfigService', () => ({
@@ -106,7 +105,7 @@ describe('created skill file integrity', () => {
     expect(meta.wins).toBe(0);
     expect(meta.losses).toBe(MIN_CLUSTER_FOR_SKILL);
     expect(meta.consecutiveLosses).toBe(MIN_CLUSTER_FOR_SKILL);
-    expect(meta.tradeIds).toEqual(['t-0', 't-1', 't-2']);
+    expect(meta.tradeIds).toEqual(Array.from({ length: MIN_CLUSTER_FOR_SKILL }, (_, i) => `t-${i}`));
     expect(meta.evidenceCount).toBe(MIN_CLUSTER_FOR_SKILL);
     // The cluster that AUTHORED this skill is recorded separately, so the
     // promotion maths can exclude it. It round-trips the frontmatter like

@@ -48,7 +48,14 @@ vi.mock('../services/automation/AutomationService', async (importOriginal) => {
 });
 // The notebook reads are exercised by `chatSurfacePrompt.test.ts`; here they
 // would only add a storage dependency to a cap test.
-vi.mock('../services/learning/SkillMemoryService', () => ({ listSkills: () => [] }));
+vi.mock('../services/learning/SkillMemoryService', () => ({
+    listSkills: () => [],
+    // E-35 wiring lives in presentTradeTool; this suite is about a scheduled
+    // run's plan ration, so the deterministic layer is a pass-through.
+    applyNotebookSkillsToAnalysis: (analysis: unknown) => analysis,
+    confirmedAvoidForSetup: () => null,
+    skillFileNameFor: () => null,
+}));
 vi.mock('../services/learning/strategyStore', () => ({ activeStrategiesBlock: () => '' }));
 vi.mock('../services/learning/profileMemory', () => ({ buildProfileMemoryIndex: () => '' }));
 

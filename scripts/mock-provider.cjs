@@ -189,7 +189,12 @@ const server = http.createServer((req, res) => {
 
     if (req.url.endsWith('/models') && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ data: [{ id: MODEL, object: 'model' }] }));
+        // `context_length` is what OpenRouter, Together, Groq (`context_window`),
+        // llama.cpp and vLLM report, and it is the only way this app learns a
+        // model's real window without the trader typing one. The probe and the
+        // Settings editor can therefore exercise the discovered-window path
+        // against a server that actually answers.
+        res.end(JSON.stringify({ data: [{ id: MODEL, object: 'model', context_length: 131_072 }] }));
         return;
     }
 

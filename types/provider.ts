@@ -41,14 +41,28 @@ export interface ProviderConfig {
    */
   thinkingCapable?: boolean;
   /**
-   * Model context window in tokens — optional. When set, retrieved-memory
-   * stage budgets scale with it (`stageBudgetChars` →
-   * `utils/tokenEstimate.windowBudgetTokens`) instead of assuming the
-   * 65,536 default, so a small-window provider gets a smaller notebook
-   * slice instead of a budget sized for a model it is not. Set from the
-   * provider editor; absent ⇒ default window, behavior unchanged.
+   * Override for the model context window in tokens — optional, and it wins
+   * over everything else (`utils/contextWindow.resolveContextWindow` puts a
+   * user override above a measured limit, a discovered per-model window and the
+   * 1,000,000 default). It scales retrieved-memory stage budgets
+   * (`stageBudgetChars` → `utils/tokenEstimate.windowBudgetTokens`) and it sets
+   * the ceiling automatic compaction holds the outbound history to, so a small
+   * window here is how you tell the app "compact earlier", not "inject less".
+   * Set from the provider editor; absent ⇒ best available evidence.
    */
   contextWindowTokens?: number;
+  /**
+   * Context window per model id, in tokens, as reported by the provider's own
+   * `/models` endpoint at discovery (`context_length`, `context_window`,
+   * `max_model_len`, `input_token_limit`, …). Read by
+   * `utils/contextWindow.resolveContextWindow` AFTER `contextWindowTokens` and
+   * a measured limit, and BEFORE the assumed default: it says what this model
+   * claims about itself, which beats an assumption but loses to an override.
+   * Absent ⇒ no per-model claim is known. Gateways that report nothing here
+   * (OpenAI, DeepSeek, Anthropic) are why the default and the measured
+   * fallback exist at all.
+   */
+  modelContextWindows?: Record<string, number>;
   /**
    * Override for json_schema constrained decoding on chat_completions
    * providers. undefined = decide by verified-host detection; true = always

@@ -189,7 +189,118 @@ export interface SkillIndexRow {
     description?: string;
     ifCondition?: string;
     thenAction?: string;
+    /** Which seat may see this skill — mirrors `SkillMeta.audience`. The
+     *  retrieval filters on it (`MemoryRetrievalService.rankedMatchedSkills`);
+     *  the index did not, so a moderator-only rule could be named to an
+     *  analyst seat. */
+    audience?: string;
+    /** Human-invoked only: background knowledge the trader reads with `/slug`.
+     *  It is NEVER handed to a seat on its own, so it must not be named in a
+     *  catalogue the seat is told to apply from. */
+    manualOnly?: boolean;
+    /** The idle lifecycle suspended it — it stops being injected. */
+    suspended?: boolean;
+    /** The trader switched it off. */
+    disabled?: boolean;
+    /** ISO timestamp of the last counted trade — the tie-break. */
+    lastEvidenceAt?: string;
 }
+
+/**
+ * The seats the index can be written for. The retrieval path uses the same
+ * two audiences, and `audience: analyst` hides a skill from a moderator's
+ * assembly while `audience: moderator` hides it from an analyst's.
+ */
+export type SkillIndexAudience = 'analyst' | 'moderator';
+
+/**
+ * A skill earns an index slot only if it can ACTUALLY be applied.
+ *
+ * The index is not a catalogue of everything in the notebook — it is the
+ * list the prompt tells the seat to APPLY from ("APPLY any that match … and
+ * pull its full body with recall"). So it must carry the same gate the
+ * injection path carries, or the index offers a rule the harness would never
+ * honour:
+ *
+ *  · retired    — `SkillStatus` says the trader retired it.
+ *  · suspended  — the idle lifecycle stopped injecting it (it can earn its
+ *                 way back; it is not dead, but it is not live either).
+ *  · disabled   — the trader switched it off.
+ *  · manualOnly — human-invoked only: never handed to a seat on its own.
+ *  · audience   — a rule scoped to the OTHER kind of seat.
+ *
+ * A row that carries none of these facts (a caller that did not pass them)
+ * is KEPT — the filter must never remove a skill because the caller was
+ * quiet about it.
+ */
+export const isIndexableSkill = (row: SkillIndexRow, audience: SkillIndexAudience = 'analyst'): boolean => {
+    if (row.status === 'retired') return false;
+    if (row.suspended === true) return false;
+    if (row.disabled === true) return false;
+    if (row.manualOnly === true) return false;
+    const scope = (row.audience || 'all').toLowerCase();
+    if (scope !== 'all' && scope !== audience) return false;
+    return true;
+};
+
+/** A skill the seat cannot apply without a trigger is a name, not a rule. */
+const hasUsableTrigger = (row: SkillIndexRow): boolean =>
+    Boolean(
+        (row.description || '').trim()
+        || (row.ifCondition || '').trim()
+        || (row.thenAction || '').trim(),
+    );
+
+/** confirmed before candidate; anything else (an old status word) last. */
+const statusRank = (status?: string): number => {
+    if (status === 'confirmed') return 0;
+    if (status === 'candidate') return 1;
+    return 2;
+};
+
+/**
+ * The order the index is written in, BEFORE the window is cut.
+ *
+ * The window is 30 slots. Filling it in notebook file order meant a retired
+ * rule and an unproven candidate occupied a slot exactly like a confirmed
+ * one, so repairing the library did not guarantee the model ever saw the
+ * repaired skill — and the index is the only place a skill is ever NAMED to
+ * the model.
+ *
+ * The order is: a usable trigger first (a name with no rule cannot be
+ * applied), then `confirmed` before `candidate`, then the most recently
+ * evidenced first. Ties keep the caller's order — the sort is stable, so a
+ * library that is equal on every axis reads in the order it was given, and
+ * nothing is reshuffled for tidiness.
+ */
+export const compareSkillIndexRows = (a: SkillIndexRow, b: SkillIndexRow): number => {
+    const trigger = Number(hasUsableTrigger(b)) - Number(hasUsableTrigger(a));
+    if (trigger !== 0) return trigger;
+    const status = statusRank(a.status) - statusRank(b.status);
+    if (status !== 0) return status;
+    const aAt = a.lastEvidenceAt ? Date.parse(a.lastEvidenceAt) : NaN;
+    const bAt = b.lastEvidenceAt ? Date.parse(b.lastEvidenceAt) : NaN;
+    const aHas = Number.isFinite(aAt);
+    const bHas = Number.isFinite(bAt);
+    if (aHas !== bHas) return aHas ? -1 : 1;
+    if (aHas && bHas && aAt !== bAt) return bAt - aAt;
+    return 0;
+};
+
+/**
+ * The rows the index may offer, in the order it offers them.
+ *
+ * Filtered by the same gate the injection path uses, then ranked. Exported so
+ * a caller that also records WHICH skills it named (the row's `injectedSkills`
+ * list) uses the SAME list the prompt carried — a row that claims a skill the
+ * prompt never named is worse than a silent row.
+ */
+export const rankSkillIndexRows = (
+    rows: SkillIndexRow[],
+    audience: SkillIndexAudience = 'analyst',
+): SkillIndexRow[] => rows
+    .filter(r => isIndexableSkill(r, audience))
+    .sort(compareSkillIndexRows);
 
 /**
  * Compact skills-library index for the chat system prompt: the model must
@@ -203,9 +314,18 @@ export interface SkillIndexRow {
  *  the dock looks at a chart, the Chat surface looks at nothing, and a heading
  *  that says "match this chart" on a surface with no chart is a lie the model
  *  can only answer by inventing one. */
-export const buildSkillsIndexForPrompt = (rows: SkillIndexRow[], max = 30, where = 'this chart'): string => {
+export const buildSkillsIndexForPrompt = (
+    rows: SkillIndexRow[],
+    max = 30,
+    where = 'this chart',
+    audience: SkillIndexAudience = 'analyst',
+): string => {
     if (rows.length === 0) return '';
-    const lines = rows.slice(0, max).map(r => {
+    // Ranked and filtered BEFORE the window is cut — see rankSkillIndexRows.
+    const eligible = rankSkillIndexRows(rows, audience);
+    if (eligible.length === 0) return '';
+    const shown = eligible.slice(0, max);
+    const lines = shown.map(r => {
         const rule = [
             r.ifCondition ? `IF ${r.ifCondition}` : '',
             r.thenAction ? `THEN ${r.thenAction}` : '',
@@ -215,8 +335,11 @@ export const buildSkillsIndexForPrompt = (rows: SkillIndexRow[], max = 30, where
         return `- ${r.slug}${r.status ? ` [${r.status}]` : ''} — ${kindTag}${desc || rule || '(see recall)'}${desc && rule ? ` · ${rule}` : ''}`;
     });
     return [
-        `## Skills library — ${rows.length} skill${rows.length === 1 ? '' : 's'}. Each line is WHEN to use it; the IF/THEN is the rule. APPLY any that match ${where} before answering; cite the slug you used, and pull its full body with recall/get_notebook_map when you act on it.`,
+        `## Skills library — ${eligible.length} skill${eligible.length === 1 ? '' : 's'}. Each line is WHEN to use it; the IF/THEN is the rule. APPLY any that match ${where} before answering; cite the slug you used, and pull its full body with recall/get_notebook_map when you act on it.`,
         ...lines,
-        rows.length > max ? `…and ${rows.length - max} more — get_notebook_map or recall lists the full library.` : '',
+        // The honest count: what this seat may use, minus what it was shown.
+        // Skills that were filtered out (retired, dormant, manual-only, another
+        // seat's) are not counted — they are not this seat's to pull.
+        eligible.length > max ? `…and ${eligible.length - max} more — get_notebook_map or recall lists the full library.` : '',
     ].filter(Boolean).join('\n');
 };

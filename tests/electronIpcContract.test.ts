@@ -31,7 +31,17 @@ const preload = read('electron/preload.cjs');
 const channels = (src: string, re: RegExp): string[] =>
     [...new Set([...src.matchAll(re)].map(m => m[1]))].sort();
 
-const handled = (): string[] => channels(main, /ipcMain\.handle\(\s*'([^']+)'/g);
+/**
+ * A channel is HANDLED by the main process if it is registered with
+ * `ipcMain.handle(...)` — directly, or through `trustedHandle(...)`, the
+ * wrapper that every privileged channel goes through so the sender frame can
+ * be checked (E-28).
+ *
+ * The wrapper is not a hole in the contract: it is the ONE registration path,
+ * and the last test below pins that. So the comparison is unchanged in
+ * strength — it just follows the registration to where it now lives.
+ */
+const handled = (): string[] => channels(main, /(?:ipcMain\.handle|trustedHandle)\(\s*'([^']+)'/g);
 const listened = (): string[] => channels(main, /ipcMain\.on\(\s*'([^']+)'/g);
 const invoked = (): string[] => channels(preload, /ipcRenderer\.invoke\(\s*'([^']+)'/g);
 const sent = (): string[] => channels(preload, /ipcRenderer\.send\(\s*'([^']+)'/g);
@@ -64,5 +74,26 @@ describe('Electron IPC contract', () => {
         // two source files — never by relaxing the comparison.
         expect(handled().length).toBeGreaterThan(0);
         expect(invoked().length).toBeGreaterThan(0);
+    });
+
+    it('every privileged channel goes through the sender-frame guard', () => {
+        // E-28 put the sender-frame check behind ONE wrapper, so the guard
+        // cannot be forgotten on a channel that matters. This pins that: the
+        // ONLY `ipcMain.handle(` in the file must be the wrapper's own
+        // registration, and every channel name must be registered through it.
+        // A new handler registered directly would be a hole — the preload
+        // bridge is exposed to whatever document the window loads.
+        const rawRegistrations = [...main.matchAll(/ipcMain\.handle\(\s*'([^']+)'/g)].map(m => m[1]);
+        expect(
+            rawRegistrations,
+            'a channel registered with ipcMain.handle directly bypasses the sender-frame guard',
+        ).toEqual([]);
+        const guarded = channels(main, /trustedHandle\(\s*'([^']+)'/g);
+        const unguarded = handled().filter(c => !guarded.includes(c));
+        expect(
+            unguarded,
+            'a handled channel that is not registered through trustedHandle has no sender-frame check',
+        ).toEqual([]);
+        expect(guarded.length).toBeGreaterThan(0);
     });
 });

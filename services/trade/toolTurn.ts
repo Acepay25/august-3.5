@@ -143,6 +143,11 @@ const runToolTurnInner = async (req: ToolTurnRequest): Promise<InnerOutcome> => 
     const stream = streamChatWithDeskTools(req.config, req.messages, {
         ...req.transport,
         signal,
+        // The transport's reactive path (a provider that rejected the request
+        // and stated its limit). The proactive one reports through
+        // `onToolEvent`, which the caller already paints as a tool line — this
+        // is the only compaction channel that would otherwise be silent.
+        onContextCompact: line => events.addToolLine(line),
         onStreamReset: () => {
             // The attempt, not the answer: clear the accumulator and repaint,
             // so the corrected turn paints alone instead of concatenating.

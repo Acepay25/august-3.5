@@ -111,6 +111,14 @@ describe('useTradeJournalActions', () => {
         act(() => result.current.handleUpdateTradeOutcome('t1', 'LOSS' as any));
 
         expect(setLoggedTrades).toHaveBeenCalled();
+        const updater = setLoggedTrades.mock.calls[0][0] as (rows: any[]) => any[];
+        const corrected = updater([trade('t1')])[0];
+        expect(corrected).toMatchObject({
+            outcome: 'LOSS',
+            correctedFrom: 'WIN',
+            resolutionSource: 'correction',
+        });
+        expect(corrected.correctedAt).toBeTruthy();
         expect(ThinkingStoreService.updateThinkingOutcome).toHaveBeenCalledWith(
             'think-1', 'LOSS', 't1', 'alice', { pnlAmount: 100, pnlPercent: undefined },
         );

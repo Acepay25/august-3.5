@@ -54,7 +54,7 @@ const confirmedDecayedSkill = (): SkillMeta => ({
   regime: 'ranging',
   strategyFamily: 'mean_reversion',
   // Lifetime record says the skill is great…
-  wins: 10,
+  wins: 18,
   losses: 2,
   consecutiveLosses: 1,
   tradeIds: ['old-1', 'old-2'],
@@ -86,10 +86,10 @@ describe('alpha-decay demotion (end-to-end through the evidence path)', () => {
 
     const file = getMemoryFiles().files.find(f => f.name === 'decay-skill.md')!;
     const meta = parseSkillMarkdown(file.content)!;
-    // Lifetime 10W/3L (77%) would keep it confirmed under the old math;
+    // Lifetime 18W/3L (86%) would keep it confirmed under the old math;
     // the decayed window (2W/9L) demotes it to candidate — not retired.
     expect(meta.status).toBe('candidate');
-    expect(meta.wins).toBe(10);
+    expect(meta.wins).toBe(18);
     expect(meta.losses).toBe(3);
     expect(meta.recentOutcomes).toBe('WWLLLLLLLLL'.slice(-12));
   });

@@ -20,7 +20,11 @@ import { getQuickResponse } from '../providers/GenericAnalysisService';
 import { extractAndParseJson } from '../../utils/jsonUtils';
 import { getMemoryFilesIndex, ModelNote } from './MemoryFilesService';
 
-const NOTEBOOK_NOTE_FALLBACK = `You maintain the trader's notebook — markdown files the AI ensemble reads before EVERY future analysis. After each closed trade you decide whether to write, and how.
+// Exported so `constants/promptRegistry.ts` can IMPORT the built-in default
+// instead of restating it. The registry's copy was 107 characters short and
+// missing the "never write into skills/" rule, so "Reset to default" in
+// Settings installed a prompt that permitted writing into skills/.
+export const NOTEBOOK_NOTE_FALLBACK = `You maintain the trader's notebook — markdown files the AI ensemble reads before EVERY future analysis. After each closed trade you decide whether to write, and how.
 
 The CURRENT NOTEBOOK block below lists every folder and file with a short excerpt. READ IT FIRST — it is the only way to write smartly.
 
@@ -44,7 +48,8 @@ Output ONLY valid JSON with exactly these fields:
   "content": "markdown (append: the new section with its own ## heading; create: the whole file)"
 }`;
 
-const CHAT_NOTE_FALLBACK = `The user asked you to save something to their trader notebook — markdown files the AI ensemble reads before EVERY future analysis. Decide what the notebook needs.
+// Exported for the same reason as NOTEBOOK_NOTE_FALLBACK above.
+export const CHAT_NOTE_FALLBACK = `The user asked you to save something to their trader notebook — markdown files the AI ensemble reads before EVERY future analysis. Decide what the notebook needs.
 
 The CURRENT NOTEBOOK block below lists every folder and file with a short excerpt. READ IT FIRST.
 

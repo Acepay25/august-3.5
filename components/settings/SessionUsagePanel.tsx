@@ -165,6 +165,45 @@ export const HarnessControls: React.FC = () => {
                 />
             </label>
             <label className="block text-ui-dense text-zinc-400">
+                Minimum net edge (R)
+                <span className="mt-0.5 block text-ui-2xs leading-4 text-zinc-500">
+                    Refuse a plan whose net expectancy at its own probability is at or
+                    below this, after the round-trip fee. 0 refuses only negative edge;
+                    the card quotes the number it refused on. Slippage is not modelled.
+                </span>
+                <input
+                    type="number"
+                    min={-5}
+                    max={5}
+                    step={0.05}
+                    value={settings.minEdgeR}
+                    onChange={e => persist({ minEdgeR: Math.min(5, Math.max(-5, Number(e.target.value) || 0)) })}
+                    data-testid="harness-min-edge"
+                    className="mt-1 w-full rounded-control border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                />
+            </label>
+            <label className="block text-ui-dense text-zinc-400">
+                Default leverage (×)
+                <span className="mt-0.5 block text-ui-2xs leading-4 text-zinc-500">
+                    New sessions and tickets start here. Historical rows keep the
+                    leverage they were logged with. The proposal card always shows the
+                    isolated-liquidation buffer beside the stop.
+                </span>
+                <input
+                    type="number"
+                    min={1}
+                    max={125}
+                    step={1}
+                    value={settings.defaultLeverage}
+                    onChange={e => {
+                        const n = Number(e.target.value);
+                        persist({ defaultLeverage: Math.min(125, Math.max(1, Math.round(Number.isFinite(n) ? n : 10))) });
+                    }}
+                    data-testid="harness-default-leverage"
+                    className="mt-1 w-full rounded-control border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100"
+                />
+            </label>
+            <label className="block text-ui-dense text-zinc-400">
                 Starter playbook library
                 <span className="mt-0.5 block text-ui-2xs leading-4 text-zinc-500">
                     The curated vetted-literature shelf. Turning this off withdraws
@@ -223,6 +262,27 @@ export const HarnessControls: React.FC = () => {
                     <span className="text-ui-dense text-zinc-300">
                         {settings.skillEnforcementEnabled !== false ? 'Enforced' : 'Not enforced'}
                     </span>
+                </span>
+            </label>
+            <label className="block text-ui-dense text-zinc-400">
+                Outcome settlement
+                <span className="mt-0.5 block text-ui-2xs leading-4 text-zinc-500">
+                    What the autopilot does when it detects a win, loss or missed entry.
+                    Shadow (the default) shows the result and records nothing — run it
+                    for a month and compare with your own calls. Automatic records
+                    after a 15-second Undo window; confirm waits for your click. A
+                    per-coin approval rule always wins over this.
+                </span>
+                <span className="mt-1 block">
+                    <SelectMenu
+                        value={settings.outcomeSettlement}
+                        onChange={v => persist({ outcomeSettlement: v as 'automatic' | 'confirm' | 'shadow' })}
+                        options={[
+                            { value: 'automatic', label: 'Automatic — record after 15s, Undo' },
+                            { value: 'shadow', label: 'Shadow — show, never record' },
+                            { value: 'confirm', label: 'Confirm — wait for my click' },
+                        ]}
+                    />
                 </span>
             </label>
             <label className="block text-ui-dense text-zinc-400">

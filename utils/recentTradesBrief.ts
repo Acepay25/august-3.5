@@ -14,7 +14,7 @@
  */
 
 import { LoggedTrade, TradeOutcome } from '../types';
-import { computeJournalStats } from './journalAnalytics';
+import { computeJournalStats, decidedAtOf } from './journalAnalytics';
 
 /** How many rows a brief carries by default — and how many the model may pull. */
 export const RECENT_TRADES_WINDOW = 20;
@@ -23,15 +23,17 @@ export interface TradeLogFilter {
     coin?: string;
     outcome?: string;
     strategy?: string;
-    /** ISO date/datetime; rows logged at or after it. */
+    /** ISO date/datetime; rows DECIDED at or after it. */
     since?: string;
     limit?: number;
 }
 
 export interface TradeLogRow {
     id: string;
-    /** The log time, verbatim from `LoggedTrade.timestamp`. */
+    /** The log time, verbatim from `LoggedTrade.timestamp` (provenance). */
     loggedAt: string;
+    /** The decision time — the clock this brief orders and shows. */
+    decidedAt: string;
     symbol: string;
     direction: string;
     outcome: string;
@@ -69,14 +71,12 @@ export interface RecentTradesBrief {
 
 const UNPARSEABLE = 0;
 
-/** Log time as an epoch number. Rows without a readable stamp sort first. */
+/** Decision time as an epoch number, with the same legacy fallbacks the
+ *  dashboards use. Rows without a readable stamp sort first. */
 const logTime = (t: LoggedTrade): number => {
-    const ms = Date.parse(t.timestamp ?? '');
+    const ms = Date.parse(decidedAtOf(t));
     return Number.isFinite(ms) ? ms : UNPARSEABLE;
 };
-
-const isDecided = (t: LoggedTrade): boolean =>
-    t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS;
 
 const mean = (nums: number[]): number | null =>
     nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
@@ -133,7 +133,7 @@ const rowLine = (row: Omit<TradeLogRow, 'line'>): string => {
         : '';
     const strategy = row.strategy ? ` · ${row.strategy}` : '';
     const tags = row.tags.length ? ` · [${row.tags.join(',')}]` : '';
-    return `${row.loggedAt || '—'} ${row.symbol} ${row.direction} ${row.outcome}${pnl}${r}${strategy}${tags}`;
+    return `${row.decidedAt || '—'} ${row.symbol} ${row.direction} ${row.outcome}${pnl}${r}${strategy}${tags}`;
 };
 
 /** Header stats + one row per trade over the given (already-windowed) trades. */
@@ -147,6 +147,7 @@ export const buildRecentTradesBrief = (trades: LoggedTrade[]): RecentTradesBrief
         const base: Omit<TradeLogRow, 'line'> = {
             id: t.id,
             loggedAt: t.timestamp,
+            decidedAt: decidedAtOf(t),
             symbol: t.analysis?.coinName ?? '—',
             direction: t.analysis?.direction ?? '—',
             outcome: t.outcome ?? '—',
@@ -177,8 +178,8 @@ export const buildRecentTradesBrief = (trades: LoggedTrade[]): RecentTradesBrief
         netPnLDollars: round(sum(dollarRows.map(t => t.pnlAmount as number))),
         netPnLPercent: round(sum(percentRows.map(t => t.pnlPercent as number)), 1),
         streak: stats.currentStreak,
-        from: rows[0]?.loggedAt ?? null,
-        to: rows[rows.length - 1]?.loggedAt ?? null,
+        from: rows[0]?.decidedAt ?? null,
+        to: rows[rows.length - 1]?.decidedAt ?? null,
     };
 };
 
@@ -203,7 +204,7 @@ export const neutralRowsText = (brief: RecentTradesBrief): string => {
             const pnl = typeof r.pnlDollars === 'number' ? ` $${r.pnlDollars.toFixed(2)}`
                 : typeof r.pnlPercent === 'number' ? ` ${r.pnlPercent >= 0 ? '+' : ''}${r.pnlPercent.toFixed(1)}%`
                     : '';
-            return `- ${day(r.loggedAt)} ${r.symbol} ${r.direction} ${r.outcome}${pnl}${r_}${r.tags.length ? ` [${r.tags.join(',')}]` : ''}`;
+            return `- ${day(r.decidedAt)} ${r.symbol} ${r.direction} ${r.outcome}${pnl}${r_}${r.tags.length ? ` [${r.tags.join(',')}]` : ''}`;
         }),
     ].join('\n');
 };

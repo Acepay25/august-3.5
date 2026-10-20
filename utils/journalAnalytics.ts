@@ -1,5 +1,14 @@
 import { LoggedTrade, TradeOutcome } from '../types';
 
+/**
+ * When the DECISION behind a trade was made — the one clock time-bucketed
+ * analytics must use. New rows stamp `decidedAt`; legacy rows carry the same
+ * fact on the embedded analysis; a row with neither falls back to its log
+ * time, because it still has to sort somewhere.
+ */
+export const decidedAtOf = (t: LoggedTrade): string =>
+  t.decidedAt || t.analysis?.createdAt || t.timestamp;
+
 export interface JournalGroupStats {
   key: string;
   trades: number;

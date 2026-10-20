@@ -42,6 +42,13 @@ export interface LoggedTrade {
   /** When this row was LOGGED. Not the outcome time — see `outcomeResolvedAt`. */
   timestamp: string;
   /**
+   * When the DECISION was made (`analysis.createdAt`, else the message time).
+   * Distinct from `timestamp`: an autopilot row confirmed on Friday for a plan
+   * decided Monday must land on Monday in every time-bucketed view. Absent on
+   * legacy rows; read it through `decidedAtOf()` so the fallback lives once.
+   */
+  decidedAt?: string;
+  /**
    * The id of the plan this trade came from (`Message.planId`, minted by the
    * dock's `present_trade` and shared with the level-watch). Absent on rows
    * logged before stage 3 and on trades the trader logged by hand.
@@ -55,6 +62,17 @@ export interface LoggedTrade {
    * the two apart.
    */
   outcomeResolvedAt?: string;
+  /**
+   * Who or what wrote the outcome: the autopilot's automatic settlement, a
+   * human's manual log/confirm, or a later human correction. The ledger keeps
+   * the distinction so an automatic mistake is auditable and never looks like
+   * a trader's own call.
+   */
+  resolutionSource?: 'autopilot' | 'manual' | 'correction';
+  /** On a correction: the outcome this row carried before the trader changed it. */
+  correctedFrom?: TradeOutcome;
+  /** On a correction: when the trader changed it. */
+  correctedAt?: string;
   leverage?: number;
   postMortem?: string;
   postMortemCreatedAt?: string; // Timestamp for post-mortem analysis
@@ -184,6 +202,69 @@ export interface LoggedTrade {
    */
   rSource?: 'autopilot' | 'postMortem';
   excursionSource?: 'autopilot' | 'postMortem';
+  /**
+   * The round-trip COST of this trade, in R, when it could be computed.
+   *
+   * The app had no cost model at all before this: every R on the row — and
+   * every expectancy built from them — was GROSS, so a 0.10 % round trip
+   * against a 1 % stop (0.10 R) was invisible. `costR` is that charge, in R,
+   * from `utils/netRiskReward`.
+   *
+   * ABSENT when the cost could not be computed (the stop distance is
+   * unknown) — a gap, never a zero. `costUnknown` says which.
+   */
+  costR?: number;
+  /**
+   * The NET R multiple — `realizedR` (GROSS) minus `costR`.
+   *
+   * `realizedR` stays the gross view on purpose: it is the price-measured
+   * quantity the outcome engines produced, and rewriting it would make the
+   * stored number disagree with the tape it was measured against. `netR` is
+   * the cost-adjusted sibling, and the ledgers that grade a strategy should
+   * read THIS one.
+   */
+  netR?: number;
+  /**
+   * ALWAYS `false`. The cost model charges fees only — slippage is NOT
+   * modelled, and a stored `false` is how that stays visible to every reader
+   * instead of being an unlabelled zero.
+   */
+  slippageModeled?: false;
+  /** Why the cost could not be computed. Absent when it was. */
+  costUnknown?: 'stop-distance' | 'fee' | 'gross-r';
+  /**
+   * The app's SUGGESTED risk for this trade, in dollars: the trader's equity
+   * × their risk % × the ticket fraction, with the exchange leverage cap
+   * applied.
+   *
+   * ABSENT when equity is unset — sizing fails closed there and no number is
+   * invented, because a confident-looking size for a user who never set an
+   * account is the exact failure this replaces.
+   */
+  suggestedRiskUsd?: number;
+  /** The notional that suggested risk implies, in dollars. Absent with the risk. */
+  suggestedNotionalUsd?: number;
+  /**
+   * Why the suggested size is what it is — a downgrade, a leverage clamp, the
+   * equity-missing state. Present whenever a suggestion was made; the sizing
+   * never shows an unexplained number.
+   */
+  suggestedSizeReason?: string;
+  /**
+   * The RISK in dollars the MODEL stated for this plan, when it stated one.
+   *
+   * Recorded SEPARATELY from the app's suggestion so the journal can compare
+   * the two — the app's number never depends on it, and the model can neither
+   * inflate nor shrink the suggested ticket. ABSENT when the model stated no
+   * size, and the row must not imply that it agreed with the suggestion.
+   */
+  modelStatedRiskUsd?: number;
+  /**
+   * The NOTIONAL in dollars the MODEL stated, when it stated one. A
+   * different quantity from the risk above, and kept apart from it for the
+   * same reason.
+   */
+  modelStatedNotionalUsd?: number;
   /** Worst move against the position while it was open, as leveraged percent. Candle-exact; distinct from the approximate `slOptimizationData.maxAdverseExcursion`. */
   maxAdverseExcursion?: number;
   /** Best price the trade offered before exit, as leveraged percent (MFE). With pnlPercent it yields capture efficiency. Candle-exact over the live window. */

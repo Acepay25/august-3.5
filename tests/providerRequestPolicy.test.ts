@@ -17,11 +17,14 @@ import {
     claudeThinkingBudgetTokens,
     anthropicShouldSendThinking,
     anthropicThinkingFields,
+    effectiveTemperature,
     geminiThinkingParams,
     isPrivateOrLoopbackHost,
+    isLinkLocalHost,
     httpAllowedForHost,
     isSafeProviderTargetUrl,
     isLocalBaseUrl,
+    normalizeProviderUrl,
     MIN_EFFECTIVE_THINKING_TOKENS,
     ANTHROPIC_DEFAULT_TEMPERATURE,
 } from '../shared/providerRequestPolicy.cjs';
@@ -153,6 +156,51 @@ describe('anthropicThinkingFields — temperature-omitted-with-thinking rule', (
     });
 });
 
+describe('effectiveTemperature — the format × thinking table the trader can read', () => {
+    it('sends the explicit value (else 0.7) on every non-thinking format', () => {
+        for (const apiFormat of ['chat_completions', 'responses', 'google'] as const) {
+            expect(effectiveTemperature({ apiFormat, temperature: 0.4 })).toEqual({
+                temperature: 0.4, requested: 0.4, omittedBecause: null,
+            });
+            expect(effectiveTemperature({ apiFormat }).temperature).toBe(0.7);
+        }
+    });
+
+    it('sends messages temperature when thinking is OFF, and OMITS it when ON', () => {
+        const off = effectiveTemperature({ apiFormat: 'messages', modelId: 'gpt-4o', temperature: 0.4 });
+        expect(off).toEqual({ temperature: 0.4, requested: 0.4, omittedBecause: null });
+
+        const on = effectiveTemperature({
+            apiFormat: 'messages', modelId: 'claude-sonnet-5', maxTokens: 8192,
+            reasoningEffort: 'high', temperature: 0.4,
+        });
+        // The requested value is still reported — the trader saw 0.4 — but
+        // the wire carries no temperature, and the reason is named.
+        expect(on).toEqual({ temperature: undefined, requested: 0.4, omittedBecause: 'thinking' });
+    });
+
+    it('json mode and the small-token floor restore the messages temperature', () => {
+        const json = effectiveTemperature({
+            apiFormat: 'messages', modelId: 'claude-opus-5', maxTokens: 8192, jsonMode: true, temperature: 0.4,
+        });
+        expect(json.temperature).toBe(0.4);
+        expect(json.omittedBecause).toBeNull();
+        const tiny = effectiveTemperature({
+            apiFormat: 'messages', modelId: 'claude-opus-5', maxTokens: 10, temperature: 0.4,
+        });
+        expect(tiny.temperature).toBe(0.4);
+    });
+
+    it('an explicit off suppresses thinking and restores the temperature', () => {
+        const off = effectiveTemperature({
+            apiFormat: 'messages', modelId: 'claude-sonnet-5', maxTokens: 8192,
+            reasoningEffort: 'off', temperature: 0.4,
+        });
+        expect(off.temperature).toBe(0.4);
+        expect(off.omittedBecause).toBeNull();
+    });
+});
+
 describe('geminiThinkingParams', () => {
     it('requests thoughts with the long-standing 8192 budget, never under JSON mode', () => {
         expect(geminiThinkingParams(false, 'gemini-2.5-pro')).toEqual({ includeThoughts: true, thinkingBudget: 8192 });
@@ -186,7 +234,6 @@ describe('host policy — loopback/private LAN vs public', () => {
         ['192.168.1.5', 'RFC1918 192.168/16'],
         ['172.16.0.9', 'RFC1918 172.16/12 low edge'],
         ['172.31.255.255', 'RFC1918 172.16/12 high edge'],
-        ['169.254.10.1', 'link-local'],
         ['LocalHost', 'case-insensitive'],
     ];
     const denied: Array<[string, string]> = [
@@ -195,6 +242,12 @@ describe('host policy — loopback/private LAN vs public', () => {
         ['example.com', 'public name'],
         ['localhost.evil.example', 'name-suffix spoof'],
         ['100.64.0.1', 'CGNAT (not in the renderer rule)'],
+        // Link-local is the CLOUD-METADATA range, not a LAN. It used to be in
+        // the allowed set; it is now refused outright (see the link-local
+        // describe block below).
+        ['169.254.10.1', 'link-local'],
+        ['169.254.169.254', 'cloud metadata (IMDS)'],
+        ['[fe80::1]', 'IPv6 link-local'],
         ['', 'empty'],
     ];
 
@@ -218,6 +271,63 @@ describe('host policy — loopback/private LAN vs public', () => {
         expect(isSafeProviderTargetUrl('https://proxy.example/r?token=1')).toBe(true); // redirect hops may carry query
         expect(isSafeProviderTargetUrl('not a url')).toBe(false);
         expect(isSafeProviderTargetUrl('')).toBe(false);
+    });
+});
+
+describe('link-local is the cloud-metadata range — refused outright', () => {
+    // 169.254.169.254 is where the AWS / GCP / Azure instance metadata
+    // service answers, and it hands CREDENTIALS to anything that can reach
+    // it. PRIVACY.md:84-87 says cloud-metadata hosts are refused; that claim
+    // is now true of the PROVIDER policy too, not just of toolForge.
+    it('isLinkLocalHost recognises the metadata range (and only it)', () => {
+        expect(isLinkLocalHost('169.254.169.254')).toBe(true);
+        expect(isLinkLocalHost('169.254.10.1')).toBe(true);
+        expect(isLinkLocalHost('[fe80::1]')).toBe(true);
+        expect(isLinkLocalHost('fe80::1')).toBe(true);
+        expect(isLinkLocalHost('169.253.169.254')).toBe(false);
+        expect(isLinkLocalHost('192.168.1.5')).toBe(false);
+        expect(isLinkLocalHost('10.0.0.1')).toBe(false);
+        expect(isLinkLocalHost('localhost')).toBe(false);
+    });
+
+    it('is refused for plain HTTP — it is not a private LAN', () => {
+        expect(isPrivateOrLoopbackHost('169.254.169.254')).toBe(false);
+        expect(httpAllowedForHost('169.254.169.254')).toBe(false);
+        expect(isSafeProviderTargetUrl('http://169.254.169.254/latest/meta-data/')).toBe(false);
+    });
+
+    it('is refused over HTTPS TOO — HTTPS is otherwise allowed for every host', () => {
+        expect(isSafeProviderTargetUrl('https://169.254.169.254/')).toBe(false);
+        expect(isSafeProviderTargetUrl('https://169.254.10.1:8443/v1')).toBe(false);
+    });
+
+    it('is refused as a redirect hop, so a provider cannot 302 the main process at it', () => {
+        // fetchFollowingSafeRedirects re-validates EVERY hop against
+        // isSafeProviderTargetUrl — this is the hop that matters.
+        expect(isSafeProviderTargetUrl('http://169.254.169.254/')).toBe(false);
+    });
+
+    it('is not a keyless local provider', () => {
+        expect(isLocalBaseUrl('http://169.254.169.254:11434/v1')).toBe(false);
+    });
+
+    it('normalizeProviderUrl rejects it with its own message, not the HTTPS one', () => {
+        expect(() => normalizeProviderUrl('http://169.254.169.254/v1')).toThrow(/link-local/i);
+        expect(() => normalizeProviderUrl('https://169.254.169.254/v1')).toThrow(/link-local/i);
+        // The ordinary LAN case still normalizes — refusing link-local must
+        // not narrow the local-server allowance that exists for a reason.
+        expect(normalizeProviderUrl('http://192.168.1.20:11434/v1')).toBe('http://192.168.1.20:11434/v1');
+        expect(normalizeProviderUrl('http://localhost:11434/v1')).toBe('http://localhost:11434/v1');
+    });
+
+    it('the decimal/hex IPv4 spellings of the metadata address are refused too', () => {
+        // new URL() normalises the integer and hex spellings of an IPv4
+        // address, so a pasted `http://2848037886/` still lands on
+        // 169.254.169.254 and must still be refused.
+        const decimal = 169 * 2 ** 24 + 254 * 2 ** 16 + 169 * 2 ** 8 + 254;
+        expect(new URL(`http://${decimal}/`).hostname).toBe('169.254.169.254');
+        expect(isSafeProviderTargetUrl(`http://${decimal}/`)).toBe(false);
+        expect(isSafeProviderTargetUrl('http://0xa9fea9fe/')).toBe(false);
     });
 });
 

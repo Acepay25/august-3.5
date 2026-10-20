@@ -26,7 +26,10 @@ export type SkillWorthDecision = z.infer<typeof WorthDecisionSchema> & {
     prediction?: SkillPrediction;
 };
 
-const SKILL_WORTH_FALLBACK = `You judge whether a new trading skill is worth creating.
+// Exported so `constants/promptRegistry.ts` can IMPORT the built-in default
+// instead of restating it — a second copy is how a "Reset to default" could
+// install a prompt this call site never sends.
+export const SKILL_WORTH_FALLBACK = `You judge whether a new trading skill is worth creating.
 
 A skill is a mechanical IF/THEN procedure (price, candle close, level, volume, regime) — not a vague lesson.
 Look at:

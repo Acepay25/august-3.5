@@ -47,7 +47,7 @@ vi.mock('@capacitor/filesystem', () => ({
     Filesystem: { writeFile: vi.fn() }, Directory: {}, Encoding: {},
 }));
 
-import { exportPreferencesData, importPreferencesData } from '../services/infrastructure/ExportService';
+import { exportPreferencesData, importPreferencesData, RAW_STRING_ENVELOPE } from '../services/infrastructure/ExportService';
 
 const USER = 'roundtrip-user';
 /** The sharpest case in the tree: a consent, not a cache. */
@@ -107,5 +107,34 @@ describe('a raw-localStorage store on a native platform', () => {
         window.localStorage.clear();
         await importPreferencesData(backup);
         expect(JSON.parse(window.localStorage.getItem('memory_amendments_v1') ?? 'null')).toEqual(queue);
+    });
+
+    it('carries a PLAIN STRING store through the raw-string envelope (Q4)', async () => {
+        // `last_active_user` is a bare username, not JSON. The old sweep could
+        // not parse it, so the key vanished; a naive mirror would restore
+        // `"alice"` (quotes included) where every reader compares the bare name.
+        window.localStorage.setItem('last_active_user', 'alice');
+        const backup = await exportPreferencesData();
+        expect(backup.last_active_user).toEqual({ [RAW_STRING_ENVELOPE]: 'alice' });
+
+        window.localStorage.clear();
+        nativeStore.clear();
+        await importPreferencesData(backup);
+        expect(window.localStorage.getItem('last_active_user')).toBe('alice');
+        expect(nativeStore.get('last_active_user')).toBe('alice');
+    });
+
+    it('carries a plain session id and the sidebar flag without quoting either (Q4)', async () => {
+        window.localStorage.setItem(`trade_chat_active_v1_${USER}`, 's-1');
+        window.localStorage.setItem('trade_sidebar_open_v1', '0');
+
+        const backup = await exportPreferencesData();
+        expect(backup[`trade_chat_active_v1_${USER}`]).toEqual({ [RAW_STRING_ENVELOPE]: 's-1' });
+        expect(backup.trade_sidebar_open_v1).toBe(0); // JSON-parseable flag
+
+        window.localStorage.clear();
+        await importPreferencesData(backup);
+        expect(window.localStorage.getItem(`trade_chat_active_v1_${USER}`)).toBe('s-1');
+        expect(window.localStorage.getItem('trade_sidebar_open_v1')).toBe('0');
     });
 });

@@ -113,18 +113,20 @@ approvedBy: grandfathered
         await new Promise(r => setTimeout(r, 50));
     };
 
+    // `recordInjections: true` is the OPT-IN a send site now makes: a record
+    // says "the model saw this", so only a context that really travels may
+    // write one. This helper stands in for such a send site.
     const theContext = (runId: string): string =>
         getMemoryFilesContext(
             { coin: 'BTCUSDT', direction: 'Short', family: 'Family A' },
             [],
             'analyst',
             'opening',
-            { runId },
+            { runId, recordInjections: true },
         );
 
     const makeTrade = (overrides: Partial<LoggedTrade> = {}): LoggedTrade => ({
         id: 'ctl-1',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         analysis: {
             coinName: 'BTCUSDT',
             direction: 'Short',

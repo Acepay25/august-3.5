@@ -165,6 +165,57 @@ export const peekTruncations = (): TruncationSummary => (
         : closedSummary
 );
 
+/**
+ * Run a turn inside a truncation window and report what it found.
+ *
+ * `recordFinishReason` only counts while a window is open, so a tally that
+ * nothing brackets records NOTHING — which is why the window functions had
+ * no production caller and every run reported "complete" even when the
+ * provider stopped at the token ceiling. A caller that wants to know whether
+ * ITS answer was cut off brackets the turn with this and reads the summary
+ * it gets back.
+ *
+ * The window is closed in a `finally`, so an aborted or failed turn still
+ * closes it: a leaked window would let the NEXT run's finish reasons land in
+ * this one's tally.
+ *
+ * The tally is one process-wide counter, not per-connection — the window API
+ * has always been a single slot, and a second concurrent bracket would reset
+ * the first. So the summary RETURNED here is the reading to use; the global
+ * `peekTruncations()` is only a fallback for a caller that brackets nothing
+ * of its own.
+ */
+export const withTruncationWindow = async <T>(
+    fn: () => Promise<T>,
+): Promise<{ value: T; summary: TruncationSummary }> => {
+    beginTruncationWindow();
+    try {
+        const value = await fn();
+        return { value, summary: consumeTruncations() };
+    } finally {
+        // Close the window even when the turn threw: a leaked open window
+        // would let the next run's finish reasons land in this one's tally.
+        if (windowOpen) consumeTruncations();
+    }
+};
+
+/**
+ * The one sentence a run shows when the provider stopped early.
+ *
+ * The tally is the only way to know an answer was cut off at the token
+ * ceiling — a truncated body is a SUCCESS-shaped response, so nothing else
+ * in the transport reports it. Re-deriving it from a missing sentence is
+ * exactly what `AGENTS.md` forbids ("Read the ceiling with
+ * `peekTruncations()`; don't re-derive it from a missing regex match").
+ */
+export const truncationNotice = (summary: TruncationSummary): string => {
+    if (!summary.truncated) return '';
+    const calls = summary.truncatedCalls === 1
+        ? 'one answer'
+        : `${summary.truncatedCalls} answers`;
+    return `THE PROVIDER STOPPED EARLY: ${calls} in this run hit the token ceiling, so the text may be cut off mid-thought. Re-ask, or use a model with a bigger context window.`;
+};
+
 /** Test/seam helper: a fresh module state per case. */
 export const resetTruncationWindow = (): void => {
     windowOpen = false;

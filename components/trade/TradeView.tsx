@@ -36,6 +36,7 @@ import { formatWatchFiredForModel } from '../../services/trade/chartTriggers';
 import { notify, ensureNotifyPermission } from '../../services/infrastructure/notify';
 import * as chatStore from '../../services/trade/chatStore';
 import { useFuturesLiveFeed } from '../../hooks/useFuturesLiveFeed';
+import { useSharedTicker } from '../../hooks/useSharedTicker';
 import { useSymbolUniverse } from '../../hooks/useSymbolUniverse';
 import TradingChart, { toKlineInterval, chartColor, type ChartInterval, type ChartHandle } from './TradingChart';
 import type { MessageLevelLines } from '../../services/trade/keyLevels';
@@ -198,6 +199,34 @@ const fundingProgress = (nextFundingTime: number, nowMs: number): { frac: number
     return { frac, soon: left <= 30 * 60_000 };
 };
 
+/**
+ * The funding countdown + its depleting bar — a LEAF that owns the clock.
+ *
+ * The 1-second tick used to live in the TradeView body, so every second it
+ * re-rendered the WHOLE trade surface — chart, order book, transcript — to
+ * move one string. The tick now stops here: the leaf subscribes to the ONE
+ * shared ticker (hooks/useSharedTicker.ts) and only the leaf re-renders.
+ */
+const FundingCountdown: React.FC<{ nextFundingTime: number; fundingRate: number }> = ({ nextFundingTime, fundingRate }) => {
+    const nowMs = useSharedTicker();
+    const { frac, soon } = fundingProgress(nextFundingTime, nowMs);
+    return (
+        <>
+            <span className="flex items-baseline justify-between">
+                <span className={`font-mono text-ui-sm font-medium tabular-nums ${fundingRate >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {fmtPercent(fundingRate * 100, 4)}
+                </span>
+                <span className="font-mono text-ui-dense tabular-nums text-zinc-400">{fundingCountdown(nextFundingTime, nowMs)}</span>
+            </span>
+            <span className="mt-1 block h-[3px] overflow-hidden rounded-full bg-zinc-800" aria-hidden="true" data-testid="funding-bar">
+                {/* duration-300 is deliberate: the bar's width is a data value
+                    (funding countdown), not chrome. ui-doctrine motion exception. */}
+                <span className={`block h-full rounded-full transition-[width,background-color] duration-300 ease-[var(--ease-snappy)] ${soon ? 'animate-pulse bg-amber-400 shadow-[0_0_6px_rgba(240,136,0,0.5)]' : 'bg-cyan-400/80'}`} style={{ width: `${Math.round(frac * 100)}%` }} />
+            </span>
+        </>
+    );
+};
+
 /** Live (<lg) viewport flag — below the lg breakpoint the desk switches to
  *  the mobile 3-mode layout (Chart | AI | Book); at lg+ the original three-
  *  column arrangement renders untouched. Guarded for jsdom (no matchMedia →
@@ -344,7 +373,6 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
     // list — two 60s polls for one exchange answer would be waste.
     const symbols = useSymbolUniverse();
     const [strip, setStrip] = useState<StripData | null>(null);
-    const [nowMs, setNowMs] = useState(() => Date.now());
     const [chartDrawings, setChartDrawings] = useState<ChartDrawing[]>([]);
     /** Shapes the MODEL drew via desk tools — rendered on the chart, never
      *  persisted into the user's drawing file, cleared on symbol change. */
@@ -661,12 +689,6 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         }
     }, [modelDrawings]);
 
-    // 1s tick for the funding countdown.
-    useEffect(() => {
-        const tick = window.setInterval(() => setNowMs(Date.now()), 1000);
-        return () => window.clearInterval(tick);
-    }, []);
-
     // Live values override polled ones while the socket is up.
     const markPrice = feed.markIndex?.markPrice ?? strip?.markPrice;
     const indexPrice = feed.markIndex?.indexPrice ?? strip?.indexPrice;
@@ -954,24 +976,9 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                 <Stat label="Open Interest" value={strip ? fmtUsd(strip.oiValue) : '—'} />
                 <div className="flex w-[210px] shrink-0 flex-col px-3.5">
                     <span className="text-ui-2xs uppercase tracking-wider text-zinc-500">Funding · next in</span>
-                    {Number.isFinite(fundingRate) ? (() => {
-                        const { frac, soon } = fundingProgress(nextFundingTime ?? 0, nowMs);
-                        return (
-                            <>
-                                <span className="flex items-baseline justify-between">
-                                    <span className={`font-mono text-ui-sm font-medium tabular-nums ${fundingRate! >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                        {fmtPercent(fundingRate! * 100, 4)}
-                                    </span>
-                                    <span className="font-mono text-ui-dense tabular-nums text-zinc-400">{fundingCountdown(nextFundingTime ?? 0, nowMs)}</span>
-                                </span>
-                                <span className="mt-1 block h-[3px] overflow-hidden rounded-full bg-zinc-800" aria-hidden="true" data-testid="funding-bar">
-                                    {/* duration-300 is deliberate: the bar's width is a data value
-                                        (funding countdown), not chrome. ui-doctrine motion exception. */}
-                                    <span className={`block h-full rounded-full transition-[width,background-color] duration-300 ease-[var(--ease-snappy)] ${soon ? 'animate-pulse bg-amber-400 shadow-[0_0_6px_rgba(240,136,0,0.5)]' : 'bg-cyan-400/80'}`} style={{ width: `${Math.round(frac * 100)}%` }} />
-                                </span>
-                            </>
-                        );
-                    })() : <span className="font-mono text-ui-sm text-zinc-200">—</span>}
+                    {Number.isFinite(fundingRate)
+                        ? <FundingCountdown nextFundingTime={nextFundingTime ?? 0} fundingRate={fundingRate!} />
+                        : <span className="font-mono text-ui-sm text-zinc-200">—</span>}
                 </div>
             </div>
 

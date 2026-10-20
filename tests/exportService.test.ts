@@ -315,10 +315,12 @@ describe('stores the app keeps in raw localStorage', () => {
         expect(localStorage.getItem(NOTEBOOK)).toBeNull();
     });
 
-    it('skip an unreadable raw value rather than inventing one', async () => {
+    it('carries an unreadable raw value in a raw-string envelope, not as invented JSON', async () => {
         localStorage.setItem(PROFILE_MEMORY, 'not json at all');
         const backup = await exportPreferencesData();
-        expect(PROFILE_MEMORY in backup).toBe(false);
+        // The owner's bytes are exact and recoverable; the envelope says
+        // "this is a string", not "this parsed".
+        expect(backup[PROFILE_MEMORY]).toEqual({ __augustRawLocalStorageString: 'not json at all' });
     });
 
     it('export the OWNER\'s live bytes, not the stale Preferences mirror left by a restore', async () => {

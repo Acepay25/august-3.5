@@ -268,6 +268,35 @@ export function sortModelsFreeFirst(modelIds: string[]): string[] {
     ];
 }
 
+/**
+ * Merge the context windows a `/models` sweep reported into the stored map.
+ *
+ * A reported value wins; a model the provider says nothing about keeps whatever
+ * was learned before. That asymmetry is deliberate: gateways add and drop fields
+ * between releases, and a sweep that stops reporting a window would otherwise
+ * return a 128K model to the assumed 1M default — the one failure shape that
+ * makes the app overflow instead of compact.
+ */
+export function mergeModelContextWindows(
+  existing: Record<string, number> | undefined,
+  discovered: Record<string, number>,
+): Record<string, number> {
+  return { ...(existing || {}), ...discovered };
+}
+
+/** Does that merge change anything? A 6-hourly sweep must not write Preferences
+ *  (and re-render every dropdown off it) for a provider that said the same thing
+ *  it said last time. */
+export function sameModelContextWindows(
+  a: Record<string, number> | undefined,
+  b: Record<string, number> | undefined,
+): boolean {
+  const ka = Object.keys(a || {});
+  const kb = Object.keys(b || {});
+  if (ka.length !== kb.length) return false;
+  return kb.every(k => (a || {})[k] === (b || {})[k]);
+}
+
 /** Merge a /models catalog with ids the user already saved (keep custom extras). */
 export function mergeDiscoveredModels(existing: string[], discovered: string[]): string[] {
     return sortModelsFreeFirst([...discovered, ...existing]);

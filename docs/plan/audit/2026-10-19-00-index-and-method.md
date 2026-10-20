@@ -264,7 +264,7 @@ not implemented and merge it to the full audit, if its implemented and stale del
   `scripts/check-flow-doc-anchors.cjs:44` scans it — deleting it breaks a gate.
 - **The 7 committed PNGs were kept** — they are the only committed screenshots of this app.
 - Gates after the change: **`typecheck` exit 0 · `lint:loose` 677 warnings / 0 errors · `test`
-  471 files, 4,660 tests, all pass, exit 0** · **`check-flow-doc-anchors` exit 0, 296 anchors
+  471 files, 4,660 tests, all pass, exit 0** · **`check-flow-doc-anchors` exit 0, 295 anchors
   verified, 0 unattributed** — and its agents-census arm reports **"0 AGENTS.md claim(s) disagree
   with the tree"**.
 - **The 18 deletions are STAGED, not committed.** They are one `git revert` from being undone.

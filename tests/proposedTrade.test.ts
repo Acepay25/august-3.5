@@ -83,6 +83,18 @@ describe('buildProposedTradeAnalysis', () => {
         expect(a.takeProfit.map(t => t.price)).toEqual(['3200']);
         expect(a.rrRatio).toBe(2); // (3200-3000)/(3000-2900)
     });
+
+    it('stamps a validity window so the plan can expire into ENTRY_NOT_HIT (E-38)', () => {
+        // A wide stop reads as swing: the detector's own 330-minute window.
+        const swing = buildProposedTradeAnalysis({ symbol: 'ETHUSDT', direction: 'Long', entry: 3000, stopLoss: 2900, takeProfits: [3200] });
+        expect(swing.tradeType).toBe('swing');
+        expect(swing.validityDurationMinutes).toBe(330);
+
+        // A sub-1 % stop reads as scalp: 20 minutes, not a day.
+        const scalp = buildProposedTradeAnalysis({ symbol: 'BTCUSDT', direction: 'Long', entry: 100, stopLoss: 99.5, takeProfits: [101] });
+        expect(scalp.tradeType).toBe('scalp');
+        expect(scalp.validityDurationMinutes).toBe(20);
+    });
 });
 
 describe('buildProposedTradeMessage', () => {

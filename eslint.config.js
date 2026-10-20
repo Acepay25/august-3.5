@@ -108,7 +108,7 @@ export default tseslint.config(
     rules: {
       // Relax rules that would produce too many errors initially.
       //
-      // WARNING RATCHET: `npm run lint` runs with --max-warnings 889 in
+      // WARNING RATCHET: `npm run lint` runs with --max-warnings 659 in
       // package.json. The number must EQUAL the warning count on a clean main,
       // because the cap is only a ratchet if it actually binds.
       //
@@ -121,12 +121,20 @@ export default tseslint.config(
       //
       // 949 -> 889: the first cleanup the corrected ratchet made safe. It
       // removed 58 unused imports from App.tsx, whose real dependency surface
-      // was 58 names wider than anything in the file actually used. 28 unused
-      // LOCAL declarations remain there and are deliberately NOT swept in: each
-      // is a whole `useMemo`/`useCallback`/`useState` statement whose
-      // initialiser has to be read before deciding whether removing it removes
-      // a computation or a subscription. Pay those down as their files are
-      // touched, not in a bulk pass.
+      // was 58 names wider than anything in the file actually used.
+      //
+      // 889 -> 659: the cap had drifted loose again — it stood at 889 against a
+      // 659-warning tree, so 230 warnings could be added and CI would still
+      // pass. Re-measured with `npm run lint:loose` and re-tightened to the
+      // exact count (2026-10-20).
+      //
+      // App.tsx carries 17 `no-unused-vars` warnings in all: 10 unused LOCAL
+      // declarations, plus 7 unused import bindings spread across 5 import
+      // statements. The 10 locals are deliberately NOT swept in: each is a
+      // hook binding or a destructured return value whose initialiser has to
+      // be read before deciding whether removing it removes a computation or
+      // a subscription. Pay those down as their files are touched, not in a
+      // bulk pass.
       //
       // Re-measure on a clean checkout after touching this file, and LOWER the
       // number when you pay warnings down; never raise it to go green.

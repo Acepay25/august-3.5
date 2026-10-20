@@ -12,11 +12,12 @@ import {Box, Check, Eye, EyeOff, LoadingIcon, Pencil, RefreshCw, Trash2, X, Zap}
 import { ProviderConfig, ApiFormat, API_FORMAT_LABELS } from '../../types/provider';
 import { GOOGLE_GEMINI_DEFAULT_BASE } from '../../utils/googleGeminiFormat';
 import { testConnection } from '../../services/providers/GenericProviderService';
-import { discoverProviderModels } from '../../services/infrastructure/ProviderConfigService';
+import { discoverProviderModelCatalog, discoverProviderModels } from '../../services/infrastructure/ProviderConfigService';
 import { resetProviderHealth, getProviderHealth, providerCooldownRemainingMs } from '../../services/infrastructure/ProviderHealthService';
 import { probeAndLearn } from '../../services/learning/harnessLessons';
 import { validateProviderUrl } from '../../utils/providerUrlValidation';
-import { findProviderById, mergeDiscoveredModels, sortModelsFreeFirst } from '../../utils/providerUtils';
+import { findProviderById, mergeDiscoveredModels, mergeModelContextWindows, sameModelContextWindows, sortModelsFreeFirst } from '../../utils/providerUtils';
+import { resolveContextWindow } from '../../utils/contextWindow';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { SelectMenu } from '../shared/SelectMenu';
 import { useToastActions } from '../shared/Toast';
@@ -421,20 +422,29 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
         if (!selected) return;
         setIsDiscovering(true);
         try {
-            const discovered = await discoverProviderModels({
+            const catalog = await discoverProviderModelCatalog({
                 baseUrl: draftUrl || selected.baseUrl,
                 apiKey: draftKey || selected.apiKey,
                 apiFormat: draftFormat || selected.apiFormat,
             });
+            const discovered = catalog.ids;
             const freshModels = sortModelsFreeFirst(discovered);
             const isUnchanged = selected.models.length === freshModels.length && selected.models.every((m, idx) => m === freshModels[idx]);
-            if (isUnchanged) {
+            // Even when the id list is identical, the reported context windows
+            // may be new — and they are what `utils/contextWindow` compaction
+            // holds the outbound history to.
+            const nextWindows = mergeModelContextWindows(selected.modelContextWindows, catalog.windows);
+            const windowsChanged = !sameModelContextWindows(selected.modelContextWindows, nextWindows);
+            if (isUnchanged && !windowsChanged) {
                 toast.success('Models up to date', 'All models from this provider are already up to date.');
             } else {
-                const updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>> = { models: freshModels };
+                const updates: Partial<Omit<ProviderConfig, 'id' | 'isBuiltIn'>> = isUnchanged
+                    ? {}
+                    : { models: freshModels };
                 if (selected.selectedModel && !freshModels.includes(selected.selectedModel)) {
                     updates.selectedModel = freshModels[0] || '';
                 }
+                if (windowsChanged) updates.modelContextWindows = nextWindows;
                 await onUpdateProvider(selected.id, updates);
                 const added = freshModels.filter(m => !selected.models.includes(m)).length;
                 const removed = selected.models.filter(m => !freshModels.includes(m)).length;
@@ -509,16 +519,23 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
         catalogInFlight.current.add(cfg.id);
         if (!silent) setCatalogStatus(`Updating ${cfg.name}…`);
         try {
-            const discovered = await discoverProviderModels({
+            const catalog = await discoverProviderModelCatalog({
                 baseUrl: cfg.baseUrl,
                 apiKey: cfg.apiKey,
                 apiFormat: cfg.apiFormat,
             });
+            const discovered = catalog.ids;
             const freshModels = sortModelsFreeFirst(discovered);
             const selectedModel = freshModels.includes(cfg.selectedModel) ? cfg.selectedModel : (freshModels[0] || cfg.selectedModel);
             catalogRefreshed.current[cfg.id] = Date.now();
-            if (freshModels.join('\0') !== cfg.models.join('\0') || selectedModel !== cfg.selectedModel) {
-                await onUpdateProvider(cfg.id, { models: freshModels, selectedModel });
+            const nextWindows = mergeModelContextWindows(cfg.modelContextWindows, catalog.windows);
+            const windowsChanged = !sameModelContextWindows(cfg.modelContextWindows, nextWindows);
+            if (freshModels.join('\0') !== cfg.models.join('\0') || selectedModel !== cfg.selectedModel || windowsChanged) {
+                await onUpdateProvider(cfg.id, {
+                    models: freshModels,
+                    selectedModel,
+                    ...(windowsChanged ? { modelContextWindows: nextWindows } : {}),
+                });
             }
             if (!silent) setCatalogStatus(`Updated ${cfg.name} · ${freshModels.length} models`);
         } catch {
@@ -875,8 +892,32 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                     <details className="text-ui-dense text-zinc-500">
                         <summary className="cursor-pointer">Context window (optional)</summary>
                         <p className="mt-1 text-ui-sm text-zinc-500">
-                            Model context window in tokens. Retrieved-memory budgets scale with it; leave empty for the 65,536 default.
+                            Model context window in tokens. It scales retrieved-memory budgets and it is the
+                            ceiling a long turn is compacted to. Leave empty to use what this model reported
+                            at discovery, or the 1,000,000 default when it reported nothing.
                         </p>
+                        {(() => {
+                            // What the app will ACTUALLY hold this provider to,
+                            // and which evidence decided it. A number the trader
+                            // did not type must not look like one they did.
+                            const resolved = resolveContextWindow({
+                                ...selected,
+                                contextWindowTokens: draftCtxWindow.trim() && Number.isFinite(Number(draftCtxWindow))
+                                    ? Number(draftCtxWindow)
+                                    : selected.contextWindowTokens,
+                            });
+                            const reported = selected.modelContextWindows?.[selected.selectedModel];
+                            return (
+                                <p className="mt-1 text-ui-sm text-zinc-500" data-testid="provider-context-window-resolved">
+                                    In use now: {resolved.tokens.toLocaleString()} tokens ({resolved.label}).
+                                    {reported && resolved.source !== 'user'
+                                        ? ` This model reported ${reported.toLocaleString()} at discovery.`
+                                        : reported && resolved.source === 'user'
+                                            ? ` Your entry overrides the ${reported.toLocaleString()} it reported.`
+                                            : ' This model has never reported one.'}
+                                </p>
+                            );
+                        })()}
                         <input type="number" min="1" step="1" value={draftCtxWindow} onChange={(e) => setDraftCtxWindow(e.target.value)} placeholder="e.g. 131072" className={`${inputBase} mt-2`} />
                     </details>
                 </div>

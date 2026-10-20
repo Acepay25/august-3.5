@@ -24,7 +24,7 @@
     "probe:chip": "node scripts/chip-shot.cjs",
     "probe:census": "node scripts/surface-census.cjs",
     "probe:surfaces": "node scripts/surface-shots.cjs",
-    "lint": "eslint . --max-warnings 889",
+    "lint": "eslint . --max-warnings 659",
     "lint:loose": "eslint .",
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
@@ -39,7 +39,8 @@
     "check-flow-doc-anchors": "node scripts/check-flow-doc-anchors.cjs",
     "skill-approval-probe": "node scripts/probe-skill-approval.cjs",
     "installer-smoke": "node scripts/installer-smoke.cjs",
-    "verify:signature": "node scripts/verify-release-signature.cjs"
+    "verify:signature": "node scripts/verify-release-signature.cjs",
+    "replay:plans": "node scripts/replay-plans.cjs"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^7.0.3",

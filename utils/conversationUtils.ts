@@ -1,9 +1,13 @@
 import { Conversation, MessageRole } from '../types';
+import { getHarnessSettings } from './harnessSettings';
 
-/** App-wide default futures leverage. Single source of truth — the value was
- *  inlined as `100` at ~10 sites; one divergence silently skews every
- *  dashboard metric (PnL %, R:R, backtest math). */
-export const DEFAULT_LEVERAGE = 100;
+/** The leverage a row was recorded under before the default became a setting.
+ *  Only historical fallbacks may use it: stamping it on a NEW ticket would
+ *  re-introduce the 100× default this change removes. */
+export const LEGACY_LEVERAGE = 100;
+
+/** The trader's leverage for a NEW session or ticket. */
+export const defaultLeverage = (): number => getHarnessSettings().defaultLeverage;
 
 export const createNewConversation = (): Conversation => {
   return {
@@ -15,7 +19,7 @@ export const createNewConversation = (): Conversation => {
     ocrModel: '',               // Set once a vision provider is configured
     moderatorProviderId: '',     // Set once providers are configured (defaults to first ready provider)
     moderatorModel: '',
-    leverage: DEFAULT_LEVERAGE, // Match the app-wide default (useTradeLogging / schema / UI)
+    leverage: defaultLeverage(), // The trader's setting, not an app-wide 100×
   };
 };
 

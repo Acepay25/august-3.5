@@ -3,6 +3,8 @@ import { Conversation, Message, TradeOutcome } from '../types';
 import { OutcomeAutopilotService, AutopilotResolution } from '../services/ui/OutcomeAutopilotService';
 import { appendWatchEpisode } from '../utils/watchList';
 import { autoJournalPolicyFor } from '../utils/approvalInbox';
+import { settlementActionFor, SETTLEMENT_UNDO_MS } from '../utils/outcomeSettlement';
+import { getHarnessSettings } from '../utils/harnessSettings';
 import { describeWatchTick } from '../utils/watchTicks';
 import { ticketExpiryLine } from '../utils/paperPnl';
 
@@ -36,13 +38,26 @@ export const useWatchSideEffects = ({
             const watched = messagesRef.current.find(m => m.id === messageId)?.watched;
             const coin = messagesRef.current.find(m => m.id === messageId)?.analysis?.coinName;
             const policy = autoJournalPolicyFor(coin, activeUsername || undefined);
-            if (watched && policy === 'deny') return;
-            if (watched && policy === 'always') {
-                confirmAutopilot.current(messageId);
+            const action = settlementActionFor({
+                watched: !!watched,
+                policy,
+                settlement: getHarnessSettings().outcomeSettlement,
+                expiredOpen: resolution.expiredOpen,
+            });
+            if (action === 'ignore') return;
+            if (action === 'notify-only') {
+                toast.success('Autopilot: outcome detected', resolution.detail);
                 return;
             }
-            if (!watched || resolution.expiredOpen) {
-                toast.success('Autopilot: outcome detected', resolution.detail);
+            if (action === 'shadow') {
+                // The shadow month: resolve and show, never record. The
+                // disagreement between this banner and what the trader would
+                // confirm is the evidence that decides whether automatic is safe.
+                toast.success('Shadow: outcome detected (not recorded)', `${resolution.detail} — settlement is in shadow mode.`);
+                return;
+            }
+            if (action === 'log-now') {
+                confirmAutopilot.current(messageId);
                 return;
             }
             const existing = pendingTimers.current.get(messageId);
@@ -50,7 +65,7 @@ export const useWatchSideEffects = ({
             const timer = window.setTimeout(() => {
                 pendingTimers.current.delete(messageId);
                 confirmAutopilot.current(messageId);
-            }, 15_000);
+            }, SETTLEMENT_UNDO_MS);
             pendingTimers.current.set(messageId, timer);
             toast.success('Logging in 15s', 'Undo to keep this setup open.', {
                 label: 'Undo',

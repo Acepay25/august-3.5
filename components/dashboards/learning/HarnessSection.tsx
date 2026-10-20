@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { LoggedTrade, TradeOutcome } from '../../../types';
 import { computeEvidenceQualityStats } from '../../../utils/analysisQuality';
 import { summarizeSimilarSetups, COLD_START_MIN } from '../../../services/learning/SetupMemoryService';
+import { decidedAtOf } from '../../../utils/journalAnalytics';
 import { REGIMES } from './shared';
 
 interface HarnessSectionProps {
@@ -66,7 +67,7 @@ export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, 
 
     // Drawdown — explicitly split: current (open) vs historical max.
     const drawdown = useMemo(() => {
-        const ordered = [...closedWindowed].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        const ordered = [...closedWindowed].sort((a, b) => new Date(decidedAtOf(a)).getTime() - new Date(decidedAtOf(b)).getTime());
         let equity = 0, peak = 0, open = 0, max = 0;
         for (const t of ordered) {
             equity += typeof t.pnlPercent === 'number' ? t.pnlPercent : (t.outcome === TradeOutcome.WIN ? 2 : -1);
@@ -98,7 +99,7 @@ export const HarnessSection: React.FC<HarnessSectionProps> = ({ closedWindowed, 
         }
         for (const [key, c] of byKey) {
             if (c.total < 3) continue;
-            const last20 = c.recent.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()).slice(-20);
+            const last20 = c.recent.sort((a, b) => new Date(decidedAtOf(a)).getTime() - new Date(decidedAtOf(b)).getTime()).slice(-20);
             const last20Wins = last20.filter(t => t.outcome === TradeOutcome.WIN).length;
             rows.push({
                 key,

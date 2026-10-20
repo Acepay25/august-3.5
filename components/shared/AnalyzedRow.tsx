@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Brain } from './Icons';
+import { subscribeSharedTicker } from '../../hooks/useSharedTicker';
 
 export interface AnalyzedRowProps {
     /** The turn is still working (streaming, no answer text yet) — the
@@ -48,18 +49,19 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
         wasRunningRef.current = running;
     }, [running]);
 
+    // The live clock. This row used to run its OWN setInterval, so a
+    // 200-message conversation held up to 400 live timers — one per row —
+    // each re-rendering its own row. It now subscribes to the ONE shared
+    // ticker (hooks/useSharedTicker.ts); the per-row API is unchanged.
     useEffect(() => {
         if (!running) {
             setLiveSeconds(null);
             return;
         }
         const start = startedAtRef.current ?? Date.now();
-        setLiveSeconds(Math.max(0, Math.round((Date.now() - start) / 1000)));
-        const id = window.setInterval(
-            () => setLiveSeconds(Math.max(0, Math.round((Date.now() - start) / 1000))),
-            1000,
-        );
-        return () => window.clearInterval(id);
+        const elapsed = (): number => Math.max(0, Math.round((Date.now() - start) / 1000));
+        setLiveSeconds(elapsed());
+        return subscribeSharedTicker(() => setLiveSeconds(elapsed()));
     }, [running]);
 
     // Precedence is deliberate: a LIVE tick outranks everything, then the clock

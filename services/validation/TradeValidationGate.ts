@@ -586,7 +586,14 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
     // regex result 945004 (~100× inflation corrupts R:R and ATR-distance math).
     const entryPrice = parsePrice(analysis.entryPoints[0]?.price || '') || 0;
     const stopLoss = parsePrice(analysis.stopLoss || '') || 0;
-    const takeProfit1 = parsePrice(analysis.takeProfit[0]?.price || '') || 0;
+    // ALL the plan's targets, not just the first one. The ratio is measured
+    // against the take-profit NEAREST the entry (the canonical rule), so
+    // handing the gate only `takeProfit[0]` graded a model that listed its
+    // targets farthest-first against the farthest one — a different number
+    // from the one the card and the journal showed (audit finding F-11).
+    const takeProfits = (analysis.takeProfit ?? [])
+        .map(tp => parsePrice(tp.price || '') || 0)
+        .filter(tp => tp > 0);
     const atr = hybridData.indicators?.['1h']?.atr ?? 0;
 
     // Determine trade type from strategy
@@ -630,7 +637,7 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
     }
 
     // 3.2 Risk/Reward Validation
-    if (entryPrice > 0 && stopLoss > 0 && takeProfit1 > 0 && atr > 0) {
+    if (entryPrice > 0 && stopLoss > 0 && takeProfits.length > 0 && atr > 0) {
         // Pass the direction. Without it this took the legacy Math.abs path, so
         // a geometrically impossible plan (Long with the stop ABOVE entry)
         // scored 80/100 and "VALIDATION: PASSED" at High confidence, while the
@@ -639,7 +646,12 @@ ${patternMatch.warning ? `\n PATTERN MEMORY:\n${patternMatch.warning}` : ''}
         // hand-edited, legacy and prose-parsed plans — but outcomeEngine
         // already refuses the same plan as INVALID, and two engines
         // disagreeing about one trade is how that disagreement reads as edge.
-        const rrResult = validateRiskReward(entryPrice, stopLoss, takeProfit1, atr, adjustedConfidence, analysisDirection as TradeDirection);
+        //
+        // The whole target ladder goes in, not just its first entry: the ratio
+        // is measured against the take-profit NEAREST the entry, so a model
+        // that lists its targets farthest-first is graded against the same
+        // target the card quotes (audit finding F-11).
+        const rrResult = validateRiskReward(entryPrice, stopLoss, takeProfits, atr, adjustedConfidence, analysisDirection as TradeDirection);
         validationScores.riskReward = rrResult.isValid ? RR_VALIDATION_PASS_SCORE : RR_VALIDATION_FAIL_SCORE;
         warnings.push(...rrResult.warnings);
 

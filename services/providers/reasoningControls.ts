@@ -66,6 +66,14 @@ export const EFFORT_BY_TASK = {
     clarification: 'low',
     /** Casual chat / bot 1:1 replies. */
     chat: 'low',
+    /** Any turn that can call `present_trade` — the Chat surface and the dock.
+     *  This is the one output that moves money; it must not be the cheapest
+     *  tier in the schedule (E-39). A trader's explicit composer pick still
+     *  wins over this default. */
+    tradingDecision: 'high',
+    /** A scheduled run that can present a plan. Nobody is watching it decide,
+     *  so it gets the top tier in the schedule. */
+    automatedTradingDecision: 'max',
     /** Post-mortem reports — structured, but not exploratory. */
     postMortem: 'medium',
     /** The skill supervisor's per-item verdicts — judgment over the
@@ -83,7 +91,10 @@ export type EffortTask = keyof typeof EFFORT_BY_TASK;
  *  further, and 'auto' passes through untouched). */
 export type EffortProfile = 'fast' | 'quality';
 
-const stepEffortDown = (e: ReasoningEffort): ReasoningEffort =>
+/** One tier down the ladder. Exported because a turn that just ran out of
+ *  thinking room needs the same step the Fast/Quality dial uses — a second
+ *  ladder would drift from this one the first time a tier is added. */
+export const stepEffortDown = (e: ReasoningEffort): ReasoningEffort =>
     e === 'max' ? 'high' : e === 'high' ? 'medium' : e === 'medium' ? 'low' : e;
 
 /** The effort a task maps to, with 'auto' passthrough for unknown tasks.
@@ -110,8 +121,8 @@ export const effortForTask = (
  * how one surface starts answering with reasoning and the other without it
  * while showing the same label.
  */
-export const resolveComposerEffort = (effort?: ReasoningEffort): ReasoningEffort =>
-    effort && effort !== 'auto' ? effort : effortForTask('chat');
+export const resolveComposerEffort = (effort?: ReasoningEffort, task: EffortTask = 'chat'): ReasoningEffort =>
+    effort && effort !== 'auto' ? effort : effortForTask(task);
 
 // ─── Capability-class detection ────────────────────────────────────────────
 

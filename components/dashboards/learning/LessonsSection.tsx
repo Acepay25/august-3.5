@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle, ChevronDownIcon } from '../../shared/Icons';
 import { LoggedTrade, TradeOutcome } from '../../../types';
 import type { TopLesson } from '../../../services/learning/MemoryFilesService';
+import { decidedAtOf } from '../../../utils/journalAnalytics';
 import { REGIMES } from './shared';
 
 interface LessonsSectionProps {
@@ -37,7 +38,7 @@ export const LessonsSection: React.FC<LessonsSectionProps> = ({ topLessons, clos
             && (lessonRegimeFilter === 'all' || (t.marketRegime ?? 'unknown') === lessonRegimeFilter)
             && (!lessonPnlThreshold || (typeof t.pnlPercent === 'number' && t.pnlPercent <= -2))
         )
-            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+            .sort((a, b) => new Date(decidedAtOf(a)).getTime() - new Date(decidedAtOf(b)).getTime())
             .slice(-15);
     }), [topLessons, closedWindowed, lessonRegimeFilter, lessonPnlThreshold]);
 
@@ -114,8 +115,8 @@ export const LessonsSection: React.FC<LessonsSectionProps> = ({ topLessons, clos
                                         ) : (
                                             matches.slice(-8).map(t => (
                                                 <div key={t.id} className="flex items-center justify-between rounded-control bg-zinc-900/60 border border-white/5 px-2 py-1 text-ui-xs font-mono tabular-nums">
-                                                    <span className="text-zinc-400 truncate pr-2" title={`${new Date(t.timestamp).toLocaleDateString()} · ${t.analysis?.direction} · ${t.marketRegime ?? '?'}`}>
-                                                        {new Date(t.timestamp).toLocaleDateString()} · {t.analysis?.direction}
+                                                    <span className="text-zinc-400 truncate pr-2" title={`${new Date(decidedAtOf(t)).toLocaleDateString()} · ${t.analysis?.direction} · ${t.marketRegime ?? '?'}`}>
+                                                        {new Date(decidedAtOf(t)).toLocaleDateString()} · {t.analysis?.direction}
                                                         <span className="text-zinc-600"> · {t.marketRegime ?? '?'}</span>
                                                     </span>
                                                     <span className={`shrink-0 font-bold ${t.outcome === TradeOutcome.WIN ? 'text-emerald-400' : 'text-rose-400'}`}>

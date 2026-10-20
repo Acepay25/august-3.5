@@ -3,6 +3,7 @@ import { Brain, Lightbulb } from './Icons';
 import { getActiveUsername } from '../../utils/activeUser';
 import { nextTip } from '../../utils/tradingTips';
 import { stripTraceMarkers, traceLines } from '../../utils/traceText';
+import { subscribeSharedTicker } from '../../hooks/useSharedTicker';
 
 export interface ReasoningRowProps {
     /** Full thinking / chain-of-thought text. */
@@ -80,18 +81,19 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
     }, [running]);
 
     // Tick the visible duration once per second while the trace streams.
+    // This row used to run its OWN setInterval — one per row, so a
+    // 200-message conversation held up to 400 live timers. It now subscribes
+    // to the ONE shared ticker (hooks/useSharedTicker.ts); the per-row API is
+    // unchanged.
     useEffect(() => {
         if (!running) {
             setLiveSeconds(null);
             return;
         }
         const start = startedAtRef.current ?? Date.now();
-        setLiveSeconds(Math.max(0, Math.round((Date.now() - start) / 1000)));
-        const id = window.setInterval(
-            () => setLiveSeconds(Math.max(0, Math.round((Date.now() - start) / 1000))),
-            1000,
-        );
-        return () => window.clearInterval(id);
+        const elapsed = (): number => Math.max(0, Math.round((Date.now() - start) / 1000));
+        setLiveSeconds(elapsed());
+        return subscribeSharedTicker(() => setLiveSeconds(elapsed()));
     }, [running]);
 
     // While expanded and live, follow the bottom of the trace ONLY while the

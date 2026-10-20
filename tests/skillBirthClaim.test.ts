@@ -84,11 +84,11 @@ describe('birth certificate wiring', () => {
     });
 
     it('recordEvalVerdict tests the claim and stamps sample + detail', async () => {
-        // horizon 5 reached (sample 10), bar 0.5+0.10=0.6, winRate 0.5 → UNMET.
-        const id = await seed('unmet', 5, 5, pred(10, 5));
+        // horizon 5 reached (sample 20), bar 0.5+0.10=0.6, winRate 0.5 → UNMET.
+        const id = await seed('unmet', 10, 10, pred(10, 5));
         await recordEvalVerdict(id, helps, USERNAME);
         const meta = readMeta(id);
-        expect(meta.claimTestedEvidence).toBe(10);
+        expect(meta.claimTestedEvidence).toBe(20);
         expect(meta.evalDetail).toContain('claim UNMET');
     });
 
@@ -99,7 +99,7 @@ describe('birth certificate wiring', () => {
     });
 
     it('UNMET claim blocks fresh promotion (helps ×2, sample sufficient)', async () => {
-        const id = await seed('blocked', 5, 5, pred(10, 5)); // winRate .5 < bar .6
+        const id = await seed('blocked', 10, 10, pred(10, 5)); // winRate .5 < bar .6
         await recordEvalVerdict(id, helps, USERNAME);
         await recordEvalVerdict(id, helps, USERNAME);
         const meta = readMeta(id);
@@ -108,14 +108,14 @@ describe('birth certificate wiring', () => {
     });
 
     it('MET claim allows promotion', async () => {
-        const id = await seed('earned', 8, 2, pred(10, 5)); // .8 ≥ .6
+        const id = await seed('earned', 16, 4, pred(10, 5)); // .8 ≥ .6
         await recordEvalVerdict(id, helps, USERNAME);
         await recordEvalVerdict(id, helps, USERNAME);
         expect(readMeta(id).status).toBe('confirmed');
     });
 
     it('skills without a prediction keep the old promotion behavior', async () => {
-        const id = await seed('legacy', 5, 5); // no prediction line
+        const id = await seed('legacy', 10, 10); // no prediction line
         await recordEvalVerdict(id, helps, USERNAME);
         await recordEvalVerdict(id, helps, USERNAME);
         const meta = readMeta(id);

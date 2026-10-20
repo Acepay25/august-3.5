@@ -91,19 +91,25 @@ jobs:
       - name: Startup chunk stays under the ratchet
         run: |
           set -euo pipefail
-          # 2600 kB raw. The last measured entry chunk was ~1956 kB, so this
-          # leaves ~33% headroom — enough that ordinary work does not trip it,
-          # tight enough to catch the eager-import regression class (a single
-          # 363KB chart import was enough to matter).
-          CEILING_KB=2600
+          # 1400 kB raw. Measured 1,377.98 kB on 2026-10-20 after the plan's
+          # lazy-loading pass — the old 2600 kB ceiling let a 363 kB eager
+          # import through unnoticed. Headroom is deliberately small (the
+          # ratchet must bind), so lower this number whenever the build
+          # shrinks by more than 10% (the stale-ceiling check below).
+          CEILING_KB=1400
+          STALE_FLOOR_KB=$(( CEILING_KB * 90 / 100 ))
           entry=$(ls -S dist/assets/index-*.js | head -1)
           if [ -z "$entry" ]; then
             echo "::error::no entry chunk found in dist/assets"
             exit 1
           fi
           size_kb=$(( $(wc -c < "$entry") / 1024 ))
-          echo "entry chunk: $(basename "$entry") = ${size_kb} kB (ceiling ${CEILING_KB} kB)"
+          echo "entry chunk: $(basename "$entry") = ${size_kb} kB (ceiling ${CEILING_KB} kB, stale below ${STALE_FLOOR_KB} kB)"
           if [ "$size_kb" -gt "$CEILING_KB" ]; then
             echo "::error::entry chunk ${size_kb} kB exceeds the ${CEILING_KB} kB ratchet — an eager import crept into the startup graph. Use React.lazy() or manualChunks."
+            exit 1
+          fi
+          if [ "$size_kb" -lt "$STALE_FLOOR_KB" ]; then
+            echo "::error::the build is ${size_kb} kB, more than 10% below the ${CEILING_KB} kB ceiling — lower CEILING_KB in guards.yml so the ratchet keeps binding."
             exit 1
           fi

@@ -14,6 +14,11 @@ vi.mock('../utils/conversationUtils', () => ({
 
 const conv = (id: string, extra: Record<string, unknown> = {}) => ({ id, messages: [], ...extra }) as any;
 
+/** The ids a cancel was asked for, in order. */
+const cancelledIds = (handleCancelAnalysis: (conversationId?: string) => void): string[] =>
+    (handleCancelAnalysis as unknown as { mock: { calls: unknown[][] } })
+        .mock.calls.map(c => c[0] as string);
+
 const createArgs = (overrides: Partial<UseConversationHousekeepingArgs> = {}): UseConversationHousekeepingArgs => ({
     conversationHistory: [conv('c1'), conv('c2')],
     setConversationHistory: vi.fn(),
@@ -42,7 +47,9 @@ describe('useConversationHousekeeping', () => {
 
         expect(setConversationHistory).toHaveBeenCalledWith([conv('c2')]);
         expect(setActiveConversationId).toHaveBeenCalledWith('c2');
-        expect(args.handleCancelAnalysis).toHaveBeenCalled();
+        // The DELETED conversation's run stops — and only that one. A run in
+        // another thread is none of this delete's business.
+        expect(cancelledIds(args.handleCancelAnalysis)).toEqual(['c1']);
     });
 
     it('deleting the last session mints a fresh blank one instead of reusing', () => {
@@ -70,10 +77,19 @@ describe('useConversationHousekeeping', () => {
         act(() => result.current.handleDeleteConversations(['c2']));
 
         expect(args.setActiveConversationId).not.toHaveBeenCalled();
-        expect(args.handleCancelAnalysis).not.toHaveBeenCalled();
+        // The deleted thread's run stops even though it was not the active one.
+        expect(cancelledIds(args.handleCancelAnalysis)).toEqual(['c2']);
     });
 
-    it('loadConversation only switches (and cancels) when the id differs', () => {
+    it('loading a conversation does NOT cancel the run — the run survives the switch', () => {
+        // THE CONTRACT E-45 CHANGED, DELIBERATELY.
+        //
+        // This used to assert that `handleCancelAnalysis` WAS called on a
+        // conversation load. That assertion pinned the defect: the pipeline
+        // binds every async write to the conversation the request started in
+        // (`updateRequestMessages`), so the run was DESIGNED to land its answer
+        // in the thread it was typed in — and the cancel killed it before that
+        // could happen. A switch is a VIEW change now.
         const args = createArgs();
         const { result, rerender } = renderHook(({ a }: { a: UseConversationHousekeepingArgs }) => useConversationHousekeeping(a), {
             initialProps: { a: args },
@@ -85,7 +101,32 @@ describe('useConversationHousekeeping', () => {
         rerender({ a: { ...args, activeConversationId: 'c2' } });
         act(() => result.current.handleLoadConversation('c1'));
         expect(args.setActiveConversationId).toHaveBeenCalledWith('c1');
-        expect(args.handleCancelAnalysis).toHaveBeenCalled();
+        // The run keeps going. The thread it belongs to says so while you are
+        // away (the surface's busy badge), and the answer lands there.
+        expect(args.handleCancelAnalysis).not.toHaveBeenCalled();
+    });
+
+    it('a new conversation does not cancel the run either', () => {
+        // Same reasoning as the load: opening another thread moves the view.
+        const args = createArgs();
+        const { result } = renderHook(() => useConversationHousekeeping(args));
+
+        act(() => result.current.handleNewConversation());
+
+        expect(args.handleCancelAnalysis).not.toHaveBeenCalled();
+    });
+
+    it('clearing the whole history stops every conversation\'s run', async () => {
+        // "Clear all" takes every thread with it, so every thread's run stops —
+        // each one NAMED, because a run in a thread the trader is not looking
+        // at is not covered by a cancel of the active one.
+        const args = createArgs();
+        const { result } = renderHook(() => useConversationHousekeeping(args));
+
+        // The clear sits behind a confirmation, so it settles on a later tick.
+        await act(async () => { await result.current.handleClearAllConversations(); });
+
+        expect(cancelledIds(args.handleCancelAnalysis)).toEqual(['c1', 'c2']);
     });
 
     it('selected-delete confirmations gate the deletion', async () => {

@@ -35,7 +35,7 @@ import { MessageRole } from '../../types';
 import { CASUAL_CHAT_SYSTEM_PROMPT, CHAT_SURFACE_SYSTEM_PROMPT } from '../../constants/prompts/chatPrompts';
 import { TASK_BUDGETS } from '../providers/taskBudgets';
 import { resolveComposerEffort, type ReasoningEffort } from '../providers/reasoningControls';
-import { buildSkillsIndexForPrompt } from './tradeChatContext';
+import { buildSkillsIndexForPrompt, rankSkillIndexRows } from './tradeChatContext';
 import { listSkills } from '../learning/SkillMemoryService';
 import { activeStrategiesBlock } from '../learning/strategyStore';
 import { buildProfileMemoryIndex } from '../learning/profileMemory';
@@ -45,6 +45,7 @@ import { userContentWithImage } from './chatTurnRunner';
 import { saveToolPayload } from './toolPayloadStore';
 import { appendToolActions } from '../../utils/toolActions';
 import { recordToolTurnUsage } from '../../utils/sessionUsage';
+import { truncationNotice, withTruncationWindow } from '../../utils/finishReason';
 
 /** The desk tools a Chat-surface seat may call. Everything here answers from
  *  the exchange, the journal, the notebook or the web — none of it needs the
@@ -71,6 +72,9 @@ export const CHAT_SURFACE_TOOLS = [
     // shared executor draws nothing and arms no watch for this sink — and says
     // so in the receipt rather than promising a [HARNESS SIGNAL] that cannot come.
     'present_trade',
+    // A skip is a decision; the Chat surface must be able to leave the HOLD
+    // record it was told to consider.
+    'decline_trade',
     // Anything that can be clipped must be able to be re-read.
     'read_tool_output',
 ];
@@ -113,8 +117,22 @@ export const surfacePromptWith = (mandate: string, where: string): ChatSurfacePr
             description: meta.description,
             ifCondition: meta.ifCondition,
             thenAction: meta.thenAction,
+            // The facts the index's own gate needs, so a rule the harness would
+            // never hand a seat (retired, dormant, trader-disabled,
+            // human-invoked-only, or scoped to the other kind of seat) cannot
+            // occupy one of the 30 slots a good skill needs. These mirror
+            // `SkillMeta` — the retrieval filters on the same fields.
+            audience: meta.audience,
+            manualOnly: meta.manualOnly,
+            suspended: Boolean(meta.suspendedAt),
+            disabled: Boolean(meta.disabledByUser),
+            lastEvidenceAt: meta.lastEvidenceAt,
         }));
-        skills = rows.slice(0, SKILL_INDEX_WINDOW).map(r => r.slug);
+        // The SAME ranked list the prompt carries, so the row's `injectedSkills`
+        // names exactly the skills the model was shown. Ranking it twice (here
+        // and inside the builder) is idempotent — the sort is stable.
+        const ranked = rankSkillIndexRows(rows);
+        skills = ranked.slice(0, SKILL_INDEX_WINDOW).map(r => r.slug);
         skillsBlock = buildSkillsIndexForPrompt(rows, SKILL_INDEX_WINDOW, where);
     } catch {
         skills = [];
@@ -267,7 +285,7 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
         allowedTools: CHAT_SURFACE_TOOLS,
         maxTokens: TASK_BUDGETS.chat,
         temperature: 0.4,
-        reasoningEffort: resolveComposerEffort(req.effort),
+        reasoningEffort: resolveComposerEffort(req.effort, 'tradingDecision'),
         chartInterval: req.interval,
         trades: req.trades,
         // The desk CAN present a plan here, and this is the only chart-action
@@ -326,15 +344,21 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
         // satisfy a request to check the tape.
         addToolCall: name => { if (!isPresentationOnlyTool(name)) sawMarketTool = true; },
     };
-    const out = await runToolTurn({
+    // The truncation tally is per-RUN, and this is the run. Without a window
+    // open, `recordFinishReason` counts nothing and a provider that stopped
+    // at the token ceiling is indistinguishable from one that finished — a
+    // truncated body is a SUCCESS-shaped response, so nothing else in the
+    // transport reports it. Bracket the turn so the notice below is a
+    // measured fact, not a guess from a missing sentence.
+    const { value: out, summary } = await withTruncationWindow(async () => await runToolTurn({
         config: req.config,
         messages: chatSurfaceTurnMessages(req.history, req.prompt, req.image, req.config.selectedModel, systemText),
         signal: req.signal,
         startedAt: req.startedAt,
-        effort: resolveComposerEffort(req.effort),
+        effort: resolveComposerEffort(req.effort, 'tradingDecision'),
         transport,
         events: tracked,
-    });
+    }));
     recordToolTurnUsage({
         startedAt: req.startedAt,
         workedMs: out.workedMs,
@@ -347,6 +371,17 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
             outputUsdPer1k: req.config.outputUsdPer1k,
         },
     });
+    // A cut-off answer is said out loud, on the row it belongs to, BEFORE the
+    // "nothing looked up" notice: that notice is about the TOOLS, this one is
+    // about the ANSWER being incomplete, and a trader reading the row must not
+    // mistake a truncated analysis for a complete one.
+    const cutOff = truncationNotice(summary);
+    if (cutOff) {
+        return {
+            ...out,
+            notice: out.notice ? `${cutOff} ${out.notice}` : cutOff,
+        };
+    }
     if (req.requireTools && !sawMarketTool && !out.interrupted) {
         // The honest notice, on the row it belongs to: an answer that looked up
         // nothing must not read like one that looked something up. A stopped

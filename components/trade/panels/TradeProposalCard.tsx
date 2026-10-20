@@ -12,8 +12,11 @@
 import React from 'react';
 import { CheckCircle } from '../../shared/Icons';
 import type { TradeProposal } from '../../../services/trade/proposedTrade';
-import { computeRrRatio, buildProposedTradeAnalysis } from '../../../services/trade/proposedTrade';
+import { computeRrRatio, buildTradePlan, modelStatedSize, proposedTicketSize } from '../../../services/trade/proposedTrade';
 import { fmtRiskReward } from '../../../utils/riskReward';
+import { getHarnessSettings } from '../../../utils/harnessSettings';
+import { defaultLeverage } from '../../../utils/conversationUtils';
+import { computeLiquidationBuffer } from '../../../utils/ticketSize';
 
 export interface TradeProposalCardProps {
     proposal: TradeProposal;
@@ -24,16 +27,34 @@ export interface TradeProposalCardProps {
      *  labelled for what it is waiting on, so a slow scan never reads as a dead
      *  button — the failure mode this whole surface was built to avoid. */
     awaitingLog?: boolean;
+    /** The leverage the suggested size is computed against. Defaults to the
+     *  app-wide default; a host that knows the conversation's leverage should
+     *  pass it, because the exchange's notional ceiling depends on it. */
+    leverage?: number;
     onLog: () => void;
     onCancel: () => void;
 }
 
-const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog, awaitingLog = false, onLog, onCancel }) => {
+const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog, awaitingLog = false, leverage, onLog, onCancel }) => {
     // The card shows levels the moment the model names them, but the probability,
-    // the confidence tier and any grade come ONLY from the stamped analysis —
-    // the same builder that writes the journal row, so the card can never quote a
+    // the confidence tier and any grade come ONLY from the one plan object —
+    // the same builder the journal row runs, so the card can never quote a
     // number the row disagrees with.
-    const stamped = proposal.gate ? buildProposedTradeAnalysis(proposal) : null;
+    const plan = proposal.gate ? buildTradePlan(proposal) : null;
+    // The SUGGESTED size — the trader's own equity and risk % against this
+    // plan's stop distance. It is shown only once the gate has answered, so
+    // the number never changes under the trader while the scan runs.
+    const lev = leverage ?? defaultLeverage();
+    const liquidated = computeLiquidationBuffer(String(proposal.entry), String(proposal.stopLoss), lev);
+    const settings = getHarnessSettings();
+    const refused = proposal.gate?.refusal;
+    const size = plan && !refused
+        ? proposedTicketSize(proposal, settings.equityUsd, lev, settings.riskPercent)
+        : null;
+    // What the MODEL said about size, kept separate from the suggestion: the
+    // trader's ticket is the app's number, and the model's is a claim to
+    // compare it against.
+    const stated = modelStatedSize(proposal.rationale);
     return (
     <div className="mt-1 rounded-control border border-white/[0.04] bg-white/[0.015] p-2.5" data-testid="trade-proposal-card">
         <div className="flex items-center gap-2">
@@ -46,9 +67,9 @@ const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog,
                     {fmtRiskReward(computeRrRatio(proposal), 1)} R:R
                 </span>
             )}
-            {stamped ? (
+            {plan ? (
                 <span className="ml-auto font-mono text-ui-xs uppercase tracking-wider text-zinc-500" data-testid="proposal-confidence">
-                    {stamped.probability}% · {stamped.confidence} confidence
+                    {plan.probability}% · {plan.confidence} confidence
                 </span>
             ) : (
                 <span className="ml-auto font-mono text-ui-xs uppercase tracking-wider text-zinc-600" data-testid="proposal-gate-pending">
@@ -70,8 +91,61 @@ const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog,
                 <div className="font-semibold text-emerald-400">{proposal.takeProfits.join(' / ')}</div>
             </div>
         </div>
+        {liquidated && (
+            // The risk the levels grid does not show: how far isolated
+            // liquidation sits beyond the stop. At the old 100× default a 1 %
+            // wick was a total loss and nothing on the card said so.
+            <p
+                className={`mt-1.5 font-mono text-ui-2xs ${liquidated.bufferPct <= 0 ? 'text-rose-400' : 'text-zinc-500'}`}
+                data-testid="proposal-liq-buffer"
+            >
+                {liquidated.line}
+            </p>
+        )}
+        {size && (
+            // The SUGGESTED size — the trader's own equity and risk % against
+            // this plan's stop distance, with the exchange's notional ceiling
+            // applied. It is the app's number, not the model's, and it can
+            // only ever be SMALLER than a full ticket: the sizing rule
+            // downgrades, it never scales up.
+            <div className="mt-2 rounded-control border border-white/[0.04] bg-white/[0.02] p-2" data-testid="proposal-size">
+                <div className="font-mono text-ui-xs uppercase text-zinc-500">Suggested size</div>
+                <div className={`font-mono text-ui-dense ${size.equityUsd > 0 ? 'text-zinc-200' : 'text-amber-400/90'}`}>
+                    {size.equityUsd > 0 ? size.line : 'Not sized — equity not set'}
+                </div>
+                {size.equityUsd > 0 && (
+                    <div className="font-mono text-ui-2xs text-zinc-500">
+                        {size.riskPercent}% of ${Math.round(size.equityUsd)} · {lev}x notional cap
+                    </div>
+                )}
+                {size.equityUsd > 0 && size.reason !== 'Uncapped' && (
+                    <div className="font-mono text-ui-2xs text-amber-400/90">{size.reason}</div>
+                )}
+                {size.equityUsd <= 0 && (
+                    <div className="font-mono text-ui-2xs text-zinc-500">
+                        Set your account equity in Settings → Risk to size this trade.
+                    </div>
+                )}
+            </div>
+        )}
+        {(stated.riskUsd !== undefined || stated.notionalUsd !== undefined) && (
+            // What the MODEL said, kept apart from the suggestion above: the
+            // trader can see the two side by side, and the model's claim never
+            // changes the ticket.
+            <p className="mt-1.5 font-mono text-ui-2xs text-zinc-500" data-testid="proposal-model-size">
+                Model stated:{' '}
+                {stated.riskUsd !== undefined && `$${Math.round(stated.riskUsd)} risk`}
+                {stated.riskUsd !== undefined && stated.notionalUsd !== undefined && ' · '}
+                {stated.notionalUsd !== undefined && `$${Math.round(stated.notionalUsd)} position`}
+            </p>
+        )}
         {proposal.rationale && <p className="mt-1.5 text-ui-dense leading-relaxed text-zinc-400">{proposal.rationale}</p>}
-        {proposal.gate?.status === 'unavailable' && (
+        {proposal.gate?.refusal && (
+            <p className="mt-1.5 rounded-control border border-rose-500/20 bg-rose-500/[0.06] px-2 py-1.5 text-ui-dense text-rose-300" data-testid="proposal-refused">
+                Refused — {proposal.gate.refusal}
+            </p>
+        )}
+        {proposal.gate?.status === 'unavailable' && !refused && (
             // Fail closed: an unmeasurable plan is never quietly logged. The
             // handler asks for an explicit confirm, and the row it writes is
             // stamped `gate:unavailable` — never confidenceCap 0.
@@ -83,9 +157,10 @@ const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog,
             {canLog && (
                 <button type="button"
                     onClick={onLog}
-                    disabled={awaitingLog}
-                    className="rounded-control bg-emerald-600/90 px-2.5 py-1 text-ui-dense font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-progress disabled:bg-zinc-700 disabled:text-zinc-300">
-                    {awaitingLog ? 'Checking the gate…' : 'Log this trade'}
+                    disabled={awaitingLog || !!refused}
+                    title={refused ? 'The plan does not clear your minimum net edge.' : undefined}
+                    className="rounded-control bg-emerald-600/90 px-2.5 py-1 text-ui-dense font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-300">
+                    {refused ? 'Refused by your edge floor' : awaitingLog ? 'Checking the gate…' : 'Log this trade'}
                 </button>
             )}
             <button type="button"
