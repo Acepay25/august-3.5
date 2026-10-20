@@ -117,9 +117,14 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
         >
             <summary className="reasoning-row-summary" aria-label={`${label}${detail} — ${open ? 'collapse' : 'expand'}`}>
                 {running && (
+                    /* Three dots, in the reference's WARM colour: the work is
+                       running, and the app's running hue is the amber one.
+                       Grey said "something is happening"; amber says "the desk
+                       is working right now", which is the one thing the row
+                       exists to say. */
                     <span className="flex shrink-0 items-center gap-0.5" aria-hidden="true">
                         {[0, 1, 2].map(i => (
-                            <span key={i} className="h-1 w-1 animate-pulse rounded-full bg-zinc-500 motion-reduce:animate-none" style={{ animationDelay: `${i * 150}ms` }} />
+                            <span key={i} className="h-1 w-1 animate-pulse rounded-full bg-amber-500/80 motion-reduce:animate-none" style={{ animationDelay: `${i * 150}ms` }} />
                         ))}
                     </span>
                 )}

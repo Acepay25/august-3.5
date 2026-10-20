@@ -25,6 +25,7 @@ import React from 'react';
 import { InterruptedRunNotice } from './InterruptedRunNotice';
 import ChatWorkTimeline, { type ChatWorkView } from '../trade/panels/ChatWorkTimeline';
 import { CopyChip, FadingText, PinChip, RetryChip, SpeakChip, ThinkingTierChip } from './chatChips';
+import AnswerBody from './AnswerBody';
 import KeyLevelsCard from '../trade/KeyLevelsCard';
 import { parseKeyLevels, type ModelKeyLevel } from '../../services/trade/keyLevels';
 import type { TradeAnalysis } from '../../types';
@@ -128,11 +129,21 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
             data-testid={isUser ? 'agent-message' : 'agent-message'}
             className={`group/msg flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
         >
-            <span className="mb-0.5 font-mono text-ui-2xs uppercase tracking-wider text-zinc-600">
-                {/* A failed row has no speaker: nothing said it. The error
-                    block below carries its own label, and the time stays. */}
-                {row.error ? null : (row.speaker ?? (isUser ? 'you' : 'desk'))}
-                {row.timeLabel ? <> {row.error ? '' : '· '}{row.timeLabel}</> : null}
+            {/* WHO said it, quietly. The reference stamps nothing above a
+                message — the turn is identified by the turn. August has to
+                name the seat (the desk, a bot, the trader), so it keeps a
+                label, but it stops SHOUTING it: the uppercase monospace stamp
+                on every row read like a log line in a conversation. The time
+                moved to the action row under the answer, where the reference
+                puts it — it was printed twice, once in the stamp and once in
+                the row's own chips. */}
+            <span className="mb-1 flex items-center gap-1.5 text-ui-2xs text-zinc-500">
+                {row.error ? null : (
+                    <>
+                        <span className="h-1 w-1 shrink-0 rounded-full bg-zinc-600" aria-hidden="true" />
+                        {row.speaker ?? (isUser ? 'you' : 'desk')}
+                    </>
+                )}
             </span>
 
             {isUser && row.images && row.images.length > 0 && (
@@ -149,7 +160,8 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                    column, so a long question wraps instead of running edge to
                    edge. At 85% the bubble read as a full-width band and the
                    right-hand alignment — the thing that says "this is mine" —
-                   disappeared. */
+                   disappeared. The trader's own words are INTERFACE, not prose:
+                   they stay in the UI sans. */
                 <div className="max-w-[62%] rounded-bubble bg-zinc-800 px-3 py-2 text-ui-base leading-relaxed text-zinc-100">
                     <FadingText text={body} streaming={!!row.streaming} />
                 </div>
@@ -171,7 +183,7 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                 <div className="w-full max-w-full text-zinc-200 text-ui-base leading-relaxed">
                     <ChatWorkTimeline entry={work} />
                     {body.trim()
-                        ? <FadingText text={body} streaming={!!row.streaming} />
+                        ? <AnswerBody text={body} streaming={!!row.streaming} />
                         : <span className="text-zinc-500">{row.analysis ? 'Analysis' : '…'}</span>}
                     {children}
                 </div>
