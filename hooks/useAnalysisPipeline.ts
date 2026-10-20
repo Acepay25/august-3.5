@@ -1580,7 +1580,13 @@ ${enhancedPrompt}`;
             // retryOf lets the error bubble rebuild the exact prompt + charts
             // (the send cleared the composer immediately, so a failure left
             // the user with no way to re-run the same setup).
-            updateRequestMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: safeMessage, retryOf: { userMessageId: userMessage.id }, modelsUsed: casualErrorAttribution }]);
+            //
+            // The message carries the REAL reason in the ERROR field, and the
+            // text keeps the same words for the machine readers (the export,
+            // the retry that rebuilds the prompt). The row renders the error,
+            // not the text: a failed turn written as an answer reads as
+            // though the seat had said the app's own error hint.
+            updateRequestMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: safeMessage, error: safeMessage, retryOf: { userMessageId: userMessage.id }, modelsUsed: casualErrorAttribution }]);
 
             // Automation runs surface failures through their own callback
             // (the error bubble above lands in the private list).

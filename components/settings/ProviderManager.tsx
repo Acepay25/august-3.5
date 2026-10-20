@@ -918,7 +918,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                 </p>
                             );
                         })()}
-                        <input type="number" min="1" step="1" value={draftCtxWindow} onChange={(e) => setDraftCtxWindow(e.target.value)} placeholder="e.g. 131072" className={`${inputBase} mt-2`} />
+                        <input type="number" min="1" step="1" value={draftCtxWindow} onChange={(e) => setDraftCtxWindow(e.target.value)} placeholder="1,000,000" className={`${inputBase} mt-2`} />
                     </details>
                 </div>
             )}

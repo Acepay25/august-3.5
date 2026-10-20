@@ -1145,6 +1145,33 @@ function sanitizeProviderText(text: string): string {
         .slice(0, 300);
 }
 
+/**
+ * The CAUSE chain, flattened to the parts a human needs.
+ *
+ * Node's fetch hides the actual reason one level down: the top-level message
+ * is "fetch failed", and the real answer — "getaddrinfo ENOTFOUND
+ * api.example.com", "ECONNREFUSED 127.0.0.1:1", "certificate has expired" —
+ * sits in `cause`. A hint built from the top-level message alone names a
+ * cause it never read, which is how "could not reach the server" became the
+ * whole story when the error could have said WHICH host and WHY.
+ *
+ * Depth-capped (four) and de-duplicated: a cause chain that loops is a
+ * provider's business, not the trader's.
+ */
+function errorCauseChain(error: unknown): string {
+    const parts: string[] = [];
+    let cause = (error as { cause?: unknown })?.cause;
+    for (let depth = 0; cause && depth < 4; depth++) {
+        const c = cause as { message?: string; code?: string };
+        const message = sanitizeProviderText((c?.message || '').trim());
+        const code = typeof c?.code === 'string' ? c.code.trim() : '';
+        const piece = code && message ? `${code}: ${message}` : (code || message);
+        if (piece && !parts.includes(piece)) parts.push(piece);
+        cause = (cause as { cause?: unknown })?.cause;
+    }
+    return parts.join(' · ');
+}
+
 function toFriendlyProviderError(error: unknown, providerName: string): unknown {
     const err = error as { name?: string; code?: string; status?: number; message?: string };
 
@@ -1179,22 +1206,34 @@ function toFriendlyProviderError(error: unknown, providerName: string): unknown 
     const messageIsGeneric = !fromMessage
         || statusEcho
         || /request failed/i.test(fromMessage);
+    // The cause chain is the real reason when there is one, and it is
+    // appended to whatever the message said — never instead of it.
+    const causeDetail = errorCauseChain(err);
+    // What the wire ACTUALLY said, in one string: the provider's own text
+    // (when it said anything) plus the cause underneath it. This is the fact;
+    // the sentences below are the advice.
+    const detail = [messageIsGeneric ? '' : fromMessage, causeDetail].filter(Boolean).join(' · ');
 
     let friendly: string;
+    // Every branch names the STATUS it was given, then says what to do about
+    // it. A status the app swallowed and replaced with its own sentence left
+    // the trader guessing which kind of failure they were looking at — and
+    // the status is the part a retry policy, a log line, or a support
+    // conversation needs.
     if (status === 401) {
-        friendly = messageIsGeneric ? `${name}: invalid API key. Check your provider settings.`
+        friendly = messageIsGeneric ? `${name} (HTTP 401): invalid API key. Check your provider settings.`
             : `${name} (HTTP 401): ${fromMessage}`;
     } else if (status === 403) {
-        friendly = messageIsGeneric ? `${name}: access denied. Your API key may lack permissions or credits.`
+        friendly = messageIsGeneric ? `${name} (HTTP 403): access denied. Your API key may lack permissions or credits.`
             : `${name} (HTTP 403): ${fromMessage}`;
     } else if (status === 429) {
-        friendly = messageIsGeneric ? `${name}: rate limit or quota reached. Please wait and try again.`
+        friendly = messageIsGeneric ? `${name} (HTTP 429): rate limit or quota reached. Please wait and try again.`
             : `${name} (HTTP 429): ${fromMessage}`;
     } else if (status === 404) {
-        friendly = messageIsGeneric ? `${name}: model or endpoint not found. Check the base URL and model id.`
+        friendly = messageIsGeneric ? `${name} (HTTP 404): model or endpoint not found. Check the base URL and model id.`
             : `${name} (HTTP 404): ${fromMessage}`;
     } else if (status && status >= 500) {
-        friendly = messageIsGeneric ? `${name}: server error (${status}). Try again later.`
+        friendly = messageIsGeneric ? `${name} (HTTP ${status}): server error. Try again later.`
             : `${name} (HTTP ${status}): ${fromMessage}`;
     } else if (status) {
         friendly = messageIsGeneric ? `${name}: request failed (${status}).`
@@ -1208,17 +1247,25 @@ function toFriendlyProviderError(error: unknown, providerName: string): unknown 
             // "The operation was aborted" arrives from the Electron bridge when
             // the main-process timer (or our per-attempt cap) killed a hung
             // request — surface it as a timeout, not a mystery abort.
-            friendly = `${name}: request timed out. The provider may be overloaded — try again shortly.`;
+            friendly = detail
+                ? `${name}: ${detail} — request timed out. The provider may be overloaded — try again shortly.`
+                : `${name}: request timed out. The provider may be overloaded — try again shortly.`;
         } else if (raw.includes('fetch') || raw.includes('network') || raw.includes('econnrefused') || raw.includes('enotfound') || raw.includes('failed to connect') || raw.includes('certificate') || raw.includes('tls')) {
-            friendly = `${name}: could not reach the server. Check the base URL and your connection.`;
+            // The REAL error leads — "fetch failed · ENOTFOUND: getaddrinfo
+            // ENOTFOUND api.example.com" — and the advice follows it. The
+            // sentence alone was a guess dressed as a fact: it named no host,
+            // no code, and nothing the trader could act on.
+            friendly = detail
+                ? `${name}: ${detail} — could not reach the server. Check the base URL and your connection.`
+                : `${name}: could not reach the server. Check the base URL and your connection.`;
         } else if (rawMessage && rawMessage.toLowerCase() !== 'provider request failed.') {
             // Sanitize the raw SDK text before surfacing it: it can embed the
             // provider base URL and response-body excerpts (which may echo the
             // user's prompt). Same rules as sanitizeProviderText.
             const sanitized = sanitizeProviderText(rawMessage);
-            friendly = `${name}: ${sanitized}`;
+            friendly = causeDetail ? `${name}: ${sanitized} · ${causeDetail}` : `${name}: ${sanitized}`;
         } else {
-            friendly = `${name}: request failed.`;
+            friendly = causeDetail ? `${name}: ${causeDetail}` : `${name}: request failed.`;
         }
     }
 

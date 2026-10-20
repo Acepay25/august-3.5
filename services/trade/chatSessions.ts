@@ -34,6 +34,10 @@ export interface StoredChatEntry {
     /** What the wire was actually asked, one entry per call. It is what lets
      *  the answer say WHY it has no trace. */
     wireAudit?: WireAuditEntry[];
+    /** The turn failed, and this is the REAL reason. It is a row of its own,
+     *  not the answer: a failed turn written into the text field reads as
+     *  though the seat had said the app's own error hint. */
+    error?: string;
     /** Model side-effects (proposals/writes) surfaced as status rows. */
     actions?: ToolAction[];
     /** Attached image (screenshot or upload) shown in the transcript,
@@ -497,6 +501,7 @@ export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
         speaker: undefined,
         reasoning: trace.length > 0 ? trace : undefined,
         wireAudit: m.wireAudit,
+        error: m.error,
         actions: m.toolActions,
         // `proposal` is deliberately NOT projected. The dock keeps its card on the
         // RUNTIME entry only (`chatStore.LiveEntry`, not `StoredChatEntry`) so a
