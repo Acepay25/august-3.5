@@ -761,3 +761,202 @@ Every one measured on this tree, read from its own `*_EXIT=` marker:
 | `npm run boot-probe` | ok, zero pageerrors |
 | `npm run render-probe` | **117 checks, 0 failures**, zero pageerrors |
 | `npm run check-flow-doc-anchors` | ok, 304 anchors verified, 0 unattributed, cited-line quality 0/0 |
+
+---
+
+## 15. E-52 Phase 1 — the status line names the activity (2026-10-21)
+
+**Proposal:** `docs/plan/transcript-redesign.md` (E-52). **Covers:** **O-131**,
+and gaps **G-1**, **G-2**.
+
+The turn's status line said that work happened, not what work: a turn read
+"Analyzing · 25s" whatever the desk was doing, and the one line that could have
+said more was taken by a rotating trader tip.
+
+**What landed.** `utils/turnStatus.ts` and `utils/toolKinds.ts` are new: the
+**one** reader of the digest grammar the desk writes ("calling order book…" /
+"order book · detail") and the **one** vocabulary the desk's tools are named
+in. The running row now names the activity ("Reading the order book · 12s"),
+derived from the last tool's own line — ruling **R-A**: no model call, no
+prompt change, because the app already writes the fact. The rotating tip left
+the running row entirely; its only home is now the thinking placeholder.
+
+**The map is keyed by the tool's HUMAN LABEL, not its name** — the transcript
+never carries a name — and `tests/turnStatus.test.ts` measures the map against
+the desk service's own tool list, so a new tool cannot slip through unlabelled.
+An unknown tool keeps its own label: never guess a verb for it.
+
+**Gates.** `typecheck` ok · `vitest` 5100 in 497 · `lint` 0 errors / 656
+warnings · `build` ok · `render-probe` ok, zero pageerrors ·
+`check-flow-doc-anchors` 304 anchors, 0 unattributed.
+
+## 16. E-52 Phase 2 — the tier lands on the answer (2026-10-21)
+
+**Proposal:** `docs/plan/transcript-redesign.md` (E-52). **Covers:** **O-131**,
+and gaps **G-4**, **G-17**. **Ruling R-B** (the tier lands on the answer):
+yes.
+
+**What landed.** `types/provider.ts` now owns `ReasoningEffort` — the wire
+vocabulary — because a `Message` and a stored chat entry both carry the tier
+that produced them, and neither may depend on a service. The tier a turn ran
+under is resolved **once** (`resolveComposerEffort`), rides out of the executor
+on the outcome (`services/trade/toolTurn.ts`), and is written onto the run and
+the entry. The answer's row carries a `ThinkingTierChip` — a muted mark, not a
+control, labelled from the one ladder (`components/shared/effortScale.ts`).
+
+**The dead lane is gone.** `Message.reasoningProcesses` — a field the deleted
+debate engine filled and nothing has written since — is removed from the type,
+and the legacy lane is folded into the live one through a single seam
+(`utils/traceText.ts`). `extractModeratorThinking` had no production callers
+and is deleted rather than left as a second reader.
+
+**Gates.** `typecheck` ok · `vitest` 5100 in 497 · `lint` 0 errors / 656
+warnings · `build` ok · `render-probe` ok, zero pageerrors ·
+`check-flow-doc-anchors` 304 anchors, 0 unattributed.
+
+## 17. E-52 Phase 3 — a step has a kind, and there is one disclosure (2026-10-21)
+
+**Proposal:** `docs/plan/transcript-redesign.md` (E-52). **Covers:** **O-131**,
+and gaps **G-6**, **G-7**, **G-14**.
+
+**What landed.** Every step wore the same wrench, so a READ and a WRITE looked
+identical. Each step now carries its kind's mark and names the kind to a screen
+reader; the settled row headlines the work in typed counts ("3 reads, 1
+search"). The tool output opens onto a headed block: "Output" plus a language
+chip **derived from the bytes**, so a JSON blob says it is JSON before the
+trader reads a line of it.
+
+**A real miscount died here.** The old label read "Ran N commands", and N
+counted transcript LINES — the desk writes **two** lines per call (the call
+and its result), so every number the trader was told was double. The pairing
+moved to `utils/turnStatus.ts`, where the grammar already lived, so one paired
+row is one call.
+
+**One disclosure.** `components/shared/Disclosure.tsx` is new and it is the
+NATIVE one: the thinking row, the tool-output expander and the automation
+card's reasoning all render through it. The card's used to be a `<button>`
+plus a grid-collapse `<div>` — a second mechanism for the same kind of thing,
+and the older of the two.
+
+**Gates.** `typecheck` ok · `vitest` 5115 in 498 · `lint` 0 errors / 655
+warnings · `build` ok · `render-probe` ok, zero pageerrors ·
+`check-flow-doc-anchors` 304 anchors, 0 unattributed.
+
+## 18. E-52 Phase 4 — the tool trail works in both homes (2026-10-21)
+
+**Proposal:** `docs/plan/transcript-redesign.md` (E-52). **Covers:** **O-131**,
+and gaps **G-8**, **G-9**, **G-10**, **G-18**.
+
+**The defect was a shape, not a writer.** `Message.liveToolEvents` is a
+newline-**joined** string — one entry for the whole turn. A reader that took it
+for a list drew ONE row holding every line, so the Chat surface's call/result
+pairing never happened and its rows never expanded. Both readers now split it.
+
+**What landed.** `Message.toolEvents` and `Message.toolIds` carry the **trail**
+and the payload ids as lists, one entry per line, in the order the desk called
+the tools. The Chat surface now records the id it was already saving: before
+this, the payload was written and nothing could find it again — an expander
+that opens onto nothing. The live feed stays what it is: the capped feed a
+filling bubble shows.
+
+`docs/app-flow.md` row 40 claimed the reasoning deltas go to
+`saveThinkingBatch`. Neither `chatTurnRunner` nor `useAnalysisPipeline` does —
+the trace rides on the row, and `saveThinkingBatch` is the restore/migration
+path. The row now says so.
+
+**Gates.** `typecheck` ok · `vitest` 5124 in 499 · `lint` 0 errors / 655
+warnings · `build` ok · `render-probe` ok, zero pageerrors ·
+`check-flow-doc-anchors` 306 anchors, 0 unattributed.
+
+## 19. E-52 Phase 5 — one way back to the newest row, in both homes (2026-10-21)
+
+**Proposal:** `docs/plan/transcript-redesign.md` (E-52). **Covers:** **O-131**,
+and gap **G-11**.
+
+The Chart AI dock had no jump-to-latest at all: a trader reading up the
+transcript had no way to return to the answer that was still arriving, while
+the Chat surface had a pill. So the control moved into ONE component
+(`components/shared/JumpToLatestFab.tsx`) and both surfaces mount it.
+
+**The ring is INDETERMINATE, by ruling R-E.** A desk turn has no denominator
+anyone could honestly draw — the model may call three tools or forty — so an
+arc claiming "60 % done" would be a number the app invented. The ring says
+"the desk is working" and nothing more.
+
+`JUMP_AWAY_PX` is the ONE distance at which the transcript stops following, and
+both homes read it: one home must not yank a reader the other one offered a
+button for. The Chat surface's transcript now stops following too — it snapped
+to the bottom on every message, so a streaming answer carried the row the
+trader was reading off the screen.
+
+**Gates.** `typecheck` ok · `vitest` 5130 in 500 · `lint` 0 errors / 655
+warnings · `build` ok · `render-probe` ok, zero pageerrors ·
+`check-flow-doc-anchors` 306 anchors, 0 unattributed.
+
+## 20. E-52 Phase 6 — the launch list says what each agent is for (2026-10-21)
+
+**Proposal:** `docs/plan/transcript-redesign.md` (E-52). **Covers:** **O-131**,
+and gap **G-13**. **Ruling R-C** (build the launch list): yes — and last,
+because it needs the step kinds and the status line to be worth anything.
+
+**What landed.** A bot's row showed its name and the last thing it said, so
+two agents were two names with no way to tell which was the macro reader and
+which was the risk one. The row now says what the agent is FOR — its title, or
+the first line of its description — because the role is what you choose by.
+
+**The orphan is closed.** `components/analysis/ThinkingModal.tsx` had a focus
+trap, an `aria-modal`, a test and **no importer anywhere in the app**: a modal
+nobody had ever opened, reading as if the app had one. It is now
+`components/shared/DetailModal.tsx` — the one full-detail reader — and the
+agents surface mounts it for the agent's card: what it is for, how it thinks
+(model, notebook, skills), its standing instructions, and the trace of its last
+turn.
+
+It is a **READER**. The card offers no way to edit the agent, because editing
+stays where the editor already is: a reader that also edits is two editors,
+and the two would drift.
+
+**Gates.** `typecheck` ok · `vitest` 5137 in 501 · `lint` 0 errors / 655
+warnings · `build` ok · `render-probe` ok, zero pageerrors ·
+`check-flow-doc-anchors` 306 anchors, 0 unattributed.
+
+## 21. E-52 Phase 7 — the catalogue of what the desk can call (2026-10-21)
+
+**Proposal:** `docs/plan/transcript-redesign.md` (E-52). **Covers:** **O-131**,
+and gap **G-16**.
+
+Settings named **six** of the desk's forty tools; the other thirty-four were
+invisible, and the ones nobody names are exactly the ones that write. The
+catalogue now lists every tool, grouped by the kind the transcript's rows
+wear, each with the name the transcript shows, the name the tool is actually
+called, and what it does. It is built from the desk service's OWN list, so a
+tool added without appearing there fails the suite.
+
+It is a **reader**: the allow-lists are code, not preferences, so a per-tool
+switch would be a promise the app does not keep. The switch above it is the
+only control, and the catalogue says what that switch turns on.
+
+The kind marks moved to `components/shared/toolKindIcons.tsx`, so the
+catalogue and the transcript's rows draw the SAME mark for the same kind. The
+Settings' "Advanced" section now uses the shared disclosure too: one
+mechanism, one keyboard behaviour.
+
+**Gates.** `typecheck` ok · `vitest` 5144 in 502 · `lint` 0 errors / 655
+warnings · `build` ok · `render-probe` ok, zero pageerrors ·
+`check-flow-doc-anchors` 306 anchors, 0 unattributed.
+
+## 22. E-52 Phase 8 — the plan corpus (2026-10-21)
+
+**Proposal:** `docs/plan/transcript-redesign.md` (E-52). **Covers:** **O-131**.
+
+The proposal itself (`docs/plan/transcript-redesign.md`), the register row
+(**O-131**), the index row in `docs/plan/README.md`, and this record.
+
+**What the eight phases do NOT close** is stated in the proposal's §3 and is
+not re-stated here: **G-3** (partly), **G-5**, **G-12**, **G-15** stay open,
+**R-D** (the file/artifact viewer) is deferred by ruling, and **O-56 / E-39**
+(the default tier) is untouched.
+
+**Gates.** `check-flow-doc-anchors` 306 anchors, 0 unattributed, cited-line
+quality 0/0 · `lint` 0 errors / 655 warnings · the census in `AGENTS.md`
+restated to **5144 tests in 502 files** and re-measured by the gate.
