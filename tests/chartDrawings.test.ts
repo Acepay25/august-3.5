@@ -10,6 +10,7 @@ import {
     MAX_DRAWINGS_PER_SYMBOL,
     type ChartDrawing,
 } from '../services/trade/chartDrawings';
+import { plannedRiskReward } from '../utils/riskReward';
 
 const shape = (over: Partial<ChartDrawing> = {}): ChartDrawing => ({
     id: `d-${Math.random().toString(36).slice(2, 7)}`,
@@ -92,6 +93,20 @@ describe('describeDrawingsForModel', () => {
         expect(text).toContain('horizontal line');
         expect(text).toContain('59500');
         expect(text).toContain('supply/demand zone between prices 59000 and 60000');
+    });
+
+    it('quotes a measured move with the canonical ratio, not a local formula (O-03)', () => {
+        const text = describeDrawingsForModel([
+            shape({ kind: 'measured_move', points: [
+                { t: 1_700_000_000, p: 100 }, { t: 1_700_001_000, p: 90 }, { t: 1_700_002_000, p: 120 },
+            ] }),
+        ]);
+        // One owner for the number: whatever `utils/riskReward` says the plan is
+        // worth is what the canvas prints, so a card and a drawn level cannot
+        // disagree about the same ticket.
+        const ratio = plannedRiskReward({ entry: 100, stopLoss: 90, takeProfits: [120] });
+        expect(ratio).toBe(2);
+        expect(text).toMatch(/measured move.*2\.00:1/);
     });
 
     it('describes a fib retracement with its ratios and a text note with its content', () => {

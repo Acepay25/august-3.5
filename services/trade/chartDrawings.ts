@@ -11,6 +11,7 @@
 
 import { getActiveUsername } from '../../utils/activeUser';
 import { phtStamp } from '../../utils/timezone';
+import { fmtRiskReward, plannedRiskReward } from '../../utils/riskReward';
 import { priceArgError, usablePrice } from './tradePlanLevels';
 import type { PatternAnchor } from '../../utils/patternDetection';
 import { snapPriceToStructure } from '../../utils/patternDetection';
@@ -609,10 +610,18 @@ export const describeDrawingsForModel = (
                 const [entry, stop, target] = d.points;
                 const risk = Math.abs(entry.p - stop.p);
                 const reward = Math.abs(target.p - entry.p);
-                const ratio = risk > 0 ? reward / risk : 0;
+                // The ratio is the canonical one, not a fifth local formula:
+                // `plannedRiskReward` measures the target CLOSEST the entry over
+                // the stop distance, which for a three-point drawing is this
+                // point — and stops being this point the moment the model draws
+                // a ladder out of order. A canvas label that disagreed with the
+                // card was O-03.
+                const ratio = plannedRiskReward({
+                    entry: entry.p, stopLoss: stop.p, takeProfits: [target.p],
+                });
                 const fmtPct = (from: number, to: number): string =>
                     (entry.p > 0 ? ` ${(((to - from) / from) * 100).toFixed(2)}%` : '');
-                return `- measured move${tag}: entry ${fmt(entry.p)}, stop ${fmt(stop.p)} (risk ${fmt(risk)}${fmtPct(entry.p, stop.p)}), first target ${fmt(target.p)} (reward ${fmt(reward)}${fmtPct(entry.p, target.p)}), ${ratio.toFixed(2)}:1${suffix}`;
+                return `- measured move${tag}: entry ${fmt(entry.p)}, stop ${fmt(stop.p)} (risk ${fmt(risk)}${fmtPct(entry.p, stop.p)}), first target ${fmt(target.p)} (reward ${fmt(reward)}${fmtPct(entry.p, target.p)}), ${fmtRiskReward(ratio, 2)}${suffix}`;
             }
             case 'text':
                 return `- text note${tag} at price ${fmt(d.points[0].p)} (${stamp(d.points[0].t)})${d.label ? `: ${d.label}` : ''}${suffix}`;
