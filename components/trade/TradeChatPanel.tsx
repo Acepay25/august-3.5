@@ -1070,7 +1070,15 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             {/* The prototype's bias read rides ABOVE the transcript: always
                 current, code-calculated — the tape's state, not a chat turn. */}
             <BiasChips symbol={symbol} interval={interval as ChartInterval} />
-            <div ref={scrollRef} onScroll={onChatScroll} className="min-h-0 flex-1 space-y-4 overflow-y-auto custom-scrollbar px-4 py-4">
+            <div ref={scrollRef} onScroll={onChatScroll} className="min-h-0 flex-1 space-y-4 overflow-y-auto custom-scrollbar px-4 py-4"
+                // The dock's transcript root is the one element a screen reader
+                // needs to name for an answer to be heard at all: rows append and
+                // old ones scroll away, which is exactly `role="log"`. Held busy
+                // while any row streams so the token-by-token rewrite is not
+                // announced dozens of times; it flips off when the answer settles
+                // and the finished reply is read once. (O-65)
+                role="log" aria-live="polite" aria-busy={entries.some(e => e.streaming)}
+                aria-label="Chart AI conversation">
                 {entries.length === 0 && !panelPickerFor && (
                     <div className="flex h-full flex-col items-center justify-center gap-3 px-2 text-center">
                         <p className="text-ui-dense leading-5 text-zinc-500">

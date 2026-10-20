@@ -15,7 +15,10 @@ export const buildTranscriptMarkdown = (
 ): string => {
   const coin = analysis?.coinName || 'Trade';
   const lines: string[] = [];
-  lines.push(`# Debate Transcript — ${cleanHeading(coin)}`);
+  // The export names the run, not a format the app no longer has. The body
+  // still prints stored rounds and seat names for the rows that have them —
+  // that is the row's own history, not a claim about today.
+  lines.push(`# Analysis Transcript — ${cleanHeading(coin)}`);
   lines.push(`Generated: ${new Date().toISOString()}`);
   if (analysis) {
     const entry = analysis.entryPoints?.[0]?.price;
@@ -90,5 +93,5 @@ export const downloadTextFile = (filename: string, content: string, mime = 'text
 export const buildTranscriptFilename = (analysis: TradeAnalysis | null | undefined, ext: 'md' | 'json'): string => {
   const coin = analysis?.coinName ? analysis.coinName.replace(/[^A-Za-z0-9-]/g, '').slice(0, 16) : 'trade';
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  return `debate-${coin}-${stamp}.${ext}`;
+  return `analysis-${coin}-${stamp}.${ext}`;
 };

@@ -10,6 +10,7 @@ import React from 'react';
 import { Check, X } from '../shared/Icons';
 import { BotAvatar } from './BotAvatar';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { type AgentBot, type AgentGroup } from '../../services/agents/agentRoster';
 
 export interface NewGroupDialogProps {
@@ -26,6 +27,10 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
     const [selected, setSelected] = React.useState<Set<string>>(new Set());
     const editing = Boolean(initialGroup && onUpdate);
     useEscapeClose(open, onClose);
+    // Same trap as the New Bot dialog: the member picker is a list of
+    // checkboxes inside a blocking overlay, and Tab used to walk straight
+    // past it onto the page behind (O-66).
+    const dialogRef = useFocusTrap<HTMLDivElement>(open);
 
     React.useEffect(() => {
         if (!open) return;
@@ -51,7 +56,7 @@ export const NewGroupDialog: React.FC<NewGroupDialogProps> = ({ open, onClose, o
     const saveDisabled = selected.size < 2 || (editing && !membershipChanged);
 
     return (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label="New Group Chat">
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="New Group Chat">
             <div className="w-full max-w-md rounded-bubble border border-white/10 bg-zinc-950 p-6 shadow-2xl" data-testid="new-group-dialog">
                 <div className="flex items-start justify-between">
                     <div>

@@ -203,7 +203,11 @@ export const buildMonthReport = (trades: LoggedTrade[], nowMs: number, injection
         .map(([label, c]) => gradeRow(label, seatScored.get(label) ?? [], c.n, c.wins))
         .sort((a, b) => b.n - a.n);
 
-    const modLabel = 'moderator';
+    // Both labels name the deleted engine, and both are LEGACY-only by
+    // construction: they are scored from `debateTurns`, which nothing writes
+    // since the engine went. The word "legacy" is what tells a reader looking
+    // for the moderator why the row can never appear on a new trade.
+    const modLabel = 'moderator (legacy)';
     const modScored: { p: number; win: boolean }[] = [];
     for (const t of period) {
         const p = t.analysis?.probability;
@@ -221,7 +225,7 @@ export const buildMonthReport = (trades: LoggedTrade[], nowMs: number, injection
         if (line !== null) lineScored.push({ p: Math.min(99, Math.max(1, line)) / 100, win: t.outcome === TradeOutcome.WIN });
     }
     const ensembleLine = lineScored.length > 0
-        ? gradeRow('ensemble line', lineScored, lineScored.length, lineScored.filter(r => r.win).length)
+        ? gradeRow('ensemble line (legacy)', lineScored, lineScored.length, lineScored.filter(r => r.win).length)
         : null;
 
     // Needs-attention lines — the honest short list, deterministic.
@@ -246,7 +250,7 @@ export const buildMonthReport = (trades: LoggedTrade[], nowMs: number, injection
         }
     }
     if (moderator?.brier != null && ensembleLine?.brier != null && ensembleLine.brier < moderator.brier - 0.02) {
-        needsAttention.push(`Ensemble line beat the moderator this period (Brier ${ensembleLine.brier.toFixed(2)} vs ${moderator.brier.toFixed(2)}) — worth a look at verdict inputs`);
+        needsAttention.push(`The legacy ensemble line beat the legacy moderator this period (Brier ${ensembleLine.brier.toFixed(2)} vs ${moderator.brier.toFixed(2)}) — worth a look at how the verdict inputs were set on those old runs`);
     }
     // Context-budget economics — the most expensive skill per unit of
     // measured lift gets named on the scoreboard, so the cost side of the

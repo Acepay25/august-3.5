@@ -467,7 +467,10 @@ describe('P2 · the dock sends a prompt that matches its contract', () => {
         const transport = readFileSync(join(process.cwd(), 'services/analysis/DeskToolsService.ts'), 'utf8');
         const entry = transport.slice(transport.indexOf('export async function* streamChatWithDeskTools'));
         expect(entry, 'streamChatWithDeskTools is gone').not.toBe('');
-        expect(entry).toContain('withDeskToolsSystemPrompt(messages, nativeTools)');
+        // The third argument is the offer set: the mandate is composed from the
+        // tools this turn can actually call, so a surface that refuses
+        // `get_chart_view` cannot be told to read it.
+        expect(entry).toContain('withDeskToolsSystemPrompt(messages, nativeTools, offeredToolNames)');
     });
 });
 

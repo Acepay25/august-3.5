@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { X } from '../shared/Icons';
 
 interface ImageViewerModalProps {
@@ -12,6 +13,9 @@ interface ImageViewerModalProps {
  */
 const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ imageUrl, onClose }) => {
     const closeButtonRef = useRef<HTMLButtonElement>(null);
+    // Full-screen viewer: an untrapped Tab lands on chrome the user cannot
+    // see behind a black/95 overlay (O-66).
+    const dialogRef = useFocusTrap<HTMLDivElement>(Boolean(imageUrl));
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') onClose();
@@ -31,6 +35,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ imageUrl, onClose }
         <div
             className="fixed inset-0 z-confirm bg-black/95 flex items-center justify-center p-4"
             onClick={handleBackdropClick}
+            ref={dialogRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label="Image viewer"

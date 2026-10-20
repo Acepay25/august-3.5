@@ -119,6 +119,16 @@ export const Header: React.FC<HeaderProps> = memo(({
     // The trap in particular was correct there and is simply not a thing for a
     // panel that is always on screen: trapping focus inside navigation that
     // sits beside the content would make the app unusable.
+    //
+    // The session popover is deliberately a DISCLOSURE, not a trapped modal
+    // (O-66 names it, and it stays out of the trap list on purpose): focus
+    // never leaves the trigger, Escape and a click outside both dismiss it, and
+    // its body is a status sheet that can legitimately contain NO control at
+    // all — the two links at its foot render only when the host passes them.
+    // `useFocusTrap` on such a sheet swallows Tab against zero focusables, so
+    // the keyboard would lock for as long as the popover was open. Adding the
+    // trap would mean adding a close button purely to give the trap something
+    // to focus, and that is chrome for the harness's benefit, not the trader's.
     useEffect(() => {
         if (!isSessionModalOpen) return;
         const handleEscape = (event: KeyboardEvent) => {
@@ -187,6 +197,7 @@ export const Header: React.FC<HeaderProps> = memo(({
                                         onClick={() => setIsSessionModalOpen(!isSessionModalOpen)}
                                         className="flex items-center gap-1.5 hit-target px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded-full border border-white/5 hover:border-white/10 text-ui-xs font-medium text-zinc-400 whitespace-nowrap transition-colors duration-[150ms] ease-[var(--ease-snappy)] focus-visible:ring-2 focus-visible:ring-zinc-500"
                                         aria-expanded={isSessionModalOpen}
+                                        aria-controls="session-details-popover"
                                         aria-haspopup="dialog"
                                     >
                                         <span className={`w-1.5 h-1.5 rounded-full ${sessionContext.isKillZone ? 'bg-rose-500 animate-pulse' :
@@ -200,9 +211,10 @@ export const Header: React.FC<HeaderProps> = memo(({
                                         </span>
                                     </button>
 
-                                    {/* Session Details Modal */}
+                                    {/* Session Details Modal — a disclosure, not
+                                        a modal: see the no-trap note above. */}
                                     {isSessionModalOpen && (
-                                             <div role="dialog" aria-label="Session details" className="absolute top-full left-0 sm:left-auto sm:right-0 mt-4 sm:mt-2 w-80 bg-zinc-900 border border-white/10 rounded-bubble shadow-2xl overflow-hidden z-drawer animate-fade-in">
+                                             <div id="session-details-popover" role="dialog" aria-label="Session details" className="absolute top-full left-0 sm:left-auto sm:right-0 mt-4 sm:mt-2 w-80 bg-zinc-900 border border-white/10 rounded-bubble shadow-2xl overflow-hidden z-drawer animate-fade-in">
                                             <div className="p-3 bg-zinc-900">
                                                 {/* Live Market Conditions Section */}
                                                 {liveMarketConditions && (

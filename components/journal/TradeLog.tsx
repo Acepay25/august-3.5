@@ -344,9 +344,14 @@ const TradeDetailView: React.FC<{
                                         if (legacyModels.length > 0) {
                                             return legacyModels.map(m => modelIdToName[m] ?? m).join(' + ');
                                         }
-                                        return 'Ensemble';
+                                        // Legacy provenance, not a current feature: a row with no
+                                        // modelsUsed and no legacy per-provider fields was
+                                        // answered by the ensemble, and saying so keeps the
+                                        // old row readable without pretending the panel
+                                        // still exists to pick.
+                                        return 'Ensemble (legacy)';
                                     })()}</span>
-                                    {moderatorModel && <span>Mod: {modelIdToName[moderatorModel] || 'AI'}</span>}
+                                    {moderatorModel && <span>Mod (legacy): {modelIdToName[moderatorModel] || 'AI'}</span>}
                                 </div>
 
                                 {/* Pattern-memory gate at analysis time — shows when

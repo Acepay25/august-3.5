@@ -1334,7 +1334,17 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     </p>
                                 </div>
                             ) : (
-                                <div className="chat-column space-y-4 py-6" data-testid="agent-thread">
+                                <div className="chat-column space-y-4 py-6" data-testid="agent-thread"
+                                    // A transcript is a log: rows are appended and the
+                                    // older ones scroll away, which is what `role="log"`
+                                    // means to assistive tech. `aria-busy` is the part
+                                    // that makes it usable — while a run streams, the text
+                                    // changes on every token, and a live region without it
+                                    // re-announces the whole answer dozens of times per
+                                    // sentence. Held busy until the row settles, the answer
+                                    // is read once, in full. (O-65)
+                                    role="log" aria-live="polite" aria-busy={busy || analysisRunning}
+                                    aria-label="Conversation">
                                     {thread.map(m => {
                                         const isUser = m.role === MessageRole.USER;
                                         const row = chatRowFrom(m, username, activeBot?.name ?? 'desk');

@@ -65,6 +65,43 @@ export const getPrompt = (id: string, fallback: string): string => {
     return typeof override === 'string' && override.trim() ? override : fallback;
 };
 
+/**
+ * A fingerprint of the prompt corpus THIS call resolves, for the journal row.
+ *
+ * `promptVersion` and `promptLane` have had three readers and no writer: the
+ * profile card's A/B rows summarize a lane nothing records,
+ * `summarizePromptVersions` groups trades by a version nothing stamps, and
+ * `maybePinWinningPromptLane` can never see enough of either side to pin one.
+ * This is the writer.
+ *
+ * `defaults` means the run resolved the built-in text on every id — which is
+ * what the control lane does by definition, and also what a live run with no
+ * overrides does. `edited-<hash>` covers the exact override set the live lane
+ * resolved, so two different edits are two versions. Nothing finer is available
+ * here: a change to a BUILT-IN prompt ships with the app build and is recorded
+ * by the app version, not by this string.
+ *
+ * Deliberately hashed over the in-memory override map rather than over
+ * `PROMPT_REGISTRY`: importing the registry into a run path pulls all 1,245
+ * lines of prompt text into the entry chunk — measured at +18.7 kB, which put
+ * the bundle over its 1,400 kB ratchet. The fingerprint cannot cost more than
+ * the thing it names.
+ */
+export const promptCorpusVersion = (): string => {
+    if (controlLane) return 'defaults';
+    const ids = Object.keys(overridesCache).filter(id => (overridesCache[id] || '').trim()).sort();
+    if (ids.length === 0) return 'defaults';
+    let h = 0x811c9dc5;
+    for (const id of ids) {
+        const text = `${id}\u0000${overridesCache[id]}`;
+        for (let i = 0; i < text.length; i++) {
+            h ^= text.charCodeAt(i);
+            h = Math.imul(h, 0x01000193);
+        }
+    }
+    return `edited-${(h >>> 0).toString(36)}`;
+};
+
 /** Current override map (for the Settings UI). */
 export const getPromptOverrides = (): Record<string, string> => ({ ...overridesCache });
 

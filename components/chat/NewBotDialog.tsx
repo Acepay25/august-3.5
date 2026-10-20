@@ -8,6 +8,7 @@
 
 import React from 'react';
 import { X } from '../shared/Icons';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { BotFace, BUILTIN_FACES, UPLOADABLE_FACES, randomFace, type BotFaceSpec, type FaceShape } from './BotFace';
 import { PixelAvatarFigure } from './BotAvatar';
 import type { AgentBot } from '../../services/agents/agentRoster';
@@ -66,6 +67,9 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
         }
     }, [open]);
 
+    // Created from a rail button while the roster stays reachable behind it;
+    // without a trap Tab leaves the open form and the focus goes with it (O-66).
+    const dialogRef = useFocusTrap<HTMLDivElement>(open);
     if (!open) return null;
 
     const readyProviders = providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0);
@@ -93,7 +97,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
     const previewName = name.trim() || 'New Bot';
 
     return (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label="New Bot">
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="New Bot">
             <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-bubble border border-white/10 bg-zinc-950 p-6 shadow-2xl" data-testid="new-bot-dialog">
                 <div className="flex items-start justify-between">
                     <div>

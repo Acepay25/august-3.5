@@ -116,10 +116,12 @@ const GeneralTab: React.FC<{ tab: GeneralTabProps }> = ({ tab: props }) => {
                 {isAdvancedOpen && (
                     <div className="mt-3 space-y-3 animate-fade-in">
 
-                        {/* The harness's model-behavior dials — effort, guard,
-                            cost caps, checklist — moved here from the Data tab
-                            (stage 3): they are analysis behavior. */}
-                        <SettingsGroup title="Harness dials" description="Model effort, session guard and cost caps.">
+                        {/* The harness's model-behavior dials — effort, the session
+                            guard, the edge floor, default leverage, settlement —
+                            moved here from the Data tab (stage 3): they are analysis
+                            behavior. The cost cap that used to be in this list went
+                            with the debate engine. */}
+                        <SettingsGroup title="Harness dials" description="Model effort, the session guard, the edge floor and the default leverage.">
                             <HarnessControls />
                         </SettingsGroup>
 

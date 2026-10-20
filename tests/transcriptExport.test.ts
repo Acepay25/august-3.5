@@ -37,7 +37,7 @@ const analysis: TradeAnalysis = {
 describe('buildTranscriptMarkdown', () => {
   it('renders verdict header + per-speaker sections', () => {
     const md = buildTranscriptMarkdown(turns, analysis);
-    expect(md).toContain('# Debate Transcript — BTCUSDT');
+    expect(md).toContain('# Analysis Transcript — BTCUSDT');
     expect(md).toContain('**Verdict:** Long');
     expect(md).toContain('High confidence');
     expect(md).toContain('78%');
@@ -52,7 +52,7 @@ describe('buildTranscriptMarkdown', () => {
 
   it('handles no-analysis transcripts and markdown-in-speaker names', () => {
     const md = buildTranscriptMarkdown(turns, null);
-    expect(md).toContain('# Debate Transcript — Trade');
+    expect(md).toContain('# Analysis Transcript — Trade');
     // Speaker headings clean up markdown metacharacters.
     const dirty = buildTranscriptMarkdown([{ speaker: 'A*#B', text: 'x' }], null);
     expect(dirty).toContain('### A*#B');
@@ -79,12 +79,12 @@ describe('buildTranscriptJson', () => {
 describe('buildTranscriptFilename', () => {
   it('sanitizes the coin and embeds a timestamp', () => {
     const name = buildTranscriptFilename(analysis, 'md');
-    expect(name).toMatch(/^debate-BTCUSDT-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.md$/);
+    expect(name).toMatch(/^analysis-BTCUSDT-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.md$/);
     const jname = buildTranscriptFilename(analysis, 'json');
     expect(jname.endsWith('.json')).toBe(true);
   });
 
   it('falls back to trade for unnamed analyses', () => {
-    expect(buildTranscriptFilename(null, 'md')).toMatch(/^debate-trade-/);
+    expect(buildTranscriptFilename(null, 'md')).toMatch(/^analysis-trade-/);
   });
 });

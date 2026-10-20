@@ -156,6 +156,30 @@ describe('the Chat surface is only the chat', () => {
         // The pane this file used to test is gone, not hidden.
         expect(screen.queryByTestId('agents-desk-ai')).toBeNull();
     });
+
+    it('is a live region a screen reader can actually follow (O-65)', () => {
+        const messages = [
+            { id: 'd1', role: MessageRole.USER, text: 'first question', createdAt: '2026-10-14T08:00:00.000Z' },
+            { id: 'd2', role: MessageRole.AI, text: 'first answer', createdAt: '2026-10-14T08:01:00.000Z' },
+        ] as Message[];
+        const { rerender } = render(<AgentsView {...base} messages={messages} />);
+        const thread = screen.getByTestId('agent-thread');
+        // A transcript appends and scrolls away from the top — that is `log`,
+        // and nothing in the app said so until now.
+        expect(thread.getAttribute('role')).toBe('log');
+        expect(thread.getAttribute('aria-live')).toBe('polite');
+        expect(thread.getAttribute('aria-label')).toBe('Conversation');
+        expect(thread.textContent).toContain('first answer');
+
+        // BUSY is the half that makes it usable: the answer rewrites on every
+        // token, and a polite live region without it re-announces the growing
+        // sentence dozens of times. Held busy through the run, the settled
+        // reply is read once.
+        rerender(<AgentsView {...base} messages={messages} analysisRunning />);
+        expect(screen.getByTestId('agent-thread').getAttribute('aria-busy')).toBe('true');
+        rerender(<AgentsView {...base} messages={messages} />);
+        expect(screen.getByTestId('agent-thread').getAttribute('aria-busy')).toBe('false');
+    });
 });
 
 describe('a verdict projected into the dock keeps its decision card', () => {
