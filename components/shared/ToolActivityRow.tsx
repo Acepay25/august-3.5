@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Wrench } from './Icons';
 import { stripTraceMarkers } from '../../utils/traceText';
+import { parseToolLine, type ToolRowState } from '../../utils/turnStatus';
 import { readToolPayload } from '../../services/trade/toolPayloadStore';
 import { readToolArtifact } from '../../services/analysis/toolArtifactStore';
 import { findArtifactIdIn } from '../../utils/harnessMarks';
@@ -18,7 +19,9 @@ export interface ToolActivityRowProps {
     payloadIds?: string[];
 }
 
-export type ToolRowState = 'calling' | 'done' | 'failed';
+/** Re-exported from the one grammar owner (`utils/turnStatus.ts`) so the rows
+ *  and the turn's status line read the same line the same way. */
+export type { ToolRowState };
 
 export interface PairedToolRow {
     label: string;
@@ -61,29 +64,27 @@ const pairToolRows = (
     const rows: Array<PairedToolRow & { sources: number[] }> = [];
     const open = new Map<string, Array<PairedToolRow & { sources: number[] }>>();
     lines.forEach((raw, index) => {
-        const line = stripTraceMarkers(raw ?? '').trim();
-        if (!line) return;
-        const calling = line.match(/^calling\s+(.+?)(…|$)/i);
-        if (calling) {
-            const row = { label: calling[1].trim(), detail: '', state: 'calling' as ToolRowState, sources: [index] };
+        // The grammar is read ONCE, in `utils/turnStatus.ts` — the same
+        // reader the turn's status line and its work summary use. A second
+        // parser here is how the row and the summary stop agreeing.
+        const parsed = parseToolLine(raw);
+        if (!parsed) return;
+        if (parsed.state === 'calling') {
+            const row = { label: parsed.label, detail: parsed.detail, state: parsed.state, sources: [index] };
             const queue = open.get(row.label) ?? [];
             queue.push(row);
             open.set(row.label, queue);
             rows.push(row);
             return;
         }
-        const sep = line.indexOf(' · ');
-        const label = (sep > 0 ? line.slice(0, sep) : line).trim();
-        const rest = sep > 0 ? line.slice(sep + 3).trim() : '';
-        const failed = /(^| · )failed$/i.test(rest);
-        const queue = open.get(label);
+        const queue = open.get(parsed.label);
         if (queue && queue.length > 0) {
             const row = queue.shift()!;
-            row.state = failed ? 'failed' : 'done';
-            row.detail = failed ? rest.replace(/ ·? failed$/i, '') : rest;
+            row.state = parsed.state;
+            row.detail = parsed.detail;
             row.sources.push(index);
         } else {
-            rows.push({ label, detail: failed ? rest.replace(/ ·? failed$/i, '') : rest, state: failed ? 'failed' : 'done', sources: [index] });
+            rows.push({ label: parsed.label, detail: parsed.detail, state: parsed.state, sources: [index] });
         }
     });
     return rows;

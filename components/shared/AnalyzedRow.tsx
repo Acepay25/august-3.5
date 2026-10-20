@@ -16,6 +16,12 @@ export interface AnalyzedRowProps {
     /** What the work was, named from real data — "Read the chart, order book
      *  and notebook". Rendered after the duration; omitted when unknown. */
     title?: string;
+    /** What the turn is doing RIGHT NOW — "Reading the order book". This is
+     *  the RUNNING label, and it replaces the bare "Analyzing": a state says
+     *  the desk is busy, an activity says what it is busy with. Derived from
+     *  the turn's own tool lines (`utils/turnStatus.ts`), so it can only
+     *  report what the tools did. Absent ⇒ the bare "Analyzing". */
+    activity?: string | null;
     children: React.ReactNode;
 }
 
@@ -27,7 +33,7 @@ export interface AnalyzedRowProps {
  * covers the pre-answer work phase only — it starts at turn start and
  * freezes when the answer text begins.
  */
-const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = '', toolsCount, persistedMs, title, children }) => {
+const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = '', toolsCount, persistedMs, title, activity, children }) => {
     const [open, setOpen] = useState(running);
     const wasRunningRef = useRef(running);
     const startedAtRef = useRef<number | null>(running ? Date.now() : null);
@@ -75,13 +81,18 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
     // line; settled with tools = "Ran 4 commands, read a file". Duration only
     // stands alone when there is no action count to lead with.
     const ranTools = toolsCount !== undefined && toolsCount > 0;
+    // The RUNNING label is the ACTIVITY, not the state: "Reading the order
+    // book" says what the desk is doing, "Analyzing" only says it is busy.
+    // The separator follows the same rule as the settled form — a detail
+    // takes " · Ns", a bare state keeps " for Ns".
+    const runningActivity = (activity ?? '').trim();
     const label = running
-        ? 'Analyzing'
+        ? (runningActivity || 'Analyzing')
         : ranTools
             ? `Ran ${toolsCount} ${toolsCount === 1 ? 'command' : 'commands'}`
             : 'Analyzed';
     const detail = running
-        ? (seconds !== null ? ` for ${seconds}s` : '')
+        ? (seconds !== null ? (runningActivity ? ` · ${seconds}s` : ` for ${seconds}s`) : '')
         : ranTools
             ? (title ? `, ${title.charAt(0).toLowerCase()}${title.slice(1)}` : '') + (seconds !== null ? ` · ${seconds}s` : '')
             : (seconds !== null ? ` for ${seconds}s` : '') + (title ? ` · ${title.charAt(0).toLowerCase()}${title.slice(1)}` : '');

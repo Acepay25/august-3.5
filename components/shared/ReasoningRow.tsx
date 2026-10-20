@@ -1,14 +1,12 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Brain, Lightbulb } from './Icons';
-import { getActiveUsername } from '../../utils/activeUser';
-import { nextTip } from '../../utils/tradingTips';
 import { stripTraceMarkers, traceLines } from '../../utils/traceText';
 import { subscribeSharedTicker } from '../../hooks/useSharedTicker';
 
 export interface ReasoningRowProps {
     /** Full thinking / chain-of-thought text. */
     thinking: string;
-    /** Live stream in progress — shows the rotating tip + live duration. */
+    /** Live stream in progress — shows the live duration. */
     running?: boolean;
     /** Kept for API compatibility — rows ALWAYS start collapsed. */
     defaultOpen?: boolean;
@@ -25,11 +23,9 @@ const EXPAND_PREVIEW_CHARS = 600;
 /**
  * Collapsible thinking row, built on a native `<details>` so it stays a
  * toggle in EVERY state — clicking always expands/collapses the thinking.
- *   · RUNNING + collapsed = a wrapping tip line: a dim glyph, `Tip: …`
- *     rotating every ~5s (every third slot a habit from the trader's own
- *     learned memory), the text wrapping naturally, plus a live duration
- *     tick. No scrolling ticker — raw trace never previews (models lean on
- *     `**` markdown; it must never leak into the transcript).
+ *   · RUNNING + collapsed = a dim glyph, the word `Thinking`, and a live
+ *     duration tick. No scrolling ticker — raw trace never previews (models
+ *     lean on `**` markdown; it must never leak into the transcript).
  *   · SETTLED + collapsed = a bare ZCode-style `Thought · 14s` row — the
  *     frozen duration PERSISTS so the row still reads as a real step, and
  *     the row stays collapsed (no auto-open; a manual toggle always wins).
@@ -37,6 +33,15 @@ const EXPAND_PREVIEW_CHARS = 600;
  *     bullet, emphasis markers peeled) truncated past 600 chars with their
  *     own Show more / Show less toggle.
  * The trace body stays in the DOM when collapsed.
+ *
+ * **This row labels the TRACE, not the turn.** What the turn is doing right
+ * now is the status line one level up (`AnalyzedRow`): it names the activity
+ * — "Reading the order book" — and this row answers the other question,
+ * "is there a trace, and how long is it". They used to compete: the running
+ * row showed a rotating trader tip while the status line said only
+ * "Analyzing", so the trader read a generic tip where a real answer was
+ * available. The tip has one home now — the waiting placeholder in
+ * `ChatWorkTimeline`, which is the one moment a tip is the right thing.
  */
 const ReasoningRow: React.FC<ReasoningRowProps> = ({
     thinking,
@@ -119,11 +124,12 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
         ? `${trimmed.slice(0, EXPAND_PREVIEW_CHARS).trimEnd()} …`
         : trimmed;
 
-    // The live default is the rotating trader tip; a CUSTOM label (e.g.
-    // "Moderator thinking") carries information, so it always shows as-is,
-    // and the settled row always reads `Thought` (ZCode reference).
-    const tipSlot = Math.floor((liveSeconds ?? 0) / 5);
-    const rawTip = running && label === 'Thinking' ? nextTip(getActiveUsername(), tipSlot) : null;
+    // The row labels the TRACE, never the turn. The turn's status line lives
+    // one level up (`AnalyzedRow`): it names what the desk is doing right now
+    // — "Reading the order book" — and this row answers a different question,
+    // "is there a trace, and how long is it". Two rows, two claims; neither
+    // competes with the other. A custom label (e.g. "Moderator thinking")
+    // carries information, so it always shows as-is.
     const rowLabel = label !== 'Thinking' ? label : (running ? 'Thinking' : 'Thought');
 
     return (
@@ -134,7 +140,7 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
             onToggle={e => setOpen((e.target as HTMLDetailsElement).open)}
         >
             <summary
-                className={`reasoning-row-summary ${running ? 'is-tip' : ''}`.trim()}
+                className="reasoning-row-summary"
                 aria-label={`${label} — ${open ? 'collapse' : 'expand'}`}
             >
                 {running ? (
@@ -142,14 +148,7 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
                 ) : (
                     <Brain className="reasoning-row-glyph" aria-hidden="true" />
                 )}
-                {rawTip ? (
-                    // Wrapping tip: wraps naturally, never truncated.
-                    <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
-                        Tip: {rawTip}
-                    </span>
-                ) : (
-                    <span className="reasoning-row-label">{rowLabel}</span>
-                )}
+                <span className="reasoning-row-label">{rowLabel}</span>
                 {meta !== null && (
                     // Settled reads as a sentence ("Thought for 14s"); live
                     // keeps the dot separator so the ticking number doesn't
