@@ -12,11 +12,14 @@
  *  - **Tool and reasoning are separate blocks here.** The dock interleaves
  *    tool calls INTO the reasoning stream via a `[Desk tools]` marker the
  *    provider emits mid-answer. A settled pipeline `Message` has no single
- *    ordered stream — `reasoningProcesses` and `toolActions` are independent
+ *    ordered stream — the trace and the tool trail are independent
  *    collections — so they render as their own rows.
- *  - **`toolLines` is live-only.** `Message.liveToolEvents` is nulled when the
- *    turn settles (`verdictFinalizer.ts`), so the call→result pairs only exist
- *    while the answer streams. `toolActions` is the persistent trail.
+ *  - **The tool trail is a list, and it survives the turn.** `Message.toolEvents`
+ *    is one entry per line — the settled record of what the desk called — and
+ *    `Message.toolIds` is the payload id for each of those lines, so a row can
+ *    open onto the REAL output the tool returned. `Message.liveToolEvents` is
+ *    the capped, newline-joined LIVE feed: it is what a filling bubble shows,
+ *    and it is the fallback for rows written before the trail existed.
  */
 import React from 'react';
 import { InterruptedRunNotice } from './InterruptedRunNotice';
@@ -45,6 +48,10 @@ export interface ChatRowView {
     reasoning?: string;
     /** Live desk-tool call/result lines. */
     toolLines?: string[];
+    /** The payload id for each entry of `toolLines`, same order. The expander
+     *  opens onto the REAL output the tool returned, so a row without one
+     *  stays a plain row. */
+    toolIds?: string[];
     /** Persistent side-effect status rows. */
     actions?: ToolAction[];
     /** Frozen work time in ms from `Message.runStats` — what the collapsed
@@ -98,6 +105,7 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
         id: row.id,
         reasoning: row.reasoning,
         tools: row.toolLines ?? [],
+        toolIds: row.toolIds,
         streaming: row.streaming,
         text: row.text,
         actions: row.actions,

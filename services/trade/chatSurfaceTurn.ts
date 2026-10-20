@@ -258,11 +258,18 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
         // Append order, oldest first — the same order the dock's `tools` array
         // uses, because `liveEntryFromMessage` feeds these lines into it and
         // one renderer (ChatWorkTimeline) reads both homes.
+        //
+        // TWO fields, two jobs. `toolEvents` is the TRAIL: one line per entry,
+        // uncapped, and the thing the settled work card draws — it is what
+        // makes the rows a trader opens the rows the desk ran. `liveToolEvents`
+        // is the LIVE feed: newline-joined and capped, because a bubble that
+        // is still filling must not become a log.
         addToolLine: line => req.patch(m => {
             const feed = m.liveToolEvents?.[DESK_SPEAKER] ?? '';
             const lines = feed ? `${feed}\n${line}`.split('\n') : [line];
             return {
                 ...m,
+                toolEvents: [...(m.toolEvents ?? []), line],
                 liveToolEvents: { ...m.liveToolEvents, [DESK_SPEAKER]: lines.slice(-MAX_LIVE_TOOL_LINES).join('\n') },
             };
         }),
@@ -273,6 +280,21 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
                 // A payload write must never take down the transcript write it
                 // is riding inside — the line already landed above.
             }
+            // The id is what the expander opens onto, and it belongs to the
+            // RESULT line — the desk loop emits the digest line first, so the
+            // last line is the one the bytes are for. Without this the Chat
+            // surface's tool rows could never expand: the payload was saved
+            // and nothing could find it again.
+            req.patch(m => {
+                const ids = [...(m.toolIds ?? [])];
+                const lines = m.toolEvents ?? [];
+                // Keep the two arrays the same length: a payload that arrives
+                // with no matching line pads with '' rather than shifting every
+                // later id onto the wrong row.
+                while (ids.length < lines.length) ids.push('');
+                ids[Math.max(0, lines.length - 1)] = payload.toolCallId;
+                return { ...m, toolIds: ids };
+            });
         },
         // Side-effects (skill drafts, memory notes, forged tools) append through
         // the ONE ledger helper so this writer caps and copies exactly like the

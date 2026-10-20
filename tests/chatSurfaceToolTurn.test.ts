@@ -137,6 +137,33 @@ describe('runChatSurfaceTurn — the canonical row is written through the sink',
         expect(h.row.toolActions?.[0].speaker).toBe('desk');
     });
 
+    it('records the TRAIL — one line per entry, uncapped', async () => {
+        // The live feed is capped on purpose (a filling bubble must not become
+        // a log), but the trail is the RECORD of what the desk ran, and the
+        // work card draws it. A row that kept only the last 8 lines lost the
+        // first ones for good.
+        const steps = Array.from({ length: 11 }, (_, i) => ({ line: `get_market_packet calling… #${i}` }));
+        script(steps);
+        const h = harness();
+        await runChatSurfaceTurn(h.req);
+        const trail = h.row.toolEvents ?? [];
+        expect(trail).toHaveLength(11);
+        expect(trail[0]).toContain('#0');
+        expect(trail[10]).toContain('#10');
+    });
+
+    it('records the payload id it already saves, so the row can open onto it', async () => {
+        // The Chat surface's tool rows could never expand: the payload was
+        // saved and nothing could find it again. The id belongs to the RESULT
+        // line — the last one — and the trail's positions are the join.
+        script([{ line: 'write_memory_note · done' }], { payload: true });
+        const h = harness();
+        await runChatSurfaceTurn(h.req);
+        expect(h.row.toolIds?.[h.row.toolIds!.length - 1]).toBe('call-1');
+        // One id per trail line, so the two arrays stay the same length.
+        expect(h.row.toolIds?.length).toBe(h.row.toolEvents?.length);
+    });
+
     it('carries the surface\'s own context to the transport: coin, timeframe, journal, tier, budget', async () => {
         script([{ text: 'ok' }]);
         const h = harness();
