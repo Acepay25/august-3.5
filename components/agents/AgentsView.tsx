@@ -241,6 +241,15 @@ const relTimeMs = (ms: number): string => {
  *  legacy lane in, so this surface and the dock read the same trace. */
 const chatRowFrom = (m: Message, username: string, deskName: string): ChatRowView => {
     const trace = messageTraceText(m);
+    // The trail, one line per entry. `liveToolEvents` is the capped,
+    // newline-JOINED live feed — read as a list it is ONE row holding every
+    // line, which is why the Chat surface's tool rows never paired. The
+    // settled trail is `toolEvents`; the live feed is the fallback, and its
+    // newlines are split so an older row still draws one row per line.
+    const liveFeed = Object.values(m.liveToolEvents ?? {})
+        .flatMap(feed => feed.split('\n'))
+        .filter(line => line.trim().length > 0);
+    const trail = m.toolEvents && m.toolEvents.length > 0 ? m.toolEvents : liveFeed;
     return {
         id: m.id,
         role: m.role === MessageRole.USER ? 'user' : 'ai',
@@ -250,7 +259,10 @@ const chatRowFrom = (m: Message, username: string, deskName: string): ChatRowVie
         streaming: !!m.isStreaming,
         images: m.images,
         reasoning: trace.length > 0 ? trace : undefined,
-        toolLines: Object.values(m.liveToolEvents ?? {}).flat(),
+        toolLines: trail,
+        // The payload ids, so the tool rows can open onto the real output —
+        // the expander is the dock's one job the Chat surface could not do.
+        toolIds: m.toolIds,
         actions: m.toolActions,
         workedMs: typeof m.runStats?.durationMs === 'number' ? m.runStats.durationMs : undefined,
         // The thinking tier this answer was produced under, so the row can

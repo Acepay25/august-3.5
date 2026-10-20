@@ -186,9 +186,24 @@ export interface Message {
    *  Cleared when the stream settles — drives live markdown rendering and the
    *  Thinking row's running state (perceived speed). */
   isStreaming?: boolean;
-  /** Transient live desk-tool chips: speaker -> latest tool line ("calling
-   *  order book…" / "buy wall $1.2M @ 94.8k"). Cleared when the debate ends. */
+  /** Transient live desk-tool feed: speaker -> the RECENT tool lines, joined
+   *  with newlines and capped, because it is what a bubble shows WHILE the
+   *  answer is still coming. The settled trail is `toolEvents`. */
   liveToolEvents?: Record<string, string>;
+  /** The turn's tool trail, one entry per line, in the order the desk called
+   *  the tools. Unlike `liveToolEvents` this is NOT capped and NOT a blob: it
+   *  is the record the work card draws, so the rows a trader opens are the
+   *  rows the desk actually ran.
+   *
+   *  It exists because `liveToolEvents` is a newline-JOINED string — one
+   *  entry for the whole turn — so a reader that took it for a list got ONE
+   *  row holding every line, and the call/result pairing never happened. */
+  toolEvents?: string[];
+  /** The payload id for each entry of `toolEvents`, same order. '' (or a
+   *  missing entry) means that line kept no payload: a `calling…` line never
+   *  has one, and a guard line never will. The id is where the BYTES are; the
+   *  line is what the seat saw — two questions, zipped by position. */
+  toolIds?: string[];
 
   // Mode Tracking
   isLensMode?: boolean; // Was this analysis created with Analyst Lenses enabled?

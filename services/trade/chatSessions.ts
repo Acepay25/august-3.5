@@ -476,11 +476,19 @@ export const saveSessions = (sessions: ChatSession[], pinnedIds: readonly string
 export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
     const trace = messageTraceText(m);
     const at = m.createdAt ? Date.parse(m.createdAt) : NaN;
+    // The trail, one line per entry. `liveToolEvents` is the capped,
+    // newline-JOINED live feed — read as a list it is ONE row holding every
+    // line, so the dock's projection of a Chat row drew one giant tool row
+    // and never paired a call with its result.
+    const liveFeed = Object.values(m.liveToolEvents ?? {})
+        .flatMap(feed => feed.split('\n'))
+        .filter(line => line.trim().length > 0);
+    const trail = m.toolEvents && m.toolEvents.length > 0 ? m.toolEvents : liveFeed;
     return {
         id: m.id,
         role: m.role === MessageRole.USER ? 'user' : 'ai',
         text: m.text || '',
-        tools: Object.values(m.liveToolEvents ?? {}).flat(),
+        tools: trail,
         // Left unset on purpose: the dock stamps the answering seat from the
         // session's own bot, so a stale name here would fight it.
         speaker: undefined,
@@ -503,6 +511,9 @@ export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
         // opened in the dock from a Chat-surface conversation keeps the fact
         // that the answer was produced under a different tier.
         effort: m.runStats?.effort,
+        // …and the payload ids, so the dock's rows can open onto the real
+        // output for a turn the Chat surface answered.
+        toolIds: m.toolIds,
         // A row with an unparseable timestamp keeps `at` undefined rather than
         // stamping it as 0: the memory-attribution window join treats a real
         // stamp as meaningful and 0 as noise.

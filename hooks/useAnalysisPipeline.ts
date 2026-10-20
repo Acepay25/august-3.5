@@ -1266,6 +1266,10 @@ ${enhancedPrompt}`;
                     createdAt: new Date().toISOString(),
                     modelsUsed: { [seat.config.id]: seat.model },
                     thoughtProcesses: out.reasoning.trim() ? { [seat.config.id]: out.reasoning } : undefined,
+                    // The trail, one line per entry — the settled work card
+                    // draws these rows. The live feed beside it is the capped,
+                    // newline-joined version a bubble shows while it fills.
+                    toolEvents: out.toolLines.length ? [...out.toolLines] : undefined,
                     liveToolEvents: out.toolLines.length ? { desk: out.toolLines.join('\n') } : undefined,
                     injectedSkills: out.skills.length ? out.skills : undefined,
                     ...(out.proposal ? { proposal: out.proposal, planId: out.proposal.planId } : {}),
