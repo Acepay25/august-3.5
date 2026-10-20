@@ -67,7 +67,7 @@ each home maps them onto its own fields. That is what 20a builds.
 
 Second blocker for the cheaper "just lift the runner" route: the deps are captured
 **at construction** (`chatTurnRunner.ts:204-285`, `useMemo` over 35 fields at
-`TradeChatPanel.tsx:515-556`), including composer state (`draft`, `attachments`,
+`TradeChatPanel.tsx:516-557`), including composer state (`draft`, `attachments`,
 `setDraft`, `clearAttachments`, `setContextAt`) and `systemPromptFor`. Two surfaces
 cannot share one instance built per-mount, so 20a converts turn-scoped context into
 parameters and leaves the composer/state hooks with the caller.
@@ -694,7 +694,7 @@ and `featuresAreWired`, `harnessFeatures`, `scalpDetection`,
 `automationRouteCharacterization`, `analysisPipelineSendIdentity` green.
 
 Still blocked: `verdictFinalizer.ts` (the ~15 application sites above), and the engine
-cluster it feeds. Also two comments now make a false claim — `components/agents/AgentsView.tsx:241`
+cluster it feeds. Also two comments now make a false claim — `components/agents/AgentsView.tsx:242`
 and the second comment, `components/shared/ChatTranscriptRow.tsx:18`, cite `verdictFinalizer.ts` as where a
 verdict payload is written, and it has no production caller. Not edited this pass (no turn to
 verify the sentence around them); fix with the re-home.
@@ -1756,7 +1756,7 @@ started here rather than left half-deleted.
 Measured before deleting anything, because "the ensemble branch" no longer names what it did
 when it was ruled on.
 
-**The panel is reachable and working.** `components/trade/TradeChatPanel.tsx:937` renders a
+**The panel is reachable and working.** `components/trade/TradeChatPanel.tsx:956` renders a
 **"New panel · up to 5 models"** control, and a local `addSession(kind)` creates the session;
 `chatTurnRunner.ts:1000` builds the seats, refuses below two usable seats (`:1001`), opens a
 `createDebateMailbox` (`:1023`), plans each turn with `planPanelTurn` (`:1035`), gives every
@@ -2274,7 +2274,7 @@ instead of implying the table is checked.
 found on the line it cites: the `index.tsx` mount chain (StrictMode :73, ErrorBoundary :74, ToastProvider :75 —
 the old `73-79` range proved nothing), `august_surface_v1`, `onSendBotTurn`, `onAnalyze`, `handleRunAnalysisFromChat`,
 `runFullAnalysis`, `runSeatTurn` at both :593 and :1082, `applyCasualStreamUpdate`, `notify`. Binding found another real
-defect: row 13 cited AgentsView.tsx:733 for `onAnalyze`, and the await is at **:730** (:733 is the `finally` of that
+defect: row 13 cited AgentsView.tsx:748 for `onAnalyze`, and the await is at **:745** (:748 is the `finally` of that
 same try) — fixed in both flow docs. Coverage now prints 14/53 with 22 pairs and a floor of 14, and 39 rows remain
 line-resolved only.
 
@@ -2283,8 +2283,8 @@ went through the source: `runAutomation` is hooks/useAutomations.ts:381 (the tab
 :423 (it said :431), and the row that attributes `Message.proposal` to the pipeline cited line 1293 of that
 file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1376. All three fixed in both flow docs. Newly bound and verified true:
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44, the Enter branch at
-components/trade/panels/ChatComposer.tsx:146, systemPromptFor components/trade/TradeChatPanel.tsx:453 with
-TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:475, useBotThread hooks/useAnalysisPipeline.ts:1301,
+components/trade/panels/ChatComposer.tsx:146, systemPromptFor components/trade/TradeChatPanel.tsx:454 with
+TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:476, useBotThread hooks/useAnalysisPipeline.ts:1301,
 entriesForSession services/trade/chatSessions.ts:558, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:165
 with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
 services/trade/automationTurn.ts:69, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices

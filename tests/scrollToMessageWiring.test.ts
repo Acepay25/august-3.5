@@ -51,12 +51,24 @@ describe('App: both affordances call the bridge', () => {
         ));
     });
 
-    it('jump-to-latest lives on the Chat transcript as a scroll pill', () => {
-        // Stage 3 deleted the palette's jump action; the pill rehomed it on
-        // the Chat surface's scroller (the dock's bridge still serves
-        // Locate, pinned below).
-        expect(agentsViewSrc).toMatch(/data-testid="jump-to-latest"/);
-        expect(agentsViewSrc).toMatch(/scrollHeight - el\.scrollTop - el\.clientHeight > 240/);
+    it('jump-to-latest is ONE control, mounted on BOTH transcripts', () => {
+        // Stage 3 deleted the palette's jump action; the control rehomed on
+        // the Chat surface's scroller (the dock's bridge still serves Locate,
+        // pinned below). It then moved again — into
+        // components/shared/JumpToLatestFab.tsx — because the Chart AI dock had
+        // no way back to the answer that was still arriving, and a second
+        // implementation of the same control is how two surfaces end up
+        // disagreeing about when it appears.
+        const fabSrc = readFileSync('components/shared/JumpToLatestFab.tsx', 'utf8');
+        expect(fabSrc).toMatch(/data-testid="jump-to-latest"/);
+        // Both surfaces mount the ONE component.
+        expect(agentsViewSrc).toMatch(/<JumpToLatestFab/);
+        expect(panelSrc).toMatch(/<JumpToLatestFab/);
+        // And both read the ONE threshold, so a reader who scrolls away in
+        // one home gets the same answer in the other.
+        expect(fabSrc).toMatch(/export const JUMP_AWAY_PX = 240;/);
+        expect(agentsViewSrc).toMatch(/JUMP_AWAY_PX/);
+        expect(panelSrc).toMatch(/JUMP_AWAY_PX/);
     });
 
     it('the bridge is threaded into TradeView', () => {

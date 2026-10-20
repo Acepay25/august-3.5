@@ -61,15 +61,15 @@ Stored surface values `'chat'`, `'boards'`, `'skills'` all migrate to `'trade'`
 ```mermaid
 flowchart TD
     subgraph CHAT["Chat surface (agents)"]
-        CB["composer textarea — AgentsView.tsx:546 ref, Enter :1482"] --> D1{"send() :709 branches on what is SELECTED"}
-        D1 -->|a bot is selected| BOT["onSendBotTurn components/agents/AgentsView.tsx:740 → App:2487 → useBotMailbox → runBotTurn"]
-        D1 -->|no bot| AN["onAnalyze(prompt, images) components/agents/AgentsView.tsx:733 → App:1579 handleRunAnalysisFromChat"]
+        CB["composer textarea — AgentsView.tsx:559 ref, Enter :1494"] --> D1{"send() :724 branches on what is SELECTED"}
+        D1 -->|a bot is selected| BOT["onSendBotTurn components/agents/AgentsView.tsx:755 → App:2487 → useBotMailbox → runBotTurn"]
+        D1 -->|no bot| AN["onAnalyze(prompt, images) components/agents/AgentsView.tsx:748 → App:1579 handleRunAnalysisFromChat"]
     end
     subgraph DOCK["Chart AI dock — inside Trade, TradeView.tsx:1116"]
         DC["ChatComposer.tsx:147 :222"] --> D2{"chatTurnRunner.send chatTurnRunner.ts:812 — branches on seats"}
         D2 -->|solo| SO["runSeatTurn called services/trade/chatTurnRunner.ts:957, defined :602"]
         D2 -->|panel, 2+ seats| PN["per-seat services/trade/chatTurnRunner.ts:1106 + createDebateMailbox :1034 + planPanelTurn :1046"]
-        D2 -->|Full analysis button| FA["runFullAnalysis components/trade/TradeChatPanel.tsx:547 → the SAME App:1579 wrapper — it holds the session run slot and writes no row"]
+        D2 -->|Full analysis button| FA["runFullAnalysis components/trade/TradeChatPanel.tsx:548 → the SAME App:1579 wrapper — it holds the session run slot and writes no row"]
     end
     SO --> TT["runToolTurn — services/trade/toolTurn.ts:126"]
     PN --> TT
@@ -91,7 +91,7 @@ flowchart TD
 ```
 
 The dock's system prompt is assembled by `systemPromptFor`
-([TradeChatPanel.tsx:453](../components/trade/TradeChatPanel.tsx)) from
+([TradeChatPanel.tsx:454](../components/trade/TradeChatPanel.tsx)) from
 `TRADE_CHAT_SYSTEM_PROMPT` + skills index + strategies + profile memory + persona.
 The Chat surface's prompt is its own now (stage 20s): `chatSurfaceSystemPrompt`
 ([services/trade/chatSurfaceTurn.ts:165](../services/trade/chatSurfaceTurn.ts))
@@ -408,15 +408,15 @@ card that forgets it was clicked offers a second journal row.
 | 8 | Header → SurfaceSwitch | the destination set `App.tsx:2098`, list `SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44` |
 | 9 | App → AgentsView props | same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) on `AgentsView App.tsx:2574`, props `App.tsx:2474-2556` |
 | 10 | TradeView → TradeChatPanel | the dock, inside Trade `TradeChatPanel components/trade/TradeView.tsx:1116` |
-| 11 | AgentsView.send → bot branch | the selected bot answered at `onSendBotTurn components/agents/AgentsView.tsx:740` |
+| 11 | AgentsView.send → bot branch | the selected bot answered at `onSendBotTurn components/agents/AgentsView.tsx:755` |
 | 12 | bot branch → useBotMailbox | `runUserBotTurn hooks/useBotMailbox.ts:305` → `runBotTurn hooks/useBotMailbox.ts:130` |
-| 13 | AgentsView.send → analysis branch | `onAnalyze components/agents/AgentsView.tsx:730` → `handleRunAnalysisFromChat App.tsx:1637` — the dock's `onRunAnalysis` reaches the SAME wrapper |
-| 14 | dock Full analysis → the run slot | `runFullAnalysis components/trade/TradeChatPanel.tsx:547` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
+| 13 | AgentsView.send → analysis branch | `onAnalyze components/agents/AgentsView.tsx:745` → `handleRunAnalysisFromChat App.tsx:1637` — the dock's `onRunAnalysis` reaches the SAME wrapper |
+| 14 | dock Full analysis → the run slot | `runFullAnalysis components/trade/TradeChatPanel.tsx:548` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
 | 15 | ChatComposer → chatTurnRunner.send | key `Enter components/trade/panels/ChatComposer.tsx:147` / button `:201` → `services/trade/chatTurnRunner.ts:812` |
 | 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:957` (definition `runSeatTurn services/trade/chatTurnRunner.ts:602`) |
 | 17 | runSeatTurn → the ONE turn executor | `runToolTurn toolTurn.ts:126` → `streamChatWithDeskTools :153` → `DeskToolsService` → `streamChatRequest` |
 | 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1106` · `:1034` · `:1046` |
-| 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `systemPromptFor components/trade/TradeChatPanel.tsx:453` = the blocks below, assembled at `TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:475` |
+| 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `systemPromptFor components/trade/TradeChatPanel.tsx:454` = the blocks below, assembled at `TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:476` |
 | 20 | every dock turn → chatStore | `mutate services/trade/chatStore.ts:361` · `beginRun services/trade/chatStore.ts:508` |
 | 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useBotThread hooks/useAnalysisPipeline.ts:1319`, anything else runs the tool turn `:1376`; the ensemble flag and the roster it fed are gone (2026-10-19) |
 | 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1368` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:252` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
@@ -537,7 +537,7 @@ card that forgets it was clicked offers a second journal row.
    `services/trade/chatTurnRunner.ts:1034`, `planPanelTurn` at
    `services/trade/chatTurnRunner.ts:1046`, the dock's `send` at
    `services/trade/chatTurnRunner.ts:812`, `runFullAnalysis` at
-   `components/trade/TradeChatPanel.tsx:547`, and `MAX_PLANS_PER_RUN` at
+   `components/trade/TradeChatPanel.tsx:548`, and `MAX_PLANS_PER_RUN` at
    `services/trade/automationTurn.ts:69`. The pass also moved four surface anchors
    that pointed inside a prop list onto the guard that mounts the surface:
    `App.tsx:2451` trade, `App.tsx:2408` journal, `App.tsx:2430` learn,
@@ -590,7 +590,7 @@ card that forgets it was clicked offers a second journal row.
     `accuracy/`, the engine and its types (`debateScience.ts`, `ensembleService.ts`,
     `ensembleConsensus.ts`, `streamTypes.ts`, `debatePods.ts`) and `GroqKeyPool.ts`.
 
-12. **The Agents desk is never seeded.** Two effects in the App used to build a fallback roster from the Analyst Lens assignments or the model picker, and a third rewrote a named bot model whenever those settings moved. All three are gone with the built-in Macro / Technical / Risk analysts (owner ruling, 2026-10-19), and the registry’s seedIfEmpty helper was deleted with its only caller. A fresh profile therefore opens on the empty state at `listedBots AgentsView.tsx:1073` — "No agents yet. Create one and it appears here with its own thread" — and an agent exists only because the trader made one. Nothing went red when the seeding was removed, because no test covered it: that silence is evidence nothing was watching, not evidence the feature was inert.
+12. **The Agents desk is never seeded.** Two effects in the App used to build a fallback roster from the Analyst Lens assignments or the model picker, and a third rewrote a named bot model whenever those settings moved. All three are gone with the built-in Macro / Technical / Risk analysts (owner ruling, 2026-10-19), and the registry’s seedIfEmpty helper was deleted with its only caller. A fresh profile therefore opens on the empty state at `listedBots AgentsView.tsx:1088` — "No agents yet. Create one and it appears here with its own thread" — and an agent exists only because the trader made one. Nothing went red when the seeding was removed, because no test covered it: that silence is evidence nothing was watching, not evidence the feature was inert.
 
 ## Measured after stage 19: what the deletion did NOT remove
 

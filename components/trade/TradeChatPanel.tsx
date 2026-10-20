@@ -39,6 +39,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Activity, Compass, Crosshair, Eye, History, MoreHorizontal, PanelRightOpen, Plus, X, Zap } from '../shared/Icons';
+import JumpToLatestFab, { JUMP_AWAY_PX } from '../shared/JumpToLatestFab';
 import { ProviderConfig } from '../../types/provider';
 import type { LoggedTrade } from '../../types';
 import type { Message } from '../../types/message';
@@ -643,10 +644,20 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     // up to read. Wheel/touch position wins over the auto-follow: scrolling
     // up unpins (returning near the bottom, or sending a message, re-pins).
     const stickToBottomRef = useRef(true);
+    /** The trader has scrolled away from the newest row — the one state the
+     *  follow-the-bottom behaviour will NOT fix on its own, because a
+     *  transcript that moves while you read it cannot be read. The jump
+     *  control is the way back, and it is the same control the Chat surface
+     *  mounts (components/shared/JumpToLatestFab.tsx), on the same threshold:
+     *  one rule for both homes, so neither yanks a reader the other one
+     *  offered a button for. */
+    const [scrolledAway, setScrolledAway] = useState(false);
     const onChatScroll = useCallback((): void => {
         const el = scrollRef.current;
         if (!el) return;
-        stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        const away = el.scrollHeight - el.scrollTop - el.clientHeight > JUMP_AWAY_PX;
+        stickToBottomRef.current = !away;
+        setScrolledAway(away);
     }, []);
     useEffect(() => {
         const el = scrollRef.current;
@@ -655,6 +666,14 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         if (!last || last.role === 'user') stickToBottomRef.current = true;
         if (stickToBottomRef.current) el.scrollTop = el.scrollHeight;
     }, [entries, activeId]);
+    /** One click returns to the newest row, and re-pins the follow so the next
+     *  streamed line keeps arriving where the trader is looking. */
+    const jumpToLatest = useCallback((): void => {
+        const el = scrollRef.current;
+        if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
+        stickToBottomRef.current = true;
+        setScrolledAway(false);
+    }, []);
 
     // ── Imperative scroll-to-entry bridge (see registerScrollToMessage) ────
     // The dock owns the only real transcript scroller, so App's affordances
@@ -1070,7 +1089,10 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             {/* The prototype's bias read rides ABOVE the transcript: always
                 current, code-calculated — the tape's state, not a chat turn. */}
             <BiasChips symbol={symbol} interval={interval as ChartInterval} />
-            <div ref={scrollRef} onScroll={onChatScroll} className="min-h-0 flex-1 space-y-4 overflow-y-auto custom-scrollbar px-4 py-4"
+            {/* The transcript's own box, so the jump control floats over the
+                transcript's bottom-right corner and not over the composer. */}
+            <div className="relative min-h-0 flex-1">
+            <div ref={scrollRef} onScroll={onChatScroll} className="h-full space-y-4 overflow-y-auto custom-scrollbar px-4 py-4"
                 // The dock's transcript root is the one element a screen reader
                 // needs to name for an answer to be heard at all: rows append and
                 // old ones scroll away, which is exactly `role="log"`. Held busy
@@ -1108,6 +1130,15 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     pinnedMessageIds={pinnedMessageIds}
                     onLogProposedTrade={onLogProposedTrade}
                 />
+            </div>
+            {/* The jump control: it appears when the trader has scrolled away
+                from the newest row, and while a turn is running it shows the
+                INDETERMINATE ring — the answer is arriving down there. */}
+            <JumpToLatestFab
+                visible={scrolledAway || entries.some(e => e.streaming)}
+                running={entries.some(e => e.streaming)}
+                onJump={jumpToLatest}
+            />
             </div>
 
             {/* Composer — the reference's layout: a workspace-style section
