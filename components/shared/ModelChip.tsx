@@ -1,161 +1,113 @@
 /**
- * ModelChip — the composer's model control: a quiet pill that names the current
- * model and opens a searchable, provider-grouped, star-able menu.
+ * ModelChip — the composer's ONE model control: the trigger, and the merged
+ * panel it anchors.
  *
- * This is the Chart AI dock's picker, lifted out of `panels/ChatComposer` so the
- * Chat surface gets the SAME control rather than a plainer second one. Two chips
- * that look similar and do different things is the shape of defect this repo
- * keeps being asked to remove; the menu's contract (ready providers only,
- * grouped, searchable, scrolling not overflowing, starred first) is now owned
- * once.
+ * It used to be two controls and a third somewhere else: this chip (an inline
+ * absolute panel, provider-grouped, star-able) and `EffortChip` (a radio menu of
+ * six tiers) sat on one footer row, while `ModelPicker` ran a portaled
+ * two-column flyout in Settings, the automation editor and the seat picker. Two
+ * implementations of one decision reading different stored values, and the
+ * thinking tier separated from the model whose behaviour it changes — `low`
+ * switches thinking OFF on the GLM and DeepSeek routes
+ * (`services/providers/reasoningControls.ts`), so a tier you cannot see beside
+ * the model is a tier you cannot reason about. `docs/plan/model-menu-redesign.md`
+ * (E-51) is the ruling; the trigger now carries the tier (D-D) and lives in the
+ * composer card (D-A), and `EffortChip` is deleted rather than kept in step.
  *
- * The star list persists raw in localStorage under `august_starred_models_v1` —
- * a tiny per-browser preference, not user data — so starring in the dock also
- * sorts the chat's list.
+ * The panel body is `ModelMenu`; what stays here is the trigger's shape, the
+ * stored-value writes, and the star list — and the testid `composer-model-chip`,
+ * which two npm-scripted Playwright harnesses drive.
  */
-import React, { useState } from 'react';
-import { Check, ChevronDown, StarIcon } from './Icons';
+import React, { useRef, useState } from 'react';
+import { ChevronDown } from './Icons';
+import ModelMenu, { type ModelMenuAnchor } from './ModelMenu';
+import type { EffortChoice } from './effortScale';
+import { effortChoiceOf } from './effortScale';
 import type { ProviderConfig } from '../../types/provider';
-import { formatModelDisplayName, isFreeModelId, isProviderReady, readStarredModels, writeStarredModels } from '../../utils/providerUtils';
+import { formatModelDisplayName, isProviderReady } from '../../utils/providerUtils';
 
 export interface ModelChipProps {
     providers: ProviderConfig[];
-    /** `"<providerId>::<modelId>"`, the same encoding the dock writes. */
+    /** `"<providerId>::<modelId>"`, the same encoding both homes write. */
     value: string;
     onChange: (value: string) => void;
     onRefreshModels?: () => void | Promise<void>;
+    /** Opens Settings → AI setup. Absent ⇒ the panel offers no such row, which
+     *  is the honest option wherever the host cannot route there. */
+    onManageProviders?: () => void;
     /** Why the chip warns: a stale or unusable pick. It surfaces in the chip's
      *  `title` only — the amber banner under the composer is a separate
      *  component (`ModelFallbackBanner`), not this control. */
     issue?: string | null;
     /** What to name the current pick when nothing in the ready list matches it. */
     fallbackLabel?: string;
+    /** The session's stored tier — `'auto'` when the trader has never picked.
+     *  Absent with `showEffort === false` (a bot turn) and the panel has no
+     *  Effort section at all. */
+    effort?: EffortChoice;
+    onEffortChange?: (id: EffortChoice) => void;
+    showEffort?: boolean;
+    /** The dock's toolbar is 384px wide; the Chat surface's column is 880px.
+     *  Same control, same label, two widths — the compact form truncates. */
+    compact?: boolean;
 }
 
 const ModelChip: React.FC<ModelChipProps> = ({
-    providers, value, onChange, onRefreshModels, issue, fallbackLabel,
+    providers, value, onChange, onRefreshModels, onManageProviders, issue, fallbackLabel,
+    effort, onEffortChange, showEffort = true, compact = false,
 }) => {
-    const [query, setQuery] = useState('');
     const [open, setOpen] = useState(false);
-    const [starred, setStarred] = useState<string[]>(readStarredModels);
-    const toggleStar = (v: string): void => {
-        setStarred(prev => {
-            const next = prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v];
-            writeStarredModels(next);
-            return next;
-        });
+    const [anchor, setAnchor] = useState<ModelMenuAnchor | null>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+
+    const ready = providers.filter(isProviderReady);
+    const pairId = value.split('::')[0];
+    const modelId = value.split('::').slice(1).join('::');
+    const provider = ready.find(p => p.id === pairId) ?? null;
+    const modelLabel = provider && provider.models.includes(modelId)
+        ? formatModelDisplayName(modelId)
+        : null;
+    const tierLabel = showEffort && effort ? effortChoiceOf(effort).label : null;
+    // Ruling D-D: one value, one writer, and the tier is never behind a click.
+    const selectedLabel = provider && modelLabel
+        ? `${provider.name} · ${modelLabel}${tierLabel ? ` · ${tierLabel}` : ''}`
+        : [fallbackLabel, tierLabel].filter(Boolean).join(' · ') || 'Select model';
+
+    const toggle = (): void => {
+        if (open) { setOpen(false); return; }
+        const r = triggerRef.current?.getBoundingClientRect();
+        if (!r) return;
+        setAnchor({ top: r.top, bottom: r.bottom, left: r.left, right: r.right });
+        setOpen(true);
     };
-    const readyProviders = providers.filter(isProviderReady);
-    const q = query.trim().toLowerCase();
-    const sections = readyProviders
-        .map(p => ({
-            provider: p,
-            models: p.models
-                .filter(m => !q || m.toLowerCase().includes(q))
-                .map(m => ({ value: `${p.id}::${m}`, label: formatModelDisplayName(m), free: isFreeModelId(m) }))
-                .sort((a, b) => Number(starred.includes(b.value)) - Number(starred.includes(a.value))),
-        }))
-        .filter(s => s.models.length > 0);
-    const readyModelCount = readyProviders.reduce((n, p) => n + p.models.length, 0);
-    const selectedLabel = readyProviders
-        .flatMap(p => p.models.map(m => ({ v: `${p.id}::${m}`, label: `${p.name} · ${formatModelDisplayName(m)}` })))
-        .find(o => o.v === value)?.label
-        ?? fallbackLabel ?? 'Select model';
-    const close = (): void => { setOpen(false); setQuery(''); };
 
     return (
-        <div className="relative">
+        <div className="relative min-w-0">
             <button type="button"
-                onClick={() => setOpen(v => !v)}
-                aria-label={`Model: ${selectedLabel}`}
+                ref={triggerRef}
+                onClick={toggle}
+                aria-label={`Model ${selectedLabel}`}
                 aria-expanded={open} aria-haspopup="menu"
-                title={issue ? 'Model fallback active — re-pick a model' : 'Model'}
+                title={issue ? 'Model fallback active — re-pick a model' : selectedLabel}
                 data-testid="composer-model-chip"
-                className="flex max-w-[13rem] items-center gap-1.5 rounded-full border border-white/[0.08] bg-zinc-900/60 px-2.5 py-1 text-ui-dense text-zinc-400 transition-colors hover:border-white/[0.16] hover:text-zinc-200">
+                className={`flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-zinc-900/60 px-2.5 py-1 text-ui-dense text-zinc-400 transition-colors hover:border-white/[0.16] hover:text-zinc-200 ${compact ? 'max-w-[13rem]' : 'max-w-[22rem] min-w-0'}`}>
                 <span className="min-w-0 truncate" title={selectedLabel}>{selectedLabel}</span>
-                <ChevronDown className={`h-2.5 w-2.5 shrink-0 transition-transform duration-150 ease-[var(--ease-snappy)] ${open ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-2.5 w-2.5 shrink-0 transition-transform duration-150 ease-[var(--ease-snappy)] ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
-            {open && (
-                <>
-                    {/* The invisible-backdrop close the attach menu already uses:
-                        a popover you can leave only by picking an item is a trap. */}
-                    <div className="fixed inset-0 z-20" aria-hidden onClick={close} />
-                    <div
-                        className="absolute bottom-8 right-0 z-30 w-64 rounded-bubble border border-white/10 bg-zinc-900 shadow-xl"
-                        data-testid="composer-model-menu"
-                        role="menu"
-                        aria-label="Model"
-                        onKeyDown={(e) => {
-                            // Contain Escape: unhandled, it bubbles to the
-                            // app-level shortcut that CANCELS a running analysis
-                            // while merely closing this menu.
-                            e.stopPropagation();
-                            if (e.key === 'Escape') close();
-                        }}
-                    >
-                        {readyModelCount > 7 && (
-                            <div className="p-2 pb-1">
-                                <input
-                                    value={query}
-                                    onChange={ev => setQuery(ev.target.value)}
-                                    onKeyDown={e => {
-                                        // stopPropagation keeps composer/app
-                                        // shortcuts from firing while typing;
-                                        // Escape must still close — handled HERE,
-                                        // or the input swallows it and the open
-                                        // menu blocks the dock.
-                                        e.stopPropagation();
-                                        if (e.key === 'Escape') close();
-                                    }}
-                                    placeholder="Search models…"
-                                    aria-label="Search models"
-                                    className="w-full rounded-control border border-white/10 bg-zinc-800/60 px-2 py-1 text-ui-dense text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
-                                />
-                            </div>
-                        )}
-                        <div className="custom-scrollbar max-h-[min(45vh,20rem)] overflow-y-auto px-1 pb-1">
-                            {sections.map(section => (
-                                <div key={section.provider.id}>
-                                    <p className="sticky top-0 z-10 bg-zinc-900 px-2 pb-1 pt-2 text-ui-2xs uppercase tracking-widest text-zinc-600">{section.provider.name}</p>
-                                    {section.models.map(o => (
-                                        <div key={o.value} className={`flex items-center gap-1 rounded-control pr-1.5 transition-colors hover:bg-white/[0.06] ${o.value === value ? 'bg-white/[0.04]' : ''}`}>
-                                            <button type="button"
-                                                onClick={() => toggleStar(o.value)}
-                                                aria-label={starred.includes(o.value) ? `Unstar ${o.label}` : `Star ${o.label}`}
-                                                aria-pressed={starred.includes(o.value)}
-                                                title={starred.includes(o.value) ? 'Unstar' : 'Star'}
-                                                className={`shrink-0 rounded-full p-1 transition-colors hover:text-amber-300 ${starred.includes(o.value) ? 'text-amber-300' : 'text-zinc-600'}`}>
-                                                <StarIcon className="h-3 w-3" fill={starred.includes(o.value) ? 'currentColor' : 'none'} aria-hidden="true" />
-                                            </button>
-                                            <button type="button"
-                                                role="menuitemradio"
-                                                aria-checked={o.value === value}
-                                                onClick={() => { onChange(o.value); close(); }}
-                                                title={o.label}
-                                                className="flex min-w-0 flex-1 items-center gap-2 rounded-control py-1.5 pr-1 text-left text-ui-dense transition-colors hover:bg-white/[0.04]">
-                                                <Check className={`h-3 w-3 shrink-0 ${o.value === value ? 'text-emerald-400' : 'opacity-0'}`} aria-hidden="true" />
-                                                <span className="min-w-0 truncate" title={o.label}>{o.label}</span>
-                                            </button>
-                                            {o.free && (
-                                                <span className="shrink-0 rounded-full border border-emerald-500/30 px-1.5 py-px text-ui-2xs uppercase tracking-wider text-emerald-400">free</span>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            ))}
-                            {sections.length === 0 && (
-                                <p className="px-2 py-3 text-ui-dense text-zinc-600">No models match “{query}”.</p>
-                            )}
-                            {onRefreshModels && (
-                                <button type="button" role="menuitem"
-                                    onClick={() => { void onRefreshModels(); close(); }}
-                                    className="mt-1 block w-full rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200">
-                                    Refresh model list
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                </>
+            {open && anchor && (
+                <ModelMenu
+                    providers={providers}
+                    value={value}
+                    onChange={onChange}
+                    effort={effort}
+                    onEffortChange={onEffortChange}
+                    showEffort={showEffort}
+                    onRefreshModels={onRefreshModels}
+                    onManageProviders={onManageProviders}
+                    anchor={anchor}
+                    onClose={() => setOpen(false)}
+                    returnFocusTo={triggerRef.current}
+                />
             )}
         </div>
     );

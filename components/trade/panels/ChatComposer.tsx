@@ -2,9 +2,10 @@
  * ChatComposer — the dock's composer, extracted from TradeChatPanel.
  * Props-only: the draft and the attach menu are the SHELL's state (they keep
  * their lifetime across session switches, as before) — only their setters ride
- * in as props. The model selector and the thinking-effort dial are shared
- * controls (components/shared/ModelChip, EffortChip) that own their own open
- * state, so this file passes a value and a writer and nothing else. The +
+ * in as props. The model control is the shared `ModelChip` — one trigger that
+ * names the provider, the model and the thinking tier, and one panel that edits
+ * all three — so this file passes a value, a tier and their writers and nothing
+ * else. The +
  * attach button (files + images + chart screenshot), the scan→skills chip and
  * Full analysis behave exactly as they did inline; the send button doubles as
  * Stop while a run is live.
@@ -18,7 +19,6 @@ import type { ReasoningEffort } from '../../../services/providers/reasoningContr
 import { formatModelDisplayName } from '../../../utils/providerUtils';
 import { DISCLAIMER_SHORT } from '../../../constants/disclaimer';
 
-import EffortChip from '../../shared/EffortChip';
 import ModelChip from '../../shared/ModelChip';
 import ChatAttachmentStrip from './ChatAttachmentStrip';
 import ComposerWorkspaceRow from './ComposerWorkspaceRow';
@@ -112,9 +112,10 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
     attachFiles, showAttachMenu, setShowAttachMenu, captureChart, onCaptureChart, composerRef,
     panelCount, pickerOpen, onTogglePicker, botName, contextAt,
 }) => {
-    // The model chip is the shared ModelChip (components/shared/ModelChip.tsx) —
-    // the same control the Chat surface now renders, so the menu contract
-    // (ready providers only, grouped, searchable, starred first) is owned once.
+    // One shared ModelChip (components/shared/ModelChip.tsx), which is now also
+    // the effort dial: the tier rides the trigger's label and is edited on the
+    // slider in the same panel, so the Chat surface and this dock cannot end up
+    // with a dial the other lacks — or a label that disagrees with the request.
     return (
     <div className="shrink-0 px-3 pb-3 pt-1">
         <ModelFallbackBanner modelIssue={modelIssue} provider={provider} />
@@ -198,39 +199,43 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                     Full analysis
                     </button>
                 )}
-                <button
-                    type="button"
-                    onClick={() => {
-                        if (!busy) { void send(draft); return; }
-                        // Both, and in this order: the chat controller settles
-                        // the bubble as a deliberate stop, the pipeline cancel
-                        // actually ends the run. Either alone leaves half the
-                        // job done — that is the defect this order fixes.
-                        onStopRun?.();
-                        chatStore.abortActive();
-                    }}
-                    disabled={!ready && !busy}
-                    aria-label={busy ? 'Stop' : 'Send'}
-                    /* ml-auto: right-aligned in the toolbar row AND on its own
-                       row when the narrow dock wraps — the reference keeps the
-                       send at the composer's bottom-right, never bottom-left. */
-                    className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-zinc-900 transition-colors hover:bg-white disabled:opacity-40"
-                >
-                    {busy ? <StopIcon className="h-3 w-3" fill="currentColor" /> : <SendIcon className="h-4 w-4" aria-hidden="true" />}
-                </button>
+                {/* D-A (docs/plan/model-menu-redesign.md): the model control
+                    lives IN the card, immediately left of send — not on a
+                    footer row under it. `ml-auto` on the PAIR is what keeps
+                    send the bottom-right element when the 384px toolbar wraps
+                    onto a second line; the trigger truncates instead of
+                    pushing the row sideways. */}
+                <div className="ml-auto flex min-w-0 items-center gap-1.5" data-testid="composer-model-and-send">
+                    {!isPanel && (
+                        <ModelChip providers={providers} value={selectedChatModel} onChange={changeSoloModel}
+                            onRefreshModels={onRefreshModels} issue={modelIssue} fallbackLabel={provider?.name}
+                            effort={effort} onEffortChange={changeEffort} compact />
+                    )}
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (!busy) { void send(draft); return; }
+                            // Both, and in this order: the chat controller settles
+                            // the bubble as a deliberate stop, the pipeline cancel
+                            // actually ends the run. Either alone leaves half the
+                            // job done — that is the defect this order fixes.
+                            onStopRun?.();
+                            chatStore.abortActive();
+                        }}
+                        disabled={!ready && !busy}
+                        aria-label={busy ? 'Stop' : 'Send'}
+                        /* The pair above is what right-aligns this button now,
+                           so its own `ml-auto` is gone: the reference keeps the
+                           send at the composer's bottom-right, never bottom-left. */
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-zinc-900 transition-colors hover:bg-white disabled:opacity-40"
+                    >
+                        {busy ? <StopIcon className="h-3 w-3" fill="currentColor" /> : <SendIcon className="h-4 w-4" aria-hidden="true" />}
+                    </button>
+                </div>
             </div>
         </div>
-        {/* The reference footer, harness-style: model chip + effort chip on
-            one row under the card's right edge, the disclaimer on its own
-            line below. Both chips are the shared controls the Chat surface
-            renders too, so neither home can have a dial the other lacks. */}
-        <div className="mt-1.5 flex items-center justify-end gap-1.5 px-2">
-            {!isPanel && (
-                <ModelChip providers={providers} value={selectedChatModel} onChange={changeSoloModel}
-                    onRefreshModels={onRefreshModels} issue={modelIssue} fallbackLabel={provider?.name} />
-            )}
-            {!isPanel && <EffortChip value={effort} onChange={changeEffort} />}
-        </div>
+        {/* The footer row that used to hold the two chips is deleted with them;
+            the disclaimer keeps its own line under the card. */}
         <p className="mt-1.5 px-2 text-ui-xs text-zinc-600">
             {DISCLAIMER_SHORT}
         </p>

@@ -56,27 +56,47 @@ const MODELS = [
     await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => !document.querySelector('#splash'), null, { timeout: 25000 });
     await page.waitForSelector('[data-testid="composer-model-chip"]', { timeout: 25000 });
+    // Ruling D-D: the tier is readable WITHOUT opening the panel, so the trigger
+    // must name provider, model and tier. Asserted here because this harness is
+    // the only one that drives the real dock composer against a dense catalog.
+    const triggerText = (await page.textContent('[data-testid="composer-model-chip"]'))?.trim() ?? '';
+    console.log(`trigger label: "${triggerText}"`);
+    if (!/(Auto|Off|Low|Medium|High|Max)$/.test(triggerText)) {
+        console.error('::error::the trigger does not print the thinking tier (E-51 ruling D-D)');
+        await browser.close();
+        process.exit(1);
+    }
     await page.click('[data-testid="composer-model-chip"]');
-    await page.waitForSelector('[data-testid="composer-model-menu"]', { timeout: 5000 });
+    await page.waitForSelector('[data-testid="model-menu"]', { timeout: 5000 });
     await page.screenshot({ path: path.join(SHOTS, 'chip-open.png') });
-    // The popover must fit the viewport, whatever the list length.
+    // The popover must fit the viewport, whatever the list length. It opens
+    // UPWARD from a trigger at the bottom of the card, so `top` is the edge that
+    // an unbounded panel used to push off the screen.
     const fit = await page.evaluate(() => {
-        const r = document.querySelector('[data-testid="composer-model-menu"]').getBoundingClientRect();
+        const r = document.querySelector('[data-testid="model-menu"]').getBoundingClientRect();
         return { top: Math.round(r.top), bottom: Math.round(r.bottom), vh: window.innerHeight };
     });
     console.log(`model popover top=${fit.top} bottom=${fit.bottom} viewport=${fit.vh} ` +
         (fit.top >= 0 && fit.bottom <= fit.vh ? 'FITS' : 'OVERFLOWS'));
-    // Star the third row, prove it fills and sorts first.
-    await page.locator('[data-testid="composer-model-menu"] button[aria-label^="Star"]').nth(2).click();
+    // Star the third row, prove it fills and sorts FIRST — the ordering is a
+    // behaviour claim a screenshot cannot make.
+    await page.locator('[data-testid="model-menu-rows"] button[aria-label^="Star"]').nth(2).click();
     await page.screenshot({ path: path.join(SHOTS, 'chip-starred.png') });
-    // Search filters.
-    await page.fill('[data-testid="composer-model-menu"] input', 'kimi');
+    const firstRow = await page.getAttribute('[data-testid="model-menu-rows"] > div:first-child button[role="menuitemradio"]', 'title');
+    console.log(`after starring, first row: ${firstRow}`);
+    // Filter narrows the active provider's list.
+    await page.fill('[data-testid="model-menu"] input', 'kimi');
     await page.screenshot({ path: path.join(SHOTS, 'chip-search.png') });
-    // The effort chip is its own popover now.
-    await page.keyboard.press('Escape');
-    await page.click('[data-testid="composer-effort-chip"]');
-    await page.waitForSelector('[data-testid="effort-menu"]', { timeout: 5000 });
-    await page.screenshot({ path: path.join(SHOTS, 'chip-effort.png') });
+    await page.fill('[data-testid="model-menu"] input', '');
+    // The Effort section is in the SAME panel now: six stops, and the printed
+    // value is the tier's word.
+    await page.waitForSelector('[data-testid="effort-slider"]', { timeout: 5000 });
+    await page.screenshot({ path: path.join(SHOTS, 'chip-effort.png'), clip: await page.locator('[data-testid="model-menu-effort"]').boundingBox() });
+    const stops = await page.getAttribute('[data-testid="effort-slider"]', 'aria-valuemax');
+    const tierWord = await page.getAttribute('[data-testid="effort-slider"]', 'aria-valuetext');
+    console.log(`effort slider stops=${stops} valuetext=${tierWord}`);
     await browser.close();
     if (fit.top < 0 || fit.bottom > fit.vh) process.exit(1);
+    if (stops !== '5') { console.error('::error::the effort slider is not six stops'); process.exit(1); }
+    if (!tierWord) { console.error('::error::the slider exposes no tier label to AT'); process.exit(1); }
 })().catch(e => { console.error(e); process.exit(1); });

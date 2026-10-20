@@ -138,14 +138,13 @@ interface AgentsViewProps {
      *  the rail shows no Coach pill — a shortcut to a thread this surface no
      *  longer owns would be a dead end wearing a badge. */
     onOpenCoach?: () => void;
-    /** The composer's model chip — the dock's own `ModelChip`, handed in as a
-     *  node so this surface gets the identical control (searchable, grouped,
-     *  star-able) instead of a plainer twin of it. */
-    modelPicker?: React.ReactNode;
-    /** The composer's thinking-effort chip, mounted from the same session row
-     *  the dock reads — so the tier this surface shows is the tier the send
-     *  hands to the pipeline, on both homes. */
-    effortPicker?: React.ReactNode;
+    /** The composer's model control — the dock's own `ModelChip`, built by the
+     *  host so this surface gets the identical panel (provider, model and the
+     *  thinking tier in one place) instead of a plainer twin of it. It is a
+     *  render prop because one rule needs this surface's selection: a bot turn
+     *  answers on the bot's own config, so the panel shows no Effort section
+     *  (`showEffort: false`) rather than showing a dial nothing reads. */
+    modelPicker?: (opts: { showEffort: boolean }) => React.ReactNode;
     /** Why the stored chat model cannot answer, and what will instead (stage 3
      *  F4b). The Chat surface runs the same solo pick as the dock, so it must
      *  carry the same amber warning — hidden while a bot is selected, because a
@@ -438,7 +437,7 @@ interface BotRow {
 const AgentsView: React.FC<AgentsViewProps> = ({
     username, bots, groups, messages, selection, onSelect, onNewBot, onNewGroup,
     onSendBotTurn, onAnalyze, onLogProposedTrade, onAnalysisError, onStopRun, analysisRunning = false, renderGroup, coachCount, workingBotId,
-    lastOpenedMap = {}, modelPicker, effortPicker, modelFallback = null, destinationMenu, accountRow,
+    lastOpenedMap = {}, modelPicker, modelFallback = null, destinationMenu, accountRow,
     railExpanded = true, onToggleRailExpanded, statusCluster, surfaceSwitch,
     attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup,
     botStats,
@@ -1509,41 +1508,38 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                             className="border-b-0 px-0 py-0"
                                         />
                                     </div>
-                                    <button type="button"
-                                        onClick={() => { if (busy || analysisRunning) { onStopRun?.(); return; } void send(); }}
-                                        disabled={!busy && !analysisRunning && !text.trim()}
-                                        aria-label={(busy || analysisRunning) ? 'Stop' : 'Send'} data-testid="composer-send"
-                                        /* Two states, like the dock's composer. Stop used to live only on the
-                                           pipeline card floating over this surface, which covered the answer it
-                                           was waiting for; the control now sits where the send did. */
-                                        className={`ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-opacity hover:opacity-90 disabled:opacity-30 ${
-                                            (busy || analysisRunning) ? 'bg-rose-500/15 text-rose-300' : 'bg-zinc-100 text-zinc-900'}`}>
-                                        {busy || analysisRunning
-                                            ? <StopIcon className="h-3 w-3" fill="currentColor" aria-hidden="true" />
-                                            : <ArrowUp className="h-4 w-4" aria-hidden="true" />}
-                                    </button>
+                                    {/* E-51 D-A: the merged model control sits IN
+                                        the toolbar row, immediately left of send,
+                                        and the pair is what right-aligns. The
+                                        footer row under the card now carries only
+                                        the context note. */}
+                                    <div className="ml-auto flex min-w-0 items-center gap-1.5" data-testid="composer-model-and-send">
+                                        {modelPicker?.({ showEffort: !activeBot })}
+                                        <button type="button"
+                                            onClick={() => { if (busy || analysisRunning) { onStopRun?.(); return; } void send(); }}
+                                            disabled={!busy && !analysisRunning && !text.trim()}
+                                            aria-label={(busy || analysisRunning) ? 'Stop' : 'Send'} data-testid="composer-send"
+                                            /* Two states, like the dock's composer. Stop used to live only on the
+                                               pipeline card floating over this surface, which covered the answer it
+                                               was waiting for; the control now sits where the send did. */
+                                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-opacity hover:opacity-90 disabled:opacity-30 ${
+                                                (busy || analysisRunning) ? 'bg-rose-500/15 text-rose-300' : 'bg-zinc-100 text-zinc-900'}`}>
+                                            {busy || analysisRunning
+                                                ? <StopIcon className="h-3 w-3" fill="currentColor" aria-hidden="true" />
+                                                : <ArrowUp className="h-4 w-4" aria-hidden="true" />}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                            {/* Reference footer, two rows: the context note
-                                and the model chip share the first (chip owns
-                                the bottom-right), the disclaimer gets its own
-                                line below — August's disclaimer is longer than
-                                Claude's and three items on one row collide.
+                            {/* The context note keeps its own line, left-aligned on
+                                the card's measure; the two chips it shared the row
+                                with are now one control up in the toolbar.
                                 `px-2.5` matches the card's own `p-2.5`: the
                                 card and the measure are both 880px and centered,
-                                so the footer text sits on the same left edge as
-                                the typed text above it rather than 7px inside. */}
-                            <div className="mx-auto mt-2 flex w-full max-w-[55rem] items-center justify-between gap-3 px-2.5 text-ui-xs text-zinc-600">
+                                so the note sits on the same left edge as the typed
+                                text above it rather than 7px inside. */}
+                            <div className="mx-auto mt-2 flex w-full max-w-[55rem] items-center px-2.5 text-ui-xs text-zinc-600">
                                 <span className="min-w-0 truncate" title={contextNote}>{contextNote}</span>
-                                {/* Both chips, right-aligned as one group: the tier
-                                    is the model's, so reading them apart invites
-                                    "which of these did the answer use?". Hidden for
-                                    a bot turn, which answers on the bot's own config
-                                    through a transport that never reads this dial. */}
-                                <div className="flex shrink-0 items-center gap-1.5">
-                                    {modelPicker}
-                                    {!activeBot && effortPicker}
-                                </div>
                             </div>
                             <div className="mx-auto mt-1 w-full max-w-[55rem] px-2.5 text-ui-xs text-zinc-600">
                                 <span className="hidden sm:inline">{DISCLAIMER_SHORT}</span>

@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-19** (the anchor gate re-measured every citation here and in the stage ledger:
-**303 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**304 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 3 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -40,8 +40,8 @@ flowchart TD
     UR --> HASH["utils/appHash.ts:10 — hash and state stay equal"]
     APP --> HD["Header band App.tsx:2299 — guard surface !== 'agents' :2300"]
     HD --> SW["SurfaceSwitch App.tsx:2098 — 4 destinations, list in SurfaceMenuList.tsx:44"]
-    APP --> AV["AgentsView gets the same nodes as props App.tsx:2474-2554"]
-    SW --> T["Trade · trade-view · App:2553"]
+    APP --> AV["AgentsView gets the same nodes as props App.tsx:2474-2556"]
+    SW --> T["Trade · trade-view · App:2577"]
     SW --> J["Journal · journal-view · App:2408"]
     SW --> C["Chat · agents-view · App:2472"]
     SW --> K["Knowledge · learn-view · App:2430"]
@@ -61,12 +61,12 @@ Stored surface values `'chat'`, `'boards'`, `'skills'` all migrate to `'trade'`
 ```mermaid
 flowchart TD
     subgraph CHAT["Chat surface (agents)"]
-        CB["composer textarea — AgentsView.tsx:538 ref, Enter :1474"] --> D1{"send() :697 branches on what is SELECTED"}
+        CB["composer textarea — AgentsView.tsx:538 ref, Enter :1474"] --> D1{"send() :701 branches on what is SELECTED"}
         D1 -->|a bot is selected| BOT["onSendBotTurn components/agents/AgentsView.tsx:732 → App:2487 → useBotMailbox → runBotTurn"]
         D1 -->|no bot| AN["onAnalyze(prompt, images) components/agents/AgentsView.tsx:725 → App:1579 handleRunAnalysisFromChat"]
     end
     subgraph DOCK["Chart AI dock — inside Trade, TradeView.tsx:1115"]
-        DC["ChatComposer.tsx:146 :218"] --> D2{"chatTurnRunner.send chatTurnRunner.ts:801 — branches on seats"}
+        DC["ChatComposer.tsx:147 :222"] --> D2{"chatTurnRunner.send chatTurnRunner.ts:801 — branches on seats"}
         D2 -->|solo| SO["runSeatTurn called services/trade/chatTurnRunner.ts:946, defined :595"]
         D2 -->|panel, 2+ seats| PN["per-seat services/trade/chatTurnRunner.ts:1095 + createDebateMailbox :1023 + planPanelTurn :1035"]
         D2 -->|Full analysis button| FA["runFullAnalysis components/trade/TradeChatPanel.tsx:547 → the SAME App:1579 wrapper — it holds the session run slot and writes no row"]
@@ -108,9 +108,9 @@ recorded on the row (`Message.injectedSkills`, `types/message.ts:278`), bounded
 to the 30 the index prints — a row naming skills the model never saw would be an
 audit defect, not an audit trail.
 
-**One entry, both homes.** `handleRunAnalysisFromChat` (App.tsx:1601) is the only
-analysis wrapper: the dock passes it as `onRunAnalysis` (App:2457) and the Chat
-surface as `onAnalyze` (App:2553). It was two, and `services/trade/analysisTurn.ts`
+**One entry, both homes.** `handleRunAnalysisFromChat` (App.tsx:1625) is the only
+analysis wrapper: the dock passes it as `onRunAnalysis` (App:2481) and the Chat
+surface as `onAnalyze` (App:2577). It was two, and `services/trade/analysisTurn.ts`
 was deleted (2026-10-17) because a second writer keyed rows with ids no canonical
 row could match — that is what made the two homes disagree.
 
@@ -403,16 +403,16 @@ card that forgets it was clicked offers a second journal row.
 | 3 | App → useSurfaceRouter | surface + journalTab + journalOpenNonce, `useSurfaceRouter hooks/useSurfaceRouter.ts:54` |
 | 4 | useSurfaceRouter → useSurface | persisted value, key `august_surface_v1 hooks/useSurface.ts:15`, valid set `:16` |
 | 5 | useSurfaceRouter → appHash | `#/journal\|market\|settings\|watch` ⇄ state `parseAppHash hooks/useSurfaceRouter.ts:101`, serialize `serializeAppHash hooks/useSurfaceRouter.ts:159` |
-| 6 | App → Header | band `App.tsx:2394`, guard `surface App.tsx:2400` (surface !== 'agents') |
-| 7 | App → 4 lazy surfaces + the automation modal | each wrapped in `SurfaceSkeleton` — `SurfaceSkeleton App.tsx:160` TradeView, `SurfaceSkeleton App.tsx:2473` Journal, `SurfaceSkeleton App.tsx:2495` LearnView, `SurfaceSkeleton App.tsx:2511` StrategyStudio, `SurfaceSkeleton App.tsx:2270` AutomationView |
+| 6 | App → Header | band `App.tsx:2394`, guard `surface App.tsx:2424` (surface !== 'agents') |
+| 7 | App → 4 lazy surfaces + the automation modal | each wrapped in `SurfaceSkeleton` — `SurfaceSkeleton App.tsx:160` TradeView, `SurfaceSkeleton App.tsx:2497` Journal, `SurfaceSkeleton App.tsx:2519` LearnView, `SurfaceSkeleton App.tsx:2535` StrategyStudio, `SurfaceSkeleton App.tsx:2294` AutomationView |
 | 8 | Header → SurfaceSwitch | the destination set `App.tsx:2098`, list `SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44` |
-| 9 | App → AgentsView props | same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) on `AgentsView App.tsx:2538`, props `App.tsx:2474-2554` |
+| 9 | App → AgentsView props | same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) on `AgentsView App.tsx:2562`, props `App.tsx:2474-2556` |
 | 10 | TradeView → TradeChatPanel | the dock, inside Trade `TradeChatPanel components/trade/TradeView.tsx:1115` |
 | 11 | AgentsView.send → bot branch | the selected bot answered at `onSendBotTurn components/agents/AgentsView.tsx:732` |
 | 12 | bot branch → useBotMailbox | `runUserBotTurn hooks/useBotMailbox.ts:305` → `runBotTurn hooks/useBotMailbox.ts:130` |
-| 13 | AgentsView.send → analysis branch | `onAnalyze components/agents/AgentsView.tsx:722` → `handleRunAnalysisFromChat App.tsx:1601` — the dock's `onRunAnalysis` reaches the SAME wrapper |
+| 13 | AgentsView.send → analysis branch | `onAnalyze components/agents/AgentsView.tsx:722` → `handleRunAnalysisFromChat App.tsx:1625` — the dock's `onRunAnalysis` reaches the SAME wrapper |
 | 14 | dock Full analysis → the run slot | `runFullAnalysis components/trade/TradeChatPanel.tsx:547` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
-| 15 | ChatComposer → chatTurnRunner.send | key `Enter components/trade/panels/ChatComposer.tsx:146` / button `:201` → `services/trade/chatTurnRunner.ts:801` |
+| 15 | ChatComposer → chatTurnRunner.send | key `Enter components/trade/panels/ChatComposer.tsx:147` / button `:201` → `services/trade/chatTurnRunner.ts:801` |
 | 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:946` (definition `runSeatTurn services/trade/chatTurnRunner.ts:595`) |
 | 17 | runSeatTurn → the ONE turn executor | `runToolTurn toolTurn.ts:119` → `streamChatWithDeskTools :143` → `DeskToolsService` → `streamChatRequest` |
 | 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1095` · `:1023` · `:1035` |
@@ -440,7 +440,7 @@ card that forgets it was clicked offers a second journal row.
 | 40 | reasoning deltas → their own field | chatTurnRunner and useAnalysisPipeline hand their deltas to `saveThinkingBatch services/infrastructure/ThinkingStoreService.ts:130` |
 | 41 | notebook writes → byte tiers | a write asks `notebookPressureAllows services/learning/MemoryFilesService.ts:649` before the notebook may grow; the tiers come from utils/memoryBudget.ts and Settings Health reads memoryHealth.ts |
 | 42 | heartbeat → hygiene + idle sweep | `useLearningHeartbeat hooks/useLearningHeartbeat.ts:42` → `memoryHygiene.ts` → `skillIdleLifecycle.ts` |
-| 43 | approval tray → badge | `collectApprovalItems utils/approvalInbox.ts:57` → `approvalsWaiting App.tsx:1823` → Knowledge tab only |
+| 43 | approval tray → badge | `collectApprovalItems utils/approvalInbox.ts:57` → `approvalsWaiting App.tsx:1847` → Knowledge tab only |
 | 44 | the pane filters what it shows | `deskThread utils/agentThreads.ts:118` read at `AgentsView.tsx` |
 | 45 | `present_trade` → a card in either home | `runPresentTrade presentTradeTool.ts:78` ← dock sink `chatTurnRunner.ts` / desk sink `chatSurfaceTurn.ts`; gate scan starts there, the cap binds at log time (`ensureStamp`) |
 | 46 | `chatSurfaceSystemPrompt` → the desk arm's prompt | `chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:165` — mandate (`CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40`) + skills index + active strategies + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (`types/message.ts:278`) |
@@ -470,17 +470,17 @@ card that forgets it was clicked offers a second journal row.
    directly); ESLint reports `App.tsx:129:8 'NavRail' is defined but never used`; and
    the code says so out loud — `App.tsx:2372` is the comment reading "The
    NavRail is GONE: its five destination rows were the tab strip this redesign was
-   asked to remove". Only the `AccountRow` export is rendered, at `App.tsx:2609`.
+   asked to remove". Only the `AccountRow` export is rendered, at `App.tsx:2630`.
    **An earlier pass of this doc asserted the opposite** ("rendered at App.tsx line 2766") and
    the mechanism is worth keeping: `App.tsx:2410` passes `onExpandNavRail={…}` and
-   the rail's expand state is very much alive at `App.tsx:618`, so a grep for `NavRail`
+   the rail's expand state is very much alive at `App.tsx:634`, so a grep for `NavRail`
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 303 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 304 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 303 anchors verified, and the gate
+   the gate's own output: these docs state 304 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -639,8 +639,8 @@ added in the same pass, because a scanner that matches nothing reports no drift.
 
 **Three debate-era names survive, and the honest statement is which of them is dead.**
 `moderatorConfig` (`App.tsx:310`) is live, but as a DEFAULT, not a debate role:
-`readyProviders[0] || moderatorConfig` (`App.tsx:333`) resolves the vision/OCR provider and
-`memoryConfig: memoryConfig || moderatorConfig` (`App.tsx:572`) the memory one, the automation
+`readyProviders[0] || moderatorConfig` (`App.tsx:349`) resolves the vision/OCR provider and
+`memoryConfig: memoryConfig || moderatorConfig` (`App.tsx:588`) the memory one, the automation
 editor still resolves a seat from it (`AutomationEditorModal.tsx:168`), and the journal prints
 `Mod:` from the stored `moderatorModel` (`TradeLog.tsx:354`). No moderator TURN exists — one
 model answers a send — so the harness contract can still say "the moderator's last block"
@@ -658,5 +658,5 @@ name grep that had already misled me once on this pass.
 The engine files are gone, and most of the branch with them. What was removed this pass: the seat-completeness refusals ("Your analyst team is incomplete", "Analysts must use different models", "Two debate seats share a model") and the `TEAM_MAX_SEATS` ceiling — only ONE model answers a send (`provider`, `hooks/useAnalysisPipeline.ts:1136` falls back to `enabledProviders[0]`), so those blocked a run over a roster the run never uses, and the ceiling guarded a fan-out that no longer exists. The moderator readiness check survives but now applies only to a scheduled run (`:724`), because a schedule really does take its seat from that config; the human-send version of it refused a click over an unused pick. The flag itself, the seat builder it fed and the roster behind it were deleted on 2026-10-19; the "include a coin" tip survives as a plain nudge. `isDebating` and `activeDebateSpeakers` are deleted outright — every writer set a literal `false`, so the one branch that read them could not run.
 
 
-The user-visible consequence, now FIXED: the chart used to pick its verdict row by the DEBATE shapes (`ensembleProgress`, >1 `modelsUsed`, `debateTurns`) and passed `verdict={verdictMessage?.analysis}` — while nothing writes `Message.analysis` for a new run any more. `verdictFinalizer` was the writer; a tool turn answers with a `TradeProposal` in the tool payload (`services/trade/presentTradeTool.ts`, `proposedTrade.ts`, `tradeShapedProse.ts`). Reader without a writer, the third time in this stage (session usage, the completion notice). Fixed by `latestChartVerdict` in `services/trade/chartData.ts` (`App.tsx:1217`, passed to the chart at `:2532`): it keys on the settled proposal through the existing `buildProposedTradeAnalysis` and keeps `analysis` as the fallback for old rows; `tests/chartVerdictSource.test.ts` pins the proposal path, the fallback, the preference when a row carries both, the symbol match through `verdictLevels`, and the App wiring. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate
+The user-visible consequence, now FIXED: the chart used to pick its verdict row by the DEBATE shapes (`ensembleProgress`, >1 `modelsUsed`, `debateTurns`) and passed `verdict={verdictMessage?.analysis}` — while nothing writes `Message.analysis` for a new run any more. `verdictFinalizer` was the writer; a tool turn answers with a `TradeProposal` in the tool payload (`services/trade/presentTradeTool.ts`, `proposedTrade.ts`, `tradeShapedProse.ts`). Reader without a writer, the third time in this stage (session usage, the completion notice). Fixed by `latestChartVerdict` in `services/trade/chartData.ts` (`App.tsx:1229`, passed to the chart at `:2475`): it keys on the settled proposal through the existing `buildProposedTradeAnalysis` and keeps `analysis` as the fallback for old rows; `tests/chartVerdictSource.test.ts` pins the proposal path, the fallback, the preference when a row carries both, the symbol match through `verdictLevels`, and the App wiring. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate
 
