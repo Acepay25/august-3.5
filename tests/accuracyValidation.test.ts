@@ -129,6 +129,19 @@ describe('validateRiskReward — direction-aware ordering (Tier-0 #7)', () => {
         expect(result.orderingValid).toBe(true);
         expect(result.warnings.some(w => /TIGHT STOP/.test(w))).toBe(true);
     });
+
+    it('stands BOTH ATR bands down when there is no volatility reading (E-57 §5)', () => {
+        // With atr = 0 the tight check can never fire (`risk < 0`), while the
+        // wide one — `risk > 0 * 3` — fired on EVERY plan and printed
+        // "Infinityx ATR": a warning shaped like a measurement. This path only
+        // became reachable once the live gate started calling this function,
+        // because the gate fetches candles per timeframe and an indicator set
+        // with no ATR is a normal answer.
+        const r = validateRiskReward(95000, 94000, 96000, 0, 'Medium', 'Long');
+        expect(r.warnings.some(w => /Infinity|NaN/.test(w))).toBe(false);
+        expect(r.warnings.some(w => /ATR/.test(w))).toBe(false);
+        expect(r.atrBasedStopSuggestion).toBe(0);
+    });
 });
 
 describe('matchPatternMemory is symbol-scoped', () => {

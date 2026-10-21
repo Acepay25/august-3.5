@@ -99,7 +99,7 @@ describe('the card once the stamp has landed', () => {
             canLog onLog={onLog} onCancel={vi.fn()}
         />);
         expect(screen.getByTestId('proposal-refused')).toHaveTextContent(/net expectancy -0.44R/);
-        const btn = screen.getByRole('button', { name: /Refused by your edge floor/ });
+        const btn = screen.getByRole('button', { name: /Refused by the gate/ });
         expect(btn).toBeDisabled();
         fireEvent.click(btn);
         expect(onLog).not.toHaveBeenCalled();
@@ -170,5 +170,88 @@ describe('a plan that arrived on a run that stopped (E-57 §4)', () => {
     it('prints nothing when the turn finished', () => {
         withNote(undefined);
         expect(screen.queryByTestId('proposal-log-note')).toBeNull();
+    });
+});
+
+// E-57 §5. The band text below is `validateRiskReward`'s own wording, quoted
+// through the gate stamp — the card does not re-derive a risk sentence, because
+// a second implementation of a warning is how the card and the row start
+// disagreeing about the same stop.
+describe('a plan the gate cautions about (E-57 §5)', () => {
+    const stamped = (warnings?: string[]): TradeProposal => proposal({
+        gate: {
+            status: 'evaluated', confidenceCap: 0.9, reason: '90% cap',
+            stampedAt: new Date().toISOString(),
+            ...(warnings ? { warnings } : {}),
+        },
+    });
+
+    it('shows the caution WITHOUT a click, and keeps "Log this trade" live', () => {
+        // The tempting shape was a fold for everything the gate disliked. A
+        // caution about the trader's own money behind a toggle is a caution
+        // nobody reads — and per the owner's ruling a stop distance is the
+        // trader's judgement, so the app warns and the button still works.
+        const onLog = vi.fn();
+        render(
+            <TradeProposalCard
+                proposal={stamped(['TIGHT STOP: Stop loss (2.00) is tighter than 1x ATR (10.00). High chance of being stopped out by noise.'])}
+                canLog onLog={onLog} onCancel={vi.fn()}
+            />,
+        );
+        const box = screen.getByTestId('proposal-cautions');
+        expect(box.textContent).toContain('tighter than 1x ATR (10.00)');
+        // The one caution is not hidden behind a disclosure of its own.
+        expect(screen.queryByTestId('proposal-cautions-more')).toBeNull();
+        const log = screen.getByRole('button', { name: /Log this trade/ });
+        expect(log.hasAttribute('disabled')).toBe(false);
+        fireEvent.click(log);
+        expect(onLog).toHaveBeenCalled();
+    });
+
+    it('folds the SECOND caution into the one expandable panel the app owns', () => {
+        renderCard(stamped([
+            'R:R ratio (1.20) below required minimum (1.5) for Medium confidence',
+            'Wide stop loss (4.2x ATR). Consider reducing position size.',
+        ]));
+        expect(screen.getByTestId('proposal-cautions').textContent)
+            .toContain('below required minimum (1.5)');
+        const more = screen.getByTestId('proposal-cautions-more');
+        expect(more.tagName).toBe('DETAILS');
+        expect(more.textContent).toContain('Wide stop loss (4.2x ATR)');
+        expect(more.querySelector('summary')?.textContent).toContain('1 more caution about these levels');
+    });
+
+    it('says the count, in words a trader reads, when three bands fire', () => {
+        renderCard(stamped(['first caution', 'second caution', 'third caution']));
+        expect(screen.getByTestId('proposal-cautions').textContent).toContain('first caution');
+        expect(screen.getByTestId('proposal-cautions-more').querySelector('summary')?.textContent)
+            .toContain('2 more cautions about these levels');
+    });
+
+    it('prints nothing when the gate is happy', () => {
+        renderCard(stamped());
+        expect(screen.queryByTestId('proposal-cautions')).toBeNull();
+    });
+
+    it('a refused plan shows its reason and disables the button — a caution is not a refusal', () => {
+        const onLog = vi.fn();
+        render(
+            <TradeProposalCard
+                proposal={proposal({
+                    gate: {
+                        status: 'evaluated', confidenceCap: 0.9, reason: '90% cap',
+                        stampedAt: new Date().toISOString(),
+                        refusal: 'levels are inverted for a Long plan — a Long risks with the stop below the entry and the target above it, and these levels are not. There is no ratio to grade.',
+                        warnings: ['Stop loss is 6.3% from entry - ensure this aligns with key structure levels.'],
+                    },
+                })}
+                canLog onLog={onLog} onCancel={vi.fn()}
+            />,
+        );
+        expect(screen.getByTestId('proposal-refused')).toHaveTextContent(/levels are inverted for a Long plan/);
+        const btn = screen.getByRole('button', { name: /Refused by the gate/ });
+        expect(btn).toBeDisabled();
+        fireEvent.click(btn);
+        expect(onLog).not.toHaveBeenCalled();
     });
 });

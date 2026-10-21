@@ -195,8 +195,16 @@ export const buildTradePlan = (p: TradeProposal): TradePlan => {
         warnings.push('Gate never ran for this plan — logged UNCAPPED');
     }
     if (p.gate?.refusal) {
-        warnings.push(`REFUSED by the min-edge gate: ${p.gate.refusal}`);
+        // A refusal is either the min-edge floor or an inverted plan, and the
+        // sentence riding with it already names which. The prefix therefore says
+        // only "the gate": calling an inverted plan a min-edge refusal would
+        // claim an edge was measured on arithmetic that points the wrong way.
+        warnings.push(`REFUSED by the gate: ${p.gate.refusal}`);
     }
+    // The plan-shape bands, in the gate's own words, so the row quotes the same
+    // sentence the card showed (E-57 §5). They WARN — the Log button stayed live
+    // and the trader decided — so they belong on the record, not in a refusal.
+    for (const w of p.gate?.warnings ?? []) warnings.push(w);
 
     const cost = roundTripCostR({ stopDistancePct });
     const edge = netEdgeR({

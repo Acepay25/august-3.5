@@ -23,6 +23,10 @@
  */
 
 import { fetchGateInputData, runProgrammaticGate } from '../validation/GateKeeperService';
+import type { GateInput } from '../validation/GateKeeperService';
+import { validateRiskReward } from '../validation/AccuracyValidationService';
+import type { ConfidenceLevel } from '../validation/AccuracyValidationService';
+import { plannedRiskRewardSigned } from '../../utils/riskReward';
 import type { LoggedTrade, ProposalGate } from '../../types';
 import type { TradeProposal } from './proposedTrade';
 import { buildTradePlan } from './proposedTrade';
@@ -65,11 +69,15 @@ export interface SkillGateSignal {
     note?: string;
 }
 
-const unavailable = (reason: string, skill?: SkillGateSignal | null, minEdge?: MinEdgeVerdict): ProposalGate => ({
+const unavailable = (reason: string, skill?: SkillGateSignal | null, minEdge?: MinEdgeVerdict, shape?: PlanShapeVerdict): ProposalGate => ({
     status: 'unavailable', confidenceCap: 1, reason, stampedAt: new Date().toISOString(),
     ...(skill?.ceiling !== undefined ? { skillCeiling: skill.ceiling } : {}),
     ...(skill?.note ? { skillNote: skill.note } : {}),
-    ...(minEdge?.refusal ? { refusal: minEdge.refusal } : {}),
+    // An inverted plan refuses even with the market fetch down: the arithmetic
+    // is plan-local, and a stamp that could not look at the tape is no reason to
+    // present levels that contradict each other.
+    ...(shape?.refusal ? { refusal: shape.refusal } : (minEdge?.refusal ? { refusal: minEdge.refusal } : {})),
+    ...(shape?.warnings && shape.warnings.length ? { warnings: shape.warnings } : {}),
     ...(minEdge?.netEdgeR !== undefined ? { netEdgeR: minEdge.netEdgeR } : {}),
     ...(minEdge?.thresholdR !== undefined ? { minEdgeThresholdR: minEdge.thresholdR } : {}),
 });
@@ -106,6 +114,72 @@ const assessMinEdge = (proposal: PlanForGate, cap: number): MinEdgeVerdict => {
     };
 };
 
+/** The ATR the stop bands are measured against. The proposal carries no
+ *  timeframe (the model names levels, not a frame), so this takes the frame the
+ *  gate ALREADY scores against — `runProgrammaticGate`'s exhaustion check and
+ *  `inferRegime` both read `indicators['1h']` — and falls back through the other
+ *  three the harness always fetches. Zero means "no volatility reading", and the
+ *  bands stand down rather than warn about a number that does not exist. */
+const atrForGate = (indicators: GateInput['indicators'] | undefined): number => {
+    for (const tf of ['1h', '4h', '15m', '1d'] as const) {
+        const atr = indicators?.[tf]?.atr;
+        if (typeof atr === 'number' && Number.isFinite(atr) && atr > 0) return atr;
+    }
+    return 0;
+};
+
+interface PlanShapeVerdict {
+    warnings?: string[];
+    refusal?: string;
+}
+
+/**
+ * The plan's own shape: the R:R floor for its stated confidence and the ATR stop
+ * bands (E-57 §5).
+ *
+ * The arithmetic is NOT re-derived here. `validateRiskReward` in
+ * `services/validation/AccuracyValidationService.ts` has owned those bands for a
+ * while, and its only production caller was `TradeValidationGate.ts` — a module
+ * with no importer — which is why a plan could be graded against a floor nothing
+ * enforced and the trader never saw it. This is the live call site.
+ *
+ * It WARNS. Per the owner's ruling a stop distance is the trader's judgement, and
+ * *the app proposes; the trader decides*. The one case that refuses is an
+ * INVERTED plan, where there is no ratio to warn about at all — decided by the
+ * same `utils/riskReward` call the card's printed ratio comes from, so the two
+ * cannot disagree about what "inverted" means.
+ */
+const assessPlanShape = (proposal: PlanForGate, atr: number): PlanShapeVerdict => {
+    const planned = plannedRiskRewardSigned({
+        entry: proposal.entry,
+        stopLoss: proposal.stopLoss,
+        takeProfits: proposal.takeProfits,
+        direction: proposal.direction,
+    });
+    if (planned.inverted) {
+        // Deliberately NOT `planned.fixes`: those strings are the ordering
+        // module's REPAIR descriptions ("… mirrored to 95"), and this gate does
+        // not repair, it refuses. Quoting a mirror the app never applied would
+        // tell the trader the levels were fixed when they were thrown out.
+        const sides = proposal.direction === 'Long'
+            ? 'the stop below the entry and the target above it'
+            : 'the stop above the entry and the target below it';
+        return {
+            refusal: `levels are inverted for a ${proposal.direction} plan — a ${proposal.direction} risks with ${sides}, and these levels are not. There is no ratio to grade.`,
+        };
+    }
+    const verdict = validateRiskReward(
+        proposal.entry,
+        proposal.stopLoss,
+        proposal.takeProfits,
+        atr,
+        (proposal.confidence ?? 'Medium') as ConfidenceLevel,
+        proposal.direction as 'Long' | 'Short' | undefined,
+    );
+    const warnings = verdict.warnings.map(w => w.trim()).filter(w => w.length > 0);
+    return warnings.length > 0 ? { warnings } : {};
+};
+
 /** Run ONE scan. Never throws: every failure path returns an `unavailable` stamp,
  *  because a plan must be loggable (behind a confirm) with the reason attached.
  *
@@ -118,7 +192,7 @@ export const runGateScan = async (
     signal?: AbortSignal,
     skillGate?: Promise<SkillGateSignal | null>,
 ): Promise<ProposalGate> => {
-    if (signal?.aborted) return unavailable('stopped before the gate ran', null, assessMinEdge(proposal, 1));
+    if (signal?.aborted) return unavailable('stopped before the gate ran', null, assessMinEdge(proposal, 1), assessPlanShape(proposal, 0));
     const skillTask = skillGate
         ? withTimeout(skillGate, GATE_FETCH_TIMEOUT_MS).catch(() => null)
         : Promise.resolve<SkillGateSignal | null>(null);
@@ -127,11 +201,17 @@ export const runGateScan = async (
             withTimeout(fetchGateInputData(proposal.symbol, tradeHistory), GATE_FETCH_TIMEOUT_MS),
             skillTask,
         ]);
+        // The plan's own shape needs no tape, so it is assessed on every exit
+        // from the fetch with whatever ATR there is — none (0) when the scan
+        // could not answer, which stands the bands down but still catches two
+        // levels that contradict each other.
+        const capWithSkill = Math.min(1, skill?.ceiling ?? 1);
         // A Stop can land while the fetch is in flight. The fetch itself has no
         // signal (it goes through the shared market service), so the result is
         // discarded here: a cancelled turn must not settle an evaluated stamp.
-        if (signal?.aborted) return unavailable('stopped before the gate ran', skill, assessMinEdge(proposal, Math.min(1, skill?.ceiling ?? 1)));
-        if (!input) return unavailable('market data fetch returned nothing', skill, assessMinEdge(proposal, Math.min(1, skill?.ceiling ?? 1)));
+        if (signal?.aborted) return unavailable('stopped before the gate ran', skill, assessMinEdge(proposal, capWithSkill), assessPlanShape(proposal, 0));
+        if (!input) return unavailable('market data fetch returned nothing', skill, assessMinEdge(proposal, capWithSkill), assessPlanShape(proposal, 0));
+        const shape = assessPlanShape(proposal, atrForGate(input.indicators));
         const out = runProgrammaticGate(input);
         const cap = skill?.ceiling !== undefined
             ? Math.min(out.confidenceCap, skill.ceiling)
@@ -149,7 +229,11 @@ export const runGateScan = async (
             stampedAt: new Date().toISOString(),
             ...(skill?.ceiling !== undefined ? { skillCeiling: skill.ceiling } : {}),
             ...(skill?.note ? { skillNote: skill.note } : {}),
-            ...(minEdge.refusal ? { refusal: minEdge.refusal } : {}),
+            // An inverted plan has no ratio to grade and no expectancy to floor:
+            // its shape refusal is stated first, so the trader is never told to
+            // widen an edge on arithmetic that points the wrong way.
+            ...(shape.refusal ? { refusal: shape.refusal } : (minEdge.refusal ? { refusal: minEdge.refusal } : {})),
+            ...(shape.warnings ? { warnings: shape.warnings } : {}),
             ...(minEdge.netEdgeR !== undefined ? { netEdgeR: minEdge.netEdgeR } : {}),
             ...(minEdge.thresholdR !== undefined ? { minEdgeThresholdR: minEdge.thresholdR } : {}),
         };
@@ -162,6 +246,7 @@ export const runGateScan = async (
             e instanceof Error ? e.message : String(e),
             skill,
             assessMinEdge(proposal, Math.min(1, skill?.ceiling ?? 1)),
+            assessPlanShape(proposal, 0),
         );
     }
 };

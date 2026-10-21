@@ -85,7 +85,7 @@ describe('runGateScan', () => {
         expect(gate.minEdgeThresholdR).toBe(0);
         expect(gateReceiptLine(gate)).toMatch(/REFUSED/);
         const row = buildProposedTradeAnalysis({ ...p, gate });
-        expect(row.validationWarnings?.join(' ')).toMatch(/REFUSED by the min-edge gate/);
+        expect(row.validationWarnings?.join(' ')).toMatch(/REFUSED by the gate/);
     });
 
     it('does NOT refuse a positive-edge plan', async () => {
@@ -164,6 +164,85 @@ describe('runGateScan', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    // E-57 §5. These bands have lived in `validateRiskReward` for months and
+    // nothing outside `TradeValidationGate` — a module with no importer — ever
+    // called them, so a plan was graded against a floor nobody enforced and the
+    // trader never saw it. The owner's ruling splits them: a stop distance is
+    // the trader's judgement, so the bands WARN; only a plan whose levels
+    // contradict each other refuses, because there is nothing to judge.
+    describe('the plan shape the gate now answers for', () => {
+        it('WARNS on a sub-floor R:R and keeps the plan loggable', async () => {
+            // Medium floor is 1.5 (`ValidationConstants.MIN_RATIO_BY_CONFIDENCE`);
+            // risk 5 against a 6-point target is 1.2.
+            const p = proposal({ entry: 100, stopLoss: 95, takeProfits: [106], confidence: 'Medium' });
+            const gate = await runGateScan(p, []);
+            expect(gate.status).toBe('evaluated');
+            expect(gate.refusal).toBeUndefined();
+            expect(gate.warnings?.join(' '))
+                .toMatch(/R:R ratio \(1\.20\) below required minimum \(1\.5\) for Medium confidence/);
+            // The caution is on the RECORD, not only on the card: after the
+            // trader logs it, the row says what the gate thought.
+            const row = buildProposedTradeAnalysis({ ...p, gate });
+            expect(row.validationWarnings?.join(' ')).toContain('below required minimum (1.5)');
+        });
+
+        it('measures the stop against the 1h ATR the gate already scores on', async () => {
+            mockFetch.mockResolvedValue({ indicators: { '1h': { atr: 10 } } } as unknown as GateInput);
+            // risk 2 against a 10 ATR: inside 1×, so the noise band fires. The
+            // ratio (15.0) is nowhere near the floor, so this is the ATR alone.
+            const gate = await runGateScan(proposal({ entry: 100, stopLoss: 98, takeProfits: [130] }), []);
+            expect(gate.refusal).toBeUndefined();
+            expect(gate.warnings?.join(' ')).toMatch(/tighter than 1x ATR \(10\.00\)/);
+        });
+
+        it('falls back through the frames when the 1h set carries no ATR', async () => {
+            mockFetch.mockResolvedValue({ indicators: { '1h': null, '4h': { atr: 4 } } } as unknown as GateInput);
+            const gate = await runGateScan(proposal({ entry: 100, stopLoss: 98, takeProfits: [130] }), []);
+            expect(gate.warnings?.join(' ')).toMatch(/tighter than 1x ATR \(4\.00\)/);
+        });
+
+        it('control: a well-shaped plan gets no caution, with or without an ATR', async () => {
+            // `{} as GateInput` is a scan that answered with no indicators at
+            // all, which is the case the old code printed "Infinityx ATR" for on
+            // EVERY plan. Without this arm the cases above would pass on a
+            // gate that warned about everything.
+            const gate = await runGateScan(proposal(), []);
+            expect(gate.status).toBe('evaluated');
+            expect(gate.warnings).toBeUndefined();
+            expect(gate.refusal).toBeUndefined();
+        });
+
+        it('REFUSES an inverted plan, and the shape refusal wins over the edge floor', async () => {
+            // A Long whose stop is ABOVE the entry and whose target is BELOW it.
+            // Its net edge is also negative here, and the edge refusal must NOT
+            // be the one quoted: grading an expectancy on levels that point the
+            // wrong way is a claim about arithmetic that does not exist.
+            const p = proposal({ entry: 100, stopLoss: 105, takeProfits: [90] });
+            const gate = await runGateScan(p, []);
+            expect(gate.refusal).toMatch(/levels are inverted for a Long plan/);
+            expect(gate.refusal).not.toMatch(/net expectancy/);
+            // Not the ordering module's repair strings either — nothing mirrored.
+            expect(gate.refusal).not.toMatch(/mirrored/);
+            const row = buildProposedTradeAnalysis({ ...p, gate });
+            expect(row.validationWarnings?.join(' ')).toMatch(/REFUSED by the gate: levels are inverted/);
+        });
+
+        it('refuses an inverted plan even when the market fetch failed', async () => {
+            // The shape is plan-local. An unavailable tape is a reason to stand
+            // the bands down, never a reason to present levels that contradict
+            // each other.
+            mockFetch.mockResolvedValue(null);
+            const gate = await runGateScan(proposal({ entry: 100, stopLoss: 105, takeProfits: [110] }), []);
+            expect(gate.status).toBe('unavailable');
+            expect(gate.refusal).toMatch(/levels are inverted for a Long plan/);
+        });
+
+        it('refuses an inverted Short for the mirrored reason', async () => {
+            const gate = await runGateScan(proposal({ direction: 'Short', entry: 100, stopLoss: 95, takeProfits: [110] }), []);
+            expect(gate.refusal).toMatch(/levels are inverted for a Short plan — a Short risks with the stop above the entry/);
+        });
     });
 });
 
