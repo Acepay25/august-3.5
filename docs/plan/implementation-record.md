@@ -1057,3 +1057,63 @@ font decision, not a styling tweak); and E-52's **G-12** and **G-15**.
 **Gates.** `typecheck` ok · `vitest` 5174 in 505 · `lint` 0 errors / 656
 warnings · `build` ok · `render-probe` ok, zero pageerrors ·
 `check-flow-doc-anchors` 306 anchors, 0 unattributed, cited-line quality 0/0.
+## 25. E-55 — The reference's other four surfaces: the work card, the skills, the memory, and the tools (2026-10-21)
+
+**Proposal:** `docs/plan/reference-surfaces.md` (E-55). **Covers:** **O-134**.
+
+E-54 answered the half of the owner's report that was about the ANSWER. This
+pass answers the other half — the furniture around it — using the owner's
+second reference set: nineteen Claude frames (the Customize → Skills panel, the
+Settings → Memory panel, and ten frames of a chat surface doing real work).
+
+**The work card.** The reference draws the work as a **bare line with the card
+below it**. August had the card AROUND the line, so a collapsed turn was a
+little box with a sentence in it, and the steps inside were boxes inside a
+box. The border and the fill moved to the line's **open body**; the steps
+inside are hairline-separated **rows**; the side-effect rows keep their own
+card, because in the reference a "Presented 2 files" card is a separate card
+below the work. Every step that opens carries a **chevron**, and an
+**interrupted run is a card** with the two ways out as raised chips.
+
+**The skills catalogue.** The reference's catalogue is a **two-column grid of
+cards** — a coloured icon tile, the name, a one-line truncated description,
+the availability mark — and August's catalogue is now that. The mark is the
+honest part: **check** for a rule that reaches a seat, **pause** for one the
+idle sweep suspended, **ban** for one switched off or retired, all derived from
+`skillEnabledFlag` and never re-derived. The tile's colour follows the STATE
+(emerald / amber / zinc) instead of the kind, which used to paint a rule that
+never traded in rose — and rose means loss in this theme. The reference's
+duplicated list (the same skill under "Installed" AND under its plugin) is not
+reproduced: August has no plugins, so the shipped shelf gets the "System" badge
+on its own category row, and nothing is printed twice. The gear is hidden
+because there is no skills settings screen to open.
+
+**The memory surfaces.** The reference's list is three columns — label, what it
+says, when it was written — hairline-separated, the selected row raised with
+the pencil and the trash on it; the detail is a read with a back link, a Delete
+chip, and "Last updated / Summary / Details". August's memory list was a grid
+of cards with a date badge in the corner, and its detail was a form. Both are
+now the reference's shape, and the notebook browser, the Settings → Memory tab
+and the assistant-memory card were moved onto the same three-column grammar so
+the memory area has one row shape instead of three.
+
+**The face, corrected.** E-54 set the answer in DM Serif Text — the app's only
+serif — and that was right about the FACE and wrong about the TYPE. DM Serif
+Text is a display face: **one weight**, no italic, so every bold level in a
+long analysis was a *synthetic* bold, a smear the browser fakes by thickening
+the stems. The reference's answer face is a TEXT serif. The app now has **two
+serifs, two jobs**: DM Serif Text stays the hero and brand face
+(`font-serif`), and **Newsreader** (`font-reading`) is the reading face the
+answer is set in. The doctrine records the rule and the reason.
+
+**Deliberately not matched** (all in the proposal): the reference's icon-only
+action row (August's is labelled and carries the thinking tier), the coloured
+inline-code chip (August's is the neutral zinc pill the doctrine asks for), a
+"Presented 2 files" card and a web-search results card (features, not styling),
+and the empty chat state's greeting (a copy decision).
+
+**Gates.** `typecheck` ok · `vitest` 5204 in 508 · `lint` 0 errors / 655
+warnings (cap 659) · `build` ok · `render-probe` ok, zero pageerrors ·
+`check-flow-doc-anchors` 306 anchors, 0 unattributed, cited-line quality 0/0 ·
+`radiusRamp` ok, with the CSS radius census restated for the work card's
+token radius and the floor narrowed by one.
