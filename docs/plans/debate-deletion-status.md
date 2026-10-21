@@ -53,7 +53,7 @@ The two row types do **not** share the tool transcript's fields, measured 2026-1
 
 - dock row = `LiveEntry` (`services/trade/chatStore.ts:48`, `StoredChatEntry & {…}`):
   carries `tools: string[]`, `toolIds: string[]`, `actions`
-  (`chatTurnRunner.ts:694` appends the digest line and its id **in the same patch**,
+  (`chatTurnRunner.ts:695` appends the digest line and its id **in the same patch**,
   because the desk loop's `results` order does not match the rendered lines — pairing
   by index silently attaches the wrong payload).
 - canonical row = `Message` (`types/message.ts`): has `thoughtProcesses` `:257`,
@@ -66,7 +66,7 @@ Chat surface. The extraction therefore takes an **event sink** — the executor 
 each home maps them onto its own fields. That is what 20a builds.
 
 Second blocker for the cheaper "just lift the runner" route: the deps are captured
-**at construction** (`chatTurnRunner.ts:204-285`, `useMemo` over 35 fields at
+**at construction** (`chatTurnRunner.ts:205-286`, `useMemo` over 35 fields at
 `TradeChatPanel.tsx:516-557`), including composer state (`draft`, `attachments`,
 `setDraft`, `clearAttachments`, `setContextAt`) and `systemPromptFor`. Two surfaces
 cannot share one instance built per-mount, so 20a converts turn-scoped context into
@@ -87,7 +87,7 @@ session does not re-derive them:
   (`StreamWithDeskToolsOptions`). It self-gates on
   `getHarnessSettings().deskToolsEnabled`, and `withDeskToolsSystemPrompt` will not
   double-inject the DESK TOOLS block if the system message already carries it.
-- The dock consumes it at `chatTurnRunner.ts:643` with `allowedTools: TRADE_TOOLS`
+- The dock consumes it at `chatTurnRunner.ts:644` with `allowedTools: TRADE_TOOLS`
   (`:96`, ~20 names, chart-aware: `get_chart_view`, `mark_trade_levels`,
   `draw_on_chart`) plus a frozen `PanelTurnContext` so a background turn still
   writes into its own transcript.
@@ -103,7 +103,7 @@ numbering; the file is shorter now) — eight positional
   have no target there; (3) whether the Chat surface renders a tool chip (the dock's
   transcript rows already do).
 - Lifting `createChatTurnRunner` into App is **not** the cheap route: its deps
-  object (`chatTurnRunner.ts:204-285`) is 35 fields, most of them chart state
+  object (`chatTurnRunner.ts:205-286`) is 35 fields, most of them chart state
   owned by TradeView (`allDrawings`, `getChartSnapshot`, `addModelDrawings`,
   `onPlanPresented`). Do the transport swap, not the lift.
 
@@ -123,7 +123,7 @@ So the target is NOT "keep the branch and shrink it to one seat". It is:
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
   `streamChatWithDeskTools` (`DeskToolsService.ts:4029`), which the dock's solo
-  seat already runs at `chatTurnRunner.ts:648`.
+  seat already runs at `chatTurnRunner.ts:649`.
 - **The verdict and the journal row become tools the model chooses to call**, not
   a pipeline stage it has to earn. What already exists: `present_trade`
   (proposal → `TradeAnalysis` with outcome PENDING, so the autopilot watches it),
@@ -1758,7 +1758,7 @@ when it was ruled on.
 
 **The panel is reachable and working.** `components/trade/TradeChatPanel.tsx:956` renders a
 **"New panel · up to 5 models"** control, and a local `addSession(kind)` creates the session;
-`chatTurnRunner.ts:1009` builds the seats, refuses below two usable seats (`:1010`), opens a
+`chatTurnRunner.ts:1034` builds the seats, refuses below two usable seats (`:1035`), opens a
 `createDebateMailbox` (`:1023`), plans each turn with `planPanelTurn` (`:1035`), gives every
 seat its own mandate ("You are \"X\" on a 5-seat chart panel", `:1058`), streams each seat into
 its own bubble, and parses `@Name` mentions so a seat can pull another in mid-turn (`:1118`).
@@ -2349,7 +2349,7 @@ where relevant), not re-read:
 | `savedAnalyses` was deleted outright (stage 21) | `grep -rl savedAnalyses --include=*.ts --include=*.tsx . \| wc -l` | **0 files** — field, state, SQLite read/write, backup validation all gone; the surviving mentions are in the untracked `docs/analysis/` census, where every count is already 0 |
 | `NavRail` is imported and never rendered | `grep -rn "<NavRail" …` | 1 hit, and it is the generic `<NavRailProps>` on its own definition line — no JSX use anywhere in production |
 | post-mortems are gone | `grep -rn usePostMortem conductPostMortem …` | 1, a comment in `services/learning/SkillMemoryService.ts`; 0 for `conductPostMortem` |
-| all three turn owners record usage | `grep -rn recordToolTurnUsage …` | 3 call sites (`chatSurfaceTurn.ts:360`, `automationTurn.ts:265`, `chatTurnRunner.ts:716`) + the definition at `utils/sessionUsage.ts:63` |
+| all three turn owners record usage | `grep -rn recordToolTurnUsage …` | 3 call sites (`chatSurfaceTurn.ts:360`, `automationTurn.ts:265`, `chatTurnRunner.ts:717`) + the definition at `utils/sessionUsage.ts:63` |
 | one notifier | `grep -rn CompletionNotifications …` | 1, a comment in `services/infrastructure/notify.ts` — the module itself was deleted, which is stronger than "no caller" and is now what row 52 says |
 
 One sentence was tightened rather than corrected: row 52 said `CompletionNotifications` "has no caller",

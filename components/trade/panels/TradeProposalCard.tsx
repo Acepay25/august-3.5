@@ -33,9 +33,22 @@ export interface TradeProposalCardProps {
     leverage?: number;
     onLog: () => void;
     onCancel: () => void;
+    /**
+     * A caution printed on the card, in the app's own words, when the plan is
+     * sound but the TURN that carried it was not — a run that stopped after
+     * presenting the plan never delivered the rest of the reasoning.
+     *
+     * It deliberately does NOT disable or hide "Log this trade". The plan object
+     * is machine-built and gate-checked; what went missing is the prose around
+     * it. Removing a working control because something adjacent failed is the
+     * inert-button failure mode this app already guards elsewhere, and it leaves
+     * the trader to conclude logging is broken in general. So: say what is
+     * incomplete, and let the trader decide.
+     */
+    logNote?: string;
 }
 
-const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog, awaitingLog = false, leverage, onLog, onCancel }) => {
+const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog, awaitingLog = false, leverage, logNote, onLog, onCancel }) => {
     // The card shows levels the moment the model names them, but the probability,
     // the confidence tier and any grade come ONLY from the one plan object —
     // the same builder the journal row runs, so the card can never quote a
@@ -151,6 +164,11 @@ const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog,
             // stamped `gate:unavailable` — never confidenceCap 0.
             <p className="mt-1.5 text-ui-dense text-amber-400/90" data-testid="proposal-gate-unavailable">
                 Gate could not be checked ({proposal.gate.reason}) — logging asks you to confirm, and the row is recorded UNCAPPED.
+            </p>
+        )}
+        {logNote && (
+            <p className="mt-1.5 text-ui-dense leading-relaxed text-amber-400/90" data-testid="proposal-log-note">
+                {logNote}
             </p>
         )}
         <div className="mt-2.5 flex items-center gap-1.5">

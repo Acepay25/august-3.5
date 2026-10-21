@@ -77,9 +77,9 @@ flowchart TD
         D1 -->|no bot| AN["onAnalyze(prompt, images) components/agents/AgentsView.tsx:781 → App:1579 handleRunAnalysisFromChat"]
     end
     subgraph DOCK["Chart AI dock — inside Trade, TradeView.tsx:1116"]
-        DC["ChatComposer.tsx:147 :222"] --> D2{"chatTurnRunner.send chatTurnRunner.ts:817 — branches on seats"}
-        D2 -->|solo| SO["runSeatTurn called services/trade/chatTurnRunner.ts:962, defined :602"]
-        D2 -->|panel, 2+ seats| PN["per-seat services/trade/chatTurnRunner.ts:1115 + createDebateMailbox :1043 + planPanelTurn :1055"]
+        DC["ChatComposer.tsx:147 :222"] --> D2{"chatTurnRunner.send chatTurnRunner.ts:818 — branches on seats"}
+        D2 -->|solo| SO["runSeatTurn called services/trade/chatTurnRunner.ts:963, defined :603"]
+        D2 -->|panel, 2+ seats| PN["per-seat services/trade/chatTurnRunner.ts:1140 + createDebateMailbox :1068 + planPanelTurn :1080"]
         D2 -->|Full analysis button| FA["runFullAnalysis components/trade/TradeChatPanel.tsx:548 → the SAME App:1579 wrapper — it holds the session run slot and writes no row"]
     end
     SO --> TT["runToolTurn — services/trade/toolTurn.ts:131"]
@@ -799,10 +799,10 @@ old answer.
 | 12 | bot branch → useBotMailbox | `runUserBotTurn hooks/useBotMailbox.ts:305` → `runBotTurn hooks/useBotMailbox.ts:130` |
 | 13 | AgentsView.send → analysis branch | `onAnalyze components/agents/AgentsView.tsx:781` → `handleRunAnalysisFromChat App.tsx:1637` — the dock's `onRunAnalysis` reaches the SAME wrapper |
 | 14 | dock Full analysis → the run slot | `runFullAnalysis components/trade/TradeChatPanel.tsx:548` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
-| 15 | ChatComposer → chatTurnRunner.send | key `Enter components/trade/panels/ChatComposer.tsx:147` / button `:201` → `services/trade/chatTurnRunner.ts:817` |
-| 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:962` (definition `runSeatTurn services/trade/chatTurnRunner.ts:602`) |
+| 15 | ChatComposer → chatTurnRunner.send | key `Enter components/trade/panels/ChatComposer.tsx:147` / button `:201` → `services/trade/chatTurnRunner.ts:818` |
+| 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:963` (definition `runSeatTurn services/trade/chatTurnRunner.ts:603`) |
 | 17 | runSeatTurn → the ONE turn executor | `runToolTurn toolTurn.ts:131` → `streamChatWithDeskTools :174` → `DeskToolsService` → `streamChatRequest` |
-| 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1115` · `:1043` · `:1055` |
+| 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1140` · `:1068` · `:1080` |
 | 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `systemPromptFor components/trade/TradeChatPanel.tsx:454` = the blocks below, assembled at `TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:476` |
 | 20 | every dock turn → chatStore | `mutate services/trade/chatStore.ts:361` · `beginRun services/trade/chatStore.ts:508` |
 | 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useBotThread hooks/useAnalysisPipeline.ts:1319`, anything else runs the tool turn `:1376`; the ensemble flag and the roster it fed are gone (2026-10-19) |
@@ -810,7 +810,7 @@ old answer.
 | 23 | casual frames → Message.text | `applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:28`; flush precedes the settle write useAnalysisPipeline.ts |
 | 24 | ensemble → the stages that survive | see C — five of the old eight are gone from the call path, and no stage is named in the code, so no line number is claimed |
 | 25 | desk tools → what a caller can reach | `executeDeskTool services/analysis/DeskToolsService.ts:2327` (its allow-list is enforced at execution, not only at offer time) |
-| 26 | panel tools → chart echo | `executePanelTool services/trade/chatTurnRunner.ts:344` is what echoes the result back into the panel |
+| 26 | panel tools → chart echo | `executePanelTool services/trade/chatTurnRunner.ts:345` is what echoes the result back into the panel |
 | 27 | automation tick → runAutomation | `runAutomation hooks/useAutomations.ts:381`, forks on `config.botId hooks/useAutomations.ts:401`; the no-bot path takes the pipeline's OWN schedule arm `useAnalysisPipeline.ts:1241` → `runAutomationTurn automationTurn.ts:162`, writing the private list automationMessagesRef useAnalysisPipeline.ts:399, its `notices` (a tool that came back failed, a turn that called nothing, a refused plan) and settling through `onMessage` `useAutomations.ts:531`. Characterized in `tests/automationRouteCharacterization.test.tsx` |
 | 28 | bot routine → injected stream | the routine reuses 22's bot arm from `runBotRoutineTurn services/agents/botRoutine.ts:80` |
 | 29 | rooms → groupRounds | `useAgentGroups hooks/useAgentGroups.ts:75` → `streamQuickResponse services/providers/GenericAnalysisService.ts:606` |
@@ -937,10 +937,10 @@ old answer.
    Qualifying the citations that had no symbol
    of their own is what found
    six numbers that were right-shaped and wrong: `runSeatTurn` is called at
-   `services/trade/chatTurnRunner.ts:962`, `createDebateMailbox` at
-   `services/trade/chatTurnRunner.ts:1043`, `planPanelTurn` at
-   `services/trade/chatTurnRunner.ts:1055`, the dock's `send` at
-   `services/trade/chatTurnRunner.ts:817`, `runFullAnalysis` at
+   `services/trade/chatTurnRunner.ts:963`, `createDebateMailbox` at
+   `services/trade/chatTurnRunner.ts:1068`, `planPanelTurn` at
+   `services/trade/chatTurnRunner.ts:1080`, the dock's `send` at
+   `services/trade/chatTurnRunner.ts:818`, `runFullAnalysis` at
    `components/trade/TradeChatPanel.tsx:548`, and `MAX_PLANS_PER_RUN` at
    `services/trade/automationTurn.ts:70`. The pass also moved four surface anchors
    that pointed inside a prop list onto the guard that mounts the surface:

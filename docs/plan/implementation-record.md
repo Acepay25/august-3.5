@@ -1279,3 +1279,60 @@ writes into `services/trade/chartDrawings.ts`, reach the canvas through the draw
 than this effect; they remain asserted at the data level only (`tests/chartDrawings.test.ts:200`,
 `tests/drawingGeometry.test.ts`), not as drawn pixels. `render-probe` gained no new level assertion
 in this pass. §4, §3, §5, §6 and §1 of E-57 are still open.
+
+## 29. E-57 §4 — a failed turn is never a finished answer, in either home (2026-10-22)
+
+**Proposal:** `docs/plan/closed-loop-fixes.md` (E-57). **Closes:** **O-137**. **Surfaced:** **O-138**.
+
+The dock gated its failure stamp on the entry having no text. A turn that streamed
+"Long BTC above 65,000, stop 64,200, target…" and then died therefore kept the half-sentence
+looking like finished advice, and the part that never arrived was precisely the invalidation and
+the size. The Chat surface had no such bug — it appends its own system row — so the two homes
+rendered the same failed turn as different facts.
+
+**No new state.** `StoredChatEntry` already carries `interrupted` (`services/trade/chatSessions.ts:103`)
+and `sanitizeEntry` spreads the entry, so it persists without a migration and without a fourth
+status a reader would have to disambiguate. The stamp is now unconditional and adds
+`interrupted` when prose exists; `ChatTranscriptList` reserves `ChatFailureRow` for
+`error && !e.text`, and a prose-plus-failure row keeps its answer and carries the provider's
+reason INSIDE the one "Run stopped" card (`InterruptedRunNotice` gained `cause`).
+
+**The caution that is not a disabled control.** The card's `logNote` prints what is incomplete and
+leaves *Log this trade* enabled. Disabling it was the tempting fix and is wrong: the plan object is
+machine-built and gate-checked, and removing a working control because something adjacent failed is
+the inert-control mode this repo already pins. It says the fact and lets the trader decide.
+
+**Fixed on the way, and it matters more than the rendering.** The dock persisted the RAW provider
+message into the row; the Chat surface redacts. That field is written into the session and shipped
+in a backup, and a provider error can carry a credential-shaped token, so the dock now uses the
+canonical `sanitizeErrorText` (`utils/runStatus.ts:96`) like every other path.
+
+**Red proof, twice.** Restoring the old branch condition made the keep-prose-and-name-the-failure
+case fail; reversing it made it pass. Separately, two assertions in this pass first failed on their
+own author's prose: a source scan that bans a deleted shape matched the comment explaining why the
+shape was deleted. Both scans now read code lines only — the same correction §2 needed, learned
+twice in one day, which is the argument for making it a rule rather than a fix.
+
+**Gates.** `typecheck` ok · `vitest` **5255 in 511**, 0 skip · `lint` 0 errors / 655 warnings under
+the 659 cap (unchanged, still unattributed) · `check-flow-doc-anchors` **377** anchors, 0
+unattributed, cited-line quality 0/0, 0 self-quota disagreements.
+
+**The re-anchoring this change caused, and why it was not four fixes.** One added import line and a
+rewritten catch block shifted every later line in `chatTurnRunner.ts` — +1 after line 47, +25 after
+974 — which moved **17 citations across three docs** off their targets. The gate named 4 and would
+have stayed silent about the rest: a pointer that slides one line usually still lands near the
+symbol it names, so it PASSES while pointing at the wrong place. Four slid onto comment lines,
+where they would have kept their symbol match and lied about the code. Every citation into the file
+was therefore re-derived from the hunk map (`git diff -U0`) and each new number confirmed by
+comparing the text at the old line in `HEAD` with the text at the new one — including the ones no
+gate flagged: the `ChatTurnRunnerDeps` range `:205-286`, the seat-build pointer `:1035`, and two
+bare numbers inside mermaid node labels, which a file-prefixed rewrite pattern cannot see at all.
+
+**What this did NOT close.** Named in O-137: the Chat surface still puts the reason in a separate
+system row rather than in the interrupted card, so the homes now agree on the fact and disagree on
+the furniture; and `chatTurnRunner.ts:1277` still drops a harness warning silently when the turn
+already has text. **And O-138 is not fixed, only found:** gating this change needed four full-suite
+runs because two files that each pass solo fail together on a CLEAN checkout
+(`memorySurfaces` + `referenceVoice`, both orders, `expected +0 to be 2` on seeded notebook data),
+and the failing set moves between runs. Root cause unknown; the row says plainly not to cure it with
+a timeout.

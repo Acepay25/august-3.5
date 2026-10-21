@@ -45,6 +45,7 @@ import * as watchService from './watchService';
 import { parsePriceWatch, parseTimeWake, describeWatchesForModel } from './chartTriggers';
 import { phtClock } from '../../utils/timezone';
 import { truncationNotice, withTruncationWindow } from '../../utils/finishReason';
+import { sanitizeErrorText } from '../../utils/runStatus';
 import { ensureNotifyPermission } from '../infrastructure/notify';
 import { recordSessionForReview, runSessionSkillReview, runThesisResolver, type ReviewableSession } from '../learning/sessionSkillReview';
 import { runTraderLearner } from '../learning/traderLearner';
@@ -966,12 +967,36 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 // (already settled by runSeatTurn) instead of being stamped
                 // with a failure row.
                 if (!controller.signal.aborted) {
-                    const message = e instanceof Error ? e.message : String(e);
+                    // The CANONICAL sanitizer (utils/runStatus), the same one the
+                    // Chat surface uses: an unredacted provider message can carry
+                    // a credential-shaped token, and this string is persisted into
+                    // the session and out into a backup.
+                    const message = sanitizeErrorText(e);
                     // The REAL reason, in the ERROR field and not the text: a
                     // failed turn written into the answer reads as though the
                     // seat had said the app's own hint, and it was committed to
                     // the bot's memory as if it were an answer.
-                    mutate(sid, s => ({ ...s, entries: s.entries.map(en => en.id === aiEntry.id && !en.text ? { ...en, error: message, streaming: false, workedMs: workedMsFor(soloStartedAt) } : en) }));
+                    //
+                    // It is stamped whether or not prose arrived. The old
+                    // `&& !en.text` guard meant a turn that streamed
+                    // "Long BTC above 65,000, stop 64,200, target…" and then
+                    // FAILED kept the half-sentence looking like finished advice,
+                    // with the missing half exactly where the risk numbers were.
+                    // A row with text is stamped `interrupted` too, so the dock
+                    // renders the one "Run stopped" card with the reason in it —
+                    // prose and failure, never prose alone.
+                    mutate(sid, s => ({
+                        ...s,
+                        entries: s.entries.map(en => en.id === aiEntry.id
+                            ? {
+                                ...en,
+                                error: message,
+                                streaming: false,
+                                ...(en.text && en.text.trim() ? { interrupted: true } : {}),
+                                workedMs: workedMsFor(soloStartedAt),
+                            }
+                            : en),
+                    }));
                 }
             } finally {
                 mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? { ...en, streaming: false, ...(en.workedMs === undefined ? { workedMs: workedMsFor(soloStartedAt) } : {}) } : en)) }));

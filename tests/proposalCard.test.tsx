@@ -127,3 +127,48 @@ describe('the card once the stamp has landed', () => {
         expect(screen.getByTestId('proposal-confidence')).toHaveTextContent('72%');
     });
 });
+
+describe('a plan that arrived on a run that stopped (E-57 §4)', () => {
+    const withNote = (note?: string) => render(
+        <TradeProposalCard
+            proposal={proposal()}
+            canLog
+            logNote={note}
+            onLog={vi.fn()}
+            onCancel={vi.fn()}
+        />,
+    );
+
+    it('says what is incomplete, in the card, not on hover', () => {
+        withNote('This plan arrived on a run that stopped before it finished — the rest of the answer never came.');
+        const line = screen.getByTestId('proposal-log-note');
+        expect(line.textContent).toContain('stopped before it finished');
+    });
+
+    it('still offers "Log this trade" enabled — a caution is not a disabled control', () => {
+        // The tempting fix was to grey the button out because the TURN failed.
+        // The plan object is machine-built and gate-checked; what went missing is
+        // the prose around it. Removing a working control because something
+        // adjacent failed leaves the trader to conclude logging is broken in
+        // general — the inert-control failure mode this app already pins elsewhere.
+        const onLog = vi.fn();
+        render(
+            <TradeProposalCard
+                proposal={proposal()}
+                canLog
+                logNote="This plan arrived on a run that stopped before it finished."
+                onLog={onLog}
+                onCancel={vi.fn()}
+            />,
+        );
+        const log = screen.getByRole('button', { name: /Log this trade/ });
+        expect(log.hasAttribute('disabled')).toBe(false);
+        fireEvent.click(log);
+        expect(onLog).toHaveBeenCalled();
+    });
+
+    it('prints nothing when the turn finished', () => {
+        withNote(undefined);
+        expect(screen.queryByTestId('proposal-log-note')).toBeNull();
+    });
+});

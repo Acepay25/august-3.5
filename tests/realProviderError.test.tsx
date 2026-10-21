@@ -160,6 +160,36 @@ describe('a failed turn is not an answer', () => {
         expect(row.textContent).toContain('ENOTFOUND');
         expect(row.textContent).toContain('request failed');
     });
+
+    it('keeps the prose AND names the failure when a turn got half-way', () => {
+        // E-57 §4. The stamp used to be gated on `!en.text`, so a turn that
+        // streamed "Long BTC above 65,000, stop 64,200, target…" and then
+        // FAILED kept the half-sentence looking like finished advice — with the
+        // missing half sitting exactly where the invalidation and the size were.
+        const entries: LiveEntry[] = [{
+            id: 'e2', role: 'ai',
+            text: 'Long BTC above 65,000, stop 64,200, target',
+            error: 'Kilocode: fetch failed · ENOTFOUND: getaddrinfo ENOTFOUND api.kilocode.ai',
+            interrupted: true,
+            tools: [],
+        }];
+        render(
+            <ChatTranscriptList
+                entries={entries}
+                send={async () => undefined}
+                symbol="BTCUSDT"
+                getMark={() => null}
+                onChatLevels={() => undefined}
+            />,
+        );
+        // What arrived is still readable — this is not the blank failure row.
+        expect(screen.queryByTestId('chat-error-row')).toBeNull();
+        expect(screen.getByText(/stop 64,200, target/)).toBeTruthy();
+        // And the row says, in one place, that the run did not finish — with the
+        // reason inside the card rather than in a second box under the answer.
+        expect(screen.getByTestId('interrupted-run-notice')).toBeTruthy();
+        expect(screen.getByTestId('interrupted-run-cause').textContent).toContain('ENOTFOUND');
+    });
 });
 
 describe('the dock does not put a failure in the text field', () => {
@@ -168,6 +198,37 @@ describe('the dock does not put a failure in the text field', () => {
         expect(source).toMatch(/error: message/);
         // The old shape wrote the app's canned sentence into the ANSWER.
         expect(source).not.toMatch(/text: `The chart copilot could not answer/);
+    });
+
+    it('the stamp is not gated on the row having no text', () => {
+        // The half-finished answer WAS the bug: the failure stamp was selected
+        // on an entry with no text, so prose survived a failure unmarked.
+        //
+        // Read CODE lines only. The comment below the stamp names the old shape
+        // on purpose — this repo documents what it deleted and why — and a scan
+        // that matches its own prose would fail on documentation, not on code.
+        // (Scope is the catch block too: another site writes a HARNESS WARNING
+        // into an empty bubble at `chatTurnRunner.ts:1277`, a different field
+        // answering a different question.)
+        const codeOnly = (src: string): string => src
+            .split('\n')
+            .filter(line => !/^\s*(\/\/|\*|\/\*)/.test(line))
+            .join('\n');
+        const source = codeOnly(readFileSync('services/trade/chatTurnRunner.ts', 'utf8'));
+        const start = source.indexOf('const message = sanitizeErrorText(e);');
+        expect(start, 'the provider-failure catch no longer sanitizes through utils/runStatus').toBeGreaterThan(-1);
+        const block = source.slice(start, start + 700);
+        expect(block).not.toMatch(/&& !en\.text/);
+        expect(block).toMatch(/\.\.\.\(en\.text && en\.text\.trim\(\) \? \{ interrupted: true \} : \{\}\)/);
+    });
+
+    it('the dock sanitizes the provider message before persisting it', () => {
+        // An unredacted provider error can carry a credential-shaped token, and
+        // this field is written into the session and out into a backup. The dock
+        // must use the same sanitizer the Chat surface uses, not raw `e.message`.
+        const source = readFileSync('services/trade/chatTurnRunner.ts', 'utf8');
+        expect(source).toMatch(/import \{ sanitizeErrorText \} from '\.\.\/\.\.\/utils\/runStatus';/);
+        expect(source).toMatch(/const message = sanitizeErrorText\(e\);/);
     });
 
     it('the row model carries the error', () => {
