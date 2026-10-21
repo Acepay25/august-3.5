@@ -67,7 +67,7 @@ import { formatInvokedSkillSection, resolveInvokedSkills } from '../services/lea
 import { recordRegimeDay, marketRegimeToLedger } from '../services/learning/regimeLedger';
 import { extractDebateTemplate, DebateTemplate } from '../utils/debateTemplates';
 import { parseComposerIntent, formatComposerSteer } from '../utils/composerMentions';
-import { beginPromptLane, endPromptLane, promptCorpusVersion } from '../services/infrastructure/PromptOverrideService';
+import { beginPromptLane, promptCorpusVersion } from '../services/infrastructure/PromptOverrideService';
 import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { parseDmMarkers } from '../services/agents/botMailbox';
 import { notify } from '../services/infrastructure/notify';
@@ -941,18 +941,24 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         automationSilentRef.current = isAutomationRun;
         if (isAutomationRun) automationMessagesRef.current = [];
         try {
-            // The prompt A/B lane is per-RUN and must open BEFORE any prompt is
-            // resolved: `getPrompt` reads the lane flag, so a lane begun after the
-            // first prompt is a coin flip that changes nothing. `endPromptLane()`
-            // already closes it in the `finally` below. Until this line existed the
-            // Settings → Analysis "Prompt A/B (control lane)" dial had a reader in
-            // the profile card and `beginPromptLane` had no caller at all — a
-            // visible control that could not do the thing it names. (O-55)
+            // The prompt A/B lane is a VALUE decided per run, begun BEFORE any
+            // prompt is resolved. It used to be a module flag flipped here and
+            // cleared in the `finally` below, so two runs deciding at once — a
+            // schedule and a human send — each answered with whichever lane the
+            // other had picked, and a run that threw before the finally still
+            // reset the OTHER one's flag. There is nothing to un-set now.
+            //
+            // What this does NOT yet do: resolve a prompt override on the turn
+            // path. Every `getPrompt` call site reachable from here is on the
+            // analysis/skill-craft surfaces, and the desk turn that answers this
+            // surface calls none of them — so the pair currently differs in what
+            // it RECORDS, not in what it SENDS. Registered as an open item
+            // (E-57 §3); the honest fix is to wire it or delete the dial. (O-55)
             const promptLane = beginPromptLane();
             // The corpus this run resolved, fingerprinted. Recorded so the journal
             // row can be grouped by the prompt that produced it — the version and
             // the lane are one measurement, not two. (O-47)
-            const promptVersion = promptCorpusVersion();
+            const promptVersion = promptCorpusVersion(promptLane);
             const currentMessages = isAutomationRun
                 ? [...(options?.automation?.conversation.messages ?? []), userMessage]
                 : [...messagesRef.current, userMessage];
@@ -1598,7 +1604,6 @@ ${enhancedPrompt}`;
             // retry/backoff path instead of dequeuing a dead run (§2.3).
             return { ok: false };
         } finally {
-            endPromptLane();
             automationSilentRef.current = false;
             // Release THIS run only. A run that is not the owner of its key
             // has already been replaced by a newer one in the same

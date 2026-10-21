@@ -115,17 +115,22 @@ describe('validatePromptOverride', () => {
  * and a journal column, and NO caller for `beginPromptLane`. Nothing on the
  * panel said so: `getPrompt` kept returning the override, the profile card kept
  * rendering two empty rows, and `maybePinWinningPromptLane` could never see a
- * trade with a lane on it. These are the tests that were missing.
+ * trade with a lane on it. Those tests were missing; they are below.
+ *
+ * E-57 §3 moved the lane from a module flag to a returned VALUE, because two
+ * runs deciding at once (a schedule and a human send) each answered with the
+ * other's lane, and a run that threw before its `finally` cleared the flag out
+ * from under a run still using it.
  */
-import { beginPromptLane, endPromptLane } from '../services/infrastructure/PromptOverrideService';
-import { promptCorpusVersion } from '../services/infrastructure/PromptOverrideService';
+import { beginPromptLane, promptCorpusVersion } from '../services/infrastructure/PromptOverrideService';
+import { PROMPT_REGISTRY_IDS } from '../constants/promptIds';
+import { PROMPT_REGISTRY } from '../constants/promptRegistry';
 import { saveHarnessSettings } from '../utils/harnessSettings';
 import { readFileSync } from 'node:fs';
 
 describe('the prompt A/B lane', () => {
   beforeEach(() => {
     store = {};
-    endPromptLane();
   });
 
   it('stays LIVE when the trader set no rate', async () => {
@@ -158,7 +163,7 @@ describe('the prompt A/B lane', () => {
     }
   });
 
-  it('rolls CONTROL on a live override, and getPrompt ignores overrides there', async () => {
+  it('rolls CONTROL on a live override, and the caller passes that lane to getPrompt', async () => {
     // The dial's positions are Off / 10 % / 50 % (utils/harnessSettings coerces
     // anything else back to 10 %), so the roll is forced rather than asking for
     // a rate the app cannot store.
@@ -166,14 +171,56 @@ describe('the prompt A/B lane', () => {
     saveHarnessSettings({ promptAbRate: 0.5 });
     await savePromptOverride('analysis.master', 'MY OVERRIDE', 'alice');
     const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+    let lane: ReturnType<typeof beginPromptLane>;
     try {
-        expect(beginPromptLane()).toBe('control');
+        lane = beginPromptLane();
     } finally {
         random.mockRestore();
     }
-    expect(getPrompt('analysis.master', FALLBACK)).toBe(FALLBACK);
-    endPromptLane();
-    expect(getPrompt('analysis.master', FALLBACK)).toBe('MY OVERRIDE');
+    expect(lane).toBe('control');
+    expect(getPrompt('analysis.master', FALLBACK, lane)).toBe(FALLBACK);
+    // The same instant, a live run resolves the edit. This is the whole point of
+    // returning a value: one run's lane cannot be the other's answer.
+    expect(getPrompt('analysis.master', FALLBACK, 'live')).toBe('MY OVERRIDE');
+  });
+
+  it('two runs deciding at once keep their own lanes', async () => {
+    // The regression this replaces: `let controlLane` was module state, so
+    // beginPromptLane() called by a schedule and by a human send in the same
+    // tick left BOTH reading whichever decided last, and the `finally` that
+    // cleared it reset the other one mid-run.
+    await initPromptOverrides('alice');
+    await savePromptOverride('analysis.master', 'MY OVERRIDE', 'alice');
+    saveHarnessSettings({ pinnedPromptLane: 'control' });
+    const controlRun = beginPromptLane();
+    saveHarnessSettings({ pinnedPromptLane: 'live' });
+    const liveRun = beginPromptLane();
+    expect(controlRun).toBe('control');
+    expect(liveRun).toBe('live');
+    expect(getPrompt('analysis.master', FALLBACK, controlRun)).toBe(FALLBACK);
+    expect(getPrompt('analysis.master', FALLBACK, liveRun)).toBe('MY OVERRIDE');
+  });
+
+  it('there is no lane state left to leak between runs', () => {
+    // A source pin, because the failure is invisible to any single-run test: a
+    // reset function that exists is a reset function someone forgets to call on
+    // the path that throws.
+    //
+    // CODE lines only — the service's own header names `endPromptLane()` to
+    // explain why it is gone, and a scan that reads comments would fail on the
+    // documentation of the fix. Third time this day a source gate learned that it
+    // must scan code, not text; it is now the house rule, not a per-test insight.
+    const codeOnly = (p: string): string => readFileSync(p, 'utf8')
+        .split('\n')
+        .filter(line => !/^\s*(\/\/|\*|\/\*)/.test(line))
+        .join('\n');
+    const source = codeOnly('services/infrastructure/PromptOverrideService.ts');
+    expect(source).not.toMatch(/endPromptLane/);
+    expect(source).not.toMatch(/^let controlLane/m);
+    const pipeline = codeOnly('hooks/useAnalysisPipeline.ts');
+    expect(pipeline).toMatch(/const promptLane = beginPromptLane\(\);/);
+    expect(pipeline).toMatch(/promptCorpusVersion\(promptLane\)/);
+    expect(pipeline).not.toMatch(/endPromptLane\(\)/);
   });
 
   it('a pin beats the roll in both directions', async () => {
@@ -186,26 +233,66 @@ describe('the prompt A/B lane', () => {
   });
 });
 
+describe('the id list the corpus fingerprint filters by (E-57 §3)', () => {
+  it('names exactly the ids the Settings tab can edit', () => {
+    // Two lists that drift is the defect: an id in the registry but not here
+    // stops counting in the fingerprint (a real edit, invisible in the A/B
+    // group), and an id here but not in the registry is precisely the orphan the
+    // filter exists to drop.
+    const registered = PROMPT_REGISTRY.map(e => e.id).sort();
+    expect([...PROMPT_REGISTRY_IDS].sort()).toEqual(registered);
+  });
+});
+
 describe('promptCorpusVersion, the string the journal row groups runs by (O-47)', () => {
   beforeEach(async () => {
     store = {};
-    endPromptLane();
     await initPromptOverrides('alice');
   });
 
+  it('ignores an override left behind by a prompt that no longer exists (E-57 §3)', async () => {
+    // A deleted prompt's stored text stayed in the map, so it hashed into every
+    // live run's fingerprint: two runs with identical SENT prompts could carry
+    // different `promptVersion` strings, and the A/B group the profile card
+    // builds would split on a number that named nothing the model was given.
+    await savePromptOverride('analysis.master', 'MY OVERRIDE', 'alice');
+    const withoutOrphan = promptCorpusVersion('live');
+    store['prompt_overrides_v1_alice'] = {
+        'analysis.master': 'MY OVERRIDE',
+        'analysis.deleted_experiment': 'text from a prompt this app no longer sends',
+    };
+    await initPromptOverrides('alice');
+    expect(promptCorpusVersion('live')).toBe(withoutOrphan);
+    // Control on the shape of the assertion: the orphan really is in the map, so
+    // this passing is the filter and not a test that compared two empties.
+    expect(getPromptOverrides()).toHaveProperty('analysis.deleted_experiment');
+  });
+
+  it('the CONTROL lane fingerprints as `defaults`, and LIVE as the edit', async () => {
+    // One call, two lanes: the value decides, not the order things ran in.
+    await savePromptOverride('analysis.master', 'MY OVERRIDE', 'alice');
+    expect(promptCorpusVersion('live')).toMatch(/^edited-/);
+    expect(promptCorpusVersion('control')).toBe('defaults');
+  });
+
   it('is `defaults` for a run that resolved the built-in text', async () => {
-    expect(promptCorpusVersion()).toBe('defaults');
+    expect(promptCorpusVersion('live')).toBe('defaults');
     await savePromptOverride('analysis.master', 'MY OVERRIDE', 'alice');
     saveHarnessSettings({ promptAbRate: 0.5 });
     const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+    let lane: ReturnType<typeof beginPromptLane>;
     try {
-      expect(beginPromptLane()).toBe('control');
+      lane = beginPromptLane();
     } finally {
       random.mockRestore();
     }
+    expect(lane).toBe('control');
     // The lane resolves defaults, so its version is the defaults' version — the
-    // two sides of the A/B differ by THIS string, and nothing else.
-    expect(promptCorpusVersion()).toBe('defaults');
+    // two sides of the A/B differ by THIS string, and nothing else. Passed as the
+    // value it is: reading it back out of module state is what let one run
+    // fingerprint another's decision.
+    expect(promptCorpusVersion(lane)).toBe('defaults');
+    expect(promptCorpusVersion('live')).toMatch(/^edited-/);
   });
 
   it('names an edit, and a different edit is a different version', async () => {
@@ -217,16 +304,20 @@ describe('promptCorpusVersion, the string the journal row groups runs by (O-47)'
   });
 
   it('does not depend on the order the overrides were saved in', async () => {
+    // Both ids are REGISTERED. This file used to spell the second one
+    // `chat.casual`, which exists nowhere in the app — so the test passed while
+    // exercising only one real id, and it would keep passing if the ordering
+    // logic were deleted outright.
     await savePromptOverride('analysis.master', 'A', 'alice');
-    const one = promptCorpusVersion();
+    const one = promptCorpusVersion('live');
     await resetAllPromptOverrides('alice');
-    await savePromptOverride('chat.casual', 'X', 'alice');
+    await savePromptOverride('analysis.risk_rules', 'X', 'alice');
     await savePromptOverride('analysis.master', 'A', 'alice');
-    const two = promptCorpusVersion();
+    const two = promptCorpusVersion('live');
     await resetAllPromptOverrides('alice');
     await savePromptOverride('analysis.master', 'A', 'alice');
-    await savePromptOverride('chat.casual', 'X', 'alice');
-    expect(two).toBe(promptCorpusVersion());
+    await savePromptOverride('analysis.risk_rules', 'X', 'alice');
+    expect(two).toBe(promptCorpusVersion('live'));
     expect(one).not.toBe(two);
   });
 
@@ -236,15 +327,22 @@ describe('promptCorpusVersion, the string the journal row groups runs by (O-47)'
   });
 });
 
-describe('the run actually opens the lane it closes (O-55 wiring)', () => {
+describe('the run decides its own lane (O-55 wiring, E-57 §3)', () => {
   const src = readFileSync('hooks/useAnalysisPipeline.ts', 'utf8');
 
-  it('begins the lane inside the run, before any prompt is resolved', () => {
+  it('begins the lane inside the run, before any prompt is resolved, and never closes it', () => {
     expect(src).toMatch(/const promptLane = beginPromptLane\(\);/);
-    // The `finally` that closes it was already there — the pairing is the point.
-    expect(src).toMatch(/endPromptLane\(\);/);
+    // E-57 §3 removed the pairing on purpose. A `finally` that resets a global is
+    // the bug: it clears the lane of whichever OTHER run happened to be mid-
+    // flight, and a run that throws before reaching it leaves the flag set for
+    // everyone else. A value needs no unwinding.
+    expect(src).not.toMatch(/endPromptLane\(\)/);
+    // And the decided value is what the fingerprint is computed FROM — a version
+    // derived from module state rather than from this run would be a label for
+    // someone else's decision.
+    expect(src).toMatch(/const promptVersion = promptCorpusVersion\(promptLane\);/);
     expect(src.indexOf('const promptLane = beginPromptLane();'))
-      .toBeLessThan(src.indexOf('endPromptLane();'));
+      .toBeLessThan(src.indexOf('const promptVersion = promptCorpusVersion(promptLane);'));
   });
 
   it('stamps the lane and the corpus version on every run it records', () => {
@@ -254,6 +352,6 @@ describe('the run actually opens the lane it closes (O-55 wiring)', () => {
     expect(runIds).toBeGreaterThan(0);
     expect([...src.matchAll(/promptLane,/g)].length).toBe(runIds);
     expect([...src.matchAll(/promptVersion,/g)].length).toBe(runIds);
-    expect(src).toMatch(/const promptVersion = promptCorpusVersion\(\);/);
+    expect(src).toMatch(/const promptVersion = promptCorpusVersion\(promptLane\);/);
   });
 });

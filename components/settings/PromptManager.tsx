@@ -74,7 +74,14 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
         [selectedId]
     );
     const isModified = selectedId ? overrides[selectedId] !== undefined : false;
-    const modifiedCount = Object.keys(overrides).length;
+    // Only edits that name a prompt the app can still SEND. An override left
+    // behind by a deleted prompt used to inflate this count, so the button
+    // offered to reset N prompts while some of them exist nowhere — and the
+    // number was the same one the A/B fingerprint had already stopped trusting.
+    // Built from the registry this tab already renders, so the two cannot disagree.
+    const registeredIds = useMemo(() => new Set(PROMPT_REGISTRY.map(e => e.id)), []);
+    const modifiedCount = Object.keys(overrides)
+        .filter(id => registeredIds.has(id) && (overrides[id] || '').trim()).length;
     const draftWarnings = useMemo(() => validatePromptOverride(draft), [draft]);
 
     // Categories in display order (known groups first, unknown sorted).
