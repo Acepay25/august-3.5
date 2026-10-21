@@ -1231,3 +1231,51 @@ floor and ATR bands in the live gate, **§6** the automation run record and the 
 **§1** the closed-trade reflection that ruling (a) authorises. Also left as found, and reported
 rather than quietly edited: `docs/plan/full-audit.md:6756` and `:6757` carry the **D-24** decision
 row twice, verbatim.
+
+## 28. E-57 §7 — the Entry/Stop/Target lines the trader stops out at are now a gate (2026-10-21)
+
+**Proposal:** `docs/plan/closed-loop-fixes.md` (E-57). **Closes:** **O-117** for the plan overlay.
+
+O-117 had sat open because the honest answer to "is the drawn level asserted?" was no:
+`scripts/render-probe.cjs` never named these lines, and the chart's own test suite stopped at the
+data layer. The mapping from a settled plan to a price on the canvas — the one visual thing a
+trader sizes a position against — was unwatched.
+
+**Why the existing recorder could not be reused.** `tradingChartChatLevels.test.tsx` spies on
+`series.createPriceLine()`, which is how the dock's key-level cards paint. The verdict overlay uses
+a different mechanism entirely: `chart.addSeries(LineSeries, opts)` plus a two-point `setData()`
+across the loaded window (`components/trade/TradingChart.tsx:628-645`). A mock that records
+price lines is blind to it by construction, so this file adds a recorder for added SERIES, keyed by
+the series definition it was created from, capturing both the options and the prices fed to it.
+
+**What is asserted.** Four lines at `[100000, 98000, 104000, 108000]` in Entry→Stop→TP1→TP2 order;
+sky `#399ef7` for the entry with `lineStyle: 0`, rose `#f75d5f` and green `#07b56a` dashed with
+`lineStyle: 2`; each line spanning the whole window rather than a single floating point; an ETH plan
+on a BTC chart drawing nothing; a coin switch RETIRING the four lines instead of stranding them;
+and a re-presented plan replacing its stop rather than stacking a second one, which is the failure
+mode that leaves two stops on one chart.
+
+**The fixture is the app's own builder.** `buildProposedTradeAnalysis(proposal(...))` — the same
+object the card, the gate and the journal read — so the test cannot drift from the plan shape the
+way a hand-typed `TradeAnalysis` literal would. (The first draft of this fixture invented an `id`
+and a `thesis` and lower-cased `direction`; `TradeProposal` has neither field and spells it
+`'Long'`. Caught by reading the interface rather than guessing it.)
+
+**Proved red, not merely green.** With the product temporarily mutated — `entry` and `sl` swapped
+in `services/trade/chartData.ts:70,72` — 3 of the 5 cases failed, then all 5 passed again once the
+file was restored. A test that has never been observed to fail is an assertion about the mock.
+
+**The mock caught two of its own bugs first.** `removeSeries` looked up an entry by a `series`
+property that was never set, and retired series stayed in `drawn`, so "the overlay disappeared on a
+coin switch" would have passed vacuously against a chart that had never drawn anything. Both fixed,
+and the coin-switch case now asserts the four lines EXIST before it asserts they are gone.
+
+**Gates.** `typecheck` ok · `vitest` **5249 in 511** (+5, one new file) · `lint` 0 errors / 655
+warnings under the 659 cap · `check-flow-doc-anchors` ok with the AGENTS.md census restated to
+5249/511 and the new file named in the census sentence, as the convention requires.
+
+**What this does NOT close.** The shapes a trader draws by hand, and the shapes `mark_trade_levels`
+writes into `services/trade/chartDrawings.ts`, reach the canvas through the drawing overlay rather
+than this effect; they remain asserted at the data level only (`tests/chartDrawings.test.ts:200`,
+`tests/drawingGeometry.test.ts`), not as drawn pixels. `render-probe` gained no new level assertion
+in this pass. §4, §3, §5, §6 and §1 of E-57 are still open.
