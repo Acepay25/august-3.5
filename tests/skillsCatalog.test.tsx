@@ -64,13 +64,17 @@ describe('SkillsCatalog', () => {
 
     it('lists the roster with its real names and descriptions', () => {
         render(<SkillsCatalog />);
-        expect(screen.getByText('fade-the-fakeout.md')).toBeDefined();
+        // The card shows the name a person can recognize — the reference names
+        // "Fc Nginx Website", not the file behind it. The slug is still the
+        // identity: it is the title, the aria-label and everything that writes
+        // to the notebook.
+        expect(screen.getByText('Fade the fakeout')).toBeDefined();
         expect(screen.getByText('Fade a failed breakout when volume diverges')).toBeDefined();
     });
 
     it('gives every truncated line a title, so the full text is reachable', () => {
         render(<SkillsCatalog />);
-        expect(screen.getByText('fade-the-fakeout.md').getAttribute('title')).toBe('fade-the-fakeout.md');
+        expect(screen.getByText('Fade the fakeout').getAttribute('title')).toBe('fade-the-fakeout.md');
     });
 
     it('marks an enabled skill with the checkmark', () => {
@@ -108,8 +112,18 @@ describe('SkillsCatalog', () => {
     it('filters by the search box against name and description', () => {
         render(<SkillsCatalog />);
         fireEvent.change(screen.getByLabelText('Search skills'), { target: { value: 'volume' } });
-        expect(screen.getByText('fade-the-fakeout.md')).toBeDefined();
-        expect(screen.queryByText('ride-the-trend.md')).toBeNull();
+        expect(screen.getByText('Fade the fakeout')).toBeDefined();
+        expect(screen.queryByText('Ride the trend')).toBeNull();
+    });
+
+
+    it('finds a skill by the name the card SHOWS, not only by its slug', () => {
+        // The card shows "Fade the fakeout"; the notebook calls it
+        // "fade-the-fakeout.md". A trader types what they can see.
+        render(<SkillsCatalog />);
+        fireEvent.change(screen.getByLabelText('Search skills'), { target: { value: 'Fade the fakeout' } });
+        expect(screen.getByText('Fade the fakeout')).toBeDefined();
+        expect(screen.queryByText('Ride the trend')).toBeNull();
     });
 
     it('says a search found nothing rather than showing an empty grid', () => {

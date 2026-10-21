@@ -205,7 +205,7 @@ describe('the catalog → viewer round trip (the probe gate)', () => {
 
         // Open: press the ROW, not a separate "details" control — the catalog
         // row is the route to the record it names.
-        fireEvent.click(screen.getByRole('button', { name: 'Read btc-reclaim-repeat.md' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Read Btc reclaim repeat' }));
         const viewer = await screen.findByTestId('skill-viewer');
         expect(viewer.textContent).toContain('reclaims the prior session high');
         expect(screen.getByTestId('skill-viewer-outcome').textContent).toContain('3W – 1L');
@@ -225,7 +225,7 @@ describe('the catalog → viewer round trip (the probe gate)', () => {
     it('re-reads the record from the store on each open — a viewer is not a cache', async () => {
         mount();
         await openMemoryTab();
-        fireEvent.click(screen.getByRole('button', { name: 'Read btc-reclaim-repeat.md' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Read Btc reclaim repeat' }));
         await screen.findByTestId('skill-viewer');
         fireEvent.click(screen.getByRole('button', { name: 'Close the skill viewer' }));
 
@@ -233,7 +233,7 @@ describe('the catalog → viewer round trip (the probe gate)', () => {
         // is closed; the next open must show the current bytes, not the copy
         // the first open loaded.
         (roster[0].meta as { description: string }).description = 'UPDATED description.';
-        fireEvent.click(screen.getByRole('button', { name: 'Read btc-reclaim-repeat.md' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Read Btc reclaim repeat' }));
         const viewer = await screen.findByTestId('skill-viewer');
         expect(viewer.textContent).toContain('UPDATED description.');
     });
