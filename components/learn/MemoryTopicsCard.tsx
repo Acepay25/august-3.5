@@ -9,8 +9,13 @@ import {
     subscribeMemoryFilesChanged,
     updateMemoryFile,
 } from '../../services/learning/MemoryFilesService';
-import { memoryTopicsFromStore, topicSummaryOf, type MemoryTopic } from '../../services/learning/memoryTopics';
-import { phtDay, phtDayKey } from '../../utils/timezone';
+import {
+    memorySectionLabel,
+    memoryUpdatedLabel,
+    memoryTopicsFromStore,
+    topicSummaryOf,
+    type MemoryTopic,
+} from '../../services/learning/memoryTopics';
 
 /**
  * MemoryTopicsCard — the notebook read as CONTENT (gap 2 of
@@ -51,32 +56,17 @@ import { phtDay, phtDayKey } from '../../utils/timezone';
  * trading evening does not split across two days) and the repo's own date
  * formatter (`phtDay`).
  *
- * It lives here, in the list that owns the column, because
- * `services/learning/memoryTopics.ts` — the module that would normally own a
- * memory surface's vocabulary — is outside this change's write scope. When
- * that file is next touched, this should move there and the three call sites
- * should import it instead.
+ * It LIVES in `services/learning/memoryTopics.ts` — the module that owns this
+ * surface's vocabulary — because a vocabulary that two components import is
+ * two vocabularies the moment one of them edits it. This re-export keeps the
+ * old import path working, and the Settings card now reads the service
+ * directly.
  */
-const dayIndex = (ms: number): number =>
-    Math.floor(Date.parse(`${phtDayKey(ms)}T00:00:00Z`) / 86_400_000);
-
-export const memoryUpdatedLabel = (at: number | undefined | null, now = Date.now()): string => {
-    // No timestamp means no timestamp. The column says so rather than
-    // printing a date the notebook never had.
-    if (!at || !Number.isFinite(at)) return 'Updated unknown';
-    const days = dayIndex(now) - dayIndex(at);
-    if (days <= 0) return 'Updated today';
-    if (days < 7) return `Updated ${days} day${days === 1 ? '' : 's'} ago`;
-    return `Updated ${phtDay(at)}`;
-};
+export { memoryUpdatedLabel };
 
 interface MemoryTopicsCardProps {
     onOpenTopic: (fileId: string) => void;
 }
-
-/** The notebook folder as the section heading reads it. */
-const headingOf = (folderName: string): string =>
-    folderName ? folderName.charAt(0).toUpperCase() + folderName.slice(1) : 'Notebook';
 
 const MemoryTopicsCard: React.FC<MemoryTopicsCardProps> = ({ onOpenTopic }) => {
     const [version, setVersion] = useState(0);
@@ -104,7 +94,7 @@ const MemoryTopicsCard: React.FC<MemoryTopicsCardProps> = ({ onOpenTopic }) => {
             if (list) list.push(t);
             else byFolder.set(t.folderName, [t]);
         }
-        return [...byFolder.entries()].map(([name, rows]) => ({ name, label: headingOf(name), rows }));
+        return [...byFolder.entries()].map(([name, rows]) => ({ name, label: memorySectionLabel(name), rows }));
     }, [topics]);
 
     /** The notebook's owner — the cache this list reads is loaded for one

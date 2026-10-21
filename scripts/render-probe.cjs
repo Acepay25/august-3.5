@@ -2104,7 +2104,7 @@ async function main() {
                 .querySelector('[data-testid="learn-tab-memory"]')?.click());
             const rowPressed = await page.evaluate(() => {
                 const row = [...document.querySelectorAll('[data-testid="skills-catalog-grid"] button')]
-                    .find(b => /read fade-the-first-break/i.test(b.getAttribute('aria-label') || ''));
+                    .find(b => /read fade the first break/i.test(b.getAttribute('aria-label') || ''));
                 if (!row) return false;
                 row.click();
                 return true;

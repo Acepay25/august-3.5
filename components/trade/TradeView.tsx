@@ -19,7 +19,7 @@
  */
 
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { PanelRight, PinIcon, TrendingDown, TrendingUp } from '../shared/Icons';
+import { Grid3x3, PanelRight, PinIcon, TrendingDown, TrendingUp } from '../shared/Icons';
 import { ProviderConfig } from '../../types/provider';
 import { TradeAnalysis, LoggedTrade, Message, Kline } from '../../types';
 import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData } from '../../services/analysis/MarketDataService';
@@ -879,8 +879,17 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
         <div className="flex h-full min-h-0 flex-col bg-zinc-950" data-testid="trade-view">
             {/* ROW 1 · identity + hero (prototype's market row): instrument,
                 spark, screener, feed state on the left; the big live price
-                with its 24h delta + MARK caption on the right. */}
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] bg-zinc-900/60 px-3 pb-1.5 pt-2">
+                with its 24h delta + MARK caption on the right.
+
+                CHROME (the reference's frame). The row is a TITLE BAR, not a
+                panel: a flat page with a hairline under it, a small icon row
+                at the left, and the instrument as the title with its chevron.
+                The old row carried a panel fill and boxed every control in it
+                — three borders and three raised fills around four words, which
+                is the "box around everything" the reference does not have.
+                The controls are now flat: the icon set is one row of one size
+                (14px), and a control's state is its colour, not a frame. */}
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] px-3 pb-1.5 pt-2">
                 <div className="flex min-w-0 items-center gap-2.5">
                     {/* The book column's own open/close control. It used to be
                         the activity bar's active Trade icon; that icon now
@@ -894,10 +903,10 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                             aria-label="Toggle order book"
                             title={isBelowLg ? 'Show the order book' : 'Show or hide the order book'}
                             data-testid="trade-book-toggle"
-                            className={`hidden shrink-0 rounded-control border p-1.5 transition-colors duration-[120ms] ease-[var(--ease-snappy)] sm:flex ${
+                            className={`hidden h-7 w-7 shrink-0 items-center justify-center rounded-control transition-colors duration-[120ms] ease-[var(--ease-snappy)] sm:flex ${
                                 (isBelowLg ? mode === 'book' : sidebarOpen)
-                                    ? 'border-white/20 bg-zinc-800 text-zinc-100'
-                                    : 'border-white/10 bg-zinc-800/60 text-zinc-400 hover:border-white/20 hover:text-zinc-100'
+                                    ? 'bg-white/[0.08] text-zinc-100'
+                                    : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
                             }`}
                         >
                             <PanelRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -909,9 +918,11 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         type="button"
                         onClick={() => setScreenerOpen(true)}
                         aria-label="Open market screener"
+                        title="Market screener"
                         data-testid="screener-trigger"
-                        className="shrink-0 rounded-control border border-white/10 bg-zinc-800 px-2 py-1 text-ui-dense font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
+                        className="flex shrink-0 items-center gap-1.5 rounded-control px-2 py-1 text-ui-dense font-medium text-zinc-400 transition-colors hover:bg-white/[0.05] hover:text-zinc-200"
                     >
+                        <Grid3x3 className="h-3.5 w-3.5" aria-hidden="true" />
                         Screener
                     </button>
                     {onOpenWatchList && (
@@ -921,9 +932,9 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                             aria-label={`Pinned signals, ${watchOpenCount} open`}
                             title={watchOpenR ? `Pinned signals · ${watchOpenR}` : 'Pinned signals'}
                             data-testid="trade-pinned-trigger"
-                            className="relative shrink-0 hit-target rounded-control border border-white/10 bg-zinc-800 px-2 py-1 text-ui-dense font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-zinc-100"
+                            className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-zinc-500 transition-colors hover:bg-white/[0.05] hover:text-zinc-200"
                         >
-                            <PinIcon className="h-3 w-3" aria-hidden="true" />
+                            <PinIcon className="h-3.5 w-3.5" aria-hidden="true" />
                             {watchOpenCount > 0 && (
                                 <span className="absolute -right-1.5 -top-1.5 min-w-[1rem] rounded-full bg-zinc-200 px-1 text-center text-ui-2xs font-mono font-bold leading-4 text-zinc-900">
                                     {watchOpenR || (watchOpenCount > 99 ? '99+' : watchOpenCount)}
@@ -968,8 +979,20 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
 
             {/* ROW 2 · metrics strip — the quiet numbers a perp desk checks
                 without leaving the chart; Funding carries its own countdown +
-                depleting-window bar (amber + pulse inside 30 min). */}
-            <div className="flex shrink-0 items-center divide-x divide-white/[0.06] overflow-x-auto border-b border-white/[0.06] bg-zinc-900/40 py-1.5 pr-3">
+                depleting-window bar (amber + pulse inside 30 min).
+
+                CHROME. The strip is a section of a flat page, so it is a
+                HAIRLINE under the row above it and a hairline between its own
+                readouts — the old panel fill underneath it was the second box
+                in a row of two. The readouts themselves are unchanged: the
+                labels stay UPPERCASE and letter-spaced because that IS this
+                app's data-density rule (87 sites across components/, and the
+                order book's own PRICE/SIZE/TOTAL header is the same family),
+                and the figures stay `font-mono tabular-nums` because they are
+                numbers. What the reference's chrome adds here is the QUIET:
+                no fill behind the row, and the label is the only thing that
+                shouts. */}
+            <div className="flex shrink-0 items-center divide-x divide-white/[0.06] overflow-x-auto border-b border-white/[0.06] py-1.5 pr-3">
                 {/* Mark and 24h Change live once — in the hero price above.
                     The strip keeps only numbers the hero does not show. */}
                 <Stat label="Oracle" value={Number.isFinite(indexPrice) ? fmtPrice(indexPrice!) : '—'} />
@@ -986,7 +1009,13 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
             {/* MOBILE MODE SWITCHER (<lg): Chart | AI | Book, pinned under the
                 header; each mode shows exactly ONE full-height pane. Default
                 Chart; the choice persists per user. At lg+ this row is not
-                rendered at all. */}
+                rendered at all.
+
+                CHROME. These are NAVIGATION labels, not data readouts, so they
+                follow the reference's rule — sentence case, not the shouty
+                uppercase micro-label the readout row keeps — and the switcher
+                is a raised pill (the sliding `.seg-thumb`) rather than a
+                bordered box. */}
             {isBelowLg && (
                 <div
                     ref={switcherRef}
@@ -999,7 +1028,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         else if (e.key === 'End') { e.preventDefault(); jumpMode('last'); }
                     }}
                     data-testid="trade-mode-switcher"
-                    className="relative flex shrink-0 items-center self-start rounded-full border border-white/[0.06] bg-zinc-800/60 p-1 ml-3 mb-1"
+                    className="relative flex shrink-0 items-center self-start rounded-full bg-zinc-800/60 p-1 ml-3 mb-1"
                 >
                     {thumb.width > 0 && (
                         <span
@@ -1018,7 +1047,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                             tabIndex={mode === m ? 0 : -1}
                             data-testid={`trade-mode-${m}`}
                             onClick={() => pickMode(m)}
-                            className={`relative z-10 rounded-full px-4 py-1 text-ui-dense font-semibold uppercase tracking-wider transition-colors duration-150 ease-[var(--ease-snappy)] active:scale-[0.97] ${
+                            className={`relative z-10 rounded-full px-4 py-1 text-ui-dense font-medium transition-colors duration-150 ease-[var(--ease-snappy)] active:scale-[0.97] ${
                                 mode === m ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
                             }`}
                         >
@@ -1063,7 +1092,11 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                     <LevelAccuracyBadge
                         drawings={modelDrawings}
                         candles={levelCandles}
-                        className="absolute top-2 right-2 z-10 bg-zinc-900/90 border border-white/10 rounded-control px-2 py-1" />
+                        /* A floating chip over the plot, so it keeps a raised
+                           surface to read against the candles — the same
+                           raised pill the reference's own badges use — and
+                           loses the border that framed it. */
+                        className="absolute top-2 right-2 z-10 rounded-control bg-zinc-800/90 px-2 py-1" />
                 </div>
                 {/* The order book sits BETWEEN the chart and the AI dock, not
                     to the chart's left. The chart is the primary object on this

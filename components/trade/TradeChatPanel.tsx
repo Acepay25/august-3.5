@@ -862,7 +862,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                     yields: at 370px a squeezed "Chart AI" wrapped into two
                     lines while the controls kept their width. The session
                     title is the flexible element — it truncates. */}
-                <h2 className="shrink-0 whitespace-nowrap text-ui-caption font-semibold text-zinc-100">Chart AI</h2>
+                <h2 className="shrink-0 whitespace-nowrap text-ui-caption text-zinc-200">Chart AI</h2>
                 <span className="min-w-0 flex-1 truncate text-ui-dense text-zinc-500" title={activeSession.title}>{activeSession.title}</span>
                 {(() => {
                     // The prototype's "Analyzed 2m ago" meta, told honestly:
@@ -951,7 +951,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                         </button>
                                     )}
                                     <div className="my-1 border-t border-white/[0.06]" />
-                                    <p className="px-2 py-0.5 text-ui-2xs uppercase tracking-widest text-zinc-600">Start</p>
+                                    <p className="px-2 py-0.5 text-ui-2xs text-zinc-600">Start</p>
                                     <button type="button" onClick={() => addSession('panel')} className="block w-full rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
                                         New panel <span className="text-zinc-600">· up to {PANEL_MAX_MODELS} models</span>
                                     </button>
@@ -1032,12 +1032,12 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             {/* Panel seat editor (while a panel is still short of 2 seats). */}
             {panelPickerFor && (
                 <div className="shrink-0 space-y-1.5 border-b border-white/[0.06] bg-zinc-900/70 px-3 py-2" data-testid="panel-picker">
-                    <p className="text-ui-xs uppercase tracking-widest text-zinc-500">Panel seats ({sessions.find(s => s.id === panelPickerFor)?.panelModels?.length ?? 0}/{PANEL_MAX_MODELS}) — pick up to {PANEL_MAX_MODELS} models or agents; they answer together and talk to each other</p>
+                    <p className="text-ui-xs text-zinc-500">Panel seats ({sessions.find(s => s.id === panelPickerFor)?.panelModels?.length ?? 0}/{PANEL_MAX_MODELS}) — pick up to {PANEL_MAX_MODELS} models or agents; they answer together and talk to each other</p>
                     <div className="flex flex-wrap items-center gap-1.5">
                         {(sessions.find(s => s.id === panelPickerFor)?.panelModels ?? []).map((m: PanelSeatRef) => (
                             <span key={panelSeatKey(m)} className="flex items-center gap-1 rounded-full border border-white/10 bg-zinc-800 px-2 py-0.5 text-ui-xs text-zinc-200">
                                 {m.botId ? (bots.find(b => b.id === m.botId)?.name ?? formatModelDisplayName(m.modelId)) : formatModelDisplayName(m.modelId)}
-                                {m.botId && <span className="text-ui-2xs uppercase tracking-widest text-zinc-500">agent</span>}
+                                {m.botId && <span className="text-ui-2xs text-zinc-500">agent</span>}
                                 <button type="button" aria-label={`Remove ${panelSeatKey(m)}`}
                                     onClick={() => setPanelModels(panelPickerFor, (sessions.find(s => s.id === panelPickerFor)?.panelModels ?? []).filter((x: PanelSeatRef) => panelSeatKey(x) !== panelSeatKey(m)))}
                                     className="text-zinc-500 hover:text-rose-400"><X className="h-3 w-3" aria-hidden="true" /></button>
@@ -1054,7 +1054,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                             its own notebook. Hidden when there is no roster. */}
                         {bots.length > 0 && (sessions.find(s => s.id === panelPickerFor)?.panelModels?.length ?? 0) < PANEL_MAX_MODELS && (
                             <span className="flex flex-wrap items-center gap-1" data-testid="panel-agent-picks">
-                                <span className="text-ui-2xs uppercase tracking-widest text-zinc-600">agents</span>
+                                <span className="text-ui-2xs text-zinc-600">agents</span>
                                 {bots
                                     .filter(b => !(sessions.find(s => s.id === panelPickerFor)?.panelModels ?? [])
                                         .some((m: PanelSeatRef) => m.botId === b.id))

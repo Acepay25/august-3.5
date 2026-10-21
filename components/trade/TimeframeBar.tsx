@@ -111,11 +111,16 @@ const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange,
                     )}
                 </>
             ) : shownIntervals.map(tf => (
+                /* CHROME: the active timeframe is a RAISED chip (the
+                   reference's own segmented control draws its selected tab
+                   exactly that way) and the rest are bare labels on the flat
+                   page. No border on either — a border here made six boxes
+                   out of six words. */
                 <button
                     key={tf}
                     type="button"
                     onClick={() => onIntervalChange(tf)}
-                    className={`rounded-control px-2 py-1 text-ui-dense font-semibold transition-colors ${
+                    className={`rounded-control px-2 py-1 text-ui-dense font-medium transition-colors ${
                         interval === tf ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
                     }`}
                 >
@@ -143,7 +148,10 @@ const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange,
                         z-[90]. The overlay that closes it is z-20 either
                         way; only the panel needed lifting. */}
                     <div className={`absolute left-2 ${pickerUp ? 'bottom-9' : 'top-9'} z-40 w-40 rounded-bubble border border-white/10 bg-zinc-900 p-1 shadow-xl`} data-testid="tf-picker">
-                        <p className="px-2 py-1 text-ui-2xs uppercase tracking-widest text-zinc-600">Timeframes</p>
+                        {/* A SECTION HEADING, so it takes the reference's rule:
+                            small, muted, sentence case — not the uppercase
+                            letter-spaced eyebrow the data readouts keep. */}
+                        <p className="px-2 py-1 text-ui-2xs text-zinc-600">Timeframes</p>
                         <div className="grid grid-cols-2 gap-0.5">
                             {CHART_INTERVALS.map(tf => {
                                 const isShown = bar.includes(tf) || tf === interval;

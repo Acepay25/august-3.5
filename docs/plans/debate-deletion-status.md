@@ -83,7 +83,7 @@ The goal is one tool-capable turn in **both** chat homes. Facts, so the next
 session does not re-derive them:
 
 - `streamChatWithDeskTools` is an **async generator** returning text deltas
-  (`services/analysis/DeskToolsService.ts:3984`), and **every option is optional**
+  (`services/analysis/DeskToolsService.ts:4029`), and **every option is optional**
   (`StreamWithDeskToolsOptions`). It self-gates on
   `getHarnessSettings().deskToolsEnabled`, and `withDeskToolsSystemPrompt` will not
   double-inject the DESK TOOLS block if the system message already carries it.
@@ -122,7 +122,7 @@ So the target is NOT "keep the branch and shrink it to one seat". It is:
   SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
-  `streamChatWithDeskTools` (`DeskToolsService.ts:3984`), which the dock's solo
+  `streamChatWithDeskTools` (`DeskToolsService.ts:4029`), which the dock's solo
   seat already runs at `chatTurnRunner.ts:648`.
 - **The verdict and the journal row become tools the model chooses to call**, not
   a pipeline stage it has to earn. What already exists: `present_trade`
@@ -273,7 +273,7 @@ reading is expensive to undo.
   (`if (runEnsembleEnabled) {` also appears at the data pull, so a bare match would
   stay green with the fork deleted) and to forbid the call shape `Prompt.includes(`.
 - **20s (#25)** — the Chat surface finally has a prompt of its own.
-  `chatSurfaceSystemPrompt` (`chatSurfaceTurn.ts:165`) leads with
+  `chatSurfaceSystemPrompt` (`chatSurfaceTurn.ts:166`) leads with
   `CHAT_SURFACE_SYSTEM_PROMPT` (`chatPrompts.ts:40`), which is
   `CASUAL_CHAT_SYSTEM_PROMPT` **plus** a calling mandate and an explicit
   "NO CHART HERE" — so the output discipline that fixed the
@@ -2166,7 +2166,7 @@ run, not by reading. the post-mortem route is
 **starved, not deleted** (the guard tests the length of the field, and `docs/app-flow.md` §D carries the exact line); `reconstructOpenings`,
 `utils/debateResume` and `confidenceAccuracy` exist nowhere in the tree; the census
 recipe is `grep -rE` over `.ts/.tsx` (122 lines / 50 files for the token, 34 / 23 for
-the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:69`; and the
+the field reads); `MAX_PLANS_PER_RUN` is `services/trade/automationTurn.ts:70`; and the
 progress panel now mints two rows (`market-data`, `analysis`), completed by
 `settleOpenSteps()` in the run's `finally` after the catch has marked any failure.
 
@@ -2189,7 +2189,7 @@ declarations at `types/message.ts:165` and `types/trade.ts:78`; four are
 the repository**; the remaining five are production reads at
 `hooks/analysisPipeline/memoryContext.ts:182`,
 `services/learning/DecisionReflectionService.ts:24`, and
-`services/ui/AlgorithmicSummaryService.ts:50`. No quoted-key or shorthand write exists, so
+`services/ui/AlgorithmicSummaryService.ts:57`. No quoted-key or shorthand write exists, so
 nothing has set this field since the post-mortem writer went.
 
 Two consequences, and they are different in kind:
@@ -2199,7 +2199,7 @@ Two consequences, and they are different in kind:
    `x ?? t.timestamp`, so lesson age and the point-in-time memory slice are now computed
    from the trade's own time rather than from when the reflection was written. Nothing
    errors; the meaning is gone and the number keeps coming out.
-2. `AlgorithmicSummaryService.ts:50` gates on
+2. `AlgorithmicSummaryService.ts:57` gates on
    `if (trade.timestamp && trade.postMortemCreatedAt)` with no fallback, so its
    "reflected N minutes after close" line **can never appear for a trade closed after
    2026-10-18** — while it still appears for older rows from the journal. Dark on new data,
@@ -2274,7 +2274,7 @@ instead of implying the table is checked.
 found on the line it cites: the `index.tsx` mount chain (StrictMode :78, ErrorBoundary :79, ToastProvider :80 —
 the old `73-79` range proved nothing), `august_surface_v1`, `onSendBotTurn`, `onAnalyze`, `handleRunAnalysisFromChat`,
 `runFullAnalysis`, `runSeatTurn` at both :593 and :1082, `applyCasualStreamUpdate`, `notify`. Binding found another real
-defect: row 13 cited AgentsView.tsx:770 for `onAnalyze`, and the await is at **:767** (:770 is the `finally` of that
+defect: row 13 cited AgentsView.tsx:781 for `onAnalyze`, and the await is at **:781** (:781 is the `finally` of that
 same try) — fixed in both flow docs. Coverage now prints 14/53 with 22 pairs and a floor of 14, and 39 rows remain
 line-resolved only.
 
@@ -2285,10 +2285,10 @@ file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:13
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44, the Enter branch at
 components/trade/panels/ChatComposer.tsx:146, systemPromptFor components/trade/TradeChatPanel.tsx:454 with
 TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:476, useBotThread hooks/useAnalysisPipeline.ts:1301,
-entriesForSession services/trade/chatSessions.ts:567, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:165
+entriesForSession services/trade/chatSessions.ts:567, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:166
 with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
-services/trade/automationTurn.ts:69, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices
-services/trade/automationTurn.ts:155, latestChartVerdict services/trade/chartData.ts:95. The gate prints
+services/trade/automationTurn.ts:70, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices
+services/trade/automationTurn.ts:156, latestChartVerdict services/trade/chartData.ts:95. The gate prints
 23/53 with 37 pairs and a floor of 23; 30 rows remain line-resolved, and those are where the next wrong number
 would still be invisible.
 
@@ -2349,7 +2349,7 @@ where relevant), not re-read:
 | `savedAnalyses` was deleted outright (stage 21) | `grep -rl savedAnalyses --include=*.ts --include=*.tsx . \| wc -l` | **0 files** — field, state, SQLite read/write, backup validation all gone; the surviving mentions are in the untracked `docs/analysis/` census, where every count is already 0 |
 | `NavRail` is imported and never rendered | `grep -rn "<NavRail" …` | 1 hit, and it is the generic `<NavRailProps>` on its own definition line — no JSX use anywhere in production |
 | post-mortems are gone | `grep -rn usePostMortem conductPostMortem …` | 1, a comment in `services/learning/SkillMemoryService.ts`; 0 for `conductPostMortem` |
-| all three turn owners record usage | `grep -rn recordToolTurnUsage …` | 3 call sites (`chatSurfaceTurn.ts:360`, `automationTurn.ts:262`, `chatTurnRunner.ts:716`) + the definition at `utils/sessionUsage.ts:63` |
+| all three turn owners record usage | `grep -rn recordToolTurnUsage …` | 3 call sites (`chatSurfaceTurn.ts:360`, `automationTurn.ts:265`, `chatTurnRunner.ts:716`) + the definition at `utils/sessionUsage.ts:63` |
 | one notifier | `grep -rn CompletionNotifications …` | 1, a comment in `services/infrastructure/notify.ts` — the module itself was deleted, which is stronger than "no caller" and is now what row 52 says |
 
 One sentence was tightened rather than corrected: row 52 said `CompletionNotifications` "has no caller",

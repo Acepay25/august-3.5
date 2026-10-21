@@ -233,9 +233,9 @@ be a stored-data bug the line was hiding.
 
 | Cause, in the code | What landed | Verified by |
 | --- | --- | --- |
-| A tool round's output budget was `Math.min(caller, 4096)`, and thinking counts **inside** `max_tokens` on the DeepSeek, GLM, Anthropic and o-family routes. A seat told to decide at `high` (the E-39 default for `tradingDecision`) could spend the whole 4096 mid-thought and return a message with no call and no text; the loop read that as "chose not to call a tool" and ended the turn empty. | `DESK_ROUND_MAX_TOKENS = 8192` (`DeskToolsService.ts:240`), the same room `TASK_BUDGETS.chat` gives the answer, still clamped by a smaller caller budget. | `tests/deskToolThinkingCut.test.ts` — and measured red: setting the constant back to 4096 fails 3 checks |
+| A tool round's output budget was `Math.min(caller, 4096)`, and thinking counts **inside** `max_tokens` on the DeepSeek, GLM, Anthropic and o-family routes. A seat told to decide at `high` (the E-39 default for `tradingDecision`) could spend the whole 4096 mid-thought and return a message with no call and no text; the loop read that as "chose not to call a tool" and ended the turn empty. | `DESK_ROUND_MAX_TOKENS = 8192` (`DeskToolsService.ts:241`), the same room `TASK_BUDGETS.chat` gives the answer, still clamped by a smaller caller budget. | `tests/deskToolThinkingCut.test.ts` — and measured red: setting the constant back to 4096 fails 3 checks |
 | Nothing re-asked. An empty round returned `endedWithToolCalls: false` with `finalText: ''`, and the continuation went out at the tier that had just failed. | One re-ask per turn at a stepped-down tier (`stepEffortDown`, now exported from `reasoningControls.ts`), triggered on the wire's own stop signal — `truncated` **or** `finishReason === 'unknown'`, because a gateway that sends no signal has not said it finished. If the whole turn produced nothing, the continuation gets the same step-down plus a harness turn asking for prose. | `tests/deskToolThinkingCut.test.ts` (4 cases) — measured red: disabling the repair fails all four |
-| Nothing bounded the outbound array. The desk loop grew its own request every round, and `chatSurfaceTurnMessages` mapped the **whole** stored conversation onto every send. | `services/providers/contextCompact.ts` — fit the array to the resolved window: oldest tool payloads to a marked head slice, then old prose, then whole tool rounds (never splitting a `tool_calls` block from its replies, which is what 400s the transcript). Applied at every round and at the continuation, and reported in the transcript through the tool-line channel — including the case where **nothing could be cut** (`CONTEXT FULL: … over a N-token ceiling`), because silence there reads as a healthy request right up to the provider refusal. | `tests/contextCompact.test.ts` (26 cases), `tests/deskToolThinkingCut.test.ts` (4) |
+| Nothing bounded the outbound array. The desk loop grew its own request every round, and `chatSurfaceTurnMessages` mapped the **whole** stored conversation onto every send. | `services/providers/contextCompact.ts` — fit the array to the resolved window: oldest tool payloads to a marked head slice, then old prose, then whole tool rounds (never splitting a `tool_calls` block from its replies, which is what 400s the transcript). Applied at every round and at the continuation, and reported in the transcript through the tool-line channel — including the case where **nothing could be cut** (`CONTEXT FULL: … over a N-token ceiling`), because silence there reads as a healthy request right up to the provider refusal. | `tests/contextCompact.test.ts` (23 cases), `tests/deskToolThinkingCut.test.ts` (14) |
 | The window itself was a single optional field the trader could type, defaulting to 65,536 — and `loadProviderConfigs` **dropped it on every app start** while the save path kept writing it. `thinkingCapable`, `jsonSchemaCapable` and both pricing rates were dropped with it. | `utils/contextWindow.ts`: user override → a limit the provider stated in a rejection → the window `/models` reported for that model id → the owner's new **1,000,000** default. Discovery now captures per-model windows (`discoverProviderModelCatalog`, stored in `ProviderConfig.modelContextWindows`); the loader preserves every optional field with coercion; `Settings → Providers` shows the number in use and says which evidence produced it. | `tests/contextWindow.test.ts`, `tests/providerConfigService.test.ts` (5 new), `tests/modelCatalogRefresh.test.tsx` (2 new) |
 | An optimistic default is only safe if a wrong guess is survivable. | The transport (`sendChatRequest`, `sendChatTurn`, `streamChatRequest`) reads the limit out of a context-length rejection, records it as `measured`, compacts to it and retries **once** — never after a delta has been painted, and not at all when compaction has nothing to cut. A non-window 400 is not retried. | `tests/desktopProviderParity.test.ts` (4 new, over the Electron bridge) |
 
@@ -277,9 +277,12 @@ and vLLM use:
 - Clearing the override returns the line to the discovered 131,072, so the
   resolution order is not a unit-test artifact.
 - With the window set to `2000`, a third dock question produced
-  `CONTEXT FULL: even after compaction this request is 4,067 estimated tokens over
-  a 1,024-token ceiling…` in the transcript — and the seat answered anyway. The
-  honest report does not eat the turn.
+  `CONTEXT WINDOW TOO SMALL: 2,000 tokens cannot hold this prompt plus a reply…`
+  in the transcript. No provider request was sent: the prompt plus the output
+  budget could not fit, and the turn fails with the measured reason instead of
+  sending an impossible `max_tokens` and reporting the provider's opaque 400.
+  The output budget is also clamped to what the window has left on turns that
+  do fit (~12k windows), so the 8,192-token round no longer overflows by itself.
 - `npm run render-probe` (113 checks) re-runs the dock tool round against the same
   mock, so the transport change is covered without a live reasoning provider.
 
@@ -1117,3 +1120,54 @@ warnings (cap 659) · `build` ok · `render-probe` ok, zero pageerrors ·
 `check-flow-doc-anchors` 306 anchors, 0 unattributed, cited-line quality 0/0 ·
 `radiusRamp` ok, with the CSS radius census restated for the work card's
 token radius and the floor narrowed by one.
+## 26. E-56 — The quiet pass: the rail, the dock and the chart area stop shouting (2026-10-21)
+
+**Proposal:** `docs/plan/quiet-voice.md` (E-56). **Covers:** **O-135**.
+
+The owner's third reference pass named the **chart surface** and the **sidebar
+in the chat surface** — and asked how the skills and the memory are formatted
+now. Looking at the two side by side in a browser, the gap was not layout or
+colour. It was **volume**.
+
+**The rail (Q-1, Q-2, Q-3).** The section headings were uppercase and
+letter-spaced; they are now sentence case, small and muted, the way the
+reference's "Pinned" and "Chats and tasks" are. The Chats | Bots tab strip is
+quiet too. A conversation's title is **not a headline** any more (the reference
+lists them in a regular weight). A row's glyph is the reference's **plain
+mark**, not a ring around every row — the state still reads, because the
+working row's mark is amber and the active row's is bright. The dock's own
+prose labels were quietened the same way: it had been printing a whole
+**sentence** in uppercase letter-spacing, and the dock's name was set as a
+headline.
+
+**The chart area (the chrome pass).** The reference's window is a flat page:
+sections separated by hairlines, flat controls, a control's state carried by
+its colour rather than a frame. August's chart area had a fill and a border on
+every surface. The market row is now a **title bar** (the instrument is the
+reference's title and caret), the readout strip is hairlines only, the order
+book is a **section** of the page with one `border-l`, the drawing rail is the
+page colour, and the book toggle / Screener / Pinned / ƒSMA / the symbol
+trigger are flat controls at one icon size. The seam between the chart and the
+dock is a **hairline** — the shell's `RightPanel` drag handle had a fill and a
+border on both sides, and no longer matched the flat half beside it. The
+level-accuracy badge's percentage gained `tabular-nums`: every numeric readout
+in this app is mono tabular, and that one was not.
+
+**The judgement call.** The readout row's UPPERCASE data labels stay. That is
+the app's deliberate data-density rule, not drift — the order book's own
+PRICE/SIZE/TOTAL header is the same family — and the reference's sentence-case
+labels are *prose* headings, a different role from a figure's caption. So the
+line was drawn **by role**: navigation, section and chip labels are sentence
+case; data-readout labels keep the app's rule. Both halves are pinned, so a
+future "make it all sentence case" sweep cannot half-apply it.
+
+**The memory vocabulary came home.** The list's date column and its section
+headings are vocabulary, and they were living in a component — with the
+Settings card importing them **from that component**. They now live in
+`services/learning/memoryTopics.ts`, beside the derivation they belong to, and
+both surfaces read them from there.
+
+**Gates.** `typecheck` ok · `vitest` 5240 in 510 · `lint` 0 errors / 655
+warnings (cap 659 — and the doctrine's own stale `--max-warnings 889` was
+corrected to the real cap) · `build` ok · `render-probe` ok, zero pageerrors ·
+`check-flow-doc-anchors` 375 anchors, 0 unattributed, cited-line quality 0/0.
