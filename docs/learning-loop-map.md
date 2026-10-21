@@ -111,7 +111,7 @@ what lets the ladder test it at all.
 | `GlobalMemory.globalCorrections` | `AlgorithmicMemoryService.ts` | same index | yes |
 | skill drafts | `queueSkillDraft` (`utils/skillDrafts.ts`) | `CoachThreadPanel`/`ApprovalInbox` + supervisor | yes |
 | learning proposals | `queueLearningProposal` (`utils/learningQueue.ts`) ← cap/revival/demote/rescope/contradiction passes | `LearningQueuePanel` + supervisor (all five kinds actuable) | yes |
-| harness lessons | `recordHarnessLesson` (`harnessLessons.ts`) | `formatHarnessNotesBlock` → `ensembleService.ts` | yes |
+| harness lessons | `recordHarnessLesson` (`harnessLessons.ts`) ← the wire audit, the known-answer probes and `metaCalibration` | the wire-audit pin checker (`registerWireRoutePins`, live) + `HarnessLessonsBrowser` (human). **No prompt reader** — `formatHarnessNotesBlock` fed `ensembleService.ts`, the ensemble was deleted, and E-57 deleted the orphaned formatter rather than leave a store claiming a reader it lacks | read by a pin + a person, not a prompt |
 | memory amendments | `proposeAmendment` ← `DeskToolsService.ts` | `AmendmentsInbox` + supervisor | yes |
 | injection records | `recordMemoryInjection` ← `getMemoryFilesContext`, `botLearning.recordBotTurnInjection` | `skillAdherenceForRun` ← `applySkillEvidence`; `listRetrievedMemorySources` UI | yes |
 | decision reflections (**no store**) | none — `DecisionReflectionService.ts` is a pure selector over `LoggedTrade[]` (`loggedTrades`) + their `postMortem`; it writes nothing and owns nothing | `useAnalysisPipeline.ts` → the analyst prompt block | **reader-only, and that is the design** (WS-4.6: this row, not "registered above") |
@@ -157,8 +157,13 @@ on a Family-A trade therefore does change the next index's Family-A line.
    (the old AI-summarizer variant, plus the private `GLOBAL_MEMORY_JSON_SCHEMA`
    only it used), `memoryUtils.prepareTradeSummariesForGlobalMemory`,
    `harnessLessons.isWireRoutePinnedOff`, and an unused `listHarnessLessons`
-   import in `App.tsx`. Kept, because an earlier pass wrongly called it dead:
-   `harnessLessons.lessonsForClass` is a tested capability-class accessor.
+   import in `App.tsx`. Kept then, because an earlier pass wrongly called it
+   dead: `harnessLessons.lessonsForClass` was a tested capability-class accessor.
+   **E-57 superseded that keep.** Its only remaining caller was its own test, and
+   the ensemble reader it existed to feed was deleted long before; the
+   capability-class doctrine it pinned is still pinned — now directly against the
+   stored shape in `tests/harnessLessons.test.ts`. A tested-but-uncalled function
+   is not "alive", but deleting one is only honest once the assertion outlives it.
    **WS-4 re-check:** `MemoryConsolidationService.consolidateMemory` is live
    code that nothing on the runtime path calls — the earlier "IS imported by
    `AlgorithmicMemoryService.ts`" was true of the import only, and that

@@ -10,7 +10,6 @@ vi.mock('../services/providers/GenericProviderService', () => ({
 
 import {
     listHarnessLessons,
-    lessonsForClass,
     recordHarnessLesson,
     clearHarnessLesson,
     probeWireSupport,
@@ -73,21 +72,22 @@ describe('harnessLessons store (P7)', () => {
         expect(listHarnessLessons()).toHaveLength(2);
     });
 
-    it('lessonsForClass filters by capability class (scope, never provider identity)', () => {
+    it('a lesson is scoped by CAPABILITY CLASS, and its provider is provenance only', () => {
+        // This is the doctrine the deleted `lessonsForClass` accessor used to be
+        // tested through. It is a rule about the STORED SHAPE, not about a
+        // function, so it outlives the accessor: any model can run on this
+        // harness, and a lesson must never become a per-provider switch.
         recordHarnessLesson({ kind: 'wire', scope: 'vision', pattern: 'p1', lesson: 'l1', evidenceId: 'e1' });
         recordHarnessLesson({ kind: 'wire', scope: 'jsonMode', pattern: 'p2', lesson: 'l2', evidenceId: 'e2' });
-        expect(lessonsForClass('vision')).toHaveLength(1);
-        expect(lessonsForClass('jsonMode')).toHaveLength(1);
-        expect(lessonsForClass('thinkingDefault')).toHaveLength(0);
-    });
+        const byScope = (scope: string) => listHarnessLessons().filter(l => l.scope === scope);
+        expect(byScope('vision')).toHaveLength(1);
+        expect(byScope('jsonMode')).toHaveLength(1);
+        expect(byScope('thinkingDefault')).toHaveLength(0);
 
-    it('provider is recorded as provenance but is not the scope', () => {
         recordHarnessLesson({ kind: 'wire', scope: 'thinkingDefault', provider: 'custom-123', pattern: 'p', lesson: 'l', evidenceId: 'e' });
-        const lesson = listHarnessLessons()[0];
-        expect(lesson.provider).toBe('custom-123');
-        expect(lesson.scope).toBe('thinkingDefault');
-        // The same lesson matches its CLASS, not just its evidence provider.
-        expect(lessonsForClass('thinkingDefault')).toHaveLength(1);
+        const lesson = listHarnessLessons().find(l => l.scope === 'thinkingDefault');
+        expect(lesson?.provider).toBe('custom-123');
+        expect(lesson?.scope).toBe('thinkingDefault');
     });
 
     it('clearHarnessLesson removes exactly one lesson by id', () => {

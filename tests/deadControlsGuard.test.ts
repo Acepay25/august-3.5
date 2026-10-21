@@ -277,3 +277,68 @@ describe('a class the framework does not generate must have a rule behind it', (
         expect(checked![0]).toMatch(/background-image:/);
     });
 });
+
+/**
+ * E-57: the harness-lesson store advertised a prompt reader it did not have.
+ * `formatHarnessNotesBlock` fed the ensemble's arbiter, the ensemble was
+ * deleted, and the store's own header still claimed "read by roster build,
+ * reasoningControls, and the run-snapshot assembler" — a header that names a
+ * consumer which no longer exists is the same class of lie as an inert button,
+ * because the next reader of that file believes the loop is closed.
+ */
+describe('the harness-lesson store says who actually reads it', () => {
+    const lessonsSrc = read('services/learning/harnessLessons.ts');
+    const dead = /formatHarnessNotesBlock|lessonsForClass/;
+
+    /**
+     * The identifiers MAY appear in prose — this repo names deleted code on
+     * purpose so the next reader knows why it went (see the dated deletion
+     * ledger). What must never appear again is a line of CODE that declares,
+     * imports or calls one. So the scan is per line, and a line whose first
+     * non-space token is a comment marker is not code.
+     */
+    const codeLinesNaming = (src: string, name: RegExp): number[] =>
+        src.split('\n')
+            .map((line, i) => ({ line, n: i + 1 }))
+            .filter(({ line }) => name.test(line))
+            .filter(({ line }) => !/^\s*(\/\/|\/\*|\*)/.test(line))
+            .map(({ n }) => n);
+
+    it('the deleted readers appear on no code line, anywhere', () => {
+        for (const f of [
+            'services/learning/harnessLessons.ts',
+            'services/learning/SkillMemoryService.ts',
+            'services/learning/metaCalibration.ts',
+            'services/analysis/HybridIntelligenceService.ts',
+            'services/providers/GenericAnalysisService.ts',
+            'services/trade/tradeChatContext.ts',
+            'components/settings/HarnessLessonsBrowser.tsx',
+        ]) {
+            expect(codeLinesNaming(read(f), dead), `${f} still names a deleted lesson reader in code`).toEqual([]);
+        }
+    });
+
+    it('the scan actually bites — a called reader on a code line is a finding', () => {
+        // Without this control the rule above is a claim about a regex that
+        // matched nothing at all.
+        expect(codeLinesNaming('const x = formatHarnessNotesBlock();\n', dead)).toEqual([1]);
+        expect(codeLinesNaming('// formatHarnessNotesBlock was deleted (E-57)\n', dead)).toEqual([]);
+    });
+
+    it('the store itself is NOT dead — the wire-audit pin checker still reads it', () => {
+        // This is the assertion that stops the NEXT cleanup from deleting the
+        // store because "nothing prompts from it". A lesson can pin a provider
+        // class to thinking-off, and `reasoningControls` asks for that.
+        expect(lessonsSrc).toMatch(/registerWireRoutePins\(/);
+        expect(read('services/providers/reasoningControls.ts')).toMatch(/registerWireRoutePins/);
+    });
+
+    it('the Settings browser is still the human reader', () => {
+        expect(read('components/settings/HarnessLessonsBrowser.tsx')).toMatch(/listHarnessLessons/);
+    });
+
+    it('the header names readers that exist, and says there is no prompt reader', () => {
+        expect(lessonsSrc).not.toMatch(/read by roster/);
+        expect(lessonsSrc).toMatch(/There is NO prompt reader/);
+    });
+});
