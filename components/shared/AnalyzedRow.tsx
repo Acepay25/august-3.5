@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Brain, ChevronRight } from './Icons';
+import { ChevronRight } from './Icons';
 import { subscribeSharedTicker } from '../../hooks/useSharedTicker';
 
 export interface AnalyzedRowProps {
@@ -85,10 +85,11 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
     // line; settled with tools = "Ran 4 commands, read a file". Duration only
     // stands alone when there is no action count to lead with.
     //
-    // The settled headline is the KIND sentence ("4 reads, 1 search"), not a
-    // bare count of calls: a count of calls says the desk was BUSY, and a
-    // typed count says what it did — which is the one thing a trader reading
-    // only the collapsed row cannot get from the answer.
+    // The settled headline is the reference's command count ("Ran 4 commands"),
+    // composed by ChatWorkTimeline from the PAIRED calls; the named work follows
+    // in `title`. A count of calls, never of transcript lines — the desk writes
+    // two lines per call, and a line count would double every number the trader
+    // is told.
     const workSummary = (summary ?? '').trim();
     const ranTools = workSummary.length > 0;
     // The RUNNING label is the ACTIVITY, not the state: "Reading the order
@@ -101,10 +102,16 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
         : ranTools
             ? workSummary
             : 'Analyzed';
+    // A settled work turn reads like the reference's "Ran 4 commands, read a
+    // file": the count leads and the named work follows. Duration belongs to
+    // the LIVE line only — the reference's settled row carries no clock, and
+    // printing "· 0s" beside a tool count made a fast read look like it did
+    // nothing. A reasoning-only turn keeps "Analyzed for Ns", where the
+    // duration is the only thing that happened.
     const detail = running
         ? (seconds !== null ? (runningActivity ? ` · ${seconds}s` : ` for ${seconds}s`) : '')
         : ranTools
-            ? (title ? `, ${title.charAt(0).toLowerCase()}${title.slice(1)}` : '') + (seconds !== null ? ` · ${seconds}s` : '')
+            ? (title ? ` · ${title.charAt(0).toLowerCase()}${title.slice(1)}` : '')
             : (seconds !== null ? ` for ${seconds}s` : '') + (title ? ` · ${title.charAt(0).toLowerCase()}${title.slice(1)}` : '');
 
     return (
@@ -128,7 +135,6 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
                         ))}
                     </span>
                 )}
-                {!running && <Brain className="reasoning-row-glyph" aria-hidden="true" />}
                 <span className="reasoning-row-label">
                     {label}{detail}
                 </span>

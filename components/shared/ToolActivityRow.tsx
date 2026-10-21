@@ -124,9 +124,9 @@ const ToolRowGroupView: React.FC<{ group: ToolRowGroup; running: boolean }> = ({
     const kindName = toolKindLabel(kind);
 
     const line = (
-        <div className="flex items-center gap-1.5 text-ui-xs leading-4 text-zinc-500" data-kind={kind}>
+        <div className="flex items-center gap-1.5 text-ui-caption leading-5 text-zinc-500" data-kind={kind}>
             <Glyph className={`h-3 w-3 shrink-0 ${anyFailed ? 'text-rose-400/70' : 'text-zinc-600'}`} aria-hidden="true" />
-            <span className={`shrink-0 ${anyCalling ? 'text-zinc-500' : anyFailed ? 'text-rose-300' : 'text-zinc-400'}`}>
+            <span className={`shrink-0 ${anyCalling ? 'text-zinc-500' : anyFailed ? 'text-rose-300' : 'text-zinc-300'}`}>
                 {group.label}
             </span>
             {group.count > 1 && (
@@ -150,7 +150,7 @@ const ToolRowGroupView: React.FC<{ group: ToolRowGroup; running: boolean }> = ({
         <Disclosure
             className="tool-row"
             summaryClassName="tool-row-summary"
-            bodyClassName="tool-row-body"
+            bodyClassName="tool-row-body custom-scrollbar"
             testId="tool-row"
             detailsProps={{ 'data-fold-count': group.count, 'data-kind': kind }}
             open={open}

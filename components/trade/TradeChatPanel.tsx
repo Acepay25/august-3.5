@@ -659,13 +659,82 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         stickToBottomRef.current = !away;
         setScrolledAway(away);
     }, []);
+    /** The newest-message count and session the transcript last followed.
+     *  A NEW trader message re-pins the follow even if they had scrolled up
+     *  to read — sending is an action, and the answer must not land where
+     *  they cannot see it. A retry keeps the same user row, so this counts
+     *  user rows rather than comparing array lengths (the retry path drops
+     *  the stale answers first, which changes the length without asking). */
+    const prevUserCountRef = useRef(0);
+    const prevActiveIdRef = useRef(activeId);
     useEffect(() => {
         const el = scrollRef.current;
         if (!el) return;
+        const userCount = entries.reduce((n, e) => n + (e.role === 'user' ? 1 : 0), 0);
+        if (userCount > prevUserCountRef.current) stickToBottomRef.current = true;
+        prevUserCountRef.current = userCount;
+        if (prevActiveIdRef.current !== activeId) {
+            prevActiveIdRef.current = activeId;
+            stickToBottomRef.current = true;
+            setScrolledAway(false);
+        }
+        // A retry re-uses the user's row (so the count above does not move) and
+        // then paints a fresh empty AI placeholder after it. That is a new
+        // question from the trader's point of view, and the answer must be
+        // visible even if they had scrolled up to press Retry.
         const last = entries[entries.length - 1];
-        if (!last || last.role === 'user') stickToBottomRef.current = true;
+        const beforeLast = entries[entries.length - 2];
+        if (last?.role === 'ai' && last.streaming && !last.text?.trim() && beforeLast?.role === 'user') {
+            stickToBottomRef.current = true;
+        }
         if (stickToBottomRef.current) el.scrollTop = el.scrollHeight;
     }, [entries, activeId]);
+    // Following only on `entries` was not enough: the transcript's own height
+    // changes when the composer grows (its context stamp / warning line), and
+    // rows grow AFTER the last entry patch (the Key Levels card mounts, fonts
+    // and markdown settle, a disclosure opens). Either growth left the newest
+    // lines clipped below the fold with no jump control to reach them — the
+    // answer read as truncated until a reload re-scrolled the conversation
+    // from the top. So watch BOTH the box's size and its content, and after
+    // every change either re-pin (the reader is at the bottom) or re-measure
+    // whether the newest row is now out of reach (so the control appears).
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return undefined;
+        let frame = 0;
+        const settle = (): void => {
+            frame = 0;
+            const box = scrollRef.current;
+            if (!box) return;
+            if (stickToBottomRef.current) {
+                box.scrollTop = box.scrollHeight;
+                return;
+            }
+            setScrolledAway(box.scrollHeight - box.scrollTop - box.clientHeight > JUMP_AWAY_PX);
+        };
+        const schedule = (): void => {
+            if (frame) return;
+            frame = typeof requestAnimationFrame === 'function'
+                ? requestAnimationFrame(settle)
+                : window.setTimeout(settle, 0);
+        };
+        const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(schedule) : null;
+        ro?.observe(el);
+        const mo = typeof MutationObserver !== 'undefined'
+            ? new MutationObserver(schedule)
+            : null;
+        mo?.observe(el, { childList: true, subtree: true, characterData: true });
+        window.addEventListener('resize', schedule);
+        return () => {
+            ro?.disconnect();
+            mo?.disconnect();
+            window.removeEventListener('resize', schedule);
+            if (frame) {
+                if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame);
+                else window.clearTimeout(frame);
+            }
+        };
+    }, [activeId, activeSession.kind]);
     /** One click returns to the newest row, and re-pins the follow so the next
      *  streamed line keeps arriving where the trader is looking. */
     const jumpToLatest = useCallback((): void => {
@@ -1092,7 +1161,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             {/* The transcript's own box, so the jump control floats over the
                 transcript's bottom-right corner and not over the composer. */}
             <div className="relative min-h-0 flex-1">
-            <div ref={scrollRef} onScroll={onChatScroll} className="h-full space-y-4 overflow-y-auto custom-scrollbar px-4 py-4"
+            <div ref={scrollRef} onScroll={onChatScroll} className="h-full space-y-4 overflow-y-auto overscroll-contain custom-scrollbar px-4 py-4"
                 // The dock's transcript root is the one element a screen reader
                 // needs to name for an answer to be heard at all: rows append and
                 // old ones scroll away, which is exactly `role="log"`. Held busy

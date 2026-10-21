@@ -68,7 +68,7 @@ const TradeDetailView: React.FC<{
     onUpdatePnL?: (id: string, pnl: { pnlAmount?: number; pnlPercent?: number }) => void;
     username?: string;
 }> = ({ trade, onBack, modelIdToName, onUpdateLeverage, onUpdateType, onUpdateOutcome, onUpdatePnL, username }) => {
-    const { analysis, outcome, timestamp, postMortem, postMortemImages, correctedEntry, correctedStopLoss, correctedTakeProfit, pnlAmount, pnlPercent, modelsUsed, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, groqAlt2ModelUsed, openrouterModelUsed, moderatorModel, leverage } = trade;
+    const { analysis, outcome, timestamp, postMortem, postMortemCreatedAt, postMortemModel, postMortemImages, correctedEntry, correctedStopLoss, correctedTakeProfit, pnlAmount, pnlPercent, modelsUsed, geminiModelUsed, deepseekModelUsed, zhipuModelUsed, groqModelUsed, groqNewModelUsed, groqAlt2ModelUsed, openrouterModelUsed, moderatorModel, leverage } = trade;
     const { direction, stopLoss, stopLossPercentage, entryPoints, takeProfit, activeStrategies, coinName, invalidationCriteria } = analysis;
     const [viewerImageUrl, setViewerImageUrl] = useState<string | null>(null);
     const [localLeverage, setLocalLeverage] = useState<string>(String(leverage || defaultLeverage()));
@@ -395,6 +395,24 @@ const TradeDetailView: React.FC<{
                         </div>
                         </div>
                     </details>
+
+                    {/* The post-mortem (E-57 §1). In the open, not behind a
+                        fold: it is a sentence about a position the trader took,
+                        and the app wrote it — so it shows with the outcome, not
+                        one click after it. The note's own first line names the
+                        app as its author; the field beside it names the model,
+                        because a journal the model can write into must never
+                        read as the trader's own handwriting. */}
+                    {postMortem?.trim() && (
+                        <section className="mt-10" data-testid="trade-post-mortem">
+                            <h3 className="text-ui-base font-semibold text-zinc-100 tracking-tight">Post-mortem</h3>
+                            <p className="text-ui-2xs font-mono uppercase tracking-widest text-zinc-500 mt-1" data-testid="trade-post-mortem-when">
+                                {postMortemCreatedAt ? phtDayYear(postMortemCreatedAt) : 'date not recorded'}
+                                {postMortemModel ? ` · ${modelIdToName[postMortemModel] ?? postMortemModel}` : ''}
+                            </p>
+                            <p className="mt-3 text-ui-base leading-relaxed text-zinc-300 whitespace-pre-wrap">{postMortem}</p>
+                        </section>
+                    )}
                 </div>
             </div>
 
