@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pencil, RotateCcw } from './Icons';
+import { Info, Pencil, RotateCcw } from './Icons';
 
 /**
  * InterruptedRunNotice — the "Run stopped" card, shared by the Chat surface
@@ -9,6 +9,11 @@ import { Pencil, RotateCcw } from './Icons';
  * Rendered only with at least ONE handler: a "Run stopped" label with no
  * button beside it is a dead notice — it names a problem and offers no way
  * out, which is worse than saying nothing.
+ *
+ * The reference draws it as a CARD with the two ways out as raised chips on
+ * the right — the same furniture it uses for a file it hands back. August
+ * had a bare row of ghost buttons, which reads as a caption on the answer
+ * rather than as the place the run stopped.
  */
 export const InterruptedRunNotice: React.FC<{
     onEditPrompt?: () => void;
@@ -16,24 +21,30 @@ export const InterruptedRunNotice: React.FC<{
 }> = ({ onEditPrompt, onTryAgain }) => {
     if (!onEditPrompt && !onTryAgain) return null;
     return (
-        <div className="mt-1 flex flex-wrap items-center gap-1.5" data-testid="interrupted-run-notice">
-            <span className="text-ui-xs text-zinc-500">Run stopped</span>
-            {onEditPrompt && (
-                <button type="button"
-                    onClick={onEditPrompt}
-                    className="flex items-center hit-target gap-1 rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
-                    <Pencil className="h-3 w-3" aria-hidden="true" />
-                    <span>Edit prompt</span>
-                </button>
-            )}
-            {onTryAgain && (
-                <button type="button"
-                    onClick={onTryAgain}
-                    className="flex items-center hit-target gap-1 rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
-                    <RotateCcw className="h-3 w-3" aria-hidden="true" />
-                    <span>Try again</span>
-                </button>
-            )}
+        <div
+            data-testid="interrupted-run-notice"
+            className="mt-2 flex flex-wrap items-center gap-2 rounded-control border border-white/[0.06] bg-white/[0.02] px-3 py-2"
+        >
+            <Info className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
+            <span className="text-ui-xs text-zinc-400">Run stopped</span>
+            <div className="ml-auto flex items-center gap-1.5">
+                {onEditPrompt && (
+                    <button type="button"
+                        onClick={onEditPrompt}
+                        className="flex items-center hit-target gap-1 rounded-control border border-white/[0.06] bg-white/[0.04] px-2 py-1 text-ui-xs text-zinc-300 transition-colors hover:bg-white/[0.08] focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
+                        <Pencil className="h-3 w-3" aria-hidden="true" />
+                        <span>Edit prompt</span>
+                    </button>
+                )}
+                {onTryAgain && (
+                    <button type="button"
+                        onClick={onTryAgain}
+                        className="flex items-center hit-target gap-1 rounded-control border border-white/[0.10] bg-white/[0.08] px-2 py-1 text-ui-xs font-medium text-zinc-100 transition-colors hover:bg-white/[0.12] focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
+                        <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                        <span>Try again</span>
+                    </button>
+                )}
+            </div>
         </div>
     );
 };

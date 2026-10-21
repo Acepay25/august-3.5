@@ -162,10 +162,13 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
                 : 'Some tool output was not kept — a tool result could not be saved.'
         : null;
     return (
-        /* The Claude-pattern work card: one bordered rounded container for the
-           turn's reasoning + tool rows (was a bare left-rail border). The
-           AnalyzedRow inside still does the folding to "Analyzed for Ns". */
-        <div className="my-1.5 space-y-1.5 rounded-bubble border border-white/[0.06] bg-zinc-900/40 px-2.5 py-2">
+        /* The reference's work: a BARE LINE (the activity) with the card
+           BELOW it. The card is the analyzed row's open body — the border and
+           the fill live there now, not around the line — so a collapsed turn
+           shows one quiet sentence instead of a little box. The side-effect
+           rows keep their own card: in the reference a "Presented 2 files"
+           card is a separate card BELOW the work, not part of it. */
+        <div className="my-1.5 space-y-1.5">
             {hasWork && (
                 <AnalyzedRow
                     running={running}
@@ -186,11 +189,15 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
                 </AnalyzedRow>
             )}
             {wireAlone && (
-                <div className="my-1.5 rounded-bubble border border-white/[0.06] bg-zinc-900/40 px-2.5 py-2">
+                <div className="rounded-bubble border border-white/[0.06] bg-zinc-900/40 px-2.5 py-2">
                     <WireAuditRow entries={wireAudit} noTrace={noTrace} />
                 </div>
             )}
-            {hasActions && <ToolActionsRow actions={entry.actions!} />}
+            {hasActions && (
+                <div className="rounded-bubble border border-white/[0.06] bg-zinc-900/40 px-2.5 py-2">
+                    <ToolActionsRow actions={entry.actions!} />
+                </div>
+            )}
         </div>
     );
 };

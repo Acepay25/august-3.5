@@ -3,6 +3,7 @@ import { Check, Copy, Download, FileText, Lightbulb, X } from '../shared/Icons';
 import { copyText } from '../../utils/clipboard';
 import { downloadTextFile } from '../../utils/transcriptExport';
 import MarkdownContent from '../shared/MarkdownContent';
+import StatusPill from '../ui/StatusPill';
 import { STATUS_BADGE, KIND_BADGE } from '../skills/SkillDetail';
 import {
     skillEnabledFlag,
@@ -10,7 +11,13 @@ import {
     EXPECTANCY_MIN_R_SAMPLE,
     type SkillMeta,
 } from '../../services/learning/SkillMemoryService';
-import type { SkillReviewFinding, SkillReviewVerdict } from '../../services/learning/skillReview';
+import type { SkillReviewFinding } from '../../services/learning/skillReview';
+import {
+    skillAvailability,
+    VERDICT_LABEL,
+    VERDICT_TONE,
+    type SkillAvailability,
+} from './SkillsCatalog';
 import type { MemoryFile } from '../../types';
 
 /**
@@ -50,19 +57,18 @@ export interface SkillViewerRecord {
  * a **ghost** is a defect (the file is in the notebook and in no list), while
  * a **dormant** skill is a WARNING — a general rule is *meant* to be unscoped
  * — and a **clipped** one is a warning too (the seat gets half a procedure).
+ *
+ * The words and the tones live in `SkillsCatalog` — ONE home, so this panel
+ * and the catalogue's card cannot spell one verdict two ways.
  */
-const VERDICT_LABEL: Record<SkillReviewVerdict, string> = {
-    fine: 'Fine',
-    dormant: 'Dormant',
-    clipped: 'Clipped',
-    ghost: 'Ghost',
-};
 
-const VERDICT_TONE: Record<SkillReviewVerdict, string> = {
-    fine: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
-    dormant: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
-    clipped: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
-    ghost: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+/** The chip's own tint per state. The chip is quiet where the catalogue's
+ *  icon tile is loud: the tile already carries the colour, and a coloured
+ *  pill beside it would say the same thing twice. */
+const AVAILABILITY_TONE: Record<SkillAvailability, string> = {
+    enabled: 'bg-zinc-800 text-zinc-300',
+    suspended: 'bg-amber-950/60 text-amber-400',
+    off: 'bg-zinc-900 text-zinc-500',
 };
 
 /** Outcome line, or the honest words for what is missing. Expectancy is the
@@ -110,6 +116,10 @@ const SkillViewerPanel: React.FC<{
     const status = STATUS_BADGE[meta.status] ?? STATUS_BADGE.candidate;
     const kind = KIND_BADGE[meta.kind] ?? KIND_BADGE.repeat;
     const scope = scopeOf(meta);
+    /** The ONE availability read — the same words the catalogue's card mark
+     *  uses. A rule the desk has stopped using must not read "live" here and
+     *  "suspended" there, and the chip says WHY it is off. */
+    const availability = skillAvailability(meta, skillEnabledFlag(meta));
 
     const onCopy = (): void => {
         void copyText(file.content).then(ok => {
@@ -169,9 +179,9 @@ const SkillViewerPanel: React.FC<{
                         className="mb-3 rounded-control border border-zinc-800/80 bg-zinc-900/60 p-2.5"
                     >
                         <div className="flex items-center gap-2">
-                            <span className={`rounded-full border px-2 py-0.5 text-ui-2xs font-semibold ${VERDICT_TONE[review.verdict]}`}>
+                            <StatusPill tone={VERDICT_TONE[review.verdict]}>
                                 {VERDICT_LABEL[review.verdict]}
-                            </span>
+                            </StatusPill>
                             <h4 id="skill-viewer-review-label" className="text-ui-2xs font-semibold uppercase tracking-wider text-zinc-500">
                                 Format review
                             </h4>
@@ -235,11 +245,10 @@ const SkillViewerPanel: React.FC<{
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
                     <span className={`rounded-full px-2 py-0.5 text-ui-2xs font-semibold ${status.className}`}>{status.label}</span>
                     <span className={`rounded-full px-2 py-0.5 text-ui-2xs font-semibold ${kind.className}`}>{kind.label}</span>
-                    <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-ui-2xs font-semibold ${
-                        skillEnabledFlag(meta) ? 'bg-zinc-800 text-zinc-300' : 'bg-zinc-900 text-zinc-500'
-                    }`}>
+                    <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-ui-2xs font-semibold ${AVAILABILITY_TONE[availability.state]}`}
+                        title={availability.title}>
                         <Lightbulb className="h-3 w-3" aria-hidden="true" />
-                        {skillEnabledFlag(meta) ? 'injected' : 'not injected'}
+                        {availability.label}
                     </span>
                 </div>
                 <p className="mt-2 font-mono text-ui-dense tabular-nums text-zinc-300" data-testid="skill-viewer-outcome">

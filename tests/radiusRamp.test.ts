@@ -48,7 +48,8 @@ const FLOOR_INVENTORY = [
     'components/shell/RightPanel.tsx|rounded-t-md',
     'components/shell/SurfaceMenuList.tsx|rounded-r-full',
     'components/trade/BiasChips.tsx|rounded',
-    'components/trade/panels/ChatWorkTimeline.tsx|rounded',
+    // `ChatWorkTimeline.tsx|rounded` left the floor in E-55: the word appeared
+    // in the work card's comment, and the comment now says what the card is.
 ];
 
 const OFF_TOKEN = /rounded-(?!control\b|bubble\b|full\b)[a-z0-9[\]/.%-]*|(?<![-\w])rounded(?![-\w])/g;
@@ -178,6 +179,9 @@ describe('radius tokens own every non-token radius', () => {
     const THEME_RADIUS_INVENTORY = [
         '1.5px', '1px', '1px', '1px', '2px', '2px', '4px', '4px',
         '999px', '999px', '999px', '999px', '999px', '999px', '999px', '999px', '999px',
+        // The work card (E-55) is a token-radius surface now: the card below
+        // the bare activity line is 12px, like every other card in the app.
+        'var(--radius-bubble)',
         'var(--radius-bubble)',
         'var(--radius-control)', 'var(--radius-control)', 'var(--radius-control)', 'var(--radius-control)',
     ].sort();

@@ -12,8 +12,13 @@ import { installNavModalityTracking } from './utils/navModality';
 // @fontsource/inter imports removed (2026-09-16): Inter sat only as a
 // fallback family string behind Geist Variable in --font-sans; the Geist
 // variable font covers the UI stack.
+// Newsreader is the READING serif (E-55): the model's answer is prose, and a
+// display face has one weight — its "bold" was a synthetic one, and a long
+// analysis set in a smeared face is not readable. DM Serif Text stays the
+// display/hero face it was always meant to be.
 import '@fontsource-variable/geist';
 import '@fontsource/dm-serif-text';
+import '@fontsource-variable/newsreader';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 import '@fontsource/jetbrains-mono/700.css';

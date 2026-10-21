@@ -27,7 +27,7 @@ describe('the answer is prose', () => {
         const { container } = render(
             <ChatTranscriptRow row={{ id: 'a1', role: 'ai', text: 'Bias long above 111k.' }} />,
         );
-        expect(container.innerHTML).toContain('font-serif');
+        expect(container.innerHTML).toContain('font-reading');
     });
 
     it('the trader\'s own words stay in the interface sans', () => {
@@ -36,7 +36,7 @@ describe('the answer is prose', () => {
         );
         // The human's bubble is interface, not prose: a serif there would put
         // the trader in the same voice as the model.
-        expect(container.innerHTML).not.toContain('font-serif');
+        expect(container.innerHTML).not.toContain('font-reading');
     });
 });
 

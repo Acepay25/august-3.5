@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Brain } from './Icons';
+import { Brain, ChevronRight } from './Icons';
 import { subscribeSharedTicker } from '../../hooks/useSharedTicker';
 
 export interface AnalyzedRowProps {
@@ -132,6 +132,9 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
                 <span className="reasoning-row-label">
                     {label}{detail}
                 </span>
+                {/* The chevron the reference puts on every expandable line. A
+                    collapsed summary otherwise only hints that it opens. */}
+                <ChevronRight className="reasoning-row-chevron" aria-hidden="true" />
             </summary>
             <div className="reasoning-row-body analyzed-row-body">
                 {children}

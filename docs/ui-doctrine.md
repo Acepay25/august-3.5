@@ -78,13 +78,19 @@ ancestor and inflates to fill the surface.
       reached for without a reason.
 - [ ] Geist Variable for UI, DM Serif Text **only** for hero/display moments,
       JetBrains Mono for data.
-- [ ] **The model's answer is prose, and prose is serif** (2026-10-21, E-54).
-      The answer is the one surface in the app that is READ rather than
-      operated, and the reference sets it in a serif; the trader's own message,
-      the work card, the chips and the composer stay in the UI sans. The
-      amendment to the rule above: the answer IS a display moment. Code blocks
-      keep their monospace and the table keeps its tabular figures, so the
-      serif never touches a number's alignment.
+- [ ] **The model's answer is prose, and prose is set in a READING serif**
+      (2026-10-21, E-54; the face corrected in E-55). The answer is the one
+      surface in the app that is READ rather than operated, and the reference
+      sets it in a serif; the trader's own message, the work card, the chips
+      and the composer stay in the UI sans. Code blocks keep their monospace
+      and the table keeps its tabular figures, so the serif never touches a
+      number's alignment.
+- [ ] **A reading serif is a TEXT face, not the display face** (E-55). DM Serif
+      Text has ONE weight: set a long analysis in it and every bold level
+      becomes a synthetic bold — a smear, not an emphasis. The answer is set in
+      **Newsreader** (`--font-reading`, `font-reading`); DM Serif Text stays
+      the hero/brand face it was always meant to be. Two serifs, two jobs:
+      `font-serif` to say a name, `font-reading` to be read.
 - [ ] Every numeric readout is `font-mono tabular-nums`. A price, P&L or R that
       changes width every tick is a layout shift you can see.
 - [ ] Tables over tiles whenever the data is tabular — win rates, skills, the

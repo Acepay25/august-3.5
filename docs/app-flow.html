@@ -59,9 +59,9 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <h2>A · Boot → shell → a surface</h2>
 <div class="flow">
 <div class="tier">
- <div class="n"><b>index.html → index.tsx</b><i>no main.tsx · error handlers first :23 :43</i></div>
- <div class="n"><b>StrictMode › ErrorBoundary › ToastProvider › App</b><i>index.tsx:73-79</i></div>
- <div class="n run"><b>splash leaves #root</b><i>index.tsx:86-92 — boot-probe.cjs:119 waits for it gone, smoke.spec.ts:54 :140 assert count 0</i></div>
+ <div class="n"><b>index.html → index.tsx</b><i>no main.tsx · error handlers first :28 :48</i></div>
+ <div class="n"><b>StrictMode › ErrorBoundary › ToastProvider › App</b><i>index.tsx:78-84</i></div>
+ <div class="n run"><b>splash leaves #root</b><i>index.tsx:91-97 — boot-probe.cjs:119 waits for it gone, smoke.spec.ts:54 :140 assert count 0</i></div>
 </div>
 <div class="down">↓</div>
 <div class="tier">
@@ -268,8 +268,8 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <h2>H · Every arrow</h2>
 <table>
 <tr><th>#</th><th>from → to</th><th>what crosses</th></tr>
-<tr><td>1</td><td>index.html → index.tsx</td><td>mount, error handlers first <code>unhandledrejection index.tsx:23</code> › <code>error index.tsx:43</code></td></tr>
-<tr><td>2</td><td>index.tsx → App</td><td>StrictMode › ErrorBoundary › ToastProvider <code>index.tsx:73-79</code></td></tr>
+<tr><td>1</td><td>index.html → index.tsx</td><td>mount, error handlers first <code>unhandledrejection index.tsx:28</code> › <code>error index.tsx:48</code></td></tr>
+<tr><td>2</td><td>index.tsx → App</td><td>StrictMode › ErrorBoundary › ToastProvider <code>index.tsx:78-84</code></td></tr>
 <tr><td>3</td><td>App → useSurfaceRouter</td><td>surface + journalTab + journalOpenNonce, <code>useSurfaceRouter hooks/useSurfaceRouter.ts:54</code></td></tr>
 <tr><td>4</td><td>useSurfaceRouter → useSurface</td><td>persisted value, key <code>hooks/useSurface.ts:15 august_surface_v1</code>, valid set <code>:16</code></td></tr>
 <tr><td>5</td><td>useSurfaceRouter → appHash</td><td><code>#/journal|market|settings|watch</code> ⇄ state <code>hooks/useSurfaceRouter.ts:101</code>, serialize <code>:159</code></td></tr>

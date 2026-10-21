@@ -31,9 +31,9 @@ sections B and C moved again when stage 19 deleted the engine.
 
 ```mermaid
 flowchart TD
-    H["index.html"] --> I["index.tsx — error handlers first :23 :43"]
+    H["index.html"] --> I["index.tsx — error handlers first :28 :48"]
     I --> S["StrictMode › ErrorBoundary › ToastProvider › App :73-79"]
-    S --> SP["splash leaves #root index.tsx:86-92 — boot-probe.cjs:119 waits for it gone, smoke.spec.ts:54 :140 assert count 0"]
+    S --> SP["splash leaves #root index.tsx:91-97 — boot-probe.cjs:119 waits for it gone, smoke.spec.ts:54 :140 assert count 0"]
     SP --> APP["App.tsx:208 — surfaces render from App.tsx:2451 down"]
     APP --> US["useSurface hooks/useSurface.ts:15 key, :16 valid set"]
     US --> UR["useSurfaceRouter hooks/useSurfaceRouter.ts:75 openJournal, :101 hash read, :159 serialize"]
@@ -398,8 +398,8 @@ card that forgets it was clicked offers a second journal row.
 
 | # | from → to | what crosses |
 |---|---|---|
-| 1 | index.html → index.tsx | mount, error handlers first `unhandledrejection index.tsx:23` › `error index.tsx:43` |
-| 2 | index.tsx → App | `StrictMode index.tsx:73` › `ErrorBoundary index.tsx:74` › `ToastProvider index.tsx:75` |
+| 1 | index.html → index.tsx | mount, error handlers first `unhandledrejection index.tsx:28` › `error index.tsx:48` |
+| 2 | index.tsx → App | `StrictMode index.tsx:78` › `ErrorBoundary index.tsx:79` › `ToastProvider index.tsx:80` |
 | 3 | App → useSurfaceRouter | surface + journalTab + journalOpenNonce, `useSurfaceRouter hooks/useSurfaceRouter.ts:54` |
 | 4 | useSurfaceRouter → useSurface | persisted value, key `august_surface_v1 hooks/useSurface.ts:15`, valid set `:16` |
 | 5 | useSurfaceRouter → appHash | `#/journal\|market\|settings\|watch` ⇄ state `parseAppHash hooks/useSurfaceRouter.ts:101`, serialize `serializeAppHash hooks/useSurfaceRouter.ts:159` |

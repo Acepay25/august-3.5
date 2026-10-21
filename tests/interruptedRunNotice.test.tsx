@@ -16,6 +16,9 @@ vi.mock('lucide-react', () => ({
     Wrench: () => <span />, Check: () => <span />, Copy: () => <span />,
     Pin: () => <span />, RotateCcw: () => <span />, Square: () => <span />,
     Volume2: () => <span />, Pencil: () => <span />,
+    // The mark the notice's card carries (the reference draws an icon beside
+    // the words), so the mock has to carry it too.
+    Info: () => <span />,
 }));
 
 const base: ChatRowView = {
