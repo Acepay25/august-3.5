@@ -1336,3 +1336,57 @@ runs because two files that each pass solo fail together on a CLEAN checkout
 (`memorySurfaces` + `referenceVoice`, both orders, `expected +0 to be 2` on seeded notebook data),
 and the failing set moves between runs. Root cause unknown; the row says plainly not to cure it with
 a timeout.
+
+## 30. E-57 §3 — the prompt lane is a value now, and the fingerprint counts only what exists (2026-10-22)
+
+**Proposal:** `docs/plan/closed-loop-fixes.md` (E-57). **Closes:** **O-139**. **Opens:** **O-140**.
+
+`beginPromptLane()` flipped a module boolean and a caller's `finally` cleared it. Two
+runs deciding in the same window — a schedule and a human send — each resolved with
+whichever lane decided LAST, and a run that threw left the flag set for whoever was
+mid-flight. `promptCorpusVersion()` hashed every stored override, including edits left
+behind by prompts the app no longer ships, so two runs that sent identical bytes could
+carry different `promptVersion` strings and split the A/B group on a number that named
+nothing the model was given.
+
+**The lane is now a value.** `PromptLane` (`services/infrastructure/PromptOverrideService.ts:32`)
+is returned by `beginPromptLane` (`:34`), taken by `getPrompt(id, fallback, lane)` (`:69`) and
+`promptCorpusVersion(lane)` (`:97`), and threaded from the run that decided it
+(`hooks/useAnalysisPipeline.ts:957` → `:963`). `endPromptLane` is deleted: a value needs no
+unwinding, so there is no call left to forget on a throwing path.
+
+**The filter, and why it is a separate list.** Registered ids come from
+`constants/promptIds.ts` — twelve bare strings — because importing `PROMPT_REGISTRY` into a run
+path pulls every prompt's text with it (+18.7 kB, over the bundle ratchet, as that module's own
+history records). A test pins the two lists against each other, so an id added to the registry and
+not to the list fails the suite rather than silently vanishing from the fingerprint.
+
+**A visible number was on the same lie.** Settings' **Reset all (N)** counted stored keys, so it
+offered to reset prompts the app cannot send. It now filters against the registry the tab already
+renders (`components/settings/PromptManager.tsx:83`) — derived there rather than imported from the
+new list, so the tab and its count cannot disagree.
+
+**The finding that changed this item's own premise, and is now O-140.** The plan said to thread
+the lane "at the measured call sites". Re-reading those sites showed the analysis prompts behind
+them are reached in production only from `services/learning/SkillEvalScheduler.ts:284`, that
+`analyzeTradingViewWithTransientRetry` (`hooks/useAnalysisPipeline.ts:249`) has no caller at all,
+and that `services/trade/**` contains ZERO `getPrompt` calls — the dock never resolves an override.
+Threading the lane into a path the trader's run never takes would have produced plumbing that looks
+like wiring, so it was not done. What §3 fixed is real (no cross-run clobbering, no ghost
+fingerprint); what it exposed is that the dial measures a label, not a difference, and that is an
+owner decision with two honest answers, recorded rather than decided here.
+
+**Proved red.** Removing `&& isRegisteredPromptId(id)` fails the orphan-override case; the
+no-global scan and the value-threading scan are code-line only — the THIRD time in two days that a
+source gate failed on its own author's comment rather than on code, which is why the rule is now
+"comments may name what was deleted; the scan reads code".
+
+**Gates.** `typecheck` ok · `vitest` **5260 in 511**, 0 skip · lint 0 errors / 655 under the 659
+cap · `check-flow-doc-anchors` **381** anchors, 0 unattributed, cited-line quality 0/0, self-quota
+0 — after 24 citations into `useAnalysisPipeline.ts` and `PromptOverrideService.ts` were re-derived
+from the hunk map, including three bare numbers inside mermaid labels and html `<code>` spans that
+a file-prefixed rewrite cannot reach.
+
+**What this does NOT close.** **O-140** (above), and it does not purge the stored orphan overrides
+themselves — they are now ignored where they mislead, and deleting a trader's data is not this
+pass's call.
