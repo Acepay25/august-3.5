@@ -11,6 +11,7 @@
 
 import React from 'react';
 import { CheckCircle } from '../../shared/Icons';
+import Disclosure from '../../shared/Disclosure';
 import type { TradeProposal } from '../../../services/trade/proposedTrade';
 import { computeRrRatio, buildTradePlan, modelStatedSize, proposedTicketSize } from '../../../services/trade/proposedTrade';
 import { fmtRiskReward } from '../../../utils/riskReward';
@@ -61,6 +62,11 @@ const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog,
     const liquidated = computeLiquidationBuffer(String(proposal.entry), String(proposal.stopLoss), lev);
     const settings = getHarnessSettings();
     const refused = proposal.gate?.refusal;
+    // The gate's plan-shape bands (E-57 §5). These never disable the Log button:
+    // a stop distance is the trader's judgement, so the app PROPOSES a caution
+    // and the journal row keeps it. Only `refused` — the trader's own edge floor
+    // or an inverted plan — stops a click.
+    const cautions = proposal.gate?.warnings ?? [];
     const size = plan && !refused
         ? proposedTicketSize(proposal, settings.equityUsd, lev, settings.riskPercent)
         : null;
@@ -158,6 +164,28 @@ const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog,
                 Refused — {proposal.gate.refusal}
             </p>
         )}
+        {cautions.length > 0 && (
+            // The FIRST caution is never click-gated: it is a sentence about the
+            // trader's own money, and a warning behind a toggle is a warning
+            // nobody reads. The rest fold into the one expandable panel the app
+            // already owns, so a plan that trips three bands does not stack
+            // three amber paragraphs on the card.
+            <div className="mt-1.5" data-testid="proposal-cautions">
+                <p className="text-ui-dense leading-relaxed text-amber-400/90">{cautions[0]}</p>
+                {cautions.length > 1 && (
+                    <Disclosure
+                        testId="proposal-cautions-more"
+                        className="mt-1"
+                        summaryClassName="cursor-pointer font-mono text-ui-2xs uppercase tracking-wider text-zinc-500 hover:text-zinc-300"
+                        bodyClassName="mt-1 space-y-1 text-ui-dense leading-relaxed text-zinc-400"
+                        label={`More cautions about these levels (${cautions.length - 1})`}
+                        summary={`${cautions.length - 1} more caution${cautions.length === 2 ? '' : 's'} about these levels`}
+                    >
+                        {cautions.slice(1).map(c => <p key={c}>{c}</p>)}
+                    </Disclosure>
+                )}
+            </div>
+        )}
         {proposal.gate?.status === 'unavailable' && !refused && (
             // Fail closed: an unmeasurable plan is never quietly logged. The
             // handler asks for an explicit confirm, and the row it writes is
@@ -176,9 +204,9 @@ const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog,
                 <button type="button"
                     onClick={onLog}
                     disabled={awaitingLog || !!refused}
-                    title={refused ? 'The plan does not clear your minimum net edge.' : undefined}
+                    title={refused ? 'The gate refused this plan; the reason is printed above.' : undefined}
                     className="rounded-control bg-emerald-600/90 px-2.5 py-1 text-ui-dense font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-300">
-                    {refused ? 'Refused by your edge floor' : awaitingLog ? 'Checking the gate…' : 'Log this trade'}
+                    {refused ? 'Refused by the gate' : awaitingLog ? 'Checking the gate…' : 'Log this trade'}
                 </button>
             )}
             <button type="button"

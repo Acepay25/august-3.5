@@ -1390,3 +1390,74 @@ a file-prefixed rewrite cannot reach.
 **What this does NOT close.** **O-140** (above), and it does not purge the stored orphan overrides
 themselves — they are now ignored where they mislead, and deleting a trader's data is not this
 pass's call.
+
+## 31. E-57 §5 — the risk checks that existed now answer the plan the trader is shown (2026-10-22)
+
+**Proposal:** `docs/plan/closed-loop-fixes.md` (E-57). **Closes:** **O-141**. Ruling **(c)** is this item's shape.
+
+`validateRiskReward` (`services/validation/AccuracyValidationService.ts:206`) has owned the confidence-tier R:R
+floor and the two ATR stop bands for a long time, `tests/planE02.test.ts` and `tests/accuracyValidation.test.ts`
+pin them, and the only production caller was `runValidationGate`
+(`services/validation/TradeValidationGate.ts:654`) — inside a module with **zero importers**. So a presented plan
+was graded by a number nothing showed and nothing enforced: the card printed the ratio, the journal stored it,
+and no path ever asked whether the stop was inside the noise band the app itself computes.
+
+**The live call site.** `assessPlanShape` (`services/trade/proposalGate.ts:152`) is called from **every exit** of
+`runGateScan` (`:189`) — evaluated, aborted, null-fetch and thrown — with the ATR the scan actually brought back
+(`atrForGate :123`: 1h → 4h → 15m → 1d, the frame the gate already scores on, since `runProgrammaticGate`'s own
+exhaustion check and `inferRegime` read `indicators['1h']`). A plan whose tape never arrived is still caught for
+a shape that needs no tape. It calls the band owner rather than re-deriving anything, and the inverted check is
+the same `plannedRiskRewardSigned` call the card's printed ratio comes from, so the gate and the card cannot
+disagree about what "inverted" means.
+
+**The split ruling (c) asked for.** Sub-floor ratio, tight stop, wide stop, stop beyond 5 % of entry →
+`ProposalGate.warnings` → printed on the card (`components/trade/panels/TradeProposalCard.tsx:173`, the first
+caution always visible because a warning behind a toggle is a warning nobody reads, the rest through the one
+`Disclosure`) **and** recorded on the journal row (`services/trade/proposedTrade.ts:207`), so a caution the
+trader overrode is auditable after the fact and the Log button was never disabled. Inverted levels →
+`refusal`, stated **ahead of** the min-edge refusal, because grading an expectancy on levels that point the wrong
+way is a claim about arithmetic that does not exist. The refusal text deliberately does not quote
+`levelOrder.fixes`: those strings describe a mirror-repair this gate does not perform, and printing one would
+tell the trader the levels were fixed when they were thrown out.
+
+**Three labels said "edge floor" and were false for an inverted plan.** `proposedTrade.ts:202` stamped every
+refusal as `REFUSED by the min-edge gate`, the card's disabled button read `Refused by your edge floor`, and the
+App toast read `Plan refused by your edge floor`. All three now name the gate, and the sentence riding with each
+refusal says which check fired.
+
+**A latent defect the wiring exposed.** With `atr = 0` the tight band can never fire (`risk < 0`) while the wide
+one — `risk > 0 * 3` — fires on **every** plan, so the live gate would have printed
+`Wide stop loss (Infinityx ATR). Consider reducing position size.` as a measurement of nothing. Both bands now
+stand down when there is no volatility reading (`AccuracyValidationService.ts:269`). This was unreachable before
+only because nothing called the function.
+
+**Proved red, three ways.** Stubbing `assessPlanShape` to return `{}` → 6 of the 7 new shape cases fail (the
+seventh is the control that asserts the absence, and it is the reason the other six cannot pass on a gate that
+warns about everything). Removing the `atr > 0` guard → 2 fail, and the gate's own control case reports the
+`Infinityx ATR` string. Emptying the card block and the row's provenance loop → 4 fail: 3 card cases plus the
+journal-row assertion that the caution reaches the record.
+
+**Gates.** `typecheck` ok · `vitest` **5273 in 511**, 0 skip · lint 0 errors / 655 under the 659 cap (§26
+already measured 655, so no headroom was spent and none claimed) · `render-probe` **117 ok, zero pageerrors** ·
+(the probe and the build measured a tree that differed from this entry only in four comment strings, which
+neither render nor survive minification — said here rather than glossed, because the sentence above reads as
+one tip) ·
+entry chunk **1,383 kB** against the 1,400 ceiling by the `guards.yml` recipe (`$(wc -c)/1024`), and §5 costs no
+new module in the startup graph: `AccuracyValidationService` was already reachable through
+`HybridIntelligenceService`, which `hooks/useAnalysisPipeline.ts:19` imports statically ·
+`check-flow-doc-anchors` **382** anchors, 0 unattributed, both quality ceilings 0 — ten citations into
+`proposalGate.ts`, `proposedTrade.ts` and `TradeProposalCard.tsx` (including the two `ensureStamp` rows in the
+flow docs) were re-derived from the `git diff -U0` hunk map rather than shifted by hand, two
+`AccuracyValidationService.ts:228` citations were checked and provably did not move (the hunks start at 263), and two of them (`docs/app-flow.md`'s and `html`'s
+own "381" self-quotes, plus a comment-exemption count that §3 had already moved from 3 to 5) were stale in ways
+the gate cannot see until the count it prints is restated.
+
+**What this does NOT close.** **O-10 / O-06**: `runValidationGate` is still dead — §5 imported its *checks*, not
+its dispatcher, and it stays an E-50 deletion candidate. **O-141's own residue**: the frame the stop is measured
+against is the gate's choice, because a proposal carries no timeframe; an inverted plan still draws on the chart
+until the stamp lands, since `present_trade` returns before the scan (refusing at presentation would move the
+decision out of the one place that consults the tape, and that is its own call); the 5 % band is direction-free
+and fires on deliberate swing stops. **No `hardInvalid` field was added** — `refusal` already owns "do not log
+this", and a second flag for the same fact is a second writer waiting to disagree. The probe does **not** assert
+the caution sentence: whether a band fires depends on live candles, so a probe assertion would be flaky by
+construction, and the rendered text is pinned at the jsdom layer instead.

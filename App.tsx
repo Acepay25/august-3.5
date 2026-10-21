@@ -1551,9 +1551,9 @@ const App: React.FC = () => {
         const stamped: TradeProposal = { ...proposal, gate };
         if (gate.refusal) {
             // The card disables its own button, but a schedule, a replayed row
-            // or a stale transcript can still reach this writer. The refusal
-            // is the trader's own edge floor, not a warning.
-            toast.error('Plan refused by your edge floor', gate.refusal);
+            // or a stale transcript can still reach this writer. The refusal is
+            // the trader's own floor or an impossible plan, never a caution.
+            toast.error('Plan refused by the gate', gate.refusal);
             return false;
         }
         if (gate.status === 'unavailable') {

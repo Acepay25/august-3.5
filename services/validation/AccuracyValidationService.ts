@@ -260,15 +260,22 @@ export const validateRiskReward = (
         warnings.push(`R:R ratio (${ratio.toFixed(2)}) below required minimum (${minRequired}) for ${proposedConfidence} confidence`);
     }
 
-    // Validate stop loss is not too tight (should be at least 1x ATR)
-    if (riskMagnitude > 0 && riskMagnitude < atr) {
-        warnings.push(` TIGHT STOP: Stop loss (${riskMagnitude.toFixed(2)}) is tighter than 1x ATR (${atr.toFixed(2)}). High chance of being stopped out by noise.`);
-        isValid = false;
-    }
+    // Validate stop loss is not too tight (should be at least 1x ATR).
+    // Both ATR bands need an ATR: with no volatility reading the tight check
+    // can never fire (`x < 0` is false) while the wide one fires on EVERY plan
+    // and prints "Infinityx ATR" — a warning that is not a measurement. E-57
+    // §5 wires this function into the live gate, which is where an absent ATR
+    // first becomes reachable.
+    if (atr > 0) {
+        if (riskMagnitude > 0 && riskMagnitude < atr) {
+            warnings.push(` TIGHT STOP: Stop loss (${riskMagnitude.toFixed(2)}) is tighter than 1x ATR (${atr.toFixed(2)}). High chance of being stopped out by noise.`);
+            isValid = false;
+        }
 
-    // Warn if stop is excessively wide (more than 3x ATR)
-    if (riskMagnitude > atr * 3) {
-        warnings.push(`Wide stop loss (${(riskMagnitude / atr).toFixed(1)}x ATR). Consider reducing position size.`);
+        // Warn if stop is excessively wide (more than 3x ATR)
+        if (riskMagnitude > atr * 3) {
+            warnings.push(`Wide stop loss (${(riskMagnitude / atr).toFixed(1)}x ATR). Consider reducing position size.`);
+        }
     }
 
     // Check if stop respects common structure

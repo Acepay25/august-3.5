@@ -96,14 +96,32 @@ export interface ProposalGate {
     skillCeiling?: number;
     /** Which skill(s) fired, for the card and the row's warnings. */
     skillNote?: string;
-    /** Set when the plan's net expectancy at its own probability is at or
-     *  below the trader's floor. The card disables logging and quotes this;
-     *  the log path refuses. */
+    /** Set when the plan must NOT be logged: its levels are inverted for the
+     *  stated direction (E-57 §5 — there is no ratio to grade at all), or its
+     *  net expectancy at its own probability is at or below the trader's floor.
+     *  The card disables logging and quotes this; the log path refuses. An
+     *  inverted plan's refusal wins, because an edge floor is a meaningless
+     *  question on levels that point the wrong way. */
     refusal?: string;
     /** The refused net expectancy, in R. */
     netEdgeR?: number;
     /** The trader's floor the number was compared against, in R. */
     minEdgeThresholdR?: number;
+    /**
+     * Plan-shape cautions (E-57 §5): the R:R floor for the stated confidence, a
+     * stop tighter than 1× ATR, a stop wider than 3×, a stop further from entry
+     * than 5%. Computed by the ONE function that owns those bands
+     * (`AccuracyValidationService.validateRiskReward`), which until now was
+     * called only from `TradeValidationGate` — a module with no production
+     * importer. So the numbers existed and nothing enforced or showed them.
+     *
+     * They WARN. Per the owner's ruling, only an inverted plan refuses (that is
+     * `refusal`), because a stop distance is the trader's judgement and the app
+     * proposes rather than decides. An UNMEASURABLE plan does not refuse either:
+     * it lands in `reason` as `unavailable`, because a missing reading is not
+     * evidence of a bad plan.
+     */
+    warnings?: string[];
 }
 
 export interface TradeAnalysis {
