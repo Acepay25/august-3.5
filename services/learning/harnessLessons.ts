@@ -4,8 +4,18 @@
  * The skills store learns TRADING beliefs (what setups to repeat/avoid);
  * this store learns HARNESS beliefs — which wire shapes, prompt patterns
  * and budget knobs actually work on the providers the user runs. Written
- * by the wire audit and the known-answer probes; read by roster
- * build, reasoningControls, and the run-snapshot assembler.
+ * by the wire audit and the known-answer probes (`probeAndLearn`, wired to
+ * the provider manager's probe button).
+ *
+ * READERS, measured, not remembered (E-57): exactly two. The wire-audit pin
+ * checker below (`registerWireRoutePins`) — a live read, the reason this store
+ * is not dead — and `components/settings/HarnessLessonsBrowser.tsx`, which is a
+ * HUMAN surface. There is NO prompt reader: the block that used to feed the
+ * ensemble's arbiter (`formatHarnessNotesBlock`) and the class-scoped accessor
+ * that only its tests called (`lessonsForClass`) are deleted here, because a
+ * store that advertises a reader it does not have is the same lie as an inert
+ * button. Do not re-add a prompt injection without an owner ruling on what the
+ * seat can DO with a wire lesson.
  *
  * Capability-class doctrine (2026-08-29): lessons key on CAPABILITY CLASSES
  * (thinkingDefault / wire format / jsonMode / vision), NEVER on provider
@@ -86,10 +96,6 @@ const persist = (store: HarnessLesson[]): void => {
 /** All lessons, newest first. */
 export const listHarnessLessons = (): HarnessLesson[] =>
     [...load()].sort((a, b) => (a.at < b.at ? 1 : -1));
-
-/** Lessons scoped to one capability class. */
-export const lessonsForClass = (scope: CapabilityClass): HarnessLesson[] =>
-    load().filter(l => l.scope === scope);
 
 /**
  * Record a lesson. Re-recording the same pattern (matched by scope+kind+pattern)
@@ -172,22 +178,6 @@ export const recordBudgetLessonFromAudit = (
         lesson: 'A chat_completions seat with no verified reasoning route cannot be told to think less for fast tasks — if it thinks by default, clarifications burn reasoning budget. Probe this shape or prefer a provider with a verified thinking-off knob.',
         evidenceId: `audit:${providerId}:clarification`,
     });
-};
-
-/**
- * Harness-lesson read path for the moderator: a compact digest of the
- * harness's own wire/budget beliefs, injected into the verdict context so
- * the arbiter weighs known provider quirks ("this seat 200-accepts but
- * ignores reasoning_effort"). Capability-class scoped, capped, newest
- * first — the index, not the wall.
- */
-export const formatHarnessNotesBlock = (max = 4): string => {
-    const notes = load()
-        .filter(l => l.kind === 'wire' || l.kind === 'budget')
-        .slice(0, max);
-    if (notes.length === 0) return '';
-    const lines = notes.map(l => `- [${l.kind}/${l.scope}] ${l.lesson}`);
-    return `**HARNESS NOTES (code-observed provider behavior — weigh seat outputs accordingly):**\n${lines.join('\n')}`;
 };
 
 // ─── P6: known-answer probes (200-accepted ≠ honored) ────────────────────────

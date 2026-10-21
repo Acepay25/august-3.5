@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-21** (the anchor gate re-measured every citation here and in the stage ledger:
-**378 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**377 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 3 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -607,10 +607,15 @@ the slug remains the identity in the tooltip, the accessible name and every writ
 path, while the visible name is the phrase a person recognises. Search matches
 both, so typing what is on screen finds the skill even when the slug is different.
 
-**Known gap, stated rather than hidden:** `harnessLessons` still records
-provider/behaviour lessons, but `formatHarnessNotesBlock`
-(`harnessLessons.ts:184`) has no production caller after the ensemble reader was
-deleted. The Settings browser lists them; no prompt currently receives them.
+**Closed by E-57:** the store carried two readers with no caller —
+`formatHarnessNotesBlock`, whose subject was the ensemble's arbiter, and
+`lessonsForClass`, called only by its own tests. Both are deleted, and the module
+header no longer claims a prompt reader. What is NOT dead is the store's one live
+read: the wire-audit pin checker (`registerWireRoutePins`) asks this store whether
+a provider class is pinned to thinking-off, and `tests/deadControlsGuard.test.ts`
+pins that fact in the same commit that cut the phantom readers, so the next
+cleanup cannot delete the store on the theory that nothing reads it. Settings
+still lists the lessons, for a person.
 
 ### G.4 The desk tools are one catalogue with surface allow-lists
 
@@ -710,8 +715,11 @@ leg is worse than one that says which leg is dead.
   orphan overrides for deleted prompt ids still count in
   `promptCorpusVersion` and the “Reset all (N)” count until the override map is
   purged.
-- **Harness lessons** — recorded and listed in Settings, but
-  `formatHarnessNotesBlock` has no prompt reader after the ensemble deletion.
+- **Harness lessons** — recorded and listed in Settings, and read live by the
+  wire-audit pin checker. There is no prompt reader, and E-57 deleted the two
+  functions that pretended there was one (see G.5), so this is a stated limit
+  rather than a gap: a wire lesson is evidence for a human and for a pin, not a
+  instruction to a seat.
 - **Partial-text failures** — a turn that streamed some prose and then failed is
   left as a partial answer; `Message.error` is stamped only when the turn
   produced no text.
@@ -873,10 +881,10 @@ old answer.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 378 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 377 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 378 anchors verified, and the gate
+   the gate's own output: these docs state 377 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -968,7 +976,7 @@ old answer.
 
 10. **The arrow table is 70 rows, and every citation in it resolves — and 69 of the 70 rows pair their citation with the symbol that must live on that line (23 → 28 → 31 → 33 → 43 → 48 → 50 → 52 → 69 across these passes), so those rows are checked for content, not just for a line that exists. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently. One row names no file at all — the ensemble row, whose stages the code never names — so a wrong figure inside it stays outside this gate's reach, which is why the sentence says 69/70 rather than 70/70.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
-    resolves all 378 unique anchors on every run, so coverage of the table is no
+    resolves all 377 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
 11. **"One service replacing nine" is falsifiable, and it is right — counted, not
     asserted.** `git log --diff-filter=D` over `services/providers/` names exactly nine

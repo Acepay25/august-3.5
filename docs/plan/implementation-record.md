@@ -1171,3 +1171,63 @@ both surfaces read them from there.
 warnings (cap 659 — and the doctrine's own stale `--max-warnings 889` was
 corrected to the real cap) · `build` ok · `render-probe` ok, zero pageerrors ·
 `check-flow-doc-anchors` 375 anchors, 0 unattributed, cited-line quality 0/0.
+## 27. E-57 §2 — the harness-lesson store stopped claiming a reader it did not have (2026-10-21)
+
+**Proposal:** `docs/plan/closed-loop-fixes.md` (E-57). **Covers:** **O-136**, and the register
+corrections of §8a landed first as `dd0af735`.
+
+Two external reviews were re-verified against HEAD before anything was built. Four of their
+headline claims were false (`beginPromptLane` does have a caller; human sends do fetch market data
+in the dock; `ticketSize.ts` has three importers; pre-trade validation is not purely structural),
+and two of their remedies would have broken live paths. The one this section lands is the store
+that said "read by roster build, reasoningControls, and the run-snapshot assembler" while the only
+remaining caller of either of its readers was a test.
+
+**§8a — the census, re-measured, not re-remembered.** `O-129` named thirteen unreachable modules.
+Re-run with a scan that reads static `from`, `export … from` AND `await import(…)` — the first
+pass that forgot the dynamic form called a live module dead — the figure is **ten**: nine with no
+importer of any kind, plus `EntryTimingService.ts`, whose sole importer is the orphaned
+`TradeValidationGate.ts:49`. Four of the thirteen were never orphans, and the row now says which
+and why. The graph's 521/492/29 figures stay **unre-run** and the row says so, because no
+reachability script exists in `scripts/`. `docs/app-flow.md`'s sentence claiming the A/B lane was
+starved is corrected to what is actually broken: a process-global `controlLane`, and a dock that
+resolves no overrides at all.
+
+**§2 — the deletion.** `formatHarnessNotesBlock` and `lessonsForClass` are gone from
+`services/learning/harnessLessons.ts`. The header now names the store's two real readers —
+`registerWireRoutePins` (`harnessLessons.ts:142` → `reasoningControls.ts:216`), a live read that
+pins a provider class to thinking-off, and `HarnessLessonsBrowser`, a human surface — and states
+that there is no prompt reader. **The reviews' recommended remedy was rejected:** deleting the
+store, as both suggested, would have silently broken the wire audit.
+
+**The doctrine outlived the function.** `lessonsForClass` was the only thing testing that a lesson
+is scoped by CAPABILITY CLASS and that `provider` is provenance, never scope. That assertion moved
+into `tests/harnessLessons.test.ts` against the stored shape before the accessor went, so the
+deletion cost no coverage — the test is now `a lesson is scoped by CAPABILITY CLASS, and its
+provider is provenance only`.
+
+**The guard, and the mistake it caught.** `tests/deadControlsGuard.test.ts` pins both directions.
+Its first version asserted the identifiers must not appear in the file at all — and failed on this
+commit's own header comment, which names the deleted functions to explain why they went. That was
+the wrong rule: a repo that documents deletions by name (the dated deletion ledger exists for
+exactly that) must not be forbidden from saying so. The rule is now per line and per CODE line —
+an identifier may appear in prose; it may not appear in a declaration, an import or a call — with a
+planted control proving the scan bites on a real call and stays quiet on a comment.
+
+**Gates.** `typecheck` ok · `vitest` **5244 in 510** (was 5240: +5 in the guard, −1 by folding two
+lesson tests into one that pins the same doctrine) · `lint` 0 errors / **655** warnings under the
+659 cap — the cap is NOT lowered here, because §26 already measured 655 before this change, so the
+headroom is not attributable to it · `check-flow-doc-anchors` **377** anchors, 0 unattributed,
+cited-line quality 0/0, 20/20 reach controls, 0 of 6 AGENTS.md arms failed. The count moved 375 →
+378 → 377 across these two commits — up when §8a added citations, down when §2 deleted the citation
+to the removed `formatHarnessNotesBlock` — and both mirrors restate it on every pass, because a
+gate that measures the working tree will happily ship a doc quoting yesterday's figure.
+
+**What this does NOT close.** Whether a wire lesson SHOULD reach a prompt at all is an owner
+ruling, not a code question, and the header says so instead of silently deciding. Six of E-57's
+eight items are still OPEN: **§7** the unasserted chart levels (O-117), **§4** the dock's
+prose-then-failure turn, **§3** the per-run lane and the corpus filter, **§5** enforcing the R:R
+floor and ATR bands in the live gate, **§6** the automation run record and the failure breaker, and
+**§1** the closed-trade reflection that ruling (a) authorises. Also left as found, and reported
+rather than quietly edited: `docs/plan/full-audit.md:6756` and `:6757` carry the **D-24** decision
+row twice, verbatim.
