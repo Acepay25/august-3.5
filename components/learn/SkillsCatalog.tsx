@@ -23,6 +23,7 @@ import {
     type SkillReviewVerdict,
 } from '../../services/learning/skillReview';
 import { queueLearningProposal } from '../../utils/learningQueue';
+import { humanizeSkillName } from '../../utils/skillNames';
 import { EmptyState } from '../ui/EmptyState';
 import StatusPill, { type PillTone } from '../ui/StatusPill';
 
@@ -315,10 +316,17 @@ const SkillCard: React.FC<{
             </span>
             <button type="button"
                 onClick={() => onOpen?.(skill.id)}
-                aria-label={`Read ${skill.name}`}
+                aria-label={`Read ${humanizeSkillName(skill.name)}`}
                 className="min-w-0 flex-1 rounded-control text-left transition-colors hover:text-zinc-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
-                <span className={`block truncate text-ui-base font-medium ${retired ? 'text-zinc-500 line-through' : 'text-zinc-100'}`} title={skill.name}>
-                    {skill.name}
+                <span
+                    className={`block truncate text-ui-base font-medium ${retired ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}
+                    title={skill.name}
+                >
+                    {/* The reference's cards name a skill the way a person
+                        would ("Fc Nginx Website"), not the file behind it. The
+                        slug is still the identity: it is the tooltip and
+                        everything that writes to the notebook. */}
+                    {humanizeSkillName(skill.name)}
                 </span>
                 <span className="block truncate text-ui-dense text-zinc-500" title={skill.description || undefined}>
                     {skill.description || (retired ? 'Retired' : 'No description')}
@@ -501,7 +509,13 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSki
         return (skills ?? []).filter(s => {
             if (collection !== 'all' && s.family !== collection) return false;
             if (!q) return true;
-            return s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
+            // The haystack is BOTH names: the slug the notebook uses and the
+            // label the card shows. A trader types what they can see, and a
+            // search that cannot find the name in front of them is a search
+            // that looks broken.
+            return s.name.toLowerCase().includes(q)
+                || humanizeSkillName(s.name).toLowerCase().includes(q)
+                || s.description.toLowerCase().includes(q);
         });
     }, [skills, query, collection]);
 

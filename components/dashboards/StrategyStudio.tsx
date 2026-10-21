@@ -48,6 +48,7 @@ import SkillDetail, {
 } from '../skills/SkillDetail';
 import StatusPill, { type PillTone } from '../ui/StatusPill';
 import { ChevronRight, Grid3x3, Pin, PowerOff, RotateCcw, Trash2, Upload } from '../shared/Icons';
+import { humanizeSkillName } from '../../utils/skillNames';
 
 interface StrategyStudioProps {
     trades: LoggedTrade[];
@@ -96,10 +97,11 @@ const bodyOf = (content: string): string => content.split(/^---\s*$/m).slice(2).
  * "Avoid BTCUSDT" over a line of raw markdown. That reads as "my approved skill
  * is missing". The slug is the same string the approval wrote, so humanizing it
  * gives the row back the label the decision was made under.
+ *
+ * The helper itself moved to `utils/skillNames.ts` (E-55): the skills catalogue
+ * names a skill the same way, and a name is ONE fact with ONE home.
  */
-export const humanizeSkillName = (slug: string): string =>
-    slug.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim()
-        .replace(/^\w/, c => c.toUpperCase());
+export { humanizeSkillName };
 
 const statusTone = (status: SkillMeta['status']): PillTone =>
     (status === 'confirmed' ? 'up' : 'neutral');

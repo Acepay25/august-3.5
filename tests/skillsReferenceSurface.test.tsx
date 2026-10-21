@@ -35,6 +35,7 @@ import { render, screen, cleanup } from '@testing-library/react';
 import SkillsCatalog, { skillAvailability } from '../components/learn/SkillsCatalog';
 import SkillViewerPanel, { type SkillViewerRecord } from '../components/learn/SkillViewerPanel';
 import type { SkillMeta } from '../services/learning/SkillMemoryService';
+import { humanizeSkillName } from '../utils/skillNames';
 
 /**
  * `listSkills` is faked at MODULE level with a mutable roster, for the reason
@@ -113,10 +114,14 @@ describe('the catalogue — the reference\'s page', () => {
         render(<SkillsCatalog />);
         expect(screen.getByTestId('skills-catalog-grid')).toBeTruthy();
         const card = screen.getByTestId('skills-catalog-card');
-        expect(card.textContent).toContain('fade-the-fakeout.md');
+        // The card's NAME is the human label the reference uses; the slug stays
+        // the identity - the tooltip, the aria-label and every write path.
+        expect(card.textContent).toContain('Fade the fakeout');
+        expect(card.textContent).not.toContain('fade-the-fakeout.md');
         // The card is the opener — a row that cannot be pressed is a list of
-        // file names.
-        expect(screen.getByRole('button', { name: 'Read fade-the-fakeout.md' })).toBeTruthy();
+        // file names. Its accessible name matches the visible, humanized label
+        // (WCAG label-in-name), while the slug stays in the tooltip.
+        expect(screen.getByRole('button', { name: 'Read Fade the fakeout' })).toBeTruthy();
     });
 
     it('gives the card a one-line description a title, so the clipped tail is reachable', () => {
@@ -193,8 +198,8 @@ describe('the catalogue — the two sections', () => {
     it('never prints the same skill twice', () => {
         roster([LIVE, SHIPPED]);
         render(<SkillsCatalog />);
-        expect(screen.getAllByText('fade-the-fakeout.md')).toHaveLength(1);
-        expect(screen.getAllByText('book-trend-pullback.md')).toHaveLength(1);
+        expect(screen.getAllByText('Fade the fakeout')).toHaveLength(1);
+        expect(screen.getAllByText('Book trend pullback')).toHaveLength(1);
     });
 
     it('omits a section that holds nothing — an empty group teaches the reader the filter is broken', () => {
@@ -221,5 +226,31 @@ describe('the reader — the same words as the catalogue', () => {
         expect(screen.getByText('Suspended')).toBeTruthy();
         expect(screen.getByTitle(/Not injected/)).toBeTruthy();
         expect(screen.queryByText('injected')).toBeNull();
+    });
+});
+
+/**
+ * The name a skill is SHOWN by.
+ *
+ * The slug identifies a skill — the Approvals inbox, the notebook and every
+ * write path use it — and the catalogue's card shows the human label, the way
+ * the reference names "Fc Nginx Website" rather than the file behind it. One
+ * helper, so a skill cannot be called one thing on a card and another in a
+ * list.
+ */
+describe('humanizeSkillName (the name a person can recognize)', () => {
+    it('turns a slug into a readable label', () => {
+        expect(humanizeSkillName('fade-the-first-break.md')).toBe('Fade the first break');
+        expect(humanizeSkillName('book_trend_pullback.md')).toBe('Book trend pullback');
+    });
+
+    it('drops the file extension — it says where the rule lives, not what it is', () => {
+        expect(humanizeSkillName('resting.md')).not.toContain('.md');
+        expect(humanizeSkillName('resting.markdown')).toBe('Resting');
+    });
+
+    it('leaves a name that is already a phrase alone', () => {
+        expect(humanizeSkillName('Session open fade')).toBe('Session open fade');
+        expect(humanizeSkillName('')).toBe('');
     });
 });
