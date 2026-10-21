@@ -82,6 +82,7 @@ const BY_LABEL: Record<string, ToolKindInfo> = {
     'derivatives': { kind: 'read', activity: 'Reading derivatives' },
     'hybrid packet': { kind: 'read', activity: 'Reading the market' },
     'indicators': { kind: 'read', activity: 'Reading indicators' },
+    'key levels': { kind: 'read', activity: 'Reading key levels' },
     'liquidations': { kind: 'read', activity: 'Reading liquidations' },
     'notebook map': { kind: 'read', activity: 'Reading the notebook map' },
     'order book': { kind: 'read', activity: 'Reading the order book' },

@@ -59,9 +59,12 @@ const UNREACHABLE = registryIds.filter(id => READERS[id].length === 0);
 // 2026-10-20 (E-08): `learning.skill_refine` and `learning.skill_worth` joined
 // this list — both call sites read them, and neither was a registry entry, so
 // the Settings editor could neither show nor reset an override for them.
+// 2026-10-22 (E-57 §1): `learning.settlement_reflection` — the closed-trade
+// reflection, registered WITH its call site and wired from the first run.
 const MUST_STAY_WIRED = [
     'analysis.master', 'analysis.compact', 'analysis.risk_rules',
     'analysis.memory_enforcement', 'learning.chart_scan', 'learning.skill_craft',
+    'learning.settlement_reflection',
     'learning.skill_refine', 'learning.skill_worth',
     'notebook.chat_note', 'notebook.note', 'strategy.ocr_page', 'strategy.summarize_pdf',
 ];
@@ -92,7 +95,7 @@ const UNREACHABLE_CEILING = 0;
 
 describe('every prompt offered in Settings is one the app actually reads', () => {
     it('finds the registry, and the scanner has a population', () => {
-        expect(registryIds.length).toBe(12);
+        expect(registryIds.length).toBe(13);
         expect(WIRED.length).toBeGreaterThanOrEqual(MUST_STAY_WIRED.length);
         // A scanner that matched nothing would report every id unreachable and
         // still "pass" the ceiling if the ceiling were loose enough.

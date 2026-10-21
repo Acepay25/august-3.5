@@ -99,6 +99,10 @@ export interface PanelTurnContext {
 const TRADE_TOOLS = [
     'get_price_snapshot', 'get_order_book', 'get_derivatives',
     'get_liquidations', 'get_session_context', 'get_market_packet', 'get_all_timeframes', 'get_chart_view',
+    // The Key Levels card is fed from this: the app computes the published
+    // levels and hands back the exact fence, so the model cannot invent a
+    // price it is about to have drawn on the trader's chart.
+    'get_key_levels',
     'get_btc_context', 'recall', 'get_setup_history_stats', 'web_search', 'scan_setups',
     // The journal as rows, not as aggregates — the dock is where "how have my
     // last ten trades actually gone" gets asked.

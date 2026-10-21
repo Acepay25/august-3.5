@@ -16,7 +16,7 @@ import type { ToolAction } from '../../../types/message';
 import type { WireAuditEntry } from '../../../types/provider';
 import { tipForSeed } from '../../../utils/tradingTips';
 import { splitReasoningAroundTools } from '../../../utils/traceText';
-import { turnActivityLabel, turnKindSummary, turnWorkSummary } from '../../../utils/turnStatus';
+import { pairToolRows, turnActivityLabel, turnKindSummary, turnWorkSummary, isHarnessNoticeLine } from '../../../utils/turnStatus';
 import AnalyzedRow from '../../shared/AnalyzedRow';
 import ReasoningRow from '../../shared/ReasoningRow';
 import ToolActivityRow from '../../shared/ToolActivityRow';
@@ -97,10 +97,18 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
         () => turnActivityLabel(entry.tools, reasoning.trim().length > 0),
         [entry.tools, reasoning],
     );
-    // The settled headline: what the desk did, counted by kind. It counts
-    // CALLS, not lines — the transcript holds two lines per call, so a line
-    // count would double every number the trader is told.
-    const kindSummary = useMemo(() => turnKindSummary(entry.tools), [entry.tools]);
+    // The reference's settled headline: "Ran 4 commands, read a file". The
+    // count is CALLS, not transcript lines — `pairToolRows` is the same pairing
+    // the rows below render, so the headline and the card can never disagree
+    // about how many commands the turn ran. A reasoning-only turn has no
+    // command to count and keeps the "Analyzed" form.
+    const callCount = useMemo(
+        () => pairToolRows(entry.tools.filter(line => !isHarnessNoticeLine(line))).length,
+        [entry.tools],
+    );
+    const ranSummary = callCount > 0
+        ? `Ran ${callCount} ${callCount === 1 ? 'command' : 'commands'}`
+        : null;
     if (!hasWork && !hasActions && !wireAlone) {
         // Nothing yet: the waiting tip covers
         // the silent first moments of a turn. It is the tip's ONLY home now —
@@ -172,7 +180,7 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
             {hasWork && (
                 <AnalyzedRow
                     running={running}
-                    summary={kindSummary}
+                    summary={ranSummary}
                     persistedMs={entry.workedMs}
                     title={workSummaryLabel(entry.tools) ?? undefined}
                     activity={activity}

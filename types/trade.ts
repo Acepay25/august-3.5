@@ -85,6 +85,17 @@ export interface LoggedTrade {
    */
   postMortemByProvider?: Record<string, string>;
   /**
+   * Which model WROTE `postMortem` (E-57 §1). Set only by the settlement
+   * reflection, and absent on every row written before it — which is the whole
+   * point of keeping it separate from `postMortemByProvider`, the legacy
+   * per-provider analyst map that means a different thing.
+   *
+   * A note the app authored must never read as a note the trader wrote: the
+   * journal prints this beside the text, and `craftSkillFromPostMortem` drafts a
+   * skill from it, so the row says who is speaking.
+   */
+  postMortemModel?: string;
+  /**
    * Forensic class from the post-mortem blame split. Execution and macro
    * shocks must not become technical playbook rules.
    */

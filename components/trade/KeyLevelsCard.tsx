@@ -126,18 +126,27 @@ const KeyLevelsCard: React.FC<KeyLevelsCardProps> = ({ levels, symbol, messageId
                     Key Levels <span className="font-mono text-zinc-500 normal-case tracking-normal">({levels.length})</span>
                 </span>
                 <label
-                    className="flex cursor-pointer items-center gap-1.5 text-ui-xs font-semibold text-zinc-500 transition-colors hover:text-zinc-300"
+                    className="relative flex cursor-pointer items-center gap-1.5 text-ui-xs font-semibold text-zinc-500 transition-colors hover:text-zinc-300"
                     title={allOn ? 'Hide the other levels — pinned lines stay' : 'Draw every level on the chart'}
                 >
+                    {/* The input covers the label instead of being `sr-only`.
+                        A clipped, absolutely positioned checkbox gives the
+                        browser a 1×1 target at its STATIC position — thousands
+                        of pixels down this card's scroll container — so
+                        focusing it (a mouse click focuses too) scrolled the
+                        app's hidden overflow container and moved the whole
+                        surface out of view: the black screen. A full-size
+                        transparent input focuses where the control actually
+                        is, so the browser has nothing to scroll to. */}
                     <input
                         type="checkbox"
-                        className="sr-only"
+                        className="peer absolute inset-0 h-full w-full cursor-pointer opacity-0"
                         checked={allOn}
                         onChange={ev => setAllOn(ev.target.checked)}
                         aria-label="Draw all key levels on the chart"
                         data-testid="key-levels-chart-toggle"
                     />
-                    <span className={`relative inline-block h-3.5 w-6 rounded-full transition-colors ${allOn ? 'bg-emerald-500/40' : 'bg-zinc-700'}`} aria-hidden="true">
+                    <span className={`relative inline-block h-3.5 w-6 rounded-full transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-cyan-400/70 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-zinc-950 ${allOn ? 'bg-emerald-500/40' : 'bg-zinc-700'}`} aria-hidden="true">
                         <span className={`absolute left-0.5 top-0.5 h-2.5 w-2.5 rounded-full transition-[transform,background-color] duration-[150ms] ease-[var(--ease-snappy)] ${allOn ? 'translate-x-2.5 bg-emerald-400' : 'bg-zinc-500'}`} />
                     </span>
                     chart

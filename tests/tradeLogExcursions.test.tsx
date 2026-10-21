@@ -90,3 +90,45 @@ describe('trade detail — the measured excursion window', () => {
         cleanup();
     });
 });
+
+// E-57 §1. The note the app writes at settlement has to be READ, or a journal the
+// model can write into becomes an invisible edit to the trader's own record.
+describe('trade detail — the post-mortem the app wrote (E-57 §1)', () => {
+    const note = [
+        'Post-mortem written by the app at settlement (gpt-x).',
+        '',
+        'The short was entered at 100 with the stop at 105 and never reached a target.',
+        '',
+        'Lesson: size the stop to the sweep, not to the round number.',
+        '',
+        'IF a short entry sits below a low whose reclaim would close above the stop THEN skip the entry.',
+    ].join('\n');
+
+    it('shows the reflection in the open, with who wrote it', () => {
+        openDetail(trade({ postMortem: note, postMortemModel: 'gpt-x', postMortemCreatedAt: '2026-10-22T01:00:00.000Z' }));
+        const section = screen.getByTestId('trade-post-mortem');
+        expect(section.textContent).toContain('size the stop to the sweep');
+        expect(section.textContent).toContain('IF a short entry sits below a low');
+        // The byline reads off the FIELDS, not only the prose: the row carries
+        // which model wrote it, and a reader who copy-pastes the note is not the
+        // only audience that needs to know.
+        expect(screen.getByTestId('trade-post-mortem-when').textContent).toContain('gpt-x');
+        // And it is not behind a fold — the note is a sibling of the setup
+        // details, visible when the detail screen opens.
+        expect(section.closest('details')).toBeNull();
+        cleanup();
+    });
+
+    it('control: a row with no reflection shows no post-mortem block', () => {
+        openDetail(trade({}));
+        expect(screen.queryByTestId('trade-post-mortem')).toBeNull();
+        cleanup();
+    });
+
+    it('a legacy note still renders, and claims no model it never had', () => {
+        openDetail(trade({ postMortem: 'Lesson: the old note, written before the app reflected on anything.' }));
+        expect(screen.getByTestId('trade-post-mortem').textContent).toContain('the old note');
+        expect(screen.getByTestId('trade-post-mortem-when').textContent).not.toContain('gpt');
+        cleanup();
+    });
+});

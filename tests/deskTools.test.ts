@@ -39,6 +39,9 @@ describe('DeskToolsService', () => {
             'get_market_packet',
             'get_all_timeframes',
             'get_chart_view',
+            // The Key Levels card's computed feeder: the fence it returns is
+            // what the model publishes, so this tool is part of the catalogue.
+            'get_key_levels',
             'get_session_context',
             'get_price_snapshot',
             'get_indicators',

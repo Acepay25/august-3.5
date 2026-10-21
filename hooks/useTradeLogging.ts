@@ -15,6 +15,7 @@ import { trackConfluenceOutcome, calculateConfluenceScore } from '../services/an
 import { SLOptimizationData } from '../services/backtesting/StopLossOptimizerService';
 import { ConfidenceLevel } from '../services/validation/calibrationStore';
 import { syncClosedTradeToNotebook } from '../services/learning/SkillMemoryService';
+import { reflectOnClosedTrade } from '../services/learning/settlementReflection';
 import { resolveTradeRegime } from '../services/learning/regimeLedger';
 import { botOriginForMessage } from '../services/agents/botLearning';
 import { appendWatchEpisode } from '../utils/watchList';
@@ -509,16 +510,49 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         // memory and the skill carries originBotId. A chart-AI verdict answers
         // with several providers at once and has no single authoring bot.
         const tradeOrigin = botOriginForMessage(message.modelsUsed);
-        void syncClosedTradeToNotebook(
-            loggedTrade,
-            // Ref, not the closure: two trades settled in the same render
-            // window must both be visible to the notebook's evidence
-            // clustering (the closure can still hold the pre-log array).
-            [loggedTrade, ...loggedTradesRef.current.filter(t => t.id !== loggedTrade.id)],
-            notebookUser,
-            tradeOrigin ?? undefined,
-        )
-            .catch(err => console.warn('[TraderNotebook] Closed-trade sync failed:', err));
+        const tradesForNotebook = [loggedTrade, ...loggedTradesRef.current.filter(t => t.id !== loggedTrade.id)];
+        // E-57 §1 — the reflection runs FIRST, and the notebook is handed the
+        // row it wrote. The ordering is not a preference:
+        // `syncClosedTradeToNotebook` marks the trade settled, then folds the
+        // diary entry and the IF/THEN skill draft from `trade.postMortem`, so a
+        // reflection that ran afterwards would land on a row the notebook had
+        // already recorded as having nothing to say.
+        //
+        // The trader's click is still not made to wait: the whole chain stays
+        // fire-and-forget exactly as it was, so a slow model delays the diary,
+        // not the journal.
+        void (async () => {
+            let settledTrade = loggedTrade;
+            try {
+                const reflection = await reflectOnClosedTrade(loggedTrade, {
+                    username: notebookUser,
+                    ...(message.injectedSkills?.length ? { injectedSkills: message.injectedSkills } : {}),
+                });
+                settledTrade = reflection.trade;
+                if (reflection.wrote) {
+                    const reflected = reflection.trade;
+                    loggedTradesRef.current = loggedTradesRef.current.map(t => t.id === reflected.id ? reflected : t);
+                    setLoggedTrades(prev => prev.map(t => t.id === reflected.id ? reflected : t));
+                } else if (reflection.reason === 'failed' || reflection.reason === 'no-provider') {
+                    // A gap the app CHOSE (a trader's own note, an entry that never
+                    // filled) stays silent. A gap caused by the call not working is
+                    // reported, because "the notebook has no lesson for this trade"
+                    // is otherwise indistinguishable from the leg never existing.
+                    console.warn(`[TraderNotebook] settlement reflection skipped: ${reflection.reason}`);
+                }
+            } catch (err) {
+                // The service is written never to throw, but this leg owns the
+                // notebook sync BELOW it: an escaping error must cost the
+                // reflection, never the diary and the IF/THEN draft.
+                console.warn('[TraderNotebook] settlement reflection failed:', err);
+            }
+            await syncClosedTradeToNotebook(
+                settledTrade,
+                tradesForNotebook.map(t => t.id === settledTrade.id ? settledTrade : t),
+                notebookUser,
+                tradeOrigin ?? undefined,
+            );
+        })().catch(err => console.warn('[TraderNotebook] Closed-trade sync failed:', err));
 
         // === ThinkingStore: Update outcome for all thinking records of this trade ===
         // This correlates the stored reasoning with the actual outcome (WIN/LOSS),

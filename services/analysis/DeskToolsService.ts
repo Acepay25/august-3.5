@@ -524,6 +524,10 @@ const TOOL_BUDGETS: Record<string, number> = {
     // 2400 default would have cut to 17 rows SILENTLY to the seat — the exact
     // failure the get_chart_view budget exists to prevent.
     get_trade_log: 4000,
+    // The publishable block rides INSIDE this result: a clip that cut it in
+    // half would leave the model copying a malformed fence, which the card
+    // parser drops. Sized for the whole level list + block with headroom.
+    get_key_levels: 4000,
 };
 
 /**
@@ -768,6 +772,7 @@ const TOOL_LABELS: Record<string, string> = {
     get_market_packet: 'hybrid packet',
     get_all_timeframes: 'all-timeframe compendium',
     get_chart_view: 'chart view',
+    get_key_levels: 'key levels',
     draw_on_chart: 'chart draw',
     mark_trade_levels: 'level marks',
     clear_chart_drawings: 'chart clear',
@@ -862,6 +867,13 @@ const rawToolDigest = (name: string, content: string): string => {
                 : typeof parsed.outcome === 'string' ? parsed.outcome
                     : 'journal';
             return `${returned} logged ${returned === 1 ? 'trade' : 'trades'} · ${scope}`;
+        }
+        if (name === 'get_key_levels') {
+            if (typeof parsed.error === 'string') return parsed.error;
+            const r = Array.isArray(parsed.resistance) ? parsed.resistance.length : 0;
+            const s = Array.isArray(parsed.support) ? parsed.support.length : 0;
+            const v = parsed.vwap && typeof parsed.vwap === 'object' ? ' · VWAP' : '';
+            return `${r} resistance · ${s} support${v}`;
         }
     } catch {
         // Not JSON — fall through to the generic line.
@@ -1264,6 +1276,26 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                 properties: {
                     symbol: { type: 'string', description: 'Override symbol (default: the chart\'s current symbol).' },
                     interval: { type: 'string', description: 'Override timeframe, e.g. 15m or 1d (default: the chart\'s current interval).' },
+                },
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_key_levels',
+            description:
+                'Compute the key levels for one symbol/timeframe in one call: nearest support and resistance (with source, strength and how many of the last bars actually tested each), daily pivots, Fibonacci, psychological round numbers and session VWAP. The result includes a ready-to-publish `key-levels` fenced block — copy it verbatim at the end of your answer so the app renders the Key Levels card the user can toggle onto the chart. Call this whenever the question is "key levels", "where are the levels", or before naming prices the user may want drawn.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    symbol: { type: 'string', description: 'Any perp symbol, e.g. ETHUSDT (default: the current chart symbol).' },
+                    interval: {
+                        type: 'string',
+                        enum: ['5m', '15m', '1h', '4h', '1d'],
+                        description: 'Timeframe the levels are computed from. Defaults to the chart interval, else 1h.',
+                    },
                 },
                 additionalProperties: false,
             },
@@ -1731,6 +1763,13 @@ export const deskToolsMandateFor = (offered?: readonly string[]): string => {
     const drawingRule = canDraw
         ? 'Naming `draw_on_chart` or `mark_trade_levels` is how a level becomes something the trader can see: pass the exact prices you are citing, never restated ones.'
         : 'There is NO CANVAS on this home: nothing you name gets drawn, so a level is text the trader reads here. Pass the exact prices you are citing, never restated ones, and do not offer to draw.';
+    // The card is a PUBLISH step with a computed feeder. Without this line the
+    // model answered "key levels" from the packet's prose and either skipped
+    // the fence or typed prices into it by hand; the app already computes them,
+    // so the one honest instruction is "call, then copy".
+    const levelRule = has('get_key_levels')
+        ? ' When the user asks for KEY LEVELS (or asks where the levels are), call `get_key_levels` BEFORE you answer: it computes support/resistance, pivots, Fibonacci, round numbers and VWAP for the asked symbol/timeframe and returns a `key-levels` fence. Copy that fence VERBATIM at the end of your answer — it is what puts the Key Levels card on the chart. Never retype its prices.'
+        : '';
 
     return `
 **DESK TOOLS (available anytime on this turn)**
@@ -1738,7 +1777,7 @@ You can call live tools before you speak — opening analysis, rebuttal, clarifi
 Use them for: news/macro catalysts, funding/OI crowding, order-book walls, liquidations, BTC context on alts, session timing, or a fresh price print.
 The chart symbol is only the DEFAULT: every market tool accepts a \`symbol\` argument, so when the user asks about another coin ("what about eth, can we trade there?") pull that coin directly — get_market_packet or get_all_timeframes with symbol ETHUSDT gives the full multi-timeframe read without anyone switching charts.
 Your own trading memory is one of these tools: the recall tool searches your notebook (doctrine, rules, similar past trades) - call it when prior experience with this setup could change your stance.
-${shapeRule} The market packet you are shown carries code-calculated summaries, and its printed candle rows depend on the surface you were opened in: the full packet prints EIGHT rows per timeframe, the compact one (used by surfaces that ask for brevity) prints NONE and keeps only the summaries. Either way — eight printed rows are not a chart, and a shape described from them is invented, not read. If the rows are not in front of you, call ${groundingTool ?? 'nothing'}; if you have not, either call it or say "inferred from the rows shown" and give it no confidence. ${drawingRule}
+${shapeRule} The market packet you are shown carries code-calculated summaries, and its printed candle rows depend on the surface you were opened in: the full packet prints EIGHT rows per timeframe, the compact one (used by surfaces that ask for brevity) prints NONE and keeps only the summaries. Either way — eight printed rows are not a chart, and a shape described from them is invented, not read. If the rows are not in front of you, call ${groundingTool ?? 'nothing'}; if you have not, either call it or say "inferred from the rows shown" and give it no confidence. ${drawingRule}${levelRule}
 run_monte_carlo simulates a concrete plan: pass direction (long/short), entry, stop_loss, and take_profits (1–3 absolute prices). Optional atr is in price units; without it volatility is assumed from twice the stop distance, NOT fetched from the market. Optional timeframe is a label, num_simulations (100–5000) and max_steps (10–1000) control the run. For account drawdown estimates pass account_balance, position_size (margin in account currency), and leverage together. Report the simulation assumptions and timeout rate, not guaranteed or historical performance.
 Do not call tools you do not need. Prefer 0–2 calls. After tool results arrive, write your Floor reply from the findings — no JSON, no restated tool schemas.
 `;
@@ -1972,6 +2011,113 @@ const TA_GROUP_TO_KEYS: Record<string, keyof typeof import('./taLibrary').TA_STU
     taOverlays: 'overlays',
 };
 
+
+/**
+ * get_key_levels — the levels, computed, with the publishable card block.
+ *
+ * The key-levels card was a PROTOCOL with no feeder: the system prompt told the
+ * model it may end an answer with a `key-levels` fence, but the only way to get
+ * the numbers was to hope the hybrid packet carried them or call
+ * `get_indicators(structure)` and re-type the result. Naming a level the packet
+ * did not print meant inventing one, so the card either never appeared or
+ * carried prices nobody computed. This tool closes that: the app computes the
+ * same support/resistance, pivots, Fibonacci, psychological levels and VWAP the
+ * rest of the desk already uses, and returns the fence READY TO PUBLISH — the
+ * model copies it instead of transcribing six-digit prices from memory.
+ */
+async function runKeyLevels(symbol: string, interval: string): Promise<string> {
+    const tf = (['5m', '15m', '1h', '4h', '1d'].includes(interval) ? interval : '1h') as '5m' | '15m' | '1h' | '4h' | '1d';
+    // 250 bars: pivots need the last completed UTC day, Fibonacci a real swing,
+    // and the touch count scans the last 60 — one window covers all three.
+    const klines = await fetchFuturesOHLCV(symbol, tf, 250);
+    if (!klines || klines.length < 30) {
+        return JSON.stringify({
+            symbol,
+            interval: tf,
+            error: `not enough candles (${klines?.length ?? 0}) to compute key levels`,
+        });
+    }
+    const T = await import('./TechnicalAnalysisService');
+    const enhanced = T.calculateEnhancedKeyLevels(klines, tf);
+    const vwap = T.calculateVWAP(klines);
+    const mark = klines[klines.length - 1].close;
+    const rp = (n: number): number => Number(n.toFixed(Math.abs(n) >= 100 ? 2 : 6));
+    const distancePct = (price: number): number => Number((((price - mark) / mark) * 100).toFixed(2));
+
+    type PublishRow = {
+        label: string;
+        price: number;
+        side: 'support' | 'resistance' | 'vwap';
+        sources: string[];
+        strength: number;
+        touches: number;
+    };
+    const rows: PublishRow[] = [];
+    const add = (price: number, side: PublishRow['side'], source: string, strength: number, touches: number): void => {
+        if (!Number.isFinite(price) || price <= 0) return;
+        // One price can arrive from three detectors (a pivot that is also a
+        // fib and a round number). Publishing it three times would pad the
+        // card and make the level look stronger than the evidence; merge them
+        // and keep the strongest read, naming every source in the context.
+        const near = rows.find(r => Math.abs(r.price - price) / price < 0.0005);
+        if (near) {
+            if (!near.sources.includes(source)) near.sources.push(source);
+            near.strength = Math.max(near.strength, strength);
+            near.touches = Math.max(near.touches, touches);
+            return;
+        }
+        rows.push({ label: '', price: rp(price), side, sources: [source], strength: Math.round(strength), touches });
+    };
+    if (Number.isFinite(vwap.vwap) && vwap.vwap > 0) add(vwap.vwap, 'vwap', 'vwap', 70, 0);
+    for (const l of enhanced.support) add(l.price, 'support', l.source, l.strength, l.touchCount);
+    for (const l of enhanced.resistance) add(l.price, 'resistance', l.source, l.strength, l.touchCount);
+
+    // Number by PROXIMITY, like a trader reads a ladder: R1/S1 is the first
+    // shelf on each side of the mark, not the loudest one.
+    const resistance = rows.filter(r => r.side === 'resistance').sort((a, b) => a.price - b.price).slice(0, 4);
+    const support = rows.filter(r => r.side === 'support').sort((a, b) => b.price - a.price).slice(0, 4);
+    const vwapRow = rows.find(r => r.side === 'vwap');
+    resistance.forEach((r, i) => { r.label = `R${i + 1}`; });
+    support.forEach((r, i) => { r.label = `S${i + 1}`; });
+    if (vwapRow) vwapRow.label = 'VWAP';
+    const publishRows = [...resistance, ...(vwapRow ? [vwapRow] : []), ...support];
+    const contextFor = (r: PublishRow): string => {
+        const touches = r.touches > 1 ? `, ${r.touches} touches` : '';
+        return `${r.sources.join(' + ')}, ${r.strength}%${touches}`.slice(0, 140);
+    };
+    const block = publishRows.length > 0
+        ? ['```key-levels', ...publishRows.map(r => `${r.label} | ${r.price} | ${contextFor(r)}`), '```'].join('\n')
+        : '';
+    const out = {
+        symbol,
+        interval: tf,
+        bars: klines.length,
+        mark: rp(mark),
+        resistance: resistance.map(r => ({
+            price: r.price, sources: r.sources, strength: r.strength, touches: r.touches,
+            distancePct: distancePct(r.price),
+        })),
+        support: support.map(r => ({
+            price: r.price, sources: r.sources, strength: r.strength, touches: r.touches,
+            distancePct: distancePct(r.price),
+        })),
+        vwap: Number.isFinite(vwap.vwap) && vwap.vwap > 0
+            ? { price: rp(vwap.vwap), anchor: vwap.anchor, position: vwap.pricePosition }
+            : null,
+        pivots: enhanced.pivotPoints.daily,
+        fib: enhanced.fibLevels.levels
+            .filter(f => f.ratio === '0.5' || f.ratio === '0.618')
+            .map(f => ({ ratio: f.ratio, price: rp(f.price) })),
+        psychological: enhanced.psychologicalLevels.slice(0, 3).map(rp),
+        // The exact fence the model is meant to publish. Kept as one string so
+        // a first-line, last-line copy is the whole operation.
+        keyLevelsBlock: block,
+        publish: block
+            ? 'End your answer with keyLevelsBlock copied VERBATIM (including the fences and in this order) so the app renders the Key Levels card. Do not restate the prices in the fence from memory.'
+            : 'No levels could be computed, so publish no key-levels block — say the level scan was empty.',
+    };
+    return JSON.stringify(out);
+}
 
 /**
  * get_indicators — on-demand technical studies for any symbol/timeframe.
@@ -2762,6 +2908,12 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                 ].join('\n');
                 break;
             }
+            case 'get_key_levels':
+                content = await runKeyLevels(
+                    asSymbol(call.arguments.symbol, fallback),
+                    String(call.arguments.interval || context.chartInterval || '1h'),
+                );
+                break;
             case 'get_all_timeframes': {
                 content = await runAllTimeframes(asSymbol(call.arguments.symbol, fallback), liveMarkOf(context));
                 break;

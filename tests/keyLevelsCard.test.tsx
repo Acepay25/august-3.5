@@ -98,6 +98,20 @@ describe('KeyLevelsCard toggle → chart', () => {
         expect((screen.getByTestId('key-levels-chart-toggle') as HTMLInputElement).checked).toBe(false);
     });
 
+    it('keeps the switch input ON the control instead of a clipped absolute box', () => {
+        // The black screen: an `sr-only` checkbox is absolutely positioned at
+        // its STATIC position, thousands of px down the scrolled transcript;
+        // focusing it (a click focuses too) made the browser scroll the app's
+        // overflow-hidden shell and moved the whole surface out of view. The
+        // input must cover the visible label, whose positioned box bounds it.
+        render(<KeyLevelsCard levels={LEVELS} symbol="BTCUSDT" getMark={MARK} onChatLevels={vi.fn()} />);
+        const input = screen.getByTestId('key-levels-chart-toggle');
+        expect(input.className).not.toContain('sr-only');
+        expect(input.parentElement?.className).toContain('relative');
+        expect(input.className).toContain('absolute');
+        expect(input.className).toContain('inset-0');
+    });
+
     it('shows prices, distances and the last divider against the live mark', () => {
         render(<KeyLevelsCard levels={LEVELS} symbol="BTCUSDT" getMark={MARK} onChatLevels={vi.fn()} />);
         expect(screen.getByText('78,582.00')).toBeTruthy();

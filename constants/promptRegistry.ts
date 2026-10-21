@@ -37,6 +37,7 @@ import { SKILL_CRAFT_FALLBACK, SKILL_REFINE_FALLBACK } from '../services/learnin
 import { SKILL_WORTH_FALLBACK } from '../services/learning/skillWorthGate';
 import { CHART_SCAN_FALLBACK_PROMPT } from '../services/learning/chartScanSkills';
 import { DEFAULT_OCR_PAGE_PROMPT } from '../services/learning/pdfOcrService';
+import { SETTLEMENT_REFLECTION_FALLBACK } from '../services/learning/settlementReflection';
 
 export interface PromptRegistryEntry {
     /** Stable id — the key user overrides are stored under. */
@@ -158,5 +159,17 @@ export const PROMPT_REGISTRY: PromptRegistryEntry[] = [
         // and comes from its evaluator (already interpolated into the
         // constant).
         fallback: CHART_SCAN_FALLBACK_PROMPT,
+    },
+    {
+        id: 'learning.settlement_reflection',
+        name: 'Closed-trade reflection (post-mortem at settlement)',
+        description: 'When a trade closes, the memory model writes the row\'s post-mortem from the facts the settlement path already measured — the R it earned, the cost, the excursion, the benchmark, the regime and what the pre-trade gate said. Its IF/THEN line is what turns into a skill DRAFT for the trader to approve.',
+        usage: ['Every closed WIN/LOSS trade (E-57 §1; the leg `craftSkillFromPostMortem` and the diary/IF-THEN readers have been waiting on)'],
+        // IMPORTED, not restated: the note-shape contract (a plain `Lesson:`
+        // line and one IF/THEN sentence) is read back by
+        // `extractLessonFromPostMortem` and `parseIfThenClauses`, so an override
+        // that drops it costs the notebook its lesson — and the Settings diff
+        // has to show the truth about what runs.
+        fallback: SETTLEMENT_REFLECTION_FALLBACK,
     },
 ];

@@ -827,10 +827,15 @@ body {
   border-radius: var(--radius-bubble);
   background: rgba(255, 255, 255, 0.02);
 }
-/* The card's own line: a bare row of text, with room for the card beneath. */
+/* The card's own line: a bare row of text, with room for the card beneath.
+   Sentence-case at the reference's size — the work line is a sentence a trader
+   reads, not a micro-label, and 12px next to a 14px answer read as a caption
+   for something else. */
 .analyzed-row > summary {
-  padding: 4px 2px 7px;
+  padding: 5px 2px 8px;
+  font-size: var(--text-ui-caption);
 }
+.analyzed-row > summary .reasoning-row-label { color: var(--color-zinc-300); }
 /* A step inside the card is a ROW: a hairline between the steps, its own
    padding, and none of the box treatment a step carries on its own. */
 .analyzed-row .reasoning-row,
@@ -845,10 +850,13 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 /* The thinking row's own summary sits flush inside the card, and the trace
-   body under it keeps its scroll. */
+   body under it keeps its scroll. Sized like the reference's step rows
+   ("Ran a command") rather than a caption line. */
 .analyzed-row .reasoning-row > summary {
-  padding: 7px 12px;
+  padding: 9px 12px;
+  font-size: var(--text-ui-caption);
 }
+.analyzed-row .reasoning-row > summary .reasoning-row-label { color: var(--color-zinc-300); }
 .analyzed-row .reasoning-row .reasoning-row-body {
   padding: 4px 12px 10px;
 }
@@ -861,6 +869,13 @@ body {
    tool payload wants the tighter 10rem the reference draws. */
 .tool-row > summary { cursor: pointer; list-style: none; }
 .tool-row > summary::-webkit-details-marker { display: none; }
+/* Inside the work card a tool step is a ROW like the reference's
+   "Ran a command": the same padding as the thinking row beside it, so a
+   card of mixed steps reads as one list rather than one indented line.
+   A step with no kept payload renders as a plain line (no `<details>`), so
+   both shapes take the row padding. */
+.analyzed-row .tool-row > summary { padding: 9px 12px; }
+.analyzed-row [data-testid="tool-activity"] > div { padding: 9px 12px; }
 .tool-row-body {
   max-height: 10rem;
   overflow-y: auto;

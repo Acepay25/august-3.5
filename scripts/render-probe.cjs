@@ -414,13 +414,14 @@ async function seedVerdicts(page) {
                 },
             ],
         };
-        const tradeRow = (id, minsAgo, outcome, tradeType, direction, coin) => ({
+        const tradeRow = (id, minsAgo, outcome, tradeType, direction, coin, extra) => ({
             id,
             outcome,
             tradeType,
             timestamp: iso(minsAgo),
             leverage: 10,
             analysis: analysis({ direction, coinName: coin }),
+            ...(extra || {}),
         });
         const put = (existing) => ({
             ...(existing || {}),
@@ -433,7 +434,18 @@ async function seedVerdicts(page) {
             // false green this file keeps getting bitten by. Two of each type so
             // scalp/swing and win/loss each change what is on screen.
             tradeLog: [
-                tradeRow('pt-1', 300, 'WIN', 'scalp', 'Long', 'BTCUSDT'),
+                // ONE of the four carries a post-mortem, and the check that reads
+                // it asserts exactly one block appears across all four details:
+                // a probe that finds the note on every row would also pass on a
+                // screen that rendered the section unconditionally.
+                tradeRow('pt-1', 300, 'WIN', 'scalp', 'Long', 'BTCUSDT', {
+                    postMortem: 'Post-mortem written by the app at settlement (zz-probe-model).\n\n'
+                        + 'The reclaim closed above the swept low before the stop was tested.\n\n'
+                        + 'Lesson: size the stop to the sweep, not to the round number.\n\n'
+                        + 'IF the reclaim closes above the swept low THEN skip the long entry.',
+                    postMortemModel: 'zz-probe-model',
+                    postMortemCreatedAt: iso(120),
+                }),
                 tradeRow('pt-2', 280, 'LOSS', 'scalp', 'Short', 'BTCUSDT'),
                 tradeRow('pt-3', 260, 'WIN', 'swing', 'Long', 'ETHUSDT'),
                 tradeRow('pt-4', 240, 'ENTRY_NOT_HIT', 'swing', 'Short', 'SOLUSDT'),
@@ -2171,6 +2183,58 @@ async function main() {
             check('the card states the tally in the units actually captured',
                 /\d+W \/ \d+L/.test(cardText), cardText.slice(0, 160));
         }
+        // ── The post-mortem the app writes at settlement (E-57 §1) ─────────
+        // jsdom mounts the detail component; mounting is not the LIST rendering,
+        // and a note the app writes into the trader's journal must be provably
+        // READABLE in a real browser. One of the four seeded rows carries a note,
+        // and the last check asserts EXACTLY one detail shows a block — so a
+        // section rendered unconditionally, or a selector that matches nothing,
+        // both fail here instead of reporting a quiet pass.
+        const reflectionSeen = await page.evaluate(async () => {
+            const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+            const tab = document.querySelector('#journal-tab-log');
+            if (tab) { tab.click(); await sleep(300); }
+            const clickBack = async () => {
+                const back = Array.from(document.querySelectorAll('button'))
+                    .find(b => (b.textContent || '').trim() === 'Back');
+                if (back) { back.click(); await sleep(250); }
+                return !!back;
+            };
+            const details = [];
+            for (let attempt = 0; attempt < 6; attempt += 1) {
+                const rows = Array.from(document.querySelectorAll('button'))
+                    .filter(b => /(?:BTCUSDT|ETHUSDT|SOLUSDT)\.md/.test(b.textContent || ''));
+                const row = rows[attempt];
+                if (!row) break;
+                row.click();
+                await sleep(400);
+                const block = document.querySelector('[data-testid="trade-post-mortem"]');
+                details.push({
+                    rowText: (row.textContent || '').trim().slice(0, 60),
+                    hasBlock: !!block,
+                    text: block ? (block.textContent || '').trim() : '',
+                    byline: (document.querySelector('[data-testid="trade-post-mortem-when"]')?.textContent || '').trim(),
+                });
+                if (!(await clickBack())) break;
+            }
+            return {
+                opened: details.length,
+                withNote: details.filter(d => d.hasBlock).length,
+                sample: details.find(d => d.hasBlock) || null,
+            };
+        });
+        check('a journal History row opens its trade detail', reflectionSeen.opened >= 2,
+            `opened=${reflectionSeen.opened} details`);
+        check('the detail shows the post-mortem the app wrote',
+            !!reflectionSeen.sample && reflectionSeen.sample.text.includes('size the stop to the sweep'),
+            reflectionSeen.sample ? reflectionSeen.sample.text.slice(0, 120) : 'no trade-post-mortem block on any row');
+        check('…and names the model that wrote it',
+            !!reflectionSeen.sample && reflectionSeen.sample.byline.includes('zz-probe-model'),
+            reflectionSeen.sample ? reflectionSeen.sample.byline : 'no byline element');
+        check('control: only the seeded row shows a post-mortem block',
+            reflectionSeen.opened >= 2 && reflectionSeen.withNote === 1,
+            `opened=${reflectionSeen.opened} withNote=${reflectionSeen.withNote}`);
+
         await sweepSurface('Journal', 12);
 
         // ── The instrument picker, and the claim it makes ────────────────

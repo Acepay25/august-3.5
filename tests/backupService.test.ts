@@ -121,6 +121,39 @@ describe('BackupService.restoreBackup — step failures are loud (no silent part
         expect(h.saveThinkingBatch).toHaveBeenCalledTimes(1);
     });
 
+    it('carries the settlement reflection’s fields into the restored profile (E-57 §1)', async () => {
+        // `postMortemModel` is a NEW field on a row the backup stores whole. The
+        // failure this pins is a restore that re-picks a trade's fields and
+        // silently drops it — the same shape of data loss this file already
+        // documents for preference keys, and invisible to a count-only assertion.
+        const reflected = {
+            id: 't-ref', outcome: 'LOSS', timestamp: '2026-10-22T00:00:00.000Z',
+            analysis: { coinName: 'BTCUSDT', direction: 'Long' },
+            postMortem: 'Post-mortem written by the app at settlement (gpt-x).\n\nLesson: size the stop to the sweep.',
+            postMortemCreatedAt: '2026-10-22T01:00:00.000Z',
+            postMortemModel: 'gpt-x',
+        };
+        seedBackupFiles({ prefs: false, thinking: false });
+        // Then replace the profile generation with the reflected row — the
+        // helper's own fixture carries an empty tradeLog, and a restore that
+        // dropped the field would look identical to one that never saw it.
+        h.files.set(`${BASE}.json`, JSON.stringify({ ...profileFixture, tradeLog: [reflected] }));
+
+        const result = await restoreBackup(BACKUP_ID);
+        expect(result.success).toBe(true);
+        const written = JSON.stringify(h.overwriteUserProfile.mock.calls[0]);
+        expect(written).toContain('"postMortemModel":"gpt-x"');
+        expect(written).toContain('size the stop to the sweep');
+        expect(written).toContain('"postMortemCreatedAt":"2026-10-22T01:00:00.000Z"');
+    });
+
+    it('control: an empty tradeLog still restores, and writes an empty log', async () => {
+        seedBackupFiles();
+        const result = await restoreBackup(BACKUP_ID);
+        expect(result.success).toBe(true);
+        expect(JSON.stringify(h.overwriteUserProfile.mock.calls[0])).toContain('"tradeLog":[]');
+    });
+
     it('surfaces allow-list SKIPPED keys in the success result (non-silent skip, audit F12)', async () => {
         seedBackupFiles();
         h.importPreferencesData.mockResolvedValueOnce({
