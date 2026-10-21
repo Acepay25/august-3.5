@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-22** (the anchor gate re-measured every citation here and in the stage ledger:
-**382 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**386 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 5 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -398,13 +398,13 @@ before the next entry, no longer exist.
 
 ```mermaid
 flowchart TD
-    TK["automation tick / runNow / boot catch-up → runAutomation useAutomations.ts:381"] --> D{"forks on config.botId :401"}
-    D -->|has a bot| BR["runBotRoutineTurn useAutomations.ts:346 → botRoutine.ts:80 — prompt, history"]
+    TK["automation tick / runNow / boot catch-up → runAutomation useAutomations.ts:429"] --> D{"forks on config.botId :401"}
+    D -->|has a bot| BR["runBotRoutineTurn useAutomations.ts:394 → botRoutine.ts:80 — prompt, history"]
     BR --> ST["injected stream = streamQuickResponse useAutomations — reuses the bot transport, NOT the debate"]
     D -->|no bot| AT["automation arm BEFORE the mode fork useAnalysisPipeline.ts:1247 → runAutomationTurn automationTurn.ts:162"]
     AT --> PRIV["runs into a private message list, not the open conversation — automationMessagesRef useAnalysisPipeline.ts:399, its notices (a failed tool, a turn that called nothing, a refused plan)"]
     AT --> CAP["plan rationed: MAX_PLANS_PER_RUN services/trade/automationTurn.ts:70 · MAX_PLANS_PER_DAY AutomationService.ts:113"]
-    AT --> FAIL["failed tool + refused plan + no-lookup land in notices → row text and a WARNING toast useAutomations.ts:531"]
+    AT --> FAIL["failed tool + refused plan + no-lookup → notices on the row itself useAutomations.ts:530, a WARNING toast :571, and the breaker after three runs that produced nothing settleRunStreak hooks/useAutomations.ts:282"]
     GR["useAgentGroups.ts → groupRounds → streamQuickResponse"] --> GV["GroupChatView"]
 ```
 
@@ -417,7 +417,7 @@ taking the scheduler down with it.
 What the schedule keeps, and what it gained, are written down rather than
 assumed. `tests/automationRouteCharacterization.test.tsx` pins the private
 `automation-<id>` thread, the config's own model pick, the continuity read (now
-the last three DELIVERED runs — `MAX_HISTORY_RUNS` useAutomations.ts:169, because
+the last three DELIVERED runs — `MAX_HISTORY_RUNS` useAutomations.ts:173, because
 the old row-count read spent half its budget on `appendRun`'s 'running' stubs),
 and the verdict row. `tests/automationToolTurn.test.ts` pins the two rules a run
 with nobody watching needs: a plan refused past the cap answers with an
@@ -817,7 +817,7 @@ old answer.
 | 24 | ensemble → the stages that survive | see C — five of the old eight are gone from the call path, and no stage is named in the code, so no line number is claimed |
 | 25 | desk tools → what a caller can reach | `executeDeskTool services/analysis/DeskToolsService.ts:2327` (its allow-list is enforced at execution, not only at offer time) |
 | 26 | panel tools → chart echo | `executePanelTool services/trade/chatTurnRunner.ts:345` is what echoes the result back into the panel |
-| 27 | automation tick → runAutomation | `runAutomation hooks/useAutomations.ts:381`, forks on `config.botId hooks/useAutomations.ts:401`; the no-bot path takes the pipeline's OWN schedule arm `useAnalysisPipeline.ts:1247` → `runAutomationTurn automationTurn.ts:162`, writing the private list automationMessagesRef useAnalysisPipeline.ts:399, its `notices` (a tool that came back failed, a turn that called nothing, a refused plan) and settling through `onMessage` `useAutomations.ts:531`. Characterized in `tests/automationRouteCharacterization.test.tsx` |
+| 27 | automation tick → runAutomation | `runAutomation hooks/useAutomations.ts:429`, forks on `config.botId hooks/useAutomations.ts:449`; the no-bot path takes the pipeline's OWN schedule arm `useAnalysisPipeline.ts:1247` → `runAutomationTurn automationTurn.ts:162`, writing the private list automationMessagesRef useAnalysisPipeline.ts:399, its `notices` (a tool that came back failed, a turn that called nothing, a refused plan) and settling through `onMessage` `useAutomations.ts:583`. Characterized in `tests/automationRouteCharacterization.test.tsx` |
 | 28 | bot routine → injected stream | the routine reuses 22's bot arm from `runBotRoutineTurn services/agents/botRoutine.ts:80` |
 | 29 | rooms → groupRounds | `useAgentGroups hooks/useAgentGroups.ts:75` → `streamQuickResponse services/providers/GenericAnalysisService.ts:606` |
 | 30 | review passes / propose_skill → draft → approval → skill | `draftGates.ts` → `approveSkillDraft services/learning/skillApproval.ts:53` — the post-mortem leg is starved, not deleted (see D) |
@@ -838,8 +838,8 @@ old answer.
 | 45 | `present_trade` → a card in either home | `runPresentTrade presentTradeTool.ts:78` ← dock sink `chatTurnRunner.ts` / desk sink `chatSurfaceTurn.ts`; gate scan starts there, the cap binds at log time (`ensureStamp services/trade/proposalGate.ts:317`), and the same stamp answers for the shape of the plan — `assessPlanShape services/trade/proposalGate.ts:152` refuses an inverted one and warns on a sub-floor ratio or an out-of-band stop, per ruling (c) of E-57 §5 |
 | 46 | `chatSurfaceSystemPrompt` → the desk arm's prompt | `chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:166` — mandate (`CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40`) + skills index + active strategies + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (`types/message.ts:326`) |
 | 47 | prose that never called the tool → the same decision | `planFromProse services/trade/tradeShapedProse.ts:51` reads the labelled entry/stop/target out of the row, parseTradeProposal decides whether that is a plan, and the chip mints the ONE plan-id shape (mintPlanId) before calling onLogProposedTrade — so a spoken plan reaches the journal the same way a presented one does |
-| 48 | a scheduled run → a rationed plan | `MAX_PLANS_PER_RUN` `MAX_PLANS_PER_RUN services/trade/automationTurn.ts:70` counts inside the turn; `MAX_PLANS_PER_DAY` `MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113` is a local-calendar-day ledger keyed per automation (`:130` read, `:143` spend). Past either, `present_trade` gets an `ok: false` receipt naming the limit — a refusal the MODEL reads, not a card that quietly never appears |
-| 49 | a schedule's failure → the row and the toast | the turn's `notices` `notices services/trade/automationTurn.ts:156` — a tool that came back `ok: false` (from `onToolPayload`, which already carries it), a turn that called nothing, a refused plan — are written into the stored text at `useAnalysisPipeline.ts:1076` and handed to `useAutomations.ts:531`, which downgrades the toast from success to warning. Nobody is watching a schedule live; a success toast over a failed lookup is how an unattended run manufactures confidence |
+| 48 | a scheduled run → a rationed plan | `MAX_PLANS_PER_RUN` `MAX_PLANS_PER_RUN services/trade/automationTurn.ts:70` counts inside the turn; `MAX_PLANS_PER_DAY` `MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113` is a local-calendar-day ledger keyed per automation (`:144` read, `:157` spend). Past either, `present_trade` gets an `ok: false` receipt naming the limit — a refusal the MODEL reads, not a card that quietly never appears |
+| 49 | a schedule's failure → the row and the toast | the turn's `notices` `notices services/trade/automationTurn.ts:156` — a tool that came back `ok: false` (from `onToolPayload`, which already carries it), a turn that called nothing, a refused plan — are written into the stored text at `useAnalysisPipeline.ts:1076` and handed to `useAutomations.ts:583`, which downgrades the toast from success to warning. Nobody is watching a schedule live; a success toast over a failed lookup is how an unattended run manufactures confidence |
 | 50 | a journal row gets its scalp/swing class | `withDetectedTradeType` (`services/analysis/ScalpDetectionService.ts`) is called at the two row-minting sites `withDetectedTradeType hooks/useTradeLogging.ts:368` and `withDetectedTradeType hooks/useTradeLogging.ts:743` — label-only, so no `validityDurationMinutes` appears and the autopilot expiry window never widens. The filter reads it at `components/journal/TradeLog.tsx:540` |
 | 51 | a run records its measured cost | `recordToolTurnUsage utils/sessionUsage.ts:63` is called by all three turn owners — desk arm chatSurfaceTurn.ts, schedule arm automationTurn.ts, dock seats chatTurnRunner.ts — from the usage the wire reported per request. Knowledge → Session Usage reads that ledger; stage 19 left it with a reader and no writer. usageCalls distinguishes a zero-cost run from a provider that sent no usage frame |
 | 52 | a finished analysis says so | `notify()` (`services/infrastructure/notify.ts`) fires when a Full-analysis send settles un-stopped (`notify hooks/useAnalysisPipeline.ts:1284`). Before stage 19 this came from the verdict finalizer; the old channel name CompletionNotifications was a native-only copy of the same thing, and its FILE is gone with stage 19's tranche — the only surviving mention is a comment in `services/infrastructure/notify.ts` — so the app speaks through one notifier |
@@ -887,10 +887,10 @@ old answer.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 382 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 386 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 382 anchors verified, and the gate
+   the gate's own output: these docs state 386 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -982,7 +982,7 @@ old answer.
 
 10. **The arrow table is 70 rows, and every citation in it resolves — and 69 of the 70 rows pair their citation with the symbol that must live on that line (23 → 28 → 31 → 33 → 43 → 48 → 50 → 52 → 69 across these passes), so those rows are checked for content, not just for a line that exists. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently. One row names no file at all — the ensemble row, whose stages the code never names — so a wrong figure inside it stays outside this gate's reach, which is why the sentence says 69/70 rather than 70/70.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
-    resolves all 382 unique anchors on every run, so coverage of the table is no
+    resolves all 386 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
 11. **"One service replacing nine" is falsifiable, and it is right — counted, not
     asserted.** `git log --diff-filter=D` over `services/providers/` names exactly nine

@@ -112,6 +112,20 @@ const PLAN_LEDGER_KEY_PREFIX = 'automation_plans_v1_';
  *  a reload, after a crash, and while nobody is watching. */
 export const MAX_PLANS_PER_DAY = 3;
 
+/**
+ * How many `error`/`skipped` runs in a row disable a schedule (E-57 §6, the
+ * owner's ruling (d)). Three rather than two: one bad morning and one provider
+ * maintenance window are not a broken automation, and the app should not cut a
+ * trader's schedule off on the first hiccup. A SKIPPED run counts because the
+ * two ways to be skipped — cancelled, or re-queued for reconnect while offline —
+ * are both "the run never answered", which is exactly what an unattended
+ * schedule must not do three times without anyone noticing.
+ *
+ * Only a human re-enable clears the counter (see `toggleAutomationEnabled`), so
+ * the breaker cannot reset itself and quietly start trying again.
+ */
+export const MAX_CONSECUTIVE_AUTOMATION_FAILURES = 3;
+
 /** A local calendar day, `YYYY-MM-DD`. LOCAL on purpose: a trader who sets a
  *  schedule for "every morning" means their morning, and a UTC boundary would
  *  let a 09:00 PHT schedule spend two days' quota in one afternoon. */

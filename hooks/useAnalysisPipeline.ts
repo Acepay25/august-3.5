@@ -534,8 +534,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 moderatorConfig?: ProviderConfig;
                 moderatorModel?: string;
             };
-            /** Delivered once with the complete user prompt + AI card. */
-            onMessage: (run: { userMessage: Message; aiMessage: Message }) => void;
+            /** Delivered once with the complete user prompt + AI card, the turn's caveats and the plan ration's counts — the same fields `AutomationRunDelivery` declares in hooks/useAutomations.ts, spelled here because this hook must not import the scheduler that it is wired TO. */
+            onMessage: (run: { userMessage: Message; aiMessage: Message; notices?: string[]; plans?: { presented: number; refused: number } }) => void;
             /** Delivered when the run fails (user-safe message). */
             onError: (error: string) => void;
         };
@@ -1305,7 +1305,7 @@ ${enhancedPrompt}`;
                 options?.automation?.onMessage({
                     userMessage,
                     aiMessage,
-                    ...(out.notices.length ? { notices: out.notices } : {}),
+                    ...(out.notices.length ? { notices: out.notices } : {}), ...(out.plansPresented || out.refusedPlans ? { plans: { presented: out.plansPresented, refused: out.refusedPlans } } : {}),
                 });
                 return { ok: true };
             }

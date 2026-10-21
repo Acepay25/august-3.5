@@ -238,6 +238,47 @@ describe('importPreferencesData — restore allow-list (arbitrary pref-key injec
         expect(prefStore['thinking_leak_bin_v1']).toEqual([{ at: 'x', snippet: 'y' }]);
     });
 
+    it('carries E-57 §6 out and back with NO allow-list change', async () => {
+        // The caveats and the breaker are new FIELDS on two blobs their owner
+        // writes whole. "No `RAW_LOCAL_STORAGE_PREFIXES` change is required" is a
+        // claim about the shipped artifact, so it is tested as one: export, wipe,
+        // import, read back. A notices[] that went missing on the way through is
+        // silent data loss — the trader's record of why a schedule stopped.
+        const run = {
+            id: 'r9', automationId: 'a1', status: 'error',
+            startedAt: '2026-10-22T01:00:00.000Z', finishedAt: '2026-10-22T01:00:05.000Z',
+            error: '429 from the provider',
+            notices: ['TOOL FAILURE(S): get_order_book came back with no data.'],
+            plans: { presented: 0, refused: 1 },
+        };
+        const config = {
+            id: 'a1', name: 'Hourly sweep', enabled: false, schedule: { cron: '0 * * * *' },
+            inputSource: 'template', mode: 'standard',
+            moderatorModel: { providerId: '', modelId: '' },
+            createdAt: 0, updatedAt: 0, runCount: 3,
+            consecutiveFailures: 3,
+            disabledReason: 'Turned itself off after 3 runs in a row that produced nothing (last: 429).',
+        };
+        prefStore['automation_runs_v1_alice'] = [run];
+        prefStore['automations_v1_alice'] = [config];
+
+        const backup = await exportPreferencesData();
+        const restoredRuns = clone(backup['automation_runs_v1_alice']);
+        const restoredConfigs = clone(backup['automations_v1_alice']);
+
+        prefStore = {};
+        writtenKeys = [];
+        const report = await importPreferencesData({
+            'automation_runs_v1_alice': restoredRuns,
+            'automations_v1_alice': restoredConfigs,
+        });
+        expect(report.skippedKeys).toEqual([]);
+        expect(prefStore['automation_runs_v1_alice']).toEqual([run]);
+        expect((prefStore['automations_v1_alice'] as unknown[])[0]).toMatchObject({
+            enabled: false, consecutiveFailures: 3,
+        });
+    });
+
     it('plain-string UI keys stay OFF the allow-list (the export sweep cannot even read them)', async () => {
         // august_surface_v1 / sidebar_pane_v1 are stored as RAW strings, so
         // getPreferenceObject (JSON) never exports them; allowing them would

@@ -27,7 +27,7 @@ import {
     loadAutomationLastSeen,
     saveAutomationLastSeen,
     uid,
-    runUid,
+    runUid, MAX_CONSECUTIVE_AUTOMATION_FAILURES,
 } from '../services/automation/AutomationService';
 import { parseCron, nextCronTime, hasCronFireBetween } from '../services/automation/cronParser';
 import { planCatchUp } from '../services/automation/catchUpPlanner';
@@ -71,6 +71,10 @@ export interface AutomationRunDelivery {
     userMessage: Message;
     aiMessage: Message;
     notices?: string[];
+    /** The plan ration's answer for THIS run (E-57 §6): how many it allowed and
+     *  how many it refused. Counts rather than the `notices` sentence, because
+     *  the run row has to keep the fact even when the prose path drops it. */
+    plans?: { presented: number; refused: number };
 }
 
 export interface AutomationPipelineRunner {
@@ -258,12 +262,59 @@ export function useAutomations(params: UseAutomationsParams) {
     }, []);
     const runsByAutomationRef = useRef<Record<string, AutomationRun[]>>({});
 
+    /**
+     * One failure breaker for BOTH run arms (E-57 §6, the owner's ruling (d)).
+     *
+     * A schedule fires while nobody is looking, so a run that produced nothing
+     * has to count somewhere. Three in a row disables the schedule, and the
+     * disable is LOUD: a toast where it happens and the schedule's own banner
+     * after a reload. Autonomy that fails repeatedly and keeps trying quietly is
+     * the failure mode this app refuses; the counter is a streak, not a total,
+     * because three failures spread over a month are a schedule that works.
+     *
+     * Only a clean complete resets it, and only a human re-enable clears the
+     * reason (`toggleAutomationEnabled`), so the breaker cannot forget its own
+     * verdict and start answering again on its own.
+     *
+     * Returns the configs to persist. Both arms were rebuilding this list by
+     * hand for `lastRunAt`/`runCount`, which is how one rule gets two writers.
+     */
+    const settleRunStreak = useCallback((
+        config: AutomationConfig,
+        status: AutomationRun['status'],
+        errorText?: string,
+    ): AutomationConfig[] => {
+        const failed = status === 'error' || status === 'skipped';
+        const live = configsRef.current.find(c => c.id === config.id) ?? config;
+        const consecutiveFailures = failed ? (live.consecutiveFailures ?? 0) + 1 : 0;
+        const tripped = failed && consecutiveFailures >= MAX_CONSECUTIVE_AUTOMATION_FAILURES;
+        if (tripped) {
+            toast.warning('Automation disabled after repeated failures',
+                `"${config.name}" — ${consecutiveFailures} runs in a row produced nothing. It is off until you turn it back on.`);
+        }
+        return configsRef.current.map(c => c.id === config.id
+            ? {
+                ...c,
+                lastRunAt: Date.now(),
+                runCount: c.runCount + 1,
+                updatedAt: Date.now(),
+                consecutiveFailures,
+                ...(tripped ? {
+                    enabled: false,
+                    disabledReason: `Turned itself off after ${consecutiveFailures} runs in a row that produced nothing`
+                        + ` (last: ${errorText ?? 'no verdict'}). Switch Scheduled back on to let it try again`
+                        + ' — that clears the counter.',
+                } : {}),
+            }
+            : c);
+    }, [toast]);
+
     // ─── bot-scoped routine execution ─────────────────────────────────
     // Runs the automation AS a roster bot: persona system prompt + the
     // bot's own provider/model, reply appended as an AI row attributed to
     // the bot's identity pair (threadForProvider files it in the bot's
-    // 1:1 thread). Mirrors runAutomation's bookkeeping (one-run guard,
-    // lastRunAt/runCount bump, catch-up chaining) minus the ensemble
+    // 1:1 thread). Mirrors runAutomation's bookkeeping (one-run guard, the
+    // shared `settleRunStreak` breaker, catch-up chaining) minus the ensemble
     // machinery. DM markers in the reply are stripped by the pure half and
     // delivered through the mailbox bridge.
     const runBotScopedAutomation = useCallback(async (
@@ -277,11 +328,8 @@ export function useAutomations(params: UseAutomationsParams) {
         const prompt = (config.promptTemplate ?? '').trim();
         const runId = runUid();
         const startedAt = new Date().toISOString();
-        const finishMeta = (): void => {
-            const nextConfigs = configsRef.current.map(c => c.id === config.id
-                ? { ...c, lastRunAt: Date.now(), runCount: c.runCount + 1, updatedAt: Date.now() }
-                : c);
-            void persistConfigs(nextConfigs);
+        const finishMeta = (status: AutomationRun['status'], errorText?: string): void => {
+            void persistConfigs(settleRunStreak(config, status, errorText));
         };
 
         if (skipReason || !prompt) {
@@ -295,7 +343,7 @@ export function useAutomations(params: UseAutomationsParams) {
             } else {
                 toast.warning('Routine skipped', `"${config.name}" has no prompt template.`);
             }
-            finishMeta();
+            finishMeta('skipped', skipReason ?? 'no prompt template to run');
             return;
         }
 
@@ -359,7 +407,7 @@ export function useAutomations(params: UseAutomationsParams) {
                 toast.success(isCatchUp ? 'Routine caught up' : 'Routine complete',
                     `"${config.name}" — ${outcome.bot.name} replied.`);
             }
-            finishMeta();
+            finishMeta(outcome.status === 'skipped' ? 'skipped' : 'complete', outcome.status === 'skipped' ? outcome.skipReason : undefined);
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             appendRun(config.id, {
@@ -367,12 +415,12 @@ export function useAutomations(params: UseAutomationsParams) {
                 startedAt, finishedAt: new Date().toISOString(), error: msg,
             });
             toast.error('Routine failed', `"${config.name}" — ${msg}`);
-            finishMeta();
+            finishMeta('error', msg);
         } finally {
             inFlightRef.current = null;
             setRunningAutomationId(null);
         }
-    }, [providerConfigs, toast, appendRun, persistConfigs]);
+    }, [providerConfigs, toast, appendRun, persistConfigs, settleRunStreak]);
 
     // Set once by App after both hooks exist (see assignAutomationsBridge).
     const appendMessageRef = useRef<((msg: Message) => void) | null>(null);
@@ -475,11 +523,15 @@ export function useAutomations(params: UseAutomationsParams) {
                 userMessage: run.userMessage,
                 message: run.message,
                 error: run.error,
+                // The caveats become PART of the record (E-57 §6). Until now they
+                // were a toast and a line of prose: the toast is gone in seconds
+                // and the prose only exists on a run that answered, so an
+                // `error`/`skipped` row kept nothing at all.
+                ...(run.notices && run.notices.length > 0 ? { notices: run.notices } : {}),
+                ...(run.plans ? { plans: run.plans } : {}),
             });
-            const nextConfigs = configsRef.current.map(c => c.id === config.id
-                ? { ...c, lastRunAt: Date.now(), runCount: c.runCount + 1, updatedAt: Date.now() }
-                : c);
-            void persistConfigs(nextConfigs);
+            // The breaker, through the ONE helper both run arms settle with.
+            void persistConfigs(settleRunStreak(config, run.status, run.error));
             inFlightRef.current = null;
             setRunningAutomationId(null);
             resolveDone();
@@ -498,8 +550,8 @@ export function useAutomations(params: UseAutomationsParams) {
                 automationId: config.id,
                 conversation,
                 overrides: buildAutomationOverrides(config, providerConfigs),
-                onMessage: ({ userMessage, aiMessage, notices }) => {
-                    finish({ status: 'complete', userMessage, message: aiMessage });
+                onMessage: ({ userMessage, aiMessage, notices, plans }) => {
+                    finish({ status: 'complete', userMessage, message: aiMessage, notices, plans });
                     // A tool-turn run carries a `proposal`; a debate run carried
                     // an `analysis`. Read BOTH because the store holds history
                     // written by the old route, and a card that shows "No signal"
@@ -553,7 +605,7 @@ export function useAutomations(params: UseAutomationsParams) {
         // Wait for the run to complete (finish callback) so callers that
         // await this (catch-up chaining) serialize correctly.
         await done;
-    }, [params.isAnalysisInProgress, providerConfigs, toast, appendRun, persistConfigs, runPipeline]);
+    }, [params.isAnalysisInProgress, providerConfigs, toast, appendRun, persistConfigs, runPipeline, settleRunStreak]);
 
     // The scheduler interval is created once per profile, not once per render,
     // so it reaches this render's closure through a ref instead of capturing
@@ -700,7 +752,17 @@ export function useAutomations(params: UseAutomationsParams) {
     const toggleAutomationEnabled = useCallback(async (id: string) => {
         const config = configsRef.current.find(c => c.id === id);
         if (!config) return;
-        await persistConfigs(configsRef.current.map(c => c.id === id ? { ...c, enabled: !c.enabled, updatedAt: Date.now() } : c));
+        const nextEnabled = !config.enabled;
+        await persistConfigs(configsRef.current.map(c => c.id === id ? {
+            ...c, enabled: nextEnabled, updatedAt: Date.now(),
+            // Turning a schedule back ON is a human act, and ruling (d) makes it
+            // the ONLY thing that clears the breaker's counter — a schedule that
+            // resets itself would be autonomy getting another try quietly. The
+            // reason is cleared with it, because the streak is over; switching a
+            // schedule OFF keeps both, so a manual pause never looks like the
+            // breaker fired and vice versa.
+            ...(nextEnabled ? { consecutiveFailures: 0, disabledReason: undefined } : {}),
+        } : c));
         // Enabling must not immediately fire a stale match — restart the
         // schedule clock at now.
         lastCheckedRef.current.set(id, Date.now());
