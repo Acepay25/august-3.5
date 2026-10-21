@@ -7,7 +7,10 @@ import {
 import { runSimulation, computeKellyFraction, deriveSetupSeed } from '../services/analysis/MonteCarloService';
 import { calculateMetrics, findHistoricalMatches, generateSuggestions, runScenarioMonteCarlo, isZeroDistanceTarget } from '../services/backtesting/ScenarioSimulatorService';
 import { backtestSimilarSetups } from '../services/backtesting/LiveBacktestService';
+import { trackSLOutcome } from '../services/backtesting/StopLossOptimizerService';
+import { generateAlgorithmicTradeSummary } from '../services/ui/AlgorithmicSummaryService';
 import { computeContractSize } from '../utils/ticketSize';
+import { targetsByDistance } from '../utils/riskReward';
 import { LoggedTrade, TradeAnalysis, TradeOutcome } from '../types';
 
 const baseAnalysis = (overrides: Partial<TradeAnalysis> = {}): TradeAnalysis => ({
@@ -261,6 +264,46 @@ describe('ScenarioSimulatorService — riskUSD semantics + match gating (item 10
     // ran without the zero-distance target.
     const suggestions = generateSuggestions(degenerate, calculateMetrics(degenerate), []);
     expect(suggestions.some(s => /zero reward distance/i.test(s))).toBe(true);
+  });
+});
+
+describe('AlgorithmicSummaryService — the TP it prints is the one the card quoted', () => {
+  it('uses the NEAREST target, not takeProfit[0]', () => {
+    const trade = {
+      id: 'sum-1', outcome: TradeOutcome.WIN, timestamp: new Date().toISOString(),
+      analysis: baseAnalysis({
+        entryPoints: [{ description: 'Entry', price: '100' }],
+        stopLoss: '90',
+        takeProfit: [{ price: '130', percentage: '50' }, { price: '110', percentage: '50' }],
+      }),
+    } as LoggedTrade;
+    const summary = generateAlgorithmicTradeSummary(trade);
+    expect(summary).toContain('TP: 110');
+    expect(summary).not.toContain('TP: 130');
+  });
+});
+
+describe('targetsByDistance — TP1 is the NEAREST, not the first listed', () => {
+  it('orders an out-of-order ladder by distance from entry', () => {
+    expect(targetsByDistance(100, [130, 110, 120])).toEqual([110, 120, 130]);
+    expect(targetsByDistance(100, [110, 110, 130, null, 100])).toEqual([110, 130]);
+  });
+});
+
+describe('StopLossOptimizerService — the target a skip is scored against', () => {
+  it('uses the NEAREST target, not takeProfit[0]', () => {
+    const trade = {
+      id: 'sl-1', outcome: TradeOutcome.LOSS, timestamp: new Date().toISOString(),
+      analysis: baseAnalysis({
+        entryPoints: [{ description: 'Entry', price: '100' }],
+        stopLoss: '90',
+        // Array order is far-first; the card quoted 110.
+        takeProfit: [{ price: '130', percentage: '50' }, { price: '110', percentage: '50' }],
+      }),
+    } as LoggedTrade;
+    const out = trackSLOutcome(trade, { minPrice: 89, maxPrice: 112 });
+    expect(out?.slWasTouched).toBe(true);
+    expect(out?.missedWinDueToTightSL).toBe(true);
   });
 });
 

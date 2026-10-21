@@ -49,7 +49,13 @@ const isForeground = async (): Promise<boolean> => {
         // Unknown state must not suppress a backgrounded alert.
         return false;
     }
-    return typeof document !== 'undefined' && !document.hidden;
+    // `document.hidden` is VISIBILITY, not focus: an Electron window behind
+    // another app is visible and has no focus, and the trader is not looking
+    // at it. A notification is for exactly that state, so the check has to ask
+    // whether the document has focus too.
+    return typeof document !== 'undefined'
+        && !document.hidden
+        && (typeof document.hasFocus !== 'function' || document.hasFocus());
 };
 
 /** Ask for notification permission once; safe to call repeatedly. Returns

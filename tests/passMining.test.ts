@@ -211,6 +211,26 @@ describe('runPassMiningSweep', () => {
         expect(listSkillDrafts('pm')).toHaveLength(0);
     });
 
+    it('resolves a skip against the NEAREST target, not takeProfit[0]', async () => {
+        const base = skipTrade('ordered');
+        const trade = {
+            ...base,
+            analysis: {
+                ...base.analysis!,
+                // Array order puts the far target first. The card quoted 110;
+                // price reaches 112, so the skip was a missed opportunity.
+                takeProfit: [{ price: '130' }, { price: '110' }],
+            },
+        } as LoggedTrade;
+        const res = await runPassMiningSweep(
+            [trade],
+            'pm',
+            async () => [klAt(0, 99, 101), klAt(1, 100, 112)],
+        );
+        expect(res.missed).toBe(1);
+        expect(res.correctPasses).toBe(0);
+    });
+
     it('caps kline fetches per sweep and skips trades with no plan/reason', async () => {
         const trades = Array.from({ length: PASS_MINING_MAX_FETCHES_PER_SWEEP + 3 }, (_, i) => skipTrade(`t${i}`));
         const fetchKlines = vi.fn(async () => [klAt(0, 99, 101), klAt(1, 89, 99)]);

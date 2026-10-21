@@ -214,6 +214,12 @@ describe('a failure cannot look like a clean answer', () => {
         expect(out.notices.join('\n')).toMatch(/NOTHING WAS LOOKED UP/);
     });
 
+    it('does not count a memory read as having looked at the tape', async () => {
+        script([{ call: 'read_memory', line: 'read memory · ok' }, { text: 'Long BTC.' }]);
+        const out = await runAutomationTurn(req());
+        expect(out.notices.join('\n')).toMatch(/NOTHING WAS LOOKED UP.*no market tool/);
+    });
+
     it('keeps the tool feed capped at the same window the chat homes use', async () => {
         const steps = Array.from({ length: 11 }, (_, i) => ({ line: `calling… #${i}` }));
         script([...steps, { text: 'x' }]);

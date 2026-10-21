@@ -87,6 +87,7 @@ const BY_LABEL: Record<string, ToolKindInfo> = {
     'order book': { kind: 'read', activity: 'Reading the order book' },
     'price snapshot': { kind: 'read', activity: 'Reading the price' },
     'read memory': { kind: 'read', activity: 'Reading a memory' },
+    'read inbox': { kind: 'read', activity: 'Reading the inbox' },
     'session': { kind: 'read', activity: 'Reading the session' },
     'setup history': { kind: 'read', activity: 'Reading setup history' },
     'stored result': { kind: 'read', activity: 'Reading a stored result' },
@@ -113,6 +114,7 @@ const BY_LABEL: Record<string, ToolKindInfo> = {
     // ── writes: the desk is changing the notebook ────────────────────────
     'amend memory': { kind: 'write', activity: 'Amending memory' },
     'cancel watch': { kind: 'write', activity: 'Cancelling the price watch' },
+    'direct message': { kind: 'write', activity: 'Messaging an agent' },
     'forge tool': { kind: 'write', activity: 'Forging a tool' },
     'forget': { kind: 'write', activity: 'Forgetting a memory' },
     'memory note': { kind: 'write', activity: 'Writing a memory note' },

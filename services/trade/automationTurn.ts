@@ -31,7 +31,8 @@ import type { DeskToolCall, DeskToolResult } from '../analysis/DeskToolsService'
 import { AUTOMATION_SYSTEM_PROMPT } from '../../constants/prompts/chatPrompts';
 import { TASK_BUDGETS } from '../providers/taskBudgets';
 import { resolveComposerEffort } from '../providers/reasoningControls';
-import { isPresentationOnlyTool, runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
+import { runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
+import { isMarketReadTool } from '../analysis/DeskToolsService';
 import { runPresentTrade } from './presentTradeTool';
 import { CHAT_SURFACE_TOOLS, MAX_LIVE_TOOL_LINES, chatSurfaceTurnMessages, surfacePromptWith, type ChatSurfacePrompt } from './chatSurfaceTurn';
 import type { TradeProposal } from './proposedTrade';
@@ -175,9 +176,11 @@ export const runAutomationTurn = async (req: AutomationTurnRequest): Promise<Aut
         setText: () => { },
         addReasoning: () => { },
         addToolCall: name => {
-            // `present_trade` presents a plan; it does not read the tape, so it
-            // must not silence the "nothing was looked up" notice by itself.
-            if (!isPresentationOnlyTool(name)) sawTool = true;
+            // Only a market read may silence the "nothing was looked up"
+            // notice. `present_trade`, memory reads and skill edits are not
+            // looking at the tape, and a presented plan from memory is exactly
+            // the turn this notice exists to catch.
+            if (isMarketReadTool(name)) sawTool = true;
         },
         addToolLine: line => {
             toolLines.push(line);
@@ -276,7 +279,7 @@ export const runAutomationTurn = async (req: AutomationTurnRequest): Promise<Aut
     const notices: string[] = [];
     if (out.notice) notices.push(out.notice);
     if (!sawTool && !out.interrupted) {
-        notices.push('NOTHING WAS LOOKED UP: this scheduled run called no tool, so every number in it is the model’s own memory. '
+        notices.push('NOTHING WAS LOOKED UP: this scheduled run called no market tool, so every number in it is the model’s own memory. '
             + 'The desk tools were offered — check the model or the harness setting if this keeps happening.');
     }
     if (failedTools.length > 0) {

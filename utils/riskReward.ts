@@ -61,6 +61,26 @@ export const nearestTargetPrice = (
     return best;
 };
 
+/**
+ * The targets in the order a trader would take them: nearest first. Missing,
+ * zero-distance and duplicate levels are dropped. Used by consumers that label
+ * targets TP1/TP2/TP3 — array order is not that order.
+ */
+export const targetsByDistance = (
+    entry: unknown,
+    takeProfits: Array<number | null | undefined>,
+): number[] => {
+    const e = finiteOrNull(entry);
+    if (e === null) return [];
+    const seen = new Set<number>();
+    return takeProfits
+        .map(finiteOrNull)
+        .filter((tp): tp is number => tp !== null)
+        .filter(tp => Math.abs(tp - e) > 0)
+        .filter(tp => { if (seen.has(tp)) return false; seen.add(tp); return true; })
+        .sort((a, b) => Math.abs(a - e) - Math.abs(b - e));
+};
+
 export interface RiskRewardInput {
     entry: unknown;
     stopLoss: unknown;

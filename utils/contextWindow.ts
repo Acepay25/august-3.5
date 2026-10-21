@@ -175,6 +175,26 @@ export const promptTokenCeiling = (
     return Math.max(1_024, w - r - WIRE_FRAMING_SAFETY_TOKENS);
 };
 
+/**
+ * How much output the wire can still afford after this prompt and the framing
+ * reserve. A request whose prompt fits but whose `max_tokens` exceeds this is
+ * still over the model's window: the output budget is part of the request, so
+ * the compactor must size it against the same window.
+ *
+ * A result of `0` means the harness cannot fit even a one-token reply; the
+ * caller must not send the request as if it fit.
+ */
+export const outputTokenBudget = (
+    windowTokens: number,
+    promptTokens: number,
+    framingTokens = WIRE_FRAMING_SAFETY_TOKENS,
+): number => {
+    const w = positiveInt(windowTokens) ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
+    const p = Math.max(0, Math.floor(Number.isFinite(promptTokens) ? promptTokens : 0));
+    const f = positiveInt(framingTokens) ?? WIRE_FRAMING_SAFETY_TOKENS;
+    return Math.max(0, w - p - f);
+};
+
 // ─── Reading a provider's own limit out of a rejection ──────────────────────
 
 /**

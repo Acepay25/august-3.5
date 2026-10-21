@@ -249,12 +249,24 @@ export const compactMessages = (input: CompactInput): CompactResult => {
         }
     }
 
-    // Pass 3: drop whole groups, oldest first, never into the protected tail.
+    // Pass 3: drop whole groups, oldest first, never into the protected tail
+    // and never the last USER turn. The tail is a count of recent messages; in
+    // a tool loop the question lives at the START of the array while every
+    // round appends after it, so the question leaves the tail after three
+    // rounds. Dropping it here would send tool results with no question — the
+    // seat would answer something the trader never asked. Recompute the index
+    // each pass because each splice shifts it.
     while (total() > input.ceilingTokens) {
         const groups = turnGroups(out);
+        let lastUserIndex = -1;
+        for (let i = out.length - 1; i >= 0; i--) {
+            if (out[i].role === 'user') { lastUserIndex = i; break; }
+        }
         const droppable = groups.find(g => {
             const first = out[g[0]];
-            return first?.role !== 'system' && !inTail(g[0], out.length, keepAtLeast);
+            return first?.role !== 'system'
+                && !g.includes(lastUserIndex)
+                && !inTail(g[0], out.length, keepAtLeast);
         });
         if (!droppable) break;
         // ONE action per group: a group is the unit the trader lost, and

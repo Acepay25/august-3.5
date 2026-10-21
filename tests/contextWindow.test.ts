@@ -21,6 +21,7 @@ import {
     contextLengthLimitFromError,
     isContextLengthError,
     measuredContextWindow,
+    outputTokenBudget,
     promptTokenCeiling,
     recordMeasuredContextWindow,
     resetMeasuredContextWindows,
@@ -145,6 +146,21 @@ describe('promptTokenCeiling', () => {
         expect(promptTokenCeiling(100_000, 0)).toBe(100_000 - 4_096 - WIRE_FRAMING_SAFETY_TOKENS);
         expect(promptTokenCeiling(100_000, NaN)).toBe(100_000 - DEFAULT_OUTPUT_RESERVE_TOKENS - WIRE_FRAMING_SAFETY_TOKENS);
         expect(promptTokenCeiling(NaN, 8_192)).toBe(1_000_000 - 8_192 - WIRE_FRAMING_SAFETY_TOKENS);
+    });
+});
+
+describe('outputTokenBudget', () => {
+    it('is what the window has left after the prompt and the framing reserve', () => {
+        expect(outputTokenBudget(12_000, 7_000)).toBe(12_000 - 7_000 - WIRE_FRAMING_SAFETY_TOKENS);
+    });
+
+    it('is zero, not negative, when the prompt already fills the window', () => {
+        expect(outputTokenBudget(2_000, 6_000)).toBe(0);
+    });
+
+    it('falls back to the assumed window for an unusable input', () => {
+        expect(outputTokenBudget(NaN, 1_000)).toBe(1_000_000 - 1_000 - WIRE_FRAMING_SAFETY_TOKENS);
+        expect(outputTokenBudget(12_000, NaN)).toBe(12_000 - WIRE_FRAMING_SAFETY_TOKENS);
     });
 });
 
