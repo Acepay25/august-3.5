@@ -12,30 +12,49 @@
 // The Studio is `flex h-full` with its own scroll, so it gets a measured box
 // rather than the surrounding column's auto height — otherwise it collapses to
 // its own header.
+//
+// THE SHAPE, from the reference's Customize → Skills page: a page title, then
+// the primary list, then the SECONDARY groups as category rows — the group's
+// name in muted text with a raised pill beside it, saying what the group
+// actually holds. The reference's own second row ("Agentic-Trading" with a
+// "System" pill) is that shape, and the two groups below the Studio are
+// August's version of it: a name, and a pill that names the fact a reader
+// would otherwise have to dig the subtitle out for.
 import React from 'react';
 import ToolForgeManager from '../settings/ToolForgeManager';
 import StrategyPlans from '../settings/StrategyPlans';
+import StatusPill from '../ui/StatusPill';
 
 const SkillsLibrary: React.FC<{ studio?: React.ReactNode }> = ({ studio }) => {
     return (
         <div className="h-full min-h-0 animate-fade-in flex flex-col px-4 pb-4 gap-6">
-            <div className="flex min-h-[60vh] flex-1 flex-col overflow-hidden rounded-bubble border border-zinc-800 bg-zinc-900">
+            <div className="flex min-h-[60vh] flex-1 flex-col overflow-hidden rounded-bubble border border-zinc-800/80 bg-zinc-900">
                 {studio}
             </div>
-            <div className="border-t border-zinc-800 pt-4">
-                <h3 className="text-ui-caption font-bold text-zinc-100">Trade plans</h3>
-                <p className="mt-0.5 text-ui-dense text-zinc-500 mb-3">
+            <div className="border-t border-zinc-800/80 pt-4">
+                <div className="flex items-center gap-2">
+                    <h3 className="text-ui-sm text-zinc-500">Trade plans</h3>
+                    <StatusPill tone="neutral">Active only</StatusPill>
+                </div>
+                <p className="mt-1 text-ui-dense text-zinc-500">
                     Named strategies the model proposed. Only an ACTIVE plan is shown to the desk —
                     a draft is an unapproved proposal and no seat follows it.
                 </p>
-                <StrategyPlans />
+                <div className="mt-3">
+                    <StrategyPlans />
+                </div>
             </div>
-            <div className="border-t border-zinc-800 pt-4">
-                <h3 className="text-ui-caption font-bold text-zinc-100">Forged tools</h3>
-                <p className="mt-0.5 text-ui-dense text-zinc-500 mb-3">
-                    Model-authored desk tools awaiting your approval.
+            <div className="border-t border-zinc-800/80 pt-4">
+                <div className="flex items-center gap-2">
+                    <h3 className="text-ui-sm text-zinc-500">Forged tools</h3>
+                    <StatusPill tone="neutral">Awaiting approval</StatusPill>
+                </div>
+                <p className="mt-1 text-ui-dense text-zinc-500">
+                    Desk tools the model wrote, queued for your decision.
                 </p>
-                <ToolForgeManager />
+                <div className="mt-3">
+                    <ToolForgeManager />
+                </div>
             </div>
         </div>
     );

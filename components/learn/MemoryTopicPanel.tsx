@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Trash2, X } from '../shared/Icons';
-import MarkdownContent from '../shared/MarkdownContent';
+import { ChevronLeftIcon, X } from '../shared/Icons';
+import AnswerBody from '../shared/AnswerBody';
 import { useToastActions } from '../shared/Toast';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { deleteMemoryFile, getMemoryFiles, subscribeMemoryFilesChanged } from '../../services/learning/MemoryFilesService';
-import { topicParts, topicUpdatedLine } from '../../services/learning/memoryTopics';
+import { relativeElapsed, topicParts } from '../../services/learning/memoryTopics';
 import { proposeTopicEdit } from '../../services/learning/memoryTopicEdits';
+import { phtDayYear } from '../../utils/timezone';
 import type { MemoryFile } from '../../types';
 import type { ProviderConfig } from '../../types/provider';
 
@@ -26,6 +27,18 @@ import type { ProviderConfig } from '../../types/provider';
  *     a human approves it in Learn → Queue. Nothing here writes the notebook
  *     on its own — that is the governance the reference matches and this app
  *     already has.
+ *
+ * The SHAPE is the reference's: a "← Memory" back link at the top, the title
+ * in the interface sans with the Delete action on a raised chip beside it,
+ * and then labelled fields — "Last updated", "Summary", "Details" — each
+ * label small and muted, each value in the reading face.
+ *
+ * THE READING FACE, decided: the Summary and the Details are the model's own
+ * prose about the trader's market, read rather than operated, so they wear
+ * the SERIF the app gives the model's answer (`AnswerBody` — the one home for
+ * that voice). Everything around them is chrome: the back link, the title,
+ * the field labels, the date, the buttons and the composer all stay in the
+ * interface sans.
  */
 
 interface MemoryTopicPanelProps {
@@ -66,9 +79,12 @@ const MemoryTopicPanel: React.FC<MemoryTopicPanelProps> = ({ fileId, username, m
         );
     }
 
+    const entryName = file.name.replace(/\.md$/i, '');
+    const updated = file.updatedAt ? phtDayYear(file.updatedAt) : 'Unknown';
+
     const onDelete = async (): Promise<void> => {
         const ok = await confirm({
-            title: `Delete "${file.name}"?`,
+            title: `Delete "${entryName}"?`,
             message: 'This entry will be permanently removed from the notebook. Delete it from here rather than hunting for the file.',
             confirmLabel: 'Delete',
             destructive: true,
@@ -99,17 +115,16 @@ const MemoryTopicPanel: React.FC<MemoryTopicPanelProps> = ({ fileId, username, m
 
     return (
         <div className="flex min-h-0 flex-1 flex-col" data-testid="memory-topic-panel">
-            <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800/80 px-3 py-2">
-                <h3 className="min-w-0 flex-1 truncate text-ui-base font-semibold text-zinc-100" title={file.name}>
-                    {file.name.replace(/\.md$/i, '')}
-                </h3>
+            {/* The back link returns to the list this entry came from — the
+                reference's "← Memory". */}
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-800/80 px-3 py-2">
                 <button type="button"
-                    onClick={onDelete}
-                    aria-label={`Delete ${file.name}`}
-                    title="Delete this entry"
-                    className="flex h-8 items-center gap-1.5 rounded-control px-2 text-ui-dense text-zinc-500 transition-colors hover:bg-rose-500/10 hover:text-rose-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    Delete
+                    onClick={onClose}
+                    aria-label="Back to memory topics"
+                    title="Back to memory topics"
+                    className="flex items-center gap-1.5 rounded-control px-1.5 py-1 text-ui-base text-zinc-400 transition-colors hover:text-zinc-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
+                    <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />
+                    Memory
                 </button>
                 <button type="button"
                     onClick={onClose}
@@ -120,30 +135,61 @@ const MemoryTopicPanel: React.FC<MemoryTopicPanelProps> = ({ fileId, username, m
                 </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar px-3 py-3">
-                <p className="text-ui-2xs text-zinc-600" data-testid="memory-topic-updated">
-                    {topicUpdatedLine(file)}
-                </p>
+            <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar px-4 py-4">
+                <div className="flex items-start justify-between gap-3">
+                    <h2 className="min-w-0 flex-1 text-ui-xl font-semibold tracking-tight text-zinc-100" title={file.name}>
+                        {entryName}
+                    </h2>
+                    {/* The reference's Delete is a RAISED chip on the right of
+                        the title. It stays a destructive action here, so the
+                        word carries the app's own rose rather than pretending
+                        to be ordinary chrome. */}
+                    <button type="button"
+                        onClick={() => { void onDelete(); }}
+                        aria-label={`Delete ${entryName}`}
+                        title="Delete this entry"
+                        className="shrink-0 rounded-control bg-zinc-800 px-3 py-1.5 text-ui-dense font-medium text-rose-300 transition-colors hover:bg-zinc-700 hover:text-rose-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
+                        Delete
+                    </button>
+                </div>
 
-                <h4 className="mt-3 text-ui-2xs font-semibold uppercase tracking-wider text-zinc-500">Summary</h4>
-                <p className="mt-1 text-ui-base leading-relaxed text-zinc-100" data-testid="memory-topic-summary">
-                    {parts.summary}
-                </p>
+                <div className="mt-5 space-y-4">
+                    <div>
+                        <p className="text-ui-dense text-zinc-500">Last updated</p>
+                        <p
+                            className="mt-0.5 text-ui-base text-zinc-100"
+                            data-testid="memory-topic-updated"
+                            title={file.updatedAt ? `Updated ${relativeElapsed(file.updatedAt)}` : 'Last updated unknown'}
+                        >
+                            {updated}
+                        </p>
+                    </div>
 
-                {parts.details && (
-                    <>
-                        <h4 className="mt-4 text-ui-2xs font-semibold uppercase tracking-wider text-zinc-500">Details</h4>
-                        <div className="mt-1 text-ui-base leading-relaxed text-zinc-200">
-                            <MarkdownContent content={parts.details} />
+                    <div>
+                        <p className="text-ui-dense text-zinc-500">Summary</p>
+                        <div className="mt-0.5" data-testid="memory-topic-summary">
+                            <AnswerBody text={parts.summary} />
                         </div>
-                    </>
-                )}
+                    </div>
+
+                    {parts.details && (
+                        <div>
+                            <p className="text-ui-dense text-zinc-500">Details</p>
+                            <div
+                                className="mt-0.5 [&_ul]:space-y-2 [&_ol]:space-y-2"
+                                data-testid="memory-topic-details"
+                            >
+                                <AnswerBody text={parts.details} />
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* The NL edit box. It ASKS; it does not write — the rewrite lands in
                 the amendment queue, where a human approves it. */}
             <div className="shrink-0 border-t border-zinc-800/80 p-3">
-                <label htmlFor="memory-topic-instruction" className="block text-ui-2xs font-semibold uppercase tracking-wider text-zinc-500">
+                <label htmlFor="memory-topic-instruction" className="block text-ui-dense text-zinc-500">
                     Ask for a change
                 </label>
                 <div className="mt-1.5 flex items-end gap-2">

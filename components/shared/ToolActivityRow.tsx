@@ -3,6 +3,7 @@ import { stripTraceMarkers } from '../../utils/traceText';
 import { pairToolRows, type ToolRowState } from '../../utils/turnStatus';
 import { toolKindLabel, toolKindOf } from '../../utils/toolKinds';
 import { KIND_GLYPH } from './toolKindIcons';
+import { ChevronRight } from './Icons';
 import Disclosure from './Disclosure';
 import { readToolPayload } from '../../services/trade/toolPayloadStore';
 import { readToolArtifact } from '../../services/analysis/toolArtifactStore';
@@ -138,6 +139,8 @@ const ToolRowGroupView: React.FC<{ group: ToolRowGroup; running: boolean }> = ({
             ) : anyFailed ? (
                 <span className="min-w-0 truncate text-rose-300/80" title="failed">· failed</span>
             ) : null}
+            {/* The chevron the reference puts on every step that opens. */}
+            {expandable && <ChevronRight className="h-3 w-3 shrink-0 text-zinc-600" aria-hidden="true" />}
         </div>
     );
 

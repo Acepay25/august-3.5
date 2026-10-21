@@ -168,6 +168,11 @@
      12px bubbles / 8px controls / .12s snaps. */
   --font-sans: 'Geist Variable', 'Inter', system-ui, sans-serif;
   --font-serif: 'DM Serif Text', Georgia, serif;
+  /* The READING serif (E-55). The model's answer is prose, and a display face
+     has one weight: its bold was a synthetic one, and a long analysis set in a
+     smeared face is not readable. `font-reading` is that face; the display
+     serif above stays the hero/brand face it was always meant to be. */
+  --font-reading: 'Newsreader Variable', 'Newsreader', Georgia, serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 
   /* ── The UI type scale ───────────────────────────────────────────────────
@@ -696,6 +701,17 @@ body {
 .reasoning-row-summary:hover { color: var(--color-zinc-300); }
 /* Row glyph: brain on settled Thought rows, sparkles on the running tip. */
 .reasoning-row-glyph { width: 12px; height: 12px; flex-shrink: 0; color: var(--color-zinc-600); }
+/* The chevron on an expandable line — the reference draws one on every step
+   that opens, and the work line is the step that opens. */
+.reasoning-row-chevron {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  margin-left: 1px;
+  color: var(--color-zinc-600);
+  transition: transform 0.12s var(--ease-snappy);
+}
+.reasoning-row.is-open .reasoning-row-chevron { transform: rotate(90deg); }
 /* The running tip wraps naturally — glyph rides the first text line. */
 .reasoning-row-summary.is-tip { align-items: flex-start; }
 .reasoning-row-summary.is-tip .reasoning-row-glyph { margin-top: 3px; }
@@ -785,6 +801,57 @@ body {
 /* The Analyzed wrapper nests the whole work timeline — give it more room
    than a single thought trace. */
 .analyzed-row .reasoning-row-body { max-height: 22rem; }
+
+/* ── THE WORK CARD ──────────────────────────────────────────────────────────
+   The reference draws the work as a BARE LINE with the card BELOW it: the
+   line says what happened ("Ran 4 commands, read a file") and the card is the
+   open body that holds the steps. August had the card AROUND the line, so a
+   collapsed turn showed a little box with a sentence in it — and the steps
+   inside it were boxes inside a box.
+
+   So: the border and the fill live on the analyzed row's BODY, the
+   `<details>` itself carries none, and the steps inside are hairline-
+   separated ROWS rather than nested boxes. */
+.analyzed-row,
+.analyzed-row[data-state="running"],
+.analyzed-row.is-open {
+  border-color: transparent;
+  background: transparent;
+  /* The running breath belonged to the old box; the dots on the line say
+     "working" on their own now. */
+  animation: none;
+}
+.analyzed-row .reasoning-row-body {
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-bubble);
+  background: rgba(255, 255, 255, 0.02);
+}
+/* The card's own line: a bare row of text, with room for the card beneath. */
+.analyzed-row > summary {
+  padding: 4px 2px 7px;
+}
+/* A step inside the card is a ROW: a hairline between the steps, its own
+   padding, and none of the box treatment a step carries on its own. */
+.analyzed-row .reasoning-row,
+.analyzed-row .tool-row {
+  border: 0;
+  background: transparent;
+}
+.analyzed-row .reasoning-row + .reasoning-row,
+.analyzed-row .tool-row + .tool-row,
+.analyzed-row .reasoning-row + .tool-row,
+.analyzed-row .tool-row + .reasoning-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+/* The thinking row's own summary sits flush inside the card, and the trace
+   body under it keeps its scroll. */
+.analyzed-row .reasoning-row > summary {
+  padding: 7px 12px;
+}
+.analyzed-row .reasoning-row .reasoning-row-body {
+  padding: 4px 12px 10px;
+}
 
 /* ── A tool row that expands onto its real output ──────────────────────────
    The hairline line is the summary; opening it shows the bytes the tool

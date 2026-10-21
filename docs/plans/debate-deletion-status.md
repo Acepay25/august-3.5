@@ -1211,7 +1211,7 @@ Two operational notes, because both cost a run:
   mechanics: `scripts/boot-probe.cjs:119` blocks on
   `waitForFunction(() => !document.querySelector('#splash'))`, while the e2e
   specs assert ABSENCE with a count-0 expectation (`e2e/smoke.spec.ts:55` in the
-  shared seed path, `:141` in the first-run spec). `index.tsx:86-92` is
+  shared seed path, `:141` in the first-run spec). `index.tsx:91-97` is
   `dismissSplash` plus its double `requestAnimationFrame`. Both flow docs now
   say which gate does which, and cite the lines.
 - **"One service replacing nine" (called unfalsifiable).** That phrasing no
@@ -2040,7 +2040,7 @@ deleted file.** `collect()` resolves each qualified path and `continue`s when no
 i.e. never. Implemented the detection and ran it (parked as a clean-applying patch,
 `.probe-artifacts/deleted-file-citations.patch`, 72 lines): **3 hits in this ledger and 12 in the
 flow html — and all 12 html hits are a scanner defect, not a doc defect.** `strip()` deletes html
-tags without leaving a separator, so a `<b>App</b>` running into `<i>index.tsx:73-79` becomes the
+tags without leaving a separator, so a `<b>App</b>` running into `<i>index.tsx:78-84` becomes the
 token three such glued tokens were produced across the flow html — none of them names a real file, and each one silenced a citation that should have been checked The consequence is worse than the false positives: those 12 citations fail
 `resolve()` today, so they have never been checked for resolution, non-blank or comment-line at all.
 Work order: make `strip()` emit a space per tag and confirm the anchor population does not move;
@@ -2271,7 +2271,7 @@ open tag and two unrelated lines. Those five are now cited with the symbol besid
 instead of implying the table is checked.
 
 **Then 5 became 14.** Nine more rows were rewritten into the bindable shape, each only after its symbol was
-found on the line it cites: the `index.tsx` mount chain (StrictMode :73, ErrorBoundary :74, ToastProvider :75 —
+found on the line it cites: the `index.tsx` mount chain (StrictMode :78, ErrorBoundary :79, ToastProvider :80 —
 the old `73-79` range proved nothing), `august_surface_v1`, `onSendBotTurn`, `onAnalyze`, `handleRunAnalysisFromChat`,
 `runFullAnalysis`, `runSeatTurn` at both :593 and :1082, `applyCasualStreamUpdate`, `notify`. Binding found another real
 defect: row 13 cited AgentsView.tsx:770 for `onAnalyze`, and the await is at **:767** (:770 is the `finally` of that

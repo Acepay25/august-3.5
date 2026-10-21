@@ -29,12 +29,15 @@ const AnswerBody: React.FC<AnswerBodyProps> = ({ text, streaming, className }) =
     <FadingText
         text={text}
         streaming={!!streaming}
-        // The reference's answer is set in a SERIF — it is the one surface in
-        // the app that is read rather than operated, and a serif says that.
+        // The reference's answer is set in a READING serif — it is the one
+        // surface in the app that is read rather than operated, and a serif
+        // says that. It is a TEXT serif, not the display face: a display face
+        // has one weight, so its "bold" was a synthetic one, and a long
+        // analysis set in a smeared face is not readable.
         // The chrome around it (the chips, the work card, the composer) stays
         // in the UI sans: only the answer is prose. Code blocks keep their own
         // monospace, and the table keeps its tabular figures.
-        className={`font-serif text-zinc-200 ${className ?? ''}`}
+        className={`font-reading text-zinc-200 ${className ?? ''}`}
     />
 );
 

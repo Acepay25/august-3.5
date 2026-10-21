@@ -1,5 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Check, Lightbulb, Plus, RefreshCw, Search, Settings } from '../shared/Icons';
+import {
+    AlertTriangle,
+    Ban,
+    Check,
+    Pause,
+    Plus,
+    PowerOff,
+    RefreshCw,
+    RotateCcw,
+    Search,
+    Settings,
+} from '../shared/Icons';
 import {
     listSkills,
     skillEnabledFlag,
@@ -12,6 +23,8 @@ import {
     type SkillReviewVerdict,
 } from '../../services/learning/skillReview';
 import { queueLearningProposal } from '../../utils/learningQueue';
+import { EmptyState } from '../ui/EmptyState';
+import StatusPill, { type PillTone } from '../ui/StatusPill';
 
 /**
  * SkillsCatalog — the reference Customize → Skills screen, on August's own data.
@@ -32,6 +45,27 @@ import { queueLearningProposal } from '../../utils/learningQueue';
  *   tabs        ← `family` (falling back to `kind`), a real partition of the
  *                 roster. A tab with zero skills is not drawn at all — the
  *                 decorative-group defect this screen exists to avoid.
+ *
+ * THE REFERENCE, AND WHAT AUGUST KNOWS INSTEAD
+ * ---------------------------------------------
+ * The reference draws a catalogue: a title and a one-line subtitle, a header
+ * row carrying search / refresh / settings / Add, an "Installed" heading over a
+ * two-column grid of cards (a coloured icon tile, the name, a one-line muted
+ * description, a checkmark at the right edge), and then a category row — the
+ * category's name in muted text with a raised "System" pill beside it.
+ *
+ * August has no plugins, so it has no plugin-provided category to repeat the
+ * installed list under. The one provenance axis it DOES have is `prior`:
+ * `prior: 'book'` is the vetted starter shelf that ships with the app. That
+ * is the reference's "System", so it gets the reference's badge — and it gets
+ * its OWN category row rather than a second copy of the same cards, because
+ * the same skill printed twice under two headings is a duplicate, not a
+ * grouping.
+ *
+ * The reference's checkmark means ONE thing: this skill is available. August
+ * has three honest answers to that question, so it has three marks, and the
+ * two that are not "yes" say WHICH no they are (`skillAvailability` below).
+ * A check on a suspended rule would be a lie the trader cannot see through.
  */
 
 /** A roster row, flattened for rendering. */
@@ -41,6 +75,13 @@ interface CatalogSkill {
     description: string;
     enabled: boolean;
     status: SkillMeta['status'];
+    kind: SkillMeta['kind'];
+    /** The idle sweep's stamp. Its presence IS the suspension. */
+    suspendedAt?: string;
+    /** The trader switched this one off in the notebook. */
+    disabledByUser?: boolean;
+    /** The vetted shelf that ships with the app (`prior: 'book'`). */
+    system: boolean;
     wins: number;
     losses: number;
     family: string;
@@ -50,6 +91,65 @@ interface CatalogSkill {
  *  with no families at all still gets one honest, non-empty group rather than an
  *  empty tab strip. */
 const collectionOf = (meta: SkillMeta): string => meta.family?.trim() || (meta.kind === 'avoid' ? 'Avoid' : 'Repeat');
+
+/**
+ * THE AVAILABILITY VOCABULARY — one word per state, and the reason beside it.
+ *
+ * The reference draws a checkmark on a card, and the check means exactly one
+ * thing: the skill is available. August has three honest answers to that
+ * question, so it has three marks, and the two that are not "yes" say WHICH
+ * no they are. A check on a rule that reaches no seat is a lie, and the
+ * trader has no way to see through it.
+ *
+ * ONE home: the catalogue's card mark and the reader's chip
+ * (`components/learn/SkillViewerPanel.tsx`) both read this, so the two
+ * surfaces cannot spell one state two ways — which is how a suspended skill
+ * ends up reading as "active" on one of them.
+ */
+export type SkillAvailability = 'enabled' | 'suspended' | 'off';
+
+export interface SkillAvailabilityRead {
+    state: SkillAvailability;
+    /** The one word. */
+    label: string;
+    /** Why it is in that state — the sentence a tooltip and a screen reader
+     *  both need, because "Suspended" alone invites "by whom?". */
+    title: string;
+}
+
+/**
+ * The state a skill is in, and why.
+ *
+ * `enabled` is passed in rather than re-derived: `skillEnabledFlag` is the ONE
+ * place `enabled` may be derived, and a second implementation here is exactly
+ * how the label and the injectors drifted apart the first time.
+ */
+export const skillAvailability = (
+    meta: Pick<SkillMeta, 'status' | 'suspendedAt' | 'disabledByUser'>,
+    enabled: boolean,
+): SkillAvailabilityRead => {
+    if (meta.suspendedAt) {
+        return {
+            state: 'suspended',
+            label: 'Suspended',
+            title: 'Not injected — the idle sweep suspended it after 90 days of silence. It is still matched, so it can revive on its own.',
+        };
+    }
+    if (meta.disabledByUser) {
+        return { state: 'off', label: 'Off', title: 'Not injected — you switched this off in the notebook.' };
+    }
+    if (meta.status === 'retired') {
+        return { state: 'off', label: 'Off', title: 'Not injected — this rule was retired, so no seat follows it.' };
+    }
+    if (!enabled) {
+        return { state: 'off', label: 'Off', title: 'Not injected — this skill is not reaching a seat.' };
+    }
+    return {
+        state: 'enabled',
+        label: 'Enabled',
+        title: 'Enabled — this skill is injected into the seat prompt.',
+    };
+};
 
 /**
  * What one manual re-read found, said in the trader's words.
@@ -63,7 +163,7 @@ const collectionOf = (meta: SkillMeta): string => meta.family?.trim() || (meta.k
 const describeRosterSync = (prev: CatalogSkill[] | null, next: CatalogSkill[]): string => {
     if (prev === null) return 'Skill list read';
     const sig = (s: CatalogSkill): string =>
-        `${s.name}|${s.description}|${s.enabled}|${s.status}|${s.wins}|${s.losses}|${s.family}`;
+        `${s.name}|${s.description}|${s.enabled}|${s.status}|${s.kind}|${s.suspendedAt ?? ''}|${s.disabledByUser ?? false}|${s.system}|${s.wins}|${s.losses}|${s.family}`;
     const before = new Map(prev.map(s => [s.id, sig(s)]));
     let added = 0;
     let changed = 0;
@@ -80,15 +180,37 @@ const describeRosterSync = (prev: CatalogSkill[] | null, next: CatalogSkill[]): 
     return parts.length ? `Refreshed — ${parts.join(', ')}` : 'Refreshed — nothing changed';
 };
 
-/** A deterministic tint per collection, from the theme's own ramp. The reference
- *  gives each skill a distinct vivid gradient; August has no per-skill colour
- *  data and inventing six gradients would be decoration with no meaning. The
- *  tile carries an icon on a neutral surface instead. */const tileClass = (enabled: boolean, kind: SkillMeta['kind']): string => {
+/**
+ * The icon tile — the reference's coloured square, in the theme's own hues.
+ *
+ * The COLOUR says the STATE (emerald = reaching a seat, amber = suspended,
+ * zinc = not in play) and the GLYPH says what the rule DOES (an avoid is a
+ * power-off, a repeat is a rotation — the same pair the Studio's card uses,
+ * because one kind must not have two marks). Colouring the tile by KIND, the
+ * way this did before, would read a rule that never traded as a LOSS, and
+ * rose means loss in this theme.
+ */
+const tileClass = (s: CatalogSkill): string => {
     const base = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-control border';
-    if (!enabled) return `${base} border-zinc-800 bg-zinc-900 text-zinc-600`;
-    return kind === 'avoid'
-        ? `${base} border-rose-500/30 bg-rose-500/10 text-rose-300`
-        : `${base} border-emerald-500/30 bg-emerald-500/10 text-emerald-300`;
+    if (s.status === 'retired') return `${base} border-zinc-800 bg-zinc-900 text-zinc-600`;
+    const state = skillAvailability(s, s.enabled).state;
+    if (state === 'enabled') return `${base} border-emerald-500/30 bg-emerald-500/10 text-emerald-300`;
+    if (state === 'suspended') return `${base} border-amber-500/30 bg-amber-500/10 text-amber-300`;
+    return `${base} border-zinc-700 bg-zinc-800 text-zinc-500`;
+};
+
+/**
+ * The mark at the card's right edge — the reference's checkmark, in August's
+ * own vocabulary.
+ *
+ * The check stays the reference's quiet grey: the tile is where the colour
+ * lives, so a green check beside a green tile would shout the same fact
+ * twice.
+ */
+const MARK: Record<SkillAvailability, { Icon: React.FC<{ className?: string }>; className: string }> = {
+    enabled: { Icon: Check, className: 'text-zinc-400' },
+    suspended: { Icon: Pause, className: 'text-amber-400' },
+    off: { Icon: Ban, className: 'text-zinc-500' },
 };
 
 /**
@@ -110,7 +232,7 @@ const describeRosterSync = (prev: CatalogSkill[] | null, next: CatalogSkill[]): 
  *    procedure in every prompt. A warning.
  *  - **fine** — everything checks out.
  */
-const VERDICT_LABEL: Record<SkillReviewVerdict, string> = {
+export const VERDICT_LABEL: Record<SkillReviewVerdict, string> = {
     fine: 'Fine',
     dormant: 'Dormant',
     clipped: 'Clipped',
@@ -121,20 +243,20 @@ const VERDICT_LABEL: Record<SkillReviewVerdict, string> = {
  *  and NOT "never fired" is the run-cap: the injection log is run-capped, so
  *  absence from it is the same fact as "aged out of the window" and proves
  *  nothing (`services/learning/memoryHealth.ts:15-18`). */
-const VERDICT_HINT: Record<SkillReviewVerdict, string> = {
+export const VERDICT_HINT: Record<SkillReviewVerdict, string> = {
     fine: 'Every format check passes.',
     dormant: 'Names no setup it applies to — it will not fire, and it holds one of the 30 index slots.',
     clipped: 'The recall card drops characters — the seat gets half a procedure.',
     ghost: 'In the notebook, in the backup, and in no list at all.',
 };
 
-/** The theme's own semantic ramp: rose for the defect, amber for the two
- *  warnings, zinc for the quiet one. The same families `tileClass` uses. */
-const VERDICT_TONE: Record<SkillReviewVerdict, string> = {
-    fine: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
-    dormant: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
-    clipped: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
-    ghost: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+/** The theme's own semantic ramp, as the ONE chip component's tones: rose for
+ *  the defect, amber for the two warnings, zinc for the quiet one. */
+export const VERDICT_TONE: Record<SkillReviewVerdict, PillTone> = {
+    fine: 'up',
+    dormant: 'warn',
+    clipped: 'warn',
+    ghost: 'down',
 };
 
 /** The report's one-line summary. Every number is counted, never estimated. */
@@ -160,6 +282,93 @@ export interface SkillsCatalogProps {
     onOpenSkill?: (fileId: string) => void;
 }
 
+/**
+ * One card of the grid — the reference's card, on August's data.
+ *
+ * A coloured icon tile on the left, the name in medium weight, a ONE-LINE
+ * muted description truncated with an ellipsis, and the availability mark at
+ * the right edge. The row is the opener: a card that cannot be pressed is a
+ * list of file names, and the record behind it — description, body, outcome
+ * ledger — was unreachable without leaving for the memory manager.
+ */
+const SkillCard: React.FC<{
+    skill: CatalogSkill;
+    onOpen?: (fileId: string) => void;
+    /** The format review's finding for THIS skill, when one has been run. */
+    verdict?: SkillReviewFinding;
+}> = ({ skill, onOpen, verdict }) => {
+    const availability = skillAvailability(skill, skill.enabled);
+    const Mark = MARK[availability.state].Icon;
+    const retired = skill.status === 'retired';
+    return (
+        <li className="flex items-center gap-3" data-testid="skills-catalog-card">
+            <span className={tileClass(skill)} aria-hidden="true">
+                {/* aria-hidden on the glyph itself as well as its
+                    tile: the tile's hidden is enough for assistive
+                    tech, and the icon-semantics scan reads JSX, not
+                    the rendered tree — a glyph that is hidden in the
+                    DOM but unsaid in the source is a regression the
+                    guard cannot see coming back. */}
+                {skill.kind === 'avoid'
+                    ? <PowerOff className="h-4 w-4" aria-hidden="true" />
+                    : <RotateCcw className="h-4 w-4" aria-hidden="true" />}
+            </span>
+            <button type="button"
+                onClick={() => onOpen?.(skill.id)}
+                aria-label={`Read ${skill.name}`}
+                className="min-w-0 flex-1 rounded-control text-left transition-colors hover:text-zinc-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
+                <span className={`block truncate text-ui-base font-medium ${retired ? 'text-zinc-500 line-through' : 'text-zinc-100'}`} title={skill.name}>
+                    {skill.name}
+                </span>
+                <span className="block truncate text-ui-dense text-zinc-500" title={skill.description || undefined}>
+                    {skill.description || (retired ? 'Retired' : 'No description')}
+                </span>
+            </button>
+            {/* The mark. The tooltip names WHY — "Off" alone would be a
+                shrug, and the reason is the one thing a trader needs. */}
+            <span className="shrink-0" title={availability.title}>
+                <Mark className={`h-4 w-4 ${MARK[availability.state].className}`} aria-label={availability.label} />
+            </span>
+            {/* The row says what the review found, so a problem is
+                visible where the skill is — not only in the
+                report. A ghost has no row at all (it is not in
+                the list), which is exactly why the report
+                exists. */}
+            {verdict && (
+                <span data-testid="skills-row-verdict" title={verdict.evidence}>
+                    <StatusPill tone={VERDICT_TONE[verdict.verdict]}>
+                        {VERDICT_LABEL[verdict.verdict]}
+                    </StatusPill>
+                </span>
+            )}
+        </li>
+    );
+};
+
+/**
+ * The two-column grid of cards, under one section heading.
+ *
+ * The reference's cards are laid out in two columns with the mark at the far
+ * edge of each column, so the mark reads as the column's own "available"
+ * column rather than as a stray glyph.
+ */
+const CardGrid: React.FC<{
+    skills: CatalogSkill[];
+    onOpen?: (fileId: string) => void;
+    verdictBySlug: Map<string, SkillReviewFinding>;
+}> = ({ skills, onOpen, verdictBySlug }) => (
+    <ul className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2">
+        {skills.map(s => (
+            <SkillCard
+                key={s.id}
+                skill={s}
+                onOpen={onOpen}
+                verdict={verdictBySlug.get(s.name.replace(/\.md$/i, ''))}
+            />
+        ))}
+    </ul>
+);
+
 const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSkill, onAddSkill }) => {
     const [skills, setSkills] = useState<CatalogSkill[] | null>(null);
     const [query, setQuery] = useState('');
@@ -179,6 +388,10 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSki
                 description: meta.description ?? '',
                 enabled: skillEnabledFlag(meta),
                 status: meta.status,
+                kind: meta.kind,
+                suspendedAt: meta.suspendedAt,
+                disabledByUser: meta.disabledByUser,
+                system: meta.prior === 'book',
                 wins: meta.wins,
                 losses: meta.losses,
                 family: collectionOf(meta),
@@ -292,6 +505,24 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSki
         });
     }, [skills, query, collection]);
 
+    /**
+     * The two sections of the page.
+     *
+     * "Installed" is the trader's own roster — the rules the desk learned or
+     * the trader approved. The starter shelf is the reference's "System"
+     * category: the vetted playbooks that ship with the app, which no trade
+     * of yours earned and no evidence ledger will ever own.
+     *
+     * The partition is EXCLUSIVE, and that is the one place this page parts
+     * company with the reference. Claude lists the same skill twice — once
+     * under "Installed" and once under the plugin category that provides it —
+     * because a plugin and an install are two different routes to one skill.
+     * August has no plugins, so the second route here would be a second copy
+     * of the same cards. The shelf gets its own category row instead.
+     */
+    const own = useMemo(() => shown.filter(s => !s.system), [shown]);
+    const shipped = useMemo(() => shown.filter(s => s.system), [shown]);
+
     // The active collection must survive a reload that drops it: pinning a tab
     // whose skills were all retired would render an empty grid that looks broken.
     const activeCollection = collections.some(c => c.label === collection) || collection === 'all'
@@ -306,8 +537,8 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSki
         >
             {/* Title block + the reference's top row: search, refresh, gear, Add. */}
             <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                    <h3 className="font-serif text-ui-xl text-zinc-100">Skills</h3>
+                <div className="min-w-0">
+                    <h3 className="text-ui-xl font-semibold tracking-tight text-zinc-100">Skills</h3>
                     <p className="mt-0.5 text-ui-dense text-zinc-500" role="status" data-testid="skills-status">
                         {syncNote ?? 'What the desk has learned to do, and what it has learned to avoid.'}
                     </p>
@@ -321,7 +552,7 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSki
                             onChange={e => setQuery(e.target.value)}
                             placeholder="Search skills"
                             aria-label="Search skills"
-                            className="h-6 w-40 bg-transparent text-ui-dense text-zinc-200 outline-none placeholder:text-zinc-600"
+                            className="h-6 w-56 bg-transparent text-ui-dense text-zinc-200 outline-none placeholder:text-zinc-600"
                         />
                     </div>
                     <button type="button" onClick={() => reload(true)} aria-label="Refresh the skill list" title="Refresh"
@@ -341,7 +572,7 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSki
                         </button>
                     )}
                     {onAddSkill && (
-                        <button type="button" onClick={onAddSkill}
+                        <button type="button" onClick={onAddSkill} title="Add a skill — the draft is written in the Approvals inbox"
                             className="flex h-8 items-center gap-1 rounded-full bg-zinc-100 px-3 text-ui-dense font-semibold text-zinc-950 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-100">
                             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                             Add
@@ -368,9 +599,9 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSki
                             {problems.map(finding => (
                                 <li key={finding.fileId} data-testid="skills-review-row" className="rounded-control border border-zinc-800/80 bg-zinc-900/60 p-2.5">
                                     <div className="flex items-start gap-2">
-                                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-ui-2xs font-semibold ${VERDICT_TONE[finding.verdict]}`}>
+                                        <StatusPill tone={VERDICT_TONE[finding.verdict]}>
                                             {VERDICT_LABEL[finding.verdict]}
-                                        </span>
+                                        </StatusPill>
                                         <span className="min-w-0 flex-1">
                                             <span className="block truncate font-mono text-ui-dense text-zinc-300" title={finding.name}>
                                                 {finding.name}
@@ -446,74 +677,50 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSki
                 </div>
             )}
 
-            {/* Section label on a hairline rule that runs to the right edge. */}
-            <div className="mt-4 border-t border-zinc-700 pt-2">
-                <h4 className="text-ui-dense font-medium text-zinc-200">
-                    {activeCollection === 'all' ? 'Installed' : activeCollection}
-                </h4>
-            </div>
-
             {skills === null ? (
                 <p className="py-6 text-center text-ui-dense text-zinc-500" data-testid="skills-catalog-error">
                     The skill library could not be read.
                 </p>
             ) : shown.length === 0 ? (
-                <p className="py-6 text-center text-ui-dense text-zinc-600" data-testid="skills-catalog-empty">
-                    {query.trim() ? `No skill matches “${query.trim()}”.` : 'No skills yet.'}
-                </p>
+                <div data-testid="skills-catalog-empty">
+                    <EmptyState
+                        compact
+                        align="center"
+                        title={query.trim() ? `No skill matches “${query.trim()}”.` : 'No skills yet.'}
+                        description={query.trim()
+                            ? 'Clear the search to see the whole roster.'
+                            : 'Approve a drafted skill in the Approvals inbox, or import a SKILL.md, and it lands here.'}
+                    />
+                </div>
             ) : (
-                <ul className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2" data-testid="skills-catalog-grid">
-                    {shown.map(s => (
-                        <li key={s.id} className="flex items-center gap-3 py-1.5" data-testid="skills-catalog-card">
-                            <span className={tileClass(s.enabled, s.status === 'retired' ? 'avoid' : 'repeat')} aria-hidden="true">
-                                {/* aria-hidden on the glyph itself as well as its
-                                    tile: the tile's hidden is enough for assistive
-                                    tech, and the icon-semantics scan reads JSX, not
-                                    the rendered tree — a glyph that is hidden in the
-                                    DOM but unsaid in the source is a regression the
-                                    guard cannot see coming back. */}
-                                <Lightbulb className="h-4 w-4" aria-hidden="true" />
-                            </span>
-                            {/* The row is the opener: a catalog row that cannot be
-                                pressed is a list of file names, and the record
-                                behind it — description, body, outcome ledger —
-                                was unreachable without leaving for the memory
-                                manager. */}
-                            <button type="button"
-                                onClick={() => onOpenSkill?.(s.id)}
-                                aria-label={`Read ${s.name}`}
-                                className="min-w-0 flex-1 rounded-control text-left transition-colors hover:text-zinc-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
-                                <span className="block truncate text-ui-dense font-semibold text-zinc-100" title={s.name}>
-                                    {s.name}
-                                </span>
-                                <span className="block truncate text-ui-dense text-zinc-500" title={s.description || undefined}>
-                                    {s.description || (s.status === 'retired' ? 'Retired' : 'No description')}
-                                </span>
-                            </button>
-                            {s.enabled ? (
-                                <Check className="h-4 w-4 shrink-0 text-zinc-400" aria-label="Enabled" />
-                            ) : (
-                                <span className="shrink-0 text-ui-2xs text-zinc-600" title="Not injected — disabled or suspended">
-                                    off
-                                </span>
-                            )}
-                            {/* The row says what the review found, so a problem is
-                                visible where the skill is — not only in the
-                                report. A ghost has no row at all (it is not in
-                                the list), which is exactly why the report
-                                exists. */}
-                            {verdictBySlug.get(s.name.replace(/\.md$/i, '')) && (
-                                <span
-                                    data-testid="skills-row-verdict"
-                                    className={`shrink-0 rounded-full border px-1.5 py-0.5 text-ui-2xs font-semibold ${VERDICT_TONE[verdictBySlug.get(s.name.replace(/\.md$/i, ''))!.verdict]}`}
-                                    title={verdictBySlug.get(s.name.replace(/\.md$/i, ''))!.evidence}
-                                >
-                                    {VERDICT_LABEL[verdictBySlug.get(s.name.replace(/\.md$/i, ''))!.verdict]}
-                                </span>
-                            )}
-                        </li>
-                    ))}
-                </ul>
+                <div data-testid="skills-catalog-grid">
+                    {/* The reference's "Installed" heading: a label with a
+                        hairline under it, then the two-column card grid. */}
+                    {own.length > 0 && (
+                        <section aria-labelledby="skills-installed-label">
+                            <h4 id="skills-installed-label"
+                                className="mt-4 border-b border-zinc-800/80 pb-2 text-ui-base font-semibold text-zinc-100">
+                                Installed
+                            </h4>
+                            <CardGrid skills={own} onOpen={onOpenSkill} verdictBySlug={verdictBySlug} />
+                        </section>
+                    )}
+                    {/* The reference's category row: the name in muted text,
+                        and the raised pill that says WHAT the category is. */}
+                    {shipped.length > 0 && (
+                        <section aria-labelledby="skills-system-label">
+                            <div className="mt-5 flex items-center gap-2">
+                                <h4 id="skills-system-label" className="text-ui-sm text-zinc-500">
+                                    Starter library
+                                </h4>
+                                <StatusPill tone="neutral" title="Vetted playbooks that ship with August — they are not learned from your trades.">
+                                    System
+                                </StatusPill>
+                            </div>
+                            <CardGrid skills={shipped} onOpen={onOpenSkill} verdictBySlug={verdictBySlug} />
+                        </section>
+                    )}
+                </div>
             )}
         </section>
     );

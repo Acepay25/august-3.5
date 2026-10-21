@@ -14,6 +14,9 @@ vi.mock('lucide-react', () => ({
     Palette: () => <span data-testid="palette-icon" />,
     NotebookPen: () => <span data-testid="notebook-pen-icon" />,
     Target: () => <span data-testid="target-icon" />,
+    // The chevron an expandable step carries — the reference draws one on
+    // every step that opens, so the mock has to carry it too.
+    ChevronRight: () => <span data-testid="chevron-right-icon" />,
 }));
 
 describe('pairToolLines (call→result updates ONE row)', () => {
