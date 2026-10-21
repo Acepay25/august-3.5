@@ -171,10 +171,15 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                             <Zap className="h-3 w-3 shrink-0" aria-hidden="true" />
                             <span>{e.tools[0] ?? 'Harness event'}</span>
                         </p>
-                    ) : e.error ? (
-                        /* A failed turn is not an answer. Both homes render the
-                           same row, so the dock can no longer show a blank
-                           bubble where the Chat surface shows the failure. */
+                    ) : e.error && !e.text ? (
+                        /* A turn that never produced a line is a failure, whole
+                           and alone: both homes render the same row, so the dock
+                           cannot show a blank bubble where Chat shows the failure.
+                           A turn that produced prose AND then failed is NOT this
+                           row — it falls through to the answer below, keeps what
+                           arrived, and carries the reason inside the "Run stopped"
+                           card. Collapsing it here would throw away the half of
+                           the analysis the trader still has to read. */
                         <ChatFailureRow error={e.error} />
                     ) : (
                         <div className="space-y-1">
@@ -198,6 +203,7 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                                 retry uses. */}
                             {e.interrupted && !e.streaming && (
                                 <InterruptedRunNotice
+                                    cause={e.error}
                                     onEditPrompt={(() => {
                                         const asked = entries[i - 1]?.role === 'user' ? entries[i - 1].text : '';
                                         return asked ? () => setDraftText?.(asked) : undefined;
@@ -271,6 +277,9 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                                 <TradeProposalCard
                                     proposal={e.proposal}
                                     canLog={!!onLogProposedTrade}
+                                    logNote={e.error
+                                        ? 'This plan arrived on a run that stopped before it finished — the rest of the answer never came.'
+                                        : undefined}
                                     awaitingLog={awaitingLogEntryId === e.id}
                                     onLog={async () => {
                                         // Double-log guard: the disposition lives at module
