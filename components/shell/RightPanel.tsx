@@ -148,7 +148,13 @@ const RightPanel: React.FC<RightPanelProps> = ({
                     onPointerDown={onResizeStart}
                     onDoubleClick={onResizeReset}
                     title="Drag to resize · double-click to reset"
-                    className="hidden w-1.5 shrink-0 cursor-col-resize touch-none items-center justify-center border-x border-white/[0.06] bg-zinc-900/40 text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-300 lg:flex"
+                    /* The seam is a HAIRLINE, like every other separator in
+                       the app. It was a filled strip with a border on BOTH
+                       sides, which drew a little gutter between the chart and
+                       the dock — and the chart side went flat in E-56, so the
+                       two halves of one window no longer matched. The grab
+                       target keeps its width; only the paint changes. */
+                    className="hidden w-1.5 shrink-0 cursor-col-resize touch-none items-center justify-center border-l border-white/[0.06] text-zinc-600 transition-colors hover:text-zinc-300 lg:flex"
                 >
                     <span aria-hidden className="block h-6 w-px bg-current opacity-60" />
                 </div>

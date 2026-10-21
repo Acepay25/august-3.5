@@ -121,7 +121,13 @@ export const ChartToolRail: React.FC<ChartToolRailProps> = ({
             data-testid="chart-tool-rail"
             role="toolbar"
             aria-label="Chart drawing tools"
-            className="absolute left-0 top-0 z-20 flex h-full w-10 flex-col items-center gap-0.5 border-r border-white/[0.06] bg-zinc-900/90 py-1.5"
+            /* CHROME (the reference's frame): a flat page separated by a
+               HAIRLINE, not a panel with a fill and a border. The rail used to
+               carry its own raised surface (zinc-900 at 90 %) over the chart,
+               which drew a second box down the left edge of the plot. It is
+               the page colour now, and the one hairline on its right is what
+               separates the icon column from the chart. */
+            className="absolute left-0 top-0 z-20 flex h-full w-10 flex-col items-center gap-0.5 border-r border-white/[0.06] bg-zinc-950 py-1.5"
         >
             <RailButton title="Cursor — pan & zoom the chart" active={tool === 'cursor'} onClick={() => onSelectTool('cursor')}>
                 <MousePointer2 className="h-4 w-4" aria-hidden="true" />

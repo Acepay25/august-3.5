@@ -59,10 +59,14 @@ export const LevelAccuracyBadge: React.FC<Props> = ({ drawings, candles, classNa
             data-testid="level-accuracy-badge"
             title="Of the levels this model drew, how many did price actually reach. A level price never returned to was not read from the chart."
         >
+            {/* A DATA readout, so the label keeps the app's uppercase
+                micro-label (the readout row's own rule) and the figure keeps
+                the monospace tabular figures every number in this app
+                carries. */}
             <span className="text-ui-xs font-bold text-zinc-500 uppercase tracking-wider">
                 Levels
             </span>
-            <span className={`font-mono ${tone}`}>{pct}%</span>
+            <span className={`font-mono tabular-nums ${tone}`}>{pct}%</span>
             <span className="text-zinc-600">
                 reached ({reached}/{judged})
             </span>

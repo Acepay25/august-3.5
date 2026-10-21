@@ -177,16 +177,26 @@ const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol, live = false, l
         : book?.dominantSide ?? 'balanced';
 
     return (
-        <div className="flex h-full min-h-0 flex-col border-l border-white/[0.06] bg-zinc-900/40">
+        /* CHROME (the reference's frame): the book is a SECTION of a flat
+           page, so it is separated from the chart by ONE HAIRLINE and carries
+           no fill of its own. The old panel fill (zinc-900 at 40 %) was a
+           second box down the middle of the surface. */
+        <div className="flex h-full min-h-0 flex-col border-l border-white/[0.06]">
             <div className="flex shrink-0 items-center justify-between px-2 py-1.5">
                 <h2 className="ui-kicker">Order Book</h2>
-                <span className={`font-mono text-ui-xs ${usingLive ? 'text-emerald-400' : asksView.length || bidsView.length ? 'text-zinc-600' : bookFailed ? 'text-rose-400' : 'text-zinc-600 animate-pulse'}`} title={usingLive ? 'depth20@100ms websocket' : 'REST poll every 5s'}>
+                {/* The feed state is a WORD, not a figure, so it wears the
+                    interface face — the monospace is for the numbers in the
+                    ladder below it. */}
+                <span className={`text-ui-xs ${usingLive ? 'text-emerald-400' : asksView.length || bidsView.length ? 'text-zinc-600' : bookFailed ? 'text-rose-400' : 'text-zinc-600 animate-pulse'}`} title={usingLive ? 'depth20@100ms websocket' : 'REST poll every 5s'}>
                     {usingLive ? 'live' : asksView.length || bidsView.length ? `${dominant}` : bookFailed ? 'offline' : book ? 'empty' : 'loading'}
                 </span>
             </div>
             {/* Column headers share the rows' grid so all three columns align.
                 Labelled exactly like the metrics strip in TradeView (Stat's
-                label class) rather than inventing a new micro-type style. */}
+                label class) rather than inventing a new micro-type style —
+                the uppercase letter-spaced data label stays, because these
+                are DATA columns; only the face follows the figures below
+                them, so the words line up with the numbers. */}
             <div
                 data-testid="orderbook-header"
                 className={`${GRID} shrink-0 items-center py-1 font-mono text-ui-2xs uppercase tracking-wider text-zinc-500`}
@@ -221,10 +231,13 @@ const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol, live = false, l
                 {/* The spread band reuses the same grid, so it reads as a row
                     of the table rather than a banner: label in the price
                     column, the absolute spread in Size, the percentage in
-                    Total. */}
+                    Total. The hairlines above and below it are the section
+                    separators — the band itself is no longer a filled strip,
+                    because the reference separates a section with a line and
+                    not with a colour. */}
                 <div
                     data-testid="orderbook-spread"
-                    className={`${GRID} my-1 items-center border-y border-white/[0.06] bg-zinc-900/60 py-1 font-mono text-ui-xs tabular-nums text-zinc-400`}
+                    className={`${GRID} my-1 items-center border-y border-white/[0.06] py-1 font-mono text-ui-xs tabular-nums text-zinc-400`}
                 >
                     <span className={spreadPercent > 0.05 ? 'text-amber-400' : 'text-zinc-500'}>spread</span>
                     <span className="text-right text-zinc-300">{bestAsk && bestBid ? fmtPrice(spreadValue) : '—'}</span>

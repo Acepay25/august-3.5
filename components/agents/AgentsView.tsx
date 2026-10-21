@@ -342,15 +342,19 @@ const Row: React.FC<{
             <div className="flex items-start gap-2 px-2 py-1.5">
                 <button type="button" onClick={onClick} data-testid={testId} className="flex min-w-0 flex-1 items-start gap-2 text-left">
                     {avatar ?? (
-                        <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                            working ? 'border-amber-500/40 text-amber-300' : active ? 'border-zinc-600 text-zinc-200' : 'border-zinc-800 text-zinc-500'
+                        /* The reference's rows carry a PLAIN glyph — a small
+                           chat mark, not a ring around every row, which made a
+                           list of medallions. The state still reads: the working
+                           row's mark is amber, the active row's is bright. */
+                        <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center ${
+                            working ? 'text-amber-300' : active ? 'text-zinc-300' : 'text-zinc-600'
                         }`}>
-                            <Icon className="h-3 w-3" aria-hidden="true" />
+                            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                         </span>
                     )}
                     <span className="min-w-0 flex-1">
                         <span className="flex min-w-0 items-center gap-1">
-                            <span className="min-w-0 truncate text-ui-sm font-semibold text-zinc-200" title={title}>{title}</span>
+                            <span className="min-w-0 truncate text-ui-sm text-zinc-200" title={title}>{title}</span>
                             {attention && (
                                 <span title={attention} data-testid="row-attention"
                                     className="shrink-0 text-ui-2xs font-bold text-amber-400">⚠</span>
@@ -728,16 +732,27 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         [activeBot, isChartPane, messages, deskMessages],
     );
 
+    const lastThreadRole = thread[thread.length - 1]?.role;
     useEffect(() => {
         const el = scroller.current;
+        // Sending is an explicit request to see the new turn: re-pin even if
+        // the trader had scrolled up to read. Without this the question and
+        // its answer could land below the fold while the transcript stayed
+        // parked exactly where it was.
+        if (lastThreadRole === 'user') {
+            stickToBottomRef.current = true;
+            setShowJump(false);
+        }
         // Follow the newest row — but only while the trader is still near it.
         // Un-pinned, the transcript keeps the row the trader is reading.
         if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
-    }, [thread.length]);
+    }, [thread.length, lastThreadRole]);
 
     const send = useCallback(async (): Promise<void> => {
         const prompt = text.trim();
         if (!prompt || busy || analysisRunning) return;
+        stickToBottomRef.current = true;
+        setShowJump(false);
         setText('');
         // The branch the toggle used to make explicit. A bot selected → the
         // bot's own transport; nothing selected → the full analysis pipeline.
@@ -1034,7 +1049,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 aria-selected={railTab === id}
                                 aria-controls="rail-list-panel"
                                 onClick={() => setRailTab(id)}
-                                className={`hit-target rounded-control px-2 py-1 text-ui-dense uppercase tracking-widest transition-colors duration-[120ms] ease-[var(--ease-snappy)] ${
+                                className={`hit-target rounded-control px-2 py-1 text-ui-dense transition-colors duration-[120ms] ease-[var(--ease-snappy)] ${
                                     railTab === id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
                                 }`}>
                                 {label}
@@ -1082,7 +1097,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         </div>
                     )}
                     {railTab === 'chats' && (<section data-testid="rail-pinned">
-                        <h4 className="px-1 pb-1 text-ui-sm font-semibold uppercase tracking-widest text-zinc-500">Pinned</h4>
+                        <h4 className="px-1 pb-1 text-ui-dense text-zinc-500">Pinned</h4>
                         {/* WS-6: the desk's own conversation is a first-class row,
                             not only the pane you fall back into. */}
                         <Row active={isChartPane} title="Chart AI" testId="chart-ai-row"
@@ -1101,7 +1116,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
                     {railTab === 'bots' && (<section>
                         <div className="flex items-center gap-1 px-1 pb-1">
-                            <h4 className="text-ui-sm font-semibold uppercase tracking-widest text-zinc-500">
+                            <h4 className="text-ui-dense text-zinc-500">
                                 Bots
                             </h4>
                             {/* The list's own creator, as the reference's BOTS
@@ -1143,7 +1158,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             no place to put the control that creates one. */}
                     {railTab === 'chats' && (<section data-testid="rail-rooms">
                             <div className="flex items-center gap-1 px-1 pb-1">
-                                <h4 className="text-ui-sm font-semibold uppercase tracking-widest text-zinc-500">
+                                <h4 className="text-ui-dense text-zinc-500">
                                     Rooms
                                 </h4>
                                 <button type="button" onClick={onNewGroup} data-testid="rail-new-room"
@@ -1186,7 +1201,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
                     {railTab === 'chats' && onLoadConversation && (
                         <section data-testid="rail-conversations">
-                            <h4 className="px-1 pb-1 text-ui-sm font-semibold uppercase tracking-widest text-zinc-500">
+                            <h4 className="px-1 pb-1 text-ui-dense text-zinc-500">
                                 Conversations
                             </h4>
                             {visibleConversationRows.length === 0 ? (
@@ -1202,13 +1217,17 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                             <button type="button" data-testid="conversation-row"
                                                 onClick={() => onLoadConversation(r.id)}
                                                 className="flex w-full items-start gap-2 px-2 py-1.5 text-left">
-                                                <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                                                    active ? 'border-zinc-600 text-zinc-200' : 'border-zinc-800 text-zinc-500'
+                                                <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center ${
+                                                    active ? 'text-zinc-300' : 'text-zinc-600'
                                                 }`}>
-                                                    <MessageSquare className="h-3 w-3" aria-hidden="true" />
+                                                    <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
                                                 </span>
                                                 <span className="min-w-0 flex-1">
-                                                    <span className="block truncate text-ui-sm font-semibold text-zinc-200" title={r.title}>{r.title}</span>
+                                                    {/* The reference's chat titles are
+                                                        NOT bold — a list of them
+                                                        reads as a list, not as a
+                                                        set of headlines. */}
+                                                    <span className="block truncate text-ui-sm text-zinc-200" title={r.title}>{r.title}</span>
                                                 </span>
                                                 <span className="shrink-0 pt-0.5 font-mono text-ui-2xs text-zinc-600">
                                                     {relTimeMs(r.atMs)}
@@ -1494,7 +1513,11 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             )}
                         </div>
                         {showJump && (
-                            <JumpToLatestFab visible running={false} onJump={jumpToLatest} />
+                            <JumpToLatestFab
+                                visible
+                                running={busy || analysisRunning}
+                                onJump={jumpToLatest}
+                            />
                         )}
                         </div>
 

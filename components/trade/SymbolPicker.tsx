@@ -95,6 +95,12 @@ export const SymbolPicker: React.FC<SymbolPickerProps> = ({ symbols, value, onCh
 
     return (
         <div className="relative">
+            {/* CHROME (the reference's title bar). The trigger is a TITLE with
+                a chevron, not a box: the reference's own window chrome puts the
+                title and its caret on the bare page and keeps the small icon
+                set beside it. The old trigger was a bordered, filled pill —
+                the loudest object in a title bar. The panel it opens is still
+                a bordered card, because that is what a popover is. */}
             <button
                 ref={triggerRef}
                 type="button"
@@ -102,7 +108,7 @@ export const SymbolPicker: React.FC<SymbolPickerProps> = ({ symbols, value, onCh
                 aria-expanded={open}
                 data-testid="symbol-picker-trigger"
                 onClick={toggle}
-                className="flex items-center gap-1.5 rounded-control border border-white/10 bg-zinc-800 px-2 py-1 text-ui-caption font-bold text-zinc-100 transition-colors hover:border-white/20 focus:outline-none"
+                className="flex items-center gap-1.5 rounded-control px-2 py-1 text-ui-caption font-bold text-zinc-100 transition-colors hover:bg-white/[0.05]"
             >
                 {display(value)}
                 {valueMeta && valueMeta.changePercent24h !== 0 && (

@@ -1097,13 +1097,19 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
             <TimeframeBar interval={interval} onIntervalChange={onIntervalChange}>
                 {/* Prototype's "Add studies" button, one honest study: the
                     SMA-20 line over the closes. Amber = active, matching the
-                    overlay's color so the button and the line agree. */}
+                    overlay's color so the button and the line agree.
+
+                    CHROME: the study toggle is a flat control on the toolbar —
+                    no box, no border — and its state is the amber fill the
+                    line itself wears. The reference's toolbars are a row of
+                    flat controls, and a bordered box on every one of them is
+                    what made this row read as a stack of chips. */}
                 <button type="button" onClick={() => setIndicatorsOn(v => !v)} aria-pressed={indicatorsOn}
                     title="Toggle the SMA-20 overlay"
-                    className={`ml-1.5 rounded-control border px-2 py-1 text-ui-dense font-semibold transition-colors ${
+                    className={`ml-1.5 rounded-control px-2 py-1 text-ui-dense font-medium transition-colors ${
                         indicatorsOn
-                            ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
-                            : 'border-white/10 text-zinc-400 hover:border-white/20 hover:text-zinc-100'
+                            ? 'bg-amber-500/10 text-amber-300'
+                            : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
                     }`}>
                     ƒSMA
                 </button>
@@ -1118,8 +1124,14 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                     toolbar badge it replaced duplicated the symbol picker, the
                     active timeframe and the feed dot at once. */}
                 {levels.length > 0 && (
-                    <span className="pointer-events-none absolute right-3 top-2 z-10 rounded-full border border-white/[0.06] bg-zinc-900/70 px-2 py-0.5 text-ui-2xs uppercase tracking-widest text-zinc-500" title="Current verdict levels drawn on the chart" data-testid="verdict-overlay-chip">
-                        verdict overlay · {levels.map(l => l.label).join(' ')}
+                    /* CHROME: a status CHIP, not a data readout — so it takes
+                       the reference's badge shape (a raised grey pill, no
+                       border) and the reference's sentence case, instead of the
+                       uppercase letter-spaced treatment the readout row keeps.
+                       The level names inside it are the verdict's own words and
+                       are unchanged. */
+                    <span className="pointer-events-none absolute right-3 top-2 z-10 rounded-full bg-zinc-800/80 px-2 py-0.5 text-ui-2xs text-zinc-400" title="Current verdict levels drawn on the chart" data-testid="verdict-overlay-chip">
+                        Verdict overlay · {levels.map(l => l.label).join(' ')}
                     </span>
                 )}
                 <ChartToolRail

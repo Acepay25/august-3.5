@@ -24,6 +24,7 @@ import KeyLevelsCard from '../KeyLevelsCard';
 import { proposalStateOf as sharedProposalStateOf, rememberProposalState } from '../../../services/trade/proposalDisposition';
 import { CopyChip, FadingText, PinChip, RetryChip, ThinkingTierChip } from '../../shared/chatChips';
 import AnswerBody from '../../shared/AnswerBody';
+import ChatFailureRow from '../../shared/ChatFailureRow';
 
 /** Per-entry disposition of a model proposal card ('logged' / 'dismissed')
  *  moved to `services/trade/proposalDisposition` when the Chat surface grew a
@@ -170,6 +171,11 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                             <Zap className="h-3 w-3 shrink-0" aria-hidden="true" />
                             <span>{e.tools[0] ?? 'Harness event'}</span>
                         </p>
+                    ) : e.error ? (
+                        /* A failed turn is not an answer. Both homes render the
+                           same row, so the dock can no longer show a blank
+                           bubble where the Chat surface shows the failure. */
+                        <ChatFailureRow error={e.error} />
                     ) : (
                         <div className="space-y-1">
                             {e.speaker && (

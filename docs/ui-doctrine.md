@@ -131,7 +131,10 @@ ancestor and inflates to fill the surface.
 ## Verification
 
 - [ ] `npm run lint` — errors are zero and warnings are capped by a ratchet
-      (`--max-warnings 889`); adding a warning fails the gate.
+      (`--max-warnings 659`); adding a warning fails the gate. (The cap was
+      889 until 2026-10-21, when the tree was already under it and the number
+      had become a figure nobody could check — a ratchet that is above the
+      count it ratchets is not a ratchet.)
 - [ ] `npm run typecheck && npm run test && npm run build`.
 - [ ] **Look at it in a browser.** jsdom cannot see an inflated pill, a clipped
       column, or a layout that only breaks at 800px — the Electron floor. Every

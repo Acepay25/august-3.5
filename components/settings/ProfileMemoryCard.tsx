@@ -25,7 +25,7 @@ import {
     isTraderLearningEnabled, setTraderLearningEnabled,
 } from '../../services/learning/traderLearner';
 import StatusPill from '../ui/StatusPill';
-import { memoryUpdatedLabel } from '../learn/MemoryTopicsCard';
+import { memoryUpdatedLabel } from '../../services/learning/memoryTopics';
 
 /** The kind chip: four categorical labels that only say WHICH kind of memory
  *  an entry is. Monochrome on purpose — the hue carried no verdict, and the
