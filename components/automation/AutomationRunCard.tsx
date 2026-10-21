@@ -46,6 +46,22 @@ const AutomationRunCard: React.FC<{
     // without this the card reads a misleading "Neutral" with an empty bubble.
     const isBotReply = !analysis && !proposal && !!run.message?.text?.trim();
 
+    // The run's caveats, read off the RECORD (E-57 §6). Two of this card's three
+    // bubble paths print `message.text` whole — the proposal path and a bot
+    // reply — and the turn already writes its notices INTO that text, on purpose,
+    // because the next scheduled run's history is built from these stored rows
+    // and the model must be told what went wrong last time. Rendering them again
+    // there would be the same sentence twice on one card. What used to lose them
+    // entirely was the analysis-shaped bubble, which rebuilds the text from the
+    // analysis object and never shows the prose, and the `error`/`skipped` run
+    // that has no message at all. Those are the paths this block is for.
+    const proseCarriesCaveats = Boolean(proposal) || isBotReply;
+    const caveats = run.notices ?? [];
+    // Which model answered, named from the row's own `modelsUsed` — the field is
+    // already stored, so this is a reader, not a second writer.
+    const answeredBy = Object.entries(run.message?.modelsUsed ?? {})
+        .map(([, modelId]) => modelIdToName[modelId] ?? modelId);
+
     const statusBadge = run.status === 'complete' ? (
         <StatusPill tone="up" kicker>Complete</StatusPill>
     ) : run.status === 'running' ? (
@@ -111,12 +127,35 @@ const AutomationRunCard: React.FC<{
                     {statusBadge}
                     <span className={`font-black text-ui-base tracking-wider uppercase ${directionColor}`}>{direction}</span>
                     {(analysis?.coinName ?? proposal?.symbol) && <span className="font-mono text-ui-sm font-bold text-zinc-300">{analysis?.coinName ?? proposal?.symbol}</span>}
+                    {answeredBy.length > 0 && (
+                        <span className="font-mono text-ui-2xs text-zinc-500" data-testid="automation-run-model">{answeredBy.join(' · ')}</span>
+                    )}
                     <span className="ml-auto text-ui-xs font-mono text-zinc-500">{time}</span>
                 </div>
 
                 {run.status === 'error' && run.error && (
                     <div className="px-3 py-2.5 bg-rose-500/5 border border-rose-500/15 rounded-control text-ui-sm text-rose-300/90 leading-relaxed mb-3">
                         {run.error}
+                    </div>
+                )}
+
+                {caveats.length > 0 && !proseCarriesCaveats && (
+                    // Always visible, never behind a toggle: this is the block that
+                    // tells the trader the run "completed" without looking
+                    // something up, and a caveat you have to click for is a caveat
+                    // nobody reads before acting on the signal.
+                    <div className="mb-3 rounded-control border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5" data-testid="automation-run-caveats">
+                        <p className="text-ui-2xs font-bold uppercase tracking-widest text-amber-400/90">
+                            {caveats.length} caveat{caveats.length === 1 ? '' : 's'} on this run
+                        </p>
+                        <ul className="mt-1 list-disc space-y-1 pl-4 text-ui-sm leading-relaxed text-amber-200/80">
+                            {caveats.map(c => <li key={c}>{c}</li>)}
+                        </ul>
+                        {run.plans && (
+                            <p className="mt-1.5 font-mono text-ui-2xs text-zinc-400" data-testid="automation-run-plans">
+                                Plans: {run.plans.presented} allowed{run.plans.refused > 0 ? `, ${run.plans.refused} refused by the ration` : ''}.
+                            </p>
+                        )}
                     </div>
                 )}
 

@@ -114,6 +114,16 @@ const AutomationView: React.FC<{
                 </div>
             </div>
 
+            {/* The breaker's own words, on the schedule's own surface and not in
+                a tooltip: a schedule that turned ITSELF off after producing
+                nothing must not look like one the trader merely switched off. */}
+            {!config.enabled && config.disabledReason && (
+                <div className="px-4 py-2.5 border-b border-white/5 bg-rose-500/[0.07] shrink-0" data-testid="automation-disabled-reason">
+                    <p className="text-ui-2xs font-bold uppercase tracking-widest text-rose-400">Turned off after runs that produced nothing</p>
+                    <p className="mt-1 text-ui-sm leading-relaxed text-rose-200/85">{config.disabledReason}</p>
+                </div>
+            )}
+
             {/* Card feed */}
             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 sm:p-5 space-y-3">
                 {isLoadingRuns ? (

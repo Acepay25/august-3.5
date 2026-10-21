@@ -1461,3 +1461,65 @@ and fires on deliberate swing stops. **No `hardInvalid` field was added** — `r
 this", and a second flag for the same fact is a second writer waiting to disagree. The probe does **not** assert
 the caution sentence: whether a band fires depends on live candles, so a probe assertion would be flaky by
 construction, and the rendered text is pinned at the jsdom layer instead.
+
+## 32. E-57 §6 — what a scheduled run leaves behind, and what stops it leaving nothing (2026-10-22)
+
+**Proposal:** `docs/plan/closed-loop-fixes.md` (E-57). **Closes:** **O-142**. **Opens:** **O-143** — a gate gap this
+item found while choosing its own verification.
+
+`runAutomationTurn` already returns `notices`, `failedTools`, `refusedPlans` and `plansPresented`
+(`services/trade/automationTurn.ts:279-300`). The hook turned them into a WARNING toast
+(`hooks/useAutomations.ts:566`) and stored nothing: `AutomationRun` had no field for a caveat, so the record of a
+run was silent about it the moment the toast expired. Worse, two of the three shapes had no prose to hide behind
+— an `error` or `skipped` row carries no message at all, and the card's analysis-shaped bubble rebuilds its text
+from the analysis object and drops the prose the turn wrote. And there was no ceiling on failure anywhere: a
+routine whose bot had left the roster fired, skipped, toasted and fired again, forever.
+
+**The caveats are fields now.** `AutomationRun.notices` / `.plans` (`types/automation.ts:102`, `:108`) are written
+at the ONE `finish` site (`hooks/useAutomations.ts:530`) from the delivery the pipeline already carries
+(`hooks/useAnalysisPipeline.ts:1308`, widened in place so no line in that heavily-cited file moved), and printed
+on the card in the open (`components/automation/AutomationRunCard.tsx:147`) — a test asserts the block sits
+outside any `<details>`, because a caveat behind a toggle is a caveat nobody reads before acting on the signal.
+The block is deliberately suppressed on the two bubble paths that already render `message.text` whole, and that
+is not tidiness: the turn writes its notices INTO that text on purpose, because the next scheduled run's history
+is built from these stored rows, so the model is told what failed last time. A card that showed both would print
+one sentence twice.
+
+**One breaker, both arms.** `settleRunStreak` (`hooks/useAutomations.ts:282`) is the only place that counts the
+streak, and the pipeline's `finish` and the bot routine's `finishMeta` both settle through it — two writers would
+be how one arm quietly stops counting. `MAX_CONSECUTIVE_AUTOMATION_FAILURES`
+(`services/automation/AutomationService.ts:127`) is 3, and a trip writes `enabled: false` plus a `disabledReason`
+into the config the boot reads, so the verdict survives a reload rather than living in React state. The schedule
+prints its own banner (`components/automation/AutomationView.tsx:121`) rather than letting `Off` mean two things,
+and only `toggleAutomationEnabled` (`hooks/useAutomations.ts:752`) clears the counter — the re-enable IS the human
+act ruling (d) asked for. A switch OFF writes no reason, so a manual pause and a breaker trip stay tellable apart.
+
+**Two items in this pass turned out to be already true, and are recorded rather than "fixed".** The quota reads
+`MAX_PLANS_PER_DAY` — plans per automation per local calendar day, ledger read at
+`services/automation/AutomationService.ts:144`, spent at `:157` — and the refusal receipt already prints "3 plans
+per day for this schedule" (`services/trade/automationTurn.ts:216`); no UI ever claimed symbols, so the semantics
+were left alone as the plan required. And no `model` field was added to the run: `message.modelsUsed` already
+names the model, the card now reads it (`AutomationRunCard.tsx:62`) and falls back to the raw id rather than
+saying nothing, so a second field would have been a second writer for one fact. `RAW_LOCAL_STORAGE_PREFIXES` was
+not touched — `automations_v1_` and `automation_runs_v1_` are already on it
+(`services/infrastructure/ExportService.ts:773-774`), which the new export → wipe → import test confirms carries
+the new fields.
+
+**Proved red, four ways.** Dropping the two row fields → the record test fails. Never writing `enabled: false` →
+the trip, re-enable and bot-arm tests fail (4 total, the streak control still passes because it asserts the
+schedule is still ON). Forcing the duplication guard off → the no-repeat test sees the sentence twice. Making the
+banner unconditional → the manual-off control fails. The two controls exist so the four failures cannot be
+explained by a test that passes on any code.
+
+**Gates.** `typecheck` ok · `vitest` **5290 in 511**, 0 skip (17 cases added, no new file) · lint 0 errors / 655
+under the 659 cap · `build` ok, entry chunk **1,383 kB** against the 1,400 ceiling by the `guards.yml` recipe —
+the automation surface is lazy, so this cost the startup graph nothing · `render-probe` **117 ok, zero
+pageerrors**.
+
+**What this does NOT close.** **O-143**: `grep -c automation` is 0 in `render-probe.cjs`, `boot-probe.cjs`,
+`probe-skill-approval.cjs`, `surface-census.cjs` and `e2e/smoke.spec.ts`, so no browser gate has ever opened this
+surface — §6's rendered claims rest on jsdom alone, and the probe's contribution here is that nothing ELSE
+regressed. The bot arm still has no `notices` to record, because `runBotRoutineTurn` returns none; a fire that
+returns before the bridge is wired leaves no meta at all (pre-existing, untouched); and the breaker counts a run
+a human cancelled, which is a deliberate reading of `skipped` and is written into the constant's own comment
+rather than hidden in a branch.

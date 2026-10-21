@@ -40,7 +40,9 @@ import { useAutomations } from '../hooks/useAutomations';
 
 interface AutomationOptions {
     automation: {
-        onMessage: (run: { userMessage: Message; aiMessage: Message }) => void;
+        // The delivery fields the pipeline actually passes — the same shape
+        // `AutomationRunDelivery` declares in the hook. `plans` is E-57 §6.
+        onMessage: (run: { userMessage: Message; aiMessage: Message; notices?: string[]; plans?: { presented: number; refused: number } }) => void;
         onError: (error: string) => void;
     };
 }
@@ -176,5 +178,153 @@ describe('useAutomations — ensemble run settlement', () => {
         expect(runs.length).toBe(1);
         expect(runs[0].status).toBe('complete');
         expect(runs[0].message?.text).toBe('done');
+    });
+});
+
+/**
+ * E-57 §6 — what a run LEAVES behind, and what happens when runs stop leaving
+ * anything at all.
+ *
+ * Two halves. (1) The turn's caveats were a toast and a line of prose: the toast
+ * is gone in seconds, the prose only exists on a run that answered, so an
+ * `error`/`skipped` row recorded nothing about why it failed. Now they are
+ * fields on the row. (2) Ruling (d): three runs in a row that produced nothing
+ * disable the schedule, visibly, and only a human can start it again — because
+ * autonomy that fails repeatedly and keeps trying quietly is the one failure
+ * mode an unattended feature must not have.
+ */
+describe('useAutomations — the run record and the failure breaker (E-57 §6)', () => {
+    /** `persistConfigs` REPLACES the list, so the breaker can only act on a
+     *  schedule the store already knows. Seed it the way the app's own load
+     *  does, and wait for the mount to read it back. */
+    const setupSeeded = async (impl: PipelineImpl, over: Partial<AutomationConfig> = {}) => {
+        prefStore.set('automations_v1_tester', [automation(over)]);
+        const s = await setup(impl);
+        await waitFor(() => expect(s.h.result.current.configs.length).toBe(1));
+        return s;
+    };
+    const stored = () => (prefStore.get('automations_v1_tester') ?? []) as AutomationConfig[];
+
+    const answerWith = (notices: string[], plans: { presented: number; refused: number }): PipelineImpl =>
+        async (_p, _i, _h, options) => {
+            options.automation.onMessage({
+                userMessage: { id: 'u1', role: 'user', text: 'sweep BTC' } as unknown as Message,
+                aiMessage: { id: 'm1', role: 'ai', text: 'done', analysis: {} } as unknown as Message,
+                notices,
+                plans,
+            });
+            return { ok: true };
+        };
+
+    it('writes the caveats and the plan ration ONTO the row, not only into a toast', async () => {
+        const notices = ['NO MARKET LOOKUP: this turn answered without calling a market tool.'];
+        const { h, toast } = await setup(answerWith(notices, { presented: 1, refused: 1 }));
+        await act(async () => { await h.result.current.runAutomation(automation({}), false); });
+
+        await waitFor(() => expect(settledRuns(h)[0]).toBeTruthy());
+        const run = settledRuns(h)[0];
+        expect(run.notices).toEqual(notices);
+        expect(run.plans).toEqual({ presented: 1, refused: 1 });
+        // The toast still fires — the row is the record, the toast is the moment.
+        expect(toast.warning).toHaveBeenCalled();
+    });
+
+    it('control: a clean run stores neither field, so an absent caveat is not a gap', async () => {
+        const { h } = await setup(callbackThenResolve);
+        await act(async () => { await h.result.current.runAutomation(automation({}), false); });
+        const run = settledRuns(h)[0];
+        expect(run.notices).toBeUndefined();
+        expect(run.plans).toBeUndefined();
+        expect(run.status).toBe('complete');
+    });
+
+    it('a run that never answered keeps its own reason, and counts', async () => {
+        const { h } = await setupSeeded(silentExit(false));
+        await act(async () => { await h.result.current.runAutomation(automation({}), false); });
+        expect(settledRuns(h)[0].status).toBe('error');
+        expect(stored()[0].consecutiveFailures).toBe(1);
+        expect(stored()[0].enabled).toBe(true);
+    });
+
+    it('disables the schedule after three in a row, in words, and the disable survives a reload', async () => {
+        const { h, toast } = await setupSeeded(silentExit(false));
+        for (let i = 0; i < 3; i += 1) {
+            await act(async () => { await h.result.current.runAutomation(automation({}), false); });
+        }
+
+        await waitFor(() => expect(stored()[0].enabled).toBe(false));
+        expect(stored()[0].consecutiveFailures).toBe(3);
+        expect(stored()[0].disabledReason).toMatch(/3 runs in a row that produced nothing/);
+        expect(stored()[0].disabledReason).toMatch(/Switch Scheduled back on/);
+        expect(toast.warning).toHaveBeenCalledWith(
+            'Automation disabled after repeated failures',
+            expect.stringContaining('It is off until you turn it back on'),
+        );
+        // The reload is the real test: the store is what the app reads at boot,
+        // so a breaker that only lived in React state would forget its own
+        // verdict and start answering again on its own.
+        const reopened = await setup(silentExit(false));
+        await waitFor(() => expect(reopened.h.result.current.configs[0].enabled).toBe(false));
+        expect(reopened.h.result.current.configs[0].disabledReason).toMatch(/runs in a row/);
+    });
+
+    it('counts a STREAK, not a total — one clean run in the middle resets it', async () => {
+        // Without this arm the test above would pass on a breaker that counted
+        // every failure since the day the schedule was made.
+        let fires = 0;
+        const impl: PipelineImpl = async (_p, _i, _h, options) => {
+            fires += 1;
+            if (fires === 3) {
+                options.automation.onMessage({
+                    userMessage: { id: 'u1', role: 'user', text: 'sweep BTC' } as unknown as Message,
+                    aiMessage: { id: 'm1', role: 'ai', text: 'done', analysis: {} } as unknown as Message,
+                });
+                return { ok: true };
+            }
+            return { ok: false };
+        };
+        const { h } = await setupSeeded(impl);
+        for (let i = 0; i < 5; i += 1) {
+            await act(async () => { await h.result.current.runAutomation(automation({}), false); });
+        }
+        expect(stored()[0].enabled).toBe(true);
+        expect(stored()[0].consecutiveFailures).toBe(2);
+        expect(stored()[0].runCount).toBe(5);
+    });
+
+    it('a human re-enable clears the counter and the reason, and that is the only way', async () => {
+        const { h } = await setupSeeded(silentExit(false));
+        for (let i = 0; i < 3; i += 1) {
+            await act(async () => { await h.result.current.runAutomation(automation({}), false); });
+        }
+        await waitFor(() => expect(stored()[0].enabled).toBe(false));
+
+        await act(async () => { await h.result.current.toggleAutomationEnabled('a1'); });
+        expect(stored()[0].enabled).toBe(true);
+        expect(stored()[0].consecutiveFailures).toBe(0);
+        expect(stored()[0].disabledReason).toBeUndefined();
+    });
+
+    it('control: switching a schedule OFF by hand writes no breaker reason', async () => {
+        // Two states that look alike are one state: a trader's own pause must not
+        // read as the app reporting it stopped trying.
+        const { h } = await setupSeeded(silentExit(false));
+        await act(async () => { await h.result.current.toggleAutomationEnabled('a1'); });
+        expect(stored()[0].enabled).toBe(false);
+        expect(stored()[0].disabledReason).toBeUndefined();
+    });
+
+    it('the bot arm feeds the SAME breaker — one rule, one writer', async () => {
+        // The harness roster is empty, so every bot-scoped fire is skipped with
+        // "no longer on the roster": exactly the repeated silence ruling (d)
+        // covers, and the arm that does not run the pipeline at all.
+        const { h, runPipeline } = await setupSeeded(silentExit(false), { botId: 'macro' });
+        for (let i = 0; i < 3; i += 1) {
+            await act(async () => { await h.result.current.runAutomation(automation({ botId: 'macro' }), false); });
+        }
+        await waitFor(() => expect(stored()[0].enabled).toBe(false));
+        expect(stored()[0].disabledReason).toMatch(/3 runs in a row that produced nothing/);
+        expect(stored()[0].disabledReason).toMatch(/no longer on the roster/);
+        expect(runPipeline).not.toHaveBeenCalled();
     });
 });
