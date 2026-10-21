@@ -102,6 +102,40 @@ describe('a full analysis is told, and checked', () => {
         expect(out.notice).toMatch(/NOTHING LOOKED UP/);
     });
 
+    it('does not count a memory read or a skill edit as checking the tape', async () => {
+        // The old check excluded ONLY `present_trade`, so any other call —
+        // including reading the notebook or writing a memory — silenced the
+        // notice. A plan then presented from that memory passed the check the
+        // notice exists to enforce.
+        script([
+            { call: 'read_memory', line: 'read memory · ok' },
+            { call: 'write_memory_note', line: 'memory note · saved' },
+            { text: 'Long BTC at 111,000, stop 109,800.' },
+        ]);
+        const out = await turn({ requireTools: true });
+        expect(out.notice).toMatch(/NOTHING LOOKED UP/);
+    });
+
+    it('does not count a decline as checking the tape', async () => {
+        script([
+            { call: 'decline_trade', line: 'calling decline trade…' },
+            { line: 'decline trade · HOLD' },
+            { text: 'No trade.' },
+        ]);
+        const out = await turn({ requireTools: true });
+        expect(out.notice).toMatch(/NOTHING LOOKED UP/);
+    });
+
+    it('does count a market read from the trader\'s own log', async () => {
+        script([
+            { call: 'get_trade_log', line: 'calling trade log…' },
+            { line: 'trade log · 12 closed' },
+            { text: 'Your last three longs stopped at the range low.' },
+        ]);
+        const out = await turn({ requireTools: true });
+        expect(out.notice).toBeUndefined();
+    });
+
     it('leaves an ordinary chat line alone: no mandate, no notice', async () => {
         script([{ text: 'A futures contract is an agreement…' }]);
         const out = await turn();

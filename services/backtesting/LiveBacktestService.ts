@@ -12,6 +12,7 @@
 import { LoggedTrade, TradeAnalysis, TradeOutcome } from '../../types';
 import { MarketRegime } from '../analysis/TechnicalAnalysisService';
 import { parsePrice } from '../../utils/analysisUtils';
+import { nearestTargetPrice } from '../../utils/riskReward';
 import { baseOf } from '../../utils/symbol';
 
 // =============================================================================
@@ -258,7 +259,12 @@ const calculatePnlPercent = (trade: LoggedTrade): number | null => {
 
     const entry = parsePrice(analysis.entryPoints?.[0]?.price || '') || 0;
     const sl = parsePrice(analysis.stopLoss || '') || 0;
-    const tp = parsePrice(analysis.takeProfit?.[0]?.price || '') || 0;
+    // A corrected exit is what actually filled; otherwise use the target the
+    // card quoted (nearest), not array order.
+    const corrected = parsePrice(trade.correctedTakeProfit || '');
+    const tp = Number.isFinite(corrected) && corrected > 0
+        ? corrected
+        : (nearestTargetPrice(entry, (analysis.takeProfit ?? []).map(t => parsePrice(t?.price ?? ''))) ?? 0);
 
     if (entry > 0) {
         const dirSign = analysis.direction === 'Long' ? 1 : -1;

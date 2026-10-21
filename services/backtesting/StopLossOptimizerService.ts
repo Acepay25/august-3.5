@@ -9,6 +9,7 @@
 
 import { LoggedTrade, TradeOutcome } from '../../types';
 import { parsePrice } from '../../utils/analysisUtils';
+import { nearestTargetPrice } from '../../utils/riskReward';
 
 // ============================================================================
 // TYPES
@@ -297,14 +298,17 @@ export const trackSLOutcome = (
         ? priceData.minPrice <= extendedSL
         : priceData.maxPrice >= extendedSL;
 
-    // Determine if this was a missed win
-    const takeProfit1 = trade.analysis.takeProfit?.[0]?.price;
+    // Determine if this was a missed win. The first target the trader would
+    // have taken is the NEAREST one; array order can put it second.
+    const takeProfit1 = nearestTargetPrice(
+        entry,
+        (trade.analysis.takeProfit ?? []).map(tp => parsePrice(tp?.price ?? '')),
+    );
     let hitTP = false;
-    if (takeProfit1) {
-        const tp = parsePrice(takeProfit1 || '');
+    if (takeProfit1 !== null) {
         hitTP = direction === 'Long'
-            ? priceData.maxPrice >= tp
-            : priceData.minPrice <= tp;
+            ? priceData.maxPrice >= takeProfit1
+            : priceData.minPrice <= takeProfit1;
     }
 
     const missedWinDueToTightSL = slWasTouched && !extendedZoneBreached && hitTP &&

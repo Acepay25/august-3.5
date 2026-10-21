@@ -14,6 +14,7 @@
 // =============================================================================
 
 import { clamp01 } from '../../utils/math';
+import { targetsByDistance } from '../../utils/riskReward';
 
 export interface MonteCarloResult {
     simulations: number;
@@ -280,9 +281,13 @@ const evaluatePath = (
 
     const isLong = direction === 'Long';
     const absentTarget = isLong ? Infinity : -Infinity;
-    const tp1 = takeProfits[0] || (explicitTargetsOnly ? absentTarget : (isLong ? entry * 1.02 : entry * 0.98));
-    const tp2 = takeProfits[1] || (explicitTargetsOnly ? absentTarget : (isLong ? entry * 1.04 : entry * 0.96));
-    const tp3 = takeProfits[2] || (explicitTargetsOnly ? absentTarget : (isLong ? entry * 1.06 : entry * 0.94));
+    // TP1/TP2/TP3 mean nearest, next, farthest — the order the trader takes
+    // them, not the order the model happened to list. Array order here made a
+    // 3.10R "TP1" out of the farthest target on an out-of-order ladder.
+    const orderedTargets = targetsByDistance(entry, takeProfits);
+    const tp1 = orderedTargets[0] || (explicitTargetsOnly ? absentTarget : (isLong ? entry * 1.02 : entry * 0.98));
+    const tp2 = orderedTargets[1] || (explicitTargetsOnly ? absentTarget : (isLong ? entry * 1.04 : entry * 0.96));
+    const tp3 = orderedTargets[2] || (explicitTargetsOnly ? absentTarget : (isLong ? entry * 1.06 : entry * 0.94));
 
     // Per-step volatility estimate from the path's own log returns — used to
     // synthesize intra-step high/low. A TP/SL touch between closes was

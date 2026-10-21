@@ -40,6 +40,8 @@ vi.mock('openai', () => ({
 
 import { sendChatRequest } from '../services/providers/GenericProviderService';
 import ChatTranscriptRow from '../components/shared/ChatTranscriptRow';
+import ChatTranscriptList from '../components/trade/panels/ChatTranscriptList';
+import type { LiveEntry } from '../services/trade/chatStore';
 import type { ProviderConfig } from '../types/provider';
 
 const config = (over: Partial<ProviderConfig> = {}): ProviderConfig => ({
@@ -135,6 +137,28 @@ describe('a failed turn is not an answer', () => {
         // "desk" would read as though the desk had said it.
         expect(screen.getByTestId('chat-error-row')).toBeTruthy();
         expect(document.body.textContent).not.toContain('desk');
+    });
+
+    it('the dock renders the failure too, instead of an empty bubble', () => {
+        // The dock's list is a different component from the Chat surface's row.
+        // A failure row only in `ChatTranscriptRow` left the dock's failed turn
+        // blank: the error field existed and nothing drew it.
+        const entries: LiveEntry[] = [{
+            id: 'e1', role: 'ai', text: '', tools: [],
+            error: 'Kilocode: fetch failed · ENOTFOUND: getaddrinfo ENOTFOUND api.kilocode.ai',
+        }];
+        render(
+            <ChatTranscriptList
+                entries={entries}
+                send={async () => undefined}
+                symbol="BTCUSDT"
+                getMark={() => null}
+                onChatLevels={() => undefined}
+            />,
+        );
+        const row = screen.getByTestId('chat-error-row');
+        expect(row.textContent).toContain('ENOTFOUND');
+        expect(row.textContent).toContain('request failed');
     });
 });
 

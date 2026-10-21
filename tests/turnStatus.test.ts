@@ -84,6 +84,26 @@ describe('turnActivityLabel — what the turn is doing RIGHT NOW', () => {
         // would be a lie about the model's work; the label is not.
         expect(turnActivityLabel(['calling my custom tool…'], false)).toBe('my custom tool');
     });
+
+    it('does not let a harness notice become the status line', () => {
+        // The desk writes receipts, repairs and guards to the SAME channel as
+        // tool lines. "COMPACTED FOR THE CONTEXT WINDOW" is not what the turn is
+        // doing; the last real call is.
+        expect(turnActivityLabel([
+            'calling order book…', 'order book · ok',
+            'COMPACTED FOR THE CONTEXT WINDOW: 2 old tool results shortened — 9,000 → 6,000 estimated tokens.',
+        ], false)).toBe('Reading the order book');
+        expect(turnActivityLabel(['desk guard · repeated call — asking for a reply now'], false)).toBeNull();
+        // `compactOutbound` reports the request's OTHER half on this same
+        // channel: how much output actually fit, and the refusal when nothing
+        // would. They are receipts about the wire, not the turn's work — and
+        // with no ` · ` in them the whole sentence would become the label.
+        expect(turnActivityLabel([
+            'calling order book…', 'order book · ok',
+            'OUTPUT BUDGET: 8,192 output tokens requested, 400 fit the 8,192-token window.',
+            'CONTEXT WINDOW TOO SMALL: 8,192 tokens cannot hold this prompt plus a reply (7,900 estimated prompt tokens, 128-token ceiling).',
+        ], false)).toBe('Reading the order book');
+    });
 });
 
 describe('turnWorkSummary — what the turn DID', () => {
@@ -104,6 +124,17 @@ describe('turnWorkSummary — what the turn DID', () => {
     it('has nothing to say when the turn did nothing', () => {
         expect(turnWorkSummary([])).toBeNull();
         expect(turnWorkSummary(['', '  '])).toBeNull();
+    });
+
+    it('does not name a harness notice as a tool the desk used', () => {
+        expect(turnWorkSummary([
+            'calling order book…', 'order book · ok',
+            'desk guard · repeated call — asking for a reply now',
+        ])).toBe('order book');
+        expect(turnWorkSummary([
+            'calling order book…', 'order book · ok',
+            'OUTPUT BUDGET: 8,192 output tokens requested, 400 fit the 8,192-token window.',
+        ])).toBe('order book');
     });
 });
 
@@ -141,6 +172,22 @@ describe('turnKindSummary — the counts, by KIND', () => {
     it('counts a failed call too — the desk tried, and that is work', () => {
         expect(turnKindSummary(['calling order book…', 'order book · failed'])).toBe('1 read');
     });
+
+    it('does not count a harness notice as a call', () => {
+        expect(turnKindSummary([
+            'calling order book…', 'order book · ok',
+            'thinking hit the round\'s token ceiling with nothing to show · re-asking at medium',
+            'desk guard · repeated call — asking for a reply now',
+            'COMPACTED FOR THE CONTEXT WINDOW: 1 old tool result shortened — 2,000 → 400 estimated tokens.',
+        ])).toBe('1 read');
+        // One call, and two wire receipts beside it. Counting the receipts would
+        // tell the trader the desk ran three tools it never ran.
+        expect(turnKindSummary([
+            'calling order book…', 'order book · ok',
+            'OUTPUT BUDGET: 8,192 output tokens requested, 400 fit the 8,192-token window.',
+            'CONTEXT WINDOW TOO SMALL: 8,192 tokens cannot hold this prompt plus a reply.',
+        ])).toBe('1 read');
+    });
 });
 
 describe('toolKinds — the vocabulary, keyed by the label the transcript carries', () => {
@@ -151,6 +198,10 @@ describe('toolKinds — the vocabulary, keyed by the label the transcript carrie
         expect(toolKindOf('chart draw').kind).toBe('draw');
         expect(toolKindOf('skill proposal').kind).toBe('write');
         expect(toolKindOf('present trade').kind).toBe('present');
+        // Mailbox tools are defined beside the mailbox, not in the desk's
+        // definition list; their labels are still emitted by `toolLabel`.
+        expect(toolKindOf('direct message').kind).toBe('write');
+        expect(toolKindOf('read inbox').kind).toBe('read');
     });
 
     it('is case-insensitive, because the transcript carries "BTC context"', () => {
@@ -196,7 +247,14 @@ describe('toolKinds — the vocabulary, keyed by the label the transcript carrie
         let lm: RegExpExecArray | null;
         while ((lm = labelRe.exec(block![0]))) labels[lm[1]] = lm[2];
 
-        const emitted = [...new Set([...names].map(n => labels[n] ?? n.replace(/_/g, ' ')))]
+        // Both populations matter: a tool DEFINED in the desk service, and a
+        // label declared in TOOL_LABELS for a tool defined elsewhere (the
+        // mailbox tools live beside their mailbox). The old population used
+        // only the names, so `direct message`/`read inbox` were never checked.
+        const emitted = [...new Set([
+            ...[...names].map(n => labels[n] ?? n.replace(/_/g, ' ')),
+            ...Object.values(labels),
+        ])]
             .map(l => l.toLowerCase())
             .sort();
 

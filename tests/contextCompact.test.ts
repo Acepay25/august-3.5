@@ -312,4 +312,18 @@ describe('compactForWire', () => {
             .actions.forEach(a => kinds.add(a.kind));
         expect(kinds.has('tool-payload')).toBe(true);
     });
+
+    it('never drops the last USER question, even after tool rounds push it out of the tail', () => {
+        // The question is at the START of a desk turn; every round appends
+        // AFTER it. By round four it is outside the protected tail, and the
+        // first droppable group is the question itself. Dropping it leaves the
+        // seat with tool results and no question to answer.
+        const messages: ChatMessage[] = [
+            { role: 'system', content: 'mandate' },
+            { role: 'user', content: 'read the tape' },
+            ...Array.from({ length: 8 }, (_, i) => toolRound(`get_order_book_${i}`, 2_000)).flat(),
+        ];
+        const r = compactMessages({ messages, ceilingTokens: 600 });
+        expect(r.messages.some(m => m.role === 'user' && m.content === 'read the tape')).toBe(true);
+    });
 });

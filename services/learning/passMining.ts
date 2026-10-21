@@ -24,6 +24,7 @@ import { TradeOutcome } from '../../types/enums';
 import { getPreferenceArray, setPreferenceObject } from '../infrastructure/PreferencesService';
 import { scanTradeOutcome, resolveOutcomeFromScan } from '../backtesting/outcomeEngine';
 import { baseOf } from '../../utils/symbol';
+import { nearestTargetPrice } from '../../utils/riskReward';
 import type { Kline } from '../../types/message';
 
 /** Match MIN_CLUSTER_FOR_SKILL — three vindicated passes draft a skill. */
@@ -151,7 +152,10 @@ const planOf = (t: LoggedTrade): { entry: number; sl: number; tp: number; isLong
     const num = (v: unknown): number => parseFloat(String(v ?? '').replace(/[^0-9.]/g, '')) || 0;
     const entry = num(a.entryPoints?.[0]?.price) || num(t.correctedEntry);
     const sl = num(a.stopLoss);
-    const tp = num(a.takeProfit?.[0]?.price);
+    // The target the trader was shown is the NEAREST one, not the first the
+    // model happened to list. A skipped trade resolved against array order can
+    // be called a correct pass because the farthest target never filled.
+    const tp = nearestTargetPrice(entry || 0, (a.takeProfit ?? []).map(t => num(t?.price)));
     const isLong = a.direction === 'Long';
     if (!entry || !sl || !tp) return null;
     // Sanity: the levels must bracket the entry the right way for the side.

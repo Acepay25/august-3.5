@@ -28,6 +28,7 @@ import { executeForgedTool, confirmedForgedToolDefinitions } from '../tools/tool
 import type { ChatMessage, ChatRequestOptions } from '../providers/GenericProviderService';
 import { sendChatTurn, streamChatRequest } from '../providers/GenericProviderService';
 import { compactForWire } from '../providers/contextCompact';
+import { DEFAULT_OUTPUT_RESERVE_TOKENS, outputTokenBudget } from '../../utils/contextWindow';
 import { stepEffortDown, type ReasoningEffort } from '../providers/reasoningControls';
 import { calculateCorrelationRisk } from './CorrelationRiskService';
 import {
@@ -336,19 +337,44 @@ const appendTurnNotice = (messages: ChatMessage[], text: string): void => {
  * `services/providers/contextCompact.ts` holds the policy; this is the channel
  * that reports it, on the same tool-event line the transcript already paints.
  */
+interface CompactedOutbound {
+    messages: ChatMessage[];
+    maxTokens: number;
+}
+
 const compactOutbound = (
     config: ProviderConfig,
     messages: ChatMessage[],
     maxTokens: number | undefined,
     report?: (line: string) => void,
-): ChatMessage[] => {
-    const result = compactForWire(config, messages, { outputReserveTokens: maxTokens });
+): CompactedOutbound => {
+    const requested = maxTokens ?? DEFAULT_OUTPUT_RESERVE_TOKENS;
+    const result = compactForWire(config, messages, { outputReserveTokens: requested });
     // Report the cut OR the failure to cut. A window too small for the mandate
     // plus the current turn leaves the compactor nothing to do, and that is the
     // one case where silence reads as "the request is fine" right before the
     // provider refuses it.
     if (report && (result.changed || result.stillOver > 0) && result.notice) report(result.notice);
-    return result.messages;
+
+    // The prompt fitting is only half the request: `max_tokens` is counted
+    // against the SAME window, and the old path sent 8192 output tokens no
+    // matter how little room the prompt left. A 4k/8k local model was therefore
+    // handed a request that could never fit. Size the output to what is left,
+    // and refuse a request that cannot hold even a short reply rather than send
+    // it and let the provider answer with an opaque 400.
+    const available = outputTokenBudget(result.windowTokens, result.afterTokens);
+    if (available < 128) {
+        const line = `CONTEXT WINDOW TOO SMALL: ${result.windowTokens.toLocaleString()} tokens cannot hold this prompt plus a reply`
+            + ` (${result.afterTokens.toLocaleString()} estimated prompt tokens, ${result.ceilingTokens.toLocaleString()}-token ceiling).`
+            + ' Raise the provider context window or shorten the conversation.';
+        report?.(line);
+        throw new Error(line);
+    }
+    const effective = Math.min(requested, available);
+    if (report && effective < requested) {
+        report(`OUTPUT BUDGET: ${requested.toLocaleString()} output tokens requested, ${effective.toLocaleString()} fit the ${result.windowTokens.toLocaleString()}-token window.`);
+    }
+    return { messages: result.messages, maxTokens: effective };
 };
 
 
@@ -2228,6 +2254,24 @@ const MARKET_TOOLS = new Set([
     'run_monte_carlo',
 ]);
 
+/**
+ * The tools whose call READ the market (or the trader's own market record).
+ *
+ * `MARKET_TOOLS` answers a different question — "does this result need the coin
+ * named?" — so it does not include `get_trade_log` or `run_screener`. This set
+ * is the one the Full-analysis / scheduled-run check asks: a memory read, a
+ * skill edit, `decline_trade`, or `present_trade` is NOT looking at the tape,
+ * and must not silence "nothing was looked up".
+ */
+const MARKET_READ_TOOLS = new Set([
+    ...MARKET_TOOLS,
+    'get_session_context',
+    'get_trade_log',
+    'run_screener',
+]);
+
+export const isMarketReadTool = (name: string): boolean => MARKET_READ_TOOLS.has(name);
+
 const resolvedSymbolField = (call: DeskToolCall, fallback: string): { symbol?: string } => {
     if (!MARKET_TOOLS.has(call.name)) return {};
     return { symbol: asSymbol(call.arguments?.symbol, fallback) };
@@ -3551,9 +3595,10 @@ export async function runDeskToolLoop(params: {
         // Compacting here rather than once at entry is what stops an eight-round
         // turn from growing past the window in round five.
         const outbound = compactOutbound(config, messages, roundOptions.maxTokens, onToolEvent);
+        const turnOptions = { ...roundOptions, maxTokens: outbound.maxTokens };
         const turn = streamTurn
-            ? await runStreamingTurn(streamTurn, config, outbound, roundOptions, onTextDelta)
-            : await sendTurn(config, outbound, roundOptions);
+            ? await runStreamingTurn(streamTurn, config, outbound.messages, turnOptions, onTextDelta)
+            : await sendTurn(config, outbound.messages, turnOptions);
         reasoning = [reasoning, turn.reasoning].filter(Boolean).join('\n');
         finalText = turn.text || '';
 
@@ -4261,9 +4306,10 @@ export async function* streamChatWithDeskTools(
     // rounds collected PLUS the answer's own output budget — and it is the one
     // the trader is waiting for. Fit it here rather than let it arrive as a
     // truncated answer with a "provider stopped early" line and no reply.
+    const compactedFinal = compactOutbound(config, finalMessages, continuationOptions.maxTokens, line => onToolEvent?.(line));
     yield* streamChatRequest(
         config,
-        compactOutbound(config, finalMessages, continuationOptions.maxTokens, line => onToolEvent?.(line)),
-        continuationOptions,
+        compactedFinal.messages,
+        { ...continuationOptions, maxTokens: compactedFinal.maxTokens },
     );
 }

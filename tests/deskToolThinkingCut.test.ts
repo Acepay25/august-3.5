@@ -363,14 +363,33 @@ describe('proactive compaction inside the tool loop', () => {
         expect(events.join('\n')).not.toMatch(/COMPACTED/);
     });
 
-    it('says so when the window cannot hold even the mandate and the question', async () => {
+    it('clamps the output budget to what the window has left', async () => {
+        // The prompt fits after compaction, but 8192 output tokens would push
+        // the whole request past a 12k window. The wire must receive what is
+        // left, not the round's default.
+        scriptStream([{ text: 'Book is thin; no plan.' }]);
+        await runDeskToolLoop({
+            config: { ...config, contextWindowTokens: 12_000 },
+            messages: longHistory(),
+            sendTurn: sendMock,
+            streamTurn: streamMock,
+            nativeTools: true,
+            options: { maxTokens: 8_192 },
+        });
+        const sent = streamMock.mock.calls[0][2] as { maxTokens: number };
+        expect(sent.maxTokens).toBeGreaterThan(0);
+        expect(sent.maxTokens).toBeLessThan(8_192);
+    });
+
+    it('refuses a request the window cannot hold instead of sending it', async () => {
         // 2000 tokens with an 8192 output budget leaves a ceiling of 1024, and
-        // the desk mandate alone is bigger. There is nothing to cut, so the
-        // notice is the ONLY thing that tells the trader what happened — a
-        // silent oversized send is what they experience as "it never replied".
+        // the desk mandate alone is bigger. The prompt fits nothing, and the
+        // output budget cannot be clamped into the window either. Sending it
+        // anyway is what the trader experiences as "it never replied"; the
+        // turn must say why before it refuses.
         scriptStream([{ text: 'An answer.' }]);
         const events: string[] = [];
-        await runDeskToolLoop({
+        await expect(runDeskToolLoop({
             config: { ...config, contextWindowTokens: 2_000 },
             messages: longHistory(),
             sendTurn: sendMock,
@@ -378,8 +397,11 @@ describe('proactive compaction inside the tool loop', () => {
             nativeTools: true,
             onToolEvent: line => events.push(line),
             options: { maxTokens: 8_192 },
-        });
-        expect(events.join('\n')).toMatch(/CONTEXT FULL/);
+        })).rejects.toThrow(/CONTEXT WINDOW TOO SMALL/);
+        expect(events.join('\n')).toMatch(/CONTEXT WINDOW TOO SMALL/);
+        // No provider request was made with an impossible budget.
+        expect(streamMock).not.toHaveBeenCalled();
+        expect(sendMock).not.toHaveBeenCalled();
     });
 
     it('never sends a call whose replies it dropped', async () => {

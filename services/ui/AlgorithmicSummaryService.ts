@@ -3,7 +3,8 @@
 
 import { LoggedTrade } from '../../types';
 import { detectTradingSession } from '../validation/calibrationStore';
-import { fmtRiskReward } from '../../utils/riskReward';
+import { fmtRiskReward, nearestTargetPrice } from '../../utils/riskReward';
+import { parsePrice } from '../../utils/analysisUtils';
 
 /**
  * Generates a structured trade summary string algorithmically.
@@ -35,7 +36,13 @@ export const generateAlgorithmicTradeSummary = (trade: LoggedTrade): string => {
     // === LINE 3: EXECUTION (Entry, SL, TP, R:R) ===
     const entry = trade.correctedEntry || analysis?.entryPoints?.[0]?.price || 'N/A';
     const sl = trade.correctedStopLoss || analysis?.stopLoss || 'N/A';
-    const tp = trade.correctedTakeProfit || analysis?.takeProfit?.[0]?.price || 'N/A';
+    // The card quotes the target NEAREST the entry; the summary must not quote
+    // the first array element instead.
+    const nearestTp = nearestTargetPrice(
+        parsePrice(String(entry)),
+        (analysis?.takeProfit ?? []).map(tp => parsePrice(tp?.price ?? '')),
+    );
+    const tp = trade.correctedTakeProfit || (nearestTp !== null ? String(nearestTp) : 'N/A');
     const rr = analysis?.rrRatio ? fmtRiskReward(analysis.rrRatio, 2) : 'N/A';
 
     lines.push(`Entry: ${entry}, SL: ${sl}, TP: ${tp} | R:R ${rr}`);

@@ -39,7 +39,8 @@ import { buildSkillsIndexForPrompt, rankSkillIndexRows } from './tradeChatContex
 import { listSkills } from '../learning/SkillMemoryService';
 import { activeStrategiesBlock } from '../learning/strategyStore';
 import { buildProfileMemoryIndex } from '../learning/profileMemory';
-import { isPresentationOnlyTool, runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
+import { runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
+import { isMarketReadTool } from '../analysis/DeskToolsService';
 import { runPresentTrade } from './presentTradeTool';
 import { userContentWithImage } from './chatTurnRunner';
 import { saveToolPayload } from './toolPayloadStore';
@@ -362,9 +363,11 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
     const tracked: ToolTurnEvents = {
         ...events,
         // Name, not display line: `present_trade` renders as a call like any
-        // other, but it reads nothing — a plan presented out of memory must not
-        // satisfy a request to check the tape.
-        addToolCall: name => { if (!isPresentationOnlyTool(name)) sawMarketTool = true; },
+        // other, but it reads nothing — and neither does a memory read, a
+        // skill edit, or `decline_trade`. Only an explicit market-read set
+        // satisfies "checked the tape"; anything else would let a plan from
+        // memory pass the very check that exists to catch it.
+        addToolCall: name => { if (isMarketReadTool(name)) sawMarketTool = true; },
     };
     // The truncation tally is per-RUN, and this is the run. Without a window
     // open, `recordFinishReason` counts nothing and a provider that stopped

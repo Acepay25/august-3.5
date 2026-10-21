@@ -52,12 +52,6 @@ export interface ToolTurnEvents {
     addAction(action: Parameters<NonNullable<StreamWithDeskToolsOptions['onToolAction']>>[0]): void;
 }
 
-/** A call that PRESENTS a result without reading one. `present_trade` runs the
- *  proposal gate, but the gate is a scoring pass over data the model never saw,
- *  so a turn whose only call is this one looked nothing up and must not satisfy
- *  the Full-analysis / scheduled-run "checked the tape" contract. */
-export const isPresentationOnlyTool = (name: string): boolean => name === 'present_trade';
-
 export interface ToolTurnOutcome {
     /** The answer, after stripping and the echo/peel repair — what to PAINT. */
     text: string;

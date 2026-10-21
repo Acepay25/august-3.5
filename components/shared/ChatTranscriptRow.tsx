@@ -26,6 +26,7 @@ import { InterruptedRunNotice } from './InterruptedRunNotice';
 import ChatWorkTimeline, { type ChatWorkView } from '../trade/panels/ChatWorkTimeline';
 import { CopyChip, FadingText, PinChip, RetryChip, SpeakChip, ThinkingTierChip } from './chatChips';
 import AnswerBody from './AnswerBody';
+import ChatFailureRow from './ChatFailureRow';
 import KeyLevelsCard from '../trade/KeyLevelsCard';
 import { parseKeyLevels, type ModelKeyLevel } from '../../services/trade/keyLevels';
 import type { TradeAnalysis } from '../../types';
@@ -170,15 +171,7 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                    words — the status, the message, the cause underneath — and
                    it is drawn in the failure colour so the reader never
                    mistakes the app's error for the seat's opinion. */
-                <div
-                    data-testid="chat-error-row"
-                    className="w-full max-w-full rounded-control border border-rose-500/25 bg-rose-500/[0.06] px-3 py-2 text-ui-base leading-relaxed text-rose-200"
-                >
-                    <span className="mb-0.5 block font-mono text-ui-2xs uppercase tracking-wider text-rose-400/80">
-                        request failed
-                    </span>
-                    {row.error}
-                </div>
+                <ChatFailureRow error={row.error} />
             ) : (
                 <div className="w-full max-w-full text-zinc-200 text-ui-base leading-relaxed">
                     <ChatWorkTimeline entry={work} />

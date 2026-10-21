@@ -29,6 +29,37 @@
 import { stripTraceMarkers } from './traceText';
 import { KIND_ORDER, toolKindCount, toolKindOf, type ToolKind } from './toolKinds';
 
+/**
+ * Lines the desk writes to the SAME tool-event channel that are NOT tool
+ * calls: compaction receipts, thinking-cut repairs, the repeated-call guard,
+ * the "nothing looked up" notice and the truncation warning. They must stay
+ * visible in the work card, but they are not calls — counting one as a step
+ * would tell the trader the desk ran a tool it never ran, and letting one be
+ * the last line would make the status say "COMPACTED FOR THE CONTEXT WINDOW"
+ * where it should name the work.
+ *
+ * The prefixes are the desk's own literals. A new harness notice must be added
+ * here; `tests/turnStatus.test.ts` pins the current set.
+ */
+const HARNESS_NOTICE_PREFIXES = [
+    'desk guard',
+    'thinking hit the round',
+    'tool syntax',
+    'COMPACTED FOR THE CONTEXT WINDOW',
+    'CONTEXT FULL',
+    'CONTEXT WINDOW TOO SMALL',
+    'OUTPUT BUDGET',
+    'FULL ANALYSIS, NOTHING LOOKED UP',
+    'NOTHING WAS LOOKED UP',
+    'THE PROVIDER STOPPED EARLY',
+    'TOOL FAILURE',
+];
+
+export const isHarnessNoticeLine = (raw: string): boolean => {
+    const line = stripTraceMarkers(raw ?? '').trim();
+    return HARNESS_NOTICE_PREFIXES.some(prefix => line.startsWith(prefix));
+};
+
 /** A tool row's state. Derived from the line's TEXT, never stored separately —
  *  the digest line is the only record of what happened. */
 export type ToolRowState = 'calling' | 'done' | 'failed';
@@ -84,6 +115,7 @@ export const parseToolLine = (raw: string): ParsedToolLine | null => {
 export const turnActivityLabel = (lines: string[], hasReasoning: boolean): string | null => {
     let last: ParsedToolLine | null = null;
     for (const raw of lines ?? []) {
+        if (isHarnessNoticeLine(raw)) continue;
         const parsed = parseToolLine(raw);
         if (parsed) last = parsed;
     }
@@ -163,7 +195,7 @@ export const pairToolRows = (lines: string[]): PairedToolRow[] => {
  * honest summary was a count of lines.
  */
 export const turnKindSummary = (lines: string[]): string | null => {
-    const rows = pairToolRows(lines);
+    const rows = pairToolRows((lines ?? []).filter(line => !isHarnessNoticeLine(line)));
     if (rows.length === 0) return null;
     const counts = new Map<ToolKind, number>();
     for (const row of rows) {
@@ -197,6 +229,7 @@ export const turnWorkSummary = (tools: string[]): string | null => {
     const parts: string[] = [];
     const seen = new Set<string>();
     for (const raw of tools ?? []) {
+        if (isHarnessNoticeLine(raw)) continue;
         const parsed = parseToolLine(raw);
         if (!parsed) continue;
         const head = parsed.label;
