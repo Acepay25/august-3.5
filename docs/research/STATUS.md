@@ -29,6 +29,11 @@ Trading source code is modified by this work.
 > It is **not** one of the named reference repos and is **out of scope**; it is
 > excluded from every manifest.
 
+> These three checkouts are also the pins the independent audit re-derived coverage
+> against — `git rev-parse HEAD` in each returns pi `58c0b02c`, deepseek-harness
+> `687f282e`, hermes-agent `4e58c721`. Anyone re-checking a shard citation should do it
+> here, at these commits; a later upstream commit moves every line number in the corpus.
+
 ## Phases — all complete
 
 | Phase | Deliverable | Status |
@@ -52,6 +57,16 @@ Every tracked file in every repo appears in the ledger, exactly once, with a sta
 of `read` or `skipped` and — for a skip — a one-line reason. No file is missing, no
 ledger row names a file that is not tracked, and no shard is without a ledger.
 
+**Two qualifications the independent audit adds to that PASS**
+(`INDEPENDENT-AUDIT.md` §1/§4, both re-derived here): arithmetically the gate is
+complete, but `read` is not uniformly "read line by line" — 19 files in
+`dsh-web-deliverables-feedback` are recorded `read` while its own prose says they were
+not, and the merged totals above inherit them (so `deepseek-harness` is 13,060 recorded
+`read`, 13,041 honestly `read`). And three ledgers — `dsh-docs-persistence`,
+`dsh-client-primitives-theme`, `dsh-client-approval-agents-ui` — do not open with the
+required `path\tstatus\tnote` header, which the roll-up tolerates and this file did not
+record.
+
 Regenerate: `node %TEMP%\harness-research\merge-status.mjs` (merges the shard
 ledgers into the manifest and diffs it against `git ls-files`), then
 `node %TEMP%\harness-research\gen-coverage.mjs` (rebuilds `COVERAGE.md`).
@@ -71,6 +86,8 @@ ledgers into the manifest and diffs it against `git ls-files`), then
 | `docs/research/trading-baseline.md` | the August Trading baseline: 343 features, each REAL or COSMETIC, with `file:line` |
 | `docs/research/baseline/*.md` | the seven per-area evidence files behind the baseline |
 | `docs/research/TRADING-IMPROVEMENTS.md` | twelve proposals with verdicts, a "considered and rejected" section, and the ranked top five |
+| `docs/research/INDEPENDENT-AUDIT.md` | the second-agent audit of this run: coverage re-derived from the pinned clones, 22 of 93 reports spot-checked content-by-content, and the five findings the gate should carry |
+| `docs/research/PROPOSALS-DELTA.md` | the same auditor re-opening every August-side `file:line` in the ranked top five at HEAD, with the corrections an implementer must carry into P4 and P9 |
 | `docs/research/<repo>/ARCHITECTURE.md` | the per-repo synthesis |
 | `docs/research/<repo>/COVERAGE.md` | the generated per-shard coverage table |
 | `docs/research/<repo>/coverage.tsv` | the same, as TSV |
@@ -131,3 +148,22 @@ ledgers into the manifest and diffs it against `git ls-files`), then
 - **18:12** — **Phase 4 DONE.** Twelve proposals, twelve verdicts, a
   "considered and rejected" section, and a ranked top five with a direct
   recommendation and an order.
+- **22:07** — **Independent audit landed** (`INDEPENDENT-AUDIT.md`,
+  `PROPOSALS-DELTA.md`), by an agent with no shard authorship in this run. Coverage
+  re-derived from its own clones: the gate's 38,979 / 93 / 0-missing **CONFIRMED**, and
+  22 of 93 reports spot-checked content-by-content (~300 checks, 3 substantive defects,
+  0 fabricated files or symbols). Every August-side `file:line` in the ranked top five
+  re-opened at HEAD: P1/P2/P3/P4/P5/P10 **CONFIRMED**, with corrections an implementer
+  must carry.
+- **00:23 (2026-10-23)** — **The audit was itself audited.** Re-checking its own
+  citations found four of its claims wrong or short: P3's two `DeskToolsService.ts`
+  attributions were swapped, `NavRail.tsx` keeps **three** live exports rather than the
+  two its correction told the plan to write, the `interrupted` flag is on the persisted
+  `StoredChatEntry` and not "only on the dock's `LiveEntry`", and P9's premise
+  ("cooldown read nowhere on the turn path") fails because `App.tsx:329` feeds the
+  fallback provider straight into `useAnalysisPipeline`. Its clone directory
+  (`C:/Dev/harness-refs`) does not exist on this machine, though its three commit pins
+  re-verify against the clones above; the §2 bucket rows sum 7,024 against a 7,025
+  denominator; the header anomaly is three ledgers, not two; and 14 reports carry no
+  `path:line` citation at all, not the two named. All corrected in place, and this file
+  now indexes both audit documents and carries the two qualifications on its own PASS.

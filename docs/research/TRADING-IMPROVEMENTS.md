@@ -336,24 +336,31 @@ evidence, is in the baseline. The ones that cost the most to keep:
 
 | Dead thing | Size | Evidence |
 | --- | --- | --- |
-| `TradeValidationGate` | 41 KB, **zero importers** | `services/validation/TradeValidationGate.ts`; `runValidationGate:495-973`; its twelve steps never run |
+| `TradeValidationGate` | 41 KB / 998 lines, **zero production importers** | `services/validation/TradeValidationGate.ts`; `runValidationGate:495-973`; its twelve steps never run. Its one importer is `tests/accuracyValidation.test.ts:3`, which pulls `validateTimeframeAlignment` + `matchPatternMemory` (7 references, one whole `describe` block at `:147`) — the module dies with those cases, not with the file, which otherwise tests the live `AccuracyValidationService`. The live pre-trade scan is a different module: `services/trade/proposalGate.ts` (334 lines) |
 | `patternMemoryGate` | test-only | `PatternMemorySynthesisService.ts:882-1081`; `Message.patternMemoryGate` is never assigned, so the journal HALT chip (`TradeLog.tsx:359-386`) can never render |
 | `SessionGuardService` — the **guard half** | daily-loss / trade-cap / streak / cooldown never fire | `SessionGuardService.ts:157-268` (`assessSession` + `formatGuardContextBlock`) is called only from tests. The module itself is **not** dead: `rowPnlUsd` and `utcDayStart` are imported by `services/learning/monthlyReport.ts:23`, `services/validation/calibrationPolicy.ts:63`, `utils/disciplineAnalytics.ts:18` and `utils/harnessSettings.ts:7` |
 | `providerFitness` | names a consumer (`autoAssignLenses`) **that does not exist** | `services/learning/providerFitness.ts:7-9` |
-| `learning_rules_v2` | a write-only store with a backup | `StorageService.ts:105`; no prompt reader |
-| `NavRail.tsx` | 242 lines, **never rendered** | `App.tsx:2507-2515`; `tests/deadControlsGuard.test.ts:145` pins the absence |
+| `learning_rules_v2` | a write-only store with a backup | `StorageService.ts:105` loads it into the profile (`useProfilePersistence.ts:116`, migration at `:115`); nothing composes it into a turn |
+| `NavRail.tsx` | 242 lines; the **component** is never rendered, but the file keeps **three live exports** | unmount pinned by `tests/deadControlsGuard.test.ts:145` (`expect(appSrc).not.toMatch(/<NavRail/)`), and `App.tsx:2507-2515` is the comment saying so. Live: `AccountRow` + `NAV_RAIL_AUTO_COLLAPSE_PX` (`App.tsx:129`, used `:2735`/`:669`/`:672`) and `NAV_RAIL_EXPANDED_PX` (`AgentsView.tsx:73`, used `:972`). Dead: the component, `export default React.memo(NavRail)` (`:242`) and `NAV_RAIL_COLLAPSED_PX` (`:35`). Deleting the file breaks the build; relocating three symbols first does not |
 | `SurfaceMenuList`'s surface list | mounted with `hideSurfaces`, so the brand bar, the badge and `RunBusyBadge` are all dead | `App.tsx:2725-2731` |
 | `ARBITER_ALLOWED_TOOLS` | only test importers | `DeskToolsService.ts:3341-3357` |
 | ~~`applyNotebookSkillsToAnalysis`~~ | **CORRECTED — it is LIVE.** The baseline recorded it as dead; re-opening the source shows the E-35 fix landed: `services/trade/presentTradeTool.ts:113` calls it and a fired AVOID **refuses the presentation** (`:114-133`). Not a deletion target |
-| `MemoryConsolidationService.ts` | an orphan module | — |
+| `MemoryConsolidationService.ts` | an orphan module — and two docs say its passes run | `pruneOutdatedInsights:74` / `aggregateSimilarInsights:102` have **no caller anywhere** (repo-wide grep: their own definitions plus one comment); `consolidateMemory`, the name `docs/learning-loop-map.md:167` uses, does not exist in the file. The module is 139 lines, not the 114 the prior cleanup manifest recorded |
 | the debate residue | 29 vestigial items | baseline §7 |
 
 Two things make this worse than ordinary dead code:
 
 - **The documentation lies.** `docs/app-flow.md:610-611` tells the reader the
   pattern-memory gate is *"the pre-trade gate that refuses a setup with no
-  evidence"*. It is test-only. `AgentsView.tsx:10-33` opens with *"⚠️ THE TWO
-  SURFACES DO NOT SHARE A STORE TODAY"* — false since the one-home merge.
+  evidence"*. It is test-only: its only call site
+  (`PatternMemorySynthesisService.ts:986`) sits inside
+  `generatePatternMemoryEnforcementContext` (`:982`), whose only consumers are
+  `tests/patternMemoryGate.test.ts`. Two lines above, `docs/app-flow.md:608` calls
+  `generateSynthesizedPromptInjection` *"the injected sentence"* — it has zero
+  callers (`:589` is its own definition). `AgentsView.tsx:10-33` opens with *"⚠️ THE
+  TWO SURFACES DO NOT SHARE A STORE TODAY"* — false since the one-home merge, which
+  `docs/app-flow.md:150-152` already states as *"one thread, GENERATING in both
+  homes"* over one `chatSessions` store.
   `docs/plans/debate-deletion-status.md:3-8` records that *"the closed-trade
   learning chain stops working with no replacement"*, and the code confirms it
   (`SkillCraftService.ts:145`).
@@ -434,8 +441,9 @@ returns is not the same as a stream that succeeded."* `deepseek-harness`
 ### What August Trading does today
 
 - A Stopped turn on the **Chat surface** is unmarked. `types/message.ts` has no
-  `interrupted` field; the flag lives only on the dock's `LiveEntry`
-  (`services/trade/chatSessions.ts:96-103`). `chatRowFrom`
+  `interrupted` field; the flag is declared on the **persisted** `StoredChatEntry`
+  (`services/trade/chatSessions.ts:103`, so the dock's rows survive reload) and
+  `chatStore.LiveEntry` inherits it by intersection (`chatStore.ts:48`). `chatRowFrom`
   (`components/agents/AgentsView.tsx:246-294`) never sets it, so
   `ChatTranscriptRow.tsx:219` can never render the "Run stopped" card — the
   recovery affordance (Edit prompt / Try again) is unreachable on the surface where
