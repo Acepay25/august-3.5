@@ -82,9 +82,22 @@ binary, out-of-scope language).
   with the shards ordered by value, so a partial run still lands the
   harness-critical ones first. After the fix, seven reports landed in twenty
   minutes.
-- **2026-10-22** — **Phase 3 spot-checks begun** (the lead re-opens the source and
-  confirms the claims; the shard authors do not verify their own work). First
-  checks: `dsh-core` and `pi-ai`. **6 of 7 claims verified exactly; 1 verified
-  true with a line-number drift of ~76 lines** (`max-tokens is sticky` is at
-  `packages/core/agent-loop/src/agent.ts:338-341`, not `:262-267` as cited). The
-  claim held; the citation drifted.
+- **2026-10-22** — **Phase 3 gate: deepseek-harness PASSES.** 16,297 tracked files,
+  16,297 ledger rows, **13,060 read, 3,237 skipped with a reason, 0 pending, 0
+  missing, 0 skipped without a reason, 47 of 47 shards complete.** The skipped tier
+  is the generated bilingual-pair hash records, the committed test snapshots and
+  expected-output fixtures, the Chinese mirrors of English documents already read,
+  and the in-tree vendor and native artefacts — each with a one-line reason.
+- **2026-10-22** — **The gate caught two stale claims in the August baseline**, and
+  both are corrected in `trading-baseline.md` and `TRADING-IMPROVEMENTS.md`:
+  1. *"the hard avoid veto is dead / `applyNotebookSkillsToAnalysis` has zero
+     production callers"* is **stale** — the E-35 fix landed. It is called at
+     `services/trade/presentTradeTool.ts:113` and a fired AVOID **refuses the
+     presentation**. The accurate claim is that the **chat** path has no
+     deterministic skill enforcement.
+  2. *"`SessionGuardService` is dead"* is **too strong** — the guard half is dead
+     (`assessSession` / `formatGuardContextBlock` are called only from tests), but
+     the module is imported for two pure helpers (`rowPnlUsd`, `utcDayStart`).
+  Verified **correct** as reported: `TradeValidationGate` really has zero importers
+  (all four production mentions are comments), `MemoryConsolidationService.ts` has
+  zero references at all, and the `propose_skill` defect is exactly as described.
