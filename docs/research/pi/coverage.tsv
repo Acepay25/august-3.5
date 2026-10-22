@@ -1,5 +1,5 @@
 shard	files	read	skipped	pending	skipped-without-a-reason	files-missing-from-the-ledger
-pi-agent-env	62	0	0	62	0	0
+pi-agent-env	62	62	0	0	0	0
 pi-ai	402	399	3	0	0	0
 pi-chord	109	109	0	0	0	0
 pi-codemode-mcp	67	67	0	0	0	0

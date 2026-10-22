@@ -87,7 +87,7 @@ repos for a trading app with scheduled automations.
   skills"*.
 - **Provenance is an explicit marker, never inferred.** `created_by: agent` is
   written by `skill_manage`; *"never inferred from location"*
-  (`tools/skill_provenance.py`).
+  (`tools/skill_usage.py:4-5`, enforced by `tools/skill_manager_guards.py:192-197`).
 - **Write origin is a `ContextVar`.** `tools/skill_provenance.py` separates a
   background-review write from a foreground, user-directed one: *"the curator only
   curates skills the self-improvement review fork created; skills a user asked for
@@ -187,18 +187,68 @@ The seams are one-idea files, and the corpus is files:
 
 ---
 
-## 8. Coverage
+## 8. Coverage — the gate PASSES
 
-The authoritative numbers are **generated, not written by hand**:
+**20,695 tracked files. 20,695 ledger rows. 0 pending, 0 missing, 0 skipped without a
+reason, 34 of 34 shards complete. GATE PASS.**
 
-- **`docs/research/hermes-agent/COVERAGE.md`** — the per-shard table.
+| | Files | Share |
+| --- | ---: | ---: |
+| **Read** | 18,144 | 87.7 % |
+| **Skipped, with a reason** | 2,551 | 12.3 % |
+| Pending / missing / unexplained | **0** | 0 % |
+
+By type: `source` 5,684 read / 133 skipped · `tests` 9,372 read / 4 skipped ·
+`docs` 1,620 / 73 · `config` 1,118 / 17 · `build-CI` 301 / 3 · `examples` 49 / 0 ·
+`assets` 0 / 186 · `generated-vendored` 0 / 2,135.
+
+**What the 2,551 skipped files are.** Every one carries a one-line reason:
+
+- **2,110 contributor records** — one per person, containing a personal email
+  address. **Deliberately not read and not reproduced anywhere in these reports.**
+  Two of the 2,112 are profile metadata derived from the git log, also skipped.
+- **54 brand design-system markdown files** (~1 MB) — catalogued as a set.
+- **~190 binary assets** — confirmed by name and byte size.
+- **The rest** are generated or vendored files, and a set of helper scripts read
+  by their module docstring plus their public function signatures rather than
+  line by line; the note says exactly that.
+
+**One gap was re-dispatched rather than accepted.** The `hermes-tui-gateway` reader
+ran out of budget and left 24 `tui_gateway/methods_*.py` files unread, marking
+them `skipped` with the reason *"not reached before this run's read budget was
+exhausted"*. That is an honest skip, but it is not coverage, so those 24 files were
+re-dispatched and read. **The gate is not satisfied by an admission of not having
+read something; it is satisfied by reading it.**
+
+**The authoritative numbers are generated, not written by hand:**
+
+- **`docs/research/hermes-agent/COVERAGE.md`** — the per-shard table
+  (files / read / skipped-with-a-reason / pending / missing-from-ledger).
 - **`docs/research/hermes-agent/coverage.tsv`** — the same, as TSV.
-- **`docs/research/hermes-agent/manifest.tsv`** — the full ledger.
+- **`docs/research/hermes-agent/manifest.tsv`** — the full ledger: every tracked
+  file, its size, its type, its owning shard, its status and its reason.
 
-Regenerate with `node %TEMP%\harness-research\merge-status.mjs`, then
-`node %TEMP%\harness-research\gen-coverage.mjs`.
+Regenerate with `node %TEMP%\harness-research\merge-status.mjs` (merges the shard
+ledgers into the manifest and diffs it against `git ls-files`), then
+`node %TEMP%\harness-research\gen-coverage.mjs` (rebuilds `COVERAGE.md`).
 
-**Totals for the repo:** 20,695 tracked files across 34 shards. The
-`hermes-contributors` shard (2,112 files) is a deliberate `skipped` tier: 2,110 are
-personal email addresses, deliberately not read, and 2 are profile metadata derived
-from the git log.
+**Lead spot-checks.** The lead re-opened the source and confirmed the claims rather
+than trusting the shard authors:
+
+- `hermes-cron`: `cron/occurrences.py:78` (`unclaimed_pending_slot` — *"Stored
+  instant of a slot the dispatcher never claimed"*) and `cron/jobs.py:3194`
+  (`_restore_unclaimed_slot` — *"Put an occurrence the dispatcher advanced past but
+  never claimed back on the schedule (#107485) … Restored ONCE"*) — **both verified
+  exactly, at the cited lines, including the issue number.**
+- `hermes-tools`: `tools/skill_provenance.py:1-9` (the write-origin `ContextVar`),
+  `tools/skill_usage.py:1-6` (the sidecar) and `tools/skill_usage.py:70`
+  (`skill_file_lock`, *"Re-entrant within one thread"*) — **verified exactly**.
+- `hermes-skills-core`: `tools/skill_usage.py:4-5` (*"an explicit `created_by: agent`
+  marker written by skill_manage — never inferred from location"*), `:35`
+  (`STATE_ACTIVE, STATE_STALE, STATE_ARCHIVED`) and `:56` (`.archive`) — **verified
+  exactly**.
+
+**One attribution was corrected as a result:** the `created_by` marker is documented
+in `tools/skill_usage.py:4-5` and enforced by `tools/skill_manager_guards.py:192-197`,
+not in `tools/skill_manager_tool.py` as the proposals first stated. **No claim was
+found false.**

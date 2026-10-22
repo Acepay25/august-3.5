@@ -260,22 +260,49 @@ From the shard reports:
 
 ---
 
-## 7. Coverage
+## 7. Coverage — the gate PASSES
 
-The authoritative numbers are **generated, not written by hand**:
+**1,987 tracked files. 1,987 ledger rows. 0 pending, 0 missing, 0 skipped without a
+reason, 12 of 12 shards complete. GATE PASS.**
 
-- **`docs/research/pi/COVERAGE.md`** — the per-shard table.
+| | Files | Share |
+| --- | ---: | ---: |
+| **Read** | 1,811 | 91.1 % |
+| **Skipped, with a reason** | 176 | 8.9 % |
+| Pending / missing / unexplained | **0** | 0 % |
+
+By type: `source` 615 read / 150 skipped · `tests` 826 read / 2 skipped ·
+`docs` 90 / 2 · `examples` 138 / 0 · `build-CI` 97 / 0 · `config` 45 / 2 ·
+`assets` 0 / 12 · `generated-vendored` 0 / 8.
+
+**What the 176 skipped files are.** Every one carries a one-line reason:
+
+- **147 source files catalogued rather than read line by line** — the note says so
+  explicitly: *"bulk tier: catalogued via head + export-signature scan, not read
+  line by line."* These are the vendored `highlight.min.js` / `marked.min.js`
+  bundles, the 1,076-line export stylesheet, and the large type-only modules.
+- **8 generated artefacts** — the npm lockfile, the four PNG screenshot assets.
+- **A handful of generated and vendored files** confirmed by name and byte size.
+
+**The authoritative numbers are generated, not written by hand:**
+
+- **`docs/research/pi/COVERAGE.md`** — the per-shard table
+  (files / read / skipped-with-a-reason / pending / missing-from-ledger).
 - **`docs/research/pi/coverage.tsv`** — the same, as TSV.
-- **`docs/research/pi/manifest.tsv`** — the full ledger.
+- **`docs/research/pi/manifest.tsv`** — the full ledger: every tracked file, its
+  size, its type, its owning shard, its status and its reason.
 
-Regenerate with `node %TEMP%\harness-research\merge-status.mjs`, then
-`node %TEMP%\harness-research\gen-coverage.mjs`.
+Regenerate with `node %TEMP%\harness-research\merge-status.mjs` (merges the shard
+ledgers into the manifest and diffs it against `git ls-files`), then
+`node %TEMP%\harness-research\gen-coverage.mjs` (rebuilds `COVERAGE.md`).
 
-**Totals for the repo:** 1,987 tracked files across 12 shards.
-
-**Lead spot-checks.** The lead re-opened the source and confirmed the claims in
-`pi-ai` rather than trusting the shard author: the `StreamFunction` contract at
+**Lead spot-checks.** The lead re-opened the source and confirmed the claims rather
+than trusting the shard authors. `pi-ai`: the `StreamFunction` contract at
 `packages/ai/src/types.ts:389-397`, the `NON_OVERFLOW_PATTERNS` exclusion list at
 `packages/ai/src/utils/overflow.ts:76-84`, and the validator's "Received arguments"
-echo at `packages/ai/src/utils/validation.ts:315-355` were all verified **exactly**,
-at the cited lines.
+echo at `packages/ai/src/utils/validation.ts:315-355` — **all three verified
+exactly, at the cited lines**. `pi-durable`: the crash-loop breaker at
+`packages/durable/src/harness/scheduler.ts:1364-1367` (*"A task cut off
+`restartLimit` times in a row"*, with the `#parked` predicate) and the
+`settings.restartLimit` default at `src/harness/agent.ts:56` — **verified exactly**.
+**6 of 6 claims verified; none false.**

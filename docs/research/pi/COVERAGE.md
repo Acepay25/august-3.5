@@ -5,7 +5,7 @@ exactly one shard, so the shard totals add up to the repo total.
 
 | Shard | Files | Read | Skipped (reason given) | Pending | Missing from ledger |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `pi-agent-env` | 62 | 0 | 0 | 62 | 0 |
+| `pi-agent-env` | 62 | 62 | 0 | 0 | 0 |
 | `pi-ai` | 402 | 399 | 3 | 0 | 0 |
 | `pi-chord` | 109 | 109 | 0 | 0 | 0 |
 | `pi-codemode-mcp` | 67 | 67 | 0 | 0 | 0 |
@@ -18,6 +18,6 @@ exactly one shard, so the shard totals add up to the repo total.
 | `pi-scripts-ci` | 122 | 122 | 0 | 0 | 0 |
 | `pi-tui` | 125 | 119 | 6 | 0 | 0 |
 
-**Total:** 1987 files — **1749 read**, **176 skipped with a reason**, 62 pending, 0 missing from a ledger.
+**Total:** 1987 files — **1811 read**, **176 skipped with a reason**, 0 pending, 0 missing from a ledger.
 
-**Shards complete:** 11 of 12. No skipped row lacks a reason.
+**Shards complete:** 12 of 12. No skipped row lacks a reason.
