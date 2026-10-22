@@ -47,6 +47,7 @@ import TradeChatPanel, { ChartAiDockRail } from './TradeChatPanel';
 import RightPanel from '../shell/RightPanel';
 import { useRightPanel } from '../../hooks/useRightPanel';
 import type { PanelTurnContext } from './TradeChatPanel';
+import type { SoloTurnRow } from '../../services/trade/chatTurnMirror';
 import type { ReasoningEffort } from '../../types/provider';
 import SymbolPicker from './SymbolPicker';
 import ScreenerPanel from './ScreenerPanel';
@@ -93,8 +94,15 @@ interface TradeViewProps {
     botThreadRows?: Message[];
     onBotTurnCommit?: (bot: AgentBot, prompt: string, answer?: string, workedMs?: number, effort?: ReasoningEffort) => void;
     /** A solo turn asked in the dock has to reach the conversation too, or the
-     *  merged thread stays one-way on this surface exactly as it did on Chat. */
-    onSoloTurnCommit?: (row: { id: string; role: 'user' | 'ai'; text: string; workedMs?: number; effort?: ReasoningEffort }, conversationId: string) => void;
+     *  merged thread stays one-way on this surface exactly as it did on Chat.
+     *  The row shape is the mirror's — it carries the LIVE state as well as the
+     *  settled one, which is what lets the Chat surface show a turn that started
+     *  over here as still arriving. */
+    onSoloTurnCommit?: (row: SoloTurnRow, conversationId: string) => void;
+    /** Adopt (or mint) the conversation a dock solo turn speaks into, and point
+     *  the Chat surface at it. Absent ⇒ a session with no thread stays invisible
+     *  to the other home, which is the split this closes. */
+    onSyncConversation?: (conversationId?: string) => string | null;
     /** The App conversation the dock's bound session stands in for, so the chart
      *  and the Chat surface show ONE thread rather than two transcripts.
      *  Read through `entriesForSession`; absent ⇒ the dock is its own chat. */
@@ -359,7 +367,7 @@ export const useTickFlash = (price: number | undefined): { cls: string; seq: num
 };
 
 
-const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onAnalysisError, onStopRun, coachCount, botThreadRows, onBotTurnCommit, onSoloTurnCommit, conversationRows, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, onOpenChat, onToggleWatch, onOpenWatchList, watchOpenCount = 0, watchOpenR, pinnedMessageIds }) => {
+const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onAnalysisError, onStopRun, coachCount, botThreadRows, onBotTurnCommit, onSoloTurnCommit, onSyncConversation, conversationRows, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, onOpenChat, onToggleWatch, onOpenWatchList, watchOpenCount = 0, watchOpenR, pinnedMessageIds }) => {
     // The chart opens on the coin the SHARED chat session carries. Adopting only
     // from an effect is not enough: the dock mounts in the same commit, a child's
     // effect runs before its parent's, and the dock can re-bind the active session
@@ -1170,6 +1178,7 @@ const TradeView: React.FC<TradeViewProps> = ({ providers, selectedChatModel, onS
                         botThreadRows={botThreadRows}
                         onBotTurnCommit={onBotTurnCommit}
                         onSoloTurnCommit={onSoloTurnCommit}
+                        onSyncConversation={onSyncConversation}
                         conversationRows={conversationRows}
                         onOpenChat={onOpenChat}
                     />

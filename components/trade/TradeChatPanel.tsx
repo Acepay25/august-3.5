@@ -219,6 +219,11 @@ interface TradeChatPanelProps {
      *  — without it the merged thread is readable from this pane but nothing a
      *  trader types here ever reaches the other home. */
     onSoloTurnCommit?: ChatTurnRunnerDeps['onSoloTurnCommit'];
+    /** Adopt (or mint) the App conversation a solo dock turn speaks into, and
+     *  make the Chat surface show it. Without it a session started on the Trade
+     *  screen had no thread at all, so nothing said here could ever appear
+     *  there — the two homes were two transcripts wearing one app. */
+    onSyncConversation?: ChatTurnRunnerDeps['onSyncConversation'];
     /** Jump straight to the Chat surface from the dock header. Routed
      *  through App's surface select so the directional enter animation
      *  (Chat arrives from the left) fires like every other Chat hop. */
@@ -295,6 +300,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     onToggleCollapsed, expanded, onToggleExpanded, onOpenChat,
     onNewGroup, onOpenCoach, coachCount = 0, botThreadRows, conversationRows, onBotTurnCommit,
     onSoloTurnCommit,
+    onSyncConversation,
     onToggleWatch, pinnedMessageIds,
     onRefreshModels,
 }) => {
@@ -378,7 +384,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         () => entriesForSession(activeSession.entries, canonicalRows),
         [activeSession.entries, canonicalRows],
     );
-    const busy = !!snap.running[activeId];
+    /** Busy in EITHER home. `running` is the dock's own stream; a session bound
+     *  to a conversation is also busy while the CHAT surface is answering in it,
+     *  because the two homes are one thread and the composer must show Stop (and
+     *  refuse a second send) for a run it did not start. The registry is the
+     *  pipeline's own — `beginConversationRun` — so this cannot drift from it. */
+    const conversationBusy = !!activeSession.conversationId && !!snap.conversationRunning[activeSession.conversationId];
+    const busy = !!snap.running[activeId] || conversationBusy;
 
     /** The freshest mark for the levels card's Dist column + "last" divider —
      *  read from the canvas snapshot (the markPrice@1s line), never a re-fetch. */
@@ -542,9 +554,10 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         onPlanPresented,
         onBotTurnCommit,
         onSoloTurnCommit,
+        onSyncConversation,
         onRunAnalysis,
         onAnalysisError,
-    }), [symbol, interval, effort, selectedChatModel, chartLevels, allDrawings, trades, getChartSnapshot, provider, configForSeat, systemPromptFor, bots, activeId, draft, sessions, botThreadRows, conversationRows, attachments, attachedImages, clearAttachments, setDraft, setContextAt, addModelDrawings, clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onSoloTurnCommit, onRunAnalysis, onAnalysisError]);
+    }), [symbol, interval, effort, selectedChatModel, chartLevels, allDrawings, trades, getChartSnapshot, provider, configForSeat, systemPromptFor, bots, activeId, draft, sessions, botThreadRows, conversationRows, attachments, attachedImages, clearAttachments, setDraft, setContextAt, addModelDrawings, clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onSoloTurnCommit, onSyncConversation, onRunAnalysis, onAnalysisError]);
     const { send, runFullAnalysis, runHarnessTurn } = runner;
 
     // ── Per-session composer memory ─────────────────────────────────────────
