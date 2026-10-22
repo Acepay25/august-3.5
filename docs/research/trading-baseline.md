@@ -98,6 +98,15 @@ any more. So a closed trade produces no lesson, and therefore no skill.
 | Trade log, `get_trade_log`, intake | 15 | 5 | 10 | 0 |
 | **Total** | **343** | **256** | **61** | **29** |
 
+> **Arithmetic note (2026-10-23).** These columns do not add up: 256 + 61 + 29 = **346**,
+> three more than the 343 features above. The discrepancy is one row — the ensemble area
+> says 23 REAL / 20 COSMETIC / 0 PARTIAL, but `baseline/ensemble-and-debate.md`'s verdict
+> column carries **40** features marked **22 REAL / 6 COSMETIC / 12 DELETED** (tallied
+> row by row). Reconciling that row to 22 / 18 / 0 makes the totals **255 REAL / 59 dead
+> or cosmetic / 29 partial = 343**. Until an author re-classifies, quote "256 / 61" as the
+> ledger's claim, not as a count — and re-derive it from the section files before using it
+> as a census.
+
 The harness is **not** a hollow shell — 256 of 343 features genuinely work, and the
 tool registry, the proposal gate, the skill approval gate and the one-conversation-home
 contract are all real. The problem is not quality; it is that **61 features are

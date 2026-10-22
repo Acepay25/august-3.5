@@ -276,10 +276,11 @@ enforces in review, and each stated as *the rule and the defect it prevents*:
 5. **Require evidence** — a claim is falsifiable and recomputable, measured before
    and after or checked by a gate, rather than kept in sync by hand.
 
-The repo also *demonstrates* the deletion discipline: the debate-style subsystems
-and the 2D floor were removed outright rather than deprecated, and the legacy global
-API was **quarantined behind a second, explicitly temporary entrypoint** rather than
-deleted on day one.
+(This paragraph previously credited this repo with "the debate-style subsystems and the
+2D floor… removed outright" and a "legacy global API quarantined behind a second,
+explicitly temporary entrypoint". Neither is in this repo — `git log -S "2D floor"` is
+empty, the 2D floor is August's own deleted surface, and the compat entrypoint is `pi`'s
+story — so that sentence was removed on 2026-10-23.)
 
 ---
 
@@ -306,8 +307,8 @@ a reason, 0 failing rows, 0 shards without a ledger. GATE PASS.**
 
 | | Files | Share |
 | --- | ---: | ---: |
-| **Read** | 13,060 | 80.2 % |
-| **Skipped, with a reason** | 3,237 | 19.8 % |
+| **Read** | 13,060 | 80.1 % |
+| **Skipped, with a reason** | 3,237 | 19.9 % |
 | Pending / missing / unexplained | **0** | 0 % |
 
 By type:

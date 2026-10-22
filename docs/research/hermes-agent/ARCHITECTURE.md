@@ -194,13 +194,18 @@ reason, 34 of 34 shards complete. GATE PASS.**
 
 | | Files | Share |
 | --- | ---: | ---: |
-| **Read** | 18,144 | 87.7 % |
-| **Skipped, with a reason** | 2,551 | 12.3 % |
+| **Read** | 18,168 | 87.8 % |
+| **Skipped, with a reason** | 2,527 | 12.2 % |
 | Pending / missing / unexplained | **0** | 0 % |
 
-By type: `source` 5,684 read / 133 skipped · `tests` 9,372 read / 4 skipped ·
+By type: `source` 5,708 read / 109 skipped · `tests` 9,372 read / 4 skipped ·
 `docs` 1,620 / 73 · `config` 1,118 / 17 · `build-CI` 301 / 3 · `examples` 49 / 0 ·
 `assets` 0 / 186 · `generated-vendored` 0 / 2,135.
+
+**These are the post-re-dispatch numbers.** An earlier version of this table was
+generated before the 24 `tui_gateway/methods_*.py` files were re-read (§ below) and
+counted them as skipped (18,144 / 2,551, with `source` 5,684 / 133). The manifest,
+`coverage.tsv` and `STATUS.md` all carry 18,168 / 2,527; this table now matches them.
 
 **What the 2,551 skipped files are.** Every one carries a one-line reason:
 
