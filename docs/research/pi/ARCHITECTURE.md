@@ -75,14 +75,16 @@ The decisions a rebuild would not guess:
 
 ### Capability flags, not code branches
 
-`packages/ai/src/providers/compat-schema.ts:188-538` holds ~90 **named boolean
-flags** in a TypeBox schema, each with a documented default and an auto-detected
+`packages/ai/src/providers/compat-schema.ts:188-538` holds **24 named boolean
+flags** in that window — 31 in the whole file (`grep -c "Type\.Boolean"` at `58c0b02`, measured 2026-10-23;
+an earlier version of this document said ~90, which is roughly the file's property count, not its
+flags) — in a TypeBox schema, each with a documented default and an auto-detected
 fallback. Every provider quirk becomes *data*. The merge refuses to drift: a
 duplicated property across API schemas requires an **explicit** override, and an
 override that resolves nothing is an error (`:591-617`).
 
 The honest caveat, from the shard report: the schemas all set
-`additionalProperties: true` (`:348, 413, 500, 510, 537`), so **a typo in a flag
+`additionalProperties: true` at seven sites (`:348, 413, 500, 510, 521, 537, 639`), so **a typo in a flag
 name is accepted silently**. The mitigation covers duplicates, not typos.
 
 ### One canonical place for the three questions
@@ -91,10 +93,24 @@ name is accepted silently**. The mitigation covers duplicates, not typos.
 order, *"was this a context overflow?"*, *"was this worth retrying?"* and *"what does
 this error cost me?"*. Two rules from `overflow.ts` are worth copying whole:
 
-- **The overflow detector must be checked BEFORE the retry detector.** A Bedrock
+- **The overflow detector must be checked BEFORE the retry detector — and that
+  ordering lives in the CALLER, not in `overflow.ts`.** The rule is real: a Bedrock
   throttle reads *"Too many tokens"* and would match the generic overflow pattern
-  without the exclusion list (`:80-84`; `NON_OVERFLOW_PATTERNS` at `:76-84`).
-- **Any HTTP 413 counts as a context overflow**, regardless of body (`:64-66`).
+  without `NON_OVERFLOW_PATTERNS` (`packages/ai/src/utils/overflow.ts:76-84`, the
+  exclusion list at `:80-84`). But the check-before-retry itself is enforced where the
+  two are called: `packages/coding-agent/src/core/agent-session.ts:3769-3772`
+  (`if (isContextOverflow(…)) return false;` — *"Context overflow errors are NOT
+  retryable (handled by compaction instead)"*) and `packages/durable/src/harness/generation.ts:542`.
+  An earlier version of this document attributed the ordering to `overflow.ts:80-84`,
+  which is only the exclusion list.
+- **A 413 that IS the response status counts as a context overflow — and a 413
+  merely mentioned in a body does not** (`packages/ai/src/utils/overflow.ts:64-66`:
+  `/^(?:[\w -]+ API error \(413\):|413(?:\s|:|$))/i`, whose own comment says *"Match raw
+  SDK errors and formatProviderError's prefix, not a status mentioned in the body"*).
+  `packages/ai/test/overflow.test.ts:48-56` asserts the negatives — a body-only `413`,
+  a non-leading one, and `4130` are all NOT overflow. The bodyless form is Cerebras-only
+  (`overflow.ts:69`, `:151`). An earlier version of this document said "any HTTP 413,
+  regardless of body", which is the opposite of the tested rule.
 
 `packages/ai/src/utils/retry.ts:43` matches a status code with a negative lookbehind
 — `(?<![a-z0-9])(?:429|500|…)(?![a-z0-9])` — because **a status code inside a
@@ -253,10 +269,15 @@ From the shard reports:
   rejects" or "must not throw" contract stated only in prose
   (`packages/ai/src/models.ts:174-246`). A provider that violates one fails silently.
 - **The overflow table will rot.** ~25 provider-specific regexes with a hand-maintained
-  exclusion list (`packages/ai/src/utils/overflow.ts:38-84`), and no test that every
-  provider's real error text is matched.
-- **`compat` has grown to roughly 90 boolean flags** and every schema allows
-  additional properties, so a typo is invisible.
+  exclusion list (`packages/ai/src/utils/overflow.ts:38-84`). The rot risk is the
+  hand-listed sample texts: `packages/ai/test/overflow.test.ts:35-56` asserts a fixed set
+  of strings per provider, and the only test that produces a REAL provider response is
+  API-key-gated — `packages/ai/test/context-overflow.test.ts:96`
+  (`describe.skipIf(!process.env.ANTHROPIC_API_KEY)`), so CI never runs it. "No test" was
+  the wrong word; "no test that runs without a key" is the true one.
+- **`compat` holds 31 boolean flags** (24 of them inside the cited `188-538`), and
+  seven schema sites allow additional properties, so a typo is invisible. The number was
+  earlier written as ~90 here — that figure counted properties, not flags.
 
 ---
 
@@ -305,4 +326,8 @@ exactly, at the cited lines**. `pi-durable`: the crash-loop breaker at
 `packages/durable/src/harness/scheduler.ts:1364-1367` (*"A task cut off
 `restartLimit` times in a row"*, with the `#parked` predicate) and the
 `settings.restartLimit` default at `src/harness/agent.ts:56` — **verified exactly**.
-**6 of 6 claims verified; none false.**
+**6 of 6 claims verified; none false** — *amended 2026-10-23: a later re-open found
+four claims of this file's own that were misattributed or miscounted (the ~90-flag census,
+the five-`additionalProperties` list, the overflow-before-retry attribution, and the
+"any 413 regardless of body" rule); all four are corrected above, and the spot-check that
+missed them was sampling the shard reports, not this synthesis.*

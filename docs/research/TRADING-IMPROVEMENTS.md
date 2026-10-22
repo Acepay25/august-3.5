@@ -653,7 +653,7 @@ adds a refusal path to the UI.
 **Source: the August baseline §8. Reference: `pi` `packages/ai/src/providers/data/*.json`
 + `packages/ai/scripts/model-data.ts:214-301` — the *"no heavy database"* answer:
 **file-per-record JSON, a manifest, and a validator**; and
-`packages/ai/src/scripts/hydrate-model-catalog.ts:66-80` — atomic publication
+`packages/ai/scripts/hydrate-model-catalog.ts:66-80` — atomic publication
 (stage in a temp dir, validate, then rename). `hermes-agent`
 `tools/skill_ledger.py` — a JSONL ledger, not the state DB: *"durable, greppable,
 survives DB resets."* `deepseek-harness`
@@ -1100,7 +1100,7 @@ concatenated descriptions, config-driven names, raw-JSON-Schema MCP tools)"*, an
 manifest, so a new tool cannot be silently undocumented."* Also `pi`
 `packages/ai/scripts/model-data.ts:214-301` — a manifest with a schema version, a
 structure hash and per-file SHA-256, plus a build gate that refuses stale data;
-and `packages/ai/src/scripts/hydrate-model-catalog.ts:66-80` — atomic publication
+and `packages/ai/scripts/hydrate-model-catalog.ts:66-80` — atomic publication
 (stage, validate, rename).**
 
 ### What August Trading does today
@@ -1240,7 +1240,7 @@ on the second surface.
 | **A SQLite database for the review/learning system** | — | Explicitly ruled out by the task and by `AGENTS.md` (the notebook is files; `utils/memoryBudget.ts` refuses growth rather than evicting). Hermes' answer — a JSONL ledger plus file-per-record and a validator — is the shape to borrow, and it is files. **Rejected.** |
 | **A "personalised" model catalogue showing only what one key may use** | `pi` `packages/ai/src/providers/openrouter.ts:24-60` | Attractive, but August's providers are runtime-configured and the trader picks the model (`components/shared/ModelMenu.tsx`). The catalogue exists; the *filter* is a small UI nicety, not a harness improvement. **Rejected as out of scope.** |
 | **A task-graph panel for the trader** | `pi` durable §"Task Graph" | The graph is for a host application with many concurrent tasks. August has automations, a bot roster and a room — but a graph *panel* is a new surface, which the minimalist direction forbids, and the app's own "Activity drawer" already covers the one case. **Rejected.** |
-| **Per-model capability flags to replace provider branches** | `pi` `packages/ai/src/providers/compat-schema.ts:188-538` | Genuinely good, but August's provider branches are in a single 113 KB service that already works, and the reference's own version is ~90 boolean flags with a silent-typo hazard (`additionalProperties: true` everywhere) — a complexity *increase* August does not need. **Deferred, not rejected** — worth doing if the provider surface grows again. |
+| **Per-model capability flags to replace provider branches** | `pi` `packages/ai/src/providers/compat-schema.ts:188-538` | Genuinely good, but August's provider branches are in a single 113 KB service that already works, and the reference's own version is 31 boolean flags (24 in the cited window) with a silent-typo hazard (`additionalProperties: true` at seven sites) — a complexity *increase* August does not need. **Deferred, not rejected** — worth doing if the provider surface grows again. |
 | **Compaction as a script with a journal** (pi codemode) | `pi` durable §"Code Mode" | Impressive, and it is exactly the kind of thing that would let the model run a multi-step pipeline in one turn. But it is a whole new execution model, a sandbox, and a replay journal — a large net complexity increase for a harness whose product goal is review and journaling. **Rejected on complexity.** |
 | **Rewriting the Chat surface to match the dock's row furniture** | — (August's own gap) | *Partly adopted*, as P5: the fix is one shared row contract, not a rewrite. The full rewrite is rejected. |
 | **A `last20` steering column that changes model routing** | `ModelPerformanceService.ts:531-629/1041-1138` (dead) | Tempting — the code to demote a cold model already exists. But the code is **dead** and the live weighted-voting context ranks by all-time win rate (`:649`). Wiring model routing to a 20-trade window is a product decision about model selection, and it would need a *ledger* of provider fitness — which is exactly the dead `providerFitness.ts` with its non-existent consumer. **Rejected as a product decision; the dead code should be deleted (P4), not wired.** |
