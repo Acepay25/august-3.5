@@ -578,7 +578,13 @@ adds a refusal path to the UI.
 `packages/ai/src/scripts/hydrate-model-catalog.ts:66-80` — atomic publication
 (stage in a temp dir, validate, then rename). `hermes-agent`
 `tools/skill_ledger.py` — a JSONL ledger, not the state DB: *"durable, greppable,
-survives DB resets."***
+survives DB resets."* `deepseek-harness`
+`packages/spill/spill-local/src/index.ts:149-157` — the **spill** half: when a
+payload is too big for the context it is written to a private session-scoped file
+and the model gets **a path plus a retrieval hint** (*"Use read with offset/limit,
+or grep this path to search within it"*), so the queryable log needs no database.
+**August already has this pattern** — `services/analysis/toolArtifactStore.ts` plus
+the `read_tool_output` tool — and should extend it rather than invent one.**
 
 ### What August Trading does today
 
@@ -668,7 +674,13 @@ in the same save; a scan that finds the stamp with a dead owner restores the ins
 ONCE, the executions ledger's `scheduled_instant` blocks a second fire, and
 `cron.catch_up_missed: false` skips past-grace misses **with a logged reason**.
 Never drop a slot silently."* And the catch-up window: *"half the period, clamped to
-120 s–2 h; 120 s grace for missed one-shots."* `pi`
+120 s–2 h; 120 s grace for missed one-shots."* `deepseek-harness`
+`packages/goal/goal-round-driver/src/index.ts:111/150/176` + `packages/goal/goal/src/fold.ts:313`
+— the round allowance is a **durable admitted-round count derived from the log**, not
+an in-memory counter, so it survives a restart; the driver fires only at whole-agent
+idle, only for an *armed* goal, only after a fail-closed durability checkpoint, and
+only once the agent's descendants have settled; at the cap it exits with a **stable
+code** (`round-limit`) and there is **no auto-restart after a cancellation**. `pi`
 `packages/durable/README.md` §"Persist and Resume" — *"A retried submission with the
 same `requestId` returns the existing submission instead of submitting twice"* —
 and §"Failures and Recovery" — the crash-loop `restartLimit` and the one-shot
@@ -695,15 +707,23 @@ schedule"*). What it lacks:
    it is about to run **before** the run starts, so a crash mid-run cannot cause a
    second run. August's run history already has the row; it needs to be written
    first, not last.
-2. **Give the breaker a reason and a kind.** Count failures **per kind** (provider
+2. **Derive the breaker's count from the run history, not from memory.** The DSH
+   goal-round driver counts *admitted rounds* from the log
+   (`packages/goal/goal/src/fold.ts:313`), so the count survives a restart. August's
+   3-in-a-row breaker should count **rows in the run history**, so an app restart
+   does not hand a broken schedule a fresh budget — and so the count is
+   reconstructible when the trader asks "why did this stop?".
+3. **Give the breaker a reason and a kind.** Count failures **per kind** (provider
    error / no-ready-provider / empty-but-complete / breaker-tripped) and show the
    reason on the card. A trader reading "this schedule stopped because it produced
-   nothing three times" can fix it; "this schedule stopped" cannot.
-3. **An idle watchdog for scheduled runs**, not just a request timeout: a run that
+   nothing three times" can fix it; "this schedule stopped" cannot. Use a **stable
+   code** (the DSH `round-limit` pattern) so the reason is machine-readable.
+4. **An idle watchdog for scheduled runs**, not just a request timeout: a run that
    has made no progress for N minutes is interrupted and recorded as interrupted.
    Hermes' rule is the one to copy: **idle, not wall-clock** — a long-but-active job
-   is never cut off.
-4. **An idempotency key** on a scheduled run so a retried occurrence cannot present
+   is never cut off. And **no auto-restart after a cancellation**, so a cancelled
+   schedule does not come back on its own.
+5. **An idempotency key** on a scheduled run so a retried occurrence cannot present
    two plans. `utils/recentTradesBrief.ts` and the proposal-disposition store
    (`services/trade/proposalDisposition.ts:22-32`) already solve the analogous
    problem for the manual path; the scheduled path has no equivalent.
@@ -853,7 +873,15 @@ inferred from location"*; `tools/skill_usage.py` — usage telemetry lives in a
 **sidecar** `.usage.json`, *"never frontmatter — keeps telemetry out of user-authored
 SKILL.md and off bundled/hub skills"*; `tools/skill_provenance.py` — a
 **write-origin** ContextVar separating a background review's writes from a
-foreground, user-directed one.**
+foreground, user-directed one. `deepseek-harness`
+`packages/goal/tool-goal/src/authority.ts:100/111` — a **two-tier authority**
+(`direct-human` for edit/pause/resume; `direct-human` *or* `goal-round` for
+complete/blocked), with **the session log as the audit trail**: *"every mutation is a
+`goal/change` event with the full post-mutation snapshot, and the fold can prove
+that a recorded change was legal"* (`packages/goal/goal/src/fold.ts:200`) — *"There
+is no separate approval table; the log IS the audit trail"* — and
+`packages/goal/tool-goal/src/index.ts:270`, where **the model cannot resume a
+durably paused goal**: the human owns that transition.**
 
 ### What August Trading does today
 
@@ -893,6 +921,13 @@ Two related facts from the same area:
    it. It is currently the difference between "the prompt can ask for a skill" and
    "the code can require one" — and the app's own `present_trade` refusal
    (`presentTradeTool.ts:117-129`) is the strongest argument for wiring it.
+4. **Make the recorded fact the only thing both readers use.** The reference's
+   two-tier authority is worth copying in shape: an approval is a *fact about a
+   skill* (`approved` / `gated` / `retired`) that the record holds, and the code can
+   prove a recorded approval was legal — rather than a separate table that can
+   disagree with the notebook. August already writes that fact (`approvedBy`); the
+   change is to make it the **only** thing the index and the injection read, which
+   is item 1.
 
 ### Concrete files touched
 
