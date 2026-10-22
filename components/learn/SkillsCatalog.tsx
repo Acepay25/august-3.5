@@ -14,6 +14,7 @@ import {
 import {
     listSkills,
     skillEnabledFlag,
+    isApprovedSkill,
     type SkillMeta,
 } from '../../services/learning/SkillMemoryService';
 import {
@@ -83,6 +84,10 @@ interface CatalogSkill {
     disabledByUser?: boolean;
     /** The vetted shelf that ships with the app (`prior: 'book'`). */
     system: boolean;
+    /** The SEAT's answer, read from `isApprovedSkill` where the row is built.
+     *  Passed in rather than re-derived here for the same reason `enabled` is:
+     *  a second implementation is how the label and the injectors drift apart. */
+    approved: boolean;
     wins: number;
     losses: number;
     family: string;
@@ -128,6 +133,7 @@ export interface SkillAvailabilityRead {
 export const skillAvailability = (
     meta: Pick<SkillMeta, 'status' | 'suspendedAt' | 'disabledByUser'>,
     enabled: boolean,
+    approved: boolean,
 ): SkillAvailabilityRead => {
     if (meta.suspendedAt) {
         return {
@@ -144,6 +150,18 @@ export const skillAvailability = (
     }
     if (!enabled) {
         return { state: 'off', label: 'Off', title: 'Not injected — this skill is not reaching a seat.' };
+    }
+    // THE SAME GATE THE SEAT READS, supplied by the caller. The injection and
+    // (since P10) the skills index both refuse an unapproved rule, so a card
+    // that said "injected" here would be a check on a rule that reaches no
+    // seat — the exact lie this function exists to prevent. `approved` is read
+    // from `isApprovedSkill` where the row is built, never re-derived here.
+    if (!approved) {
+        return {
+            state: 'off',
+            label: 'Off',
+            title: 'Not injected — nothing has approved this rule, so no seat is given it. A draft is approved in the Coach inbox; the starter library has its own switch in Settings.',
+        };
     }
     return {
         state: 'enabled',
@@ -194,7 +212,7 @@ const describeRosterSync = (prev: CatalogSkill[] | null, next: CatalogSkill[]): 
 const tileClass = (s: CatalogSkill): string => {
     const base = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-control border';
     if (s.status === 'retired') return `${base} border-zinc-800 bg-zinc-900 text-zinc-600`;
-    const state = skillAvailability(s, s.enabled).state;
+    const state = skillAvailability(s, s.enabled, s.approved).state;
     if (state === 'enabled') return `${base} border-emerald-500/30 bg-emerald-500/10 text-emerald-300`;
     if (state === 'suspended') return `${base} border-amber-500/30 bg-amber-500/10 text-amber-300`;
     return `${base} border-zinc-700 bg-zinc-800 text-zinc-500`;
@@ -298,7 +316,7 @@ const SkillCard: React.FC<{
     /** The format review's finding for THIS skill, when one has been run. */
     verdict?: SkillReviewFinding;
 }> = ({ skill, onOpen, verdict }) => {
-    const availability = skillAvailability(skill, skill.enabled);
+    const availability = skillAvailability(skill, skill.enabled, skill.approved);
     const Mark = MARK[availability.state].Icon;
     const retired = skill.status === 'retired';
     return (
@@ -400,6 +418,7 @@ const SkillsCatalog: React.FC<SkillsCatalogProps> = ({ onOpenSettings, onOpenSki
                 suspendedAt: meta.suspendedAt,
                 disabledByUser: meta.disabledByUser,
                 system: meta.prior === 'book',
+                approved: isApprovedSkill(meta),
                 wins: meta.wins,
                 losses: meta.losses,
                 family: collectionOf(meta),

@@ -40,6 +40,12 @@ vi.mock('../services/learning/SkillMemoryService', () => ({
     // implementation is the real behaviour.
     skillExpectancyR: (meta: { netR?: number; rSampled?: number }) =>
         (meta.rSampled ?? 0) >= 5 && typeof meta.netR === 'number' ? meta.netR / (meta.rSampled ?? 1) : undefined,
+    // The availability mark reads the seat's approval gate, so the stand-in
+    // carries its rule: a pure derivation, like the two above. (The real one
+    // also asks Settings whether the starter shelf is withdrawn; `prior: 'book'`
+    // rows in this file are not what those tests are about.)
+    isApprovedSkill: (meta: { approvedBy?: string; prior?: string }) =>
+        meta.approvedBy === 'human' || meta.approvedBy === 'grandfathered' || meta.prior === 'book',
     EXPECTANCY_MIN_R_SAMPLE: 5,
 }));
 
@@ -61,6 +67,9 @@ const meta = (over: Partial<SkillMeta> = {}): SkillMeta => ({
     description: 'Fade a failed breakout when volume diverges',
     wins: 0,
     losses: 0,
+    // The availability mark reads the seat's approval gate; these tests are
+    // about the review verdict, so the row is an ordinary approved skill.
+    approvedBy: 'human',
     ...over,
 } as SkillMeta);
 

@@ -59,7 +59,10 @@ describe('the dev-proxy request carries a timeout of its own', () => {
         const proxy = calls.find(c => c.url.includes('__provider_proxy'));
         expect(proxy, 'the dev-proxy branch never ran, so this test measured nothing').toBeDefined();
         const sent = proxy!.init.signal;
-        expect(sent, 'the proxy request was sent with NO signal at all').not.toBeNull();
+        // `not.toBeNull()` would be a dud here: the pre-fix code passed
+        // `options?.signal`, and a caller that passed no signal at all made the
+        // assertion hold on `undefined`. The property is a real AbortSignal.
+        expect(sent, 'the proxy request was sent with no signal at all').toBeInstanceOf(AbortSignal);
         // THE FIX: a signal that carries a timeout, not the caller's bare signal.
         expect(sent).not.toBe(controller.signal);
         expect(timeouts.mock.calls.map(c => c[0])).toContain(120_000);
@@ -77,7 +80,7 @@ describe('the dev-proxy request carries a timeout of its own', () => {
 
         const proxy = calls.find(c => c.url.includes('__provider_proxy'));
         expect(proxy, 'the streaming dev-proxy branch never ran').toBeDefined();
-        expect(proxy!.init.signal, 'a stream with no timeout signal can hang the turn').not.toBeNull();
+        expect(proxy!.init.signal, 'a stream with no signal of its own can hang the turn').toBeInstanceOf(AbortSignal);
         const budgets = timeouts.mock.calls.map(c => c[0]);
         expect(budgets).toContain(300_000);
         expect(budgets, 'a stream cut at 120 s would end a thinking model mid-chain').not.toContain(120_000);

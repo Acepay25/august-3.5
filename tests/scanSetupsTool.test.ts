@@ -11,9 +11,14 @@ vi.mock('../services/analysis/KlineService', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../services/analysis/KlineService')>();
     return { ...actual, fetchKlines: vi.fn() };
 });
-vi.mock('../services/learning/SkillMemoryService', () => ({
-    listSkills: vi.fn(() => []),
-}));
+vi.mock('../services/learning/SkillMemoryService', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../services/learning/SkillMemoryService')>();
+    // Only the library READ is stubbed. The approval gate stays the real one:
+    // this tool's skill cross-reference cites rules into a prompt, and a
+    // hand-written copy of `isApprovedSkill` here would let the test pass while
+    // the production gate changed underneath it.
+    return { ...actual, listSkills: vi.fn(() => []) };
+});
 
 import { executeDeskTool, clearDeskToolCache } from '../services/analysis/DeskToolsService';
 import { fetchKlines } from '../services/analysis/KlineService';
@@ -50,8 +55,10 @@ describe('scan_setups tool', () => {
         vi.mocked(listSkills).mockReturnValue([{
             // `enabled` is load-bearing here: this index is prompt-bound, so a
             // skill the idle lifecycle suspended must not be cited into it.
+            // `approvedBy` is load-bearing for the same reason — see the arm
+            // below.
             file: { name: 'breakout-retest.md', enabled: true } as never,
-            meta: { status: 'confirmed', ifCondition: 'IF price breaks out of the range THEN retest' } as never,
+            meta: { status: 'confirmed', approvedBy: 'human', ifCondition: 'IF price breaks out of the range THEN retest' } as never,
         }]);
         const r = await executeDeskTool({ id: 'c1', name: 'scan_setups', arguments: { symbol: 'BTCUSDT', interval: '15m' } });
         expect(r.ok).toBe(true);
@@ -73,6 +80,21 @@ describe('scan_setups tool', () => {
         const r = await executeDeskTool({ id: 'c2', name: 'scan_setups', arguments: { symbol: 'BTCUSDT', interval: '15m' } });
         expect(r.content).toContain('Range breakout');
         expect(r.content).not.toContain('breakout-retest');
+    });
+
+    /** P10's third home. The skills index and the injection read one approval
+     *  filter; this cross-reference is a THIRD place a rule is named to a model,
+     *  so a skill nothing has approved must not be cited here either — the seat
+     *  would call `recall` on it and be handed nothing. */
+    it('does not cite a skill the seat has not been approved to use', async () => {
+        vi.mocked(fetchKlines).mockResolvedValue(breakoutCandles() as never);
+        vi.mocked(listSkills).mockReturnValue([{
+            file: { name: 'breakout-retest.md', enabled: true } as never,
+            meta: { status: 'confirmed', prior: 'gated', ifCondition: 'IF price breaks out of the range THEN retest' } as never,
+        }]);
+        const r = await executeDeskTool({ id: 'c3', name: 'scan_setups', arguments: { symbol: 'BTCUSDT', interval: '15m' } });
+        expect(r.content, 'the scan itself must still answer').toContain('Range breakout');
+        expect(r.content, 'an unapproved rule was named to the model').not.toContain('breakout-retest');
     });
 
     it('says nothing is live when the tape is flat (no invented setups)', async () => {

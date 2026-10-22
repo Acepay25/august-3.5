@@ -329,7 +329,7 @@ const ROUND_TRIP_FIELDS: Array<keyof SkillMeta> = [
     'status', 'kind', 'coin', 'direction', 'family', 'regime',
     'ifCondition', 'thenAction', 'predicate', 'strategyFamily', 'signals',
     'invalidation', 'horizon', 'sizing', 'prior', 'audience', 'manualOnly',
-    'approvedBy', 'approvedAt', 'whyAccepted', 'originBotId', 'originMessageId',
+    'approvedBy', 'approvedAt', 'whyAccepted', 'reason', 'originBotId', 'originMessageId',
     'description', 'version', 'wins', 'losses', 'consecutiveLosses',
     'netR', 'grossR', 'rSampled', 'suspendedAt', 'disabledByUser', 'evalVerdict',
     'evalStreak', 'lastEvidenceAt', 'lastMatchedAt', 'supersededBy',

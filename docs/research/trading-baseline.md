@@ -118,12 +118,12 @@ tested, documented, and unreachable.
 ## 2. Agent loop, turn lifecycle, and the tool registry
 
 **REAL (66).** One loop (`runToolTurn`, `services/trade/toolTurn.ts:131`), one
-executor (`runDeskToolLoop`, `DeskToolsService.ts:3589`), one registry
+executor (`runDeskToolLoop`, `DeskToolsService.ts:3594`), one registry
 (`DESK_TOOL_DEFINITIONS`, `DeskToolsService.ts:909-1548`). The executor-level
 allow-list is enforced on **every** transport (`DeskToolsService.ts:2483-2492`).
 The mandate is composed from the tools the turn can actually call
-(`deskToolsMandateFor`, `:1739-1784`). A refusal is `ok:false`, not a receipt
-(`:2426-2438`). 20s per-tool-call deadline; 180s turn budget; a repeat-call guard; a
+(`deskToolsMandateFor`, `:1744-1789`). A refusal is `ok:false`, not a receipt
+(`:2431-2443`). 20s per-tool-call deadline; 180s turn budget; a repeat-call guard; a
 stall detector; a self-heal bounce; a thinking-cut re-ask; a produced-nothing
 continuation; atomic compaction so a `tool_calls` pair never splits
 (`contextCompact.ts:122-145`); the context window learned from the provider's own
@@ -136,9 +136,9 @@ rejection plus one retry (`GenericProviderService.ts:1324-1341`).
 | `enhancedPrompt` — never sent | `useAnalysisPipeline.ts:1168-1213` (§0) |
 | Hybrid injection string | computed, never reaches a send |
 | Gate-keeper injection | `useAnalysisPipeline.ts:1203` — `const gateInjection = '';` |
-| `ARBITER_ALLOWED_TOOLS` | `DeskToolsService.ts:3359-3375`; **no production importer** — only `tests/evidencePack.test.ts:33`, `tests/tradeLogTool.test.ts:11` |
+| `ARBITER_ALLOWED_TOOLS` | `DeskToolsService.ts:3364-3380`; **no production importer** — only `tests/evidencePack.test.ts:33`, `tests/tradeLogTool.test.ts:11` |
 | `toAnthropicTools` | `DeskToolsService.ts:1796-1801`; test-only |
-| `requireFirstToolRound` | `DeskToolsService.ts:3656/3737`; unreachable |
+| `requireFirstToolRound` | `DeskToolsService.ts:3661` declared, used `:3761`; unreachable |
 | The prompt A/B lane | `services/trade/**` has **zero** `getPrompt` calls; a "control" and a "live" run send identical bytes and record different labels (the repo's own `O-140`) |
 | The four `analysis.*` registry prompts | reach a model only via `analyzeTradingView`, whose only production caller is the skill-eval scheduler (`SkillEvalScheduler.ts:285`) |
 | `analyzeTradingViewWithTransientRetry` | `useAnalysisPipeline.ts:249-275`; zero callers |
@@ -153,7 +153,7 @@ the "was" text are the pre-fix tree.
    silently lost *before* the human approval gate. *Now:* the handler reads it
    (`services/analysis/DeskToolsService.ts:2687`), the schema carries it
    (`schemas/learning.ts:153`), the ingest stamps it and the frontmatter serialises
-   and parses it (`services/learning/SkillMemoryService.ts:2973`, `:1325`, `:726`),
+   and parses it (`services/learning/SkillMemoryService.ts:2977`, `:1325`, `:726`),
    and the Coach card shows it (`components/chat/CoachThreadPanel.tsx:143`). The two
    smaller losses closed too: a missing `steps` is refused (`:2668`) instead of
    coerced into `["undefined"]`, and `timeframe` is a schema property (`:2688`) —
@@ -163,7 +163,7 @@ the "was" text are the pre-fix tree.
 2. **~~The unattended evaluator could call tools the automation surface denies~~ —
    fixed.** *Was:* `SkillEvalScheduler.ts:284-294` called `analyzeTradingView` with
    **no** `allowedTools` → `DeskToolsService.ts:2485/3720-3724` (an empty list means
-   unrestricted), fired detached at `SkillMemoryService.ts:3797-3798`, so a
+   unrestricted), fired detached at `SkillMemoryService.ts:3801-3802`, so a
    background job could call `propose_skill`, `decline_trade`, every forged
    `custom_*` tool and the exact 8 tools `automationTurn.ts:56-64` denies. *Now:* it
    passes `AUTOMATION_EVALUATION_TOOLS` (`services/trade/automationTurn.ts:73`, used
@@ -184,10 +184,10 @@ the "was" text are the pre-fix tree.
 gate** — `isApprovedSkill` (`SkillMemoryService.ts:999`, enforced at
 `MemoryRetrievalService.ts:226`). Also real: the evidence ledger
 (`SkillMemoryService.ts:2243`), 3-state adherence (`MemoryInjectionService.ts:189`),
-the status ladder + CI gate (`:1832/:1517`), the temporal ledger (`:1198/:1226`),
+the status ladder + CI gate (`:1871/:1556`), the temporal ledger (`:1236/:1264`),
 the graveyard + revival (`skillGraveyard.ts:97/288/341`), the idle lifecycle
 (90d suspend → 180d archive, `skillIdleLifecycle.ts:264` via `memoryHygiene.ts:269`),
-the library cap + displacement (`SkillMemoryService.ts:3360`), the worth gate +
+the library cap + displacement (`SkillMemoryService.ts:3364`), the worth gate +
 attempt throttle (`skillWorthGate.ts:81`, `skillDrafts.ts:219`), the 7-step memory
 hygiene (`memoryHygiene.ts:151`), the **weekly digest**
 (`weeklyReview.ts:128` → `WeeklyReviewCard.tsx:13`), the monthly card
@@ -205,7 +205,7 @@ strategy store (`strategyStore.ts:209` → `chatSurfaceTurn.ts:127`).
 | `providerFitness.ts` | orphan; its own header names a consumer (`autoAssignLenses`) **that does not exist in the repo** |
 | The predicate-gate confidence ceiling — **on the chat path only** | `skillPredicateGate.ts:200` computes the ceiling; the *note* it returns (`:216`) is only read on the chat path, where it is dropped with the rest of `enhancedPrompt`. On the **plan** path the ceiling is applied: `services/trade/proposalGate.ts:264` → `buildSkillGate`, whose ceiling is folded into the one stamp the card shows and the journal records (`services/trade/presentTradeTool.ts:140-144`) |
 | The insight pruner | dead |
-| IF/THEN auto-ingest | `SkillMemoryService.ts:3036` writes a file with `prior:'gated'` but **no `approvedBy`** (`:3125`), so `isApprovedSkill` blocks injection — and the index withholds it too since `e6787a8f` (`services/trade/tradeChatContext.ts:277` applies the same approval fact), so a gated row is neither named nor given |
+| IF/THEN auto-ingest | `SkillMemoryService.ts:3040` writes a file with `prior:'gated'` but **no `approvedBy`** (`:3129`), so `isApprovedSkill` blocks injection — and the index withholds it too since `e6787a8f` (`services/trade/tradeChatContext.ts:277` applies the same approval fact), so a gated row is neither named nor given |
 | Harness lessons | no prompt reader |
 
 > **CORRECTION (Phase 3 gate, lead verification).** The first reading of this section
@@ -230,7 +230,7 @@ strategy store (`strategyStore.ts:209` → `chatSurfaceTurn.ts:127`).
 | **Strategies** | `strategyStore.ts` | Yes (a prompt block) | none — `status:'active'` only |
 | **Skills** | the notebook | Yes, **if** `isApprovedSkill` | the full apparatus |
 
-**The index filter and the injection filter disagree.** The index
+**~~The index filter and the injection filter disagree~~ — CLOSED by `e6787a8f`.** The index
 (`tradeChatContext.ts:272`) does not apply the approval check the injection path
 applies (`MemoryRetrievalService.ts:226`), so an unapproved skill is **named** to the
 model and never **given** to it.
@@ -277,7 +277,7 @@ queue (`hooks/useNetworkStatus.ts:12-47`).
 
 | Gap | Evidence |
 | --- | --- |
-| **No runtime provider/model fallback** | A 500/429/401 ends the turn. No second provider is tried, on the chat, dock, analysis or automation path (`GenericProviderService.ts:1506-1511/1722-1727`, `useAnalysisPipeline.ts:1338-1344`, `automationTurn.ts:106-127`). A *resolution-time* fallback for a stale pick **is** real, with an amber banner in both composers (`utils/providerUtils.ts:119-134`, `tests/modelFallbackBanner.test.tsx`) — but that is a different thing. |
+| **No runtime provider/model fallback** | A 500/429/401 ends the turn. No second provider is tried, on the chat, dock, analysis or automation path (`GenericProviderService.ts:1506-1511/1722-1727`, `useAnalysisPipeline.ts:1338-1344`, `automationTurn.ts:268` — one config in, no re-pick). A *resolution-time* fallback for a stale pick **is** real, with an amber banner in both composers (`utils/providerUtils.ts:119-134`, `tests/modelFallbackBanner.test.tsx`) — but that is a different thing. |
 | The cooldown bench is not consulted for a chat turn's provider | `ProviderHealthService.ts:104-122` is read in only 3 places, none of them the turn path (`App.tsx:328-336`, `botAttention.ts:55`) |
 | The dev-proxy branches had **no timeout** — both of them, not only the non-streaming one | **Fixed 2026-10-23**: 120 s on the request (`GenericProviderService.ts:1432`), 300 s on the turn (`:1619`), pinned by `tests/devProxyTimeout.test.ts` |
 | A Stopped turn on the Chat surface is unmarked | `types/message.ts` has no `interrupted` field; the flag is on the persisted `StoredChatEntry` (`chatSessions.ts:103`, inherited by `LiveEntry` at `chatStore.ts:48`), so the dock's rows survive reload |
@@ -480,7 +480,7 @@ today.
 (`SqliteService.ts:159-183/718-742/756-774`) and the IndexedDB profile blob
 (`dbService.ts:227-263`), keyed by `LoggedTrade.id` (= the Message id); section-diff
 persistence with delete-absent (`SqliteService.ts:593-609`); the `get_trade_log`
-tool (`DeskToolsService.ts:1384-1402`, handler `:3280-3304`), deliberately **not
+tool (`DeskToolsService.ts:1384-1402`, handler `:3285-3309`), deliberately **not
 cached** (`:450-466`); `utils/recentTradesBrief.ts`; the Journal "Last 20" card
 (`components/journal/Journal.tsx:323-380`); the training JSONL export
 (`utils/reportExport.ts:171-255`, button `ActionsTab.tsx:33-52`); and

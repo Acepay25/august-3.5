@@ -21,7 +21,7 @@ does not mention is not claimed to be done.
 |---|---|---|---|
 | **E-11** | **The prompt contract test.** A new suite that asserts what is **sent** on the four model-call paths, not what is built. | `tests/promptContract.test.ts` (new) | `npx vitest run tests/promptContract.test.ts` → **16 tests, 16 pass** (2026-10-20). |
 | **E-60** | **The "one place to look" rule**, in one line, in `AGENTS.md`. | `AGENTS.md` § *The Plan* | Read back; the line names the working list, the evidence file, and the id a proposal must cite. |
-| **E-01a** (prompts thread) | **The harness contract reaches every live surface exactly once.** It is injected at the transport — `withDeskToolsSystemPrompt` (`services/analysis/DeskToolsService.ts:3777`, called from `:3822`) — not at each surface's composer. | `services/analysis/DeskToolsService.ts` | **Verified by outcome, not by diff:** `tests/promptContract.test.ts` asserts `HARNESS CONTRACT` appears exactly once in the sent system prompt on all four paths, and that the evaluation path — which composes the contract itself — does not get a second one at the transport. |
+| **E-01a** (prompts thread) | **The harness contract reaches every live surface exactly once.** It is injected at the transport — `withDeskToolsSystemPrompt` (`services/analysis/DeskToolsService.ts:3782`, called from `:3827`) — not at each surface's composer. | `services/analysis/DeskToolsService.ts` | **Verified by outcome, not by diff:** `tests/promptContract.test.ts` asserts `HARNESS CONTRACT` appears exactly once in the sent system prompt on all four paths, and that the evaluation path — which composes the contract itself — does not get a second one at the transport. |
 | **E-09** (prompts thread) | **`analysis.lens` is gone from the registry.** The editor entry the trader could edit but the model never saw is deleted; the registry now holds **12** ids. | `constants/promptRegistry.ts:54-162` | **Verified by reading the file** (no `analysis.lens` entry) **and by the new gate**: `tests/promptContract.test.ts` now asserts that the three registry ids the registry itself says reach `analyzeTradingView` — `analysis.master`, `analysis.risk_rules`, `analysis.memory_enforcement` — actually appear **in the sent system prompt**. That is E-09's own verification, done the way the plan asked for it: not "a `getPrompt()` call site exists" but "the prompt reaches a sent request". |
 | **3.6 (docs restructure)** | **The plan corpus landed in `docs/plan/`** — `README.md`, `open-items.md`, `full-audit.md` and `audit/` (seven sources). `docs/plans/` now holds **one** file: `debate-deletion-status.md`, the dated history ledger the anchor gate scans. | `docs/plan/`; `docs/plans/debate-deletion-status.md` | **Verified by listing the tree** at `40443692`: `docs/plans/` = 1 file, `docs/plan/` = 4 entries + 7 audit sources. |
 | **Q14 (answered and executed)** | **18 plan documents deleted, not archived.** | `docs/plans/` | **Verified by listing `docs/plans/`**: only the dated ledger survives, as the anchor gate's scan list (`scripts/check-flow-doc-anchors.cjs:44`) requires. |
@@ -334,7 +334,7 @@ re-building a cost cap the app had already stopped shipping.
 | Row | The defect | What landed | Verified by |
 | --- | --- | --- | --- |
 | **O-55**, **O-47** | The A/B lane and the prompt fingerprint had three readers and no writer, so the profile card's control/live split and every `promptVersion` on a journal row were `undefined`. | `hooks/useAnalysisPipeline.ts:951` opens the lane per run and `:955` stamps the corpus; both `runStats` builders persist the pair (`:1278-1279`, `:1443-1444`), which is what `hooks/useTradeLogging.ts:428-429` copies onto the trade. The fingerprint is `promptCorpusVersion()` in `services/infrastructure/PromptOverrideService.ts` — it hashes the EDITED-corpus state, so it is stable across builds and moves the moment the trader edits a prompt. It deliberately does NOT hash `PROMPT_REGISTRY`: importing the registry into the run path grew the entry chunk by 18.7 kB and the bundle ratchet is not a thing to loosen. | `tests/promptOverrideService.test.ts`: the lane's three branches, the fingerprint's stability and variation, and two source pins that the writers are still called from the pipeline |
-| **O-60** | The desk mandate ordered the seat to call `get_chart_view`, and the Chat surface's allow-list refuses it — a duty the executor would not honour, which reads to the model as an obligation rather than an absence. | The mandate is composed from the offer set: `deskToolsMandateFor(offered)` (`services/analysis/DeskToolsService.ts:1686`), `withDeskToolsSystemPrompt(…, offeredTools)` (`:3974`), the offer list built at `:4082` from `mergedAllowed` before falling back to the definitions. A home with no chart is told there is NO CHART to read here and must cite the candles; a home with no market read at all is told to name no shape. | `tests/deskSystemPrompt.test.ts` — the invariant that every tool the mandate NAMES is a tool this turn can call — plus the updated source assertion in `tests/promptContract.test.ts` |
+| **O-60** | The desk mandate ordered the seat to call `get_chart_view`, and the Chat surface's allow-list refuses it — a duty the executor would not honour, which reads to the model as an obligation rather than an absence. | The mandate is composed from the offer set: `deskToolsMandateFor(offered)` (`services/analysis/DeskToolsService.ts:1686`), `withDeskToolsSystemPrompt(…, offeredTools)` (`:3979`), the offer list built at `:4087` from `mergedAllowed` before falling back to the definitions. A home with no chart is told there is NO CHART to read here and must cite the candles; a home with no market read at all is told to name no shape. | `tests/deskSystemPrompt.test.ts` — the invariant that every tool the mandate NAMES is a tool this turn can call — plus the updated source assertion in `tests/promptContract.test.ts` |
 | **O-62** | The prompt promised a *fresh* packet; the code served an 8-second cache and, on a failed fetch, a bare "packet unavailable". | The fence stamps its own age — `packetAgeNote()` at `services/trade/tradeChatContext.ts:90` says `Ns old`, and past a minute `… — STALE: this snapshot predates the last N minute(s); call get_market_packet or get_chart_view for a newer read before you state a price` (into the header at `:128`). A failed fetch writes the `DATA_UNAVAILABLE` sentinel (`:102`) whose text says the state is UNKNOWN rather than missing. The system prompt now claims an age-stamped packet, not a fresh one. | `tests/tradeChatContext.test.ts` (the age, the sentinel, and the prompt's own sentence about it) |
 | **O-65** | Nothing near a streaming transcript was a live region, so an arriving answer was never announced. | `role="log" aria-live="polite" aria-busy=…` on both homes' scroll containers — `components/trade/TradeChatPanel.tsx:1077`, `components/agents/AgentsView.tsx:1346` — each with an `aria-label` naming the conversation. Per-row live regions were rejected deliberately: one per message re-announces the whole transcript on every token. | `tests/tradeChatPanelHarness.test.tsx`, the surface-switch case in `tests/surfaceSwitch.test.tsx` |
 | **O-66** | Seven of eighteen dialogs rendered `role="dialog"` with no trap, no `aria-modal`, no restore. | Five modals now trap and are proven by mounting each one and asserting focus lands inside — `AutomationEditorModal`, `ThinkingModal`, `ImageViewerModal`, `NewBotDialog`, `NewGroupDialog` — plus the two the audit missed: the full-screen `LiveMarket` overlay (`components/market/LiveMarket.tsx:81`, and NOT when it is the embedded panel) and the update overlay's decidable phase (`components/shared/UpdateOverlay.tsx:140`, because `downloading` and `installing` contain nothing focusable and a trap there swallows Tab for minutes). The header's session popover stays a disclosure on purpose — `components/shared/Header.tsx:217` writes no `aria-modal` and Escape/outside-click dismiss it — and now carries `aria-controls` on its trigger. | `tests/useFocusTrap.test.tsx`: the five mounts, and a **population** gate that lexes every `.tsx` under `components/` plus `App.tsx` with the shared `jsxScan` and refuses any element that writes `aria-modal` without carrying the `useFocusTrap()` ref on that same tag. Reach is floored at the 18 measured sites, six named members must be in the set, two planted defects prove both finding branches fire, and a disclosure-only fixture proves it does not over-refuse. |
@@ -1538,7 +1538,7 @@ remain are named below.
 draft was approving a rule whose stated evidence the app had thrown away. It now rides
 the whole chain: read at `services/analysis/DeskToolsService.ts:2687`, declared at
 `schemas/learning.ts:153` (clipped to 600 chars, the same budget every other clause
-carries), stamped by the ingest (`services/learning/SkillMemoryService.ts:2973`),
+carries), stamped by the ingest (`services/learning/SkillMemoryService.ts:2977`),
 serialised into the skill's frontmatter (`:1325`) and parsed back (`:726`), and printed
 as its own line on the Coach card (`components/chat/CoachThreadPanel.tsx:143`).
 `timeframe` joined the schema (`:2688`) because the replay proof silently assumed `1h`
@@ -1596,7 +1596,11 @@ errors / **655** warnings under the 659 cap (unchanged) · `check-flow-doc-ancho
 the lines these moved. `docs/research` is *not* policed, so its citations were
 re-derived from this commit's own `-U0` hunk headers: 258 named and 98 bare moves,
 each asserted by requiring the bytes at the old line and the new line to be identical,
-with every doc verified afterwards to differ from its committed form in digits only.
+with every doc verified afterwards to differ from its committed form in digits only. That rule
+protects a MOVE; it does not validate a citation the move left alone, and a reviewer's re-check of
+the prose this session wrote found several that had been wrong for days (§35, and the `STATUS.md`
+log line). `docs/research/**` sits outside the four documents the anchor gate polices, so nothing
+measures it automatically.
 
 **What this does NOT close.** The probe half of P2: `skill-approval-probe` seeds the
 draft bytes, so the segment between a model's `propose_skill` call and the inbox is
@@ -1613,14 +1617,15 @@ touches P4, P1 or P5's row-furniture half.
 **From:** `docs/research/TRADING-IMPROVEMENTS.md` P5 item 3. **Closes:** no register row.
 **Changes the shape of:** P5 items 1 and 2, which are now recorded as one decision.
 
-**What landed.** Both `/__provider_proxy` branches were sending `signal: options?.signal`
+**What landed.** Two of the three `/__provider_proxy` branches were sending `signal: options?.signal`
 — no timeout of their own — while every other transport path in the same file passes
 `withTimeoutSignal` (120 s) or `withStreamTimeoutSignal` (300 s). They now pass the one
 matching the call they make: the non-streaming request at
 `services/providers/GenericProviderService.ts:1432`, the streaming turn at `:1619`.
 The research corpus recorded this as one branch; a census of `signal: options?.signal`
-found the second, so the fix is wider than the finding and the three rows that named it
-now say so.
+found a second uncapped one, so the fix is wider than the finding and the three rows that
+named it now say so — and narrower than it reads, because a third proxy branch was already
+capped and this pass did not touch it.
 
 **Why the streaming branch takes 300 s and not 120 s.** The proposal said "match the
 other two transports (120 s)". A stream is not a non-streaming call: a reasoning model
@@ -1661,3 +1666,83 @@ which is why the re-anchor pass asserts on bytes rather than trusting its own ar
 655 warnings · `check-flow-doc-anchors` 410 anchors, 0 unattributed, self-quota 0, and
 the AGENTS.md census arm green against the tracked file count (it failed at 514 until the
 new test file was staged — the gate measures `git ls-files`, not the working directory).
+
+---
+
+## 35. The review pass: five real defects the first two commits left (2026-10-23)
+
+**Method.** Five read-only reviewers were launched against `e6787a8f` + `7bd7098f`
+with different lenses — the reason chain, the unattended blast radius, the index
+consolidation, test quality, and doc-claim fact-checking. Every finding they made was
+re-opened in the tree before anything was changed; two of theirs did not survive
+inspection (named below).
+
+**Fixed, in code.**
+
+1. **The second writer of the skill format did not write the new field.**
+   `ingestCraftedSkillUnlocked` builds its own `SkillMeta` and had no `reason` slot, so
+   a draft backed by a closed trade — which is exactly what a post-mortem produces —
+   lost the evidence on the way to the notebook while the draft-backed path kept it.
+   Now stamped at `services/learning/SkillMemoryService.ts:2887`, the same clip as the
+   other writer. Pinned by extending the existing P0-1 case
+   (`tests/skillApprovalRoundTrip.test.ts`), proved red by disabling the line.
+2. **The round-trip guard did not know the field existed.** `ROUND_TRIP_FIELDS`
+   (`services/learning/skillReview.ts:332`) is the list the byte-level serialize/parse
+   guard walks; `reason` was absent, so a frontmatter round trip could silently drop it
+   and nothing would fail. Added beside `whyAccepted`.
+3. **The Skills label asserted a thing the gate denies.** After P10 the index and the
+   injection both withhold an unapproved skill, while `skillAvailability` still answered
+   `Enabled — this skill is injected into the seat prompt` from `skillEnabledFlag` alone
+   (`components/learn/SkillsCatalog.tsx:159`, fed at `:421`), and the skill reader's chip
+   and `SkillDetail`'s "Active" (`components/skills/SkillDetail.tsx:139`) did the same.
+   The function's own header already states the rule — "a check on a rule that reaches
+   no seat is a lie" — so this is not a new opinion, it is the module's contract
+   applied to a fact it had not yet read. Both call `isApprovedSkill` (widened to
+   `Pick<SkillMeta, 'approvedBy' | 'prior'>` so the surfaces can call the one reader
+   instead of re-implementing it), and the existing `off` state carries the why; no new
+   chip vocabulary was invented. `tests/skillsReferenceSurface.test.tsx` and
+   `tests/skillLiveLabel.test.tsx` pin both directions, including the starter-shelf arm
+   that fails if a surface hand-tests `approvedBy === 'human'` instead of calling the gate.
+4. **A third place names skills to a model.** `scan_setups` cross-references the skill
+   list into a tool result, filtered only by retired-and-enabled — so a seat was told
+   "skills: funding-exhaustion-long" and `recall` would answer with nothing. It applies
+   the approval fact now (`services/analysis/DeskToolsService.ts:3049`), with
+   `tests/scanSetupsTool.test.ts` mocking the library but keeping the REAL gate.
+5. **Three of my own tests were not capable of failing.** (a)
+   `tests/automationToolTurn.test.ts` opened with `toEqual(AUTOMATION_TOOLS.filter(t =>
+   t !== 'present_trade' && ...))` — the production expression restated, which is green
+   for any code. Replaced with assertions that the base actually carries both acting
+   tools, that neither survives, that exactly two were removed, and that nothing else
+   was. (b) The deny-list loop in the same test was vacuous (the base already excludes
+   them). (c) `tests/devProxyTimeout.test.ts` asserted `not.toBeNull()` on a value that
+   was `undefined` pre-fix, so that arm passed on the broken code; both arms now demand
+   an `AbortSignal` instance. The reviewer's fourth point — the mocks re-implement the
+   projection's `.map()` — is true and accepted: they call the real `skillIndexRow`, so
+   a gate change is caught; only a change to `skillIndexRows`' *composition* would hide.
+
+**Not taken from the review, and why.** One reviewer reported the unattended path can
+"still reach every forged `custom_*` tool" — true of SCHEDULED runs (`automationTurn.ts`
+sets `executePanelTool`, which re-adds confirmed forged definitions at
+`services/analysis/DeskToolsService.ts:4265-4273`), and false of the evaluator this fix
+narrowed, because `analyzeTradingView` wires no executor. So the claim is a pre-existing
+property of the automation surface, not a hole in this change, and it is recorded rather
+than silently widened into a behaviour change for schedules. Another suggested routing
+`get_notebook_map` through the same filter; rejected — that tool answers "what files are
+in my notebook", and hiding a file there makes it wrong about the trader's own data.
+
+**Gates.** `typecheck` ok · `vitest` green across the touched suites (the full run and
+the final numbers are in the entry below) · `check-flow-doc-anchors` re-run after the
+docs moved again: the corpus was re-anchored a second time with the same byte-identity
+assertion, now including `SkillsCatalog.tsx`, `SkillViewerPanel.tsx`, `SkillDetail.tsx`
+and `skillReview.ts`.
+
+**And what the corpus check found about ITSELF.** The re-anchor rule validates a MOVE,
+not a citation nobody moved. A reviewer that re-opened every claim this session's prose
+makes found citations that had been wrong for days — `deskToolsMandateFor`,
+`rejectedResult`, `requireFirstToolRound`, the status-ladder and temporal-ledger pairs,
+the `hurts` pin block, `revokeSkillApproval`, O-31's two route-A entry points, and
+`automationTurn.ts:106-127` (which is `automationSeatFor`) quoted as evidence that the
+automation path has no provider fallback. Each is corrected here. **`docs/research/**` is
+not policed** — the anchor gate reads four documents — so nothing measures the rest of
+the corpus automatically, and O-29 was the proof that a register row can be confidently
+wrong for three days. That is the honest limit of this pass, not a resolved item.

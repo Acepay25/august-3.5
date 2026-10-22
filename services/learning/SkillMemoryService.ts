@@ -996,7 +996,7 @@ export const skillEnabledFlag = (meta: SkillMeta): boolean =>
  * own evidence so the reviewer can see it beside the request, and a writer that
  * forgets to set the fact fails CLOSED — it simply never activates.
  */
-export const isApprovedSkill = (meta: SkillMeta): boolean => {
+export const isApprovedSkill = (meta: Pick<SkillMeta, 'approvedBy' | 'prior'>): boolean => {
     if (meta.approvedBy === 'human' || meta.approvedBy === 'grandfathered') return true;
     // The starter library is vetted literature, not model output: one explicit
     // Settings toggle approves the whole shelf, and it is ON by default so the app
@@ -2881,6 +2881,10 @@ const ingestCraftedSkillUnlocked = async (
         // `isApprovedSkill` sees it. Auto-ingest (no approvedBy) keeps the
         // fail-closed behavior — status/evidence alone are not consent.
         ...(approvedBy ? { approvedBy, approvedAt: new Date().toISOString() } : {}),
+        // The draft-backed writer stamps this (see `reason` there); a second
+        // writer of the same format that omits it is how the field would go
+        // missing for exactly the drafts a post-mortem produces.
+        ...(crafted.reason?.trim() ? { reason: crafted.reason.trim().slice(0, 600) } : {}),
         ifCondition: crafted.ifCondition,
         thenAction: crafted.thenAction,
         predicate: sanitizePredicate(crafted.predicate),
