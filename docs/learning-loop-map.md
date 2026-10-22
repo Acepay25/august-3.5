@@ -164,16 +164,18 @@ on a Family-A trade therefore does change the next index's Family-A line.
    capability-class doctrine it pinned is still pinned — now directly against the
    stored shape in `tests/harnessLessons.test.ts`. A tested-but-uncalled function
    is not "alive", but deleting one is only honest once the assertion outlives it.
-   **WS-4 re-check:** `MemoryConsolidationService.consolidateMemory` is live
-   code that nothing on the runtime path calls — the earlier "IS imported by
-   `AlgorithmicMemoryService.ts`" was true of the import only, and that
-   import was unused. `updateGlobalMemoryAlgorithmically` calls its two steps
-   directly (`pruneOutdatedInsights` + `aggregateSimilarInsights`,
-   `AlgorithmicMemoryService.ts`), which is what keeps the store
-   maintained; the async wrapper's only remaining reference is the ad-hoc
-   `tests/test-memory-consolidation.ts` script (not a Vitest file — the
-   `tests/**/*.test.ts` include never collects it). Kept as the documented
-   composition of those two steps; do not read its existence as a schedule.
+   **WS-4 re-check (2026-10-23): both ends of this leg are dead.**
+   `MemoryConsolidationService` exports only `pruneOutdatedInsights` (`:74`) and
+   `aggregateSimilarInsights` (`:102`); repo-wide neither has a caller, and the
+   `consolidateMemory` this paragraph used to name does not exist in the file.
+   `updateGlobalMemoryAlgorithmically` does not call them either — it only creates
+   an empty store when the profile has none (`AlgorithmicMemoryService.ts:38-43`).
+   Nor does anything else append: no file assigns or pushes to
+   `GlobalMemory.insightKnowledgeBase.insights`, which is why row 4 below says the
+   store never grows. So it is neither maintained nor fed; the module is a
+   deletion candidate, and wiring either half is a decision (P4 in
+   `docs/research/TRADING-IMPROVEMENTS.md` — the register has no row for it yet),
+   not a description of the code as it stands.
 4. **Top-level `insightKnowledgeBase` state is carried, not used.** The writer
    does fire — exactly once, at profile load (`useUserProfileLoader.ts`) —
    but nothing at runtime ever produces a new value for it, so the load → persist

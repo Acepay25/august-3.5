@@ -96,6 +96,12 @@ installer, and only then uploads the signed bytes with `gh release upload`.
   you can apply to a diff
 - `docs/learning-loop-map.md` — how skills, rules, notebook memory and the
   supervisor get written, retrieved and injected
+- `docs/app-flow.md` — the living flow doc (with `docs/app-flow.html` as its
+  printable view), every line number machine-checked by
+  `npm run check-flow-doc-anchors`
+- `docs/research/` — the harness-research corpus: three reference-repo syntheses
+  (93 shard reports with per-file ledgers), the August baseline, twelve
+  improvement proposals, and the independent audit of the run
 - `PRIVACY.md` — every path by which data leaves the machine
 
 ## License

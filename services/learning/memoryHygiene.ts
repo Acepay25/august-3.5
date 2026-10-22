@@ -8,17 +8,17 @@
  * so the Learn surface's Health tab can say what memory looks like without
  * the user having to go looking.
  *
- * Deliberately absent, with the reason:
- *  - consolidation — the insight store needs no scheduled pass here because
- *    its ONLY writer already consolidates on every write:
- *    `AlgorithmicMemoryService.updateGlobalMemoryAlgorithmically` pushes the
- *    batch's new insights and then calls `pruneOutdatedInsights` +
- *    `aggregateSimilarInsights` in the same block
- *    (`AlgorithmicMemoryService.ts:146-149`; the `if (newInsights.length > 0)`
- *    guard at :135 is the only code in the repo that mutates
- *    `GlobalMemory.insightKnowledgeBase.insights`). A store that cannot grow
- *    without being pruned would just be walked twice. See
- *    docs/learning-loop-map.md.
+ * Deliberately absent — but NOT for the reason this comment used to give:
+ *  - consolidation — nothing consolidates, and nothing is adding either.
+ *    `pruneOutdatedInsights` / `aggregateSimilarInsights`
+ *    (services/learning/MemoryConsolidationService.ts) have no caller anywhere;
+ *    `updateGlobalMemoryAlgorithmically` only creates an empty
+ *    `insightKnowledgeBase` when the profile has none
+ *    (AlgorithmicMemoryService.ts:38-43); and no file appends to
+ *    `GlobalMemory.insightKnowledgeBase.insights`. The store is carried and
+ *    written back verbatim, so a scheduled prune would walk a list nobody grows.
+ *    Wiring either half is an open decision (P4 in
+ *    docs/research/TRADING-IMPROVEMENTS.md) — see docs/learning-loop-map.md.
  *
  * What this pass DOES run, and reports one line each:
  *  - stale-skill demotion proposals (below);

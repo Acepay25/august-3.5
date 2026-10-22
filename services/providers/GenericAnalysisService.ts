@@ -262,9 +262,9 @@ export interface AnalyzeTradingViewParams {
     signal?: AbortSignal;
     /**
      * Sampling temperature. Defaults to 0.35 (pro-trader determinism) when
-     * omitted. The ensemble raises this per-seat when Lenses are OFF so the
-     * three analysts sharing one prompt sample differently instead of
-     * collapsing to near-identical output.
+     * omitted. A caller that runs several seats over one prompt may raise it
+     * per seat so they sample differently instead of collapsing to identical
+     * output.
      */
     temperature?: number;
     allowedTools?: string[];
@@ -277,7 +277,7 @@ export interface AnalyzeTradingViewParams {
      *  answer (and any untagged thinking) forming live, not just at the end. */
     onPartialOutput?: (chunk: string) => void;
     /** Wire-audit sink (P5) — receives the applied reasoning-route label for
-     *  this call so the debate run log can show what the wire received. */
+     *  this call so the answer's row can show what the wire received. */
     onWireAudit?: (entry: WireAuditEntry) => void;
     /** model side-effects from this seat's desk-tool loop
      *  (forge_tool / amend_memory / custom_* receipts). */
@@ -436,12 +436,12 @@ export async function analyzeTradingView(
     }
 
     // --- CALL THE GENERIC CLIENT (optional desk-tools loop, then stream) ---
-    // Temperature: 0.35 default — pro-trader discipline wants determinism
-    // when each seat carries a distinct persona. The ensemble passes a
-    // per-seat temperature (0.55–0.85) when Lenses are OFF so three seats
-    // sharing one prompt still sample independently.
-    // P2: the analysis phase IS the opening-statements phase — schedule it
-    // at high effort (seat opinions are the debate's raw material).
+    // Temperature: 0.35 default — pro-trader discipline wants determinism.
+    // The analysis is scheduled at high effort. The ensemble that used to
+    // pass a per-seat temperature (0.55–0.85) when Lenses were OFF was
+    // removed with the debate engine; `temperature` remains the caller's
+    // override for this single analysis call, which is why the default is
+    // the pro-trader number rather than a sampling spread.
     const options: ChatRequestOptions = { jsonMode: false, maxTokens: TASK_BUDGETS.analysis, temperature: temperature ?? 0.35, signal, onReasoning, reasoningEffort: effortForTask('analysis'), onWireAudit };
     let responseText = '';
     let reasoningAccumulated = '';
