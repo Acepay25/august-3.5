@@ -265,7 +265,7 @@ queue (`hooks/useNetworkStatus.ts:12-47`).
 | **No runtime provider/model fallback** | A 500/429/401 ends the turn. No second provider is tried, on the chat, dock, analysis or automation path (`GenericProviderService.ts:1501-1506/1722-1727`, `useAnalysisPipeline.ts:1338-1344`, `automationTurn.ts:95-116`). A *resolution-time* fallback for a stale pick **is** real, with an amber banner in both composers (`utils/providerUtils.ts:119-134`, `tests/modelFallbackBanner.test.tsx`) — but that is a different thing. |
 | The cooldown bench is not consulted for a chat turn's provider | `ProviderHealthService.ts:104-122` is read in only 3 places, none of them the turn path (`App.tsx:328-336`, `botAttention.ts:55`) |
 | The dev-proxy branch has **no timeout** | `GenericProviderService.ts:1411-1427` (dev-only) |
-| A Stopped turn on the Chat surface is unmarked | `types/message.ts` has no `interrupted` field; the flag lives only on the dock's `LiveEntry` (`chatSessions.ts:96-103`) |
+| A Stopped turn on the Chat surface is unmarked | `types/message.ts` has no `interrupted` field; the flag is on the persisted `StoredChatEntry` (`chatSessions.ts:103`, inherited by `LiveEntry` at `chatStore.ts:48`), so the dock's rows survive reload |
 | An empty-but-"complete" automation run does not trip the breaker | the breaker counts only error/skipped rows |
 | The desk turn budget is a nudge, not a stop | `DeskToolsService.ts:196-219/4069-4072` |
 | `isProviderReady` vs `readyProviderModels` disagree on keyless local servers | `utils/providerUtils.ts:18-22` vs `:38-42` |
