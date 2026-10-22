@@ -492,6 +492,17 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     // fallback when the prompt names no coin.
     const snap = useSyncExternalStore(chatStore.subscribe, chatStore.getSnapshot, chatStore.getSnapshot);
     const activeSession = snap.sessions.find(x => x.id === snap.activeId) ?? snap.sessions[0];
+    /** A run the OTHER home started in THIS thread.
+     *
+     *  The Chart AI dock registers its controller under the CONVERSATION id as
+     *  well as its session id, so this surface can say what is actually true:
+     *  the thread is answering. Without it the composer showed Send over an
+     *  answer streaming in from the chart, and pressing it started a second run
+     *  on top of the first. */
+    const dockRunning = !!activeConversationId && !!snap.conversationRunning[activeConversationId];
+    /** Everything below that asks "is this thread busy" asks THIS: the local
+     *  bot send, the pipeline's own run, and a dock turn in the same thread. */
+    const running = busy || analysisRunning || dockRunning;
     const sessionSymbol = activeSession?.symbol ?? 'BTCUSDT';
     const sessionInterval = (activeSession?.interval ?? '15m') as ChartInterval;
     const symbols = useSymbolUniverse();
@@ -750,7 +761,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
 
     const send = useCallback(async (): Promise<void> => {
         const prompt = text.trim();
-        if (!prompt || busy || analysisRunning) return;
+        if (!prompt || running) return;
         stickToBottomRef.current = true;
         setShowJump(false);
         setText('');
@@ -789,7 +800,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         clearAttachments();
         setBusy(true);
         try { await onSendBotTurn(activeBot, prompt); } finally { setBusy(false); }
-    }, [text, busy, analysisRunning, onAnalyze, onAnalysisError, activeBot, onSendBotTurn, attachedImages, clearAttachments]);
+    }, [text, running, onAnalyze, onAnalysisError, activeBot, onSendBotTurn, attachedImages, clearAttachments]);
 
     /** The ⋯/right-click list for a room: pin plus the two roster handlers App
      *  hands in. Pinned rooms gain edit/delete here that the hover icons never
@@ -1413,7 +1424,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     // re-announces the whole answer dozens of times per
                                     // sentence. Held busy until the row settles, the answer
                                     // is read once, in full. (O-65)
-                                    role="log" aria-live="polite" aria-busy={busy || analysisRunning}
+                                    role="log" aria-live="polite" aria-busy={running}
                                     aria-label="Conversation">
                                     {thread.map(m => {
                                         const isUser = m.role === MessageRole.USER;
@@ -1515,7 +1526,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         {showJump && (
                             <JumpToLatestFab
                                 visible
-                                running={busy || analysisRunning}
+                                running={running}
                                 onJump={jumpToLatest}
                             />
                         )}
@@ -1588,15 +1599,15 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     <div className="ml-auto flex min-w-0 items-center gap-1.5" data-testid="composer-model-and-send">
                                         {modelPicker?.({ showEffort: !activeBot })}
                                         <button type="button"
-                                            onClick={() => { if (busy || analysisRunning) { onStopRun?.(); return; } void send(); }}
-                                            disabled={!busy && !analysisRunning && !text.trim()}
-                                            aria-label={(busy || analysisRunning) ? 'Stop' : 'Send'} data-testid="composer-send"
+                                            onClick={() => { if (running) { onStopRun?.(); return; } void send(); }}
+                                            disabled={!running && !text.trim()}
+                                            aria-label={running ? 'Stop' : 'Send'} data-testid="composer-send"
                                             /* Two states, like the dock's composer. Stop used to live only on the
                                                pipeline card floating over this surface, which covered the answer it
                                                was waiting for; the control now sits where the send did. */
                                             className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-opacity hover:opacity-90 disabled:opacity-30 ${
-                                                (busy || analysisRunning) ? 'bg-rose-500/15 text-rose-300' : 'bg-zinc-100 text-zinc-900'}`}>
-                                            {busy || analysisRunning
+                                                running ? 'bg-rose-500/15 text-rose-300' : 'bg-zinc-100 text-zinc-900'}`}>
+                                            {running
                                                 ? <StopIcon className="h-3 w-3" fill="currentColor" aria-hidden="true" />
                                                 : <ArrowUp className="h-4 w-4" aria-hidden="true" />}
                                         </button>

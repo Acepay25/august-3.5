@@ -61,6 +61,7 @@ import {
 import { saveToolPayload } from './toolPayloadStore';
 import * as chatStore from './chatStore';
 import type { LiveEntry, LiveSession } from './chatStore';
+import { startEntryMirror, type SoloTurnRow } from './chatTurnMirror';
 import {
     panelSeats, planPanelTurn, formatRoomTranscript, parsePanelMentions, panelCouldStillBePass,
 } from './chatPanel';
@@ -278,8 +279,23 @@ export interface ChatTurnRunnerDeps {
      *
      *  Without this the merge is one-way: the pane reads the conversation but a
      *  question asked in it never lands there, so flipping the pill back made the
-     *  exchange look like it had never happened. */
-    onSoloTurnCommit?: (row: { id: string; role: 'user' | 'ai'; text: string; workedMs?: number; effort?: ReasoningEffort }, conversationId: string) => void;
+     *  exchange look like it had never happened.
+     *
+     *  It now carries the LIVE row too, not just the settled one — see
+     *  `chatTurnMirror`, which exists because a turn started here was invisible
+     *  to the Chat surface until it finished. */
+    onSoloTurnCommit?: (row: SoloTurnRow, conversationId: string) => void;
+    /** Make the conversation this dock turn belongs to the one the Chat surface
+     *  is showing, minting one when the session has never had a thread.
+     *
+     *  A dock session started on the Trade screen had no `conversationId` at all,
+     *  so nothing it said could reach the Chat surface — the two homes were two
+     *  transcripts wearing one app. The caller owns conversations, so this asks
+     *  it to adopt (or create) the thread and hands the id back for the session
+     *  to bind. Returns null only when the host has no conversation to give, and
+     *  the turn then stays dock-local rather than writing into a thread that
+     *  does not exist. */
+    onSyncConversation?: (conversationId?: string) => string | null;
     /** Launches the FULL ensemble pipeline from this chat. It writes its rows
      *  into the ACTIVE conversation — the same thread the Chat surface renders —
      *  so this resolves when the run ends and carries no answer text. */
@@ -318,7 +334,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         getChartSnapshot, provider, configForSeat, systemPromptFor, bots, activeId, draft,
         sessions, botThreadRows, conversationRows, attachments, attachedImages,
         clearAttachments, setDraft, setContextAt, addModelDrawings,
-        clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onSoloTurnCommit, onRunAnalysis, onAnalysisError,
+        clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onSoloTurnCommit, onSyncConversation, onRunAnalysis, onAnalysisError,
     } = deps;
 
     /** The tier every turn in this runner resolves to. ONE resolution, read by
@@ -839,6 +855,11 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             ? (retryEntry.image ? [{ id: newId('at'), kind: 'image', name: 'chart.png', payload: retryEntry.image }] : [])
             : attachments;
         if ((!text && sentAttachments.length === 0 && !retryEntry) || live.running[sid]) return;
+        // A run belongs to the thread, not to the surface that typed it. While
+        // the Chat surface is answering IN THIS CONVERSATION, a second send from
+        // the dock would put two writers on one answer — so the dock refuses,
+        // exactly as it refuses against its own running session above.
+        if (session0.conversationId && chatStore.isConversationRunning(session0.conversationId)) return;
         if (!provider) return;
         if (retryEntry) {
             // Drop the stale answer(s) AFTER the original user bubble — the
@@ -852,6 +873,21 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             clearAttachments();
         }
         const session = session0;
+        // ONE conversation, two homes. A solo dock turn always speaks into a
+        // thread the Chat surface can open: a session that never had one adopts
+        // (or mints) it here, and a session that has one makes sure the Chat
+        // surface is LOOKING at it — otherwise switching across showed an older
+        // thread and the exchange you were mid-way through was nowhere.
+        // Bot sessions are excluded (their thread is the bot's conversation,
+        // committed by `onBotTurnCommit`) and panels are rooms, not threads.
+        let turnConversationId = session.conversationId;
+        if (session.kind !== 'panel' && !session.botId && onSyncConversation) {
+            const synced = onSyncConversation(turnConversationId);
+            if (synced && synced !== session.conversationId) {
+                turnConversationId = synced;
+                mutate(sid, s => (s.conversationId === synced ? s : { ...s, conversationId: synced }));
+            }
+        }
         // WHO SUPERVISES: this session's model — a panel's FIRST seat when
         // several are selected. Reported now, and it rides every learning
         // hook fired from this send's finally block.
@@ -871,7 +907,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             session.entries,
             session.botId && bots.some(b => b.id === session.botId)
                 ? botThreadRows
-                : (session.conversationId ? conversationRows : undefined),
+                : (turnConversationId ? conversationRows : undefined),
         );
         const retryIdx = retryEntry ? conversation.findIndex(e => e.id === retryEntry.id) : -1;
         const history = retryIdx >= 0 ? conversation.slice(0, retryIdx) : conversation;
@@ -886,6 +922,17 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         // keeps streaming into the store even if the panel unmounts.
         const controller = new AbortController();
         chatStore.beginRun(sid, controller);
+        // The SAME controller, registered under the CONVERSATION too. The two
+        // homes key their run registries differently on purpose (a session id
+        // and a conversation id must not collide), but a thread that is
+        // answering must read as busy from either home: this is what lets the
+        // Chat surface's Stop reach a run started here, and what lights the
+        // rail's "still working" badge for it. Solo turns only — a panel is a
+        // room, and a bot session's thread is committed by its own path.
+        const registersConversation = session.kind !== 'panel' && !session.botId && !!turnConversationId;
+        if (registersConversation && turnConversationId) {
+            chatStore.beginConversationRun(turnConversationId, controller);
+        }
         // Paint the transcript NOW, before the packet fetch: the user's
         // bubble + a "Thinking…" placeholder appear the instant they hit send,
         // so the dock never looks dead during the network round-trip. Solo
@@ -914,6 +961,14 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             // retried user bubble stays; only the fresh answer is removed).
             mutate(sid, s => ({ ...s, entries: s.entries.filter(e => e.id !== soloAiEntry.id && (retryEntry || e.id !== userEntry.id)) }));
             endRunOwned(sid, controller);
+            // And release the CONVERSATION registration armed above, or this
+            // thread stays busy forever: the run is over, but every home still
+            // reads `conversationRunning` and offers a Stop for a turn that
+            // already ended — which is what made a stopped dock turn block the
+            // Chat surface's composer for the rest of the session.
+            if (registersConversation && turnConversationId) {
+                chatStore.endConversationRunOwned(turnConversationId, controller);
+            }
             return;
         }
         const userText = `${contextBlock}\n\n${text}${fileBlocks}`;
@@ -940,9 +995,24 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             // session, not into `messages`, so unlike the Chat surface there is
             // no trader's row already waiting to be claimed.
             if (bot) onBotTurnCommit?.(bot, text);
-            else if (session.conversationId) {
-                onSoloTurnCommit?.({ id: userEntry.id, role: 'user', text }, session.conversationId);
+            else if (turnConversationId) {
+                onSoloTurnCommit?.({ id: userEntry.id, role: 'user', text }, turnConversationId);
             }
+            // THE LIVE MIRROR. Without it the conversation gained this turn's
+            // answer only when it settled, so crossing to the Chat surface
+            // mid-generation showed the question and a silent thread. The mirror
+            // copies this entry into the conversation under the same id, and
+            // `finally` stops it — which flushes, so a stopped or failed turn
+            // cannot leave a row claiming to still be streaming.
+            const mirror = !bot && turnConversationId && onSoloTurnCommit
+                ? startEntryMirror({
+                    sid,
+                    entryId: aiEntry.id,
+                    conversationId: turnConversationId,
+                    speakerKey: soloProvider.id,
+                    commit: onSoloTurnCommit,
+                })
+                : null;
             // History carries its images. The user attached a chart two turns
             // ago and asked "what about that pattern?" — the screenshot was
             // stored on the entry all along (StoredChatEntry.image, which is why
@@ -1028,14 +1098,26 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 const settled = !!settledText.trim() && !/^Running the full ensemble/.test(settledText);
                 if (bot) {
                     if (settled) onBotTurnCommit?.(bot, text, settledText, workedMsFor(soloStartedAt), turnEffort);
-                } else if (settled && session.conversationId) {
+                } else if (settled && turnConversationId) {
                     // Under the id the pane is ALREADY showing this answer by, so
                     // the Chat thread gains the row and this pane does not double
-                    // it — see `onSoloTurnCommit`.
+                    // it — see `onSoloTurnCommit`. `streaming: false` is said here
+                    // as well as by the mirror's flush: a host with no mirror must
+                    // still settle the row it was given.
                     onSoloTurnCommit?.(
-                        { id: aiEntry.id, role: 'ai', text: settledText, workedMs: workedMsFor(soloStartedAt), effort: turnEffort },
-                        session.conversationId,
+                        { id: aiEntry.id, role: 'ai', text: settledText, streaming: false, workedMs: workedMsFor(soloStartedAt), effort: turnEffort },
+                        turnConversationId,
                     );
+                }
+                // Stops the mirror and flushes the entry's final state — the
+                // settled text, or the error and `streaming: false` of a turn
+                // that never answered. Nothing may leave a live row in the
+                // conversation once this run is over.
+                mirror?.stop();
+                if (registersConversation && turnConversationId) {
+                    // Owned release: a pipeline run that took this conversation
+                    // in the meantime keeps its own registration.
+                    chatStore.endConversationRunOwned(turnConversationId, controller);
                 }
                 if (bot && usernameNow) {
                     const answered = chatStore.getSnapshot().sessions

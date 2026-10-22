@@ -82,7 +82,7 @@ import { effortDialUp } from './components/shared/effortDial';
 import { nextEffortTier } from './components/shared/effortScale';
 import { DEFAULT_FRAMEWORKS } from './constants/models';
 import { computeChatModelFallback, isProviderReady } from './utils/providerUtils';
-import { defaultLeverage } from './utils/conversationUtils';
+import { defaultLeverage, createNewConversation, findReusableEmptyConversation } from './utils/conversationUtils';
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
 import { type ThreadSelection, threadForProvider } from './utils/agentThreads';
 import {
@@ -117,6 +117,7 @@ import { useWatchSideEffects } from './hooks/useWatchSideEffects';
 import { useSurfaceRouter } from './hooks/useSurfaceRouter';
 import type { AppSurface } from './hooks/useSurface';
 import type { TradeMode } from './components/trade/TradeView';
+import type { SoloTurnRow } from './services/trade/chatTurnMirror';
 import SurfaceMenuList, { type NavBadge } from './components/shell/SurfaceMenuList';
 // The default export is the rail component itself, and NOTHING renders it
 // since its five destination rows were deleted with the tab strip
@@ -415,6 +416,33 @@ const App: React.FC = () => {
         if (activeConversationId) chatStore.bindConversation(activeConversationId);
         handleSurfaceSelect('trade');
     }, [activeConversationId, handleSurfaceSelect]);
+    /** Arriving on either home shows the thread that is ANSWERING.
+     *
+     *  The pill in each header already routes the deliberate hop through
+     *  `openChartAi`, but the nav rail and the Alt+N chords switch surfaces
+     *  directly, and a switch that lands on a different thread than the one
+     *  still generating is the desync the trader reads as "it stopped answering
+     *  over here". Both directions, keyed on the run registries rather than on a
+     *  guess: the conversation's own registry for a Chat run, the session's for
+     *  a dock run. */
+    const hopSurfaceRef = useRef(surface);
+    useEffect(() => {
+        const from = hopSurfaceRef.current;
+        hopSurfaceRef.current = surface;
+        if (from === surface) return;
+        if (surface === 'trade') {
+            if (activeConversationId && chatStore.isConversationRunning(activeConversationId)) {
+                chatStore.bindConversation(activeConversationId);
+            }
+            return;
+        }
+        if (surface === 'agents') {
+            const sess = chatStore.getActiveSession();
+            if (sess?.conversationId && chatStore.getSnapshot().running[sess.id]) {
+                setActiveConversationId(sess.conversationId);
+            }
+        }
+    }, [surface, activeConversationId, setActiveConversationId]);
 
     // The Chat ⇄ Chart AI hop is a mode switch, and a mode switch that stops to
     // load a chunk is not one. Each side warms its PARTNER at idle so the press
@@ -1740,20 +1768,84 @@ const App: React.FC = () => {
      *  Deliberately un-stamped: no `botId`, no `modelsUsed`. A desk answer is the
      *  desk's, and `deskThread` drops only rows a bot positively owns. */
     const commitSoloChatTurn = useCallback((
-        row: { id: string; role: 'user' | 'ai'; text: string; workedMs?: number; effort?: ReasoningEffort },
+        row: SoloTurnRow,
         conversationId: string,
     ): void => {
         const at = new Date().toISOString();
-        updateMessages(prev => prev.some(m => m.id === row.id) ? prev : [...prev, {
-            id: row.id,
-            role: row.role === 'user' ? MessageRole.USER : MessageRole.AI,
-            text: row.text,
-            createdAt: at,
-            ...(row.role === 'ai' && typeof row.workedMs === 'number'
-                ? { runStats: { runId: `desk-${row.id}`, startedAt: at, finishedAt: at, durationMs: row.workedMs, ...(row.effort ? { effort: row.effort } : {}) } }
+        // What a mirrored desk turn OWNS on the row. The trace rides under the
+        // answering provider's key — the same key the Chat surface's own live
+        // writer uses — so one turn is one paragraph, not two.
+        const live = (createdAt: string): Partial<Message> => ({
+            isStreaming: !!row.streaming,
+            ...(row.reasoning ? { thoughtProcesses: { [row.speakerKey ?? 'desk']: row.reasoning } } : {}),
+            ...(row.tools ? { toolEvents: row.tools } : {}),
+            ...(row.toolIds ? { toolIds: row.toolIds } : {}),
+            ...(row.error ? { error: row.error } : {}),
+            ...(typeof row.workedMs === 'number'
+                ? { runStats: { runId: `desk-${row.id}`, startedAt: createdAt, finishedAt: createdAt, durationMs: row.workedMs, ...(row.effort ? { effort: row.effort } : {}) } }
                 : {}),
-        }], conversationId);
+        });
+        updateMessages(prev => {
+            const idx = prev.findIndex(m => m.id === row.id);
+            if (idx < 0) {
+                return [...prev, {
+                    id: row.id,
+                    role: row.role === 'user' ? MessageRole.USER : MessageRole.AI,
+                    text: row.text,
+                    createdAt: at,
+                    ...(row.role === 'ai' ? live(at) : {}),
+                }];
+            }
+            // UPSERT, never replace. The dock's mirror writes this row every
+            // ~200ms while the turn runs, and a field another writer owns —
+            // the analysis, the planId receipt, an attached image — must
+            // survive the next patch. Only the mirrored fields move.
+            return prev.map((m, i) => (i === idx
+                ? { ...m, text: row.text, ...(row.role === 'ai' ? live(m.createdAt ?? at) : {}) }
+                : m));
+        }, conversationId);
     }, [updateMessages]);
+
+    /** Adopt (or mint) the conversation a Chart AI solo turn speaks into, and
+     *  point the Chat surface at it.
+     *
+     *  A dock session started on the Trade screen had no conversation at all, so
+     *  nothing said there could ever appear in the Chat surface — the two homes
+     *  were two transcripts wearing one app. Every solo turn now resolves to a
+     *  thread first: the session's own binding if it still exists, else the
+     *  unused blank conversation the housekeeping reuses for "New chat", else a
+     *  fresh one. Making it ACTIVE is the other half of the sync: the thread you
+     *  are typing in is the thread the other home shows. */
+    const ensureDockTurnConversation = useCallback((conversationId?: string): string | null => {
+        if (conversationId && conversationHistory.some(c => c.id === conversationId)) {
+            if (conversationId !== activeConversationId) setActiveConversationId(conversationId);
+            return conversationId;
+        }
+        const reusable = findReusableEmptyConversation(conversationHistory, activeConversationId);
+        // A blank thread is only reusable if nothing is ANSWERING in it. The
+        // pipeline registers its run under the conversation id BEFORE the
+        // trader's row lands, so a thread can be empty and still mid-run — and
+        // adopting it would put two writers on one answer, which is the very
+        // desync this callback exists to remove.
+        if (reusable && !chatStore.isConversationRunning(reusable.id)) {
+            if (reusable.id !== activeConversationId) {
+                setConversationHistory(prev => [
+                    { ...reusable, timestamp: Date.now() },
+                    ...prev.filter(c => c.id !== reusable.id),
+                ]);
+                setActiveConversationId(reusable.id);
+            }
+            return reusable.id;
+        }
+        const newConv = createNewConversation();
+        if (activeConversation) {
+            newConv.ocrModel = activeConversation.ocrModel;
+            newConv.leverage = activeConversation.leverage;
+        }
+        setConversationHistory(prev => [newConv, ...prev]);
+        setActiveConversationId(newConv.id);
+        return newConv.id;
+    }, [conversationHistory, activeConversationId, setActiveConversationId, activeConversation, setConversationHistory]);
 
     // ─── Stable identities for overlay/panel callbacks ─────────────────────
     // Inline arrows here were recreated on every App render, busting
@@ -2480,6 +2572,7 @@ const App: React.FC = () => {
                                     botThreadRows={tradeBotThread}
                                     onBotTurnCommit={commitDockBotTurn}
                                     onSoloTurnCommit={commitSoloChatTurn}
+                                    onSyncConversation={ensureDockTurnConversation}
                                     conversationRows={messages}
                                     onNewGroup={() => setIsNewGroupOpen(true)}
                                     onOpenCoach={openApprovalsInLearn}

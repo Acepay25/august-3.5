@@ -880,20 +880,29 @@ describe('a solo turn asked in the panel commits into its conversation', () => {
         fireEvent.click(screen.getByText('Key levels?'));
         expect(await screen.findByText(/Bias long above 111,400/)).toBeTruthy();
 
-        expect(committed.map(c => c.role)).toEqual(['user', 'ai']);
-        expect(committed.every(c => c.cid === 'conv-7')).toBe(true);
+        // The question is ONE commit and the answer is AT LEAST one: the live
+        // mirror writes the answer while it streams (that is what lets the Chat
+        // surface show a turn that started over here as still arriving), and the
+        // settle commit is the last word. Every commit goes to the same thread.
+        expect(committed[0].role).toBe('user');
         expect(committed[0].text).toBe('Key levels?');
-        expect(committed[1].text).toContain('Bias long above');
+        expect(committed.filter(c => c.role === 'ai').length).toBeGreaterThanOrEqual(1);
+        expect(committed.every(c => c.cid === 'conv-7')).toBe(true);
+        const last = committed[committed.length - 1];
+        expect(last.role).toBe('ai');
+        expect(last.text).toContain('Bias long above');
+        expect(last).toMatchObject({ streaming: false });
 
         const entries = chatStore.getSnapshot().sessions.find(s => s.id === sid)?.entries ?? [];
         expect(entries.find(e => e.role === 'user')?.id).toBe(committed[0].id);
-        expect(entries.find(e => e.role === 'ai')?.id).toBe(committed[1].id);
+        expect(entries.find(e => e.role === 'ai')?.id).toBe(last.id);
     });
 
     it('an unbound session commits nothing, so the dock keeps its own transcript', async () => {
-        // No `conversationId` means there is no conversation to write into.
-        // Firing anyway would drop a dock question into whatever chat the trader
-        // happens to have open on the other surface.
+        // No `conversationId` AND no host that can resolve one means there is no
+        // conversation to write into. Firing anyway would drop a dock question
+        // into whatever chat the trader happens to have open on the other
+        // surface, so the mirror stays off until a thread is actually named.
         script(yieldText('Dock-only answer.'));
         const committed: unknown[] = [];
         render(

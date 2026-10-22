@@ -135,7 +135,17 @@ const replyTo = (body) => {
     return `MOCK REPLY for "${quoted}" — the desk is up, the feed is live, and this answer came from the local mock.`;
 };
 
-const stream = (res, text) => {
+/** OPT-IN slow scenario, keyed on a marker in the REQUEST rather than an env
+ *  flag, for the same reason `PROBE_TOOL_ROUND` is: the default answer streams in
+ *  ~60 ms, which is over before a surface switch even renders, so the live-sync
+ *  check ("a turn asked in the dock is still ARRIVING on the Chat surface")
+ *  could only ever measure a settled row. A sentinel in one message arms this
+ *  for that message alone and cannot leak into another phase's turn. */
+const SLOW_MARK = 'PROBE_SLOW_STREAM';
+const SLOW_FILLER = 'The desk is up and the feed is live, so this sentence keeps '
+    + 'arriving token by token while the trader reads the other surface. '.repeat(9);
+
+const stream = (res, text, delayMs = 12) => {
     res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache, no-transform',
@@ -155,7 +165,7 @@ const stream = (res, text) => {
         const piece = words.slice(i, i + 4).join(' ');
         i += 4;
         res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: `${piece} ` } }] })}\n\n`);
-        setTimeout(tick, 12);
+        setTimeout(tick, delayMs);
     };
     tick();
 };
@@ -230,7 +240,12 @@ const server = http.createServer((req, res) => {
             return;
         }
         const text = replyTo(body);
-        if (body.stream) { stream(res, text); return; }
+        if (body.stream) {
+            const slow = JSON.stringify((body && body.messages) || []).includes(SLOW_MARK);
+            if (slow) console.log('[mock-provider] slow-stream scenario');
+            stream(res, slow ? `${text} ${SLOW_FILLER}` : text, slow ? 90 : 12);
+            return;
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
             model: MODEL,

@@ -941,6 +941,79 @@ async function main() {
                 backToTrade === 'clicked' && backLanded === true, `${backToTrade}/${backLanded}`);
         }
 
+        // ── ONE THREAD, TWO HOMES: the answer is still ARRIVING across the hop ──
+        // The requirement in one sentence: generating in Chart AI, switch to the
+        // Chat surface, STILL generating. Nothing above proves it. Every dock
+        // check waits for the reply to SETTLE before it moves on, and a mirror
+        // that commits only at settle passes all of them while the other home
+        // shows a silent thread mid-run. So this phase asks slowly — the mock's
+        // request-scoped `PROBE_SLOW_STREAM` scenario, ~5s of deltas — and
+        // crosses over while the stream is still up.
+        await page.evaluate((needle) => {
+            const ta = document.querySelector('textarea');
+            if (!ta || ta.disabled) return;
+            Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')
+                .set.call(ta, needle);
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+            const btn = [...document.querySelectorAll('button')].find(b => !b.disabled && /send/i.test(
+                `${b.getAttribute('aria-label') || ''} ${b.title || ''} ${b.textContent || ''}`));
+            if (btn) btn.click();
+        }, 'PROBE_SLOW_STREAM does the answer cross the hop');
+        // The dock has to be visibly working BEFORE the switch, or the phase
+        // measures a turn that already finished and reports a pass it did not earn.
+        let stillStreaming = false;
+        for (let i = 0; i < 25 && !stillStreaming; i++) {
+            stillStreaming = await page.evaluate(() => [...document.querySelectorAll('button')]
+                .some(b => !b.disabled && /stop/i.test(`${b.getAttribute('aria-label') || ''} ${b.title || ''}`)));
+            if (!stillStreaming) await sleep(100);
+        }
+        check('the dock turn is still generating before the hop', stillStreaming,
+            'no Stop button within 2.5s of sending — the mock answered too fast to measure a live turn');
+        await page.evaluate(() => {
+            const hit = document.querySelector('[data-testid="surface-switch-agents"]');
+            if (hit) hit.click();
+        });
+        await page.waitForSelector('main textarea', { timeout: 20000 });
+        await sleep(400);
+        // Two measurements on the OTHER home, both taken while the run is up:
+        // its composer offers Stop for a run it did not start (a row with no
+        // live flag fails this), and the answer grows between samples (a
+        // settle-only mirror fails this).
+        const busyOnChat = await page.evaluate(() => [...document.querySelectorAll('main button')]
+            .some(b => /stop/i.test(`${b.getAttribute('aria-label') || ''} ${b.title || ''}`)));
+        check('the Chat surface shows the dock’s turn as still running', busyOnChat,
+            'the Chat composer offered Send while the Chart AI turn was generating');
+        const aiCharsOnChat = () => page.evaluate(() => [...document.querySelectorAll(
+            '[data-testid="agent-message"][data-role="ai"]')].reduce((n, e) => n + (e.textContent || '').length, 0));
+        const growA = await aiCharsOnChat();
+        await sleep(700);
+        const growB = await aiCharsOnChat();
+        check('the answer keeps growing on the Chat surface', growB > growA && growA > 0,
+            `${growA} -> ${growB} characters`);
+        // The settle signal here is the CONTROL CHANGING IDENTITY, not becoming
+        // enabled: `waitSendable` asks for an enabled Send, and a composer with
+        // an empty draft is disabled by design on both homes. The run is over
+        // when the surface stops offering Stop.
+        let liveSettled = false;
+        for (let i = 0; i < 150 && !liveSettled; i++) {
+            liveSettled = await page.evaluate(() => ![...document.querySelectorAll('button')]
+                .some(b => /stop/i.test(`${b.getAttribute('aria-label') || ''} ${b.title || ''}`)));
+            if (!liveSettled) await sleep(200);
+        }
+        await waitStableAnswer(page);
+        const liveText = await page.evaluate(() => [...document.querySelectorAll(
+            '[data-testid="agent-message"][data-role="ai"]')].map(e => e.textContent || '')
+            .reduce((a, b) => (a.length >= b.length ? a : b), ''));
+        check('the turn that crossed the hop settles complete, not truncated',
+            liveSettled && liveText.length > 400 && /came from the local mock/.test(liveText),
+            `composer free: ${liveSettled}, ${liveText.length} chars`);
+        // Back to the dock, so the phase below resumes where it expects.
+        await page.evaluate(() => {
+            const hit = document.querySelector('[data-testid="surface-switch-trade"]');
+            if (hit) hit.click();
+        });
+        await page.locator('[data-testid="trade-view"]').waitFor({ timeout: 8000 }).catch(() => {});
+
 
         // ── The Chat surface (id/testids still "agents") ───────────────────────────────────────────
         // It reads the App-side message array through a filter
@@ -972,8 +1045,35 @@ async function main() {
             await sleep(800);
         };
         await openAgents();
-        check('Agents opens on an empty desk thread', (await agentRows()) === 0,
-            `${await agentRows()} rows`);
+        // This check used to assert the desk thread was EMPTY, which was a
+        // description of the SPLIT (two stores, two transcripts) rather than of
+        // a contract. A turn asked in the Chart AI dock now resolves a
+        // conversation and mirrors into it, so the Chat surface opens ON the
+        // dock's own exchange — and that is what is worth asserting here: the
+        // dock's prompts, rendered on the other home, from the same rows.
+        const mergedRows = await agentRows();
+        const mergedText = await page.evaluate(() => [...document.querySelectorAll(
+            '[data-testid="agent-message"]')].map(r => r.textContent || '').join('\n'));
+        // The dock's RECENT turns, not its oldest ones. Conversations are saved
+        // on a 1500 ms debounce (hooks/useConversations.ts:4), so a thread
+        // minted seconds before one of this probe's reloads is genuinely gone,
+        // and the dock rebinds to a live one on its next send — asserting the
+        // pre-reload rows were here would be measuring the save timer, not the
+        // sync. What must hold is that the thread the Chat surface opens on IS
+        // the one the dock last wrote to.
+        const hasLive = /PROBE_SLOW_STREAM/.test(mergedText);
+        const hasTool = /PROBE_TOOL_ROUND/.test(mergedText);
+        check('the Chat surface opens on the dock’s own exchange',
+            mergedRows >= 2 && hasLive && hasTool,
+            `${mergedRows} rows, the hop turn ${hasLive}, the tool turn ${hasTool}`);
+        // Then a clean thread, so the phase below counts what IT sends.
+        await page.evaluate(() => {
+            const b = document.querySelector('[data-testid="rail-new-chat"]');
+            if (b) b.click();
+        });
+        await sleep(600);
+        const freshRows = await agentRows();
+        check('a new chat on the Chat surface starts empty', freshRows === 0, `${freshRows} rows`);
 
         const sendInAgents = async (text) => {
             const before = await agentRows();

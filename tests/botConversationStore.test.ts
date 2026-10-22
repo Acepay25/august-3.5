@@ -116,7 +116,11 @@ describe('the trader and the bot read the SAME conversation', () => {
         // undefined and the session's own entries are the whole transcript.
         expect(panelSrc).toMatch(/const canonicalRows = boundBot\s+\?\s+botThreadRows/);
         expect(panelSrc).toMatch(/activeSession\.conversationId \? conversationRows : undefined/);
-        expect(panelSrc).toMatch(/session\.conversationId \? conversationRows : undefined/);
+        // In the runner the id is resolved BEFORE the merge (`turnConversationId`),
+        // because a solo turn adopts or mints its thread at send. The rule the
+        // assertion carries is unchanged: no thread ⇒ no canonical rows ⇒ the
+        // session's own entries are the whole transcript.
+        expect(panelSrc).toMatch(/turnConversationId \? conversationRows : undefined/);
     });
 });
 
@@ -183,16 +187,18 @@ describe('a turn asked in the dock reaches the Chat surface', () => {
         expect(panelSrc).toMatch(/if \(settled\) onBotTurnCommit\?\.\(bot, text, settledText/);
     });
 
-    it('a bot turn commits under bot identity; a solo turn only when it is bound', () => {
+    it('a bot turn commits under bot identity; a solo turn only into a thread it has', () => {
         // This case used to read "fires for a bot session only", which was true
         // for a bleak reason: a solo turn had no path into the conversation at
         // all, so a question asked in the Desk AI pane was simply never filed.
-        // That split is what the merge exists to close. What must STILL hold is
-        // the guard on the solo path — an unbound dock chat has no conversation
-        // to write into, and guessing one would drop a dock question into
-        // whichever chat the trader has open elsewhere.
+        // That split is what the merge exists to close — and the close is now
+        // total: a solo turn RESOLVES a thread at send (`onSyncConversation`
+        // adopts or mints one), so the id it commits under is never a guess.
+        // What must still hold is that a turn with no resolved thread writes
+        // nowhere, which is the `turnConversationId` guard below.
         expect(panelSrc).toMatch(/if \(bot\) onBotTurnCommit\?\.\(bot, text\);/);
-        expect(panelSrc).toMatch(/else if \(session\.conversationId\) \{/);
-        expect(panelSrc).toMatch(/else if \(settled && session\.conversationId\) \{/);
+        expect(panelSrc).toMatch(/else if \(turnConversationId\) \{/);
+        expect(panelSrc).toMatch(/else if \(settled && turnConversationId\) \{/);
+        expect(panelSrc).toMatch(/const synced = onSyncConversation\(turnConversationId\)/);
     });
 });

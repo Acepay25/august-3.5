@@ -112,6 +112,14 @@ type LegacySessionKind = SessionKind | 'coach';
 /** One panel seat: a specific model inside a specific provider. */
 export interface PanelSeatRef { providerId: string; modelId: string; botId?: string }
 
+/** A conversation row projected into a dock session.
+ *
+ *  The persisted entry shape plus the one fact a stored blob never carries:
+ *  whether the turn is still arriving. `chatStore.LiveEntry` is structurally the
+ *  same thing; it is NOT imported here because the store imports THIS module,
+ *  and a projection that reached back for its reader would be a cycle. */
+export type ProjectedChatEntry = StoredChatEntry & { streaming?: boolean };
+
 export interface ChatSession {
     id: string;
     title: string;
@@ -480,7 +488,7 @@ export const saveSessions = (sessions: ChatSession[], pinnedIds: readonly string
  * rows, key levels) rather than replaying the Chat's. {@link entriesForSession}
  * is the other half — the single merge that makes both homes read ONE thread.
  */
-export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
+export const liveEntryFromMessage = (m: Message): ProjectedChatEntry => {
     const trace = messageTraceText(m);
     const at = m.createdAt ? Date.parse(m.createdAt) : NaN;
     // The trail, one line per entry. `liveToolEvents` is the capped,
@@ -496,6 +504,17 @@ export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
         role: m.role === MessageRole.USER ? 'user' : 'ai',
         text: m.text || '',
         tools: trail,
+        /** The turn is still arriving.
+         *
+         *  This is the fact that made the two homes disagree rather than
+         *  differ: a Chat-surface run was already mirrored into the dock row by
+         *  row, but the row carried no `streaming`, so crossing over mid-answer
+         *  showed a FINISHED reply that had no work card, no live text and no
+         *  Stop — and the next token then rewrote it under the trader's eyes.
+         *  `Message.isStreaming` is the pipeline's own truth, written when the
+         *  run starts and cleared when it settles, so the dock reads it rather
+         *  than re-deriving "is anything running" from a timer. */
+        streaming: !!m.isStreaming,
         // Left unset on purpose: the dock stamps the answering seat from the
         // session's own bot, so a stale name here would fight it.
         speaker: undefined,
@@ -565,11 +584,11 @@ export const liveEntryFromMessage = (m: Message): StoredChatEntry => {
  * key levels — so a reload can never invent a merge the trader never had.
  */
 export const entriesForSession = (
-    local: StoredChatEntry[],
+    local: ProjectedChatEntry[],
     canonical: readonly Message[] | undefined,
-): StoredChatEntry[] => {
+): ProjectedChatEntry[] => {
     if (!canonical) return local;
-    const rows: StoredChatEntry[] = canonical.map(liveEntryFromMessage);
+    const rows: ProjectedChatEntry[] = canonical.map(liveEntryFromMessage);
     const known = new Set(rows.map(e => e.id));
     for (const e of local) {
         const at = rows.findIndex(m => m.id === e.id);

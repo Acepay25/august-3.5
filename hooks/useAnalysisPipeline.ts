@@ -488,7 +488,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
      */
     const cancelRunAt = (key: string): void => {
         const run = runsRef.current.get(key);
-        if (!run) return;
+        if (!run) {
+            // The key IS the conversation id, so a run the OTHER home started in
+            // this thread is still stoppable from here: the Chart AI dock
+            // registers its controller under the conversation as well as its
+            // session, and a Stop that found no pipeline run used to do nothing
+            // while the answer kept arriving in front of the trader.
+            if (key && key !== NO_CONVERSATION_KEY) abortConversationRun(key);
+            return;
+        }
         run.controller.abort();
         run.inFlight = false;
         run.loadingMessage = null;
