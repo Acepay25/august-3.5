@@ -675,7 +675,7 @@ ONCE, the executions ledger's `scheduled_instant` blocks a second fire, and
 `cron.catch_up_missed: false` skips past-grace misses **with a logged reason**.
 Never drop a slot silently."* And the catch-up window: *"half the period, clamped to
 120 s–2 h; 120 s grace for missed one-shots."* `deepseek-harness`
-`packages/goal/goal-round-driver/src/index.ts:111/150/176` + `packages/goal/goal/src/fold.ts:313`
+`packages/goal/goal-round-driver/src/index.ts:111/150/176` + `packages/goal/goal/src/fold.ts:325-330`
 — the round allowance is a **durable admitted-round count derived from the log**, not
 an in-memory counter, so it survives a restart; the driver fires only at whole-agent
 idle, only for an *armed* goal, only after a fail-closed durability checkpoint, and
@@ -709,7 +709,7 @@ schedule"*). What it lacks:
    first, not last.
 2. **Derive the breaker's count from the run history, not from memory.** The DSH
    goal-round driver counts *admitted rounds* from the log
-   (`packages/goal/goal/src/fold.ts:313`), so the count survives a restart. August's
+   (`packages/goal/goal/src/fold.ts:325-330`), so the count survives a restart. August's
    3-in-a-row breaker should count **rows in the run history**, so an app restart
    does not hand a broken schedule a fresh budget — and so the count is
    reconstructible when the trader asks "why did this stop?".
