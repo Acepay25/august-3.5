@@ -307,7 +307,7 @@ preserved (`passMining.ts:248-299`); `setupScan`.
 | Feature | Evidence |
 | --- | --- |
 | **`TradeValidationGate` (41 KB)** | `services/validation/TradeValidationGate.ts` — **zero importers in the whole production tree.** `runValidationGate:495-973` runs twelve named steps (MTF confluence, volume, regime, Devil's Advocate, crowding, session risk, pattern memory, entry timing, SL optimisation, calibration penalty) that never run. `matchPatternMemory:227-320`, `detectCrowdedTrade:329-375`, `validateSessionRisk:384-426`, `validateTimeframeAlignment:438-480` are reachable only through it. |
-| `patternMemoryGate` | `PatternMemorySynthesisService.ts:882-1081` — `generateMandatoryPatternCheck` and `generatePatternMemoryEnforcementContext` have **0 production callers**. `Message.patternMemoryGate` is never assigned, so the journal's HALT chip (`TradeLog.tsx:359-386`) can never render. **`docs/app-flow.md:610-611` still tells the reader this is "the pre-trade gate that refuses a setup with no evidence."** |
+| `patternMemoryGate` | `PatternMemorySynthesisService.ts:882-1081` — `generateMandatoryPatternCheck` and `generatePatternMemoryEnforcementContext` have **0 production callers**. `Message.patternMemoryGate` is never assigned, so the journal's HALT chip (`TradeLog.tsx:359-386`) can never render. **`docs/app-flow.md:606-621` used to tell the reader this was "the pre-trade gate that refuses a setup with no evidence" — corrected 2026-10-23, and it now names `services/trade/proposalGate.ts:152` as the live gate.** |
 | Severity insights | `severityInsights.ts:269` — the store and the maths are real; the writer is unreachable |
 | `SessionGuardService` | `SessionGuardService.ts:157-268` — computes realised day P&L, trades opened today, the loss streak and a 4h post-loss cooldown, grades them, and is called **only from tests**. The 2% daily-loss budget, the 2-trades/day cap, the streak pause and the cooldown never fire. |
 | `providerFitness` | see §3 |
@@ -376,8 +376,9 @@ grid-collapse `<div>`, at `StrategySearch.tsx:269/325` and
 
 **Also cosmetic:** the Chat surface's rail row for the desk thread is titled
 **"Chart AI"** (`AgentsView.tsx:1119`) while the same thread is called "Desk" in that
-surface's own header (`:1365/1372`); `AgentsView.tsx:10-33` still opens with
-*"⚠️ THE TWO SURFACES DO NOT SHARE A STORE TODAY"*, now false; Settings → Journal is
+surface's own header (`:1365/1372`); `AgentsView.tsx`'s header *"⚠️ THE TWO SURFACES DO
+NOT SHARE A STORE TODAY"*, now false (rewritten 2026-10-23 to "two stores, one thread");
+Settings → Journal is
 a launcher duplicating a switch destination; the agent's "N lessons · N skills · N
 evidence" is shown three times in one surface; the session pill's accessible name is
 the bare `"NY"` (`Header.tsx:196-212`); 13 dead animation classes and the whole
