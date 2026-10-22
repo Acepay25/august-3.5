@@ -121,7 +121,19 @@ describe('the skill live label', () => {
         expect(ap(meta)).toBe(false);
         render(<SkillDetail skill={card(meta)} onBack={() => {}} onToggleRetire={() => {}} backLabel="Studio" />);
         expect(labelText()).toBe('Inactive');
-        expect(document.querySelector('[title*="nothing has approved"]')).not.toBeNull();
+        expect(document.querySelector('[title*="has approved this rule"]')).not.toBeNull();
+    });
+
+    it('says WHO said yes when it was the supervisor, instead of saying nobody did', () => {
+        // `approvedBy: 'supervisor'` is NOT approval — the gate refuses it — but a
+        // card that then reads "nothing has approved this rule" contradicts the
+        // "auto-approved" pill beside it. Two sentences about the same file must
+        // not disagree about who accepted it.
+        const meta = { ...META, approvedBy: 'supervisor' as const, whyAccepted: 'the queue looked sound' };
+        render(<SkillDetail skill={card(meta)} onBack={() => {}} onToggleRetire={() => {}} backLabel="Studio" />);
+        expect(labelText()).toBe('Inactive');
+        expect(document.querySelector('[title*="Accepted by the LLM supervisor"]')).not.toBeNull();
+        expect(document.querySelector('[title*="has approved this rule"]')).toBeNull();
     });
 
     it('reads the canonical flag, so it cannot drift from the injectors again', () => {

@@ -2788,9 +2788,9 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     if (!hit) {
                         // Name the REAL reason when the slug is a pending
                         // DRAFT (the book-*/scan-*/chat-* sources): revise_skill
-                        // can only act on approved skills, and a bare "no skill"
-                        // invites the model to claim a revision that can never
-                        // queue (observed 2026-09-14).
+                        // acts on a skill that already EXISTS AS A FILE, and a
+                        // bare "no skill" invites the model to claim a revision
+                        // that can never queue (observed 2026-09-14).
                         const { listSkillDrafts } = await import('../../utils/skillDrafts');
                         const username = getActiveUsername();
                         const draftHit = listSkillDrafts(username).find(d => {

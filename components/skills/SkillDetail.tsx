@@ -148,7 +148,9 @@ const SkillDetail: React.FC<{
                     : meta?.supersededBy
                         ? `Absorbed into ${meta.supersededBy}. Its evidence is kept as the control group.`
                         : meta && !isApprovedSkill(meta)
-                            ? 'Nothing has approved this rule, so no seat is given it. A draft is approved in the Coach inbox; the starter library has its own switch in Settings.'
+                            ? meta.approvedBy === 'supervisor'
+                                ? 'Accepted by the LLM supervisor, not by you — and nothing model-approved reaches a seat.'
+                                : 'Nothing has approved this rule, so no seat is given it. A skill reaches a seat only on a human approval; the starter library has its own switch in Settings.'
                             : 'Not reaching the desk.';
     const wins = Math.round(meta?.wins ?? 0);
     const losses = Math.round(meta?.losses ?? 0);
