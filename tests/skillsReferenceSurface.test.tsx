@@ -68,6 +68,10 @@ const meta = (over: Partial<SkillMeta> = {}): SkillMeta => ({
     description: 'Fade a failed breakout when volume diverges',
     wins: 0,
     losses: 0,
+    // The approval fact the SEAT's gate reads. A skill that reaches a seat is an
+    // approved one, so the default row says so; the tests below pass
+    // `approvedBy: undefined` to check the state that is not.
+    approvedBy: 'human',
     ...over,
 } as SkillMeta);
 
@@ -177,11 +181,36 @@ describe('the catalogue — the availability marks', () => {
         // `skillEnabledFlag` is the one place `enabled` may be derived. The
         // reader imports the same function, so a rule cannot read "suspended"
         // on the card and "active" in the record.
-        const suspended = skillAvailability(meta({ suspendedAt: new Date().toISOString() }), false);
+        const suspended = skillAvailability(meta({ suspendedAt: new Date().toISOString() }), false, true);
         expect(suspended.state).toBe('suspended');
         expect(suspended.label).toBe('Suspended');
-        expect(skillAvailability(meta(), true).state).toBe('enabled');
-        expect(skillAvailability(meta({ status: 'retired' }), false).state).toBe('off');
+        expect(skillAvailability(meta(), true, true).state).toBe('enabled');
+        expect(skillAvailability(meta({ status: 'retired' }), false, true).state).toBe('off');
+        // THE SEAT'S OWN GATE, ON THE CARD. A rule nothing has approved is not
+        // injected and not indexed (P10), so the catalogue may not mark it with
+        // the check — that is a lie about a skill the trader cannot see through.
+        const unapproved = skillAvailability(meta(), true, false);
+        expect(unapproved.state).toBe('off');
+        expect(unapproved.title).toMatch(/nothing has approved/i);
+    });
+
+    it('follows the starter shelf’s own switch — the fact is read, not re-derived', () => {
+        // A `prior: 'book'` skill is approved by the Settings switch, not by a
+        // human click. A component that hand-tested `approvedBy === 'human'`
+        // would call the whole shelf "not injected" while the injection uses it.
+        roster([{ name: 'book-shelf.md', description: 'Join the trend at value', family: 'Family C', prior: 'book' as const }]);
+        render(<SkillsCatalog />);
+        expect(screen.getByLabelText('Enabled'), 'the shelf is approved by its switch, so the card must say so').toBeTruthy();
+    });
+
+    it('does not mark a skill nothing has approved with the check', () => {
+        // The card-level half of the same rule: the row builder reads
+        // `isApprovedSkill`, so a candidate with no `approvedBy` and no `prior`
+        // cannot render as injected.
+        roster([{ name: 'gated.md', description: 'Sweep the low then fade', family: 'Family A', prior: 'gated' as const, approvedBy: undefined }]);
+        render(<SkillsCatalog />);
+        expect(screen.queryByLabelText('Enabled')).toBeNull();
+        expect(screen.getByTitle(/nothing has approved/i)).toBeTruthy();
     });
 });
 

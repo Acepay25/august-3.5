@@ -151,13 +151,22 @@ describe('the schedule’s tool list is derived, not restated', () => {
         // skill eval may not present a plan or record a decline; both act on the
         // trader's record with nobody watching. Derived from AUTOMATION_TOOLS so
         // the deny-list stays the one owner.
-        expect(AUTOMATION_EVALUATION_TOOLS).toEqual(
-            AUTOMATION_TOOLS.filter(t => t !== 'present_trade' && t !== 'decline_trade'),
-        );
+        //
+        // Deliberately NOT `toEqual(AUTOMATION_TOOLS.filter(...))`, which is what
+        // this first asserted: restating the production expression is a check that
+        // cannot fail. What can fail is the SET — that the base really carries both
+        // acting tools (or the subtraction is a no-op), that neither survives it,
+        // and that nothing ELSE was dropped, so an unrelated edit to the
+        // derivation shows up as a missing read-only tool rather than as a green
+        // suite.
+        expect(AUTOMATION_TOOLS, 'the base does not offer present_trade, so the narrowing proves nothing').toContain('present_trade');
+        expect(AUTOMATION_TOOLS, 'the base does not offer decline_trade, so the narrowing proves nothing').toContain('decline_trade');
         expect(AUTOMATION_EVALUATION_TOOLS).not.toContain('present_trade');
         expect(AUTOMATION_EVALUATION_TOOLS).not.toContain('decline_trade');
-        for (const denied of AUTOMATION_UNATTENDED_DENY) {
-            expect(AUTOMATION_EVALUATION_TOOLS, `${denied} reached a detached eval`).not.toContain(denied);
+        expect(AUTOMATION_EVALUATION_TOOLS.length).toBe(AUTOMATION_TOOLS.length - 2);
+        for (const tool of AUTOMATION_TOOLS) {
+            if (tool === 'present_trade' || tool === 'decline_trade') continue;
+            expect(AUTOMATION_EVALUATION_TOOLS, `${tool} dropped from the eval for no reason`).toContain(tool);
         }
         // A typo would silently narrow the list, and the executor would refuse a
         // tool the eval legitimately reads. Every name must be a real tool.

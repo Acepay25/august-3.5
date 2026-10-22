@@ -3031,7 +3031,7 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                 const setups = scanSetups(klines.map(k => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close, volume: k.volume })));
                 let skillIndex: Array<{ slug: string; status?: string; ifCondition?: string; enabled: boolean }> = [];
                 try {
-                    const { listSkills } = await import('../learning/SkillMemoryService');
+                    const { listSkills, isApprovedSkill } = await import('../learning/SkillMemoryService');
                     // `enabled`, not just status: this index is prompt-bound,
                     // and a skill the idle lifecycle suspended must not reach
                     // the model through the back door it left by — the same
@@ -3041,7 +3041,12 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                         status: meta.status,
                         ifCondition: meta.ifCondition,
                         enabled: file.enabled,
-                    })).filter(s => s.status !== 'retired' && s.enabled);
+                        // And the same gate the injection and the skills index
+                        // read (P10): a rule nothing has approved cannot be
+                        // handed over, so naming it here would send the seat to
+                        // a `recall` that answers with nothing.
+                        approved: isApprovedSkill(meta),
+                    })).filter(s => s.status !== 'retired' && s.enabled && s.approved);
                 } catch { /* skill cross-ref is best-effort */ }
                 if (setups.length === 0) {
                     content = `SETUP SCAN ${sym} ${ivl} — nothing live in the last 5 bars. No breakout, pin, inside-bar resolution, gap, divergence, band play, pullback or failed break is currently triggered. Do not invent a setup.`;

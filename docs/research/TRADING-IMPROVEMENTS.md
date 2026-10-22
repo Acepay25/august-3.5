@@ -159,7 +159,7 @@ already exists (`utils/recentTradesBrief.ts`).
 > **LANDED `e6787a8f` (2026-10-23).** The reason the schema demands is now read
 > (`services/analysis/DeskToolsService.ts:2687`), carried by `CraftedSkillSchema`
 > (`schemas/learning.ts:153`), stamped by the ingest and serialised into the skill's
-> frontmatter and parsed back out (`services/learning/SkillMemoryService.ts:2973`,
+> frontmatter and parsed back out (`services/learning/SkillMemoryService.ts:2977`,
 > `:1325`, `:726`), and printed as its own line on the Coach card
 > (`components/chat/CoachThreadPanel.tsx:143`). `timeframe` joined the schema
 > (`:2688`); `source` deliberately did not. A proposal with no `steps` is refused
@@ -285,7 +285,7 @@ approvals (headless/cron = refuse)."* `pi` `packages/durable/README.md` §"Exten
 `SkillEvalScheduler.ts:284-294` calls `analyzeTradingView` with **no**
 `allowedTools`. That reaches `GenericAnalysisService.ts:449-452` →
 `DeskToolsService.ts:2485/3720-3724`, where an **empty list means unrestricted**, and
-the run is fired detached at `SkillMemoryService.ts:3797-3798`, with
+the run is fired detached at `SkillMemoryService.ts:3801-3802`, with
 `deskToolsEnabled` defaulting true (`utils/harnessSettings.ts:110`).
 
 So an unattended, detached job can call `propose_skill`, `decline_trade`, every
@@ -369,7 +369,7 @@ evidence, is in the baseline. The ones that cost the most to keep:
 | `learning_rules_v2` | a write-only store with a backup | `StorageService.ts:105` loads it into the profile (`useProfilePersistence.ts:116`, migration at `:115`); nothing composes it into a turn |
 | `NavRail.tsx` | 242 lines; the **component** is never rendered, but the file keeps **three live exports** | unmount pinned by `tests/deadControlsGuard.test.ts:145` (`expect(appSrc).not.toMatch(/<NavRail/)`), and `App.tsx:2507-2515` is the comment saying so. Live: `AccountRow` + `NAV_RAIL_AUTO_COLLAPSE_PX` (`App.tsx:129`, used `:2735`/`:669`/`:672`) and `NAV_RAIL_EXPANDED_PX` (`AgentsView.tsx:73`, used `:972`). Dead: the component, `export default React.memo(NavRail)` (`:242`) and `NAV_RAIL_COLLAPSED_PX` (`:35`). Deleting the file breaks the build; relocating three symbols first does not |
 | `SurfaceMenuList`'s surface list | mounted with `hideSurfaces`, so the brand bar, the badge and `RunBusyBadge` are all dead | `App.tsx:2725-2731` |
-| `ARBITER_ALLOWED_TOOLS` | only test importers | `DeskToolsService.ts:3359-3375` |
+| `ARBITER_ALLOWED_TOOLS` | only test importers | `DeskToolsService.ts:3364-3380` |
 | ~~`applyNotebookSkillsToAnalysis`~~ | **CORRECTED — it is LIVE.** The baseline recorded it as dead; re-opening the source shows the E-35 fix landed: `services/trade/presentTradeTool.ts:113` calls it and a fired AVOID **refuses the presentation** (`:114-133`). Not a deletion target |
 | `MemoryConsolidationService.ts` | an orphan module — and two docs say its passes run | `pruneOutdatedInsights:74` / `aggregateSimilarInsights:102` have **no caller anywhere** (repo-wide grep: their own definitions plus one comment); `consolidateMemory`, the name `docs/learning-loop-map.md:167` uses, does not exist in the file. The module is 139 lines, not the 114 the prior cleanup manifest recorded |
 | the debate residue | 29 vestigial items | baseline §7 |
@@ -503,7 +503,7 @@ returns is not the same as a stream that succeeded."* `deepseek-harness`
   and Pin chip. The memory-provenance strip is dock-only
   (`ChatTranscriptList.tsx:245-251`).
 - ~~The dev-proxy transport has **no timeout**~~ — **fixed 2026-10-23**. The proposal
-  named one branch; the streaming dev-proxy branch had the same missing signal, so both
+  named one branch; a census found a second uncapped one (a third already had the cap), so both
   now carry the budget of the transport they stand in for (120 s on the request, 300 s
   on the turn — `services/providers/GenericProviderService.ts:1432`, `:1619`), pinned by
   `tests/devProxyTimeout.test.ts`. A dev turn can no longer hang until the trader presses
@@ -954,6 +954,28 @@ by removing the silent failure in (3), which is a simplification in its own righ
 > by `tests/tradeChatContext.test.ts` (the filter) and, on the wire, by
 > `tests/promptContract.test.ts` (an unapproved skill is not *named*). Everything
 > below describes the pre-fix tree.
+>
+> **Addendum after review (2026-10-23): the same filter now reaches three more
+> homes, and two remain.** A review of the change found the index was not the only
+> place a rule is named: (1) the Skills catalogue's availability mark
+> (`components/learn/SkillsCatalog.tsx:159`, fed by the row builder at `:421`) and
+> (2) the skill reader's chip (`components/learn/SkillViewerPanel.tsx:123`) both
+> claimed "injected into the seat prompt" from `skillEnabledFlag` alone — so after
+> P10 they were describing a skill the seat would never be given, and a label that
+> asserts what the gate denies is the defect that function's own header names. Both
+> now read `isApprovedSkill` (called, never re-derived), and
+> `components/skills/SkillDetail.tsx:139` layers the same fact into "Active".
+> (3) `scan_setups` cross-references skills *into a tool result the model reads*,
+> filtered only by retired-and-enabled; it now applies the approval fact too
+> (`services/analysis/DeskToolsService.ts:3049`, pinned by
+> `tests/scanSetupsTool.test.ts`). Two model-facing skill lists still do not filter:
+> `get_notebook_map` answers "what files are in the notebook" — hiding a file there
+> would make the map wrong about the trader's own data, which is a different
+> question from "what should I apply" — and the zero-evidence ban
+> (`services/learning/MemoryRetrievalService.ts:282`) has no index counterpart, so a
+> skill with no `prior` and no counted outcome is still named. That second one is a
+> behaviour change with a visible blast radius (a fresh notebook's index could empty)
+> and is left as the owner's call.
 
 **Verdict: ADOPT**
 **Effort: S**
@@ -991,10 +1013,10 @@ model as a broken promise and to the trader as a flaky system.
 Two related facts from the same area:
 
 - The IF/THEN auto-ingest writes a file with `prior: 'gated'` and **no
-  `approvedBy`** (`SkillMemoryService.ts:2996/3085`), so `isApprovedSkill` blocks it
+  `approvedBy`** (`SkillMemoryService.ts:3000/3085`), so `isApprovedSkill` blocks it
   — yet the index still names it.
 - The **hard avoid veto is live, but only on the plan path.**
-  `applyNotebookSkillsToAnalysis` (`SkillMemoryService.ts:3819`) is called at
+  `applyNotebookSkillsToAnalysis` (`SkillMemoryService.ts:3823`) is called at
   `services/trade/presentTradeTool.ts:113`, and a fired AVOID **refuses the
   presentation** and writes the falsification ledger (`:114-133`). On the **chat**
   path there is no deterministic skill enforcement at all: the code-checked trigger's

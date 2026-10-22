@@ -43,6 +43,9 @@ const roster = (rows: Array<Partial<SkillMeta> & { name: string }>): void => {
             kind: 'repeat',
             wins: 0,
             losses: 0,
+            // A skill the seat actually uses: the catalogue's mark follows
+            // `isApprovedSkill`, so the default row carries the approval fact.
+            approvedBy: 'human',
             ...r,
         } as SkillMeta,
     })));

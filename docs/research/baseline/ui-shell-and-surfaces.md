@@ -575,7 +575,7 @@ what to do instead) and is listed here only so the distinction is explicit.
   (`components/shared/ToggleSwitch.tsx:15-33`) — the render-probe's flip detector depends on
   that (`scripts/render-probe.cjs:2129, 2159-2167`).
 - The SkillsCatalog's "Skill settings" gear is **hidden** when there is no handler
-  (`components/learn/SkillsCatalog.tsx:582-587`), which is the correct pattern: App
+  (`components/learn/SkillsCatalog.tsx:601-606`), which is the correct pattern: App
   deliberately does not pass `onOpenSkillsSettings` (`App.tsx:2656-2661`).
 - The Learn right panel is guarded against an empty box
   (`components/learn/LearnView.tsx:352-357`).

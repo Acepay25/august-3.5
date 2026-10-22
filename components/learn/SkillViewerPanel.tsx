@@ -7,6 +7,7 @@ import StatusPill from '../ui/StatusPill';
 import { STATUS_BADGE, KIND_BADGE } from '../skills/SkillDetail';
 import {
     skillEnabledFlag,
+    isApprovedSkill,
     skillExpectancyR,
     EXPECTANCY_MIN_R_SAMPLE,
     type SkillMeta,
@@ -119,7 +120,7 @@ const SkillViewerPanel: React.FC<{
     /** The ONE availability read — the same words the catalogue's card mark
      *  uses. A rule the desk has stopped using must not read "live" here and
      *  "suspended" there, and the chip says WHY it is off. */
-    const availability = skillAvailability(meta, skillEnabledFlag(meta));
+    const availability = skillAvailability(meta, skillEnabledFlag(meta), isApprovedSkill(meta));
 
     const onCopy = (): void => {
         void copyText(file.content).then(ok => {

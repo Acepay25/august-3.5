@@ -121,7 +121,7 @@ describe('approving a draft creates the skill, and says so only when it did', ()
         // The trade-backed branch previously built its SkillMeta with no
         // `approvedBy`/`prior`, so `isApprovedSkill` was false and the skill
         // silently never injected — while the card read "Active".
-        queueDraft(craft(), 'trade-closed-1');
+        queueDraft(craft({ reason: 'three closed BTC longs in a row stopped at the same level' }), 'trade-closed-1');
         const draft = listSkillDrafts(USER)[0];
         const closedTrade = {
             id: 'trade-closed-1',
@@ -137,6 +137,12 @@ describe('approving a draft creates the skill, and says so only when it did', ()
         expect(skill.meta.approvedBy).toBe('human');
         expect(isApprovedSkill(skill.meta)).toBe(true);
         expect(skill.meta.tradeIds).toContain('trade-closed-1');
+        // The OTHER half of the same asymmetry: this branch builds its own
+        // SkillMeta, and before P2 it had no `reason` slot at all — so a draft
+        // that carried its evidence lost it on the way to the notebook, while
+        // the draft-backed branch (which `propose_skill` takes) kept it. Two
+        // writers of one format must write the same fields.
+        expect(skill.meta.reason).toBe('three closed BTC longs in a row stopped at the same level');
     });
 });
 

@@ -45,6 +45,10 @@ const META: SkillMeta = {
     tradeIds: [],
     body: 'Fade a failed breakout when volume diverges.',
     description: 'Fade a failed breakout when volume diverges',
+    // "Active" now means what the injectors will actually use, and that includes
+    // the approval gate — so the baseline row is an approved one and the arms
+    // below vary the OTHER facts (suspension, supersession, retirement).
+    approvedBy: 'human',
 };
 
 const card = (meta: SkillMeta | null): SkillCardData => ({
@@ -104,6 +108,20 @@ describe('the skill live label', () => {
         const meta = { ...META, status: 'retired' as const };
         render(<SkillDetail skill={card(meta)} onBack={() => {}} onToggleRetire={() => {}} backLabel="Studio" />);
         expect(labelText()).toBe('Retired');
+    });
+
+    it('says Inactive for a skill the seat will not be given — the gate is the injectors’ own', async () => {
+        // Route A's exact row: the post-mortem auto-ingest writes a file with
+        // `prior: 'gated'` and no `approvedBy`. Its `enabled` FIELD is true, and
+        // since P10 neither the skills index nor the injection carries it — so a
+        // card calling it "Active" was a check on a rule that reaches no seat.
+        const { skillEnabledFlag: sf, isApprovedSkill: ap } = await import('../services/learning/SkillMemoryService');
+        const meta = { ...META, approvedBy: undefined, prior: 'gated' as const };
+        expect(sf(meta)).toBe(true);
+        expect(ap(meta)).toBe(false);
+        render(<SkillDetail skill={card(meta)} onBack={() => {}} onToggleRetire={() => {}} backLabel="Studio" />);
+        expect(labelText()).toBe('Inactive');
+        expect(document.querySelector('[title*="nothing has approved"]')).not.toBeNull();
     });
 
     it('reads the canonical flag, so it cannot drift from the injectors again', () => {

@@ -205,6 +205,16 @@ ledgers into the manifest and diffs it against `git ls-files`), then
   citations and 98 bare `:NNN` citations across nine research documents**, each move
   asserted by requiring the bytes at the old line and the new line to be identical, and
   every doc verified afterwards to differ from its committed form **in digits only**.
+
+  **What that method does not do is validate a citation it never moved.** A reviewer re-checked
+  every claim this session's new prose makes and found citations that resolve to the wrong line —
+  `deskToolsMandateFor`, `rejectedResult`, `requireFirstToolRound`, the status-ladder and
+  temporal-ledger pairs, the `hurts` pin block, `revokeSkillApproval`, the O-31 route-A entry
+  points, and `automationTurn.ts:106-127` (which is `automationSeatFor`) quoted as evidence of a
+  provider-fallback gap. Each one named in prose this session wrote has now been re-measured and
+  corrected. **The corpus as a whole is still not machine-checked**: `docs/research/**` sits
+  outside the four documents `scripts/check-flow-doc-anchors.cjs` polices, and a wrong line number
+  is stable under a shift — which is exactly why a byte-identity rule cannot see one.
   Where a claim itself changed truth value — the two "live problems" in the baseline,
   the `propose_skill` defect read from both sides, the route-A row, weak spots 1/2/4 —
   the prose now says *fixed*, names the commit, and keeps the pre-fix text as labelled
@@ -224,3 +234,30 @@ ledgers into the manifest and diffs it against `git ls-files`), then
   raised their values 2/3/5 → 10/20/10 on 2026-10-20. It is now CLOSED with the real
   lines. `docs/plan/full-audit.md` was re-anchored by mistake and reverted — it is pinned
   to `6a41a9f7` and its drift is by design.
+- **04:40 (2026-10-23)** — **Five reviewers audited the two commits; five real defects
+  came out of it, and three of them were mine.** (1) The trade-backed skill writer built
+  its own `SkillMeta` with no `reason` slot, so a post-mortem draft lost the evidence the
+  draft-backed path keeps — now stamped at `SkillMemoryService.ts:2887`. (2) The
+  byte-level round-trip guard (`skillReview.ts:332`) did not know the field existed, so a
+  frontmatter round trip could drop it silently. (3) The Skills catalogue's mark and the
+  skill reader's chip still said *"injected into the seat prompt"* from
+  `skillEnabledFlag` alone — after P10 that is a label asserting what the gate denies, and
+  the function's own header already forbids it; both now call `isApprovedSkill`
+  (`SkillsCatalog.tsx:159/:421`, `SkillViewerPanel.tsx:123`, `SkillDetail.tsx:139`), the
+  gate widened to a `Pick` so surfaces call it instead of re-implementing it. (4)
+  `scan_setups` is a THIRD place a rule is named to a model (`DeskToolsService.ts:3049`) —
+  it applies the approval fact now. (5) Three of the tests this session wrote could not
+  fail: `toEqual(AUTOMATION_TOOLS.filter(…))` restated the production expression, the
+  deny-list arm was vacuous, and `not.toBeNull()` passed on the pre-fix `undefined`.
+  Gates: **515 files / 5,357 tests green (4 new cases), `tsc` clean, eslint 0 errors / 655
+  warnings, anchors 410 / 0 unattributed.** Two reviewer suggestions were declined after
+  checking them: routing `get_notebook_map` through the skill filter (it answers "what
+  files exist", not "what should I apply"), and treating the forged-tool widening at
+  `DeskToolsService.ts:4265-4273` as a hole in P3 (it applies to SCHEDULED runs, which
+  wire an executor; the evaluator this pass narrowed does not, so it is a pre-existing
+  property of the automation surface, recorded rather than quietly changed).
+  **The corpus was re-anchored a second time and then measured against itself**: the
+  byte-identity rule validates a move, not a citation nobody moved, and a reviewer that
+  re-opened every claim this session's prose makes found several citations that had been
+  wrong for days — all corrected, and the limit stated in §35 because `docs/research/**`
+  sits outside the four documents the anchor gate polices.

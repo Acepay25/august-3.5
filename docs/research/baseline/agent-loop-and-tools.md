@@ -29,8 +29,8 @@ Two defects dominate the rest:
 
 | # | Feature | Verdict | Evidence |
 |---|---|---|---|
-| 1 | **The desk tool loop** — a bounded `for` over up to 8 rounds, each round = one provider call → parse tool calls → execute → re-prompt. | **REAL** | `services/analysis/DeskToolsService.ts:3733` (the round loop), `:196` (`MAX_DESK_TOOL_ROUNDS = 8`) |
-| 2 | **`streamChatWithDeskTools`** — the one streaming transport every tool-bearing turn goes through; it owns the cache clear, the system-prompt enrichment, the live-delta queue and the final continuation. | **REAL** | `services/analysis/DeskToolsService.ts:4199-4485`; the loop is launched at `:4337`, awaited at `:4415` |
+| 1 | **The desk tool loop** — a bounded `for` over up to 8 rounds, each round = one provider call → parse tool calls → execute → re-prompt. | **REAL** | `services/analysis/DeskToolsService.ts:3738` (the round loop), `:196` (`MAX_DESK_TOOL_ROUNDS = 8`) |
+| 2 | **`streamChatWithDeskTools`** — the one streaming transport every tool-bearing turn goes through; it owns the cache clear, the system-prompt enrichment, the live-delta queue and the final continuation. | **REAL** | `services/analysis/DeskToolsService.ts:4204-4490`; the loop is launched at `:4342`, awaited at `:4420` |
 | 3 | **`runToolTurn`** — the ONE turn executor (echo repair, reasoning peel, abort-first settle, token accounting, effort + wire-audit ride-out). Shared by dock, Chat and automation. | **REAL** | `services/trade/toolTurn.ts:131-166` (wrapper), `:168-253` (inner); callers `services/trade/chatSurfaceTurn.ts:361`, `services/trade/chatTurnRunner.ts:743`, `services/trade/automationTurn.ts:267` |
 | 4 | **The abort-first settle** — an explicit Stop is settled before every other branch, so a stopped turn reads as *interrupted*, never as a failure. | **REAL** | `services/trade/toolTurn.ts:216-218`; pinned by `tests/toolTurn.test.ts:115-133` |
 | 5 | **The reasoning peel / pure-echo repair** — native chain-of-thought echoed into the content channel is split off; a turn that streamed *only* reasoning says so instead of showing the scratchpad twice. | **REAL** | `services/trade/toolTurn.ts:220-241` (`splitThinkingFromOutput`, the `echoNotice`) |
@@ -40,14 +40,14 @@ Two defects dominate the rest:
 | 9 | **The automation turn** — a *third* sink: nothing paints, the row is written once at the end from the accumulated outcome. | **REAL** | `services/trade/automationTurn.ts:173-317`; the no-op display channels at `:185-188` |
 | 10 | **The bot path is deliberately tool-free** — a bot's 1:1 thread answers with `streamQuickResponse` (no tools), and `useBotMailbox` / `botRoutine` / `groupRounds` are deliberately not moved onto the tool turn. | **REAL** (deliberate) | `hooks/useAnalysisPipeline.ts:1377-1401`; the ruling is stated at `services/trade/chatSurfaceTurn.ts:24-28` |
 | 11 | **The Full-analysis instruction** — the trader pressing the button is an *instruction*, and the turn is then CHECKED for having obeyed it. | **REAL** | `services/trade/chatSurfaceTurn.ts:342-344` (the mandate), `:393-401` (the check); pinned by `tests/fullAnalysisRequiredTools.test.ts:73-145` |
-| 12 | **The wall-clock turn budget** (180 s) with a one-shot wrap-up notice at 80 %. | **REAL** | `services/analysis/DeskToolsService.ts:208-209`, enforced `:4087-4090` |
-| 13 | **The per-tool-call deadline** (20 s) — a hung lookup cannot hold the round, and the call comes back as a `DATA_UNAVAILABLE:` receipt rather than an exception. | **REAL** | `services/analysis/DeskToolsService.ts:220`, `:252-285` (`withinToolDeadline`), applied per call at `:3345-3349` |
-| 14 | **The repeat-call guard** — a second identical call inside the TTL is answered with a pointer to the result the seat already holds, not a replay. | **REAL** | `services/analysis/DeskToolsService.ts:3891-3922`; the gate rule at `:485-492` |
-| 15 | **The stall detector** — three identical calls, or an alternating pair seen twice, ends the turn with a "REPEAT" notice. | **REAL** | `services/analysis/DeskToolsService.ts:293-306`, used `:4085`, `:4091-4098` |
-| 16 | **The self-heal bounce** — a malformed text-protocol tool call is bounced back to the model as a syntax error; a *truncated* call gets a different repair ("make it fit") than a malformed one. | **REAL** | `services/analysis/DeskToolsService.ts:3789-3816`; the two predicates `:3439-3460` |
-| 17 | **The thinking-cut re-ask** — a round that returned no words because the wire hit its own token ceiling is re-asked **once** with the tier stepped down, and the step-down persists for the rest of the turn. | **REAL** | `services/analysis/DeskToolsService.ts:3832-3852` (`thinkingRepairSent`, `repairEffort`, `stepEffortDown`); the round budget was raised to 8192 for the same reason at `:222-241` |
-| 18 | **The "produced nothing" continuation** — a turn that returned no words and ran no tool gets one final prose-only request at a stepped-down tier. | **REAL** | `services/analysis/DeskToolsService.ts:4459-4469` |
-| 19 | **The after-tools continuation** — after tool rounds, one more streamed request carries the results and asks for the reply. | **REAL** | `services/analysis/DeskToolsService.ts:4445-4484` |
+| 12 | **The wall-clock turn budget** (180 s) with a one-shot wrap-up notice at 80 %. | **REAL** | `services/analysis/DeskToolsService.ts:208-209`, enforced `:4092-4095` |
+| 13 | **The per-tool-call deadline** (20 s) — a hung lookup cannot hold the round, and the call comes back as a `DATA_UNAVAILABLE:` receipt rather than an exception. | **REAL** | `services/analysis/DeskToolsService.ts:220`, `:252-285` (`withinToolDeadline`), applied per call at `:3350-3354` |
+| 14 | **The repeat-call guard** — a second identical call inside the TTL is answered with a pointer to the result the seat already holds, not a replay. | **REAL** | `services/analysis/DeskToolsService.ts:3896-3927`; the gate rule at `:485-492` |
+| 15 | **The stall detector** — three identical calls, or an alternating pair seen twice, ends the turn with a "REPEAT" notice. | **REAL** | `services/analysis/DeskToolsService.ts:293-306`, used `:4090`, `:4096-4103` |
+| 16 | **The self-heal bounce** — a malformed text-protocol tool call is bounced back to the model as a syntax error; a *truncated* call gets a different repair ("make it fit") than a malformed one. | **REAL** | `services/analysis/DeskToolsService.ts:3794-3821`; the two predicates `:3444-3465` |
+| 17 | **The thinking-cut re-ask** — a round that returned no words because the wire hit its own token ceiling is re-asked **once** with the tier stepped down, and the step-down persists for the rest of the turn. | **REAL** | `services/analysis/DeskToolsService.ts:3837-3857` (`thinkingRepairSent`, `repairEffort`, `stepEffortDown`); the round budget was raised to 8192 for the same reason at `:222-241` |
+| 18 | **The "produced nothing" continuation** — a turn that returned no words and ran no tool gets one final prose-only request at a stepped-down tier. | **REAL** | `services/analysis/DeskToolsService.ts:4464-4474` |
+| 19 | **The after-tools continuation** — after tool rounds, one more streamed request carries the results and asks for the reply. | **REAL** | `services/analysis/DeskToolsService.ts:4450-4489` |
 | 20 | **The per-conversation run registry** — a run belongs to a conversation; a conversation switch moves the view and does not kill the run. | **REAL** | `hooks/useAnalysisPipeline.ts:389` (`runsRef`), `:799-833` (`updateRequestMessages` / `assertCurrentRequest`), `:473-479` (the switch effect) |
 | 21 | **The queued-send drain** — text typed while a run is live parks and then runs as ONE follow-up turn when the run ends, however it ended. | **REAL** | `hooks/useAnalysisPipeline.ts:617-633` (park), `:1743-1757` (drain) |
 | 22 | **The prompt A/B lane** — a per-run `live`/`control` label stamped on `runStats.promptLane` + `promptVersion`. | **COSMETIC** — it is a *record*, not a wire change: `services/trade/**` contains **zero** `getPrompt` calls, so a "control" run and a "live" run send the same bytes. (Repo's own O-140.) | stamped `hooks/useAnalysisPipeline.ts:965-969`, written `:1296-1297` / `:1466`; the missing resolution `docs/plan/open-items.md:425` (O-140) |
@@ -62,30 +62,30 @@ Two defects dominate the rest:
 | # | Feature | Verdict | Evidence |
 |---|---|---|---|
 | 28 | **`DESK_TOOL_DEFINITIONS`** — the single catalogue: 31 core tools with OpenAI-shaped schemas. | **REAL** | `services/analysis/DeskToolsService.ts:909-1548`; the order is pinned by `tests/deskTools.test.ts:18-59` |
-| 29 | **`CHART_ACTION_TOOL_DEFS`** — 8 canvas tools, offered **only** when the caller wires an executor *and* the seat's allow-list names them. | **REAL** | `services/analysis/DeskToolsService.ts:1557-1728`; the gate `:4258-4260` |
-| 30 | **The offer-time filter** — the definitions handed to the provider are filtered by the seat's allow-list. | **REAL** | `services/analysis/DeskToolsService.ts:3738-3742` (`effectiveTools`) |
+| 29 | **`CHART_ACTION_TOOL_DEFS`** — 8 canvas tools, offered **only** when the caller wires an executor *and* the seat's allow-list names them. | **REAL** | `services/analysis/DeskToolsService.ts:1557-1728`; the gate `:4263-4265` |
+| 30 | **The offer-time filter** — the definitions handed to the provider are filtered by the seat's allow-list. | **REAL** | `services/analysis/DeskToolsService.ts:3743-3747` (`effectiveTools`) |
 | 31 | **The executor-level allow-list** — `executeDeskTool` refuses an off-list name *before* the cache and before the switch, on every transport (a text-protocol seat can emit a tag for any tool). | **REAL** | `services/analysis/DeskToolsService.ts:2483-2492`; the refusal shape `:2431-2443`; pinned by `tests/deskTools.test.ts:119-158` |
-| 32 | **The forged-tool gate** — a `custom_*` recipe is refused if the seat's list does not carry it, before the forge executor is reached. | **REAL** | `services/analysis/DeskToolsService.ts:3958-3977` (esp. `:3962-3965`) |
-| 33 | **The desk mandate, composed from the offer set** — `deskToolsMandateFor(offered)` writes the shape rule and the drawing rule from the tools *this* turn can call: no chart-view ⇒ "there is NO CHART to read on this home"; no market read ⇒ "name none of them". | **REAL** | `services/analysis/DeskToolsService.ts:1744-1789`; built from `mergedAllowed` at `:4279-4286`; pinned by `tests/deskSystemPrompt.test.ts:62-117` |
-| 34 | **The harness contract + mandate injection** — `withDeskToolsSystemPrompt` adds the contract once (only if the caller's prompt has none) and appends the mandate + the text-protocol fallback. | **REAL** | `services/analysis/DeskToolsService.ts:4171-4192`; pinned by `tests/deskSystemPrompt.test.ts:33-53` |
-| 35 | **`ARBITER_ALLOWED_TOOLS`** — a 9-name seat policy for the moderator. | **DEAD / COSMETIC** — the moderator seat was deleted; only two test files import it | `services/analysis/DeskToolsService.ts:3359-3375`; importers `tests/evidencePack.test.ts:33`, `tests/tradeLogTool.test.ts:11`; `docs/analysis/2026-10-21-04-cleanup-manifest.md:62` |
+| 32 | **The forged-tool gate** — a `custom_*` recipe is refused if the seat's list does not carry it, before the forge executor is reached. | **REAL** | `services/analysis/DeskToolsService.ts:3963-3982` (esp. `:3967-3970`) |
+| 33 | **The desk mandate, composed from the offer set** — `deskToolsMandateFor(offered)` writes the shape rule and the drawing rule from the tools *this* turn can call: no chart-view ⇒ "there is NO CHART to read on this home"; no market read ⇒ "name none of them". | **REAL** | `services/analysis/DeskToolsService.ts:1744-1789`; built from `mergedAllowed` at `:4284-4291`; pinned by `tests/deskSystemPrompt.test.ts:62-117` |
+| 34 | **The harness contract + mandate injection** — `withDeskToolsSystemPrompt` adds the contract once (only if the caller's prompt has none) and appends the mandate + the text-protocol fallback. | **REAL** | `services/analysis/DeskToolsService.ts:4176-4197`; pinned by `tests/deskSystemPrompt.test.ts:33-53` |
+| 35 | **`ARBITER_ALLOWED_TOOLS`** — a 9-name seat policy for the moderator. | **DEAD / COSMETIC** — the moderator seat was deleted; only two test files import it | `services/analysis/DeskToolsService.ts:3364-3380`; importers `tests/evidencePack.test.ts:33`, `tests/tradeLogTool.test.ts:11`; `docs/analysis/2026-10-21-04-cleanup-manifest.md:62` |
 | 36 | **`toAnthropicTools`** — the Anthropic-schema converter. | **DEAD / COSMETIC** — no production caller (the Anthropic transport sends no `tools` field) | `services/analysis/DeskToolsService.ts:1796-1801`; `docs/analysis/2026-10-21-02-enhancements.md:268` (B-19) |
-| 37 | **`requireFirstToolRound`** (round 0 forced to `toolChoice:'required'`). | **COSMETIC / unreachable** — no production caller ever sets it; the debate that needed it is deleted | declared `services/analysis/DeskToolsService.ts:3656`, `:4157`; used `:3755-3757`; no assignment outside the module |
+| 37 | **`requireFirstToolRound`** (round 0 forced to `toolChoice:'required'`). | **COSMETIC / unreachable** — no production caller ever sets it; the debate that needed it is deleted | declared `services/analysis/DeskToolsService.ts:3661`, `:4162`; used `:3760-3762`; no assignment outside the module |
 | 38 | **`AUTOMATION_UNATTENDED_DENY`** — a scheduled run may not write the trader's notebook; the deny list is derived from `CHAT_SURFACE_TOOLS` so a rename cannot silently un-deny it. | **REAL** | `services/trade/automationTurn.ts:56-64`; the derivation `:62-64`; pinned by `tests/automationToolTurn.test.ts:135-143` |
 | 39 | **The skill-evaluation path had NO seat allow-list** — an unattended background runner reached the same loop with `allowedTools` undefined, i.e. unrestricted. | **FIXED `e6787a8f`** — the evaluator now passes `AUTOMATION_EVALUATION_TOOLS`; `tests/skillEvalArms.test.ts` asserts every arm carries it, that the list is not empty, and that it excludes `propose_skill`, `present_trade`, `decline_trade`, `forge_tool` and `write_memory_note` | `services/learning/SkillEvalScheduler.ts:301`, `services/trade/automationTurn.ts:73` (was: no `allowedTools` at `:285-302`, `services/analysis/DeskToolsService.ts:2490` refusing only a non-empty list) |
-| 40 | **`get_trade_log`** — the journal as rows, oldest-first, each row's PnL in the unit it was captured in; never cached. | **REAL** | definition `services/analysis/DeskToolsService.ts:1384-1402`; handler `:3280-3304`; pinned by `tests/tradeLogTool.test.ts:46-131` |
+| 40 | **`get_trade_log`** — the journal as rows, oldest-first, each row's PnL in the unit it was captured in; never cached. | **REAL** | definition `services/analysis/DeskToolsService.ts:1384-1402`; handler `:3285-3309`; pinned by `tests/tradeLogTool.test.ts:46-131` |
 | 41 | **`propose_skill`** — a PENDING draft in the Coach inbox; nothing reaches the skill library without a human. | **REAL, with a defect** — the required `reason` has no destination. See §5.1 | definition `services/analysis/DeskToolsService.ts:1049-1086`; handler `:2650-2735`; the round trip pinned by `tests/skillApprovalRoundTrip.test.ts:225-258` |
 | 42 | **`revise_skill`** — a PENDING rescope proposal with a *content* fingerprint, so a repeat queues once. | **REAL** | `services/analysis/DeskToolsService.ts:1118-1144` (definition), `:2779-2832` (handler); the fingerprint `:2818-2822` |
 | 43 | **`propose_strategy`** — a draft trade plan written into `strategies/`, refused when it has no invalidation. | **REAL** | `services/analysis/DeskToolsService.ts:1087-1117`, `:2736-2778` |
 | 44 | **`forge_tool`** — a declarative HTTPS recipe stored as a CANDIDATE; it never touches the network until a human approves it. | **REAL** | `services/analysis/DeskToolsService.ts:931-954`, `:2542-2562` |
 | 45 | **`amend_memory`** — a PENDING correction to a notebook file; nothing is applied at call time. | **REAL** | `services/analysis/DeskToolsService.ts:910-930`, `:2520-2541` |
 | 46 | **`write_memory_note`** — a DIRECT write into the model's own notebook folders (the only growth tool that writes immediately). | **REAL** | `services/analysis/DeskToolsService.ts:955-976`, `:2563-2587` |
-| 47 | **`present_trade` / `decline_trade`** — the verdict IS a tool call; a skip is a decision and is recorded. | **REAL** | definitions `:1623-1667`; the dock sink `services/trade/chatTurnRunner.ts:444-474`; the decline handler `services/analysis/DeskToolsService.ts:3249-3278` |
+| 47 | **`present_trade` / `decline_trade`** — the verdict IS a tool call; a skip is a decision and is recorded. | **REAL** | definitions `:1623-1667`; the dock sink `services/trade/chatTurnRunner.ts:444-474`; the decline handler `services/analysis/DeskToolsService.ts:3254-3283` |
 | 48 | **`read_tool_output`** — pages a clipped result back by its `ta-…` id; the receipt is only offered to a seat that can actually call it. | **REAL** | definition `:1140-1157`; handler `:2921-2961`; the honesty gate `:550-551` |
-| 49 | **The tool cache** — a 30 s per-run TTL over an *allow-list* of pure network reads (the policy was inverted from a deny-list so a write is never replayed). | **REAL** | `services/analysis/DeskToolsService.ts:450-472`, `:494-499`; the clear at the one choke point `:4217`; the failure sentinel is never cached `:3322-3324` |
+| 49 | **The tool cache** — a 30 s per-run TTL over an *allow-list* of pure network reads (the policy was inverted from a deny-list so a write is never replayed). | **REAL** | `services/analysis/DeskToolsService.ts:450-472`, `:494-499`; the clear at the one choke point `:4222`; the failure sentinel is never cached `:3327-3329` |
 | 50 | **The per-tool result budget** — 2400 chars default, per-tool overrides, order-book/liquidation down-sampling, JSON-preserving shaping, and a clip note that names what was lost. | **REAL** | `services/analysis/DeskToolsService.ts:504-531` (budgets), `:565-639` (`clipWithinBudget`), `:641-759` (`budgetToolContent`) |
 | 51 | **The spill receipt** — a clipped result names an artifact id the seat can page, so "MISSING, not absent" is actionable. | **REAL** | `services/analysis/DeskToolsService.ts:749-757`; the artifact store `services/analysis/toolArtifactStore.ts`; the reader `:2939-2979` |
-| 52 | **The untrusted-data fence** — every tool result is fenced as third-party data, with the harness-note allowance *generated from the real markers* rather than hand-written. | **REAL** | `services/analysis/DeskToolsService.ts:3481-3490`; the legend `utils/harnessMarks.ts:188-191`; the ingestion neutraliser `:172-183` |
+| 52 | **The untrusted-data fence** — every tool result is fenced as third-party data, with the harness-note allowance *generated from the real markers* rather than hand-written. | **REAL** | `services/analysis/DeskToolsService.ts:3486-3495`; the legend `utils/harnessMarks.ts:188-191`; the ingestion neutraliser `:172-183` |
 | 53 | **The tool-label table** — the transcript carries a tool's *human label*, never its name; `toolLabel` is the single source. | **REAL** | `services/analysis/DeskToolsService.ts:761-795`; the digest `:802-813` |
 | 54 | **The wire-audit record** — what the transport was actually asked, per request, carried out on the outcome. | **REAL** | collected `services/trade/toolTurn.ts:136-152`, ridden out `:96`, `:164`; written onto the row `services/trade/chatTurnRunner.ts:782` / `hooks/useAnalysisPipeline.ts:1495` |
 
@@ -113,8 +113,8 @@ Two defects dominate the rest:
 | 67 | **The context-length rejection recovery** — the provider states its own limit; the app records it and retries the turn once, compacted to that limit. | **REAL** | `services/providers/GenericProviderService.ts:1324-1341`; the three retry sites `:1301-1303`, `:1526-1528`, `:1876-1878`; the reader `utils/contextWindow.ts:233-243` |
 | 68 | **The compaction notice** — the trader is told what was cut, in numbers, on the tool-event channel. | **REAL** | `services/providers/contextCompact.ts:300-307`, `:313-324`; surfaced `services/analysis/DeskToolsService.ts:345-357` |
 | 69 | **Provider failure → a real error on the row** — the provider's own text leads, the canned sentence is only the fallback, and the cause chain under "fetch failed" is preserved. | **REAL** | `services/providers/GenericProviderService.ts:1175-1229`; the row write `services/trade/chatTurnRunner.ts:1046-1082`; the Chat surface's SYSTEM row `hooks/useAnalysisPipeline.ts:1603`; pinned by `tests/realProviderError.test.tsx:218-231` |
-| 70 | **A tool that throws → a `DATA_UNAVAILABLE:` receipt**, not an exception; the turn continues and the model is told the source FAILED (unknown, not absence). | **REAL** | `services/analysis/DeskToolsService.ts:3327-3336`; the sentinel `utils/harnessMarks.ts:25-38` |
-| 71 | **A hung run** — a 20 s per-call deadline plus a 180 s turn budget plus an 8-round cap plus a repeat gate plus a stall detector: five independent brakes. | **REAL** | `services/analysis/DeskToolsService.ts:220`, `:208`, `:196`, `:3891-3922`, `:4091-4098` |
+| 70 | **A tool that throws → a `DATA_UNAVAILABLE:` receipt**, not an exception; the turn continues and the model is told the source FAILED (unknown, not absence). | **REAL** | `services/analysis/DeskToolsService.ts:3332-3341`; the sentinel `utils/harnessMarks.ts:25-38` |
+| 71 | **A hung run** — a 20 s per-call deadline plus a 180 s turn budget plus an 8-round cap plus a repeat gate plus a stall detector: five independent brakes. | **REAL** | `services/analysis/DeskToolsService.ts:220`, `:208`, `:196`, `:3896-3927`, `:4096-4103` |
 | 72 | **A Stop is never a failure** — `AbortError` propagates; the dock keeps the half-written answer and stamps `interrupted`; the Chat surface settles `isStreaming: false`. | **REAL** | `services/trade/toolTurn.ts:216-218`; `services/trade/chatTurnRunner.ts:783-787`; `hooks/useAnalysisPipeline.ts:1533-1544` |
 | 73 | **A stale run cannot write into a new trader's data** — the owner check is in the write path, not in the cancel path. | **REAL** | `hooks/useAnalysisPipeline.ts:806-817`; the profile-switch backstop `:1687-1692` |
 | 74 | **The `mutate` miss is loud** — a write into a session the store no longer holds warns instead of silently dropping the row. | **REAL** | `services/trade/chatStore.ts:361-378` (the `console.warn`) |
@@ -144,7 +144,7 @@ USER TYPES "what is BTC doing?"
      · allow-list = CHAT_SURFACE_TOOLS :57-81   ·  transport :306-346
   ─────────────────────────────────────────────────────────────────────────────
   EXECUTE  services/trade/toolTurn.ts:131  runToolTurn
-     → services/analysis/DeskToolsService.ts:4199  streamChatWithDeskTools
+     → services/analysis/DeskToolsService.ts:4204  streamChatWithDeskTools
         · clearDeskToolCache()  :4199          ← the ONE cache invalidation point
         · mandate composed from the offer set  :4261-4268 → withDeskToolsSystemPrompt :4153
         · round loop :3715
@@ -239,7 +239,7 @@ re-stamped, because "the book is 35 s old" is the honest fact
 
 **The cache is cleared at one choke point**, inside `streamChatWithDeskTools`, not by the
 callers — because the call site went with the deleted debate engine and nothing warned
-(`services/analysis/DeskToolsService.ts:4210-4217`). Artifacts are deliberately NOT cleared
+(`services/analysis/DeskToolsService.ts:4215-4222`). Artifacts are deliberately NOT cleared
 there: a concurrent turn would lose the payloads its model is paging through (`:494-499`).
 
 **The turn's clock starts when the bubble is painted**, not when the provider is called, so
@@ -248,7 +248,7 @@ a Stop, a failure and a clean finish all report the same "worked for Ns"
 
 **The harness contract is composed exactly once per turn.** `withDeskToolsSystemPrompt`
 adds it only if the caller's prompt does not already carry it
-(`services/analysis/DeskToolsService.ts:4182-4191`) — the analysis prompt composes it
+(`services/analysis/DeskToolsService.ts:4187-4196`) — the analysis prompt composes it
 itself (`services/providers/GenericAnalysisService.ts:358-370`), and the desk path must not
 double it.
 
@@ -258,7 +258,7 @@ the `user` role so a seat can tell the trader's words from the app's
 (`services/analysis/DeskToolsService.ts:324, 3786, 3827, 4056, 4431, 4445`).
 
 **A "calling…" line is emitted before the call runs, one per call**, so the transcript
-shows a call in flight rather than only its result (`services/analysis/DeskToolsService.ts:3948-3951`).
+shows a call in flight rather than only its result (`services/analysis/DeskToolsService.ts:3953-3956`).
 
 **The tool-round budget is 8, not 3.** The comment says why: at 3 a seat that looked at the
 chart and then wanted a second frame to compare against was cut off mid-investigation
@@ -311,7 +311,7 @@ would reopen it silently.
 
 > **Fixed `e6787a8f` (2026-10-23).** The reason the schema demands is now read
 > (`services/analysis/DeskToolsService.ts:2687`), stored (`schemas/learning.ts:153`,
-> `services/learning/SkillMemoryService.ts:2973/:1325/:726`) and shown to the human
+> `services/learning/SkillMemoryService.ts:2977/:1325/:726`) and shown to the human
 > who approves it (`components/chat/CoachThreadPanel.tsx:143`). `timeframe` is a
 > schema property too (`:2688`); `source` stays out on purpose. A missing `steps` is
 > refused (`:2668`) instead of coerced into `["undefined"]`. The prose below is the
@@ -356,7 +356,7 @@ required to write that statement and it went nowhere.
   the coercion makes impossible to be missing.
 - The `propose_skill` receipt's `skill` field is `crafted.name` (`:2712`) — the display
   name, not the slug the file will get. That is correct here (`ingestCraftedSkillFromDraft`
-  derives its own slug, `services/learning/SkillMemoryService.ts:2981-2991`), but it means
+  derives its own slug, `services/learning/SkillMemoryService.ts:2985-2995`), but it means
   the action chip and the eventual file name are different strings.
 
 **Git history.** The previously-known class of this bug — a proposal write that failed
@@ -393,7 +393,7 @@ unattended, also detached — reaches the *same* loop with **no allow-list at al
 - `utils/harnessSettings.ts:110` — `deskToolsEnabled` defaults to **true**, so
   `services/providers/GenericAnalysisService.ts:350-354` turns the desk loop on for this path;
 - the runner is fired detached from the trade-sync chain
-  (`services/learning/SkillMemoryService.ts:3837-3838`: `void runDueSkillEvalWithDefaultRunner(…)`).
+  (`services/learning/SkillMemoryService.ts:3841-3842`: `void runDueSkillEvalWithDefaultRunner(…)`).
 
 So an unattended job can call `propose_skill`, `write_memory_note`, `remember`, `forget`,
 `amend_memory`, `forge_tool`, `revise_skill`, `propose_strategy`, `decline_trade` — **the
@@ -455,7 +455,7 @@ visible from the editor.
 ### 4.7 The round budget and the turn budget are enforced, but a *stalled* model can still spend the whole wall clock — **LOW/MED**
 
 The wrap-up notice fires once at 80 % of the 180 s budget
-(`services/analysis/DeskToolsService.ts:4087-4090`) but does not stop the turn; the round
+(`services/analysis/DeskToolsService.ts:4092-4095`) but does not stop the turn; the round
 cap (8) and the per-call deadline (20 s) are the hard stops. A seat that answers every round
 with a fresh call can therefore burn ~160 s of a 180 s turn. That is the intended shape
 (the budget is a hang guard, not a ration) but the trader sees a long silence with only a
@@ -465,7 +465,7 @@ with a fresh call can therefore burn ~160 s of a 180 s turn. That is the intende
 
 `streamChatWithDeskTools` re-yields the authoritative text after a wipe **only if** the
 consumer implements the wipe channel
-(`services/analysis/DeskToolsService.ts:4429-4438`: *"Gated on an observing consumer (one
+(`services/analysis/DeskToolsService.ts:4434-4443`: *"Gated on an observing consumer (one
 that clears its bubble on wipes): without the wipe channel the re-yield would DUPLICATE the
 answer instead of replacing residue."*). `toolTurn` does implement it
 (`services/trade/toolTurn.ts:182-187`), so the two production sinks are fine — but any
@@ -474,7 +474,7 @@ answer after a self-heal.
 
 ### 4.9 The `requireFirstToolRound` / `toolChoice:'required'` lever is dead code — **LOW**
 
-`services/analysis/DeskToolsService.ts:3656`, `:4157`, `:3755-3757`. It was the "force the
+`services/analysis/DeskToolsService.ts:3661`, `:4162`, `:3760-3762`. It was the "force the
 seat to ground itself before arguing" rule for debates running without live hybrid data.
 The debate engine is gone; no production caller sets it. It is harmless, but it is a
 *reader's* false signal that a turn can force a lookup.
@@ -507,7 +507,7 @@ Do not re-do any of this.
 
 **One loop, one executor, one registry.** The three surfaces share `runToolTurn`
 (`services/trade/toolTurn.ts:131`) and `runDeskToolLoop`
-(`services/analysis/DeskToolsService.ts:3589`); the differences are the sink and the
+(`services/analysis/DeskToolsService.ts:3594`); the differences are the sink and the
 allow-list, not the machinery. The panel, the Chat surface and the schedule cannot drift
 about how a turn behaves because there is nothing to drift.
 
@@ -553,11 +553,11 @@ and the round output budget raised to 8192 with the reason spelled out (`:222-24
 
 **The thinking-cut re-ask and the "produced nothing" continuation** are two small,
 surgical repairs for the two ways a reasoning model produces an empty turn
-(`services/analysis/DeskToolsService.ts:3832-3852`, `:4459-4469`).
+(`services/analysis/DeskToolsService.ts:3837-3857`, `:4464-4474`).
 
 **The self-heal distinguishes a truncated call from a malformed one** — telling a model to
 re-emit a call that was cut off reproduces the cut
-(`services/analysis/DeskToolsService.ts:3448-3460`, `:3793-3815`).
+(`services/analysis/DeskToolsService.ts:3453-3465`, `:3798-3820`).
 
 **The transcript grammar is written down once and both homes read it.**
 `utils/turnStatus.ts` + `utils/toolKinds.ts` + `tests/turnStatus.test.ts` — and the
@@ -583,10 +583,10 @@ and records what it shed inside the payload (`_omitted` / `_clip`)
 redeem it (`services/analysis/DeskToolsService.ts:550-551`, `:749-757`, `:2939-2979`).
 
 **The cache policy is an allow-list**, and the failure sentinel is never cached
-(`services/analysis/DeskToolsService.ts:450-472`, `:3322-3324`).
+(`services/analysis/DeskToolsService.ts:450-472`, `:3327-3329`).
 
 **The cache is invalidated at the one choke point every run passes**
-(`services/analysis/DeskToolsService.ts:4210-4217`).
+(`services/analysis/DeskToolsService.ts:4215-4222`).
 
 **A Stop is a first-class outcome**, checked before anything else, and the two homes agree
 about it (`services/trade/toolTurn.ts:213-218`).
@@ -655,7 +655,7 @@ path (`hooks/useAnalysisPipeline.ts:806-817`).
   (`services/analysis/skillPredicate.ts:188-284`, `:408-451`). Its predicate is offered to
   the model through `propose_skill` / `revise_skill`
   (`services/analysis/DeskToolsService.ts:1076`, `:1137`) and stored through
-  `sanitizePredicate` (`services/learning/SkillMemoryService.ts:2845`, `:2977`). What makes
+  `sanitizePredicate` (`services/learning/SkillMemoryService.ts:2845`, `:2981`). What makes
   a *tool* visible to a turn is the allow-list + the mandate (§1 #30-#34).
 - Files read in part (cited by line, not by assertion): `services/providers/GenericProviderService.ts`
   (the request/retry/error paths), `services/providers/GenericAnalysisService.ts`

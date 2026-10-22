@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { setSkillStatus, skillExpectancyR, skillEnabledFlag, EXPECTANCY_MIN_R_SAMPLE } from '../../services/learning/SkillMemoryService';
+import { setSkillStatus, skillExpectancyR, skillEnabledFlag, isApprovedSkill, EXPECTANCY_MIN_R_SAMPLE } from '../../services/learning/SkillMemoryService';
 import { deleteMemoryFile } from '../../services/learning/MemoryFilesService';
 import type { SkillMeta } from '../../services/learning/SkillMemoryService';
 import type { SkillProofResult } from '../../services/learning/skillProof';
@@ -130,8 +130,13 @@ const SkillDetail: React.FC<{
      *  control group. But a superseded skill is retired from MATCHING
      *  (`SkillMeta.supersededBy`), so it is not live either. Layered on top of
      *  the canonical flag rather than folded into it, because changing that flag
-     *  would start writing `enabled:false` on a file whose bytes are still read. */
-    const reaching = live && !meta?.supersededBy;
+     *  would start writing `enabled:false` on a file whose bytes are still read.
+     *  Approval is layered the same way, and read from `isApprovedSkill` — the ONE
+     *  place that fact is decided — rather than re-tested: the injection and the
+     *  skills index both refuse an unapproved rule, so a card calling it "Active"
+     *  would be a check on a skill that reaches no seat. Guarded on `meta`
+     *  being present, because a pane with no file open has no approval to read. */
+    const reaching = live && !!meta && !meta.supersededBy && isApprovedSkill(meta);
     const liveReason = retired
         ? undefined
         : reaching
@@ -142,7 +147,9 @@ const SkillDetail: React.FC<{
                     ? 'You switched this off in the notebook.'
                     : meta?.supersededBy
                         ? `Absorbed into ${meta.supersededBy}. Its evidence is kept as the control group.`
-                        : 'Not reaching the desk.';
+                        : meta && !isApprovedSkill(meta)
+                            ? 'Nothing has approved this rule, so no seat is given it. A draft is approved in the Coach inbox; the starter library has its own switch in Settings.'
+                            : 'Not reaching the desk.';
     const wins = Math.round(meta?.wins ?? 0);
     const losses = Math.round(meta?.losses ?? 0);
     const refined = Boolean(meta?.previousVersion && meta?.refinedAt);
