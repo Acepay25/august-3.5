@@ -280,3 +280,42 @@ ledgers into the manifest and diffs it against `git ls-files`), then
   `MemoryFilesManager.tsx:241` carries the same claim in a toast. **515 files / 5,358 tests,
   `tsc` clean, eslint 0/655, anchors 410, `render-probe` 126 ok with zero pageerrors after
   the text change.** See `docs/plan/implementation-record.md` §36.
+- **05:50 (2026-10-23)** — **The running app was checked, not just the tests.** The
+  trader's dev server answers on **:3000** — **:5173 is a different project** (its HTML
+  says `August Proxy` and loads `/src/main.tsx`; this repo has no `src/` and enters at
+  `/index.tsx`), and the served source was confirmed to contain this session's changes
+  before anything was asserted against it. A scratch Playwright run against that live
+  server (`.probe-artifacts/live-verify.mjs`, 14 checks, all green) proved, in the real
+  browser: the Approvals card prints `Why: <the model's own sentence>` verbatim; pressing
+  Save writes a notebook whose **shard** (`memory_files_v2_<user>_skills` — reading only
+  the v1 key is how the first run "lost" the reason) carries `reason:`; 14 catalogue rows
+  render, the freshly approved skill's own row reads **Enabled**, and after `approvedBy`
+  was stripped from its stored bytes the SAME row reads **Off** with the tooltip naming
+  the real reason — while a starter-shelf row stays Enabled, which is the control that
+  makes both halves non-vacuous. Zero pageerrors. `npm run skill-approval-probe` ran
+  green alongside it (25 PASS / 0 FAIL), including its deliberate
+  write-failure arm (the `probe: quota exceeded` trace in that log is the test working).
+- **06:05 (2026-10-23)** — **A benefit review and two reference re-reads.** The benefit
+  review found one real code asymmetry I had left: `timeframe` and `source` joined the
+  draft-backed writer but not `ingestCraftedSkillUnlocked`
+  (`services/learning/SkillMemoryService.ts:2887-2889`)
+  — the exact class `792589ff` fixed for `reason`; both are now stamped and the P0-1 case
+  asserts them. It also confirmed the dev-proxy cap is not a packaged-path regression:
+  the `messages`/`google` "stream" that routes through `sendChatRequestOnce`
+  (`GenericProviderService.ts:1931`) was already capped at 120 s in production at
+  `:1486-1490`, so dev now matches the shipped behaviour rather than breaking it.
+  Re-opening the pi and deepseek studies at their pinned SHAs found **ten claims in this
+  corpus that were wrong about the references**, all corrected with the measurement that
+  settles each: `compat-schema.ts` holds 31 boolean flags (24 in the cited window), not
+  "~90"; `additionalProperties: true` appears at seven sites, not five; the
+  check-overflow-before-retry ordering lives in `coding-agent/src/core/agent-session.ts:3769-3772`
+  and `durable/src/harness/generation.ts:542`, not in `overflow.ts:80-84` (which is the
+  exclusion list); **"any HTTP 413 regardless of body" is the opposite of the tested rule**
+  (`overflow.ts:64-66` matches a 413 that IS the status, and `test/overflow.test.ts:48-56`
+  asserts a body-only 413 is not overflow); the overflow-table "no test" claim needed
+  "no test that runs without an API key" (`test/context-overflow.test.ts:96` skips);
+  `packages/ai/src/scripts/hydrate-model-catalog.ts` does not exist (the real path is
+  `packages/ai/scripts/…`, cited twice); and deepseek's two-bounds compaction trigger is
+  at `config.ts:191-194`, not `:203-206`. The pi synthesis's own
+  "6 of 6 claims verified; none false" line now carries the amendment, because that
+  spot-check sampled the shard reports and never re-opened this summary.

@@ -2881,10 +2881,12 @@ const ingestCraftedSkillUnlocked = async (
         // `isApprovedSkill` sees it. Auto-ingest (no approvedBy) keeps the
         // fail-closed behavior — status/evidence alone are not consent.
         ...(approvedBy ? { approvedBy, approvedAt: new Date().toISOString() } : {}),
-        // The draft-backed writer stamps this (see `reason` there); a second
-        // writer of the same format that omits it is how the field would go
+        // The draft-backed writer stamps these (see `reason` there); a second
+        // writer of the same format that omits them is how the field would go
         // missing for exactly the drafts a post-mortem produces.
         ...(crafted.reason?.trim() ? { reason: crafted.reason.trim().slice(0, 600) } : {}),
+        ...(crafted.timeframe ? { timeframe: crafted.timeframe } : {}),
+        ...(crafted.source ? { source: crafted.source } : {}),
         ifCondition: crafted.ifCondition,
         thenAction: crafted.thenAction,
         predicate: sanitizePredicate(crafted.predicate),

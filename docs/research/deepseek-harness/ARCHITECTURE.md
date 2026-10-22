@@ -187,7 +187,7 @@ original Session"*. The jobs seam is the kind-agnostic background-job controller
 inherit it; a `user/message` whose source is the compact plugin inherits it too; and
 `session/end-seed` **clears** it — a new seed boundary starts a new compaction group.
 The trigger is a *minimum* of two independent bounds: the window fraction is a soft
-target and the headroom arithmetic is a hard floor (`packages/compaction/compaction-basic/src/config.ts:203-206`).
+target and the headroom arithmetic is a hard floor (`packages/compaction/compaction-basic/src/config.ts:191-194`, the `Math.min(contextWindow * policy.thresholdRatio, pressureBudgetTokens)`; the earlier citation of `:203-206` lands on the `retainTokens` conflict throw instead).
 Unknown config keys are a **hard error**, not a warning (`:330`) — *"Reject stale or
 misspelled keys before defaults can hide them."*
 

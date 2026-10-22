@@ -1807,3 +1807,65 @@ answers what is IN the notebook, not what a seat is given.
 655 warnings · anchors 410, 0 unattributed · `render-probe` re-run AFTER the label text
 changed again — 126 ok, zero pageerrors, so the Learn sweep saw the new words rather than
 the old ones.
+
+---
+
+## 37. Live-app verification, one more asymmetry, and ten wrong claims about the references (2026-10-23)
+
+**What was checked where it actually runs.** The trader's dev server is **:3000**;
+**:5173 is a different project** (it serves `August Proxy` from `/src/main.tsx`, and this
+repo enters at `/index.tsx`). Before asserting anything against it, the served source was
+confirmed to contain this session's code (`curl :3000/components/learn/SkillsCatalog.tsx`
+returns the new tooltip text and `approved: isApprovedSkill(meta)`) — checking a stale or
+different checkout would have proven nothing either way.
+
+**The live result.** `.probe-artifacts/live-verify.mjs` (scratch, Playwright, 14 checks,
+all green against the running app) verified the user-visible chain end to end: the
+Approvals card prints the reason verbatim; Save writes a notebook whose **shard** carries
+`reason:` — and that was itself a finding about the check, not the app: the first version
+read only `memory_files_v1_<user>`, which holds folders and the shard manifest, so it
+reported a missing reason that was really in `memory_files_v2_<user>_skills`. The mark
+change was proven with a contrast, not a zero: 14 rows render, the saved skill's own row
+reads `Enabled`, the same row reads `Off` after `approvedBy` is stripped from its stored
+bytes, and a starter-shelf row stays `Enabled` throughout — so neither arm can pass on an
+empty page. `npm run skill-approval-probe` ran green beside it (25 PASS / 0 FAIL).
+
+**One more writer asymmetry, from the benefit review.** `timeframe` and `source` were
+forwarded to the draft-backed ingest but never stamped by `ingestCraftedSkillUnlocked`
+(`services/learning/SkillMemoryService.ts:2887-2889`) — the same two-writers-of-one-format
+class `792589ff` fixed for `reason`. Both are stamped now and the existing P0-1 case
+asserts them, so the closed-trade route and the chat route can no longer disagree about
+what a skill file contains.
+
+**One finding that is not a defect.** The review flagged the 120 s dev cap as reachable on
+a *streaming* call (`GenericProviderService.ts:1931` routes `messages`/`google` streams
+through `sendChatRequestOnce`). It is not a regression: that path was already capped at
+120 s in the packaged app (`:1486-1490` wrap every format call), so the fix made dev match
+the shipped behaviour instead of breaking it.
+
+**And the reference corpus was wrong about the references, ten times.** Re-opening the
+pinned clones (`pi` at `58c0b02`, `deepseek-harness` at `687f282e`) and re-measuring each
+claim before touching it: the `~90 boolean flags` figure counted properties, not flags
+(31 file-wide, 24 in the cited window); `additionalProperties: true` has seven sites, not
+five; the overflow-before-retry **ordering** is enforced in the caller
+(`coding-agent/src/core/agent-session.ts:3769-3772`, `durable/src/harness/generation.ts:542`),
+not in `overflow.ts:80-84`; **"any HTTP 413 regardless of body" states the opposite of the
+tested rule** (`overflow.ts:64-66` requires the 413 to be the status, and
+`test/overflow.test.ts:48-56` asserts body-only 413s are NOT overflow); the "no test" claim
+about the overflow table is really "no test that runs without an API key"
+(`test/context-overflow.test.ts:96` is key-gated); `packages/ai/src/scripts/hydrate-model-catalog.ts`
+does not exist (twice cited; the real path is `packages/ai/scripts/…`); and deepseek's
+two-bounds compaction trigger is at `config.ts:191-194`, not `:203-206`. The pi
+synthesis's own "6 of 6 verified, none false" line now carries that amendment — its
+spot-check sampled the shard reports and never re-opened the summary written from them.
+
+**Gates.** `tsc` clean · 515 files / **5,358 tests** (no new cases this entry) · eslint 0
+errors / 655 warnings · anchors 410, 0 unattributed · live probe 14/14 against :3000.
+
+**Left for the owner, and it is not documentation.** A route-A skill file now reads `Off`
+with an honest why, and there is **no press in the app that approves it** — the only
+writers of `approvedBy: 'human'` are a draft approval and a queued rewrite
+(`services/learning/skillApproval.ts:71`, `services/learning/SkillMemoryService.ts:1108`),
+and neither exists for a file the closed-trade loop minted. Honest `Off` with no lever is
+still a dead end; the small fix is one Approve press on the skill card beside Undo, which
+is a product decision, not a repair.
