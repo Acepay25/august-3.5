@@ -139,6 +139,11 @@ const DraftCard: React.FC<{
                         <span className="font-semibold text-zinc-300">If</span> {d.crafted.ifCondition}
                         <span className="font-semibold text-zinc-300"> → then</span> {d.crafted.thenAction}
                     </p>
+                    {d.crafted.reason && (
+                        <p className="mt-1 text-ui-sm leading-relaxed text-zinc-500" data-testid={`coach-draft-reason-${d.id}`}>
+                            <span className="font-semibold text-zinc-400">Why:</span> {d.crafted.reason}
+                        </p>
+                    )}
                     <p className="mt-1 text-ui-dense text-zinc-600">
                         {d.coin ? `${d.coin} · ` : ''}
                         {d.crafted.kind === 'avoid' ? 'avoid' : 'repeat'} skill · from trade {d.tradeId.slice(0, 8)}…

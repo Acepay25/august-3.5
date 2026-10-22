@@ -63,6 +63,24 @@ describe('CoachThreadPanel', () => {
         expect(document.querySelector('[data-testid^="coach-proposal-"]')).toBeTruthy();
     });
 
+    it('shows the evidence the proposer gave — the reason propose_skill requires', () => {
+        // The human is approving a RULE; the reason is why they were asked. The
+        // tool made it required and then dropped it, so the card reviewed a bare
+        // IF/THEN. A draft WITH a reason shows it; this is the assertion that
+        // fails if the handler stops carrying it again.
+        localStorage.clear();
+        const queued = queueSkillDraft({
+            tradeId: 'msg-2',
+            coin: 'BTCUSDT',
+            crafted: crafted({ reason: 'the last three reclaim shorts all stopped out above the sweep' }),
+        });
+        if (!queued) throw new Error('queueSkillDraft stored nothing');
+        render(<CoachThreadPanel onAllowDraft={vi.fn()} onDenyDraft={vi.fn()} />);
+        const line = screen.getByTestId(`coach-draft-reason-${queued.id}`);
+        expect(line.textContent).toContain('the last three reclaim shorts all stopped out above the sweep');
+        expect(line.textContent).toContain('Why:');
+    });
+
     it('empty state explains the loop', () => {
         localStorage.clear();
         render(<CoachThreadPanel onAllowDraft={vi.fn()} onDenyDraft={vi.fn()} />);

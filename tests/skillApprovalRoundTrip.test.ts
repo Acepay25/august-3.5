@@ -38,11 +38,13 @@ import {
     isApprovedSkill,
     listSkills,
     parseSkillMarkdown,
+    skillIndexRows,
 } from '../services/learning/SkillMemoryService';
 import { approveSkillDraft } from '../services/learning/skillApproval';
 import { applyRescopeProposal } from '../services/learning/SkillMemoryService';
 import { listSkillDrafts, queueSkillDraft } from '../utils/skillDrafts';
 import { listLearningProposals } from '../utils/learningQueue';
+import { buildSkillsIndexForPrompt } from '../services/trade/tradeChatContext';
 import { executeDeskTool } from '../services/analysis/DeskToolsService';
 import type { CraftedSkill } from '../schemas/learning';
 import type { LoggedTrade } from '../types';
@@ -222,6 +224,27 @@ describe('a notebook with no harness folders', () => {
     });
 });
 
+describe('the skills index names only rules the injection would hand over', () => {
+    it('drops an unapproved skill and keeps an approved one', async () => {
+        // One writer, one reader (P10): `isApprovedSkill` gates the injection,
+        // and the index is the list the prompt says to APPLY from — so naming an
+        // unapproved rule there is a promise the harness breaks one layer down.
+        await ingestCraftedSkillFromDraft(
+            craft({ name: 'Unapproved rule', ifCondition: 'an unapproved condition here', thenAction: 'take the trade' }),
+            'BTC', USER, undefined, undefined,
+        );
+        await ingestCraftedSkillFromDraft(
+            craft({ name: 'Approved rule', ifCondition: 'an approved condition here', thenAction: 'take the trade' }),
+            'BTC', USER, undefined, 'human',
+        );
+        const block = buildSkillsIndexForPrompt(skillIndexRows());
+        expect(block).toContain('approved-rule');
+        expect(block).not.toContain('unapproved-rule');
+        // The index FILTERS; it does not delete. Both files are still in the notebook.
+        expect(names()).toEqual(expect.arrayContaining(['unapproved-rule.md', 'approved-rule.md']));
+    });
+});
+
 describe('the desk tool that feeds this inbox', () => {
     it('propose_skill queues a draft that really is approvable', async () => {
         const { executeDeskTool, clearDeskToolCache } = await import('../services/analysis/DeskToolsService');
@@ -250,10 +273,58 @@ describe('the desk tool that feeds this inbox', () => {
         expect(call.ok).toBe(true);
         const draft = listSkillDrafts(USER)[0];
         expect(draft.crafted.name).toBe('Session-open fade short');
+        // The schema REQUIRED this reason; before the fix the handler never read
+        // it, so the human approved a bare IF/THEN and the evidence was gone.
+        expect(draft.crafted.reason).toBe('the last three ETH longs taken at the open all stopped out');
 
         const approved = await approveSkillDraft(draft, USER, []);
         expect(approved.created).toBe(true);
         expect(triggers()).toContain('us session open high held twice on closing prices');
+        // …and it survives approval: serialized into the file, read back by the
+        // same parser the rest of the library uses.
+        const saved = listSkills().find(s => (s.meta.ifCondition ?? '').toLowerCase() === 'us session open high held twice on closing prices');
+        expect(saved?.file.content).toContain('the last three ETH longs taken at the open all stopped out');
+        expect(saved?.meta.reason).toBe('the last three ETH longs taken at the open all stopped out');
+    });
+
+    it('refuses a proposal with no steps instead of queueing the word "undefined"', async () => {
+        const { executeDeskTool, clearDeskToolCache } = await import('../services/analysis/DeskToolsService');
+        clearDeskToolCache();
+        const call = await executeDeskTool({
+            id: 'x2',
+            name: 'propose_skill',
+            arguments: {
+                name: 'Sweep reclaim short',
+                kind: 'avoid',
+                when: 'price sweeps a prior low then reclaims it within one candle',
+                validate: 'Confirm the reclaim on the live chart',
+                output: 'A short with a stop above the sweep',
+                approval: 'A human approves this draft',
+                if_condition: 'sweep of the prior low reclaimed within one candle',
+                then_action: 'short the reclaim with the stop above the sweep',
+                reason: 'two sweeps this session reclaimed immediately',
+            },
+        });
+        expect(call.ok).toBe(false);
+        expect(String(call.content)).toMatch(/missing its steps/);
+        expect(listSkillDrafts(USER)).toHaveLength(0);
+    });
+});
+
+describe('the learning queue tells the truth about a failed write', () => {
+    it('returns null when storage refuses the row instead of claiming it queued', async () => {
+        const { queueLearningProposal } = await import('../utils/learningQueue');
+        const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota exceeded'); });
+        try {
+            expect(queueLearningProposal({
+                kind: 'demote',
+                skillSlug: 'funding-exhaustion-long',
+                text: 'demote?',
+                fingerprint: 'test|write-failure',
+            }, USER)).toBeNull();
+        } finally {
+            spy.mockRestore();
+        }
     });
 });
 

@@ -231,6 +231,11 @@ export interface SkillIndexRow {
     suspended?: boolean;
     /** The trader switched it off. */
     disabled?: boolean;
+    /** The approval fact the injection path already gates on (`isApprovedSkill`).
+     *  Absent = keep (a caller that did not pass it); the one projection both
+     *  surfaces now use always sets it. Without it the index NAMED an
+     *  unapproved rule to a seat that would never be handed it. */
+    approved?: boolean;
     /** ISO timestamp of the last counted trade — the tie-break. */
     lastEvidenceAt?: string;
 }
@@ -257,6 +262,8 @@ export type SkillIndexAudience = 'analyst' | 'moderator';
  *  · disabled   — the trader switched it off.
  *  · manualOnly — human-invoked only: never handed to a seat on its own.
  *  · audience   — a rule scoped to the OTHER kind of seat.
+ *  · approved   — no human yes (and not the vetted starter shelf): the
+ *                 injection path refuses it, so the index must not name it.
  *
  * A row that carries none of these facts (a caller that did not pass them)
  * is KEPT — the filter must never remove a skill because the caller was
@@ -267,6 +274,7 @@ export const isIndexableSkill = (row: SkillIndexRow, audience: SkillIndexAudienc
     if (row.suspended === true) return false;
     if (row.disabled === true) return false;
     if (row.manualOnly === true) return false;
+    if (row.approved === false) return false;
     const scope = (row.audience || 'all').toLowerCase();
     if (scope !== 'all' && scope !== audience) return false;
     return true;

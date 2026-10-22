@@ -26,6 +26,7 @@ import { getBots } from '../agents/agentRoster';
 import { formatSkillProcedure, parseIfThenClauses, skillHitRate } from '../../utils/ifThenSkill';
 import { maybePinWinningPromptLane } from '../../utils/promptVersionStats';
 import { CraftedSkill } from '../../schemas/learning';
+import type { SkillIndexRow } from '../trade/tradeChatContext';
 import { netRiskReward, stopDistancePercent } from '../../utils/netRiskReward';
 import { parsePrice } from '../../utils/analysisUtils';
 import { formatCraftedSkillBody, refineSkillFromLosses } from './SkillCraftService';
@@ -350,6 +351,12 @@ export interface SkillMeta {
      *  session-scoped, so without this the audit trail for an auto-approved
      *  skill evaporates on reload. One line, capped. */
     whyAccepted?: string;
+    /** Evidence from the session that motivated the rule, in the proposer's
+     *  words. `propose_skill` requires it; this is where it lands so the human
+     *  approving the draft (and the next reader of the file) can see WHY the
+     *  rule exists. Distinct from `whyAccepted`, which is the approver's
+     *  verdict. One line, capped. */
+    reason?: string;
     /** Who said yes to this rule — THE approval fact the gate reads.
      *
      * `'supervisor'` is deliberately NOT approval: the model supervising its own
@@ -716,6 +723,7 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         timeframe: pick('timeframe'),
         source: pick('source'),
         whyAccepted: pick('whyAccepted')?.slice(0, 400),
+        reason: pick('reason')?.slice(0, 600),
         approvedBy: pick('approvedBy') === 'supervisor'
             ? 'supervisor' : pick('approvedBy') === 'human'
                 ? 'human' : pick('approvedBy') === 'grandfathered' ? 'grandfathered' : undefined,
@@ -996,6 +1004,36 @@ export const isApprovedSkill = (meta: SkillMeta): boolean => {
     if (meta.prior === 'book') return getHarnessSettings().starterLibraryEnabled !== false;
     return false;
 };
+
+/** The ONE projection from the library to the skills-index row shape.
+ *
+ *  Both surfaces that build the index (the Chat surface and the dock) call this
+ *  instead of mapping `listSkills()` themselves. They had two copies, and they
+ *  drifted: one passed four of the filter facts, the other passed none — so a
+ *  suspended, trader-disabled, human-invoked-only or other-audience skill could
+ *  be NAMED to a seat that the injection path would never hand it to. Approval
+ *  was missing from both, which is the same defect one level down: the index
+ *  offered a rule the harness would not honour.
+ *
+ *  The index and the injection now read the same approval predicate
+ *  (`isApprovedSkill`); `isIndexableSkill` applies it with the other facts. */
+export const skillIndexRow = (file: { name: string }, meta: SkillMeta): SkillIndexRow => ({
+    slug: file.name.replace(/\.md$/i, ''),
+    status: meta.status,
+    kind: meta.kind,
+    description: meta.description,
+    ifCondition: meta.ifCondition,
+    thenAction: meta.thenAction,
+    audience: meta.audience,
+    manualOnly: meta.manualOnly,
+    suspended: Boolean(meta.suspendedAt),
+    disabled: Boolean(meta.disabledByUser),
+    approved: isApprovedSkill(meta),
+    lastEvidenceAt: meta.lastEvidenceAt,
+});
+
+/** The library read through that one projection. */
+export const skillIndexRows = (): SkillIndexRow[] => listSkills().map(({ file, meta }) => skillIndexRow(file, meta));
 
 /** A rewrite invalidates the yes that came before it: the approval was for the rule
  *  as it read, so every path that moves a live skill's trigger must call this.
@@ -1284,6 +1322,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.approvedBy ? [`approvedBy: ${yamlString(meta.approvedBy)}`] : []),
         ...(meta.approvedAt ? [`approvedAt: ${yamlString(meta.approvedAt)}`] : []),
         ...(meta.whyAccepted ? [`whyAccepted: ${yamlString(meta.whyAccepted.replace(/\n/g, ' '))}`] : []),
+        ...(meta.reason ? [`reason: ${yamlString(meta.reason.replace(/\n/g, ' '))}`] : []),
         ...(meta.originBotId ? [`originBotId: ${yamlString(meta.originBotId)}`] : []),
         ...(meta.originBotName ? [`originBotName: ${yamlString(meta.originBotName.replace(/\n/g, ' '))}`] : []),
         ...(meta.originMessageId ? [`originMessageId: ${yamlString(meta.originMessageId)}`] : []),
@@ -2931,6 +2970,7 @@ const ingestCraftedSkillFromDraftUnlocked = async (
         // evidence ⇒ no injection.
         prior: 'gated',
         ...(whyAccepted?.trim() ? { whyAccepted: whyAccepted.trim().slice(0, 400) } : {}),
+        ...(crafted.reason?.trim() ? { reason: crafted.reason.trim().slice(0, 600) } : {}),
         ...(approvedBy ? { approvedBy } : {}),
         ifCondition: crafted.ifCondition,
         thenAction: crafted.thenAction,

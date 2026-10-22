@@ -1071,10 +1071,15 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     approval: { type: 'string', description: 'What must be true for the skill to apply' },
                     if_condition: { type: 'string', description: 'The IF clause (one sentence, measurable)' },
                     then_action: { type: 'string', description: 'The THEN clause (one sentence, actionable)' },
-                    reason: { type: 'string', description: 'Evidence from THIS session that motivates the skill' },
+                    reason: { type: 'string', description: 'Evidence from THIS session that motivates the skill — shown to the human approving it and kept on the skill' },
+                    timeframe: { type: 'string', description: 'The timeframe the pattern was observed on (15m / 1h / 4h). Carried onto the skill; the replay proof assumes 1h without it.' },
                     predicate: { type: 'string', description: PREDICATE_GRAMMAR_HINT + ' Author one whenever the IF clause reduces to candle math — it is what lets the desk check the trigger in code instead of trusting a seat to read the prose. Omit it when the condition is not reducible; a fabricated clause is worse than none.' },
                 },
                 required: ['name', 'kind', 'when', 'steps', 'if_condition', 'then_action', 'reason'],
+                // `source` is deliberately NOT a property: it is learner-stamped
+                // provenance (scan / post-mortem / chat), not something a model
+                // may claim. Every other field this handler reads is listed, so
+                // the closed set stays truthful.
                 additionalProperties: false,
             },
         },
@@ -2654,7 +2659,14 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     if (typeof steps === 'string') {
                         try { steps = JSON.parse(steps); } catch { steps = [steps]; }
                     }
-                    if (!Array.isArray(steps)) steps = [String(steps)];
+                    // A missing `steps` used to become ["undefined"] — a real
+                    // array of one string, so the schema's min(1) passed and
+                    // the draft was queued carrying the literal word. Refuse
+                    // instead; the rejection text below lists steps because it
+                    // now genuinely can be missing.
+                    if (!Array.isArray(steps) || steps.length === 0) {
+                        return rejectedResult(call, 'propose_skill rejected: the proposal is missing its steps.');
+                    }
                     const crafted = parseCraftedSkill({
                         name: asString(call.arguments.name),
                         kind: call.arguments.kind === 'repeat' ? 'repeat' : 'avoid',
@@ -2668,6 +2680,12 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                         ifCondition: asString(call.arguments.if_condition),
                         thenAction: asString(call.arguments.then_action),
                         predicate: asString(call.arguments.predicate) || undefined,
+                        // Required by the tool schema and, until this read, never
+                        // seen again: the human was asked to approve a rule whose
+                        // stated evidence the tool had thrown away. It rides on
+                        // the draft, the Coach card and the skill file.
+                        reason: asString(call.arguments.reason) || undefined,
+                        timeframe: asString(call.arguments.timeframe) || undefined,
                     });
                     if (!crafted) {
                         return rejectedResult(call, 'propose_skill rejected: the proposal is missing required fields (name, when, steps, if_condition, then_action).');
@@ -2806,7 +2824,7 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     }, getActiveUsername());
                     content = proposal
                         ? JSON.stringify({ proposed: true, id: proposal.id, skill: slug, note: 'Revision proposal queued — a human approves it in Settings → Skills. The live skill is unchanged until then.' })
-                        : 'revise_skill: an identical revision proposal is already pending.';
+                        : 'revise_skill: nothing was queued — an identical revision proposal is already pending, or the queue could not be written.';
                 } catch (err) {
                     return rejectedResult(call, `revise_skill rejected: ${err instanceof Error ? err.message : String(err)}`);
                 }

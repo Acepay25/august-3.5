@@ -20,10 +20,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Message } from '../types/message';
 import type { ProviderConfig } from '../types/provider';
-import { streamChatWithDeskTools } from '../services/analysis/DeskToolsService';
+import { streamChatWithDeskTools, DESK_TOOL_DEFINITIONS } from '../services/analysis/DeskToolsService';
 import { CHAT_SURFACE_TOOLS } from '../services/trade/chatSurfaceTurn';
 import {
-    AUTOMATION_TOOLS, AUTOMATION_UNATTENDED_DENY, MAX_PLANS_PER_RUN,
+    AUTOMATION_TOOLS, AUTOMATION_UNATTENDED_DENY, AUTOMATION_EVALUATION_TOOLS, MAX_PLANS_PER_RUN,
     automationSeatFor, automationSystemPrompt, runAutomationTurn,
 } from '../services/trade/automationTurn';
 // The day cap comes from the ledger module, not from the turn that reads it: an
@@ -144,6 +144,25 @@ describe('the schedule’s tool list is derived, not restated', () => {
 
     it('is exactly the Chat list minus the deny list', () => {
         expect(AUTOMATION_TOOLS).toEqual(CHAT_SURFACE_TOOLS.filter(t => !AUTOMATION_UNATTENDED_DENY.includes(t)));
+    });
+
+    it('the eval list is the unattended list minus the two acting tools', () => {
+        // A scheduled run may present one plan — that is its job. A detached
+        // skill eval may not present a plan or record a decline; both act on the
+        // trader's record with nobody watching. Derived from AUTOMATION_TOOLS so
+        // the deny-list stays the one owner.
+        expect(AUTOMATION_EVALUATION_TOOLS).toEqual(
+            AUTOMATION_TOOLS.filter(t => t !== 'present_trade' && t !== 'decline_trade'),
+        );
+        expect(AUTOMATION_EVALUATION_TOOLS).not.toContain('present_trade');
+        expect(AUTOMATION_EVALUATION_TOOLS).not.toContain('decline_trade');
+        for (const denied of AUTOMATION_UNATTENDED_DENY) {
+            expect(AUTOMATION_EVALUATION_TOOLS, `${denied} reached a detached eval`).not.toContain(denied);
+        }
+        // A typo would silently narrow the list, and the executor would refuse a
+        // tool the eval legitimately reads. Every name must be a real tool.
+        const names = new Set(DESK_TOOL_DEFINITIONS.map(d => d.function.name));
+        for (const tool of AUTOMATION_EVALUATION_TOOLS) expect(names.has(tool), `${tool} is not a desk tool`).toBe(true);
     });
 });
 

@@ -118,20 +118,29 @@ const read = (username?: string): LearningProposal[] => {
     }
 };
 
-const write = (items: LearningProposal[], username?: string): void => {
+/** True only when the bytes are in storage. A caller is about to tell a human
+ *  "your proposal is queued"; that claim needs the store's agreement, not the
+ *  absence of a throw — the same rule `utils/skillDrafts.ts` already follows.
+ *  Quota exhaustion on the shared WebView origin is a real failure, and the
+ *  old swallow-and-continue made it indistinguishable from success. */
+const write = (items: LearningProposal[], username?: string): boolean => {
     try {
         localStorage.setItem(storageKey(username), JSON.stringify(items.slice(-MAX_PROPOSALS)));
         if (typeof window !== 'undefined') window.dispatchEvent(new Event('august-learning-queue'));
-    } catch { /* ignore */ }
+        return true;
+    } catch {
+        return false;
+    }
 };
 
 export const listLearningProposals = (username?: string): LearningProposal[] =>
     typeof localStorage === 'undefined' ? [] : read(username);
 
 /**
- * Queue a proposal. Returns null when an identical fingerprint is already
- * pending (dedupe — the contradiction sweep must not re-queue the same pair
- * every week).
+ * Queue a proposal. Returns null when nothing was queued — an identical
+ * fingerprint is already pending (dedupe — the contradiction sweep must not
+ * re-queue the same pair every week), or the store refused the write. Callers
+ * that tell a human something must not report success on null.
  */
 export const queueLearningProposal = (
     proposal: Omit<LearningProposal, 'id' | 'createdAt'>,
@@ -144,12 +153,12 @@ export const queueLearningProposal = (
         id: `lp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         createdAt: new Date().toISOString(),
     };
-    write([...items, next], username);
-    return next;
+    return write([...items, next], username) ? next : null;
 };
 
-export const dismissLearningProposal = (id: string, username?: string): void =>
+export const dismissLearningProposal = (id: string, username?: string): void => {
     write(listLearningProposals(username).filter(p => p.id !== id), username);
+};
 
 // ─── The single applier ─────────────────────────────────────────────────────
 // Both approval surfaces (the Coach thread and the Skills queue strip) used to

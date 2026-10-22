@@ -145,6 +145,15 @@ export const CraftedSkillSchema = z.object({
   // because the field whitelist lives with the evaluator and a boundary that
   // rejected a whole craft over one bad clause would teach the loop nothing.
   predicate: z.string().max(240).optional().catch(undefined),
+  // Evidence from THIS session that motivated the rule. The propose_skill tool
+  // makes it required; it is optional here because a post-mortem or scan craft
+  // carries its evidence as the trade itself. It rides on the draft, is shown
+  // on the Coach card, and is persisted onto the skill — the human is being
+  // asked to approve a rule, and the evidence is the reason for asking.
+  reason: z.preprocess(
+    (v) => (typeof v === 'string' ? v.slice(0, 600) : v),
+    z.string().optional(),
+  ),
   // Provenance stamped by a learner (not the model): the timeframe a pattern
   // was earned on, and which source minted the draft. Optional so chat/
   // post-mortem/verdict authors stay valid.
