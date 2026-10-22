@@ -72,6 +72,19 @@ binary, out-of-scope language).
   the change was reverted with `git checkout --` and preserved verbatim as
   `docs/research/REVERTED-unintended-edits.patch`. The tree is clean of source
   changes; only `docs/research/` is new.
-- **2026-10-22** — **Phase 2 dispatched.** One reader per shard, concurrency 6, each
-  writing `shards/<shard>.md` and `shards/<shard>.status.tsv` under the shared brief
-  `docs/research/SHARD-BRIEF.md`.
+- **2026-10-22** — **Phase 2 dispatched (second attempt).** The first run read one
+  file per tool call; on a 402-file shard that is ~2.4 minutes per step, and after
+  95 minutes not one shard report had been written. The brief was rewritten to
+  specify **batch reading** (15–30 files per shell call, `Get-Content -Raw` with a
+  header per file — a read, not an execution) and **three read tiers** (a full entry
+  for load-bearing source, a one-line table row for the bulk, skipped-with-a-reason
+  for generated/vendored/binary). The run was killed and relaunched at concurrency 9
+  with the shards ordered by value, so a partial run still lands the
+  harness-critical ones first. After the fix, seven reports landed in twenty
+  minutes.
+- **2026-10-22** — **Phase 3 spot-checks begun** (the lead re-opens the source and
+  confirms the claims; the shard authors do not verify their own work). First
+  checks: `dsh-core` and `pi-ai`. **6 of 7 claims verified exactly; 1 verified
+  true with a line-number drift of ~76 lines** (`max-tokens is sticky` is at
+  `packages/core/agent-loop/src/agent.ts:338-341`, not `:262-267` as cited). The
+  claim held; the citation drifted.
