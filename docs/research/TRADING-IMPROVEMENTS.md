@@ -350,17 +350,19 @@ evidence, is in the baseline. The ones that cost the most to keep:
 
 Two things make this worse than ordinary dead code:
 
-- **The documentation lies.** `docs/app-flow.md:610-611` tells the reader the
-  pattern-memory gate is *"the pre-trade gate that refuses a setup with no
-  evidence"*. It is test-only: its only call site
-  (`PatternMemorySynthesisService.ts:986`) sits inside
+- **The documentation lied; two of the three lies are now fixed (2026-10-23).**
+  `docs/app-flow.md:606-621` used to call the pattern-memory gate *"the pre-trade
+  gate that refuses a setup with no evidence"* — it is test-only: its only call
+  site (`PatternMemorySynthesisService.ts:986`) sits inside
   `generatePatternMemoryEnforcementContext` (`:982`), whose only consumers are
-  `tests/patternMemoryGate.test.ts`. Two lines above, `docs/app-flow.md:608` calls
-  `generateSynthesizedPromptInjection` *"the injected sentence"* — it has zero
-  callers (`:589` is its own definition). `AgentsView.tsx:10-33` opens with *"⚠️ THE
-  TWO SURFACES DO NOT SHARE A STORE TODAY"* — false since the one-home merge, which
-  `docs/app-flow.md:150-152` already states as *"one thread, GENERATING in both
-  homes"* over one `chatSessions` store.
+  `tests/patternMemoryGate.test.ts` — and the paragraph now names
+  `services/trade/proposalGate.ts:152` as the live gate. Two lines above, it called
+  `generateSynthesizedPromptInjection` *"the injected sentence"*; it has zero
+  callers (`:589` is its own definition) and is now marked dead. `AgentsView.tsx`
+  opened with *"⚠️ THE TWO SURFACES DO NOT SHARE A STORE TODAY"* — false since the
+  one-home merge, which `docs/app-flow.md:150-152` states as *"one thread,
+  GENERATING in both homes"* over one `chatSessions` store; the banner now says two
+  stores, one thread.
   `docs/plans/debate-deletion-status.md:3-8` records that *"the closed-trade
   learning chain stops working with no replacement"*, and the code confirms it
   (`SkillCraftService.ts:145`).
@@ -379,8 +381,9 @@ Two things make this worse than ordinary dead code:
    `ThinkingRole 'moderator'`, the `debateTurnIndex` column, `Message.evidencePack`,
    `PatternMemoryGateView.mandatoryQuestions` — exactly as the owner already decided
    in `docs/plans/debate-deletion-status.md:1680-1712/2062-2069`. Data is not code.
-3. **Fix the documents in the same commit** — `docs/app-flow.md:610-611`,
-   `AgentsView.tsx:10-33`, and the three committee-shaped prompt strings.
+3. **Fix the documents in the same commit** — ✅ **`docs/app-flow.md:606-621` and
+   `AgentsView.tsx`'s header were fixed 2026-10-23.** Still open: the three
+   committee-shaped prompt strings.
 4. **Decide, explicitly, the two subsystems that are dead but *should* be alive** —
    see P5 and P6 below. Deleting `SessionGuardService` and `TradeValidationGate`
    outright is right if P5/P6 are rejected, and wrong if they are adopted. **Do not

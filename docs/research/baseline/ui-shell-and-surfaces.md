@@ -235,12 +235,13 @@ switches; the switch's own handler intercepts Chat → Trade for the same reason
 (`App.tsx:2246-2255`). Arriving on either home shows the thread that is *answering*
 (`App.tsx:428-445`).
 
-**The agent's own claim about this is stale.** `components/agents/AgentsView.tsx:10-33` still
-opens with "⚠️ THE TWO SURFACES DO NOT SHARE A STORE TODAY" and says the Chat surface reads
+**The agent's own claim about this was stale, and is now fixed (2026-10-23).**
+`components/agents/AgentsView.tsx:10-25` used to open with "⚠️ THE TWO SURFACES DO NOT
+SHARE A STORE TODAY" and said the Chat surface reads
 App's `messages` while the dock reads `chatStore` — a true statement about the *writers*,
-now contradicted by the mirror and the merge that make them one transcript. The comment's
-own cited evidence (`render-probe.cjs:487-491`) has moved. The claim as written would tell
-the next reader the two homes are two transcripts.
+contradicted by the mirror and the merge that make them one transcript. The comment's
+own cited evidence (`render-probe.cjs:487-491`) had moved. The banner now states the
+contract: two row shapes, one thread.
 
 ### 3.3 Where the "one home" leaks
 

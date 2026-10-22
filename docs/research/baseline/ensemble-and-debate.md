@@ -173,7 +173,7 @@ feature, not a leftover of the debate."
 
 ## 3. The multi-agent model today
 
-### 3.1 The three surfaces (they do not share a store)
+### 3.1 The three surfaces (two stores, one mirrored thread)
 
 | Surface | Entry point | Runner | Fan-out | Synthesis seat? |
 |---|---|---|---|---|
@@ -182,8 +182,12 @@ feature, not a leftover of the debate."
 | **Agents group room** | `hooks/useAgentGroups.ts:126` (`runGroupThread`) | same | N members, serial, ≤3 rounds / ≤12 model turns | **No** |
 
 The Agents surface reads App's `messages`; the chart dock reads `services/trade/chatStore.ts`
-(`components/agents/AgentsView.tsx:10-25` says so explicitly). They are the *same persona over two
-different transcripts*.
+(`components/agents/AgentsView.tsx:10-25` documents both writers). They are two row SHAPES
+over one thread: `startEntryMirror` (`services/trade/chatTurnMirror.ts`) projects the dock's
+live entry into the conversation under the same id, and `liveEntryFromMessage`
+(`services/trade/chatSessions.ts:491`) carries `Message.isStreaming` back. (This section
+originally read "the same persona over two different transcripts"; the merge and the mirror
+made that false — corrected 2026-10-23.)
 
 ### 3.2 How a GROUP ROUND works — step by step
 
