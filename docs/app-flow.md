@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-22** (the anchor gate re-measured every citation here and in the stage ledger:
-**400 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**409 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 5 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -58,7 +58,7 @@ flowchart TD
     SW --> C["Chat · agents-view · App:2564"]
     SW --> K["Knowledge · learn-view · App:2522"]
     K -.-> AP["Approvals is a TAB of Knowledge — components/learn/LearnView.tsx:64"]
-    NR["NavRail — imported App:130, NEVER rendered (see correction 5); its AccountRow export IS, App:2650"]:::dead
+    NR["NavRail — imported App:129, NEVER rendered (see correction 5); its AccountRow export IS, App:2735; NAV_RAIL_AUTO_COLLAPSE_PX and NAV_RAIL_EXPANDED_PX are live too"]:::dead
     SM["SurfaceMenuList components/shell/SurfaceMenuList.tsx:135 destination rows — only mount passes hideSurfaces (App:2608; pinned by tests/deadControlsGuard.test.ts:147-150)"]:::dead
     classDef dead stroke-dasharray: 5 5,opacity:.5
 ```
@@ -604,11 +604,21 @@ Three derived memories sit beside the notebook:
   `aiPatternMemory`/`insightKnowledgeBase`. The two frozen fields keep their
   readers and bytes; nothing grows them since `03fc0d5`.
 - **Pattern memory** — `findRelevantTrades` (`PatternMemorySynthesisService.ts:301`)
-  and `synthesizePatternMemory` build the setup's evidence;
-  `generateSynthesizedPromptInjection` is the injected sentence.
-  `calculatePnlR` now uses the canonical nearest target and a corrected
-  exit before estimating, and `generateMandatoryPatternCheck` is the
-  pre-trade gate that refuses a setup with no evidence. `addAttributedInsight` is the one writer of the attributed ledger.
+  is live at three sites (`services/learning/EvidencePackService.ts:264`,
+  `services/learning/MemoryGraph.ts:202`,
+  `services/learning/MemoryRetrievalService.ts:695`).
+  `calculatePnlR` (`PatternMemorySynthesisService.ts:249`) uses the
+  canonical nearest target with a corrected exit before estimating.
+  **The gate half is dead on every trade path.**
+  `generateSynthesizedPromptInjection` (`PatternMemorySynthesisService.ts:589`) has
+  **no caller at all**. `generateMandatoryPatternCheck`
+  (`PatternMemorySynthesisService.ts:882`) is called only by
+  `generatePatternMemoryEnforcementContext` (`PatternMemorySynthesisService.ts:982`),
+  whose only consumers are `tests/patternMemoryGate.test.ts`, and
+  `synthesizePatternMemory` (`PatternMemorySynthesisService.ts:500`) only by those
+  two. So nothing refuses a setup for want of evidence; the live pre-trade gate is
+  `services/trade/proposalGate.ts:152` (`assessPlanShape`).
+  `addAttributedInsight` is the one writer of the attributed ledger.
 
 `utils/netRiskReward.ts` is the cost model behind the ledger's `netR`; the skill
 metadata keeps `grossR`, `netR`, `netRKnown` and `rSampled` separately, because a
@@ -926,24 +936,30 @@ old answer.
 4. Approvals is a **tab** of the Knowledge surface, not a fifth destination. The live
    destination set is exactly `trade | journal | agents (labelled Chat) | learn
    (labelled Knowledge)`.
-5. **`NavRail` is imported and NOT rendered — it is a dead node.** Verified four
-   ways on 2026-10-18: `grep -c NavRail App.tsx` = 18 occurrences and **none is a
-   JSX element**; `grep '<NavRail'` repo-wide matches only `components/shell/NavRail.tsx:140`
-   (its own definition) and `tests/agentsSurface.test.tsx:387` (a test mounting it
-   directly); ESLint reports `App.tsx:130:8 'NavRail' is defined but never used`; and
-   the code says so out loud — `App.tsx:2464` is the comment reading "The
+5. **`NavRail` is imported and NOT rendered — it is a dead node.** Verified three
+   ways (re-anchored 2026-10-23): `grep -c NavRail App.tsx` = 18 occurrences and
+   **none is a JSX element**; `grep '<NavRail'` repo-wide matches only
+   `components/shell/NavRail.tsx:140` (its own definition) and
+   `tests/agentsSurface.test.tsx:410` (a test mounting it directly); and
+   the code says so out loud — `App.tsx:2507` is the comment reading "The
    NavRail is GONE: its five destination rows were the tab strip this redesign was
-   asked to remove". Only the `AccountRow` export is rendered, at `App.tsx:2735`.
+   asked to remove". Only the `AccountRow` export is rendered, at `App.tsx:2735`;
+   `NAV_RAIL_AUTO_COLLAPSE_PX` (`App.tsx:129`, used `:669`/`:672`) and
+   `NAV_RAIL_EXPANDED_PX` (`components/agents/AgentsView.tsx:73`, used `:972`) are
+   the other two live exports, so the file cannot be deleted whole.
+   (The fourth way used to be an ESLint finding on an unused `NavRail` default
+   import. It no longer exists: `App.tsx:129` now imports only the two used symbols,
+   so that import is gone; the proof stands on the three ways above.)
    **An earlier pass of this doc asserted the opposite** ("rendered at App.tsx line 2766") and
-   the mechanism is worth keeping: `App.tsx:2502` passes `onExpandNavRail={…}` and
+   the mechanism is worth keeping: `App.tsx:2545` passes `onExpandNavRail={…}` and
    the rail's expand state is very much alive at `App.tsx:663`, so a grep for `NavRail`
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 400 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 409 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 400 anchors verified, and the gate
+   the gate's own output: these docs state 409 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
