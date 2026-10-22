@@ -33,9 +33,9 @@ Trading source code is modified by this work.
 
 | Phase | Deliverable | Status |
 | --- | --- | --- |
-| 0 | `docs/research/trading-baseline.md` — what August Trading's harness does today, real vs cosmetic | in progress |
-| 1 | `docs/research/<repo>/manifest.tsv` — coverage ledger, every tracked file | pending |
-| 2 | `docs/research/<repo>/shards/<shard>.md` — one subagent per shard, full read | pending |
+| 0 | `docs/research/trading-baseline.md` — what August Trading's harness does today, real vs cosmetic | **DONE** |
+| 1 | `docs/research/<repo>/manifest.tsv` — coverage ledger, every tracked file | **DONE** |
+| 2 | `docs/research/<repo>/shards/<shard>.md` — one subagent per shard, full read | in progress (93 shards dispatched) |
 | 3 | `docs/research/<repo>/ARCHITECTURE.md` — synthesis + coverage summary (lead verifies) | pending |
 | 4 | `docs/research/TRADING-IMPROVEMENTS.md` — proposals with verdicts and a ranked top-5 | pending |
 
@@ -57,3 +57,21 @@ binary, out-of-scope language).
 - **2026-10-22** — Phase 0 started. Recovered the Stage 3 plan from git history
   (`docs/plans/stage3-arrangement.md`, last present at `dd34ea87`); it is deleted from
   the working tree but is the governing plan for the harness work.
+- **2026-10-22** — **Phase 0 DONE.** Seven readers covered the harness; 343 numbered
+  features classified. Deliverables: `docs/research/trading-baseline.md` (the
+  synthesis) plus the seven evidence files in `docs/research/baseline/`.
+  Headline: **256 features REAL, 61 dead/cosmetic, 29 partial.** The largest single
+  finding is that the analysis pipeline assembles the trader's context and discards
+  it — `enhancedPrompt` is written 4× and read once, by a `devLog`
+  (`hooks/useAnalysisPipeline.ts:1168-1213`); all three sends use `promptToSend`.
+- **2026-10-22** — **Phase 1 DONE.** Coverage ledger built for all three repos
+  (`manifest.tsv`, `shard-sizes.tsv`, and a per-shard work order
+  `shards/<shard>.files.txt`). 39,979 tracked files across 93 shards.
+- **2026-10-22** — **Working-tree incident.** Six source files were modified during
+  the baseline pass (a `startedAt` work-clock field). This is a research-only task, so
+  the change was reverted with `git checkout --` and preserved verbatim as
+  `docs/research/REVERTED-unintended-edits.patch`. The tree is clean of source
+  changes; only `docs/research/` is new.
+- **2026-10-22** — **Phase 2 dispatched.** One reader per shard, concurrency 6, each
+  writing `shards/<shard>.md` and `shards/<shard>.status.tsv` under the shared brief
+  `docs/research/SHARD-BRIEF.md`.
