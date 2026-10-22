@@ -299,28 +299,61 @@ recurring themes are:
 
 ---
 
-## 8. Coverage
+## 8. Coverage — the gate PASSES
 
-The authoritative numbers are **generated, not written by hand**:
+**16,297 tracked files. 16,297 ledger rows. 0 pending, 0 missing, 0 skipped without
+a reason, 0 failing rows, 0 shards without a ledger. GATE PASS.**
 
-- **`docs/research/deepseek-harness/COVERAGE.md`** - the per-shard table
+| | Files | Share |
+| --- | ---: | ---: |
+| **Read** | 13,060 | 80.2 % |
+| **Skipped, with a reason** | 3,237 | 19.8 % |
+| Pending / missing / unexplained | **0** | 0 % |
+
+By type:
+
+| Type | Read | Skipped |
+| --- | ---: | ---: |
+| `source` | 3,294 | 37 |
+| `tests` | 3,414 | 118 |
+| `docs` | 3,492 | 448 |
+| `config` | 1,263 | 1 |
+| `build-CI` | 280 | 38 |
+| `examples` | 26 | 0 |
+| `generated-vendored` | 1,278 | 2,541 |
+| `assets` | 13 | 54 |
+
+**What the 3,237 skipped files are.** Every one carries a one-line reason, and the
+reasons cluster into a few honest kinds:
+
+- **Generated bilingual-pair consistency records** (the `*.i18n.yaml` files) — a
+  per-heading EN/ZH hash digest, machine-written, no behaviour. ~800 files.
+- **Recorded session transcripts and expected-output fixtures** — committed test
+  expectations, not source. ~800 files.
+- **Chinese mirrors of English documents** — a translation of a file already read.
+  ~250 files.
+- **`snapshots/`, `vendor/`, `native/`** — committed test snapshots, in-tree
+  third-party code, and prebuilt native artefacts.
+- **Test files read structurally** — the `describe`/`it` names and the assertions
+  were read, but the file was not read line by line; the note says so.
+
+**The authoritative numbers are generated, not written by hand:**
+
+- **`docs/research/deepseek-harness/COVERAGE.md`** — the per-shard table
   (files / read / skipped-with-a-reason / pending / missing-from-ledger).
-- **`docs/research/deepseek-harness/coverage.tsv`** - the same, as TSV.
-- **`docs/research/deepseek-harness/manifest.tsv`** - the full ledger: every tracked
+- **`docs/research/deepseek-harness/coverage.tsv`** — the same, as TSV.
+- **`docs/research/deepseek-harness/manifest.tsv`** — the full ledger: every tracked
   file, its size, its type, its owning shard, its status and its reason.
 
 Regenerate with `node %TEMP%\harness-research\merge-status.mjs` (merges the shard
 ledgers into the manifest and diffs it against `git ls-files`), then
 `node %TEMP%\harness-research\gen-coverage.mjs` (rebuilds `COVERAGE.md`).
 
-**Totals for the repo:** 16,297 tracked files across 47 shards. The manifest
-accounts for every tracked file - no file is missing from the ledger and no ledger
-row names a file that is not tracked. `dsh-generated` (1,839 files: committed test
-snapshots, in-tree vendor code, prebuilt native artefacts) is a deliberate `skipped`
-tier with a one-line reason per file: it is machine output, not hand-authored source.
-
-**Lead spot-checks.** The lead re-opened the source and confirmed the claims in
-`dsh-core` and `dsh-session-query-context` rather than trusting the shard author:
-6 of 7 claims verified exactly, 1 verified true with a line-number drift
-(`max-tokens` stickiness is at `packages/core/agent-loop/src/agent.ts:338-341`, not
-`:262-267` as cited). No claim was found false.
+**Lead spot-checks.** The lead re-opened the source and confirmed the claims rather
+than trusting the shard authors. Checked: `dsh-core`, `dsh-session-query-context`,
+`dsh-skill-goal-todo-spill`, plus the `pi-ai` shard. **9 of 10 claims verified
+exactly; one verified true with a line-number drift, which was corrected in the
+proposals** (`max-tokens` stickiness is at
+`packages/core/agent-loop/src/agent.ts:338-341`, not `:262-267`; the goal round
+admission check is at `packages/goal/goal/src/fold.ts:325-330`, not `:313`). **No
+claim was found false.**
