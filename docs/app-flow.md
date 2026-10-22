@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-22** (the anchor gate re-measured every citation here and in the stage ledger:
-**397 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**400 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 5 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -45,7 +45,7 @@ new detailed inventory of memory, skills, tools and the learning loop; the stage
 flowchart TD
     H["index.html"] --> I["index.tsx — error handlers first :28 :48"]
     I --> S["StrictMode › ErrorBoundary › ToastProvider › App :73-79"]
-    S --> SP["splash leaves #root index.tsx:91-97 — boot-probe.cjs:119 waits for it gone, smoke.spec.ts:54 :140 assert count 0"]
+    S --> SP["splash leaves #root index.tsx:91-96 — boot-probe.cjs:119 waits for it gone, smoke.spec.ts:54 :140 assert count 0"]
     SP --> APP["App.tsx:209 — surfaces render from App.tsx:2543 down"]
     APP --> US["useSurface hooks/useSurface.ts:15 key, :16 valid set"]
     US --> UR["useSurfaceRouter hooks/useSurfaceRouter.ts:75 openJournal, :101 hash read, :159 serialize"]
@@ -80,7 +80,7 @@ flowchart TD
     subgraph DOCK["Chart AI dock — inside Trade, TradeView.tsx:1124"]
         DC["ChatComposer.tsx:147 :222"] --> D2{"chatTurnRunner.send chatTurnRunner.ts:838 — branches on seats"}
         D2 -->|solo| SO["runSeatTurn called services/trade/chatTurnRunner.ts:1033, defined :619"]
-        D2 -->|panel, 2+ seats| PN["per-seat services/trade/chatTurnRunner.ts:1226 + createDebateMailbox :1154 + planPanelTurn :1166"]
+        D2 -->|panel, 2+ seats| PN["per-seat services/trade/chatTurnRunner.ts:1226 + createDebateMailbox :1154 + planPanelTurn :1174"]
         D2 -->|Full analysis button| FA["runFullAnalysis components/trade/TradeChatPanel.tsx:561 → the SAME App:1607 wrapper — it holds the session run slot and writes no row"]
     end
     SO --> TT["runToolTurn — services/trade/toolTurn.ts:131"]
@@ -164,7 +164,7 @@ duplicate or hide it.
   while the trader reads the other, and a rAF writer fires zero times there —
   the same defect `FadingText` records.
 - The thread exists before the first write. A solo dock turn resolves its
-  conversation at send (`turnConversationId`, `services/trade/chatTurnRunner.ts:883`)
+  conversation at send (`turnConversationId`, `services/trade/chatTurnRunner.ts:891`)
   through `ensureDockTurnConversation` (`App.tsx:1819`), handed to the runner as
   `onSyncConversation`, which adopts the unused blank conversation or mints one
   and makes it active — a session that never had a thread used to keep its
@@ -859,9 +859,9 @@ old answer.
 | 13 | AgentsView.send → analysis branch | `onAnalyze components/agents/AgentsView.tsx:792` → `handleRunAnalysisFromChat App.tsx:1665` — the dock's `onRunAnalysis` reaches the SAME wrapper |
 | 14 | dock Full analysis → the run slot | `runFullAnalysis components/trade/TradeChatPanel.tsx:561` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
 | 15 | ChatComposer → chatTurnRunner.send | key `Enter components/trade/panels/ChatComposer.tsx:147` / button `:201` → `services/trade/chatTurnRunner.ts:838` |
-| 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:1033` (definition `runSeatTurn services/trade/chatTurnRunner.ts:623`) |
+| 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:1033` (definition `runSeatTurn services/trade/chatTurnRunner.ts:631`) |
 | 17 | runSeatTurn → the ONE turn executor | `runToolTurn toolTurn.ts:131` → `streamChatWithDeskTools :174` → `DeskToolsService` → `streamChatRequest` |
-| 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1226` · `:1154` · `:1166` |
+| 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1234` · `:1154` · `:1174` |
 | 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `systemPromptFor components/trade/TradeChatPanel.tsx:466` = the blocks below, assembled at `TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:488` |
 | 20 | every dock turn → chatStore | `mutate services/trade/chatStore.ts:361` · `beginRun services/trade/chatStore.ts:508` |
 | 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useBotThread hooks/useAnalysisPipeline.ts:1333`, anything else runs the tool turn `:1384`; the ensemble flag and the roster it fed are gone (2026-10-19) |
@@ -940,10 +940,10 @@ old answer.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 397 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 400 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 397 anchors verified, and the gate
+   the gate's own output: these docs state 400 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -996,10 +996,10 @@ old answer.
    Qualifying the citations that had no symbol
    of their own is what found
    six numbers that were right-shaped and wrong: `runSeatTurn` is called at
-   `services/trade/chatTurnRunner.ts:1037`, `createDebateMailbox` at
-   `services/trade/chatTurnRunner.ts:1154`, `planPanelTurn` at
-   `services/trade/chatTurnRunner.ts:1166`, the dock's `send` at
-   `services/trade/chatTurnRunner.ts:838`, `runFullAnalysis` at
+   `services/trade/chatTurnRunner.ts:1045`, `createDebateMailbox` at
+   `services/trade/chatTurnRunner.ts:1162`, `planPanelTurn` at
+   `services/trade/chatTurnRunner.ts:1174`, the dock's `send` at
+   `services/trade/chatTurnRunner.ts:846`, `runFullAnalysis` at
    `components/trade/TradeChatPanel.tsx:561`, and `MAX_PLANS_PER_RUN` at
    `services/trade/automationTurn.ts:70`. The pass also moved four surface anchors
    that pointed inside a prop list onto the guard that mounts the surface:
