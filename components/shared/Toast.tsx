@@ -52,8 +52,11 @@ export const useToastActions = () => {
             addToast({ type: 'success', title, message, action, duration: action ? 15_000 : undefined }),
         error: (title: string, message?: string, action?: Toast['action']) =>
             addToast({ type: 'error', title, message, action, duration: 8000 }),
-        warning: (title: string, message?: string) =>
-            addToast({ type: 'warning', title, message }),
+        // The optional third argument is a per-toast reading budget, not a new
+        // tone: a warning that carries two sentences of recovery instructions
+        // cannot be read in the 5s a one-line "no provider configured" gets.
+        warning: (title: string, message?: string, durationMs?: number) =>
+            addToast({ type: 'warning', title, message, ...(durationMs ? { duration: durationMs } : {}) }),
         info: (title: string, message?: string) =>
             addToast({ type: 'info', title, message }),
     }), [addToast]);

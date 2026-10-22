@@ -8,10 +8,13 @@
  *
  * Fire-once: every armed watch fires AT MOST once and is then removed by the
  * service — a "ready to trade" alert that re-pings every tick is a bug.
- * Unlike plan levels (advisory touches on an existing plan), a trigger whose
- * condition is ALREADY true at arm time fires on its first tick: the model
- * just asked to be told the moment X is true — if X is true now, that moment
- * is now.
+ * Unlike plan levels (advisory touches on an existing plan), a watch is a
+ * promise about the FUTURE: `watchService.arm` REFUSES a price condition the
+ * live tape already satisfies, because firing it on the tick it was armed told
+ * the trader something they already knew and spent a model turn saying so. A
+ * TIME wake is different — its deadline is in the future by construction
+ * (`inMinutes ≥ 1`), and one whose minute has already passed on an app reopen
+ * still owes the model its turn.
  */
 
 import { phtClock } from '../../utils/timezone';

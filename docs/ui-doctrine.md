@@ -76,21 +76,23 @@ ancestor and inflates to fill the surface.
       new literal: name the role, or add the step deliberately and say why.
       `2xs` (9px) and `micro` (8px) are the dense-data floors and should not be
       reached for without a reason.
-- [ ] Geist Variable for UI, DM Serif Text **only** for hero/display moments,
-      JetBrains Mono for data.
-- [ ] **The model's answer is prose, and prose is set in a READING serif**
-      (2026-10-21, E-54; the face corrected in E-55). The answer is the one
-      surface in the app that is READ rather than operated, and the reference
-      sets it in a serif; the trader's own message, the work card, the chips
-      and the composer stay in the UI sans. Code blocks keep their monospace
-      and the table keeps its tabular figures, so the serif never touches a
-      number's alignment.
-- [ ] **A reading serif is a TEXT face, not the display face** (E-55). DM Serif
-      Text has ONE weight: set a long analysis in it and every bold level
-      becomes a synthetic bold — a smear, not an emphasis. The answer is set in
-      **Newsreader** (`--font-reading`, `font-reading`); DM Serif Text stays
-      the hero/brand face it was always meant to be. Two serifs, two jobs:
-      `font-serif` to say a name, `font-reading` to be read.
+- [ ] Geist Variable for UI, JetBrains Mono for data. **No serif face ships**
+      (owner ruling, 2026-10-22): every screen is the UI stack. `font-serif` and
+      `font-reading` survive as ROLES, both resolving to it — do not delete them,
+      because Tailwind's own `font-serif` default would then quietly bring
+      Georgia back wherever the role is named.
+- [ ] **The model's answer is prose, and prose has its own role** (2026-10-21,
+      E-54; the face superseded by the ruling above). The answer is the one
+      surface in the app that is READ rather than operated, so it is set through
+      `AnswerBody` → `font-reading`, while the trader's own message, the work
+      card, the chips and the composer stay in the interface chrome. Code blocks
+      keep their monospace and the table keeps its tabular figures, so the
+      answer's typography never touches a number's alignment.
+- [ ] **A role is not a size.** `display` (base + 12) and `hero` (base + 18) are
+      what a heading earns; the two serif jobs E-55 separated ("`font-serif` to
+      say a name, `font-reading` to be read") are now one face and two roles —
+      the distinction that still matters is which surface is read and which is
+      operated.
 - [ ] Every numeric readout is `font-mono tabular-nums`. A price, P&L or R that
       changes width every tick is a layout shift you can see.
 - [ ] Tables over tiles whenever the data is tabular — win rates, skills, the

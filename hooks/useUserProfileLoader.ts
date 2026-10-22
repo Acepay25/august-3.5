@@ -86,7 +86,14 @@ export interface UseUserProfileLoaderArgs {
     setActiveUsername: (u: string) => void;
     setExistingUsernames: React.Dispatch<React.SetStateAction<string[]>>;
     setIsUserModalOpen: (open: boolean) => void;
-    toast: { info: (msg: string) => void; error: (title: string, message?: string) => void };
+    /** The three tones this hook actually uses, from `useToastActions()`.
+     *  `warning` carries the data-loss alert: a title + body pair, because the
+     *  title slot renders bold at body size. */
+    toast: {
+        info: (msg: string) => void;
+        error: (title: string, message?: string) => void;
+        warning: (title: string, message?: string, durationMs?: number) => void;
+    };
     /** Owned by the caller because the autosave hook is constructed BEFORE
      *  this one and must read the same flag. Set true only once a profile's
      *  data has actually loaded; the autosave refuses to write otherwise. */
@@ -456,13 +463,15 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 if (isStale()) return;
                 if (!integrityCheck.valid && integrityCheck.tradeCountChanged) {
                     logIntegrityEvent('DATA_LOSS_DETECTED', integrityCheck);
-                    const message = ` Data Issue Detected\n\n` +
-                        `Your trade log appears to have fewer trades than before ` +
-                        `(${integrityCheck.previousTradeCount} → ${integrityCheck.currentTradeCount}).\n\n` +
-                        (integrityCheck.hasBackups && integrityCheck.latestBackup
-                            ? `A backup with ${integrityCheck.latestBackup.tradeCount} trades is available from ${new Date(integrityCheck.latestBackup.timestamp).toLocaleString()}.\n\nGo to Settings → Export Data to restore from backup.`
-                            : 'Consider exporting your data regularly to prevent future data loss.');
-                    toast.info(message);
+                    // Title + body, not one blob in the TITLE slot: the title
+                    // renders bold at body size, so the whole warning came out
+                    // as a five-line block of bold text over the chart. And
+                    // `warning` is the honest tone — cyan `info` reads as a
+                    // status update, and this says trades went missing.
+                    const counts = `Your trade log has fewer trades than before (${integrityCheck.previousTradeCount} → ${integrityCheck.currentTradeCount}).`;
+                    toast.warning('Data issue detected', integrityCheck.hasBackups && integrityCheck.latestBackup
+                        ? `${counts} A backup with ${integrityCheck.latestBackup.tradeCount} trades from ${new Date(integrityCheck.latestBackup.timestamp).toLocaleString()} is available — open Settings → Data to restore it.`
+                        : `${counts} No backup holds more, so export your data regularly to prevent future loss.`, 15_000);
                 }
             } else {
                 await resetAppState(username);

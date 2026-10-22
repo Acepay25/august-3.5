@@ -19,10 +19,11 @@
  *     belong to the row you are on.
  *  3. THE DETAIL'S FIELDS ARE LABELLED, and the Details really are a bulleted
  *     list.
- *  4. THE PROSE IS SET IN THE READING FACE. The Summary and the Details are
- *     what the trader READS, so they wear the app's serif (`AnswerBody`, the
+ *  4. THE PROSE IS SET IN THE READING ROLE. The Summary and the Details are
+ *     what the trader READS, so they wear `font-reading` (`AnswerBody`, the
  *     one home for the model's voice) while the chrome around them stays in
- *     the interface sans.
+ *     the interface sans. The face behind that role is the UI stack — no serif
+ *     ships since the owner's ruling of 2026-10-22; the ROLE is the claim.
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -243,8 +244,8 @@ describe('the memory detail reads as a document', () => {
             </ToastProvider>,
         );
 
-        // The Summary and the Details are what the trader READS: the app's
-        // serif, the one home for the model's voice (AnswerBody).
+        // The Summary and the Details are what the trader READS: the reading
+        // role, whose one home is AnswerBody.
         const summary = screen.getByTestId('memory-topic-summary');
         expect(summary.innerHTML).toContain('font-reading');
         const details = await screen.findByTestId('memory-topic-details');

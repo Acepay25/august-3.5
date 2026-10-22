@@ -400,7 +400,15 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             if (name === 'watch_price') {
                 const { watch, error } = parsePriceWatch(args, { symbol: turn.symbol, makeId, nowMs });
                 if (error || !watch) return receipt(false, `watch_price rejected: ${error ?? 'invalid'}`);
-                watchService.arm(watch);
+                // The canvas mark is only this watch's price when the canvas is
+                // the same coin AND the turn has not drifted off it (canvasNote).
+                // Otherwise the service decides from its own feed.
+                const markHint = !crossCanvas && canvasSymbol === watch.symbol ? drawnPrice : null;
+                if (watchService.arm(watch, markHint) === 'refused') {
+                    // The refusal IS the answer: say what is already true instead
+                    // of arming a trigger that would only announce history.
+                    return receipt(false, `watch_price refused: ${watch.symbol} already satisfies "${watch.condition} ${watch.price}" at the live mark, so there is nothing to watch and no alert will ever come. Tell the user that condition is here NOW (read the tape if you need the fresh number), or arm a level the market has not reached.`);
+                }
                 return receipt(true, `Watch ${watch.id} armed: ${watch.symbol} ${watch.condition} ${watch.price}, expires ${phtClock(watch.expiresAt)} PHT. The harness will wake you with a [HARNESS TRIGGER] the first time it holds — then it lapses. Tell the user you are watching for it.`);
             }
             const { wake, error } = parseTimeWake(args, { symbol: turn.symbol, makeId, nowMs });

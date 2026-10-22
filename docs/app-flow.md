@@ -29,7 +29,8 @@ sections B and C moved again when stage 19 deleted the engine.
 tier, one disclosure, the settled tool trail, the one jump control and the agent
 detail reader; E-53 made the wire audit visible; E-54 gave the answer its reading
 voice; E-55 moved the work card, skills catalogue and memory surfaces onto the
-reference's grammar and added the reading serif. The same period added one
+reference's grammar and added the reading serif (that FACE is gone — the owner's
+ruling of 2026-10-22 kept the reading ROLE and pointed it at the UI stack). The same period added one
 context window resolved once, automatic compaction with the last user turn
 pinned, a per-window output budget and an honest refusal when nothing fits, the
 provider's real cause chain, and a failure row in both homes. Section G is the
@@ -188,8 +189,11 @@ the rows beneath it cannot disagree about how many calls the turn ran —
 `ToolActivityRow`/`pairToolRows` renders one paired call→result row per call
 (never two lines per call), and `Disclosure` is
 the ONE native `<details>` used by the thinking row, tool output, automation
-reasoning and Settings' Advanced section. The answer itself is `AnswerBody` — a
-reading serif — while the trader's own bubble stays in the UI sans.
+reasoning and Settings' Advanced section. The answer itself is `AnswerBody` — its own
+reading role, `font-reading` — while the trader's own bubble stays in the
+interface chrome. The role is not a face any more: since the owner's ruling of
+2026-10-22 no serif ships, and `--font-reading` and `--font-serif` both resolve
+to the UI stack.
 
 The transcript data has two shapes on purpose. `Message.toolEvents` + `toolIds`
 are the settled trail and the payload ids for each line; `liveToolEvents` is the
