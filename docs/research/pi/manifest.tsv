@@ -1,5 +1,5 @@
 path	size	type	owner-shard	status	note
-.gitattributes	480	config	pi-repo-root	pending	
+.gitattributes	480	config	pi-repo-root	read	Line-ending policy: LF by default, CRLF forced for .bat/.cmd/.ps1, LF for .sh, -whitespace for archived .diff artifacts, binary declarations for image/font/archive types.
 .github/APPROVED_CONTRIBUTORS	3858	build-CI	pi-scripts-ci	pending	
 .github/ISSUE_TEMPLATE/bug.yml	1399	build-CI	pi-scripts-ci	pending	
 .github/ISSUE_TEMPLATE/config.yml	174	build-CI	pi-scripts-ci	pending	
@@ -18,9 +18,9 @@ path	size	type	owner-shard	status	note
 .github/workflows/pr-gate.yml	5183	build-CI	pi-scripts-ci	pending	
 .github/workflows/publish-model-catalog.yml	5585	build-CI	pi-scripts-ci	pending	
 .github/workflows/remove-inprogress-on-close.yml	881	build-CI	pi-scripts-ci	pending	
-.gitignore	698	config	pi-repo-root	pending	
+.gitignore	698	config	pi-repo-root	read	Node and tooling ignores plus five policy-bearing entries: the gitignored generated model data (packages/ai/src/providers/data/), published HF session corpora, Bun build output, compaction results and agent scratch (todo.md, plans/). .env ignored.
 .husky/pre-commit	1553	build-CI	pi-scripts-ci	pending	
-.npmrc	34	config	pi-repo-root	pending	
+.npmrc	34	config	pi-repo-root	read	Two supply-chain lines: save-exact=true and min-release-age=2, which blocks npm from resolving any package published in the last 2 days.
 .pi/extensions/import-repro.ts	12938	source	pi-scripts-ci	pending	
 .pi/extensions/prompt-url-widget.ts	8487	source	pi-scripts-ci	pending	
 .pi/extensions/redraws.ts	609	source	pi-scripts-ci	pending	
@@ -38,18 +38,18 @@ path	size	type	owner-shard	status	note
 .pi/skills/github-work.md	1327	docs	pi-scripts-ci	pending	
 .pi/skills/interactive-testing.md	930	docs	pi-scripts-ci	pending	
 .pi/skills/release.md	4812	docs	pi-scripts-ci	pending	
-AGENTS.md	8648	docs	pi-repo-root	pending	
-CONTRIBUTING.md	5033	docs	pi-repo-root	pending	
-LICENSE	1069	docs	pi-repo-root	pending	
-README.md	10635	docs	pi-repo-root	pending	
-SECURITY.md	4227	docs	pi-repo-root	pending	
-biome.json	1006	config	pi-repo-root	pending	
-flake.lock	1073	config	pi-repo-root	pending	
-flake.nix	1398	build-CI	pi-repo-root	pending	
-nix/model-catalog.json	92	config	pi-repo-root	pending	
-nix/package.nix	5467	source	pi-repo-root	pending	
-package-lock.json	202174	generated-vendored	pi-repo-root	pending	generated: package-manager lockfile
-package.json	4912	config	pi-repo-root	pending	
+AGENTS.md	8648	docs	pi-repo-root	read	The agent-facing constitution (8.6 KB, read in full): conversational style rules, code-quality rules including erasable-syntax-only TypeScript and no backward compatibility unless asked, the check-vs-test command policy, dependency and lockfile policy, git safety for concurrent agent sessions, PR review without moving the worktree, changelog format and attribution, and an explicit override clause.
+CONTRIBUTING.md	5033	docs	pi-repo-root	read	Human-facing contribution gate: pi's core is minimal and anything that does not belong in the core should be an extension; you must understand your code; all new-contributor issues and PRs are auto-closed until a maintainer replies lgtm/lgtmi; npm run check and ./test.sh must both pass; changelog entries are maintainer-only; AI is explicitly not trusted to triage issues.
+LICENSE	1069	docs	pi-repo-root	read	MIT licence, Copyright 2025 Mario Zechner. Confirms licence only.
+README.md	10635	docs	pi-repo-root	read	Product contract: ships powerful defaults but skips features like sub-agents and plan mode; no built-in permission system (containerisation offered instead); the seven-package monorepo table; supply-chain hardening list; the local-package consumption workflow; standalone binary builds; the ask that users publish OSS sessions to Hugging Face.
+SECURITY.md	4227	docs	pi-repo-root	read	Trust model: the local user account and its writable files are inside pi's trust boundary; no sandbox and no permission system by design; prompt injection and malicious model output declared out of scope and unfixable; private reporting via security@earendil.com or a GitHub Security Advisory.
+biome.json	1006	config	pi-repo-root	read	Lint and format config: tabs, indent width 3, line width 120; noExplicitAny and noNonNullAssertion off; an explicit include allowlist that excludes the generated model files; one custom grit plugin for model-type comparison.
+flake.lock	1073	config	pi-repo-root	read	Nix lockfile pinning two nixpkgs inputs (nixos-unstable and the older nixos-26.05-darwin branch) with narHashes. Small, read in full.
+flake.nix	1398	build-CI	pi-repo-root	read	Flake entry point: four build targets, x86_64-darwin special-cased onto the older darwin nixpkgs branch because unstable dropped Intel macOS; packages, apps and a default overlay output.
+nix/model-catalog.json	92	config	pi-repo-root	read	92 bytes, one field: a sha256 revision of the typed model catalog. This single hash is used as both the fetch URL segment and the fetchurl integrity hash.
+nix/package.nix	5467	source	pi-repo-root	read	Load-bearing: a two-stage Nix derivation that builds and npm packs every workspace package then installs from install-lock with local tarball overrides; content-addressed model-catalog fetch; deliberate PATH ordering in the wrapper (Pi's own node appended, the user's node and Pi's fd/ripgrep/clipboard preferred); an installCheck that force-loads native prebuilds so a silently disabled feature fails the build.
+package-lock.json	202174	generated-vendored	pi-repo-root	skipped	Generated npm lockfile (202 KB, 6451 lines, lockfileVersion 3) - tier 3, not read line by line. Confirmed on disk and via its head (root entry with the workspace list and exactly-pinned dev deps) and tail (packages/tui and packages/telemetry workspace entries); the human-meaningful source of the same facts is the root package.json.
+package.json	4912	config	pi-repo-root	read	Monorepo manifest: the eight-step check gate chain (biome --write, pinned-deps, runtime-deps, ts-imports, entry-graphs, install-lock, tsc --noEmit, browser-smoke) which does NOT run tests; an eleven-package cd-chain build; version and publish scripts; exactly pinned dev deps and a global protobufjs override.
 packages/agent/CHANGELOG.md	31030	docs	pi-agent-env	pending	
 packages/agent/README.md	21449	docs	pi-agent-env	pending	
 packages/agent/examples/mcp-codemode/main.ts	1980	examples	pi-agent-env	pending	
@@ -581,44 +581,44 @@ packages/chord/test/types.test.ts	1826	tests	pi-chord	pending
 packages/chord/test/variants.test.ts	6140	tests	pi-chord	pending	
 packages/chord/test/websocket.test.ts	6138	tests	pi-chord	pending	
 packages/chord/tsconfig.build.json	209	config	pi-chord	pending	
-packages/codemode/CHANGELOG.md	6332	docs	pi-codemode-mcp	pending	
-packages/codemode/README.md	23582	docs	pi-codemode-mcp	pending	
-packages/codemode/examples/cloudflare/README.md	1046	examples	pi-codemode-mcp	pending	
-packages/codemode/examples/cloudflare/agent/src/index.ts	1866	examples	pi-codemode-mcp	pending	
-packages/codemode/examples/cloudflare/agent/wrangler.jsonc	626	examples	pi-codemode-mcp	pending	
-packages/codemode/examples/cloudflare/sandbox/src/index.ts	368	examples	pi-codemode-mcp	pending	
-packages/codemode/examples/cloudflare/sandbox/wrangler.jsonc	586	examples	pi-codemode-mcp	pending	
-packages/codemode/package.json	1690	config	pi-codemode-mcp	pending	
-packages/codemode/src/cloudflare-modules.d.ts	791	source	pi-codemode-mcp	pending	
-packages/codemode/src/cloudflare.ts	3834	source	pi-codemode-mcp	pending	
-packages/codemode/src/declarations.ts	14574	source	pi-codemode-mcp	pending	
-packages/codemode/src/identifier.ts	478	source	pi-codemode-mcp	pending	
-packages/codemode/src/index.ts	1614	source	pi-codemode-mcp	pending	
-packages/codemode/src/portable.ts	1584	source	pi-codemode-mcp	pending	
-packages/codemode/src/runtime/execution.ts	21932	source	pi-codemode-mcp	pending	
-packages/codemode/src/runtime/host.ts	3716	source	pi-codemode-mcp	pending	
-packages/codemode/src/runtime/inline.ts	5566	source	pi-codemode-mcp	pending	
-packages/codemode/src/runtime/prelude-source.ts	19905	source	pi-codemode-mcp	pending	
-packages/codemode/src/runtime/protocol.ts	3906	source	pi-codemode-mcp	pending	
-packages/codemode/src/runtime/remote.ts	11352	source	pi-codemode-mcp	pending	
-packages/codemode/src/runtime/vm.ts	13944	source	pi-codemode-mcp	pending	
-packages/codemode/src/runtime/worker.ts	1560	source	pi-codemode-mcp	pending	
-packages/codemode/src/source.ts	4661	source	pi-codemode-mcp	pending	
-packages/codemode/src/types.ts	10691	source	pi-codemode-mcp	pending	
-packages/codemode/src/wasm.ts	1283	source	pi-codemode-mcp	pending	
-packages/codemode/test/declarations.test.ts	10507	tests	pi-codemode-mcp	pending	
-packages/codemode/test/deterministic.test.ts	17279	tests	pi-codemode-mcp	pending	
-packages/codemode/test/fixtures/raw-worker.ts	448	tests	pi-codemode-mcp	pending	
-packages/codemode/test/fixtures/worker-process-exit.ts	1423	tests	pi-codemode-mcp	pending	
-packages/codemode/test/portable.test.ts	5767	tests	pi-codemode-mcp	pending	
-packages/codemode/test/sandbox.test.ts	34253	tests	pi-codemode-mcp	pending	
-packages/codemode/test/source.test.ts	3320	tests	pi-codemode-mcp	pending	
-packages/codemode/test/worker-lifetime.test.ts	8544	tests	pi-codemode-mcp	pending	
-packages/codemode/tsconfig.build.json	337	config	pi-codemode-mcp	pending	
-packages/codemode/vitest.config.ts	298	source	pi-codemode-mcp	pending	
-packages/coding-agent/.gitignore	12	config	pi-repo-root	pending	
-packages/coding-agent/CHANGELOG.md	654662	docs	pi-repo-root	pending	
-packages/coding-agent/README.md	4080	docs	pi-repo-root	pending	
+packages/codemode/CHANGELOG.md	6332	docs	pi-codemode-mcp	read	Release history 0.99.0→1.4.0; documents the breaking worker-lifetime change, the removed MCP preamble, and the output-limit fixes.
+packages/codemode/README.md	23582	docs	pi-codemode-mcp	read	Full package README: sandbox matrix, Store, source format, Cloudflare deployment, declarations, deterministic runs, result kinds.
+packages/codemode/examples/cloudflare/README.md	1046	examples	pi-codemode-mcp	read	Two-Worker Cloudflare example: sandbox Worker + agent Session Durable Object, local wrangler dev and deploy order.
+packages/codemode/examples/cloudflare/agent/src/index.ts	1866	examples	pi-codemode-mcp	read	Example agent Worker: Session Durable Object owning tools, RemoteCodemodeSandbox pointing at a separate sandbox Worker by session id.
+packages/codemode/examples/cloudflare/agent/wrangler.jsonc	626	examples	pi-codemode-mcp	read	Wrangler config binding the sandbox class via script_name so the VM runs in another isolate.
+packages/codemode/examples/cloudflare/sandbox/src/index.ts	368	examples	pi-codemode-mcp	read	One-file sandbox Worker re-exporting CodemodeSandboxDurableObject, with a 404 fetch handler.
+packages/codemode/examples/cloudflare/sandbox/wrangler.jsonc	586	examples	pi-codemode-mcp	read	Sandbox Worker config: workers_dev false, preview_urls false, cpu_ms 60000 kept above the interrupt budget.
+packages/codemode/package.json	1690	config	pi-codemode-mcp	read	Manifest: six export entries (., /declarations, /source, /portable, /cloudflare, /worker), one dependency (quickjs-wasi 3.6.2), engines node>=22.19.0.
+packages/codemode/src/cloudflare-modules.d.ts	791	source	pi-codemode-mcp	read	Ambient declarations for cloudflare:workers and a */quickjs.wasm pattern so the repo needs no Workers type dependency.
+packages/codemode/src/cloudflare.ts	3834	source	pi-codemode-mcp	read	Cloudflare entry: compiled QuickJS wasm export, createInlineCodemodeSandbox, and CodemodeSandboxDurableObject with server-side max limits.
+packages/codemode/src/declarations.ts	14574	source	pi-codemode-mcp	read	JSON Schema → TypeScript declaration renderer, incl. constraint tags, $ref expansion, budget-driven degradation to unknown.
+packages/codemode/src/identifier.ts	478	source	pi-codemode-mcp	read	toCodemodeIdentifier: maps a tool name to a legal JS identifier by replacing invalid characters with _.
+packages/codemode/src/index.ts	1614	source	pi-codemode-mcp	read	Main entry barrel: re-exports the declarations renderer, sandboxes, constants, source parser, and the type surface.
+packages/codemode/src/portable.ts	1584	source	pi-codemode-mcp	read	Node-free entry: InlineCodemodeSandbox, RemoteCodemodeSandbox, CodemodeSandboxBase and the shared type/protocol surface.
+packages/codemode/src/runtime/execution.ts	21932	source	pi-codemode-mcp	read	Host side shared by all three sandboxes: tool table, deadline, abort, call records, output, store writes, deterministic start()/deliver() protocol.
+packages/codemode/src/runtime/host.ts	3716	source	pi-codemode-mcp	read	Worker-thread launcher: one fresh Worker + QuickJS VM per execution, SharedArrayBuffer interrupt flag, acquireWorker/onWorkerStarted admission control.
+packages/codemode/src/runtime/inline.ts	5566	source	pi-codemode-mcp	read	Inline launcher for runtimes without worker threads: interrupt-budget accounting replaces the host deadline while a script computes.
+packages/codemode/src/runtime/prelude-source.ts	19905	source	pi-codemode-mcp	read	The JavaScript prelude evaluated inside the VM: built-in lockdown, tools/console/globals proxies, store/load, output and image validation, store limits.
+packages/codemode/src/runtime/protocol.ts	3906	source	pi-codemode-mcp	read	Host↔VM message contract (call/output/done/crash/started/idle) and the JSON-only value crossing rule.
+packages/codemode/src/runtime/remote.ts	11352	source	pi-codemode-mcp	read	Remote (RPC) launcher + serveCodemodeRemote: output batching, stop replies, budget/memory capping on the server side.
+packages/codemode/src/runtime/vm.ts	13944	source	pi-codemode-mcp	read	Drives one QuickJS VM: prelude evaluation, bridge, job draining with interrupt polling, deterministic clock/PRNG/UTC, fingerprint.
+packages/codemode/src/runtime/worker.ts	1560	source	pi-codemode-mcp	read	Worker-thread entry point: starts the VM, relays messages, never disposes (the host terminates the worker).
+packages/codemode/src/source.ts	4661	source	pi-codemode-mcp	read	parseCodemodeSource: the // @options: first-line directive, its two supported fields, strict errors, and the Lark grammar export.
+packages/codemode/src/types.ts	10691	source	pi-codemode-mcp	read	The public type surface: CodemodeTool, CodemodeResult (ok/error union), error kinds, run options, store writes, call records.
+packages/codemode/src/wasm.ts	1283	source	pi-codemode-mcp	read	loadQuickJSWasm: compile-once-per-path cache of the QuickJS wasm module, with retry after failure.
+packages/codemode/test/declarations.test.ts	10507	tests	pi-codemode-mcp	read	Pins schemaToType rendering: unions, sorted one-line objects, constraint tags, Pydantic nullable branches, draft-04 exclusive bounds, ref expansion, budget fallback.
+packages/codemode/test/deterministic.test.ts	17279	tests	pi-codemode-mcp	read	Runs the whole deterministic-run suite against both the worker and remote backends: clock, seed, seq ordering, fingerprint, during, abort.
+packages/codemode/test/fixtures/raw-worker.ts	448	tests	pi-codemode-mcp	read	Test double for the real worker: posts arbitrary host payloads so bridge-malformed messages can be exercised.
+packages/codemode/test/fixtures/worker-process-exit.ts	1423	tests	pi-codemode-mcp	read	Process-level fixture for abort/timeout/close, printing the result kind and the real process exit timing.
+packages/codemode/test/portable.test.ts	5767	tests	pi-codemode-mcp	read	Pins the inline interrupt budget and the remote sandbox: tool execution locality, output batching, server-side caps, abort→stop, remote failures.
+packages/codemode/test/sandbox.test.ts	34253	tests	pi-codemode-mcp	read	The big matrix: every behaviour test runs against worker, inline and remote backends (script errors, tools, store, globals, limits, escape hatches, broken bridge).
+packages/codemode/test/source.test.ts	3320	tests	pi-codemode-mcp	read	Pins parseCodemodeSource: line-number preservation, first-line-only options, and each rejection message.
+packages/codemode/test/worker-lifetime.test.ts	8544	tests	pi-codemode-mcp	read	Pins the #10748 lifetime rules: admission denial, release on constructor failure, settle-without-waiting-for-exit, real Node/Bun process exit timing.
+packages/codemode/tsconfig.build.json	337	config	pi-codemode-mcp	read	Build tsconfig: outDir dist, rootDir src, and the ambient cloudflare-modules.d.ts added via files because exclude does not apply to files.
+packages/codemode/vitest.config.ts	298	source	pi-codemode-mcp	read	Vitest config: node environment, globals, dot reporter, and the "source" export condition so tests import workspace source.
+packages/coding-agent/.gitignore	12	config	pi-repo-root	read	One line: *.bun-build. The Bun compile output is not tracked.
+packages/coding-agent/CHANGELOG.md	654662	docs	pi-repo-root	read	654 KB, 6367 lines, ~130 releases. Read in sections (head 300, lines 100-430, lines 965-1160, tail 120) plus a complete index of every New Features bullet and every version header - roughly 1100 of 6367 lines sampled, NOT every line. This is the shard's richest design-history source: compaction triggers and budget, prompt-cache discipline, the provider retry taxonomy, session durability and atomic JSONL publication, truncation receipts, skill on-demand loading, diagnostics-as-return-values.
+packages/coding-agent/README.md	4080	docs	pi-repo-root	read	npm-facing README: source-run instructions (npm install --ignore-scripts then ./pi-test.sh, callable from any directory) and the OSS session-sharing ask. The real docs ship in packages/coding-agent/docs/.
 packages/coding-agent/docs/cli-integration.md	6285	docs	pi-coding-agent-examples-docs	pending	
 packages/coding-agent/docs/cli.md	17188	docs	pi-coding-agent-examples-docs	pending	
 packages/coding-agent/docs/codemode.md	14585	docs	pi-coding-agent-examples-docs	pending	
@@ -803,9 +803,9 @@ packages/coding-agent/examples/sdk/12-full-control.ts	2031	examples	pi-coding-ag
 packages/coding-agent/examples/sdk/13-session-runtime.ts	1889	examples	pi-coding-agent-examples-docs	pending	
 packages/coding-agent/examples/sdk/14-codemode-mcp.ts	1991	examples	pi-coding-agent-examples-docs	pending	
 packages/coding-agent/examples/sdk/README.md	4790	examples	pi-coding-agent-examples-docs	pending	
-packages/coding-agent/install-lock/package-lock.json	51399	generated-vendored	pi-repo-root	pending	generated: package-manager lockfile
-packages/coding-agent/install-lock/package.json	317	config	pi-repo-root	pending	
-packages/coding-agent/package.json	3873	config	pi-repo-root	pending	
+packages/coding-agent/install-lock/package-lock.json	51399	generated-vendored	pi-repo-root	skipped	Generated npm lockfile (51 KB, 1507 lines, lockfileVersion 3) - the installer's pinned transitive tree; tier 3, not read line by line. Confirmed via head (install-lock root with one dependency), tail (yaml@2.9.0) and a 40-of-~150 sample of its node_modules keys to establish what it pins. The human-meaningful source is the root package.json plus the sibling install-lock/package.json.
+packages/coding-agent/install-lock/package.json	317	config	pi-repo-root	read	The installer's lock root: private, one dependency pinned to the exact release 1.4.0, the same protobufjs override, engines node >= 22.19.0.
+packages/coding-agent/package.json	3873	config	pi-repo-root	read	Published package manifest: piConfig.configDir as data so rebranding needs no code change; only two exports (the library and a separate ./rpc-entry); the files array ships dist, docs, examples, schemas and the CHANGELOG; notable deps proper-lockfile, quickjs-wasi, typebox, jiti, undici.
 packages/coding-agent/schemas/keybindings.schema.json	12839	config	pi-coding-agent-examples-docs	pending	
 packages/coding-agent/schemas/models.schema.json	46008	config	pi-coding-agent-examples-docs	pending	
 packages/coding-agent/schemas/settings.schema.json	19841	config	pi-coding-agent-examples-docs	pending	
@@ -1422,9 +1422,9 @@ packages/coding-agent/test/utilities.ts	9828	tests	pi-coding-agent-test	pending
 packages/coding-agent/test/version-check.test.ts	4535	tests	pi-coding-agent-test	pending	
 packages/coding-agent/test/virtual-models.test.ts	19040	tests	pi-coding-agent-test	pending	
 packages/coding-agent/test/windows-shell-config.test.ts	1313	tests	pi-coding-agent-test	pending	
-packages/coding-agent/tsconfig.build.json	647	config	pi-repo-root	pending	
-packages/coding-agent/tsconfig.examples.json	484	config	pi-repo-root	pending	
-packages/coding-agent/vitest.config.ts	1183	source	pi-repo-root	pending	
+packages/coding-agent/tsconfig.build.json	647	config	pi-repo-root	read	Publishing tsconfig: emits to ./dist and its paths map points at sibling packages' dist/*.d.ts (published shapes) - the opposite direction to the root tsconfig, which maps to source.
+packages/coding-agent/tsconfig.examples.json	484	config	pi-repo-root	read	Typechecks examples/**/*.ts against source paths with noEmit, so the examples are compile-checked, not merely linted.
+packages/coding-agent/vitest.config.ts	1183	source	pi-repo-root	read	Package test config: offline by default via PI_OFFLINE=1 with per-test allowNetwork() opt-in; silent passed-only output; unstubEnvs; CI-aware reporters; photon-node excluded from the dep optimizer; aliases for both current and legacy package names.
 packages/durable/CHANGELOG.md	30821	docs	pi-durable	pending	
 packages/durable/README.md	64918	docs	pi-durable	pending	
 packages/durable/docs/spec.md	303145	docs	pi-durable	pending	
@@ -1893,9 +1893,9 @@ packages/tui/test/wheel-scroll.test.ts	2207	tests	pi-tui	pending
 packages/tui/test/word-navigation.test.ts	6244	tests	pi-tui	pending	
 packages/tui/test/wrap-ansi.test.ts	9914	tests	pi-tui	pending	
 packages/tui/tsconfig.build.json	175	config	pi-tui	pending	
-pi-test.bat	352	source	pi-repo-root	pending	
-pi-test.ps1	1805	source	pi-repo-root	pending	
-pi-test.sh	1697	source	pi-repo-root	pending	
+pi-test.bat	352	source	pi-repo-root	read	Twelve-line Windows shim: probes for powershell.exe, runs pi-test.ps1 with -NoProfile -ExecutionPolicy Bypass, and propagates %ERRORLEVEL%.
+pi-test.ps1	1805	source	pi-repo-root	read	Windows source-run script: --no-env unsets 36 provider and cloud credential env vars, and the resolver path is converted to a file URL with [System.Uri].AbsoluteUri because --import takes a module specifier, not a path.
+pi-test.sh	1697	source	pi-repo-root	read	POSIX source-run script: the same --no-env credential stripping; the resolver path is converted via node pathToFileURL because raw paths containing # ? or % corrupt the specifier; ${ARGS[@]+...} keeps an empty argument list safe under set -u.
 scripts/agent-treeshake-smoke-entry.ts	504	build-CI	pi-scripts-ci	pending	
 scripts/auto-pi.sh	2242	build-CI	pi-scripts-ci	pending	
 scripts/biome-check.mjs	4759	build-CI	pi-scripts-ci	pending	
@@ -1982,7 +1982,7 @@ scripts/update-model-catalog-pin.mjs	6270	build-CI	pi-scripts-ci	pending
 scripts/update-model-catalog-pin.test.mjs	7247	tests	pi-scripts-ci	pending	
 scripts/update-source-imports-to-ts.sh	689	build-CI	pi-scripts-ci	pending	
 scripts/use-local-packages.mjs	1711	build-CI	pi-scripts-ci	pending	
-test.sh	2610	source	pi-repo-root	pending	
-tsconfig.base.json	554	config	pi-repo-root	pending	
-tsconfig.json	3433	config	pi-repo-root	pending	
-vitest.base.ts	4241	source	pi-repo-root	pending	
+test.sh	2610	source	pi-repo-root	read	The hermetic test entry point: mktemp sandbox, env -i allowlist environment (HOME/TMP/XDG redirected, git prompt-hijacking disabled, AWS_EC2_METADATA_DISABLED, PI_NO_LOCAL_LLM, proxy CA passed through), and a guarded cleanup that refuses to delete an unverified directory and flips the exit status to 1.
+tsconfig.base.json	554	config	pi-repo-root	read	Shared compiler contract: strict, erasableSyntaxOnly (no enum, parameter properties or namespace), verbatimModuleSyntax, allowImportingTsExtensions with rewriteRelativeImportExtensions, declaration plus maps and inline sources.
+tsconfig.json	3433	config	pi-repo-root	read	Root typecheck project: noEmit, NodeNext, and a paths map resolving every workspace specifier including subpaths to src/; include covers packages/*/src, packages/*/test and two example trees.
+vitest.base.ts	4241	source	pi-repo-root	read	Shared Vitest base: workspaceSourcePaths maps every package specifier to its SOURCE index and the alias table derives from that map, so a test can never pass against a stale build.
