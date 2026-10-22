@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useUserProfileLoader, UseUserProfileLoaderArgs } from '../hooks/useUserProfileLoader';
 import * as dbService from '../services/infrastructure/dbService';
+import { checkDataIntegrity } from '../services/validation/DataIntegrityService';
 import { PriceAlertService } from '../services/ui/PriceAlertService';
 import { OutcomeAutopilotService } from '../services/ui/OutcomeAutopilotService';
 import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
@@ -159,7 +160,7 @@ const createMockArgs = (overrides: Partial<UseUserProfileLoaderArgs> = {}): UseU
     setActiveUsername: vi.fn(),
     setExistingUsernames: vi.fn(),
     setIsUserModalOpen: vi.fn(),
-    toast: { info: vi.fn(), error: vi.fn() },
+    toast: { info: vi.fn(), error: vi.fn(), warning: vi.fn() },
     ...overrides,
 });
 
@@ -266,6 +267,42 @@ describe('useUserProfileLoader', () => {
         expect(args.profileReadyRef.current).toBe(false);
         // The trader is told, rather than losing data silently.
         expect(args.toast.error).toHaveBeenCalled();
+    });
+
+    /**
+     * The data-loss warning is READ, so it cannot be a paragraph in the TITLE
+     * slot: the title renders bold at body size, which is how a five-line block
+     * of bold text came to sit over the trade screen (owner bug report,
+     * 2026-10-22 — the whole message was passed as `toast.info(message)`).
+     * Short title, the detail as the body, the warning tone rather than cyan
+     * `info`, and a reading budget longer than a one-liner gets.
+     */
+    it('a detected data loss warns with a short title and the detail as the body', async () => {
+        vi.mocked(dbService.getUserProfile).mockResolvedValueOnce({
+            username: 'victim', conversations: [], tradeLog: [], tradeSummaries: [], settings: {},
+        } as unknown as Awaited<ReturnType<typeof dbService.getUserProfile>>);
+        vi.mocked(checkDataIntegrity).mockResolvedValueOnce({
+            valid: false, issues: [], tradeCountChanged: true,
+            previousTradeCount: 4, currentTradeCount: 0,
+            hasBackups: true,
+            latestBackup: { tradeCount: 4, timestamp: Date.parse('2026-10-22T12:11:25') },
+        } as unknown as Awaited<ReturnType<typeof checkDataIntegrity>>);
+
+        const args = createMockArgs();
+        const { result } = renderHook(() => useUserProfileLoader(args));
+        await act(async () => {
+            await result.current.loadUserData('victim');
+        });
+
+        expect(args.toast.info, 'no whole-message blob in a title slot').not.toHaveBeenCalled();
+        expect(args.toast.warning).toHaveBeenCalledOnce();
+        const [title, detail, duration] = vi.mocked(args.toast.warning).mock.calls[0];
+        expect(title).toBe('Data issue detected');
+        expect(title).not.toContain('\n');
+        expect(detail).toContain('4 → 0');
+        expect(detail).toContain('Settings → Data');
+        expect(detail).not.toContain('\n\n');
+        expect(duration).toBe(15_000);
     });
 
     it('workspace bootstrap runs once on mount — changed hook args must not reload the profile', async () => {

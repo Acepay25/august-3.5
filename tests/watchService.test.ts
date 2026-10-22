@@ -57,13 +57,25 @@ describe('price watches', () => {
         expect(watchService.list().length).toBe(0);
     });
 
-    it('a condition already true at arm time fires ON THE SPOT (arm evaluates)', () => {
+    it('a condition the tape already satisfies is REFUSED at arm time (stale is not news)', () => {
         const fired = collect();
         watchService.tick('BTCUSDT', 105);   // the feed's last price
-        armPrice({ condition: 'above', price: 100 });
-        expect(fired.length).toBe(1);
-        watchService.tick('BTCUSDT', 105);   // and only once
-        expect(fired.length).toBe(1);
+        const { watch } = parsePriceWatch({ condition: 'above', price: 100 },
+            { symbol: 'BTCUSDT', makeId: () => 'w-already', nowMs: Date.now() })!;
+        expect(watchService.arm(watch!)).toBe('refused');
+        expect(fired.length, 'no alert on the tick it was armed').toBe(0);
+        expect(watchService.list().length, 'and nothing left armed').toBe(0);
+        // The old contract fired here, which is what put two amber
+        // "WATCH … PRINTED …" rows in the dock for `below` levels the mark had
+        // already passed — and spent a full model turn announcing them.
+    });
+
+    it('the caller\'s live mark refuses a watch this symbol\'s feed has never ticked', () => {
+        const { watch } = parsePriceWatch({ condition: 'below', price: 84_482.45, symbol: 'ETHUSDT' },
+            { symbol: 'BTCUSDT', makeId: () => 'w-hint', nowMs: Date.now() })!;
+        expect(watchService.arm(watch!, 82_851)).toBe('refused');
+        // …and with no mark anywhere, the ask is still a real watch.
+        expect(watchService.arm(watch!)).toBe('armed');
     });
 
     it('a below-watch ignores other symbols\' prices', () => {
@@ -121,13 +133,33 @@ describe('cancel + list', () => {
 });
 
 describe('persistence + user scoping', () => {
-    it('armed watches survive a reload (singleton reset, storage kept)', () => {
-        armPrice({ price: 100 });
+    it('a watch still waiting across a reload fires when the tape reaches it', () => {
+        armPrice({ condition: 'above', price: 100 });
         watchService.__resetForTests();
         const fired = collect();
-        watchService.tick('BTCUSDT', 100);
+        // The first mark after the reload does NOT satisfy it — the watch is
+        // genuinely still waiting, so it keeps its promise.
+        watchService.tick('BTCUSDT', 99);
+        expect(fired.length).toBe(0);
+        watchService.tick('BTCUSDT', 100.5);
         expect(fired.length).toBe(1);
+        expect(fired[0].watch.id).toBeDefined();
     });
+
+    it('a watch whose level the first mark after a reload already meets is dropped, not announced', () => {
+        armPrice({ condition: 'above', price: 100 });
+        watchService.__resetForTests();
+        const fired = collect();
+        // The crossing happened while nothing was running. Waking the model now
+        // would report history as news — the owner's ruling on the stale
+        // "WATCH … PRINTED" rows. The cost is explicit: an alert that would
+        // have fired during the closed window does not fire at all.
+        watchService.tick('BTCUSDT', 100);
+        expect(fired.length).toBe(0);
+        expect(watchService.list().length).toBe(0);
+        expect(JSON.parse(localStorage.getItem('trade_watches_v1_alice') ?? '[]').length).toBe(0);
+    });
+
     it('the watch key is per user; a switch reloads instead of leaking', () => {
         armPrice({ price: 100 });
         // Switch users and reload: Bob starts with no watches, and Alice's

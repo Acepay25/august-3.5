@@ -163,16 +163,18 @@
      step that role occupies, so that is what the alias points at. */
 
   /* Type + motion + radii — Minara's chat-v2 numbers: 14px sans over a
-     system stack (Geist), DM Serif Text for display (font-serif resolves
-     here, so existing hero <h1 class="font-serif"> upgrades automatically),
-     12px bubbles / 8px controls / .12s snaps. */
+     system stack (Geist), 12px bubbles / 8px controls / .12s snaps.
+
+     `--font-serif` and `--font-reading` are ROLES, not faces: the owner ruled
+     (2026-10-22) that no serif ships anywhere in this app, so both resolve to
+     the UI stack. They are kept rather than deleted because the JSX names them
+     (`font-serif` on four headings, `font-reading` on the model's answer) and
+     because Tailwind v4 ships its OWN serif default — drop the override and a
+     single stray `font-serif` silently brings Georgia back into a screen the
+     trader is looking at. Restated in AGENTS.md and docs/ui-doctrine.md. */
   --font-sans: 'Geist Variable', 'Inter', system-ui, sans-serif;
-  --font-serif: 'DM Serif Text', Georgia, serif;
-  /* The READING serif (E-55). The model's answer is prose, and a display face
-     has one weight: its bold was a synthetic one, and a long analysis set in a
-     smeared face is not readable. `font-reading` is that face; the display
-     serif above stays the hero/brand face it was always meant to be. */
-  --font-reading: 'Newsreader Variable', 'Newsreader', Georgia, serif;
+  --font-serif: var(--font-sans);
+  --font-reading: var(--font-sans);
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 
   /* ── The UI type scale ───────────────────────────────────────────────────
@@ -198,8 +200,10 @@
      naming them. `lede` is the one step between `base` and `xl` — it is what
      the ten surviving `text-[15px]` literals and the provider-card title were
      drawing, and with no step there the accessibility dial could not reach
-     them. `display`/`hero` are the DM Serif moments the doctrine reserves for
-     hero headings; naming them keeps a 26px/32px literal out of the last two
+     them. `display`/`hero` are the sizes the doctrine reserves for hero
+     headings — the FACES behind those roles are now the UI stack (see the
+     `--font-serif` note above), so what a hero earns is size, not a serif.
+     Naming them keeps a 26px/32px literal out of the last two
      headings in the tree. Exact at the default base (14 + 1 / + 12 / + 18), so
      converting them moved no pixels. */
   --text-ui-lede: calc(var(--ui-font-size) + 1px);
@@ -407,7 +411,9 @@
 }
 
 .splash-wordmark {
-  font-family: 'DM Serif Text', Georgia, serif;
+  /* No family here on purpose: it inherits the UI stack. This rule used to
+     name 'DM Serif Text' directly, which is the one way a serif could come
+     back even with the @theme tokens pointed at sans. */
   font-size: 1.75rem;
   letter-spacing: -0.025em;
   background: linear-gradient(

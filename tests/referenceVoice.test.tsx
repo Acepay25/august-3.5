@@ -1,11 +1,15 @@
 /**
  * The reference's VOICE — the answer is prose, and the row does not shout.
  *
- * The reference (the Claude desktop chat) is a READING surface: the answer
- * is set in a serif, the human's bubble stays in the interface sans, and
- * nothing is stamped above a message. August had all three backwards — the
- * answer wore the UI sans, and every row wore an uppercase monospace stamp
- * with the time printed in it AND in the row's own chips.
+ * The reference (the Claude desktop chat) is a READING surface: the answer has
+ * its own type role, the human's bubble stays in the interface chrome, and
+ * nothing is stamped above a message. August had all three backwards — every
+ * row wore an uppercase monospace stamp with the time printed in it AND in the
+ * row's own chips.
+ *
+ * (The role used to be a serif FACE. The owner ruled on 2026-10-22 that no
+ * serif ships, so `--font-reading` resolves to the UI stack; what these tests
+ * pin is the ROLE and the single home for it, which is the part that drifts.)
  *
  * These are the claims that can be quietly false:
  *
@@ -23,7 +27,7 @@ import ChatTranscriptRow from '../components/shared/ChatTranscriptRow';
 import AnalyzedRow from '../components/shared/AnalyzedRow';
 
 describe('the answer is prose', () => {
-    it('the model\'s answer wears the serif', () => {
+    it('the model\'s answer wears the reading role', () => {
         const { container } = render(
             <ChatTranscriptRow row={{ id: 'a1', role: 'ai', text: 'Bias long above 111k.' }} />,
         );
@@ -34,8 +38,8 @@ describe('the answer is prose', () => {
         const { container } = render(
             <ChatTranscriptRow row={{ id: 'u1', role: 'user', text: 'what is the bias?' }} />,
         );
-        // The human's bubble is interface, not prose: a serif there would put
-        // the trader in the same voice as the model.
+        // The human's bubble is interface, not prose: the reading role there
+        // would put the trader in the same voice as the model.
         expect(container.innerHTML).not.toContain('font-reading');
     });
 });
@@ -94,8 +98,8 @@ describe('one home for the voice', () => {
     });
 
     it('the caller\'s class is added to the base rules, not swapped for them', () => {
-        // A caller that says "this answer is serif" must not lose the size
-        // and the paragraph rhythm every answer shares.
+        // A caller that says "this answer carries the reading role" must not
+        // lose the size and the paragraph rhythm every answer shares.
         const source = readFileSync('components/shared/chatChips.tsx', 'utf8');
         expect(source).toMatch(/\$\{className \?\? ''\}/);
     });

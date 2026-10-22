@@ -19,6 +19,17 @@
  * non-visible ones — before that, a watch armed while the chart pointed at
  * another coin could never see a tick for its symbol and silently expired
  * (Tier-0 #6).
+ *
+ * STALE IS NOT NEWS (owner ruling, 2026-10-22). A price watch whose condition
+ * the tape ALREADY satisfies is refused at arm time rather than fired on the
+ * spot, and a watch hydrated from a previous session whose level is already
+ * met by the FIRST mark seen after the reload is dropped without emitting. Both
+ * cases produced the same complaint: an amber "WATCH … PRINTED …" row and a
+ * whole model turn spent announcing a level the market passed long before
+ * anyone asked. `levelWatchService.arm(plan, priceAtArm)` has refused an
+ * already-dead plan this way all along — this is the same gate on the other
+ * half of the harness. What still fires is a condition that becomes true while
+ * the app is watching it, which is the only one that is actionable.
  */
 
 import { getActiveUsername } from '../../utils/activeUser';
@@ -44,6 +55,11 @@ import { PRICE_POLL_INTERVAL_MS } from './levelWatchService';
 const storageKey = (user: string): string => `${WATCHES_KEY_PREFIX}_${user}`;
 
 let watches = new Map<string, WatchItem>();
+/** Ids read from localStorage rather than armed in this session. Their first
+ *  fresh mark decides whether the level was crossed while nothing was running
+ *  (drop it silently) or whether the watch is still waiting on the tape (let
+ *  it fire normally from then on). */
+const hydrated = new Set<string>();
 let loadedFor = '';
 /** Last price per symbol + when it arrived. The chart feed's tick() only
  *  ever carries the ACTIVE symbol, so a per-symbol map (not one last-price)
@@ -109,6 +125,7 @@ const loadWatches = (): void => {
     if (user === loadedFor) return;
     loadedFor = user;
     watches = new Map();
+    hydrated.clear();
     try {
         const raw = localStorage.getItem(storageKey(user));
         const parsed: unknown = raw ? JSON.parse(raw) : [];
@@ -117,6 +134,7 @@ const loadWatches = (): void => {
             for (const w of parsed) {
                 if (validWatch(w) && !watchExpired(w, nowMs) && (w.kind === 'price' || w.atMs > nowMs - 60_000)) {
                     watches.set(w.id, w);
+                    if (w.kind === 'price') hydrated.add(w.id);
                 }
             }
         }
@@ -166,6 +184,20 @@ const evaluateWatches = (nowMs: number): void => {
         // The price only rides the signal when it's THIS symbol's mark —
         // a cross-symbol number is worse than none.
         const price = priceFor(w.symbol, nowMs);
+        if (hydrated.has(w.id)) {
+            if (price === null) continue;            // still no fresh sight of it
+            hydrated.delete(w.id);                  // THIS is the first one
+            if (watchConditionHolds(w, price, nowMs)) {
+                // The level was already met when the app came back, so the
+                // crossing happened while nothing was running: history, not
+                // news. Dropped without emitting — and a watch that SURVIVES
+                // this first sight keeps its promise, which is the whole point
+                // of the flag.
+                watches.delete(w.id);
+                persist();
+                continue;
+            }
+        }
         if (!watchConditionHolds(w, price, nowMs)) continue;
         watches.delete(w.id);
         persist();
@@ -174,9 +206,18 @@ const evaluateWatches = (nowMs: number): void => {
     syncClock();
 };
 
-/** Arm a parsed watch (chartTriggers.parsePriceWatch / parseTimeWake). */
-export const arm = (w: WatchItem): void => {
+/** Arm a parsed watch (chartTriggers.parsePriceWatch / parseTimeWake).
+ *  `liveMark` is the caller's hint — the desk tool passes the viewed canvas's
+ *  mark when the watch is for that same coin. The service's own feed is the
+ *  authority when the caller has none, because the chart has been ticking all
+ *  session. Returns 'refused' when the condition is already satisfied, in which
+ *  case nothing is armed and nothing will ever fire. */
+export const arm = (w: WatchItem, liveMark: number | null = null): 'armed' | 'refused' => {
     loadWatches();
+    if (w.kind === 'price') {
+        const mark = Number.isFinite(liveMark as number) ? liveMark : priceFor(w.symbol, Date.now());
+        if (mark !== null && watchConditionHolds(w, mark, Date.now())) return 'refused';
+    }
     if (watches.size >= MAX_WATCHES) {
         // Oldest first out — the newest ask is the one the user just made.
         const oldest = [...watches.values()].sort((a, b) => a.createdAt - b.createdAt)[0];
@@ -185,11 +226,12 @@ export const arm = (w: WatchItem): void => {
     watches.set(w.id, w);
     persist();
     syncClock();
-    // A condition that is ALREADY true (e.g. armed above a price already
-    // printing) fires on the spot — "tell me the moment X is true" where X
-    // is true now means: now. Without this a quiet feed (unchanged prints
-    // never re-call tick) could leave it armed-but-already-satisfied.
+    // A TIME wake whose deadline has already passed (an app reopen after the
+    // scheduled minute) still owes the model its turn, so this evaluation stays
+    // — for a PRICE watch it can now only fire on a condition the gate above
+    // just ruled out, which means it is a no-op there.
     evaluateWatches(Date.now());
+    return 'armed';
 };
 
 export const cancel = (id: string): boolean => {
@@ -234,6 +276,7 @@ export const subscribe = (cb: (fired: WatchFired, remaining: WatchItem[]) => voi
  *  reload is simulated). */
 export const __resetForTests = (): void => {
     watches = new Map();
+    hydrated.clear();
     loadedFor = '';
     priceBySymbol = new Map();
     lastPollAttempt.clear();

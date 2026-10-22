@@ -164,8 +164,9 @@ export const ThinkingTierChip: React.FC<{ effort: ReasoningEffort; className?: s
 export const FadingText: React.FC<{ text: string; streaming: boolean; className?: string }> = ({ text, streaming, className }) => (
     <div className={streaming ? 'stream-fade' : undefined}>
         {/* The caller's class is ADDED to the base rules, not swapped for
-            them: a caller that says "this answer is serif" must not lose the
-            size and the paragraph rhythm every answer shares. */}
+            them: a caller that says "this answer carries the reading role"
+            must not lose the size and the paragraph rhythm every answer
+            shares. */}
         <MarkdownContent content={text} className={`!text-ui-base [&_p]:my-1 [&_li]:text-ui-base ${className ?? ''}`} />
     </div>
 );

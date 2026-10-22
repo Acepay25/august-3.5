@@ -7,18 +7,17 @@ import ErrorBoundary from './components/shared/ErrorBoundary';
 import { installNavModalityTracking } from './utils/navModality';
 
 // Self-hosted fonts (offline-capable, no external CDN dependency)
-// Minara-derived type pairing: Geist for UI, DM Serif Text for display
-// (font-serif resolves to it in index.css @theme), JetBrains Mono for data.
+// Geist for UI, JetBrains Mono for data. NO serif ships: the owner ruled
+// (2026-10-22) that every serif face in the app — DM Serif Text for
+// display/hero and Newsreader for the model's answer — goes to the normal UI
+// face. `--font-serif` and `--font-reading` stay as roles in index.css so the
+// four headings and the answer body keep their vocabulary, but both resolve to
+// the sans stack, and a stray `font-serif` cannot resurrect a serif because
+// Tailwind's own default is overridden there.
 // @fontsource/inter imports removed (2026-09-16): Inter sat only as a
 // fallback family string behind Geist Variable in --font-sans; the Geist
 // variable font covers the UI stack.
-// Newsreader is the READING serif (E-55): the model's answer is prose, and a
-// display face has one weight — its "bold" was a synthetic one, and a long
-// analysis set in a smeared face is not readable. DM Serif Text stays the
-// display/hero face it was always meant to be.
 import '@fontsource-variable/geist';
-import '@fontsource/dm-serif-text';
-import '@fontsource-variable/newsreader';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 import '@fontsource/jetbrains-mono/700.css';
