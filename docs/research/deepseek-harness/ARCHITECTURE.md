@@ -145,7 +145,7 @@ abstraction: the provider interface is `list()` + `get()`, and everything else
 "how do you run a long-lived loop reliably". The driver fires **only at whole-agent
 idle, only for an *armed* goal, only after a fail-closed durability checkpoint, and
 only once the agent's descendants have settled**. The round allowance is a **durable
-admitted-round count derived from the log** (`packages/goal/goal/src/fold.ts:313`),
+admitted-round count derived from the log** (`packages/goal/goal/src/fold.ts:325-330`),
 so it survives a restart. At the cap the round exits with a **stable code**
 (`round-limit`), and there is **no auto-restart after a cancellation**.
 
