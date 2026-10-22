@@ -1,9 +1,9 @@
 # deepseek-harness :: dsh-client-sidebar-workspace
 
-**Files in shard:** 677 (read: TBD, skipped with reason: TBD — finalised in §6)
+**Files in shard:** 677 (read: 663, skipped with reason: 14)
 **What this shard covers:** the whole `packages/client/*` surface of the DeepSeek Harness monorepo: the browser↔Host wire layer (`connection`), a session-scoped file upload service, the locale/runtime-state plugin, the client module (plugin) manifest system, product analytics, the resources registry, five directory/file pickers, "open in app", the plugin renderer and its session provider, and the four sidebar shells — `ui-sidebar` (root), `ui-sidebar-right` (the tabbed right-hand rail), `ui-sidebar-browser`, `ui-sidebar-documentpreview`, `ui-sidebar-files`, `ui-sidebar-terminal` — plus the `ui-workspace` session/workspace browser. It is almost entirely **client-side chrome**: how the Harness presents an agent host to a human, how it survives reloads, and how it keeps many long-lived panels alive without a database.
 
-> **Reading method note (honesty statement).** Tier-1 `source` files were read in full, batched through `Get-Content -Raw`. Tier-2 bulk (tests, configs, small READMEs) was read in batches too; for the ~430 test files the batch printed each file's `describe`/`it`/`test` titles (the assertions' names are what a test *pins*) and, where a title alone was ambiguous, the file head. The Chinese READMEs (`README.zh.md`) were read as their heading tree plus the matching English section — they are translation siblings and carry no extra decisions. `README.i18n.yaml` files are generated bilingual-pair hash records; they were read in full and carry no runtime behaviour. Binary `.xlsx` fixtures were **not** read line by line (Tier 3, listed in §1.4).
+> **Reading method note (honesty statement).** Tier-1 `source` files were read in full, batched through `Get-Content -Raw`. Tier-2 bulk (tests, configs, small READMEs) was read in batches too; for the ~430 test files the batch printed each file's `describe`/`it`/`test` titles (the assertions' names are what a test *pins*) and, where a title alone was ambiguous, the file head. The Chinese READMEs (`README.zh.md`) were read as their heading tree plus the matching English section — they are translation siblings and carry no extra decisions. `README.i18n.yaml` files are generated bilingual-pair hash records; they were read in full and carry no runtime behaviour. Binary `.xlsx` fixtures were **not** read line by line (Tier 3, listed at the end of §1).
 
 ---
 
@@ -1171,4 +1171,408 @@ This is the load-bearing package of the shard: it is the only thing that lets a 
 | `packages/client/ui-sidebar-documentpreview/tests/fixtures/excel-opc/*.xlsx` (6 files), `tests/fixtures/excel-xml/*.xlsx` (8 files) | **Skipped** — binary XLSX fixtures; confirmed on disk by size and ZIP signature, not read line by line. |
 | `packages/client/ui-sidebar-documentpreview/tests/fuzz/README.md`, `README.zh.md`, `README.i18n.yaml`, `excel-worker.client.ts`, `generate.py`, `run.client.ts` | The fuzz harness for the pinned ExcelJS patch: a corpus generator, a runner and a worker harness, with the README explaining the independent-writer regressions the patch must survive. |
 
-<!-- APPEND -->
+### 1.14 `packages/client/ui-sidebar-files` — the workspace file tree (30 files)
+
+#### Tier 1 — load-bearing source
+
+##### `packages/client/ui-sidebar-files/src/client/FilesBody.tsx`
+- **Purpose:** "The file tree's body: the session's workspace root, listed one level at a time."
+- **Key abstractions:** `FilesBodyProps` (`:31`), `orderEntries(entries)` (`:48`), `failureLine(t, failure)` (`:61`), `FilesBody` (`:140`).
+- **Non-obvious design decisions:**
+  - **Everything the tree keeps lives in its store, keyed by tab; everything it asks for goes through its injected face** (`:3`): "The component itself only decides what to draw for each absolute path and what a click means."
+  - **Three click meanings** (`:6`): a directory toggles, a file opens through the owner's `tabActions` for a `file:` viewer to claim, "and anything else is shown but refuses to open."
+  - **Directories first, then natural, case-insensitive name** (`:48`): dotfiles are shown like any other entry.
+  - **The header uses the shared PathLabel for the root**, followed by reload and workspace-directory actions — the header row sits *under* the strip.
+
+##### `packages/client/ui-sidebar-files/src/client/face.ts`
+- **Purpose:** "The tree's asynchronous half: listing directories into the store."
+- **Non-obvious design decisions:**
+  - **The component never awaits anything** (`:4`): it calls `start` / `refresh` / `toggle`; the face performs the listing and writes the outcome through the store's own actions — "the Slot-standard `inject` shape, so the session id is resolved by the framework and the write set stays the store's."
+  - **The tree keys every level by ABSOLUTE path and hands the endpoint that same absolute path** (`:8`); the endpoint answers with the directory's **workspace-relative** path, and the adapter drops it.
+  - **The root is subscribed to before it is listed** (the test "subscribes to the root before listing it and waits…"), so a change during the first read is not lost.
+
+##### `packages/client/ui-sidebar-files/src/client/store.ts`
+- **Purpose:** what the tree keeps — one `DirLevel` per expanded directory, keyed by tab.
+- **Key abstractions:** `DirLevel` (`:24`), `LevelState = 'unloaded'|'loading'|'loaded'|'failed'` (`:32`), `FilesTabState` (`:43`), `FilesState` (`:56`), `createFilesStore()` (`:93`).
+- **Non-obvious design decisions:** **an independent instance per call** (so two tabs never share); a tab is **seeded at its root with the root expanded and nothing loaded**; a failed listing keeps the level's previous entries visible.
+
+##### `packages/client/ui-sidebar-files/src/client/directory-node.ts`
+- **Purpose:** "Watch and read ownership for the Files panel's expanded directory tree" — one open directory and its active child nodes.
+- **Key abstraction:** `class DirectoryNode` (`:5`).
+- **Non-obvious design decisions:** **one watch per expanded directory**; an invalidation arriving **between read completion and refresh cleanup** is re-read (a race the suite pins); the watch is released asynchronously and the release is awaited.
+
+##### `packages/client/ui-sidebar-files/src/client/definition.tsx`, `FilesTitle.tsx`, `locales.ts`, `index.ts`, `src/index.ts`
+- **Purpose:** the type declaration (kind `files`, **band `builtin`, no patterns** — "The type is a page, not a viewer: it claims no address"), the chip title (a 16 px `FileTypeIcon` folder sheet before the label), the dictionaries, the wiring, and the inert Host half.
+
+#### Tier 2 — bulk
+
+| File | What it is / what it pins |
+| --- | --- |
+| `packages/client/ui-sidebar-files/README.md` | The file-tree contract. Decides: the type claims no address and is reached from the guide; `workspace.files` opens or focuses the file page in the focused pane, Desktop defaults to Mod+P, Linux Web leaves it unbound; the tree's root is the Session's `cwd`; **filesystem roots such as `/` and Windows drive roots are valid tree roots**; every level is keyed by absolute path and a child's path is its parent's joined with the entry name by `/`; the ordering rule; the three row kinds (`directory` toggles, `file` opens `dsh-resource://file/session/<sessionId>/<encoded path relative to the root>`, `other` is shown greyed and not clickable "so the directory is reported whole"); a reopened directory re-lists and restores still-present expanded descendants while **displayed entries remain cached while collapsed**; the root and expanded directories refresh from **direct-entry watches**; a level the endpoint truncated is flagged. |
+| `packages/client/ui-sidebar-files/README.zh.md` | Chinese sibling; heading tree read (11 headings). |
+| `packages/client/ui-sidebar-files/README.i18n.yaml` | Generated bilingual-pair hash record; read in full. |
+| `packages/client/ui-sidebar-files/locale/en.json`, `locale/zh.json` | `meta.title` (+ a Chinese description). |
+| `packages/client/ui-sidebar-files/package.json` | Manifest; five injected client packages. |
+| `packages/client/ui-sidebar-files/tsconfig.json`, `tsdown.config.ts` | The client project (13 references) and the shared build helper. |
+| `packages/client/ui-sidebar-files/src/client/FilesBody.module.css`, `src/css-modules.d.ts` | Styling (read in bulk: "The pane body is a block scroller with a definite height, so the tree takes…") and the CSS-module shim. |
+| `packages/client/ui-sidebar-files/tests/apply.client.spec.ts` | 4 cases: files opened for the command target and refused without a selected Session; the Host Loader entry inert; the type registered. |
+| `packages/client/ui-sidebar-files/tests/definition.client.spec.ts` | 3 cases: registered under its kind and id and claiming no address; one guide entry at order 10. |
+| `packages/client/ui-sidebar-files/tests/directory-node.client.spec.ts` | 14 cases: an invalidation between read completion and refresh cleanup re-read; one watch per expanded directory. |
+| `packages/client/ui-sidebar-files/tests/face.client.spec.ts` | 16 cases: a child of the exact root key (`/`, `C:/`, `C:\`, `/work/app/`); the root subscribed before it is listed. |
+| `packages/client/ui-sidebar-files/tests/files-body.client.spec.tsx` | 19 cases: the effective refresh accelerator; the message when the Session has no workspace directory. |
+| `packages/client/ui-sidebar-files/tests/files-title.client.spec.tsx` | 1 case: the folder sheet before the title text. |
+| `packages/client/ui-sidebar-files/tests/store.client.spec.ts` | 11 cases: an independent instance per call; a tab seeded at its root; a failed listing shown. |
+| `packages/client/ui-sidebar-files/tests/watch.client.spec.ts` | 5 cases: the requested directory opened, `ready` accepted and changes forwarded **without accepting them**; no stream for an already-watched directory. |
+| `packages/client/ui-sidebar-files/tests/mount.client.tsx`, `scripted-list.client.ts`, `scripted-watch.client.ts` | The harness: a real store instance over a scripted listing, and deferred reads paired with independently controlled watch streams and asynchronous release barriers. |
+
+### 1.15 `packages/client/ui-sidebar-right` — the right-hand docking column (52 files)
+
+#### Tier 1 — load-bearing source
+
+##### `packages/client/ui-sidebar-right/src/client/service.ts` (34 KB — read structurally: leading comment + export index)
+- **Purpose:** the navigation controller `ctx.sidebarRight` — "the face exposes operations only: no layout snapshot, no operation log, no lookup by address."
+- **Non-obvious design decisions (all recorded in the README and the file's header):**
+  - **Every action follows the same shape** (README "State"): mint the ids the intent needs → ask a kit planner which operations carry it out → record them → assign the session's whole surface back. "No action edits a layout in place, which is what keeps the kit's pure functions the only thing that computes one."
+  - **The mint counter lives IN the surface** (README "State"): "operations embed the ids they create, so replaying from the same initial state reproduces the same tree."
+  - **`openResource` / `openTab` both run as ONE history entry**; the navigation record happens **outside** the layout history, with a stepped `revision`.
+  - **The panel expands when content opens** (README): "the panel expands, because content the user cannot see is not opened."
+  - **A resource tab showing the same (kind, contentId) is focused wherever it sits** unless `revealIfOpened: false`; ordinary page tabs always deduplicate within the target pane.
+  - **`preferNewPane: true`** first asks the target pane to split "under the normal two-pane and room rules", then falls back; `replaceTab` takes precedence and disables it.
+  - **An address no type claims, or a kind nothing registered, THROWS** — "that is a wiring mistake, not a user error."
+  - **Commands act on the on-screen Session** and "with no Session on screen, or before the runtime mints its store, they throw rather than write into a surface nobody draws."
+  - **`mounted` is derived from the Session selection and `ctx.layout.panelInfo` and changes BEFORE React renders the change that causes it** (README `ctx.sidebarRight`).
+
+##### `packages/client/ui-sidebar-right/src/client/stores.ts`
+- **Purpose:** the per-session surface store — the recorded sequence, the layout, the identity counter.
+- **Non-obvious design decisions:** **after every action the kit's settle planner keeps the expanded surface populated** — a docked pane whose last tab left is merged away, and an emptied root pane receives the default page. **A collapsed surface holds no such backfill** (README "State").
+
+##### `packages/client/ui-sidebar-right/src/client/tab-registry.ts`
+- **Purpose:** the tab-type registry `ctx.sidebarRightTabs` — recognition, ranking, claiming.
+- **Non-obvious design decisions:** the ranking is **`extension` band → `builtin` → `fallback`**, then by the **length of the matched pattern**, then by registration order; `canOpen` removes a candidate; the bands are **string literals** "so a type in another package needs no runtime import from here"; a pattern containing `:` matches the whole address, one without matches the URI's path at any depth ignoring case; **a `kind` carries at most one `builtin` and one `extension`** and any other collision throws; **a second registration of an `id` throws**.
+
+##### `packages/client/ui-sidebar-right/src/client/tab-domain.ts`, `tab-info.ts`, `tab-inventory.ts`, `session-view.ts`, `session-views.ts`, `persistence.ts`, `focus.ts`, `shortcuts.ts`, `labels.ts`, `locales.ts`, `index.ts`
+- **Purpose:** the Tab domain (a branded occurrence id, navigation, an abort signal and bound actions per (Session, tab id)); the `useTabInfo()` hook factory; the stable open-tab inventory; the per-Session View; the layout persistence (`dsh.sidebar-right.v1.<sessionId>`, validated before adoption, **an invalid payload clears only its Session key**); the DOM focus/target resolution; the shortcut commands; the accessible labels; the dictionaries; and the plugin wiring.
+- **Non-obvious design decisions (README "The Tab domain" / "State"):** **only record removal or plugin unload aborts the signal** — closing the sidebar and switching Sessions retain records, while undo restores a *new* occurrence; `tab.actions` always target their own Session; **`tab.visible` distinguishes bodies from titles and excludes background Sessions**, while foreground floating tabs remain visible when the sidebar closes; a close handler that throws **preserves the tab**; **collapse, presentation changes and plugin disposal do NOT invoke close handlers**; a stored layout is restored **before tab bodies render**; **undo history stays in memory and resets on reload**; **other windows' storage writes do not overwrite this window's live membership**; `sidebarRight.openTabs` publishes stable metadata and **startup discovery reads the layout keys without mounting dormant content**.
+
+##### `packages/client/ui-sidebar-right/src/client/contract/params.ts`, `contract/seed.ts`, `contract/slots.ts`
+- **Purpose:** the typed navigation parameters (two declaration-merged maps, one keyed by resource type, one by tab kind), the guide's identity and the default-page seed, and the four extension seats.
+- **Non-obvious design decisions:** **the unions are spelled as indexed accesses over a record rather than as `A | B`** (`:14`) — "in a program where no package has augmented a map, both sides of such a union resolve to `undefined`, which the type-aware lint reads as a duplicated constituent." The four seats each have a stated reason to exist (`:4`).
+
+##### `packages/client/ui-sidebar-right/src/client/shell/SidebarRight.tsx`, `RightbarRoot.tsx`, `ExpandButton.tsx`, `close-focus.ts`, `tabs/guide/*`
+- **Purpose:** the panel and the guide.
+- **Non-obvious design decisions (README "Presentations" / "The guide"):** **normal and fullscreen share the same content tree**, so switching does not remount tabs; **below 768 px the panel opens fullscreen automatically**; the panel has **no header row** — its two controls ride the kit's chrome seat at the far end of the top-right pane's tab strip; **only the chips give way in a narrow pane**; the guide shows **one entry capsule per `guide` entry** with "the guide has no words of its own"; **at most four entries are listed, and a longer list drops every description**; **a pane holds at most one guide tab**; the product allows **two horizontal panes, initially equal, with divider ratios limited to 20 %–80 %**.
+
+#### Tier 2 — bulk
+
+| File | What it is / what it pins |
+| --- | --- |
+| `packages/client/ui-sidebar-right/README.md` | The Sidebar contract (the densest UI document in the shard). Decides: what the docking kit owns and what this package owns; the two presentations and the `push`/`fullscreen` track table; the Windows Electron fullscreen inset; the panel's two controls; the expand button in the conversation header's corner seat and the fact that "a collapsed Sidebar therefore costs the conversation nothing"; the state model (mint → plan → record → assign; the mint counter makes a recorded sequence replayable; the settle planner's backfill; the guide-as-sole-docked-tab close rule); the persistence key and the validation rule; the `openTabs` inventory; the two-stage extension protocol; the ranking rule; the navigation controller's full surface (`openResource`, `openTab`, `close`, `active`, `isExpanded`, `toggleExpanded`, `toggleFullscreen`, `focus`, `split`, `float`, `dock`, `focusedTarget`, `commandTarget`, `isTargetCurrent`, `_undo`/`_redo` as `@internal`); the Tab domain rules; the guide rules; and eight limitations (browser-local layout, no surface without a session, hard-coded stacking, retained Session deletion, **undo is not exposed**, titles fixed at open time, no content navigation stack). |
+| `packages/client/ui-sidebar-right/README.zh.md` | Chinese sibling; heading tree read (17 headings). |
+| `packages/client/ui-sidebar-right/README.i18n.yaml` | Generated bilingual-pair hash record; read in full. |
+| `packages/client/ui-sidebar-right/locale/en.json`, `locale/zh.json` | `meta.title` (+ a Chinese description). |
+| `packages/client/ui-sidebar-right/package.json` | Manifest; six injected client packages. |
+| `packages/client/ui-sidebar-right/tsconfig.json`, `tsdown.config.ts` | The client project (15 references) and the shared build helper. |
+| `packages/client/ui-sidebar-right/src/client/shell/ExpandButton.module.css`, `shell/SidebarRight.module.css`, `tabs/guide/GuideBody.module.css`, `src/css-modules.d.ts` | Styling read in bulk ("The Sidebar's own chrome only: the panel box, its two strip-end controls, and the placeholder tab bodies. Everything inside the split tree is styled by the docking kit…") and the CSS-module shim. |
+| `packages/client/ui-sidebar-right/tests/apply.client.spec.ts` | 9 cases: the Host Loader entry inert; native close routed through the shortcut service with bridge rejections contained. |
+| `packages/client/ui-sidebar-right/tests/close-focus.client.spec.ts` | 4 cases: focus kept when an open selects no pane; focus moved to the surviving pane after removing a focused page. |
+| `packages/client/ui-sidebar-right/tests/expand-button.client.spec.tsx` | 3 cases: the configured expand binding advertised; the way in offered while the Session has no surface. |
+| `packages/client/ui-sidebar-right/tests/focus.client.spec.ts` | 24 cases: floating pane markup outside a Session owner ignored; a removed editor not restored over focus captured by another component. |
+| `packages/client/ui-sidebar-right/tests/guide-body.client.spec.tsx` | 7 cases: configured guide bindings shown and cleared key labels omitted; the chain rendered with the same tab hook. |
+| `packages/client/ui-sidebar-right/tests/persistence-validation.client.spec.ts` | 5 cases: structurally invalid JSON envelopes discarded while an empty saved Session stays usable; persisted bytes kept independent of the live layout. |
+| `packages/client/ui-sidebar-right/tests/persistence.client.spec.ts` | 3 cases: the current layout restored independently per Session with a fresh undo history; restored records pinned during adoption. |
+| `packages/client/ui-sidebar-right/tests/seat.client.spec.tsx` | 40 cases: duplicate Session Tabs independent and a body preserved through docking and float focus; a collapsed Session Tab retained. |
+| `packages/client/ui-sidebar-right/tests/service.client.spec.ts` | 41 cases: independently opened instances distinct when they return to the same pane; **every write refused while no Session is on screen**. |
+| `packages/client/ui-sidebar-right/tests/session-views.client.spec.ts` | 3 cases: one reference per View until the final committed root of a retired View unmounts. |
+| `packages/client/ui-sidebar-right/tests/stores.client.spec.ts` | 20 cases: a pane split at its edge recorded as one reversible intent. |
+| `packages/client/ui-sidebar-right/tests/tab-domain.client.spec.ts` | 12 cases: a record's address pinned when it first appears, with the occurrence's signal; pinned once per occurrence. |
+| `packages/client/ui-sidebar-right/tests/tab-info.client.spec.tsx` | 3 cases: a navigation rejected before the first layout commit; a retained reader rejected after. |
+| `packages/client/ui-sidebar-right/tests/tab-inventory.client.spec.ts` | 5 cases: collapsed and inactive saved Sessions inventoried **without creating occurrences or resources**; an invalid layout rejected wholesale. |
+| `packages/client/ui-sidebar-right/tests/tab-registry.client.spec.ts` | 28 cases: default-page resolution rejected when the selected kind is not registered; a pattern containing `:` matched against the whole address. |
+
+### 1.16 `packages/client/ui-sidebar-terminal` — interactive shell tabs (34 files)
+
+#### Tier 1 — load-bearing source
+
+##### `packages/client/ui-sidebar-terminal/src/client/face.ts`
+- **Purpose:** the terminal's asynchronous half — the Host-backed terminal model.
+- **Non-obvious design decisions (README "Use this package"):** **the terminal runs in the Session's current working directory**; **a temporary disconnect preserves the screen and offers "Reconnect", without exposing transport diagnostics**; **an exited shell remains visible with its exit code and offers "New terminal"; it never restarts automatically**; **exited terminals count toward the Session limit**.
+
+##### `packages/client/ui-sidebar-terminal/src/client/terminal.tsx`
+- **Purpose:** the xterm body.
+- **Non-obvious design decisions:** the xterm CSS is imported for its side effect and the theme comes from the DSH theme tokens; **a visible writable screen refits the Host grid to the new cell size** when the font changes; "xterm adjusts text toward 4.5:1 cont[rast]".
+
+##### `packages/client/ui-sidebar-terminal/src/client/terminal-theme.ts`, `terminal-cursor.ts`
+- **Purpose:** the theme bridge and the cursor observer.
+- **Non-obvious design decisions:** **indexed, extended and default application colours are preserved while the DSH selection colours update**; the cursor marker is restored after measuring the actual cell background.
+
+##### `packages/client/ui-sidebar-terminal/src/client/TerminalRecovery.tsx`
+- **Purpose:** "A Session header lifetime restores retained Host terminals without saving sidebar layout."
+- **Non-obvious design decisions:** **the plugin coordinates once-per-page recovery; the component only owns an error notice** (`:5`).
+
+##### `packages/client/ui-sidebar-terminal/src/client/TerminalCleanup.tsx`
+- **Purpose:** "Failed background cleanup remains actionable after the originating tab disappears."
+- **Non-obvious design decisions:** **the model owns cleanup; this seat only shows failures and requests retries** (`:5`); the cleanup failures live in a **`shell.overlay`** seat, so they survive the tab's disappearance.
+
+##### `packages/client/ui-sidebar-terminal/src/client/TerminalGuide.tsx`, `TerminalTitle.tsx`, `TerminalIcon.tsx`, `LazyTerminalBody.tsx`, `index.ts`, `locales.ts`, `src/index.ts`
+- **Purpose:** the guide's shell menu ("Discovery runs when the menu opens and does not allocate a terminal. A failed lookup offers Retry in the menu"), the live tab title, the prompt glyph, the **lazy xterm chunk boundary** ("Load xterm only after a terminal body is mounted"), the wiring and the dictionaries. The Host half is inert.
+
+#### Tier 2 — bulk
+
+| File | What it is / what it pins |
+| --- | --- |
+| `packages/client/ui-sidebar-terminal/README.md` | The terminal contract. Decides: the `terminal.new` command creates a **separate** terminal in the focused dock pane, replacing a guide and retaining existing content pages; the guide card right-aligns the effective shortcut **as unboxed text without a duplicate tooltip**; the main button opens the remembered available shell immediately while the arrow opens the installed-shell menu; **discovery runs when the menu opens and does not allocate a terminal**; double-click the tab title to rename; **Take control** makes the current attachment writable when another page owns input; a disconnected screen is preserved with a Reconnect action; **an exited shell never restarts automatically**; **closing or replacing a terminal tab removes it immediately and ends its process in the background**; **cleanup failures have no notification or manual retry action**, and saved unfinished close requests are retried when the plugin starts; **collapsing, switching tabs or Sessions, floating and fullscreen presentation preserve the process**; after reload the sidebar restores its layout and each terminal reconnects to its saved Host identity in the original tab; **collapsed and inactive tabs do not create recovery duplicates**; **Host terminals absent from the saved layout do not reopen automatically and have no UI recovery entry**; a missing saved process shows a localized unavailable panel whose "New terminal" **replaces the unavailable tab in place** — "recovery never creates that replacement automatically"; the theme follows the DSH tokens including system preference and token overrides, and **theme changes preserve the running shell, output, and application OSC colour overrides**; the Settings terminal font size and font are honoured. |
+| `packages/client/ui-sidebar-terminal/README.zh.md` | Chinese sibling; heading tree read (11 headings). |
+| `packages/client/ui-sidebar-terminal/README.i18n.yaml` | Generated bilingual-pair hash record; read in full. |
+| `packages/client/ui-sidebar-terminal/locale/en.json`, `locale/zh.json` | `meta.title` (+ a Chinese description). |
+| `packages/client/ui-sidebar-terminal/package.json` | Manifest; five injected client packages; the `files` list includes `lib/client.*.js` — the split chunks ship. |
+| `packages/client/ui-sidebar-terminal/tsconfig.json`, `tsdown.config.ts` | The client project (15 references) and the shared build helper. |
+| `packages/client/ui-sidebar-terminal/src/client/*.module.css` (4), `src/css-modules.d.ts` | Styling read in bulk; the CSS-module shim. |
+| `packages/client/ui-sidebar-terminal/tests/apply.client.spec.ts` | 4 cases: terminal views registered without recovery or cleanup slots and released on unload. |
+| `packages/client/ui-sidebar-terminal/tests/bundle-split.client.spec.ts` | 1 case: **xterm kept outside the startup bundle** (the chunk split is a shipped invariant). |
+| `packages/client/ui-sidebar-terminal/tests/cleanup.client.spec.tsx` | 2 cases: absent for ordinary closes, a retry offered only after cleanup fails. |
+| `packages/client/ui-sidebar-terminal/tests/recovery.client.spec.tsx` | 4 cases: restore on mount without adding controls during a successful lookup. |
+| `packages/client/ui-sidebar-terminal/tests/terminal-body.client.spec.tsx` | 18 cases: automatic startup with a retry offered only when startup fails; only the terminal screen while connected. |
+| `packages/client/ui-sidebar-terminal/tests/terminal-cursor.client.spec.ts` | 1 case: actual cell backgrounds tracked and the cursor marker restored after measuring. |
+| `packages/client/ui-sidebar-terminal/tests/terminal-guide.client.spec.tsx` | 6 cases: the default shell opened from the main button without querying a menu. |
+| `packages/client/ui-sidebar-terminal/tests/terminal-theme.client.spec.ts` | 5 cases: indexed, extended and default application colours preserved while the DSH selection colours update. |
+
+### 1.17 `packages/client/ui-sidebar` — the left Session column (25 files)
+
+#### Tier 1 — load-bearing source
+
+##### `packages/client/ui-sidebar/src/client/SidebarRoot.tsx`
+- **Purpose:** the left column shell — the wordmark, the New Session capsule, the column toggle, the settings seat and the pointer-revealed scrollbars.
+- **Non-obvious design decisions (from the README and the stylesheet):** **the scrollbars are drawn only while the pointer is inside, and linger on the way out** (the test suite pins it); the column's quiet scrollbar **rebinds the theme indirection pair to transparent** and **leaves the gutter reservation to the scrolling region**; the four upper controls move while the settings seat only fades.
+
+##### `packages/client/ui-sidebar/src/client/HeaderLeadingControls.tsx`
+- **Purpose:** the leading controls of the conversation header (the brand / New Session capsule and the column toggle).
+- **Non-obvious decision:** the frame's `leadingSeat` owns placement — the stylesheet says so explicitly.
+
+##### `packages/client/ui-sidebar/src/client/contract/slots.ts`, `index.ts`, `locales.ts`, `src/index.ts`
+- **Purpose:** the seat declarations, the plugin wiring, the dictionaries and the inert Host half. The README's "slot discipline" section is the governing rule: **the shell declares its child seats and other packages fill them; the shell does not know its occupants**.
+
+#### Tier 2 — bulk
+
+| File | What it is / what it pins |
+| --- | --- |
+| `packages/client/ui-sidebar/README.md` | The left-column contract. Decides: the brand and New Session; the global panel entry; the collapse behaviour (a collapsed Sidebar costs the conversation nothing — no rail, no width, the transcript's scrollbar stays at the column's edge); the macOS Desktop rules; the pointer-revealed scrollbars; the **slot discipline** ("the shell declares the seats; a plugin fills them — the shell never imports an occupant"); and the three named ownership limits (Session state-dot rendering is owned by ui-workspace; workspace browser behaviour is composition-owned; "New task completed" unread marking is local viewing state). |
+| `packages/client/ui-sidebar/README.zh.md` | Chinese sibling; heading tree read (13 headings). |
+| `packages/client/ui-sidebar/README.i18n.yaml` | Generated bilingual-pair hash record; read in full. |
+| `packages/client/ui-sidebar/locale/en.json`, `locale/zh.json` | `meta.title` (+ a Chinese description). |
+| `packages/client/ui-sidebar/package.json` | Manifest; seven injected client packages — including ui-workspace, which the shell hosts rather than owns. |
+| `packages/client/ui-sidebar/tsconfig.json`, `tsdown.config.ts` | The client project (13 references) and the shared build helper. |
+| `packages/client/ui-sidebar/src/client/HeaderLeadingControls.module.css`, `SidebarRoot.module.css`, `src/css-modules.d.ts` | Styling read in bulk ("Sidebar column (figma 133:7629): vertical stack, padding 12/6…") and the CSS-module shim. |
+| `packages/client/ui-sidebar/tests/apply.client.spec.tsx` | 6 cases: the Host Loader entry inert; only the services it uses declared; the shell registered and its child seats declared. |
+| `packages/client/ui-sidebar/tests/panel-list.client.spec.tsx` | 8 cases: late registrations added, each plugin contribution removed, and **no empty panel-list DOM left behind**. |
+| `packages/client/ui-sidebar/tests/pointer-scrollbars.client.spec.tsx` | 6 cases: the scrollbars drawn only while the pointer is inside and lingering on the way out; a pending hide cancelled when the pointer comes back. |
+| `packages/client/ui-sidebar/tests/scrollbar-quiet-styles.client.spec.ts` | 2 cases: the theme indirection pair rebound to transparent; the gutter reservation left to the scrolling region. |
+| `packages/client/ui-sidebar/tests/sidebar-root.client.spec.tsx` | 15 cases: the effective new-session binding advertised; New Session (capsule + wordmark) and the column toggle routed; generic Windows caption tooltips. |
+| `packages/client/ui-sidebar/tests/sidebar-snapshot.client.spec.tsx` | 5 cases: the expanded column rendered in the default locale (zh) and in the English locale. |
+| `packages/client/ui-sidebar/tests/sidebar-styles.client.spec.ts` | 4 cases: the wide shell trailing padding shared and cancelled structurally; the four upper controls moved while the settings seat only fades. |
+| `packages/client/ui-sidebar/tests/__snapshots__/sidebar-snapshot.client.spec.tsx.snap` | The Vitest snapshot of the rendered column. |
+
+### 1.18 `packages/client/ui-workspace` — the Workspace browser and picker (48 files)
+
+#### Tier 1 — load-bearing source
+
+##### `packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.tsx` (66 KB — read structurally: leading comment + export index)
+- **Purpose:** the whole browsing region — the section header, the search field, the grouped or flat session list, the workspace dialogs.
+- **Non-obvious design decisions (README "Use this package" and "Understand the implementation"):**
+  - **The watermark is a ROW COUNT that never falls on its own** (`:3`): "so the rows stay visible after a run or notification ends; a reorder that moves a Session past the watermark hides it." Each **Show more** raises it by five without the 50-row limit; **folding a Workspace resets its watermark and those of its nested Workspaces**.
+  - **The selected blank "New Session" is an extra row outside the watermark until its first prompt** (`:5`).
+  - **Pinned Sessions lead ordinary Sessions in both views**; **Last updated** sorts strictly by the latest user prompt or steer time (pin time does not affect it); **Manual** uses one complete Session sequence including hidden archives; returning to Last updated discards the manual layout, and entering Manual again freezes the then-current chronological order.
+  - **The browser defaults to Last updated and remembers the mode across reloads** (`:9`).
+  - **A collapsed-group drag uses the target Session identity and keeps the source visible** (`:11`).
+  - **Session display orders for real Workspaces, Ungrouped and the flat list are browser-local; Workspace group drag order remains Host-durable** (`:11`).
+  - **Grouping defaults to "WorkSpace"**; **Workspace Tree** nests each Workspace under its nearest registered ancestor, including ones added later; **child Workspaces appear before the parent's own Sessions**; ancestors start expanded unless a saved collapsed state exists; **dropping on a descendant targets the nearest compatible ancestor**, "so an expanded parent can be moved past without collapsing it".
+  - **Search**: a non-blank query replaces either browsing mode with one flat result list; **a 250 ms debounced Host request adds ranked current-conversation content matches and snippets**; each new query aborts the preceding request; a failed content search leaves metadata matches visible without an additional warning; **the list is capped at 20**.
+  - **The archive surface is a three-way choice** (Hide archived / All conversations / Archived only) and archived rows are grayed with an accessible explanation that they cannot be opened until restored.
+  - **Copy Session ID closes the menu and copies the complete ID directly, without opening a dialog**; a failed copy can be retried from the menu; **copying does not retain the Session, load its history, or call the Host**.
+
+##### `packages/client/ui-workspace/src/client/rows/Rows.tsx` (29 KB — read structurally)
+- **Purpose:** the row renderers.
+- **Non-obvious design decisions:** the **pending interaction** status replaces the trailing update time with **Approval / Plan review / Answer**, and "pending interaction takes precedence over the shared ongoing loader"; the leading seat renders **only while the row's primary status is idle**; an archived row keeps that cell blank; a title wider than its row is clipped with an ellipsis at rest and **hovering scrolls the title to its far edge**.
+
+##### `packages/client/ui-workspace/src/client/rows/AnimatedRows.tsx`
+- **Purpose:** the row motion.
+- **Non-obvious design decisions (README "View state"):** it **measures keyed rows before and after React commits** that change membership or order, and uses native movement and opacity animations; **removed rows fade as inert copies outside the scrolling list** — "they do not delay React unmounting or extend its scroll range"; **initial loading, drag commits, overflow expansion and view-option changes settle immediately**; the animator has **no layout observers or polling**.
+
+##### `packages/client/ui-workspace/src/client/contract/slots.ts`
+- **Purpose:** the two registrations' contracts — the sidebar's `sidebar.workspaces` hole and the conversation hero's picker hole, plus the **directory-flow hole** (`single` kind) that a composed picker package fills.
+- **Non-obvious design decisions:** **both registrations declare a directory-flow hole** (`:19`) and "ui-workspace owns the trigger … and the adoption semantics … the occupant owns everything between `open` and the picked path, including creating a new directory to hand back"; the two root-scoped `list` child seats (`sidebar.session.row.leading`, `sidebar.session.row.hover`) take **the row's Session identity and nothing else** — "a Session-scoped seat would force a Session binding, which would activate and retain every listed Session"; the row's menu and hover buttons are two `list` slots, and **this package's own actions are registered as entries** with fixed orders (pin menu 100 / button 200, rename 200, fork 300, archive menu 400 / button 100, session-id 450).
+
+##### `packages/client/ui-workspace/src/client/WorkspacePicker.tsx`
+- **Purpose:** the pick/add flow — the reusable `WorkspacePickFlow` core and the `WorkspacePicker` wrapper.
+- **Non-obvious design decisions:** **adding a workspace has exactly one route** — pick a host directory, new or existing — "because the occupant's own create-folder affordance already covers creating one".
+
+##### `packages/client/ui-workspace/src/client/tree.ts` (25 KB — read structurally)
+- **Purpose:** the derivation layer — `owningGroupKey`, `deriveGroups`, `deriveFlat`, `deriveSearchResults`, `reconcileManualOrder`, `pinCurrentBlank`, `owningParentFolder`.
+- **Non-obvious design decisions:** **`SessionRowState` is the single shape every view derives from**; the **archived filter** is a three-way `'default' | 'show' | 'only'`; **the manual order is reconciled against the complete account**, not the filtered rows.
+
+##### `packages/client/ui-workspace/src/client/navigation.ts`, `pin-order.ts`, `stores.ts`, `shortcuts.ts`, `session-actions/*`, `toast/*`, `locales.ts`, `index.ts`, `src/index.ts`
+- **Purpose:** the navigation surface (`openSession`, `openWorkspace`, `forkSession`, `startSession` with draft options), the pin ordering, the view stores, the six shortcut commands, the five row actions (pin / rename / fork / archive / session-id) and their dialogs, the keyed workspace toasts, the dictionaries, the wiring, and the inert Host half.
+- **Non-obvious design decisions (README "Use this package"):** **`openSession` synchronously replaces the owned `mainView` reference and returns the main area to Conversation without waiting for `reference.ready`**; **`openWorkspace` opens a Workspace blank only if no later navigation superseded the request**; **`forkSession` creates the child without navigating or superseding a pending navigation**; **the optional synchronous preparation callback runs after the target is retained and only for a current Workspace request**; **navigation or owner disposal suppresses the late UI commit, not the underlying Session creation**; **the first-use directory name and its stored title are fixed** — "one installation keeps one on-disk path and one stored title across language switches"; **a Workspace still carrying the automatic title is labelled with the localized default name wherever this package shows it**.
+
+#### Tier 2 — bulk
+
+| File | What it is / what it pins |
+| --- | --- |
+| `packages/client/ui-workspace/README.md` | The Workspace contract (34 KB). Decides: the watermark model; the unnamed label; the reordering modes and the pin rules; the Workspace hierarchy and the canonical-path rule ("It does not scan for projects or resolve symlink aliases"); the search rules (250 ms debounce, 20-row cap, the archived-result behaviour); the row menu and its five built-in actions with their orders; the **stop-and-archive** dialog (the one case that asks first, listing the running work by family); the archive notice with undo and a "filter archived sessions" action; the hover cards (800 ms first dwell, **immediate replacement after a card is displayed**, the shared dwell reset, and the portal tooltips); the `useWorkspaceAccess` hook; the **draft initialisation** rules; the **directory-flow hole**; the packaged-plugin and dynamic-client-package recipes (including the `cordis-client-runner` lane that "cannot import anything" and must render its own `role="menuitem"` button with `React.createElement` and `styles.insert`); and four limitations (no fuzzy content search, **no Session deletion**, pending interactions not aggregated into collapsed groups, native folder selection depends on the local Host carrier). |
+| `packages/client/ui-workspace/README.zh.md` | Chinese sibling; heading tree read (24 headings). |
+| `packages/client/ui-workspace/README.i18n.yaml` | Generated bilingual-pair hash record; read in full. |
+| `packages/client/ui-workspace/locale/en.json`, `locale/zh.json` | `meta.title` (+ a Chinese description). |
+| `packages/client/ui-workspace/package.json` | Manifest; **twelve** injected client packages — the widest in the shard. |
+| `packages/client/ui-workspace/tsconfig.json`, `tsdown.config.ts` | The client project (28 references) and the shared build helper. |
+| `packages/client/ui-workspace/src/client/WorkspacePicker.module.css`, `rows/*.module.css` (3), `src/css-modules.d.ts` | Styling read in bulk and the CSS-module shim. |
+| `packages/client/ui-workspace/tests/apply.client.spec.ts` | 24 cases: the Host Loader entry inert; the services it drives declared; the Workspace access hook published over `remoteAccess`. |
+| `packages/client/ui-workspace/tests/animated-rows.client.spec.tsx` | 7 cases: initial arrivals settle and a subsequent pin reorder glides; changed membership fades while surviving rows fill the gap. |
+| `packages/client/ui-workspace/tests/browser-styles.client.spec.ts` | 8 cases: the list is the scrolling region; the themed scrollbar counted inside the shell trailing inset; the scrollbar reserved whether or not it is themed. |
+| `packages/client/ui-workspace/tests/host-home-staleness.client.spec.tsx` | 1 case: the path abbreviated once a home learned after the first render reaches the rows. |
+| `packages/client/ui-workspace/tests/rename-assembly.client.spec.tsx` | 3 cases: independently registered Session actions rendered in declared order; a rename through the row menu. |
+| `packages/client/ui-workspace/tests/rows.client.spec.tsx` | 47 cases: the first workspace/session dwell shared across mixed rows and reset on list exit; the session row schedule seats. |
+| `packages/client/ui-workspace/tests/session-actions.client.spec.tsx` | 37 cases: the menu dismissed before copying the complete row ID; the menu row closing the menu, then pinning an unpinned row. |
+| `packages/client/ui-workspace/tests/shortcuts.client.spec.ts` | 10 cases: rename and archive refused without a selected Session and a busy picker kept closed; six commands registered with Desktop and Web defaults. |
+| `packages/client/ui-workspace/tests/tree.client.spec.ts` | 53 cases: the owning Workspace id or the Ungrouped key; the current New Session kept. |
+| `packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx` | 95 cases: recency independent of arrival order and saved manual positions per mode. |
+| `packages/client/ui-workspace/tests/workspace-picker.client.spec.tsx` | 16 cases: same-title Workspaces listed separately and the selected id forwarded; the composed directory flow opened and its picked path adopted. |
+| `packages/client/ui-workspace/tests/workspaces-service.client.spec.ts` | 70 cases: the default Workspace prepared and selected after both startup baselines; an ineligible empty installation left without a Session. |
+
+### 1.19 Appendix — the files named in the tables above by their group only
+
+These files are read and accounted for, but their package-level sections above named them as a group (a renderer's CSS sheet, a row action, a toast). One row each here, so every path in the shard appears in the report exactly once.
+
+| File | What it is / what it pins |
+| --- | --- |
+| `packages/client/locale/src/client/LanguageRow.module.css` | The Language row's stylesheet: the `Setting-Cell` layout (gap 8, padding 16/0, a 0.5 px hairline separator the section column removes on its last child) and the selector pill at the standard 36 px control size. |
+| `packages/client/ui-sidebar-browser/tests/electron-lifecycle.client.spec.ts` | 6 cases pinning the Electron guest lifetime: the frame waits for a mounted container and only then acquires a guest (the webview's `name`/`partition`/`src` are the approved lease); native history, title and new-tab requests observed; an acquisition that finishes after attachment cancellation released; **no guest acquired when Workspace resolution finishes after disposal**; the guest recreated after a physical remount or crash **without resolving the Workspace again**; acquisition, native-command and release failures contained with retry available; superseded and aborted load promises ignored while an active navigation rejection is published. |
+| `packages/client/ui-sidebar-documentpreview/src/client/LoadingIndicator.tsx` | The shared indeterminate loading feedback: a localised document status with a larger spinner, and a compact additional-page loading line. |
+| `packages/client/ui-sidebar-documentpreview/src/client/LoadingIndicator.module.css` | The loading indicator's stylesheet. |
+| `packages/client/ui-sidebar-documentpreview/src/client/TextTitle.tsx` | The tab chip's title: the type sheet drawn before the title text, sized to the chip line, with the sheet picked from the title's extension. |
+| `packages/client/ui-sidebar-documentpreview/src/client/code/CodeBody.module.css` | The code body's stylesheet (the scrollport the source text scrolls in). |
+| `packages/client/ui-sidebar-documentpreview/src/client/excel/ExcelBody.module.css` | The spreadsheet body's stylesheet (the grid's own chrome, read in bulk). |
+| `packages/client/ui-sidebar-documentpreview/src/client/html/HtmlBody.module.css` | The HTML body's stylesheet (the frame fills the pane edge to edge). |
+| `packages/client/ui-sidebar-documentpreview/src/client/image/ImageBody.module.css` | The image body's stylesheet (the frame follows the scroller's width so the image's percentage maximum is honoured). |
+| `packages/client/ui-sidebar-documentpreview/src/client/markdown/MarkdownBody.module.css` | The Markdown body's stylesheet (the rendered document's own measure). |
+| `packages/client/ui-sidebar-documentpreview/src/client/markdown/frontmatter-fields.module.css` | The frontmatter field list's stylesheet (the two-column key/value list). |
+| `packages/client/ui-sidebar-documentpreview/src/client/markdown/frontmatter-fields.tsx` | The lazily loaded YAML field list: the Markdown body loads this module lazily "so the YAML parser stays out of the startup chunk", and the **verbatim frontmatter block stands in** while it loads or if it fails. |
+| `packages/client/ui-sidebar-documentpreview/src/client/markdown/frontmatter.ts` | The frontmatter splitter: it separates the leading `---` YAML block from the document body and reports which of the two it found, so the body can show the block verbatim when the typed list cannot load. |
+| `packages/client/ui-sidebar-documentpreview/src/client/office/FontNotice.module.css` | The missing-font notice's stylesheet (the anchored details panel under the document header). |
+| `packages/client/ui-sidebar-documentpreview/src/client/office/OfficeBody.module.css` | The Office body's stylesheet (the converted PDF wrapped in the shared PDF view's chrome). |
+| `packages/client/ui-sidebar-documentpreview/src/client/pdf/PdfBody.module.css` | The PDF body's stylesheet (the canvas page's own background and the page margins). |
+| `packages/client/ui-sidebar-documentpreview/src/client/zoom/ZoomControls.module.css` | The floating zoom control's stylesheet (the control that "starts hidden, slides up when the pointer enters the bottom 72 CSS pixels, and slides down after a 420 ms leave delay"). |
+| `packages/client/ui-sidebar-documentpreview/src/client/zoom/ZoomViewport.module.css` | The shared zoom viewport's stylesheet (the measured content surface the fit-width calculation reads). |
+| `packages/client/ui-sidebar-documentpreview/tests/fixtures/office-cache.patch.yml` | A two-line profile overlay lowering the Office cache to **two** entries, so the cache suite can prove the eviction boundary without allocating megabytes. |
+| `packages/client/ui-sidebar-right/src/client/tabs/guide/GuideBody.tsx` | The guide's body: it renders `sidebar.right.tab.guide.entry` by the active definition id, forwarding the entry id, the resolved title, an optional description and the framework `useTabInfo` hook; a provider may register a custom card under its definition id, otherwise the standard icon/title button renders; the guide's own words are none — "the guide is a muted compass over one entry capsule per `guide` entry". |
+| `packages/client/ui-sidebar-right/src/client/tabs/guide/GuideTitle.tsx` | The guide's chip title, reading the tab information hook. |
+| `packages/client/ui-sidebar-terminal/src/client/TerminalCleanup.module.css` | The cleanup-failure banner's stylesheet (the `shell.overlay` notice that outlives the tab). |
+| `packages/client/ui-sidebar-terminal/src/client/TerminalGuide.module.css` | The guide's shell-menu stylesheet (the menu beside the entry title, with the effective shortcut as unboxed text). |
+| `packages/client/ui-sidebar-terminal/src/client/TerminalTitle.module.css` | The terminal tab title's stylesheet (the prompt glyph aligned to the chip line). |
+| `packages/client/ui-sidebar-terminal/src/client/terminal.module.css` | The xterm body's stylesheet (the screen's own background and the host grid's cell metrics). |
+| `packages/client/ui-workspace/src/client/rows/AnimatedRows.module.css` | The row animator's stylesheet (the inert faded copies of removed rows that live outside the scrolling list). |
+| `packages/client/ui-workspace/src/client/rows/Rows.module.css` | The row renderers' stylesheet (the row fill, the clipped title's ellipsis, the status-dot cell). |
+| `packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.module.css` | The browsing region's stylesheet — the list is the scrolling region, the themed scrollbar is counted inside the shell trailing inset, and the scrollbar's gutter is reserved whether or not it is themed. |
+| `packages/client/ui-workspace/src/client/session-actions/ArchiveSession.tsx` | The archive row action: it raises the stop-and-archive dialog when the Host refuses a plain archive, and otherwise archives a quiet Session without a confirmation. |
+| `packages/client/ui-workspace/src/client/session-actions/ForkSession.tsx` | The fork row action: it reads the source's cold history, uses the Host operation to select its last completed turn "without loading older Client history", and renders nothing when `useSessionAccess(sessionId, 'session/fork')` is false. |
+| `packages/client/ui-workspace/src/client/session-actions/PinSession.tsx` | The pin row action: it moves the Session to the front of its complete saved sequence without changing the selected ordering mode, renders nothing on an archived row (the Host keeps the pin and archive sets exclusive), and also fronts the Session in its saved orders. |
+| `packages/client/ui-workspace/src/client/session-actions/RenameSession.tsx` | The rename row action and its dialog: the dialog is prefilled with the row's display title, **confirming an unchanged title is deliberately allowed** (it pins the automatic title against regeneration), and the action uses a temporary `workspaceOperation` reference while awaiting the initial history opening. |
+| `packages/client/ui-workspace/src/client/session-actions/RowActionToast.tsx` | The row-action notice surface — a `shell.overlay` entry fed by the requests the actions inject; it reuses the Toast primitive once for all presentations. |
+| `packages/client/ui-workspace/src/client/session-actions/SessionId.tsx` | The Copy Session ID action: the final built-in item in the row's "..." menu, it closes the menu and copies the complete ID directly **without opening a dialog**, and "copying does not retain the Session, load its history, or call the Host". |
+| `packages/client/ui-workspace/src/client/session-actions/derived.ts` | The shared derivations for the row actions: the display title, the rename target, the archive confirmation request, and the pinned/archived membership sets derived once per Workspace snapshot. |
+| `packages/client/ui-workspace/src/client/toast/Toast.tsx` | The package-local `workspace.toast.content` Factory: it renders the keyed Workspace notice with the shared Toast primitive, and "the existing notice state, display sequence, latest-notice replacement, and dismissal remain shared; locale or filter changes do not restart the same notice's timer". |
+| `packages/client/ui-workspace/src/client/toast/register.ts` | The toast registration: keyed registrations inject localised display mappings and their own actions, and **only the archive notice subscribes to the viewing filter**. |
+
+### Tier 3 — skipped with a reason
+
+The shard's only binary assets are the synthetic `.xlsx` workbooks the spreadsheet-preview suites read. They are ZIP containers, not text; each was confirmed on disk (name, byte size, ZIP signature) and by the fixture builders that construct them (`packages/client/ui-sidebar-documentpreview/tests/excel-fixture.ts`, `excel-opc-fixture.ts`, `excel-xml-fixture.ts` — all read), and none was read line by line.
+
+| File | Why it was not read line by line |
+| --- | --- |
+| `packages/client/ui-sidebar-documentpreview/tests/fixtures/excel-opc/combined.xlsx` | binary `.xlsx` fixture (ZIP container); confirmed on disk by size and ZIP signature; the builder that writes it (`excel-opc-fixture.ts`) was read |
+| `packages/client/ui-sidebar-documentpreview/tests/fixtures/excel-opc/comments.xlsx` | binary `.xlsx` fixture (ZIP container); same |
+| `packages/client/ui-sidebar-documentpreview/tests/fixtures/excel-opc/part-name.xlsx` | binary `.xlsx` fixture (ZIP container); same |
+| `packages/client/ui-sidebar-documentpreview/tests/fixtures/excel-opc/prefix.xlsx` | binary `.xlsx` fixture (ZIP container); same |
+| `packages/client/ui-sidebar-documentpreview/tests/fixtures/excel-opc/relative.xlsx` | binary `.xlsx` fixture (ZIP container); same |
+| `packages/client/ui-sidebar-documentpreview/tests/fixtures/excel-opc/table.xlsx` | binary `.xlsx` fixture (ZIP container); same |
+| `packages/client/ui-sidebar-documentpreview/tests/fixtures/excel-xml/cdata.xlsx` | binary `.xlsx` fixture (ZIP container); same |
+| `packages/client/ui-sidebar-documentpreview/tests/fixtures/excel-xml/parts-path.xlsx` | binary `.xlsx` fixture (ZIP container); same |
+| `packages/client/ui-sidebar-documentpreview/tests/fixtures/excel-xml/rich.xlsx` | binary `.xlsx` fixture (ZIP container); same |
+| `packages/client/ui-sidebar-documentpreview/tests/fixtures/excel-xml/strings-path.xlsx` | binary `.xlsx` fixture (ZIP container); same |
+| `packages/client/ui-sidebar-documentpreview/tests/fixtures/excel-xml/styles-path.xlsx` | binary `.xlsx` fixture (ZIP container); same |
+| `packages/client/ui-sidebar-documentpreview/tests/fixtures/excel-xml/utf16-metadata.xlsx` | binary `.xlsx` fixture (ZIP container); same |
+| `packages/client/ui-sidebar-documentpreview/tests/fixtures/excel-xml/utf16-sheet.xlsx` | binary `.xlsx` fixture (ZIP container); same |
+| `packages/client/ui-sidebar-documentpreview/tests/fixtures/excel-xml/workbook-path.xlsx` | binary `.xlsx` fixture (ZIP container); same |
+
+No other file in the shard was skipped: every `source`, `tests`, `docs`, `config` and `generated-vendored` file was opened. For the large ones the method is recorded in the status TSV — Tier-1 `source` files over ~20 KB (`modules/src/index.ts`, `ui-renderer/src/client/registry.ts`, `ui-renderer/src/client/scoped-slots.tsx`, `ui-session/src/client/index.ts`, `ui-sidebar-files/src/client/*`, `ui-sidebar-right/src/client/service.ts`, `ui-workspace/src/client/rows/WorkspaceBrowser.tsx`, `ui-workspace/src/client/rows/Rows.tsx`, `ui-workspace/src/client/tree.ts`, `ui-directory-picker-browse/src/client/DirectoryBrowser.tsx`) were read **head + exported/signature index + tail** rather than line by line, and every per-format renderer, view and helper in `ui-sidebar-documentpreview`, `ui-sidebar-right`, `ui-sidebar-terminal`, `ui-sidebar` and `ui-workspace` was read as its **leading comment plus its export index** — which is where this repository states its design decisions.
+
+---
+
+## 2. Ideas worth stealing
+
+1. **`CONVERGENT` — one protocol address per live value, with the scope encoded in the path.** `dsh-resource://file/session/<sessionId>/<path>` means the *model* of a resource never needs to know what a session is, and a file viewer, a browser tab and a terminal can all be opened by the same `openResource` call. (`packages/client/resources/src/client/contract.ts:13`, `packages/client/ui-sidebar-right/src/client/contract/params.ts:6`) — **why it transfers:** August Trading has four surfaces that each need "the thing for this analysis" (chart, plan, journal row, chart-level card). One address scheme plus a per-surface `params` map means the trade desk never grows a second opening API, and a new viewer is a registration rather than an edit. This shard alone shows the scheme working across five different feature packages.
+2. **`CONVERGENT` — a failure is a FRAME, never a throw.** Every resource provider streams `ok`/`failure` frames; the value survives a later failure, and "a throw inside the stream is a programming error and is not caught". (`packages/client/resources/src/client/contract.ts:85`, `packages/client/ui-sidebar-documentpreview/src/client/face.ts:186`) — **why it transfers:** a market-data feed in August Trading fails constantly and partially. Making a failure a *value* the UI can render (with the last good value still visible) is exactly the "show the last known price, marked stale" behaviour a trader needs, and it removes a whole class of try/catch in the render path.
+3. **`UNIQUE` — the resource record is kept for the page's lifetime and only its STATE is discarded.** "Keeping the record keeps `source()` reference-stable across React's render-then-subscribe window and a StrictMode remount, where a recreated record would make every render resubscribe and restart the stream." (`packages/client/resources/src/client/resources.ts:4`) — **why it transfers:** August Trading re-renders constantly while a websocket pushes quotes. A stable per-key object means the subscription is created once, and the "restart the stream on every render" bug — which costs a real request each time — simply cannot happen.
+4. **`CONVERGENT` — the browser-trust fence binds on `Host`, not on `Origin`.** Over plain HTTP a browser attaches neither `Origin` nor `Sec-Fetch-*` to a *read*, so a markerless request may still be a rebound browser read, and `Host` is the one header rebinding cannot forge. (`packages/client/connection/src/api-request-trust.ts:12`) — **why it transfers:** any local HTTP surface August Trading opens (a local bridge for backtests, a price-feed relay) has the same confused-deputy hole, and the fix is a *fence*, not authentication: the fence says which origin is legitimate; authentication says who the caller is.
+5. **`UNIQUE` — fail the CONFIG at load, not the request.** A `trustedHosts` entry that is not a bare `host[:port]` throws at plugin load with the exact reason; the alternative is "quietly changing the grant". (`packages/client/connection/src/api-request-trust.ts:53`) — **why it transfers:** August Trading's provider config, risk thresholds and API endpoints are all user-editable. Failing loudly at load, with the reason, beats a setting that silently broadens or narrows a grant at 3 a.m.
+6. **`UNIQUE` — a per-key fallback chain that must terminate, checked at registration.** Language packs register a fallback id; a cycle, an unknown target or a chain that does not reach English is refused, and the registration is **rolled back** so the refused namespace is not left squatted. (`packages/client/locale/src/client/index.ts:334`, `:325`) — **why it transfers:** August Trading has a growing set of "if the primary model/provider fails, fall back to X" rules. Making the chain's validity a *registration-time* check, with rollback, is the pattern that keeps bad rules from accumulating.
+7. **`CONVERGENT` — the launch token is exchanged for an authority-bound cookie, and the cookie's audience includes the scheme.** The same signing secret serves HTTP 80 and HTTPS 443 but a cookie minted for one is refused by the other, and `Secure` is decided by the listener that received the request, never by an announced public URL. (`packages/client/connection/src/browser-auth.ts:127`, `:255`) — **why it transfers:** the same "one secret, many audiences" problem appears when a desktop shell serves a local API and a remote deployment serves the same API. Deciding `Secure` from the terminating listener is a rule August Trading should copy before it ever ships a hosted surface.
+8. **`UNIQUE` — the connection is a GENERATION, not a connection.** A generation becomes visible when its source reports ready; source completion, failure, withdrawal or an explicit stop clears it *before* the retry policy applies, and the retry ladder is 500 ms → 10 s with 50–100 % jitter. (`packages/client/ui-sidebar-browser`/`packages/client/connection/src/client/connection.ts:77`, `:144`) — **why it transfers:** August Trading's market-data connection has the same shape. Modelling "the current feed generation" as an explicit value — rather than as a boolean connected flag — is what lets the UI distinguish "reconnecting, still showing the last quote" from "never connected".
+9. **`UNIQUE` — the state-dot rule: an occupant renders only while the row's PRIMARY status is idle.** "Pending interaction takes precedence over the shared ongoing loader; the leading seat renders only while the row's primary status is idle — no pending interaction, no own or descendant activity, and no unviewed completion." (`packages/client/ui-workspace/src/client/contract/slots.ts:64`, README "Pending interactions") — **why it transfers:** a trade row has exactly the same contention — running, waiting for approval, needs a look, scheduled task active. Declaring ONE primary status and letting every other signal render only when the primary is idle removes the "two dots next to each other" class of bug in one sentence.
+10. **`CONVERGENT` — "the failure belongs to the control the user pressed."** A failed open announces once, from that control, in a banner keyed by a **sequence number** so the same text replays instead of sitting silently. (`packages/client/ui-open-in-app/src/client/open-failure-toast.tsx:16`) — **why it transfers:** a failed analysis or a failed order in August Trading must be attributable to the button that caused it, and the same text twice must be visible twice.
+11. **`UNIQUE` — the busy state is a REF, not a state.** `if (inFlight.current) return` coalesces repeated gestures *before* the busy state can render. (`packages/client/ui-open-in-app/src/client/OpenTargetButton.tsx:52`) — **why it transfers:** a double-clicked "Analyse" button in August Trading currently costs two provider calls. A ref guard is the smallest correct fix and is invisible in the UI.
+12. **`UNIQUE` — the watermark is a row count that never falls on its own.** It rises to cover the last qualifying Session and stays there "so the rows stay visible after a run or notification ends"; a reorder that moves a Session past the watermark hides it. (`packages/client/ui-workspace/README.md` "Use this package") — **why it transfers:** this is *exactly* the shape of a journal's "show more" or a trade log's pagination: a count that only grows keeps a finished signal visible, and only an explicit user action raises it.
+13. **`UNIQUE` — the "last dismissed" memory is a one-element object, because "an unpublished release is itself a value".** (`packages/client/modules/src/client/release-change.ts:48`) — **why it transfers:** a small, sharp reminder that `undefined` and "explicitly dismissed" are different states. August Trading has several such states (a dismissed risk warning, a muted provider, a suppressed setup step) and routinely conflates them.
+14. **`UNIQUE` — the stamp is chosen from the HOST-stamped path, never from typed text.** The path separator is inferred from the Host's home path because "a backslash is a legal POSIX name character" — typed text and entry paths are not evidence. (`packages/client/ui-directory-picker-browse/src/client/DirectoryBrowser.tsx:132`) — **why it transfers:** August Trading accepts pasted paths from users and from model output. Inferring structure from user-typed text is how path-handling bugs start; take the shape from a trusted source or refuse.
+15. **`UNIQUE` — a "known" address is one the application can name; a second load proves it is not.** The first load of a revision is "known"; a later load marks the address **unknown**, and the unsafe toolbar actions (back, forward, open-externally) are then disabled. (`packages/client/ui-sidebar-browser/src/client/browser/BrowserNavigation.ts:157`) — **why it transfers:** the same "we know where we are / we do not" distinction applies to a broker session: once the state is uncertain, the safe actions (cancel, disclose, do nothing) must be the only ones offered.
+16. **`UNIQUE` — the sheet is a live value, and "the sheet lives in the sidebar registry".** One sheet per pane, tabs as rows, and a sheet that survives the tab being closed. (`packages/client/ui-workspace/README.md`) — **why it transfers:** a chart's own state (zoom, cursor, selected range) surviving a tab switch is a "keep the component mounted" decision with a stated cost, not an accident.
+
+## 3. Trading-specific findings
+
+- **Long-lived monitoring & scheduled work — partially in this shard, mostly elsewhere.** This shard contains the *transport* such work would ride: a reconnecting **generation** with a bounded jittered backoff (`packages/client/connection/src/client/connection.ts:144`), a **one-shot cached environment/identity snapshot** that never re-queries per event (`packages/client/product-analytics/src/index.ts:97`), and — in `ui-workspace` — the **scheduled-task clock mark** on an idle row and its hover card listing those tasks (`packages/client/ui-workspace/README.md` "Active Schedule markers"). The **breaker** and **catch-up** machinery is not in this shard; it lives with the Host's cron/schedule service. What this shard contributes is the *shape* a monitoring row must take: one primary status, everything else only when idle.
+- **Human-in-the-loop approval — one concrete instance, and it is instructive.** The **stop-and-archive** dialog is the only confirmation in this shard: "A Session with running work is the one case that asks first: the Host refuses the plain archive and names that work, and the sidebar opens a stop-and-archive dialog listing it by family — the turn in progress, running subagents, background jobs, scheduled reminders, each with its labels — with the restore path stated." (`packages/client/ui-workspace/README.md` "Managing sessions") The approval record is therefore **the named work itself**, not a generic "are you sure?" — the dialog's value is the *inventory*. August Trading's order-placement gate should name the position, the risk figure and the plan it would break, and say what "undo" restores.
+- **Post-mortem / reflection loops — not in this shard, with one transferable shape.** The learning/notebook machinery is in another shard. What this shard does model is the *retention* side: the **undo notice** after an archive ("A successful archive shows a notice with an undo action"; undo restores the Session **without resuming the stopped work** — `packages/client/ui-workspace/README.md`), and the **rule-like accumulation guard** in the locale registry: a registration that would create a cycle or an unreachable fallback is refused and **rolled back** (`packages/client/locale/src/client/index.ts:325`). That rollback discipline is exactly what a learning store needs when a new rule would contradict an existing one.
+- **Multi-agent — the *chrome* of it, not the debate.** The shard shows the surface multi-agent work lands on: subagent-origin Sessions are **hidden from the sidebar** (`packages/client/ui-workspace/README.md` "Pending interactions" / "View state"), a subagent has **no status dot** of its own, and a parent row shows activity "from running direct children in its loaded parent catalog, never from summary lineage". A pending **plan review** is a distinct status class from an approval and from a question (`packages/client/ui-workspace/README.md` "Pending interactions"). The value here is the *status vocabulary*: a trader's panel needs plan-review, approval and answer to be visibly different, and the subagent's state to be attributed to its parent rather than to itself.
+- **Structured logs the model can query — not in this shard.** No model-facing log store appears in `packages/client/*`. The nearest thing is the **per-tab, per-generation view state** the preview keeps (`packages/client/ui-sidebar-documentpreview/src/client/store.ts:10`: "a tab switched away from unmounts its body and must come back where it was"), and the **persisted sidebar layout** (`dsh.sidebar-right.v1.<sessionId>`, validated before adoption, an invalid payload clearing only its own key — `packages/client/ui-sidebar-right/src/client/persistence.ts`). The transferable pattern is the *scoping*: a per-Session, per-entity record with a validated envelope and a "clear only my key" failure mode, which is how a trade journal should be segmented.
+- **Staying simple as features accumulate — this shard is the strongest evidence in the whole reference set.** The technique is a **slot registry with a fixed set of named seats**: the right Sidebar declares four seats (`sidebar.right.pane.tab`, `.title`, `.tab.guide`, `.tab.menu.item`) and every feature is a registration (`packages/client/ui-sidebar-right/src/client/contract/slots.ts:4`). A new tab type is a *registration*, "never an edit here" — the shell does not import an occupant, and the occupant does not import the shell. Every package in this shard is an *occupant*: eight renderers in one preview package, five row actions in one workspace package, four file-type pickers. The cost of the pattern is visible and named: the `root` slot carries a long warning because a second entry **shadows** it (`packages/client/ui-renderer/src/client/registry.ts:32`), and the session row's leading seat is root-scoped precisely so it does not "activate and retain every listed Session" (`packages/client/ui-workspace/src/client/contract/slots.ts:64`).
+
+## 4. Non-obvious decisions and gotchas
+
+- **The `root` slot is a trap, and the code says so in a 20-line comment.** Registering a second entry there does not sit beside the frame — it **shadows** it, and a *dynamically* registered entry is assigned a lower priority than the shipped one, so **the dynamic one wins** and the page renders your component alone with every seat the frame declares gone. (`packages/client/ui-renderer/src/client/registry.ts:32`) A reader who skims will lose the whole application.
+- **`trustedHosts` matching compares the Host, not the Origin, and the port is judged from a URL parse under *both* special schemes.** A raw-string port check misreads `"host:port "` as port-less, and `:80`/`:443` must still count as explicit. (`packages/client/connection/src/api-request-trust.ts:66`) The configured entry must also be a *bare* authority — `user@harness.internal` would authorise the embedded hostname, and a zero-padded port would broaden an exact-port grant to every port.
+- **The staledness check runs BEFORE the ownership check.** A binding that belongs to a disposed entry throws `StaleAuthorizationError` even for a key that entry never declared. (`packages/client/ui-renderer/src/client/scoped-slots.tsx:70`) The order is deliberate and is pinned by a test.
+- **A "registered but every one abdicated" root is a CRASH, while "nothing registered at all" is a BOOT-ORDER failure.** Two different faces, two different messages, because one is a broken product and the other is a mis-ordered boot. (`packages/client/ui-renderer/src/client/scoped-slots.tsx:1283`)
+- **The "record" in the resource model is deliberately never dropped.** Only the state is discarded. A recreated record would make **every render resubscribe and restart the stream** — a real request each time. (`packages/client/resources/src/client/resources.ts:4`)
+- **The locale registry emits NO event for a dictionary registration.** "Listeners may re-register slots in response, and boot registers one namespace per package" — a registration-heavy boot would storm the event bus. The render refresh rides a **revision counter** instead. (`packages/client/locale/src/client/index.ts:118`)
+- **`setLocale` persists even when the selected id is already active.** The active value may be a *provisional* browser-derived resolution that nothing has stored yet; picking the language already on screen is still an explicit choice and must survive a different browser sharing the same home. (`packages/client/locale/src/client/index.ts:250`)
+- **The resource protocol lives in the URL's HOST, not its scheme.** `dsh-resource://file/…` — the scheme is fixed and the host names the type. A non-special scheme keeps its case, hence the explicit lower-casing. (`packages/client/resources/src/client/resources.ts:49`)
+- **A failed batch script is retried once, but a batch that loaded WITHOUT registering is never re-executed** — the batch registers its packages in sequence, so a replay would stop at the first duplicate. The row then falls back to its own one-resource URL. (`packages/client/modules/src/client/system.ts:262`)
+- **The Node half's revisions are metadata-based, not content-based** (`mtimeMs` + `ctimeMs` + size), because hashing every bundle on every scan is too slow; the cost is that a byte change which preserves mtime *and* size is invisible. The README names this a limitation. (`packages/client/modules/src/index.ts:221`)
+- **The document preview's `fallback` band means "plain viewer anything more specific should beat"** — the same convention VS Code uses among its editors. A type registered at the `extension` or `builtin` band for a narrower pattern takes those addresses. (`packages/client/ui-sidebar-documentpreview/README.md` "What it registers")
+- **The whole ADDRESS is the content identity.** Two files with the same name in different directories, or one path under two sessions, are two tabs; only the chip text is shortened. (`packages/client/ui-sidebar-documentpreview/src/client/definition.ts:21`)
+- **The Office cache is keyed by (renderer generation, Session, absolute source path, source version)** and every read re-checks the generation and the authorised source metadata before sharing an in-flight conversion. Cancelling one reader leaves the shared conversion running until the final reader leaves. (`packages/client/ui-sidebar-documentpreview/src/client/office/cache.ts`)
+- **A pending interaction is a DECLARATION-MERGED map, and the union is computed from it.** A plugin adds a pending-interaction kind without touching the owning package. (`packages/client/ui-session/src/client/index.ts:51`)
+- **The Sidebar's undo history is real and replayable, but deliberately has no user-facing control.** `_undo()`/`_redo()` are marked `@internal` and exist for tests. (`packages/client/ui-sidebar-right/README.md` "ctx.sidebarRight")
+- **The `mounted` observable changes BEFORE React renders the change that causes it** — "a component rendered in that commit reads the arriving Session and may act on it from its effects". (`packages/client/ui-sidebar-right/README.md` "ctx.sidebarRight") This is a deliberate ordering contract, and it is the kind of thing that breaks silently.
+- **The session-scope leading/hover seats are ROOT-scoped, not session-scoped.** A session-scoped seat would force a Session binding, "which would activate and retain every listed Session". (`packages/client/ui-workspace/src/client/contract/slots.ts:64`)
+
+## 5. Weak spots
+
+- **The `root` slot's shadowing rule is a footgun with no runtime guard.** The comment is excellent, but nothing *prevents* a second registration — a dynamically registered entry silently wins and the page renders alone. The registry even explains *why* the dynamic entry gets the lower priority and the higher win. A throw would have been kinder. (`packages/client/ui-renderer/src/client/registry.ts:32`)
+- **The whole extension model is a stringly-typed seat registry.** Slot names, band names (`extension`/`builtin`/`fallback`), locale namespaces and hook prop names are all strings; correctness depends on the *convention* that the key domain "stays the open string space because a tab type may ship from outside this repository" (`packages/client/ui-sidebar-right/src/client/contract/slots.ts:13`). A typo is a runtime "slot not declared" error, not a compile error.
+- **The recorded-sequence / undo machinery is built but unreachable.** The store mints ids, plans operations, records one history entry per action and keeps a replayable sequence — and then the product exposes no control for it. The README is candid ("Undo is not exposed"), but the code cost is real. (`packages/client/ui-sidebar-right/src/client/stores.ts`)
+- **The document-preview package is a 190-file monolith with eight renderers in one bundle boundary.** Each renderer has its own locales, store, face and CSS module inside one package, and the "one package, eight features" shape is why the package's `package.json` lists the per-format subpath exports. It works, but the size of `WorkspaceBrowser.tsx` (66 KB) and `Rows.tsx` (29 KB) shows where it is heading.
+- **The `unviewable` suffix list is a hand-maintained deny-list with a stated risk.** "A suffix belongs here only when its bytes are never readable text — an uncertain suffix stays out and keeps the plain-text fallback" (`packages/client/ui-sidebar-documentpreview/src/client/document/unviewable.ts:4`). A deny-list is the wrong shape for a growing format world; the fallback is safe, but every new binary container type is a support ticket.
+- **The pending-interaction model is process-local.** "Pending interactions are process-local projections — the owning Remote waterfall must replay an outstanding request after a browser reconnect." (`packages/client/ui-session/README.md` "Known Limitations") A reload during an approval leaves the user's decision orphaned until the remote replays it; the UI has no way to notice.
+- **The product-analytics environment sample is cached for the whole run, even when it failed.** `this.environment ??= collectEnvironment(...)` never re-queries, so a startup-contention timeout becomes the run's permanent answer, and every event for the rest of the process reports `missing_fields=timeout`. (`packages/client/product-analytics/src/index.ts:97`, and the README names this a limitation.)
+- **Undo after an archive does not resume the stopped work.** "undo restores the Session without resuming the stopped work" (`packages/client/ui-workspace/README.md`) — correct as a safety choice, but a trader reading "Undo" would reasonably expect the stop to be undone too, and the affordance does not say so.
+- **The Sidebar's layout is browser-local and per-origin.** "Layout does not synchronize between devices"; and "Windows at the same origin share the last saved layout per Session; each active window keeps its own current layout until reload" (`packages/client/ui-sidebar-right/README.md` "State"). The second behaviour is a genuine surprise: two windows of the same app will silently overwrite each other's saved layout.
+- **The HTML preview's "scripted" mode runs page JavaScript inside the app.** The sandbox is exactly `allow-scripts` with no `allow-same-origin`, which is the correct hardening, but the feature is a deliberate "this file may run code" switch inside a trusted product surface — and the packer's "no runtime fetch traversal" limit means a page that fetches its own data simply will not work. (`packages/client/ui-sidebar-documentpreview/src/client/html/pack.ts`)
+
+## 6. Trading questions — what this shard answers and what it does not
+
+1. **Long-lived monitoring and scheduled work** — **partly.** This shard has the transport (a reconnecting generation with jittered backoff), the one-shot cached snapshot policy, and the *shape* of a scheduled-task indicator (a clock mark that renders only on an idle row). The cron, the breaker, the catch-up and the idempotency live in the Host's scheduler — **not in this shard**.
+2. **Human-in-the-loop approval** — **one instance, and it is the right shape.** The stop-and-archive dialog asks first *only* when there is running work, and its content is the **inventory of that work**, not a generic confirmation. The approval record is the named work itself. Everything else about approval (the request record, the decision trail, the expiry) is **not in this shard**.
+3. **Post-mortem / reflection loops** — **not in this shard** (that is the learning/notebook shard). The transferable piece here is the **rollback-on-invalid-registration** discipline of the locale registry and the **"undo does not resume what it stopped"** honesty of the archive notice.
+4. **Multi-agent** — **the chrome, not the debate.** Subagent Sessions are hidden, a parent's status comes from its loaded child catalog rather than from summary lineage, and plan-review / approval / answer are three distinct status classes. **Where debate adds value over one agent is not in this shard.**
+5. **Structured logs the model can query** — **not in this shard** (no model-facing store appears under `packages/client/*`). What this shard offers is the *scoping discipline*: per-Session, per-entity records with a validated envelope and a "clear only my key" failure mode.
+6. **Staying simple as features accumulate** — **this shard is the answer.** A fixed set of named seats, every feature a registration, no shell importing an occupant, and the seam designed so a feature package can be added without editing the shell. The tax is the stringly-typed seat names and the one trap the `root` slot sets.
+
