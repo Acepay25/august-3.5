@@ -181,19 +181,31 @@ hygiene (`memoryHygiene.ts:151`), the **weekly digest**
 `useTradeLogging.ts:527/549`), pass mining (`passMining.ts:90-108/184-303`) and the
 strategy store (`strategyStore.ts:209` → `chatSurfaceTurn.ts:144`).
 
-**COSMETIC / DEAD (9).**
+**COSMETIC / DEAD (7 — corrected after the Phase 3 gate; see the note below).**
 
 | Feature | Evidence |
 | --- | --- |
-| `applyNotebookSkillsToAnalysis` | `SkillMemoryService.ts:3819` — **zero production callers**. The prompt can *ask* for a skill; the code cannot *require* one |
 | `learning_rules_v2` store | `StorageService.ts:105`; load/save round-trip only (`useUserProfileLoader.ts:434-443`) — **no prompt reader**. A write-only corpse that still has a backup |
-| `MemoryConsolidationService.ts` | an orphan module |
+| `MemoryConsolidationService.ts` | an orphan module — **zero references in the whole production tree** |
 | `providerFitness.ts` | orphan; its own header names a consumer (`autoAssignLenses`) **that does not exist in the repo** |
-| The predicate-gate confidence ceiling | `skillPredicateGate.ts:200` — computed, then dropped; only the prose note (`:216`) survives |
-| The hard avoid veto | dead |
+| The predicate-gate confidence ceiling — **on the chat path only** | `skillPredicateGate.ts:200` computes the ceiling; the *note* it returns (`:216`) is only read on the chat path, where it is dropped with the rest of `enhancedPrompt`. On the **plan** path the ceiling is applied: `services/trade/proposalGate.ts:264` → `buildSkillGate`, whose ceiling is folded into the one stamp the card shows and the journal records (`services/trade/presentTradeTool.ts:140-144`) |
 | The insight pruner | dead |
 | IF/THEN auto-ingest | `SkillMemoryService.ts:2996` writes a file with `prior:'gated'` but **no `approvedBy`** (`:3085`), so `isApprovedSkill` blocks injection — yet the index still names it (`tradeChatContext.ts:265` does not check approval) |
 | Harness lessons | no prompt reader |
+
+> **CORRECTION (Phase 3 gate, lead verification).** The first reading of this section
+> recorded the **hard avoid veto** and `applyNotebookSkillsToAnalysis` as dead, on the
+> strength of the claim that the function had *"ten test call sites and zero
+> production ones"*. Re-opening the source shows that claim is **stale**: the fix
+> (E-35) landed. `services/trade/presentTradeTool.ts:113` calls
+> `applyNotebookSkillsToAnalysis`, and a fired AVOID **refuses the presentation** and
+> writes the falsification ledger (`:114-133`). The file's own comment says it:
+> *"This used to be computed and thrown away … so a confirmed AVOID skill could not
+> stop the plan it was written to stop."* So the code **can** require a skill — on the
+> plan path. The claim *"the prompt can ask for a skill, the code cannot require
+> one"* is **false as it stands**; the accurate version is that the **chat** path has
+> no deterministic skill enforcement, because its note is dropped with the rest of
+> `enhancedPrompt` (see §0). The count of dead items in this section is **7, not 9**.
 
 **Three belief types, three stores, three lifecycles — and only one of them works.**
 
@@ -208,12 +220,14 @@ strategy store (`strategyStore.ts:209` → `chatSurfaceTurn.ts:144`).
 applies (`MemoryRetrievalService.ts:226`), so an unapproved skill is **named** to the
 model and never **given** to it.
 
-**Guards: 18 of 22 genuinely bite.** Real: worth gate, graveyard + revival, graveyard
-sweep, idle lifecycle, consolidation, tombstone cooldown, pending-dup, live coverage,
-IF/THEN bar, library cap, status ladder, veto-cost/negative-lift demotion, approval
-gate, byte budget (refuses growth, never evicts), ε-holdout. Dead: the hard avoid
-veto, the predicate ceiling, the insight pruner, the rules store. Partial: stale-skill
-demotion (proposal-only).
+**Guards: 19 of 22 genuinely bite** (corrected from 18). Real: worth gate, graveyard +
+revival, graveyard sweep, idle lifecycle, consolidation, tombstone cooldown,
+pending-dup, live coverage, IF/THEN bar, library cap, status ladder, veto-cost/
+negative-lift demotion, approval gate, byte budget (refuses growth, never evicts),
+ε-holdout, **the hard avoid veto** (on the plan path), and **the predicate ceiling**
+(on the plan path). Dead: the insight pruner, the rules store. Partial: stale-skill
+demotion (proposal-only), and the predicate ceiling + trigger note on the **chat**
+path, where the note is dropped with `enhancedPrompt`.
 
 ---
 
