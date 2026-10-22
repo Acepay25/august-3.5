@@ -360,7 +360,7 @@ housekeeping (a thread switch moves the **view**, never the run).
 
 | Feature | Evidence |
 | --- | --- |
-| **`NavRail.tsx` — 242 lines, never rendered** | `App.tsx:2507-2515` says so in the source; `tests/deadControlsGuard.test.ts:145` pins the absence. Only `AccountRow` and `NAV_RAIL_AUTO_COLLAPSE_PX` are live |
+| **`NavRail.tsx` — 242 lines, never rendered** | `App.tsx:2507-2515` says so in the source; `tests/deadControlsGuard.test.ts:145` pins the absence. Three exports are live: `AccountRow` and `NAV_RAIL_AUTO_COLLAPSE_PX` (`App.tsx:129`) and `NAV_RAIL_EXPANDED_PX` (`components/agents/AgentsView.tsx:73`) |
 | `SurfaceMenuList`'s five-surface list | its only mount passes `hideSurfaces` (`App.tsx:2725-2731`), so `!hideSurfaces && SURFACE_ITEMS.map(...)` never evaluates — taking the brand-gradient active bar, the badge count, and the "a conversation is still running" busy badge (`RunBusyBadge` is imported **only** there) with it |
 | `Header`'s three dead props | `isAnalysisInProgress` / `currentVisionData` / `pendingQueueCount` are declared (`Header.tsx:12-20`), passed (`App.tsx:2531-2535`), and never read; `pendingQueueCount` is live state whose only consumer is a prop nobody reads |
 | `App.tsx:687/702` | two dead locals (`isNavOverlay`, `closeNavOverlay`) |
