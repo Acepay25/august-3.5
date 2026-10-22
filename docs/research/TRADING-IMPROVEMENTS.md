@@ -527,7 +527,7 @@ At the same time, the *chat* path has no deterministic gate at all
 `''`, and the calibration penalty, the provider-accuracy note, the similar-setups
 and regime weighting all reach the model as prose only. The deterministic half of
 the guard system is dead ON THE CHAT PATH — `applyNotebookSkillsToAnalysis` is live on the plan path (`services/trade/presentTradeTool.ts:113`), and the
-the predicate gate's confidence ceiling is computed and dropped.
+predicate gate's confidence ceiling is computed and dropped.
 
 ### The proposed change
 
