@@ -214,4 +214,20 @@ describe('buildSkillsIndexForPrompt', () => {
         expect(block).not.toContain('skill-30\n');
         expect(block).toContain('…and 10 more');
     });
+
+    it('does not name an unapproved skill the injection would never hand over', () => {
+        // The index is the list the prompt says to APPLY from. Naming a rule the
+        // retrieval would refuse reads to the model as a broken promise, and to
+        // the trader as a flaky system. An absent fact stays fail-open (legacy
+        // callers), but a projected row always carries it.
+        const block = buildSkillsIndexForPrompt([
+            { slug: 'approved-one', ifCondition: 'a real condition here', thenAction: 'take it', approved: true },
+            { slug: 'unapproved-one', ifCondition: 'a model-only condition', thenAction: 'take it', approved: false },
+            { slug: 'legacy-row' },
+        ]);
+        expect(block).toContain('approved-one');
+        expect(block).not.toContain('unapproved-one');
+        expect(block).toContain('legacy-row');
+        expect(block).toContain('## Skills library — 2 skills');
+    });
 });

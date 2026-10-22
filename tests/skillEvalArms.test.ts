@@ -12,11 +12,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
  *      credit reads (skillInjectedSince).
  */
 
-const analyzeCalls: Array<{ prompt: string }> = [];
+const analyzeCalls: Array<{ prompt: string; allowedTools?: string[] }> = [];
 
 vi.mock('../services/providers/GenericAnalysisService', () => ({
-    analyzeTradingView: (async (_cfg: unknown, params: { prompt: string }) => {
-        analyzeCalls.push({ prompt: params.prompt });
+    analyzeTradingView: (async (_cfg: unknown, params: { prompt: string; allowedTools?: string[] }) => {
+        analyzeCalls.push({ prompt: params.prompt, allowedTools: params.allowedTools });
         return { analysis: { confidence: 'Medium', direction: 'Long' } };
     }) as never,
 }));
@@ -51,6 +51,7 @@ vi.mock('../services/analysis/KlineService', () => ({
 }));
 
 import { buildDefaultRunner } from '../services/learning/SkillEvalScheduler';
+import { AUTOMATION_EVALUATION_TOOLS } from '../services/trade/automationTurn';
 import {
     initMemoryFiles,
     createMemoryFile,
@@ -197,6 +198,25 @@ describe('skill A/B eval arm construction', () => {
         const [treatment, baseline] = analyzeCalls;
         expect(treatment.prompt).toContain('DOCTRINE-MARKER');
         expect(baseline.prompt).toContain('DOCTRINE-MARKER');
+    });
+
+    it('every detached arm carries the evaluation allow-list, never an unrestricted turn', async () => {
+        // An empty/absent list means UNRESTRICTED at the executor, and this run
+        // is fired detached from the trade-sync path. The list must be present
+        // on the wire, and it must exclude the acting tools as well as the
+        // notebook writers the automation deny-list already names.
+        const runner = buildDefaultRunner({ id: 'test-provider' } as never, USER);
+        await runner(makeTrade(), { skillEnabled: true, skill: skillContext() });
+        await runner(makeTrade(), { skillEnabled: false, skill: skillContext() });
+
+        expect(analyzeCalls).toHaveLength(2);
+        for (const call of analyzeCalls) {
+            expect(call.allowedTools).toEqual(AUTOMATION_EVALUATION_TOOLS);
+            expect(call.allowedTools?.length).toBeGreaterThan(0);
+            for (const acting of ['present_trade', 'decline_trade', 'propose_skill', 'forge_tool', 'write_memory_note']) {
+                expect(call.allowedTools).not.toContain(acting);
+            }
+        }
     });
 
     it('neither arm records injection telemetry', async () => {

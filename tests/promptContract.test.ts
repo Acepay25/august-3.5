@@ -91,7 +91,7 @@ import { TRADE_CHAT_SYSTEM_PROMPT, buildSkillsIndexForPrompt } from '../services
 import {
     AUTOMATION_TOOLS, AUTOMATION_UNATTENDED_DENY, automationSystemPrompt, runAutomationTurn,
 } from '../services/trade/automationTurn';
-import { listSkills } from '../services/learning/SkillMemoryService';
+import { listSkills, skillIndexRows } from '../services/learning/SkillMemoryService';
 import { activeStrategiesBlock } from '../services/learning/strategyStore';
 import { buildProfileMemoryIndex } from '../services/learning/profileMemory';
 import { HARNESS_CONTRACT_PROMPT } from '../constants/prompts/harnessContract';
@@ -103,7 +103,17 @@ vi.mock('../services/analysis/DeskToolsService', async (importOriginal) => {
 });
 vi.mock('../services/learning/SkillMemoryService', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../services/learning/SkillMemoryService')>();
-    return { ...actual, listSkills: vi.fn() };
+    const listSkills = vi.fn();
+    return {
+        ...actual,
+        listSkills,
+        // The one projection is real; only its library read is stubbed, so a
+        // seeded skill carries the SAME approval fact the production index
+        // reads. A stub here would let this file audit a row shape the app
+        // never builds.
+        skillIndexRows: () => (listSkills() as Array<{ file: { name: string }; meta: Parameters<typeof actual.skillIndexRow>[1] }>)
+            .map(({ file, meta }) => actual.skillIndexRow(file, meta)),
+    };
 });
 vi.mock('../services/learning/strategyStore', () => ({ activeStrategiesBlock: vi.fn() }));
 vi.mock('../services/learning/profileMemory', () => ({ buildProfileMemoryIndex: vi.fn() }));
@@ -214,12 +224,16 @@ const toolsNamedIn = (text: string): string[] =>
 
 const SENTINEL = 'SENTINEL-SKILL-BODY-MUST-NOT-BE-DUMPED';
 
-const skillRows = (n: number) => Array.from({ length: n }, (_, i) => ({
+/** A skill as the library holds it. The `approvedBy` fact is not decoration:
+ *  an unapproved skill is no longer named to a model at all, so rows that must
+ *  reach a prompt have to carry the fact that makes them live. */
+const skillRows = (n: number, approved = true) => Array.from({ length: n }, (_, i) => ({
     file: { name: `skill-${i}.md`, content: '', createdAt: '' },
     meta: {
         status: 'active', kind: 'repeat',
         description: i === 0 ? SENTINEL : `rule number ${i}`,
         ifCondition: 'x', thenAction: 'y',
+        ...(approved ? { approvedBy: 'human' } : {}),
     },
 } as never));
 
@@ -399,6 +413,18 @@ describe('P1 · the Chat surface sends a prompt that matches its contract', () =
         // the surface has no chart, so the heading names what the skill must match
         expect(text).toContain('what the trader asks about');
     });
+
+    it('does not name a skill the trader has not approved', async () => {
+        // The index and the injection read ONE filter. Before that, an
+        // unapproved skill was NAMED here and then refused when the model tried
+        // to use it — a broken promise the model could only route around. The
+        // check is on the wire, not on the row: the name must not appear.
+        mockSkills.mockReturnValue(skillRows(2, false));
+        const { messages } = await send();
+        const sent = systemTextOf(asSent(messages));
+        expect(countOf(sent, SENTINEL), 'P1 chat: an unapproved skill was named to the model').toBe(0);
+        expect(sent).not.toContain(SKILLS_HEADING);
+    });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -412,15 +438,7 @@ describe('P2 · the dock sends a prompt that matches its contract', () => {
      * this cannot drift away from what the app sends.
      */
     const dockPrompt = (): string => {
-        const rows = listSkills().map(({ file, meta }) => ({
-            slug: file.name.replace(/\.md$/i, ''),
-            status: meta.status,
-            kind: meta.kind,
-            description: meta.description,
-            ifCondition: meta.ifCondition,
-            thenAction: meta.thenAction,
-        }));
-        const skillsBlock = buildSkillsIndexForPrompt(rows, 30, 'this chart');
+        const skillsBlock = buildSkillsIndexForPrompt(skillIndexRows(), 30, 'this chart');
         return `${TRADE_CHAT_SYSTEM_PROMPT}${skillsBlock ? `\n\n${skillsBlock}` : ''}`;
     };
 

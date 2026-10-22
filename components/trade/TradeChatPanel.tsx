@@ -62,7 +62,7 @@ import BiasChips from './BiasChips';
 import { saveBot, type AgentBot } from '../../services/agents/agentRoster';
 import { resolveAgentContext, SINGLE_AGENT_MEMORY_BUDGET, type ResolvedAgentContext } from '../../services/agents/agentContext';
 import { getFirstReadyProvider, isProviderReady, formatModelDisplayName, computeChatModelFallback } from '../../utils/providerUtils';
-import { listSkills } from '../../services/learning/SkillMemoryService';
+import { skillIndexRows } from '../../services/learning/SkillMemoryService';
 import { buildProfileMemoryIndex } from '../../services/learning/profileMemory';
 import {
     ensureSupervisorListeners, setSessionModel,
@@ -424,14 +424,11 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
      *  packet fetch: negligible. */
     const skillsIndexForPrompt = (): string => {
         try {
-            return buildSkillsIndexForPrompt(listSkills().map(({ file, meta }) => ({
-                slug: file.name.replace(/\.md$/i, ''),
-                status: meta.status,
-                kind: meta.kind,
-                description: meta.description,
-                ifCondition: meta.ifCondition,
-                thenAction: meta.thenAction,
-            })));
+            // The ONE projection (SkillMemoryService.skillIndexRows), so this
+            // surface cannot drift from the Chat surface's filter again: it used
+            // to pass none of the gate's facts, naming suspended, disabled,
+            // manual-only, other-audience and unapproved rules to a seat.
+            return buildSkillsIndexForPrompt(skillIndexRows());
         } catch {
             return '';
         }

@@ -30,14 +30,21 @@ vi.mock('../services/analysis/KlineService', () => ({
     // BiasChips pulls klines for the dock's regime row — keep the suite offline.
     fetchKlines: vi.fn(async () => []),
 }));
-vi.mock('../services/learning/SkillMemoryService', () => ({
-    listSkills: (...args: unknown[]) => (listSkillsMock as (...a: unknown[]) => unknown)(...args),
-    // E-35 wiring lives in presentTradeTool; this suite is about the dock's
-    // receipts, so the deterministic layer is a pass-through here.
-    applyNotebookSkillsToAnalysis: (analysis: unknown) => analysis,
-    confirmedAvoidForSetup: () => null,
-    skillFileNameFor: () => null,
-}));
+vi.mock('../services/learning/SkillMemoryService', async (importOriginal) => {
+    const mod = await importOriginal<typeof import('../services/learning/SkillMemoryService')>();
+    type Row = { file: { name: string }; meta: Parameters<typeof mod.skillIndexRow>[1] };
+    return {
+        ...mod,
+        listSkills: (...args: unknown[]) => (listSkillsMock as (...a: unknown[]) => unknown)(...args),
+        // The real field projection, fed from this suite's library stub.
+        skillIndexRows: () => (listSkillsMock() as Row[]).map(({ file, meta }) => mod.skillIndexRow(file, meta)),
+        // E-35 wiring lives in presentTradeTool; this suite is about the dock's
+        // receipts, so the deterministic layer is a pass-through here.
+        applyNotebookSkillsToAnalysis: (analysis: unknown) => analysis,
+        confirmedAvoidForSetup: () => null,
+        skillFileNameFor: () => null,
+    };
+});
 vi.mock('../utils/activeUser', () => ({
     getActiveUsername: () => 'alice',
     LAST_ACTIVE_USER_KEY: 'last_active_user',
@@ -231,7 +238,10 @@ describe('skills index refresh when a growth action lands (B5)', { timeout: 45_0
         await screen.findByText(/Proposing a skill/);
 
         // The library now shows the proposed skill (a human approved it).
-        listSkillsMock.mockReturnValue([{ file: { name: 'pullback-break.md' }, meta: { status: 'candidate', ifCondition: 'reclaim', thenAction: 'long' } }]);
+        // The approval fact is part of the fixture because the index gates on
+        // it — `isApprovedSkill` is what the injection path reads, and an
+        // unapproved row is deliberately not named to a seat.
+        listSkillsMock.mockReturnValue([{ file: { name: 'pullback-break.md' }, meta: { status: 'candidate', ifCondition: 'reclaim', thenAction: 'long', approvedBy: 'human' } }]);
         script(yieldText('second read'));
         const box = await screen.findByPlaceholderText(/Ask anything/);
         fireEvent.change(box, { target: { value: 'and now?' } });

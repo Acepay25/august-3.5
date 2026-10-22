@@ -36,7 +36,16 @@ vi.mock('../services/analysis/DeskToolsService', async (importOriginal) => {
 vi.mock('../services/trade/toolPayloadStore', () => ({ saveToolPayload: vi.fn(() => true) }));
 vi.mock('../services/learning/SkillMemoryService', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../services/learning/SkillMemoryService')>();
-    return { ...actual, listSkills: vi.fn() };
+    const listSkills = vi.fn();
+    return {
+        ...actual,
+        listSkills,
+        // The one projection is real; only its library read is stubbed. The
+        // field list stays in production code so the fixture cannot drift from
+        // what the index actually carries (approval included).
+        skillIndexRows: () => (listSkills() as Array<{ file: { name: string }; meta: Parameters<typeof actual.skillIndexRow>[1] }>)
+            .map(({ file, meta }) => actual.skillIndexRow(file, meta)),
+    };
 });
 vi.mock('../services/learning/strategyStore', () => ({ activeStrategiesBlock: vi.fn() }));
 vi.mock('../services/learning/profileMemory', () => ({ buildProfileMemoryIndex: vi.fn() }));
@@ -48,7 +57,7 @@ const mockMemory = vi.mocked(buildProfileMemoryIndex);
 
 const skillRows = (n: number) => Array.from({ length: n }, (_, i) => ({
     file: { name: `skill-${i}.md`, content: '', createdAt: '' },
-    meta: { status: 'active', kind: 'repeat', description: `rule number ${i}`, ifCondition: 'x', thenAction: 'y' },
+    meta: { status: 'active', kind: 'repeat', description: `rule number ${i}`, ifCondition: 'x', thenAction: 'y', approvedBy: 'human' },
 } as never));
 
 /** The transport's first message is the system prompt it was handed. */

@@ -36,7 +36,7 @@ import { CASUAL_CHAT_SYSTEM_PROMPT, CHAT_SURFACE_SYSTEM_PROMPT } from '../../con
 import { TASK_BUDGETS } from '../providers/taskBudgets';
 import { resolveComposerEffort, type ReasoningEffort } from '../providers/reasoningControls';
 import { buildSkillsIndexForPrompt, rankSkillIndexRows } from './tradeChatContext';
-import { listSkills } from '../learning/SkillMemoryService';
+import { skillIndexRows } from '../learning/SkillMemoryService';
 import { activeStrategiesBlock } from '../learning/strategyStore';
 import { buildProfileMemoryIndex } from '../learning/profileMemory';
 import { runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
@@ -111,24 +111,7 @@ export const surfacePromptWith = (mandate: string, where: string): ChatSurfacePr
     let skillsBlock: string;
     let skills: string[];
     try {
-        const rows = listSkills().map(({ file, meta }) => ({
-            slug: file.name.replace(/\.md$/i, ''),
-            status: meta.status,
-            kind: meta.kind,
-            description: meta.description,
-            ifCondition: meta.ifCondition,
-            thenAction: meta.thenAction,
-            // The facts the index's own gate needs, so a rule the harness would
-            // never hand a seat (retired, dormant, trader-disabled,
-            // human-invoked-only, or scoped to the other kind of seat) cannot
-            // occupy one of the 30 slots a good skill needs. These mirror
-            // `SkillMeta` — the retrieval filters on the same fields.
-            audience: meta.audience,
-            manualOnly: meta.manualOnly,
-            suspended: Boolean(meta.suspendedAt),
-            disabled: Boolean(meta.disabledByUser),
-            lastEvidenceAt: meta.lastEvidenceAt,
-        }));
+        const rows = skillIndexRows();
         // The SAME ranked list the prompt carries, so the row's `injectedSkills`
         // names exactly the skills the model was shown. Ranking it twice (here
         // and inside the builder) is idempotent — the sort is stable.

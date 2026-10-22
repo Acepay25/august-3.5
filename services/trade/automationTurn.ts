@@ -63,6 +63,17 @@ export const AUTOMATION_TOOLS: string[] = CHAT_SURFACE_TOOLS.filter(
     tool => !AUTOMATION_UNATTENDED_DENY.includes(tool),
 );
 
+/** The narrower set a DETACHED EVALUATION may call (SkillEvalScheduler).
+ *
+ *  A scheduled run is allowed to present one plan — that is its job. A skill
+ *  eval's job is to judge a skill, not to act: presenting a plan draws/arms a
+ *  watch and recording a decline writes a record, so neither belongs in a run
+ *  fired from the trade-sync path with nobody watching. Derived from the list
+ *  above, so the deny-list stays the one owner of "what may not run unattended". */
+export const AUTOMATION_EVALUATION_TOOLS: string[] = AUTOMATION_TOOLS.filter(
+    tool => tool !== 'present_trade' && tool !== 'decline_trade',
+);
+
 /** A plan is rationed per run and per day. `1` per run is not stinginess: one
  *  scheduled analysis should produce one plan, and a model that presents twice
  *  in a turn has changed its mind, not found a second trade — the refused
