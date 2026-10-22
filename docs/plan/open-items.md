@@ -350,7 +350,7 @@ or, for a single file, `git checkout <sha> -- <path>`. The content also remains 
 
 | kept | why |
 |---|---|
-| `docs/app-flow.md` and `docs/app-flow.html` | **living and machine-checked** — **400** verified anchors, 0 unattributed (re-measured 2026-10-23; this row said 303). The anchor gate scans both. |
+| `docs/app-flow.md` and `docs/app-flow.html` | **living and machine-checked** — **409** verified anchors, 0 unattributed (re-measured 2026-10-23 after the pattern-memory and NavRail corrections; this row said 303). The anchor gate scans both. |
 | `docs/learning-loop-map.md` | living, but **three rows are wrong** (Report 4 §8.1 row 12) — needs UPDATE, not deletion. |
 | `docs/ui-doctrine.md` | living — the binding UI rules. Needs a 2 px correction (O-87), not deletion. |
 | `docs/plans/debate-deletion-status.md` | the **dated history ledger** — names deleted files on purpose, and `scripts/check-flow-doc-anchors.cjs:44` scans it. **Deleting it breaks a gate.** |

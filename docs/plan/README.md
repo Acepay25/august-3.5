@@ -182,7 +182,7 @@ These are not in the ordering report's numbered list; they are real, and they ar
 
 | mechanism | what it protects |
 |---|---|
-| **`npm run check-flow-doc-anchors`** | the line-number claims in `docs/app-flow.md` — **400** anchors verified, 0 unattributed (measured 2026-10-23; this file is not one of the gate's own documents, so the figure is restated by hand and had drifted from 296). **It cannot see a citation that names no symbol**, which is exactly where the stale ones live; that class is repaired by hand (§14 of the cleanup manifest). |
+| **`npm run check-flow-doc-anchors`** | the line-number claims in `docs/app-flow.md` — **409** anchors verified, 0 unattributed (measured 2026-10-23; this file is not one of the gate's own documents, so the figure is restated by hand and had drifted from 296). **It cannot see a citation that names no symbol**, which is exactly where the stale ones live; that class is repaired by hand (§14 of the cleanup manifest). |
 | **`npm run render-probe`** | the rendered transcript. The only gate that can see a rendered row. |
 | **`npm run skill-approval-probe`** | the human-actuation path. Asserts notebook **bytes** after a real click. |
 | **the open-items register** (`open-items.md`) | every claim carries a `file:line` that proves it is open **at HEAD**. It is a *measurement*, not a transcription — which is why it corrected five rows from the previous audit rather than repeating them. |
