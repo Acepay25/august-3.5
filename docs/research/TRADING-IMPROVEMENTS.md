@@ -975,7 +975,14 @@ by removing the silent failure in (3), which is a simplification in its own righ
 > (`services/learning/MemoryRetrievalService.ts:282`) has no index counterpart, so a
 > skill with no `prior` and no counted outcome is still named. That second one is a
 > behaviour change with a visible blast radius (a fresh notebook's index could empty)
-> and is left as the owner's call.
+> and is left as the owner's call. A third pair remains on the LABEL side only:
+> `manualOnly` and a non-`all` `audience` are dropped by both the index
+> (`services/trade/tradeChatContext.ts:276/:279`) and the retrieval
+> (`services/learning/MemoryRetrievalService.ts:267`), yet the card still reads
+> "Enabled — injected", and `components/learn/MemoryFilesManager.tsx:241` says the same
+> in a toast. No writer in the tree sets either field (a grep over `services/` and
+> `constants/` reaches only the parser and the serialiser), so the population today is
+> hand-edited or imported files — which is why the arm is not simply added.
 
 **Verdict: ADOPT**
 **Effort: S**

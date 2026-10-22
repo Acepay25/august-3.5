@@ -1746,3 +1746,64 @@ automation path has no provider fallback. Each is corrected here. **`docs/resear
 not policed** — the anchor gate reads four documents — so nothing measures the rest of
 the corpus automatically, and O-29 was the proof that a register row can be confidently
 wrong for three days. That is the honest limit of this pass, not a resolved item.
+
+---
+
+## 36. The second review round: what my own fix got wrong (2026-10-23)
+
+**Method.** After §35 landed, two more reviewers were pointed at `792589ff` itself —
+one for runtime reach, one for design quality. Four of their findings were real and
+are fixed here; two were checked and are false; the rest are recorded as open, with the
+measurement that makes them open rather than vague.
+
+**Fixed.**
+
+1. **The new label promised a path that does not exist for the row showing it.** The
+   catalogue's title said "A draft is approved in the Coach inbox" — but the writers that
+   produce an unapproved file (`ingestIfThenFromTrade`, and the worth-gate `create`)
+   queue NO draft, so the very rows that reach that sentence have nothing waiting in the
+   inbox. The wording now states the rule ("a skill reaches a seat only on a human
+   approval") and the one switch that is real — Settings → *Starter playbook library*
+   (`components/settings/SessionUsagePanel.tsx:209-227`) — without promising a row that
+   may not exist. `components/learn/SkillsCatalog.tsx:163`.
+2. **`approvedBy: 'supervisor'` was called "nothing has approved this rule"** while the
+   pill beside it read "auto-approved". Both sentences are true of the GATE and false of
+   each other; the reason line now names who accepted it
+   (`components/skills/SkillDetail.tsx:151`), and `tests/skillLiveLabel.test.tsx` pins
+   that the two do not contradict — proved red by changing the one string comparison.
+3. **A row signature omitted the new fact.** `describeRosterSync`
+   (`components/learn/SkillsCatalog.tsx:185`) lists every field that makes a roster row
+   what it is, and the refresh line it writes ("Refreshed — nothing changed") is only
+   honest if that list is complete. `approved` was not in it, so flipping the starter
+   shelf and pressing Refresh would move every `book-*.md` card from the check to the ban
+   and report no change. Added.
+4. **A test depended on jsdom's case folding.** `[title*="nothing has approved"]` matched
+   a sentence that begins "Nothing has approved…" — jsdom matched it, Chromium would not.
+   The selector now matches a substring whose case is fixed (`has approved this rule`).
+
+**Checked and false.** The design reviewer's proposal to give a superseded skill its own
+`off` arm rests on "the matcher refuses it while the catalogue says Enabled".
+`skillMatchesSetup` does test `supersededBy` (`services/learning/SkillMemoryService.ts:1420`),
+but the writer that supersedes a skill also retires and archives it — `stampStatusTransition(meta,
+'retired', 'superseded')`, `meta.status = 'retired'`, `enabled: false` (`:3458-3468`) — and
+`skillAvailability` already answers `Off` for a retired rule
+(`components/learn/SkillsCatalog.tsx:148`). An arm for the state alone would be a branch
+nothing can reach. The reviewer also asked for a count of skills awaiting approval; there
+is genuinely none (§35's finding 4 stands) — that is a product gap, not a text fix, and it
+is the owner's to weigh.
+
+**Still open, with the measurement.** `manualOnly` and a non-`all` `audience` are dropped by
+BOTH the index (`services/trade/tradeChatContext.ts:274-279`) and the retrieval
+(`services/learning/MemoryRetrievalService.ts:267`), yet the catalogue still calls such a
+file "Enabled — injected": the same class of label lie, one arm short. It is left open
+because no writer in the tree sets either field (`grep "manualOnly: true"` and
+`"audience:"` across `services/` and `constants/` find only the parser and the serialiser) —
+so the population today is hand-edited or imported files. `components/learn/MemoryFilesManager.tsx:241`
+carries the same lie in a toast ("is now injected into every prompt") for a file the gate
+refuses. And `get_notebook_map` still lists unapproved skill files — deliberately: it
+answers what is IN the notebook, not what a seat is given.
+
+**Gates.** `tsc` clean · **515 files / 5,358 tests**, 0 skipped (+1 case) · eslint 0 errors /
+655 warnings · anchors 410, 0 unattributed · `render-probe` re-run AFTER the label text
+changed again — 126 ok, zero pageerrors, so the Learn sweep saw the new words rather than
+the old ones.

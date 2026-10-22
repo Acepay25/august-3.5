@@ -261,3 +261,22 @@ ledgers into the manifest and diffs it against `git ls-files`), then
   re-opened every claim this session's prose makes found several citations that had been
   wrong for days — all corrected, and the limit stated in §35 because `docs/research/**`
   sits outside the four documents the anchor gate polices.
+- **05:10 (2026-10-23)** — **The second review round audited the first round's fix, and
+  found four defects in it.** My own label text promised "a draft is approved in the Coach
+  inbox" for files whose writer queues no draft at all — now reworded to the rule plus the
+  one switch that exists (`SkillsCatalog.tsx:163`). `approvedBy: 'supervisor'` was labelled
+  "nothing has approved this rule" beside a pill saying it *had* — the reason line now names
+  who accepted it (`SkillDetail.tsx:151`), red-proved by flipping that one comparison. The
+  roster's row signature left `approved` out, so flipping the starter shelf and pressing
+  Refresh would have moved every card and reported "nothing changed"
+  (`SkillsCatalog.tsx:185`). And one test passed only because jsdom folds case in an
+  attribute selector — Chromium would not. Two reviewer proposals were checked and refused:
+  a `supersededBy` arm (the writer that supersedes also retires the skill at
+  `SkillMemoryService.ts:3458-3460`, and retirement already answers `Off`), and a count of
+  skills awaiting approval, which is a real gap but a product one, not a text fix. Recorded
+  as open with its measurement: `manualOnly` and a non-`all` audience are dropped by both
+  the index and the retrieval yet still read "Enabled — injected" on the card, and no writer
+  in the tree sets either field, so today's population is hand-edited or imported files;
+  `MemoryFilesManager.tsx:241` carries the same claim in a toast. **515 files / 5,358 tests,
+  `tsc` clean, eslint 0/655, anchors 410, `render-probe` 126 ok with zero pageerrors after
+  the text change.** See `docs/plan/implementation-record.md` §36.

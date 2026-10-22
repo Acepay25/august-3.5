@@ -160,7 +160,7 @@ export const skillAvailability = (
         return {
             state: 'off',
             label: 'Off',
-            title: 'Not injected — nothing has approved this rule, so no seat is given it. A draft is approved in the Coach inbox; the starter library has its own switch in Settings.',
+            title: 'Not injected — nothing has approved this rule, so no seat is given it. A skill reaches a seat only on a human approval; a rule the LLM supervisor accepted is not one, and the starter library has its own switch in Settings.',
         };
     }
     return {
@@ -182,7 +182,7 @@ export const skillAvailability = (
 const describeRosterSync = (prev: CatalogSkill[] | null, next: CatalogSkill[]): string => {
     if (prev === null) return 'Skill list read';
     const sig = (s: CatalogSkill): string =>
-        `${s.name}|${s.description}|${s.enabled}|${s.status}|${s.kind}|${s.suspendedAt ?? ''}|${s.disabledByUser ?? false}|${s.system}|${s.wins}|${s.losses}|${s.family}`;
+        `${s.name}|${s.description}|${s.enabled}|${s.status}|${s.kind}|${s.suspendedAt ?? ''}|${s.disabledByUser ?? false}|${s.system}|${s.approved}|${s.wins}|${s.losses}|${s.family}`;
     const before = new Map(prev.map(s => [s.id, sig(s)]));
     let added = 0;
     let changed = 0;
