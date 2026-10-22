@@ -83,20 +83,70 @@ Your file list is at:
 Format: `# <repo> :: <shard> :: N files :: SIZE KB` then `# size_bytes\ttype\tpath`
 then one row per file: `size_bytes<TAB>type<TAB>path`.
 
+### 3.1 HOW TO READ — batch, do not read one file per call
+
+**This is the difference between finishing and not finishing.** One `read` call per
+file is far too slow for shards of this size. Read in batches instead.
+
+Use the **shell tool** (`pwsh` on this machine) to print many files in one call, for
+example:
+
+```powershell
+$root='C:/Users/rober/AppData/Local/Temp/harness-research/pi'
+$files = @('packages/ai/src/a.ts','packages/ai/src/b.ts', ...)   # 15-30 paths
+foreach ($f in $files) { "===== FILE: $f ====="; Get-Content (Join-Path $root $f) -Raw }
+```
+
+`Get-Content -Raw` on a path list is a **read**, not an execution — it does not run
+the repo's code, does not trigger a postinstall, and does not touch the network. It
+is exactly the same bytes the `read` tool would show you. Use it.
+
+Rules for batching:
+
+- **15–30 files per shell call.** Above ~30 the output is truncated and you will
+  silently lose the tail, which is worse than being slow.
+- Print a `===== FILE: <path> =====` header before each file, so you can attribute
+  what you see.
+- Take the paths from your `.files.txt` list; do not guess or glob the whole repo.
+- Never run a build, a test, an install, a codegen, or any repo script. Never run
+  `node`, `python`, `npm`, `pnpm`, `pip`, `uv`, `make`, `cargo` on a repo file.
+  `Get-Content`, `Select-String`, `Get-ChildItem` and `git` are all fine.
+- If a file is huge (> 120 KB), read it alone, or read its head and tail with
+  `Get-Content -TotalCount 400` and `Get-Content -Tail 200`, and say so in the note.
+- For very large shards, **read in batches and write the report as you go** —
+  append a section per batch. Do not hold 300 files in your head and write once at
+  the end.
+
+### 3.2 How much to read — three tiers
+
 The `type` column is the pre-computed classification: `source`, `config`, `docs`,
 `tests`, `examples`, `build-CI`, `assets`, `generated-vendored`.
 
-**Read every file in that list.** If the list is large, work through it in
-sub-batches and keep going until it is exhausted. Do not stop early and do not
-sample silently. Files marked `generated-vendored` or `assets` do NOT need a
-line-by-line read — confirm what they are (size, name, a peek at the head for
-non-binary) and mark them `skipped` with that reason. Everything else should be
-`read`.
+| Tier | Types | What you must do | Status you record |
+| --- | --- | --- | --- |
+| **1 — the load-bearing code** | `source` files that implement behaviour | Read the file **fully**. Per-file entry with purpose, abstractions, data flow, non-obvious decisions, edge cases, surprises. | `read` |
+| **2 — the bulk** | `tests`, `docs`, `examples`, `config`, `build-CI` | Read them in batches. You still open every file, but a **one-line entry per file** is enough for a test file or a config file: what it pins or configures. For `docs`, one line on what the document *decides* is usually the most valuable thing in it. | `read` |
+| **3 — not read line by line** | `generated-vendored`, `assets` | Confirm what it is (size, name, and a peek at the head for a non-binary), then say so. Do not read a 1.4 MB JSON schema line by line. | `skipped` + reason |
 
-If a file turns out to be generated/machine output despite being classified as
-source (e.g. a huge JSON schema, a bundled bundle, a fixture dump), mark it
-`skipped` with a reason naming what it actually is. Being honest here is worth
-more than pretending.
+**Never fabricate a read.** If a file is unreadable, truncated by your own batching,
+or unclear, mark it `skipped` with a reason that says exactly what happened. If a
+batch output was cut off, re-read the tail of that batch — a silently dropped tail is
+the single worst failure mode here, because it makes the ledger claim coverage it
+does not have.
+
+A `skipped` row is not a failure. A **missing** row is.
+
+### 3.3 The file list may be huge
+
+Some shards hold 1,500–2,100 files, most of them small. That is fine: 70 files per
+shell call is 25–30 calls. Keep going until the list is exhausted. Do not stop
+early, and do not silently sample.
+
+For shards that are overwhelmingly one kind of file (e.g. 1,700 test files, or 900
+markdown design notes), the **set** is the unit of understanding. Write a section
+that says what the set does as a whole, then a **compact table with one row per
+file**. The table is the ledger: every file named, every file with a verdict.
+
 
 ---
 
@@ -113,7 +163,9 @@ Every claim must carry a `path:line` reference.
 
 ## 1. File-by-file
 
-For EACH file in the shard, an entry:
+For EACH file in the shard, an entry.
+
+### Tier 1 — load-bearing source: full entry
 
 ### `path/to/file.ext`
 - **Purpose:** one sentence.
@@ -123,9 +175,18 @@ For EACH file in the shard, an entry:
 - **Edge cases & failure handling:** what happens on empty input, error, timeout, partial write, concurrent access.
 - **Surprising:** anything that contradicts the obvious reading, or is dead / vestigial.
 
-Group the one-line entries for low-value files (config, lockfiles, tiny helpers) —
-but never omit a file: a "bulk entries" table with one row per file is acceptable
-for files with no design content.
+### Tier 2 — bulk: a compact table, one row per file
+
+| File | What it is / what it pins |
+| --- | --- |
+| `path/to/file.test.ts` | one line: what behaviour this test actually pins |
+
+Every file in the shard must appear exactly once, in a Tier-1 entry or a Tier-2
+table row. The table is not a summary — it is the ledger.
+
+### Tier 3 — skipped with a reason
+
+One line each: the file and why it was not read line by line.
 
 ## 2. Ideas worth stealing
 
