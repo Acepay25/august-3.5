@@ -1,6 +1,6 @@
 # hermes-agent :: hermes-tui-gateway
 
-**Files in shard:** 119 (read line by line in full: 95, skipped with a stated reason: 24 — see §6)
+**Files in shard:** 119 (read line by line in full: 119, skipped with a stated reason: 0 — see §7)
 **What this shard covers:** the `tui_gateway/` package of the Hermes agent — the Python JSON-RPC backend that sits behind the Ink (Node) TUI, the Electron desktop app and the web dashboard. It is the *transport and session* layer of the harness: the wire contract declared in Pydantic (`contracts/`), the method surface (`methods_*.py`), the session registry / lifecycle / reaper / compression machinery, the child-agent ("compute host" / "hosted room") isolation, the on-disk change watcher, and the cross-process plumbing (stdio JSON-RPC, WebSocket, `server_requests.py` approvals). Almost everything here is infrastructure *around* the agent loop rather than the loop itself, which is why the shard's most transferable ideas are about turn admission, event replay, permission scoping and process isolation rather than about prompting or analysis.
 
 ## 1. File-by-file
@@ -961,7 +961,136 @@
 
 ---
 
-## 2. Ideas worth stealing for August Trading
+## 2. The `tui_gateway/methods_*.py` method surface
+
+*(Added by the second coverage pass. This section covers the 24 modules the first pass never reached: the 16 skipped `methods_*.py` files plus the eight modules they call into — `server.py`, `prompt_turn.py`, `prompt_attachments.py` and the five `session_*.py` files. All 119 files of the shard are now read in full; see §7.)*
+
+### Purpose
+
+`methods_*.py` is the **handler layer** of the TUI gateway: one module per topic, each owning a handful of JSON-RPC methods and nothing else. `tui_gateway/AGENTS.md` states the root shape rule ("new RPC = a new `methods_<topic>.py` … no `if method == ...` chain"), and this pass confirms the rule is real — 34 `methods_*.py` modules declare ~240 handlers against a 248-entry contract catalogue (`contracts/`), and `contracts/registry.py`'s `assert_complete` fails a declaration with no handler *and* a handler with no declaration.
+
+The layer is not the agent loop — that lives in `run_agent` / `AIAgent`. It is the **glue between the wire and the loop**: scope binding, ownership, persistence, fail-open degradation, and the shape of the answer.
+
+### Key abstractions
+
+Five shared abstractions carry the whole layer.
+
+1. **`method_ctx.HandlerRegistry`** (`method_ctx.py:44`) — the registration seam. Every `methods_*.py` module builds its own registry, decorates its handlers with `@method("name")`, and its `register(server)` calls `HandlerRegistry.install(server)`, which **rebinds the function bodies onto `server.py`'s globals** (`bind_module`). That is why a handler body can say `_ok(rid, …)` or `_sessions` with no import: after the rebind the function's `__globals__` *is* `server.py`'s namespace. Two consequences run through the whole layer:
+   - a module-level **constant is not reachable** from a rebound body — `methods_vault.py:38` says so out loud and keeps its error code `5095` as a literal inside the handler bodies for that reason;
+   - a module-level **dict is reachable but copied**, so `profile_roster_cache.py` had to become its own module ("a cache declared there would be written to one copy and read from another").
+2. **The decorator stack.** Each topic layer has its own small vocabulary, but they all answer the same three questions — *which scope*, *which session*, *what happens on failure*:
+   - `methods_tools.py:20` `_profile_scoped_rpc(fail_code, required=(), catch_resolve=True, prefix="", scoped=True, live_session=False)` — the fullest form: required params → session resolution → profile scope → body, with body exceptions mapped to one code.
+   - `methods_session.py:31` `_session_method(name, live=False)` — `@method(name)` over a session-resolved handler (`_with_session` = no agent wait, `_with_live_session` = waits for the build); `methods_session.py:36` `_with_db(code, session_scoped)` appends a db handle.
+   - `methods_session.py:186` `_pet_method(name, fail_open=None, slug=False, scoped=True)` — a handler whose exceptions **never break the surface**: logged at debug, then a `fail_open` payload or `5031`.
+   - `methods_projects.py:27` `_projects_method(name)` — a decorator factory that injects `(pdb, conn)` and unifies the error mapping.
+   - `methods_profiles.py:23` `_profile_handler(name, code)` — the simplest form: one error code for the whole handler.
+3. **The scope.** `_profile_scoped` (`server.py:618`) and `_session_profile_runtime_scope` bind HERMES_HOME **+ secret scope + terminal policy** (and, for slash and catalog calls, the cwd) as a ContextVar around a block. This is the single most load-bearing idea in the layer, and every layer repeats the same lesson in its own words:
+   - `methods_tools.py:20` — "the same home + secret + terminal composition a turn binds, **not HERMES_HOME alone**: these bodies read config.yaml, whose `${VAR}` refs … resolve through `get_secret` — with only the home bound they read plain `os.environ`, i.e. the launch profile's values, so `mcp.servers.test` for a secondary reported green against the default profile's token."
+   - `methods_profiles.py:62` — "Home alone is half-bound: under multi-profile hosting every credential read raised `UnscopedSecretError`, which a best-effort `_try` turned into a plausible wrong answer (the toolset snapshot's `XAI_API_KEY` probe → 'every toolset off', #120726)."
+   - `methods_tools.py:519` `_session_home_scope` adds the **cwd**, because skill / bundle / quick-command resolution is cwd-keyed as well as home-keyed (#110695, #114359).
+4. **The ownership lease** (`session_lifecycle.py:121` `_ensure_active_session_slot`) — a per-session registry slot that proves this process is the only writer. `session.create` and `session.resume` deliberately do **not** claim it ("tile paints, reconnect-resumes and abandoned drafts would hold invisible slots that starve the messaging gateway sharing the cap. Anything holding a slot must be user-visible"). A claim failure **fails closed** — "an errored claim has NOT proven the session unowned; lease-less = silent double-writer hole."
+5. **The turn admission** (`prompt_turn.py:116` `_admit_prompt_turn`) — the gate every turn source crosses: ownership, liveness, the queued-prompt generation, and the presence of an agent. Synthesized turns (auto-continue, wake-ups, the notification poller) call `_run_prompt_submit` directly, and the docstring says why that is dangerous: "the bypass that once let a second backend run a duplicate turn."
+
+### Data flow — how a call flows in and out
+
+```
+client JSON-RPC frame
+  └─ rpc_dispatch.handle_request          contract check; an unknown method answers
+                                            "the client and the Hermes backend are out of sync"
+      └─ server.dispatch(req, transport)  the retirement gate; the bound transport travels into the pool
+          └─ _methods[name](rid, params)   the rebound handler body
+              ├─ scope binding             _profile_scoped / _session_profile_runtime_scope
+              ├─ session resolution        _sess_nowait / _sess / _sess_building
+              ├─ ownership                 _ensure_active_session_slot
+              └─ the work
+                   ├─ ok  → _ok(rid, result)        → write_json → the transport
+                   └─ err → _err(rid, code, msg, data) → write_json → the transport
+```
+
+…and out of the layer, an event frame:
+
+```
+_emit(event, sid, payload)          server.py:723
+  └─ _event_frame → contracts.check_payload   the payload is validated against the declared model
+      └─ write_json                 server.py:697   stamped with a per-session seq, routed to the
+                                                       OWNING session's transport
+```
+
+Three details make this work.
+
+- **`write_json` has a three-step routing ladder** (`server.py:697`): (1) an event or server→client request frame carrying `params.session_id` goes to *that session's* transport — "async events reach the owner even from threads with no contextvar binding"; (2) otherwise the context-bound transport; (3) otherwise the module stdio transport. A detached WS session gets the `_DropTransport` sink instead, so "Desktop embeds the gateway in-process and captures stdout into logs" cannot see stale frames.
+- **stdout is not stdout.** `server.py:214-215` saves `_real_stdout` and then sets `sys.stdout = sys.stderr`: "Reserve real stdout for JSON-RPC only; redirect Python's stdout to stderr so stray `print()` from libraries/tools becomes harmless gateway.stderr instead of corrupting the JSON protocol." Every crash path in the layer therefore prints to stderr (`[gateway-crash]`, `[gateway-turn]`, `[tui_gateway]`) rather than to the wire, and `server.py:80` installs a panic hook that appends the full traceback to `logs/tui_gateway_crash.log` before the one-line stderr summary.
+- **Only the long handlers leave the reader thread.** `server.py:180` `_LONG_HANDLERS` is a 70-name frozenset with the reason for each slow member written out: billing = "blocking portal (+Stripe) round-trips", `complete.path` = "git ls-files / prompt_toolkit import + skill scan", `voice.*` = "SYNCHRONOUS faster-whisper install (300s)", `command.dispatch` = "/goal draft invokes the auxiliary model; never block the RPC reader". Everything else stays inline "so fast-path ordering stays sane".
+
+### Non-obvious design decisions
+
+- **A destructive write needs explicit consent, and the consent is checked *before* the work.** `prompt.submit` can truncate a transcript, and the truncation machinery is the most carefully defended code in the shard (`methods_prompt.py:322`, `:351`, `:485`). Three separate gates: `confirm_truncate` (4029) — "An ordinal/id alone is not consent: a leftover ordinal on an ORDINARY submit is indistinguishable from a real rewind, and the cut is a destructive replace"; `confirm_empty_truncate` (4028) — ordinal 0 would DELETE every durable row; `confirm_deep_truncate` (4033) — a valid anchor can still name a stale row, so a cut that drops more than one user turn needs a second opt-in. `DEEP_TRUNCATE_ENFORCED = False` — "one release warn-only, so an older Desktop or a third-party client that predates `confirm_deep_truncate` keeps working while upgraded clients ask before a deep cut on their own."
+- **A mis-aimed cut is recoverable, not terminal.** The write is `db.replace_messages(key, truncated, active_only=True, archive_dropped=True, reject_active_turn_lease=True)` — "a rewind overwrites turns the user may not have meant to drop, and this write is the last step before they are gone — three reported incidents ended here with nothing to restore from. Soft-archiving keeps them on disk (active=0) and in the FTS index, so a mis-aimed cut is recoverable instead of terminal." `active_only=True` also stops a bare replace from deleting the compaction archive on every edit.
+- **The transcript is written BEFORE memory is touched.** "fail closed: a failed write after the in-memory rewrite would stack the new exchange on the 'undone' turns" (`methods_prompt.py:485`).
+- **The whole layer distinguishes "absent", "null" and "unknown".** `_profile_scoped_rpc` answers 4064 for an unknown profile, `_snapshot_revision` (`methods_session_control.py:163`) hashes the *visible* state so "equal reads always have equal revisions", `_snapshot_updated_at` uses only persisted timestamps — "reads never manufacture a new timestamp" — and `project.facts` answers `{"facts": null}` rather than guessing.
+- **Fail-open is a deliberate, itemised trade.** Billing (`methods_session.py:1864` `_billing_route`), the pet surface (`methods_session.py:186` `_pet_method`), `shared_metrics.*` (always `{"ok": true}`), `plugins.manage`, `mcp.servers.status` and `vault.list` all degrade to a typed envelope rather than a JSON-RPC error, because "the client always resolves and branches on the envelope". The counter-cost is stated plainly in §6: a client must carry a second, silent state for every feature it can no longer prove.
+- **An idle claim is a refusal, not a retry.** `session_auto_continue.py:400` `_handle_busy_submit` implements `display.busy_input_mode`: `interrupt` (default) → redirect, falling back to hard interrupt + queue; `queue` → queue only; `steer` → inject after the current atomic action. The reason the default exists: "rejection made clients busy-retry and drop sends". Two hard rules ride on it — a correction delivered mid-compression is demoted to queue ("a correction that reaches the provider mid-compression aborts the compression — the follow-up kills the very turn that would answer it", #61042), and steer **never** escalates to a hard interrupt, because `AIAgent.interrupt()` drops the pending-steer buffer and would silently destroy the earlier messages of a burst (#86134).
+- **The durable marker is ownership evidence, not forensics.** `session_auto_continue.py:58` `_maybe_schedule_auto_continue` reads the crash marker and refuses to re-run the turn when the marker's writer pid is still alive: "the marker is ownership evidence and the owner clears it" (#94778). The same reasoning appears in `session_lifecycle.py:88` `_install_borrowed_lease`, where a compute-host child adopts the parent's lease as an **inert** token (`enabled=False`) — "the child must neither claim a second one nor be able to release/transfer the parent's".
+- **A row is written lazily, and the reason is traffic, not tidiness.** `session_workdir.py:568` `_ensure_session_db_row` writes the row on the first *real* activity: "every TUI/desktop launch (and every 'New agent' / draft) opens a session here just to paint the composer, so eagerly creating a row left an 'Untitled' empty session behind for every launch the user never typed into." Seeded sessions are the deliberate exception (a branch carries a transcript and an explicit intent).
+- **The handler layer keeps one owner per fact.** `methods_profiles.py:605` `_configure_ui_meta` is a per-key compare-and-set on `ui_meta` ("any mismatch rejects the whole write; revisions survive deletion so a stale client cannot recreate a removed key"); `methods_tools.py:1767` `_plugins_update` answers `consent_required` + a `delta` when an update widens a plugin's permissions, and "nothing changed until the client retries with `accept_capabilities`".
+- **A slow build must not eat the message.** `session_registry.py:33` `_wait_agent_for_prompt` waits for the deferred agent build in short slices, notifies the client once past 30 s, and fails only on a dead build thread or a bounded cap — "the flat 30 s `_wait_agent` ceiling was a message-eating cliff (#63078): `prompt.submit` has already returned `{"status": "streaming"}`, the user's first message IS the turn in flight, and the deferred agent build … routinely outlives 30 seconds on cold starts. On timeout the old path emitted an error EVENT and returned without ever calling `_run_prompt_submit` — the first message was permanently discarded."
+
+### Edge cases and failure handling
+
+- **Storage failure is typed, never silent.** `methods_prompt.py:623` `_persist_session_row_for_submit` answers 5072 / 5070 (disk full) / 5071 with a `data` payload `{code, cause, details}` "so a GUI can pick a 'Run doctor' / 'Retry' action", and releases the turn slot so "neither resume nor the busy queue may see this rejected prompt as live".
+- **A failed write cannot look like a successful one.** `session_workdir.py` re-raises a disk-full error out of `_ensure_session_db_row` ("Disk-full is not a soft failure: swallowed here, `prompt.submit` returns `{"status":"streaming"}` and the message vanishes silently"), and `methods_prompt.py` writes the truncated transcript before the in-memory rewrite for the same reason.
+- **A resolved target can still be the wrong turn.** `_resolve_truncation_ordinal` refuses a stale ordinal beside a resolved durable id with 4030 — "never guess which the user meant" — and refuses an ordinal-only cut on a durable session with 4004.
+- **A repaired transcript changes what an id means.** The live list after a cold resume is the *repaired* projection (a `user;user` run merged into its first row), so an absorbed row's id resolves to nothing; the code resolves it against the **un-repaired** durable rows and returns the durable prefix instead, "so the cut keeps the inner row boundary" (#94486).
+- **A rotation splits one turn's rows across two sessions.** `session_workdir.py:695` `_submit_row_target_key` returns the live `agent.session_id` when it has rotated off `session_key`: "Writing the submit row to the stale key splits one turn's rows across two sessions: the user row in the parent, every tool row and the final text in the child" (#123545). The same hazard is why the live session, not `session_key`, is read in `session.history`, `message.react`, and the branch seed.
+- **A history desync is surfaced, never dropped.** `prompt_turn.py:271` `_commit_turn_history` tolerates exactly one mutation — a gateway-inserted pivot marker (a model switch or a personality change) — and otherwise answers the client "the response above is visible but was not saved to session history".
+- **Ownership is re-proven after the work.** `session_lifecycle.py` re-checks the lease before ending a row; `_end_unless_ledger_busy` will not end a session whose canonical ledger still holds work; `_take_over_detached_runtime_lease` moves a lease only from a **detached sibling in this process** — "a live foreign pid, a sibling that still has a client, or a same-id runtime of another profile keeps refusing — cross-process, multi-window and cross-profile exclusivity are untouched."
+- **A reaper must not reap healthy work.** `_schedule_ws_orphan_reap` (`session_lifecycle.py:962`) measures the grace in **awake** time: "closing a laptop lid for longer than the grace reaped the parked session at the instant of wake — before the Desktop's WS reconnect or `session.resume` could re-bind a transport — so every sleep/wake cycle 404'd the open chat" (#44183). It also defers while a detached turn's activity clock is fresh, and reschedules while the session still owns a wake-up schedule or a pending process notification.
+- **A notification is never delivered to the wrong session.** `session_notifications.py:49` `_notification_event_belongs_elsewhere` resolves a compression-rotated key to its continuation tip and checks other profiles' live sessions; `session_notifications.py:593` `_notif_handle_event` drops an addressed-but-unprovable event rather than adopting an orphan, and hands a durable delegation completion back so the orphan sweep can re-offer it once its owner is live.
+- **A permission the tool cannot prove is refused, not guessed.** `methods_tools.py:1564` `mcp.servers.test` reports an `auth: oauth` server with no token on disk as **not ok** — "an `auth: oauth` server serving tools/list anonymously would probe OK with no token — a false green."
+- **A secret never crosses a boundary in the clear.** `methods_vault.py` scrubs exception text with `scrub_secret_from_text` before it leaves a handler and replaces the master password with `[REDACTED]`; `methods_tools.py` redacts `shell.exec` output *before* tailing it, "so a credential crossing the slice boundary cannot survive as two unmatched fragments"; `methods_profiles.py` mirrors a `${VAR}` reference into a new profile, never the launch profile's expanded secret.
+
+### Surprising
+
+- **`session.create` returns a `lazy: true` snapshot and builds the agent afterwards.** The reply's `info` carries empty `tools` and `skills` "so Ink can paint; the AIAgent builds right after the flush" — the client's first frame is deliberately incomplete.
+- **The client's `session_id` is a lookup hint, never authority.** `server.py`'s `_current_session_steer_authority` resolves steering authority from the ContextVar-bound transport and the in-memory record's *identity*, not from the id the client sent — "transport detachment, session removal or id reuse invalidates an earlier generation". The same identity discipline runs through `session.resume`'s "reuse a session live IN THIS PROFILE, never another's".
+- **A `session.resume` can create a row that never existed.** `session_registry.py` materializes a row for a well-formed *server-minted* key that was never persisted (`_MINTED_SESSION_KEY_RE` — "only keys the server itself could have produced qualify — arbitrary strings and 8-hex runtime session ids are rejected"), because "if the backend dies in that window, the key exists client-side … and after a restart … the resume 4007ed forever" (#96793).
+- **A kanban worker transcript may not be resumed at all.** `methods_session.py:841` `_resume_guard` refuses it and fails **closed** on a positive match: "a resumed Desktop/TUI session would be a write-capable writer with none of the dispatcher ownership env, invisible to the board while a re-dispatch can start a competing writer in the same workspace" (#68779).
+- **The pet surface's names are camelCase on the wire.** `contracts/projects_pets.py` documents it ("the pet wire predates the snake_case rule and travels camelCase"), and `methods_session.py` keeps `knownRevision`, `spritesheetUnchanged`, `displayName` verbatim.
+- **A `message.complete` can carry the same text twice.** `prompt_turn.py:900` `_complete_turn_payload` distinguishes `response_previewed` (the runtime delivered the final message as an interim), `response_reused` ("this text was already delivered") and `response_transformed` ("this text was altered") — "Only the agent's reuse site sets this; never inferred from equal text (a model may say the same words twice)."
+- **The dashboard's own sidebar is a *notification*.** `methods_tools.py:308` `_refresh_live_sessions` refreshes **every** live session after an MCP reload, because "the MCP pool is process-global, so refreshing only the requester would leave sibling sessions on stale tools until `/new` — and a request without a resolvable `session_id` (desktop passes `activeSessionId ?? undefined`) would refresh nothing while still answering 'reloaded'."
+- **`/undo` is a *prefill*, not a deletion.** `methods_tools.py` rewinds N user turns and hands the backed-up text back to the composer ("Edit and resubmit, or send a new message"), soft-deleting the truncated rows on disk.
+- **A session's title can be a profile's identity.** `methods_profiles.py` treats the chat titled exactly "Bot Chat" as that profile's canonical forever-chat — "the session titled exactly 'Bot Chat' on this profile (core `UNIQUE(title)` makes it a registry of at most one row)" — and resurrects it when an accidental reaper archived it (#92687), while still honouring a deliberate archive.
+
+### The 24 files, one line each
+
+| file | what it is |
+| --- | --- |
+| `tui_gateway/server.py` | the gateway process: the session registry, the scope/lease primitives, `write_json`/`_emit`/`_ok`/`_err`, the RPC pool and the `_LONG_HANDLERS` list, and the panic hook. |
+| `tui_gateway/prompt_turn.py` | the turn itself — `_run_prompt_submit` and its per-phase helpers: admit, crash marker, bind scopes, resolve the message, run, commit, goal/loop hooks, release, follow-ups. |
+| `tui_gateway/prompt_attachments.py` | attachment staging: image sniffing, size caps, per-session attachment dirs, `@file:` ref formatting. |
+| `tui_gateway/methods_prompt.py` | `prompt.submit` and the whole truncation-consent machinery, plus the image/file/PDF attach RPCs, the side-agent RPCs and the approval RPCs. |
+| `tui_gateway/methods_session.py` | session create/list/resume/close, cwd, title, archive, reactions, delegation, spawn trees, the pet surface and the billing surface. |
+| `tui_gateway/methods_session_branch.py` | the `session.branch` / `session.branch_whole` helpers — lineage title, visible-history projection, the branch agent build, idempotency. |
+| `tui_gateway/methods_session_control.py` | `session.control` / `session.control.read` — the allowlisted goal / loop / heartbeat snapshot and the one publisher of `session.control.update`. |
+| `tui_gateway/methods_session_foreign.py` | `session.foreign.list` / `.preview` / `.import` — browsing another backend's session folders. |
+| `tui_gateway/methods_session_interrupt.py` | `session.interrupt`, `session.steer`, `session.redirect` — the correction verbs and the compute-host recovery path. |
+| `tui_gateway/methods_session_model_guard.py` | the offline model × provider coherence gate for `session.create` and the composer overrides it produces. |
+| `tui_gateway/methods_tools.py` | tools, toolsets, slash dispatch, rollback, insights, cron, learning, skills, the MCP catalog and lifecycle, the plugins hub, `cli.exec` and `shell.exec`. |
+| `tui_gateway/methods_tools_plugin_servers.py` | the per-server rows of an installed portable plugin for `plugins.manage list`. |
+| `tui_gateway/methods_slash.py` | `slash.exec` — the live-session command answers and the side-effect mirroring of a worker slash command onto the live agent. |
+| `tui_gateway/methods_projects.py` | the projects RPC surface: multi-folder workspaces, repo discovery, the sidebar tree. |
+| `tui_gateway/methods_profiles.py` | the profile RPCs: list/create/describe/configure, avatar assets, credential mirroring, the `ui_meta` compare-and-set. |
+| `tui_gateway/methods_voice.py` | voice, TTS and wake-word handlers plus their process-global state — one mic, one speaker per process. |
+| `tui_gateway/methods_vault.py` | the credential-vault RPCs: metadata-only listing, encrypted add, external-manager unlock/lock. |
+| `tui_gateway/methods_subagents.py` | the session-scoped subagent roster, interrupt and bounded live transcript tail. |
+| `tui_gateway/methods_shared_metrics.py` | the shared-metrics consent handlers — one config key pair so the CLI and the app cannot disagree. |
+| `tui_gateway/session_registry.py` | the live-session registry: the deferred agent build, the session record shapes, resume hydration, the live-session payload. |
+| `tui_gateway/session_lifecycle.py` | leases, finalize/teardown/close, the WS-orphan reaper and the transport-scoped close. |
+| `tui_gateway/session_workdir.py` | cwd resolution and healing, the durable session row, the branch seed, history rewind, git-metadata persistence. |
+| `tui_gateway/session_notifications.py` | the per-session notification poller: kanban / loop / heartbeat / delegation routing and the HUD surface note. |
+| `tui_gateway/session_auto_continue.py` | crash-interrupted-turn recovery, the queued-prompt drain and the busy-submit policy. |
+
+## 3. Ideas worth stealing for August Trading
 
 1. **Declare the wire once, generate the client, and let CI fail when it drifts.** `tui_gateway/contracts/` declares every method, request and event as a Pydantic model; `scripts/gen_gateway_contracts.py` renders the TypeScript; a test regenerates in memory and diffs the committed file, so "change the model → regenerate → `tsc` shows every consumer the field moved" (`contracts/registry.py:171-189`, `contracts/base.py:19-40`). August Trading already has a zod boundary (`schemas/tradeAnalysis.ts`) but the *client* types are hand-written — a generator for the renderer/electron boundary would kill a whole class of drift.
 2. **`assert_complete` in both directions.** A method with no contract *and* a contract with no handler are both failures (`contracts/registry.py:171-189`). August Trading has no equivalent inventory of "which service functions are exposed to which surface".
@@ -983,8 +1112,11 @@
 18. **Prompt-cache discipline: keep the prefix byte-stable and put variable text in a marked channel.** A personality change updates the ephemeral system prompt in place "so prompt-cache hits survive" and appends a pivot marker as a `user`-role message with a `display_kind` (`agent_callbacks.py:307-336`, #82756) — and a *screen changed* note rides the "one-shot user-message channel" so it "lands behind the cached prefix" (`methods_display_watch.py:49-79`).
 19. **A "did it actually run?" receipt, not a boolean.** `PersistedTurn` records the row ids and says "missing ids are unproven, never negative acknowledgements" (`contracts/events.py:219-236`); the hosted-room driver matches a receipt on `(task_id, execution_generation, role, status)` so a reply from another attempt is never mistaken for this one (`hosted_room_driver.py:969-988`).
 20. **Harden the test seam and keep it dead by default.** `synthetic_turn.py` is inert unless an env var arms it, and when armed it replaces the agent on BOTH the in-process and the isolated path "so the isolation boundary is the only variable" — and the burn is pure-Python because "a network/sleep stub releases the GIL and a green off it is fake."
+21. **A destructive write carries its own consent flag, and the flag is checked *before* the work.** The transcript-truncation path (`methods_prompt.py:322`, `:351`, `:485`) has three separate opt-ins — `confirm_truncate`, `confirm_empty_truncate` (ordinal 0 would delete every durable row) and `confirm_deep_truncate` (a valid anchor can still name a stale row) — and the refusal is a typed code, not a silent no-op. The rule that generalises: *"An ordinal/id alone is not consent: a leftover ordinal on an ORDINARY submit is indistinguishable from a real rewind, and the cut is a destructive replace."* August Trading's "edit the pending plan" and "truncate the analysis history" actions need the same three gates.
+22. **Make a mis-aimed destructive write RECOVERABLE, not merely refused.** The truncation write soft-archives the dropped rows (`archive_dropped=True`) "so a mis-aimed cut is recoverable instead of terminal", and it writes the durable transcript BEFORE touching memory "fail closed: a failed write after the in-memory rewrite would stack the new exchange on the 'undone' turns." A trade-plan or journal edit that can be undone from the store is worth more than one that merely refuses.
+23. **A busy turn should answer with a POLICY, not a rejection.** `session_auto_continue.py:400` implements `display.busy_input_mode`: `interrupt` (default) → redirect, falling back to hard interrupt + queue; `queue` → queue only; `steer` → inject after the current atomic action. The reason it exists at all: "rejection made clients busy-retry and drop sends." August Trading's two conversation homes have the same problem — a send during a streaming analysis should become a steer or a queue, not a lost message.
 
-## 3. Trading-specific findings
+## 4. Trading-specific findings
 
 1. **A trade plan needs a compare-and-set revision, not a last-write-wins write.** August Trading writes a trade plan, a journal entry and a rule/lesson; three surfaces can touch them. The hosted-room/canonical wire makes every such write a fenced mutation (`expected_revision` + `expected_generation`, `contracts/canonical.py:82-95`) and the connector policy write a CAS with a typed 4090 on conflict (`methods_connectors_account.py:229-253`). A "the plan changed under you" error is far cheaper than a silently overwritten stop.
 2. **Order/plan execution needs the `retryable` / `ambiguous` / `not_admitted` triple.** `hosted_room_peer_http.py:170-182` classifies a failed call three ways; a plan that "may or may not have been submitted" must be resolved by an idempotent replay keyed on a content digest, never by re-submitting. August Trading's `Log this trade` and the outcome-settlement path have exactly this shape of risk.
@@ -994,7 +1126,7 @@
 6. **The transcript must never show a turn that was not persisted.** `PersistedTurn.complete` is only true when the turn boundary, every row and the final body are accounted for; compaction, redirects and partial writes leave it false (`contracts/events.py:219-236`). For a trading journal, "this analysis row exists" is a claim the app must be able to prove.
 7. **A failed write must never be able to look like a successful one.** `profile_roster_cache.py:24-28` keeps the *raw* readers uncached because a stale read in a CAS writer "would overwrite a newer file"; `session_history.py:520-527` never fails open on redaction. August Trading's journal/notebook writes have the same exposure.
 
-## 4. Gotchas and anti-patterns found in the reference (do NOT copy)
+## 5. Gotchas and anti-patterns found in the reference (do NOT copy)
 
 1. **A "certify" harness that is green because the load generator is fake.** `synthetic_turn.py:11-14` documents it: a network/sleep stub releases the GIL, so a green run "off it is fake". Any August Trading latency/throughput claim needs a load generator that holds the same resource the production path holds.
 2. **A per-module cache declared next to the code that reads it.** `profile_roster_cache.py:29-32` is its own module *because* `bind_module` copies module-level dicts — "a cache declared there would be written to one copy and read from another." August Trading's `bind_module`-style global rebinding does not exist, but the same class of bug appears whenever a module-level memo is shared across a `bind_module`/`Proxy` boundary.
@@ -1003,7 +1135,7 @@
 5. **A 0.9 s failure that logs two lines and no cause.** `session_history.py:501-512` records the *gap* rather than only the current code: "a report consisting of two lines reading `status=error error_retained=True duration=0.9s` with no way to tell a provider 4xx from a budget wall from a crashed finalizer… only the exception path prints to stderr, which is why the quiet failures are the ones that get filed."
 6. **A 300 s wait that nobody can shorten.** The clarify deadline is 300 s and a pre-capability client would wait it out for nothing (`server_requests.py:8-20`); the fix was a capability advertisement, not a shorter timeout.
 
-## 5. Weak spots in the reference shard
+## 6. Weak spots in the reference shard
 
 1. **The surface is enormous and the "simple as features accumulate" goal is not met.** 119 files in one package, 21 of them over 30 KB, `server.py` alone 116 KB, `methods_session.py` 130 KB, `methods_tools.py` 102 KB, `methods_prompt.py` 83 KB. The `contracts/` layer is the *good* answer to that sprawl — but the handler layer still carries the weight.
 2. **The split-module mechanism is a code-generation-by-handshake.** `method_ctx.py:16-108` re-creates every function with `types.FunctionType` against `server.py`'s namespace, rebinds closure cells, patches `__globals__` and even rewrites module-level dicts in place. It works, and the docstrings are honest about it, but it means "where does this function actually live" is answerable only by reading the binder.
@@ -1012,9 +1144,9 @@
 5. **Half the wire vocabulary is fail-open, which is a deliberate trade but adds a real cost.** Billing, usage, free tier, plugin activation, shared metrics and the pet store all degrade to a "not available" envelope; a client must therefore carry a second, silent state for every feature it can no longer prove. August Trading should copy the *typed envelope* but not the number of degradable features.
 6. **The eviction/counter class of bug is a recurring theme, and it is not solved in general.** `event_replay.py:125-138` fixes it for the replay ring, `session_transports.py:135-140` for the transport mailbox, `turn_marker.py:36-42` for the marker file — each with its own bespoke fix rather than one shared "monotonic identity" primitive.
 
-## 6. Coverage and honest limits
+## 7. Coverage and honest limits
 
-- **Files in the shard:** 119. **Read line by line in full: 95.** **Skipped with a stated reason: 24.** The status TSV has exactly one row per file, in the file-list order.
-- **Not reached in this pass** (listed honestly in the TSV as `skipped` with a reason, and *not* summarised in this report): `tui_gateway/methods_profiles.py`, `methods_projects.py`, `methods_prompt.py`, `methods_session.py`, `methods_session_branch.py`, `methods_session_control.py`, `methods_session_foreign.py`, `methods_session_interrupt.py`, `methods_session_model_guard.py`, `methods_shared_metrics.py`, `methods_slash.py`, `methods_subagents.py`, `methods_tools.py`, `methods_tools_plugin_servers.py`, `methods_vault.py`, `methods_voice.py`, `prompt_attachments.py`, `prompt_turn.py`, `server.py`, `session_auto_continue.py`, `session_lifecycle.py`, `session_notifications.py`, `session_registry.py`, `session_workdir.py`. These are the largest handler modules in the shard; they were not summarised rather than summarised from their names.
+- **Files in the shard:** 119. **Read line by line in full: 119.** **Skipped with a stated reason: 0.** The status TSV has exactly one row per file, in the file-list order.
+- **The gap is closed.** The first pass read 95 files and ran out of budget with the 24 largest handler modules unread — the 16 `methods_*.py` files plus `server.py`, `prompt_turn.py`, `prompt_attachments.py` and the five `session_*.py` files. A second pass read all 24 in full; §2 of this report is the write-up of that surface, and every one of the 24 now carries a `read` row with a one-line note in the TSV. Nothing in this report is summarised from a file name.
 - Everything asserted above about a file is from that file's own text; every line reference points at a line that was actually read.
 

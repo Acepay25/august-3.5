@@ -2,8 +2,8 @@ shard	files	read	skipped	pending	skipped-without-a-reason	files-missing-from-the
 hermes-agent-loop	393	393	0	0	0	0
 hermes-apps-desktop-electron	666	666	0	0	0	0
 hermes-apps-desktop-rest	463	362	101	0	0	0
-hermes-apps-desktop-src-app	1210	0	0	1210	0	0
-hermes-apps-desktop-src-rest	1975	0	0	1975	0	0
+hermes-apps-desktop-src-app	1210	1210	0	0	0	0
+hermes-apps-desktop-src-rest	1975	1964	11	0	0	0
 hermes-cli-root	766	766	0	0	0	0
 hermes-contributors	2112	2	2110	0	0	0
 hermes-cron	46	46	0	0	0	0
@@ -24,12 +24,12 @@ hermes-state-mutations	13	13	0	0	0	0
 hermes-state-sessions	23	23	0	0	0	0
 hermes-state-storage	15	15	0	0	0	0
 hermes-tests-agent-tools	1860	1860	0	0	0	0
-hermes-tests-cli	1708	0	0	1708	0	0
+hermes-tests-cli	1708	1708	0	0	0	0
 hermes-tests-gateway	1689	1689	0	0	0	0
 hermes-tests-state-rest	1373	1371	2	0	0	0
 hermes-tests-tui-e2e	595	595	0	0	0	0
 hermes-tools	371	368	3	0	0	0
-hermes-tui-gateway	119	95	24	0	0	0
+hermes-tui-gateway	119	119	0	0	0	0
 hermes-ui-tui	627	627	0	0	0	0
 hermes-web	250	202	48	0	0	0
 hermes-website	839	795	44	0	0	0

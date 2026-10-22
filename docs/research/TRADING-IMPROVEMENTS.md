@@ -879,8 +879,8 @@ by removing the silent failure in (3), which is a simplification in its own righ
 **Verdict: ADOPT**
 **Effort: S**
 **Source: the August baseline §3. Reference: `hermes-agent`
-`tools/skill_manager_tool.py` — `created_by: agent` is an **explicit marker**, *"never
-inferred from location"*; `tools/skill_usage.py` — usage telemetry lives in a
+`tools/skill_usage.py:4-5` — `created_by: agent` is an **explicit marker**, *"never
+inferred from location"* (enforced by `tools/skill_manager_guards.py:192-197`); `tools/skill_usage.py` — usage telemetry lives in a
 **sidecar** `.usage.json`, *"never frontmatter — keeps telemetry out of user-authored
 SKILL.md and off bundled/hub skills"*; `tools/skill_provenance.py` — a
 **write-origin** ContextVar separating a background review's writes from a
