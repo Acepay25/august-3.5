@@ -117,6 +117,15 @@ paying for a retrieval the model never sees. This is the single defect that make
 app's memory system look real and behave hollow — and it is the *cause* of the
 "last-20 brief never reaches a model" finding in the baseline.
 
+It also carries a second, less obvious benefit: **the chat path would regain its
+deterministic skill enforcement.** The code-checked trigger is already evaluated at
+`hooks/useAnalysisPipeline.ts:1102` and its note is dropped with the rest of
+`enhancedPrompt`. The plan path already applies the same machinery — a fired AVOID
+**refuses** the presentation (`services/trade/presentTradeTool.ts:114-133`) and the
+predicate ceiling is folded into the stamp the card shows and the journal records
+(`presentTradeTool.ts:140-144`). So the chat path is not missing a mechanism; it is
+missing the wire.
+
 ### Risk
 
 **Low-medium.** The retrieval that now reaches the model was previously computed and
@@ -329,13 +338,13 @@ evidence, is in the baseline. The ones that cost the most to keep:
 | --- | --- | --- |
 | `TradeValidationGate` | 41 KB, **zero importers** | `services/validation/TradeValidationGate.ts`; `runValidationGate:495-973`; its twelve steps never run |
 | `patternMemoryGate` | test-only | `PatternMemorySynthesisService.ts:882-1081`; `Message.patternMemoryGate` is never assigned, so the journal HALT chip (`TradeLog.tsx:359-386`) can never render |
-| `SessionGuardService` | daily-loss / trade-cap / streak / cooldown never fire | `SessionGuardService.ts:157-268`, called only from tests |
+| `SessionGuardService` — the **guard half** | daily-loss / trade-cap / streak / cooldown never fire | `SessionGuardService.ts:157-268` (`assessSession` + `formatGuardContextBlock`) is called only from tests. The module itself is **not** dead: `rowPnlUsd` and `utcDayStart` are imported by `services/learning/monthlyReport.ts:23`, `services/validation/calibrationPolicy.ts:63`, `utils/disciplineAnalytics.ts:18` and `utils/harnessSettings.ts:7` |
 | `providerFitness` | names a consumer (`autoAssignLenses`) **that does not exist** | `services/learning/providerFitness.ts:7-9` |
 | `learning_rules_v2` | a write-only store with a backup | `StorageService.ts:105`; no prompt reader |
 | `NavRail.tsx` | 242 lines, **never rendered** | `App.tsx:2507-2515`; `tests/deadControlsGuard.test.ts:145` pins the absence |
 | `SurfaceMenuList`'s surface list | mounted with `hideSurfaces`, so the brand bar, the badge and `RunBusyBadge` are all dead | `App.tsx:2725-2731` |
 | `ARBITER_ALLOWED_TOOLS` | only test importers | `DeskToolsService.ts:3341-3357` |
-| `applyNotebookSkillsToAnalysis` | zero production callers | `SkillMemoryService.ts:3819` |
+| ~~`applyNotebookSkillsToAnalysis`~~ | **CORRECTED — it is LIVE.** The baseline recorded it as dead; re-opening the source shows the E-35 fix landed: `services/trade/presentTradeTool.ts:113` calls it and a fired AVOID **refuses the presentation** (`:114-133`). Not a deletion target |
 | `MemoryConsolidationService.ts` | an orphan module | — |
 | the debate residue | 29 vestigial items | baseline §7 |
 
@@ -506,7 +515,7 @@ At the same time, the *chat* path has no deterministic gate at all
 (baseline §5, Chain B): `useAnalysisPipeline.ts:1203` reduces the gate injection to
 `''`, and the calibration penalty, the provider-accuracy note, the similar-setups
 and regime weighting all reach the model as prose only. The deterministic half of
-the guard system is dead — `applyNotebookSkillsToAnalysis` has zero callers, and
+the guard system is dead ON THE CHAT PATH — `applyNotebookSkillsToAnalysis` is live on the plan path (`services/trade/presentTradeTool.ts:113`), and the
 the predicate gate's confidence ceiling is computed and dropped.
 
 ### The proposed change
@@ -553,9 +562,11 @@ cannot work around — which is why Option A is the recommendation.
 
 ### How to verify with a real test
 
-- Option A: `tests/deadControlsGuard.test.ts` gains a pin that
-  `SessionGuardService` is not imported; `docs/app-flow.md` no longer claims a
-  guard.
+- Option A: `tests/deadControlsGuard.test.ts` gains a pin that `assessSession`
+  and `formatGuardContextBlock` have no production call site; `docs/app-flow.md` no
+  longer claims a guard. The two pure helpers the rest of the app imports
+  (`rowPnlUsd`, `utcDayStart`) stay — or move to a two-function module — so the
+  deletion is of the **guard**, not of the file.
 - Option B: a unit test that three losing trades in a day make `assessSession`
   return `standdown`, and a test that `present_trade` then refuses — plus a browser
   test that the refusal is visible.
@@ -903,9 +914,13 @@ Two related facts from the same area:
 - The IF/THEN auto-ingest writes a file with `prior: 'gated'` and **no
   `approvedBy`** (`SkillMemoryService.ts:2996/3085`), so `isApprovedSkill` blocks it
   — yet the index still names it.
-- The **hard avoid veto** is dead (`applyNotebookSkillsToAnalysis`,
-  `SkillMemoryService.ts:3819`, zero callers). The prompt can *ask* for a skill; the
-  code cannot *require* one.
+- The **hard avoid veto is live, but only on the plan path.**
+  `applyNotebookSkillsToAnalysis` (`SkillMemoryService.ts:3819`) is called at
+  `services/trade/presentTradeTool.ts:113`, and a fired AVOID **refuses the
+  presentation** and writes the falsification ledger (`:114-133`). On the **chat**
+  path there is no deterministic skill enforcement at all: the code-checked trigger's
+  note is computed at `hooks/useAnalysisPipeline.ts:1102` and then dropped with the
+  rest of `enhancedPrompt` (see P1).
 
 ### The proposed change
 
@@ -915,12 +930,13 @@ Two related facts from the same area:
 2. **Mark the auto-ingested file so it is honestly named.** Either give it an
    `approvedBy` (it is a *gated* draft, so it should not be) or exclude gated
    drafts from the index. The current state — named but unusable — is the bug.
-3. **Decide the hard avoid veto.** Either wire
-   `applyNotebookSkillsToAnalysis` (which the notebook-skill veto at
-   `services/trade/presentTradeTool.ts:113-133` already proves can work) or delete
-   it. It is currently the difference between "the prompt can ask for a skill" and
-   "the code can require one" — and the app's own `present_trade` refusal
-   (`presentTradeTool.ts:117-129`) is the strongest argument for wiring it.
+3. **Give the chat path the same deterministic enforcement the plan path has.**
+   The plan path already refuses a vetoed setup (`presentTradeTool.ts:114-133`) and
+   folds the predicate ceiling into the stamp it records
+   (`presentTradeTool.ts:140-144`). The chat path computes the same
+   code-checked trigger (`hooks/useAnalysisPipeline.ts:1102`) and then drops it with
+   the rest of `enhancedPrompt`. This is not a new mechanism — it is the existing
+   one, wired to the other surface. (It is also the second reason P1 matters.)
 4. **Make the recorded fact the only thing both readers use.** The reference's
    two-tier authority is worth copying in shape: an approval is a *fact about a
    skill* (`approved` / `gated` / `retired`) that the record holds, and the code can
