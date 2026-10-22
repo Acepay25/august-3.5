@@ -7,11 +7,7 @@
  * Three regions, mirroring the reference: a conversation rail, a main pane,
  * and one pill composer.
  *
- * ⚠️ THE TWO SURFACES DO NOT SHARE A STORE TODAY. This comment used to claim
- * they did, and the claim was false — it is why "a conversation opened here
- * and on the Trade surface is one conversation" was believed and planned
- * against. The truth, which the render-probe already documented at
- * `render-probe.cjs:487-491`:
+ * ⚠️ TWO STORES, ONE THREAD — this banner used to claim the opposite.
  *
  *  - this surface reads App's `messages` (useConversations) and slices it
  *    with `utils/agentThreads`;
@@ -19,16 +15,20 @@
  *    module singleton that survives unmount so a running stream is not
  *    aborted by a surface switch.
  *
- * So a bot thread is the same PERSONA over two different transcripts. The
- * join between them is an id link, not a shared array: the dock appends its
- * own lean entry and keeps the pipeline's rich `Message` id alongside it
- * (`TradeChatPanel.tsx` → `getAnalysisMessage`).
+ * Two row SHAPES, one thread: `startEntryMirror` (`services/trade/chatTurnMirror.ts`)
+ * projects the dock's live entry into the conversation under the SAME id, and
+ * `liveEntryFromMessage` (`services/trade/chatSessions.ts:491`) carries `Message.isStreaming`
+ * back, so a Chat-surface run keeps its activity line when the trader hops.
+ * The old banner ("DO NOT SHARE A STORE TODAY") was true of the arrays and
+ * false of the thread, which is the unit the trader sees.
+ * A conversation opened here and on the Chart surface is one conversation;
+ * `docs/app-flow.md` states the contract and `tests/surfaceLiveSync.test.tsx` pins it.
  *
  *  - a send routes on WHAT IS SELECTED, not on a mode switch (there is no
  *    switch any more): a bot answers through `runUserBotTurn`, the same
  *    transport the DM mailbox uses; nothing selected hands the text to
- *    `handleSendMessage` — the real pipeline, so the ensemble debate, desk
- *    tools and memory run exactly as they do from the dock, and the verdict
+ *    `handleSendMessage` — the real pipeline, so the desk tools and memory
+ *    run exactly as they do from the dock, and the verdict
  *    comes back as an ordinary message in the same array.
  *
  * Rooms delegate to App's existing GroupChatView element rather than
@@ -478,8 +478,8 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     // There is no Chat/Analyze switch any more. What a send RUNS is decided by
     // what is selected in the rail: a bot answers in its own persona (its own
     // model, its own memory scope, fast and conversational); nothing selected
-    // runs the full analysis pipeline — the market packet, the ensemble
-    // debate, desk tools, memory injection, the verdict and its levels, which
+    // runs the full analysis pipeline — the market packet, desk tools, memory
+    // injection, the verdict and its levels, which
     // is exactly what the Chart AI dock does. Both behaviours stay reachable;
     // the toggle was a second way to say something the selection already says.
     const [busy, setBusy] = useState(false);
@@ -733,7 +733,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     // copy (WS-6's hard requirement). It used to be [], which made "opening it
     // here and on the Trade surface shows the same conversation" false: the
     // pane was a launcher wearing a transcript. The desk's own slice is
-    // deskThread: ensemble/Analyze verdicts and session-model answers land
+    // deskThread: desk-tool verdicts and session-model answers land
     // inline, while a bot's DM stays in that bot's row instead of leaking
     // into the desk pane.
     const isChartPane = selection.kind === 'team';
