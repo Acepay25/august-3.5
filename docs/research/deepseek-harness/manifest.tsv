@@ -6476,10 +6476,10 @@ packages/api/workspace-files/tsconfig.client.json	702	config	dsh-api-sdk-acp	rea
 packages/api/workspace-files/tsconfig.host.json	696	config	dsh-api-sdk-acp	read	the explicit host file list of three modules
 packages/api/workspace-files/tsconfig.json	142	config	dsh-api-sdk-acp	read	solution references
 packages/api/workspace-files/tsdown.config.ts	165	source	dsh-api-sdk-acp	read	hostPhase client bundle
-packages/attachment/README.i18n.yaml	1020	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/attachment/README.i18n.yaml	1020	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/attachment/README.md	2158	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/attachment/README.zh.md	1926	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/attachment/attachment-local/README.i18n.yaml	2495	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/attachment/attachment-local/README.i18n.yaml	2495	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/attachment/attachment-local/README.md	12276	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/attachment/attachment-local/README.zh.md	11128	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/attachment/attachment-local/locale/en.json	52	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
@@ -6505,7 +6505,7 @@ packages/attachment/attachment-local/tests/request-image-verification.spec.ts	18
 packages/attachment/attachment-local/tests/request-image.spec.ts	19186	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/attachment/attachment-local/tests/store.spec.ts	13122	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/attachment/attachment-local/tsconfig.json	407	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/attachment/attachment/README.i18n.yaml	2651	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/attachment/attachment/README.i18n.yaml	2651	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/attachment/attachment/README.md	11571	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/attachment/attachment/README.zh.md	10505	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/attachment/attachment/package.json	1023	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
@@ -9823,10 +9823,10 @@ packages/credentials/deepseek-account/src/types.ts	4528	source	dsh-credentials-i
 packages/credentials/deepseek-account/tests/account-tasks.spec.ts	2185	tests	dsh-credentials-identity-settings	read	Tier 2 full read: only running account-route agents are cancelled; only ACCOUNT_SIGN_IN_REQUIRED publishes.
 packages/credentials/deepseek-account/tests/client-headers.spec.ts	1048	tests	dsh-credentials-identity-settings	read	Tier 2 full read: header mapping and the zh_CN/en_US locale reduction.
 packages/credentials/deepseek-account/tsconfig.json	416	config	dsh-credentials-identity-settings	read	Tier 2 full read: project references (core/agent, llm/llm).
-packages/deliverables/README.i18n.yaml	866	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/deliverables/README.i18n.yaml	866	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/deliverables/README.md	2350	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/deliverables/README.zh.md	2132	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/deliverables/tool-present/README.i18n.yaml	1734	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/deliverables/tool-present/README.i18n.yaml	1734	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/deliverables/tool-present/README.md	5078	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/deliverables/tool-present/README.zh.md	4684	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/deliverables/tool-present/locale/en.json	48	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
@@ -9837,7 +9837,7 @@ packages/deliverables/tool-present/src/types.ts	695	source	dsh-web-deliverables-
 packages/deliverables/tool-present/tests/built-errors.e2e.ts	3032	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/deliverables/tool-present/tests/present.spec.ts	9194	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/deliverables/tool-present/tsconfig.json	631	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/deliverables/workspace-changes/README.i18n.yaml	1442	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/deliverables/workspace-changes/README.i18n.yaml	1442	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/deliverables/workspace-changes/README.md	11965	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/deliverables/workspace-changes/README.zh.md	10934	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/deliverables/workspace-changes/locale/en.json	53	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
@@ -9861,10 +9861,10 @@ packages/deliverables/workspace-changes/tests/paths.spec.ts	3580	tests	dsh-web-d
 packages/deliverables/workspace-changes/tests/plugin.spec.ts	31851	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/deliverables/workspace-changes/tests/support.ts	4193	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/deliverables/workspace-changes/tsconfig.json	573	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/document/README.i18n.yaml	892	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/document/README.i18n.yaml	892	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/document/README.md	1494	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/document/README.zh.md	1389	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/document/office-to-pdf/README.i18n.yaml	1394	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/document/office-to-pdf/README.i18n.yaml	1394	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/document/office-to-pdf/README.md	8594	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/document/office-to-pdf/README.zh.md	7906	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/document/office-to-pdf/locale/en.json	49	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
@@ -11193,10 +11193,10 @@ packages/extensions/ui-cordis/tests/status-icons.client.spec.tsx	8300	tests	dsh-
 packages/extensions/ui-cordis/tests/versioning.client.spec.ts	4485	tests	dsh-util-host-typert	read	head + describe/it titles: versioned card models, run-card ownership, three visible statuses
 packages/extensions/ui-cordis/tsconfig.json	790	config	dsh-util-host-typert	read	client build config
 packages/extensions/ui-cordis/tsdown.config.ts	135	source	dsh-util-host-typert	read	clientBundle one-liner
-packages/feedback/README.i18n.yaml	928	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/feedback/README.i18n.yaml	928	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/feedback/README.md	2384	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/feedback/README.zh.md	2176	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/feedback/command-feedback/README.i18n.yaml	2605	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/feedback/command-feedback/README.i18n.yaml	2605	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/feedback/command-feedback/README.md	10095	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/feedback/command-feedback/README.zh.md	9228	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/feedback/command-feedback/locale/en.json	52	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
@@ -11207,7 +11207,7 @@ packages/feedback/command-feedback/src/types.ts	2519	source	dsh-web-deliverables
 packages/feedback/command-feedback/tests/command-feedback.spec.ts	11280	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/feedback/command-feedback/tests/loader-composition.spec.ts	4989	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/feedback/command-feedback/tsconfig.json	498	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/feedback/message-feedback/README.i18n.yaml	2223	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/feedback/message-feedback/README.i18n.yaml	2223	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/feedback/message-feedback/README.md	7527	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/feedback/message-feedback/README.zh.md	6965	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/feedback/message-feedback/locale/en.json	52	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
@@ -13850,10 +13850,10 @@ packages/util/workspace-path/tests/file-media-url.spec.ts	1460	tests	dsh-util-ho
 packages/util/workspace-path/tests/index.spec.ts	5744	tests	dsh-util-host-typert	read	head + titles: addressing, absoluteness, resolution, home abbreviation, path splitting
 packages/util/workspace-path/tsconfig.json	153	config	dsh-util-host-typert	read	project references
 packages/web/AGENTS.md	581	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/web/README.i18n.yaml	923	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/web/README.i18n.yaml	923	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/README.md	2677	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/README.zh.md	2456	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/web/tool-web/README.i18n.yaml	5872	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/web/tool-web/README.i18n.yaml	5872	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/tool-web/README.md	17678	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/tool-web/README.zh.md	16772	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/tool-web/locale/en.json	44	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
@@ -13869,7 +13869,7 @@ packages/web/tool-web/tests/load-path.spec.ts	1852	tests	dsh-web-deliverables-fe
 packages/web/tool-web/tests/spill.spec.ts	4941	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/tool-web/tests/tool-web.spec.ts	46375	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/tool-web/tsconfig.json	565	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/web/web-deepseek-api/README.i18n.yaml	1984	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/web/web-deepseek-api/README.i18n.yaml	1984	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/web-deepseek-api/README.md	7473	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-deepseek-api/README.zh.md	6827	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-deepseek-api/locale/en.json	52	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
@@ -13887,7 +13887,7 @@ packages/web/web-deepseek-api/tests/search.spec.ts	13250	tests	dsh-web-deliverab
 packages/web/web-deepseek-api/tests/transport.spec.ts	15027	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-deepseek-api/tests/web-deepseek-api.e2e.ts	1401	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-deepseek-api/tsconfig.json	701	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/web/web-fetch-http/README.i18n.yaml	2348	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/web/web-fetch-http/README.i18n.yaml	2348	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/web-fetch-http/README.md	8743	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-fetch-http/README.zh.md	8042	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-fetch-http/locale/en.json	50	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
@@ -13900,7 +13900,7 @@ packages/web/web-fetch-http/src/provider.ts	12632	source	dsh-web-deliverables-fe
 packages/web/web-fetch-http/tests/fetch-http.spec.ts	29361	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-fetch-http/tests/proxy.spec.ts	6679	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-fetch-http/tsconfig.json	473	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/web/web-search-deepseek/README.i18n.yaml	3787	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/web/web-search-deepseek/README.i18n.yaml	3787	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/web-search-deepseek/README.md	13799	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-search-deepseek/README.zh.md	12557	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-search-deepseek/locale/en.json	55	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
@@ -13915,7 +13915,7 @@ packages/web/web-search-deepseek/tests/egress.spec.ts	1879	tests	dsh-web-deliver
 packages/web/web-search-deepseek/tests/redirect.spec.ts	4526	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-search-deepseek/tests/settings.spec.ts	2286	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-search-deepseek/tsconfig.json	701	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/web/web-search-exa/README.i18n.yaml	2406	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/web/web-search-exa/README.i18n.yaml	2406	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/web-search-exa/README.md	8295	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-search-exa/README.zh.md	7903	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-search-exa/package.json	1190	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
@@ -13926,7 +13926,7 @@ packages/web/web-search-exa/tests/egress.spec.ts	1826	tests	dsh-web-deliverables
 packages/web/web-search-exa/tests/exa.e2e.ts	1065	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-search-exa/tests/exa.spec.ts	12298	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-search-exa/tsconfig.json	484	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/web/web-search-perplexity/README.i18n.yaml	3609	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/web/web-search-perplexity/README.i18n.yaml	3609	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/web-search-perplexity/README.md	9617	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-search-perplexity/README.zh.md	9039	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-search-perplexity/package.json	1211	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
@@ -13937,7 +13937,7 @@ packages/web/web-search-perplexity/tests/egress.spec.ts	1840	tests	dsh-web-deliv
 packages/web/web-search-perplexity/tests/perplexity.e2e.ts	1151	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-search-perplexity/tests/perplexity.spec.ts	12187	tests	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web-search-perplexity/tsconfig.json	484	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report
-packages/web/web/README.i18n.yaml	2400	generated-vendored	dsh-web-deliverables-feedback	read	read in full; reflected in the report
+packages/web/web/README.i18n.yaml	2400	generated-vendored	dsh-web-deliverables-feedback	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/web/README.md	10778	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web/README.zh.md	10115	docs	dsh-web-deliverables-feedback	read	read in full; reflected in the report
 packages/web/web/locale/en.json	39	config	dsh-web-deliverables-feedback	read	read in full; reflected in the report

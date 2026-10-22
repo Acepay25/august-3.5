@@ -49,23 +49,25 @@ Trading source code is modified by this work.
 | Repo | Tracked files | Ledger rows | Read | Skipped (with a reason) | Pending | Missing | Skipped without a reason | Shards complete | Gate |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | `pi` | 1,987 | 1,987 | 1,811 | 176 | 0 | 0 | 0 | 12 / 12 | **PASS** |
-| `deepseek-harness` | 16,297 | 16,297 | 13,060 | 3,237 | 0 | 0 | 0 | 47 / 47 | **PASS** |
+| `deepseek-harness` | 16,297 | 16,297 | 13,041 | 3,256 | 0 | 0 | 0 | 47 / 47 | **PASS** |
 | `hermes-agent` | 20,695 | 20,695 | 18,168 | 2,527 | 0 | 0 | 0 | 34 / 34 | **PASS** |
-| **Total** | **38,979** | **38,979** | **33,039** | **5,940** | **0** | **0** | **0** | **93 / 93** | **ALL PASS** |
+| **Total** | **38,979** | **38,979** | **33,020** | **5,959** | **0** | **0** | **0** | **93 / 93** | **ALL PASS** |
 
 Every tracked file in every repo appears in the ledger, exactly once, with a status
 of `read` or `skipped` and — for a skip — a one-line reason. No file is missing, no
 ledger row names a file that is not tracked, and no shard is without a ledger.
 
-**Two qualifications the independent audit adds to that PASS**
-(`INDEPENDENT-AUDIT.md` §1/§4, both re-derived here): arithmetically the gate is
-complete, but `read` is not uniformly "read line by line" — 19 files in
-`dsh-web-deliverables-feedback` are recorded `read` while its own prose says they were
-not, and the merged totals above inherit them (so `deepseek-harness` is 13,060 recorded
-`read`, 13,041 honestly `read`). And three ledgers — `dsh-docs-persistence`,
-`dsh-client-primitives-theme`, `dsh-client-approval-agents-ui` — do not open with the
-required `path\tstatus\tnote` header, which the roll-up tolerates and this file did not
-record.
+**One qualification the independent audit added to that PASS is now fixed, and one
+remains** (`INDEPENDENT-AUDIT.md` §1/§4, both re-derived here). The fixed one: 19
+`README.i18n.yaml` rows in `dsh-web-deliverables-feedback` were recorded `read` while the
+shard's own prose said they were only opened to confirm what they are. **The ledger was
+corrected on 2026-10-23** (19 rows `read` → `skipped`, each with the reason the report
+already gave), and the manifest, `coverage.tsv` and `COVERAGE.md` were regenerated from
+the ledgers — hence `deepseek-harness` is 13,041 read / 3,256 skipped and the totals are
+33,020 / 5,959. `read` now means one thing in every ledger. Still open: three ledgers —
+`dsh-docs-persistence`, `dsh-client-primitives-theme`, `dsh-client-approval-agents-ui` —
+do not open with the required `path\tstatus\tnote` header, which the roll-up tolerates
+and this file did not record.
 
 Regenerate: `node %TEMP%\harness-research\merge-status.mjs` (merges the shard
 ledgers into the manifest and diffs it against `git ls-files`), then
@@ -121,7 +123,9 @@ ledgers into the manifest and diffs it against `git ls-files`), then
   children at 8; a pool of 9 overflowed and 87 shards never started. The pool was
   cut to 5 and the shards ordered by value.
 - **13:56–18:10** — **Phase 2 completed.** All 93 shards read: 33,039 files read
-  and 5,940 skipped with a one-line reason, across 93 reports and 93 ledgers.
+  and 5,940 skipped with a one-line reason, across 93 reports and 93 ledgers. *(That is
+  19 read rows too many — corrected to 33,020 / 5,959 on 2026-10-23; see the 01:20
+  entry.)*
 - **17:50** — **Working-tree incident 2.** Seven more source files were modified
   during the shard run (a "thinking off instead of step down" change to
   `DeskToolsService.ts`, plus tests and docs). Reverted and preserved as
@@ -166,4 +170,13 @@ ledgers into the manifest and diffs it against `git ls-files`), then
   re-verify against the clones above; the §2 bucket rows sum 7,024 against a 7,025
   denominator; the header anomaly is three ledgers, not two; and 14 reports carry no
   `path:line` citation at all, not the two named. All corrected in place, and this file
-  now indexes both audit documents and carries the two qualifications on its own PASS.
+  now indexes both audit documents and carried the two qualifications on its own PASS.
+- **01:20 (2026-10-23)** — **The 19-row ledger discrepancy is fixed.** The audit's §4.1
+  finding was that `dsh-web-deliverables-feedback` recorded 225 files `read` while its
+  own prose said 206 were read and 19 `README.i18n.yaml` records were only opened to
+  confirm what they are. The **ledger** was corrected, not the prose: 19 rows moved
+  `read` → `skipped` with that reason, and `merge-status.mjs` then `gen-coverage.mjs`
+  were re-run so the manifest, `coverage.tsv` and `COVERAGE.md` were rebuilt from the
+  ledgers rather than hand-edited. Deepseek-harness is now **13,041 read / 3,256
+  skipped**; the run total is **33,020 / 5,959**. The merge re-verified the partition
+  unchanged (16,297 rows, 0 missing, 0 phantom, 0 unknown, 0 failing rows).

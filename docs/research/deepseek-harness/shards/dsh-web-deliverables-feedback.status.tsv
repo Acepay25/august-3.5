@@ -1,8 +1,8 @@
 path	status	note
-packages/attachment/README.i18n.yaml	read	read in full; reflected in the report
+packages/attachment/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/attachment/README.md	read	read in full; reflected in the report
 packages/attachment/README.zh.md	read	read in full; reflected in the report
-packages/attachment/attachment-local/README.i18n.yaml	read	read in full; reflected in the report
+packages/attachment/attachment-local/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/attachment/attachment-local/README.md	read	read in full; reflected in the report
 packages/attachment/attachment-local/README.zh.md	read	read in full; reflected in the report
 packages/attachment/attachment-local/locale/en.json	read	read in full; reflected in the report
@@ -28,7 +28,7 @@ packages/attachment/attachment-local/tests/request-image-verification.spec.ts	re
 packages/attachment/attachment-local/tests/request-image.spec.ts	read	read in full; reflected in the report
 packages/attachment/attachment-local/tests/store.spec.ts	read	read in full; reflected in the report
 packages/attachment/attachment-local/tsconfig.json	read	read in full; reflected in the report
-packages/attachment/attachment/README.i18n.yaml	read	read in full; reflected in the report
+packages/attachment/attachment/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/attachment/attachment/README.md	read	read in full; reflected in the report
 packages/attachment/attachment/README.zh.md	read	read in full; reflected in the report
 packages/attachment/attachment/package.json	read	read in full; reflected in the report
@@ -42,10 +42,10 @@ packages/attachment/attachment/tests/admission.spec.ts	read	read in full; reflec
 packages/attachment/attachment/tests/index.spec.ts	read	read in full; reflected in the report
 packages/attachment/attachment/tests/request-projection.spec.ts	read	read in full; reflected in the report
 packages/attachment/attachment/tsconfig.json	read	read in full; reflected in the report
-packages/deliverables/README.i18n.yaml	read	read in full; reflected in the report
+packages/deliverables/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/deliverables/README.md	read	read in full; reflected in the report
 packages/deliverables/README.zh.md	read	read in full; reflected in the report
-packages/deliverables/tool-present/README.i18n.yaml	read	read in full; reflected in the report
+packages/deliverables/tool-present/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/deliverables/tool-present/README.md	read	read in full; reflected in the report
 packages/deliverables/tool-present/README.zh.md	read	read in full; reflected in the report
 packages/deliverables/tool-present/locale/en.json	read	read in full; reflected in the report
@@ -56,7 +56,7 @@ packages/deliverables/tool-present/src/types.ts	read	read in full; reflected in 
 packages/deliverables/tool-present/tests/built-errors.e2e.ts	read	read in full; reflected in the report
 packages/deliverables/tool-present/tests/present.spec.ts	read	read in full; reflected in the report
 packages/deliverables/tool-present/tsconfig.json	read	read in full; reflected in the report
-packages/deliverables/workspace-changes/README.i18n.yaml	read	read in full; reflected in the report
+packages/deliverables/workspace-changes/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/deliverables/workspace-changes/README.md	read	read in full; reflected in the report
 packages/deliverables/workspace-changes/README.zh.md	read	read in full; reflected in the report
 packages/deliverables/workspace-changes/locale/en.json	read	read in full; reflected in the report
@@ -80,10 +80,10 @@ packages/deliverables/workspace-changes/tests/paths.spec.ts	read	read in full; r
 packages/deliverables/workspace-changes/tests/plugin.spec.ts	read	read in full; reflected in the report
 packages/deliverables/workspace-changes/tests/support.ts	read	read in full; reflected in the report
 packages/deliverables/workspace-changes/tsconfig.json	read	read in full; reflected in the report
-packages/document/README.i18n.yaml	read	read in full; reflected in the report
+packages/document/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/document/README.md	read	read in full; reflected in the report
 packages/document/README.zh.md	read	read in full; reflected in the report
-packages/document/office-to-pdf/README.i18n.yaml	read	read in full; reflected in the report
+packages/document/office-to-pdf/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/document/office-to-pdf/README.md	read	read in full; reflected in the report
 packages/document/office-to-pdf/README.zh.md	read	read in full; reflected in the report
 packages/document/office-to-pdf/locale/en.json	read	read in full; reflected in the report
@@ -100,10 +100,10 @@ packages/document/office-to-pdf/tests/provider.spec.ts	read	read in full; reflec
 packages/document/office-to-pdf/tests/queue.spec.ts	read	read in full; reflected in the report
 packages/document/office-to-pdf/tests/remote.spec.ts	read	read in full; reflected in the report
 packages/document/office-to-pdf/tsconfig.json	read	read in full; reflected in the report
-packages/feedback/README.i18n.yaml	read	read in full; reflected in the report
+packages/feedback/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/feedback/README.md	read	read in full; reflected in the report
 packages/feedback/README.zh.md	read	read in full; reflected in the report
-packages/feedback/command-feedback/README.i18n.yaml	read	read in full; reflected in the report
+packages/feedback/command-feedback/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/feedback/command-feedback/README.md	read	read in full; reflected in the report
 packages/feedback/command-feedback/README.zh.md	read	read in full; reflected in the report
 packages/feedback/command-feedback/locale/en.json	read	read in full; reflected in the report
@@ -114,7 +114,7 @@ packages/feedback/command-feedback/src/types.ts	read	read in full; reflected in 
 packages/feedback/command-feedback/tests/command-feedback.spec.ts	read	read in full; reflected in the report
 packages/feedback/command-feedback/tests/loader-composition.spec.ts	read	read in full; reflected in the report
 packages/feedback/command-feedback/tsconfig.json	read	read in full; reflected in the report
-packages/feedback/message-feedback/README.i18n.yaml	read	read in full; reflected in the report
+packages/feedback/message-feedback/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/feedback/message-feedback/README.md	read	read in full; reflected in the report
 packages/feedback/message-feedback/README.zh.md	read	read in full; reflected in the report
 packages/feedback/message-feedback/locale/en.json	read	read in full; reflected in the report
@@ -127,10 +127,10 @@ packages/feedback/message-feedback/tests/loader-composition.spec.ts	read	read in
 packages/feedback/message-feedback/tests/message-feedback.spec.ts	read	read in full; reflected in the report
 packages/feedback/message-feedback/tsconfig.json	read	read in full; reflected in the report
 packages/web/AGENTS.md	read	read in full; reflected in the report
-packages/web/README.i18n.yaml	read	read in full; reflected in the report
+packages/web/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/README.md	read	read in full; reflected in the report
 packages/web/README.zh.md	read	read in full; reflected in the report
-packages/web/tool-web/README.i18n.yaml	read	read in full; reflected in the report
+packages/web/tool-web/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/tool-web/README.md	read	read in full; reflected in the report
 packages/web/tool-web/README.zh.md	read	read in full; reflected in the report
 packages/web/tool-web/locale/en.json	read	read in full; reflected in the report
@@ -146,7 +146,7 @@ packages/web/tool-web/tests/load-path.spec.ts	read	read in full; reflected in th
 packages/web/tool-web/tests/spill.spec.ts	read	read in full; reflected in the report
 packages/web/tool-web/tests/tool-web.spec.ts	read	read in full; reflected in the report
 packages/web/tool-web/tsconfig.json	read	read in full; reflected in the report
-packages/web/web-deepseek-api/README.i18n.yaml	read	read in full; reflected in the report
+packages/web/web-deepseek-api/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/web-deepseek-api/README.md	read	read in full; reflected in the report
 packages/web/web-deepseek-api/README.zh.md	read	read in full; reflected in the report
 packages/web/web-deepseek-api/locale/en.json	read	read in full; reflected in the report
@@ -164,7 +164,7 @@ packages/web/web-deepseek-api/tests/search.spec.ts	read	read in full; reflected 
 packages/web/web-deepseek-api/tests/transport.spec.ts	read	read in full; reflected in the report
 packages/web/web-deepseek-api/tests/web-deepseek-api.e2e.ts	read	read in full; reflected in the report
 packages/web/web-deepseek-api/tsconfig.json	read	read in full; reflected in the report
-packages/web/web-fetch-http/README.i18n.yaml	read	read in full; reflected in the report
+packages/web/web-fetch-http/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/web-fetch-http/README.md	read	read in full; reflected in the report
 packages/web/web-fetch-http/README.zh.md	read	read in full; reflected in the report
 packages/web/web-fetch-http/locale/en.json	read	read in full; reflected in the report
@@ -177,7 +177,7 @@ packages/web/web-fetch-http/src/provider.ts	read	read in full; reflected in the 
 packages/web/web-fetch-http/tests/fetch-http.spec.ts	read	read in full; reflected in the report
 packages/web/web-fetch-http/tests/proxy.spec.ts	read	read in full; reflected in the report
 packages/web/web-fetch-http/tsconfig.json	read	read in full; reflected in the report
-packages/web/web-search-deepseek/README.i18n.yaml	read	read in full; reflected in the report
+packages/web/web-search-deepseek/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/web-search-deepseek/README.md	read	read in full; reflected in the report
 packages/web/web-search-deepseek/README.zh.md	read	read in full; reflected in the report
 packages/web/web-search-deepseek/locale/en.json	read	read in full; reflected in the report
@@ -192,7 +192,7 @@ packages/web/web-search-deepseek/tests/egress.spec.ts	read	read in full; reflect
 packages/web/web-search-deepseek/tests/redirect.spec.ts	read	read in full; reflected in the report
 packages/web/web-search-deepseek/tests/settings.spec.ts	read	read in full; reflected in the report
 packages/web/web-search-deepseek/tsconfig.json	read	read in full; reflected in the report
-packages/web/web-search-exa/README.i18n.yaml	read	read in full; reflected in the report
+packages/web/web-search-exa/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/web-search-exa/README.md	read	read in full; reflected in the report
 packages/web/web-search-exa/README.zh.md	read	read in full; reflected in the report
 packages/web/web-search-exa/package.json	read	read in full; reflected in the report
@@ -203,7 +203,7 @@ packages/web/web-search-exa/tests/egress.spec.ts	read	read in full; reflected in
 packages/web/web-search-exa/tests/exa.e2e.ts	read	read in full; reflected in the report
 packages/web/web-search-exa/tests/exa.spec.ts	read	read in full; reflected in the report
 packages/web/web-search-exa/tsconfig.json	read	read in full; reflected in the report
-packages/web/web-search-perplexity/README.i18n.yaml	read	read in full; reflected in the report
+packages/web/web-search-perplexity/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/web-search-perplexity/README.md	read	read in full; reflected in the report
 packages/web/web-search-perplexity/README.zh.md	read	read in full; reflected in the report
 packages/web/web-search-perplexity/package.json	read	read in full; reflected in the report
@@ -214,7 +214,7 @@ packages/web/web-search-perplexity/tests/egress.spec.ts	read	read in full; refle
 packages/web/web-search-perplexity/tests/perplexity.e2e.ts	read	read in full; reflected in the report
 packages/web/web-search-perplexity/tests/perplexity.spec.ts	read	read in full; reflected in the report
 packages/web/web-search-perplexity/tsconfig.json	read	read in full; reflected in the report
-packages/web/web/README.i18n.yaml	read	read in full; reflected in the report
+packages/web/web/README.i18n.yaml	skipped	generated bilingual-pair hash record (EN/ZH per-heading digest, no behaviour); opened only to confirm what it is, not read line by line — the 19-file batch the report calls out
 packages/web/web/README.md	read	read in full; reflected in the report
 packages/web/web/README.zh.md	read	read in full; reflected in the report
 packages/web/web/locale/en.json	read	read in full; reflected in the report
