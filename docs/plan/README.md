@@ -19,7 +19,7 @@ plan itself or the evidence behind it.
 
 | file | what it is | read it when |
 |---|---|---|
-| **[`open-items.md`](open-items.md)** | **THE PLAN'S WORKING LIST** — **135** item rows (O-01…O-143) + **23** owner-decision rows here (D-01…D-23; **D-24 is recorded in `full-audit.md:6756`**, not as a row in this file), each with the `file:line` that proves it is still open at HEAD, each mapped to the proposal that covers it. The two counts were re-measured with `grep -cE '^\| O-[0-9]+ \|'` / `'^\| D-[0-9]+ '` on 2026-10-22 (the O line, for E-57's rows) and 2026-10-21 (the D line), because a hand-typed census is exactly how this line went stale twice. |
+| **[`open-items.md`](open-items.md)** | **THE PLAN'S WORKING LIST** — **136** item rows (O-01…O-144) + **23** owner-decision rows here (D-01…D-23; **D-24 is recorded in `full-audit.md:6756`**, not as a row in this file), each with the `file:line` that proves it is still open at HEAD, each mapped to the proposal that covers it. The two counts were re-measured with `grep -cE '^\| O-[0-9]+ \|'` / `'^\| D-[0-9]+ '` on 2026-10-23 (the O line; it read 135/O-143 before O-144 landed) and 2026-10-21 (the D line), because a hand-typed census is exactly how this line went stale twice. |
 | **[`implementation-record.md`](implementation-record.md)** | **WHAT LANDED** — the 2026-10-20 fix pass, item by item: where each change is, which gate verified it, the measured figures with the tip they were taken at, and **what it does not close** |
 | **[`model-menu-redesign.md`](model-menu-redesign.md)** | **E-51 — the proposer's new item.** The scan of the model dropdown as it stands (three controls, two designs, one untested), the gap against the DeepSeek Harness reference, the element-by-element mapping, **four owner rulings**, and four phased commits with their gates |
 | **[`transcript-redesign.md`](transcript-redesign.md)** | **E-52 — the proposer's new item.** The scan of the transcript as it stands (the status line, the step kinds, the trail, the two homes, the surface around them — **eighteen gaps**), **five owner rulings**, and **eight phased commits** with their gates |
@@ -105,7 +105,7 @@ three of them are blocked behind a decision.
 |---|---|---|
 | 4.1 | **One plan object** — entry, stop, targets, invalidation, one ratio, the grade, the size suggestion; the card, the gate, the clamp, the watch and the journal all read it. | 2.2, 2.4 |
 | 4.2 | **The replay harness** — headline use case: **the deterministic baseline.** *"Has anyone asked whether the model beats a fixed rule?"* | 2.2, 3.7 |
-| 4.3 | **Behavioural coverage for `electron/main.cjs`** — 1,362 lines, currently zero runtime coverage. | 1.2, 1.5 |
+| 4.3 | **Behavioural coverage for `electron/main.cjs`** — 1,412 lines, currently zero runtime coverage. | 1.2, 1.5 |
 | 4.4 | **The notebook's recovery affordance** — a version, a checksum, a `.corrupt.<ts>` sidecar. *The only item with a data-loss risk.* | 3.7 |
 | 4.5 | **Shard the notebook out of one JSON blob.** | 4.4 |
 | 4.5b | **The candidate log** — ✅ **DESIGN APPROVED (owner, 2026-10-20): a 365-day log under `userData/candidates/`, included in backup and export.** The *implementation* waits on 3.7. | 3.7, D-24 |
@@ -182,7 +182,7 @@ These are not in the ordering report's numbered list; they are real, and they ar
 
 | mechanism | what it protects |
 |---|---|
-| **`npm run check-flow-doc-anchors`** | the line-number claims in `docs/app-flow.md` — 296 anchors verified, 0 unattributed. **It cannot see a citation that names no symbol**, which is exactly where the stale ones live; that class is repaired by hand (§14 of the cleanup manifest). |
+| **`npm run check-flow-doc-anchors`** | the line-number claims in `docs/app-flow.md` — **400** anchors verified, 0 unattributed (measured 2026-10-23; this file is not one of the gate's own documents, so the figure is restated by hand and had drifted from 296). **It cannot see a citation that names no symbol**, which is exactly where the stale ones live; that class is repaired by hand (§14 of the cleanup manifest). |
 | **`npm run render-probe`** | the rendered transcript. The only gate that can see a rendered row. |
 | **`npm run skill-approval-probe`** | the human-actuation path. Asserts notebook **bytes** after a real click. |
 | **the open-items register** (`open-items.md`) | every claim carries a `file:line` that proves it is open **at HEAD**. It is a *measurement*, not a transcription — which is why it corrected five rows from the previous audit rather than repeating them. |
