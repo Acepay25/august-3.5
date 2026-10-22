@@ -87,7 +87,7 @@ session does not re-derive them:
   (`StreamWithDeskToolsOptions`). It self-gates on
   `getHarnessSettings().deskToolsEnabled`, and `withDeskToolsSystemPrompt` will not
   double-inject the DESK TOOLS block if the system message already carries it.
-- The dock consumes it at `chatTurnRunner.ts:664` with `allowedTools: TRADE_TOOLS`
+- The dock consumes it at `chatTurnRunner.ts:672` with `allowedTools: TRADE_TOOLS`
   (`:96`, ~20 names, chart-aware: `get_chart_view`, `mark_trade_levels`,
   `draw_on_chart`) plus a frozen `PanelTurnContext` so a background turn still
   writes into its own transcript.
@@ -1211,7 +1211,7 @@ Two operational notes, because both cost a run:
   mechanics: `scripts/boot-probe.cjs:119` blocks on
   `waitForFunction(() => !document.querySelector('#splash'))`, while the e2e
   specs assert ABSENCE with a count-0 expectation (`e2e/smoke.spec.ts:55` in the
-  shared seed path, `:141` in the first-run spec). `index.tsx:91-97` is
+  shared seed path, `:141` in the first-run spec). `index.tsx:91-96` is
   `dismissSplash` plus its double `requestAnimationFrame`. Both flow docs now
   say which gate does which, and cite the lines.
 - **"One service replacing nine" (called unfalsifiable).** That phrasing no
