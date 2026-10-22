@@ -307,8 +307,8 @@ a reason, 0 failing rows, 0 shards without a ledger. GATE PASS.**
 
 | | Files | Share |
 | --- | ---: | ---: |
-| **Read** | 13,060 | 80.1 % |
-| **Skipped, with a reason** | 3,237 | 19.9 % |
+| **Read** | 13,041 | 80.0 % |
+| **Skipped, with a reason** | 3,256 | 20.0 % |
 | Pending / missing / unexplained | **0** | 0 % |
 
 By type:
@@ -317,18 +317,18 @@ By type:
 | --- | ---: | ---: |
 | `source` | 3,294 | 37 |
 | `tests` | 3,414 | 118 |
-| `docs` | 3,492 | 448 |
+| `docs` | 3,473 | 467 |
 | `config` | 1,263 | 1 |
 | `build-CI` | 280 | 38 |
 | `examples` | 26 | 0 |
 | `generated-vendored` | 1,278 | 2,541 |
 | `assets` | 13 | 54 |
 
-**What the 3,237 skipped files are.** Every one carries a one-line reason, and the
+**What the 3,256 skipped files are.** Every one carries a one-line reason, and the
 reasons cluster into a few honest kinds:
 
 - **Generated bilingual-pair consistency records** (the `*.i18n.yaml` files) — a
-  per-heading EN/ZH hash digest, machine-written, no behaviour. ~800 files.
+  per-heading EN/ZH hash digest, machine-written, no behaviour. ~819 files.
 - **Recorded session transcripts and expected-output fixtures** — committed test
   expectations, not source. ~800 files.
 - **Chinese mirrors of English documents** — a translation of a file already read.

@@ -50,9 +50,9 @@ exactly one shard, so the shard totals add up to the repo total.
 | `dsh-subagent` | 201 | 201 | 0 | 0 | 0 |
 | `dsh-test-support` | 213 | 205 | 8 | 0 | 0 |
 | `dsh-util-host-typert` | 472 | 412 | 60 | 0 | 0 |
-| `dsh-web-deliverables-feedback` | 225 | 225 | 0 | 0 | 0 |
+| `dsh-web-deliverables-feedback` | 225 | 206 | 19 | 0 | 0 |
 | `dsh-workflow-jobs-schedule` | 139 | 128 | 11 | 0 | 0 |
 
-**Total:** 16297 files — **13060 read**, **3237 skipped with a reason**, 0 pending, 0 missing from a ledger.
+**Total:** 16297 files — **13041 read**, **3256 skipped with a reason**, 0 pending, 0 missing from a ledger.
 
 **Shards complete:** 47 of 47. No skipped row lacks a reason.
