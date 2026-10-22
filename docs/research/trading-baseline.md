@@ -73,6 +73,16 @@ multi-seat debate engine's context assembler, left in place after the debate eng
 was deleted. The cost of leaving it is a large, maintained, tested, dead subsystem
 that makes the app *look* like it remembers the trader's journal when it does not.
 
+**The closed-trade learning chain is dead.** `post-mortems` were deleted
+(`usePostMortem`, `MistakePatternService`, `JobQueueService` — commit `03fc0d5`,
+2026-10-17), and the consequence is recorded in
+`docs/plans/debate-deletion-status.md:3-8`: *"the closed-trade learning chain stops
+working with no replacement."* The code confirms it —
+`craftSkillFromPostMortem` (`SkillCraftService.ts:140`) is still called from
+`botLearning.ts:234`, but its guard `pm.length < 40` (`:145`) makes it return null
+for **every** trade closed after 2026-10-17, because nothing writes a post-mortem
+any more. So a closed trade produces no lesson, and therefore no skill.
+
 ---
 
 ## 1. Verdict ledger
@@ -413,7 +423,10 @@ set to a pending resolver, so `handleReplacementChoice` can never act).
 **Live but misleading text.** `calibrationPolicy.ts:753/758/808` still says
 *"INSTRUCTION FOR MODERATOR: Weight X's analysis more heavily"* and is injected into
 the hybrid packet a **single** model reads (`HybridIntelligenceService.ts:1269-1276`).
-`EFFORT_BY_TASK.moderatorVerdict/.rebuttal/.clarification`
+Two more reach a live model and describe a committee that no longer exists:
+`DeskToolsService.ts:1776` (*"opening analysis, rebuttal, clarification, or moderator
+verdict"*) and `constants/prompts/harnessContract.ts:16` (*"The moderator's last block
+is the labeled markdown plan only"*). `EFFORT_BY_TASK.moderatorVerdict/.rebuttal/.clarification`
 (`reasoningControls.ts:72-78`) and `TASK_BUDGETS.rebuttal/.clarification`
 (`taskBudgets.ts:15-17`) have no production caller. The `skill` audience
 `'moderator'` survives only on legacy files — `SkillMemoryService.ts:382` says so.
@@ -494,6 +507,14 @@ These are the parts a proposal must not touch, because they are already right:
     text neutralised at ingestion.
 13. **The byte budget refuses growth and never evicts**, because nothing in that
     store is safe to evict.
+
+**Two multi-seat mechanisms, two stores, two vocabularies.** The dock **panel**
+(`chatPanel.ts:81`, up to 5 seats, tool DMs allowed, **no turn cap**, has a
+synthesis seat) and the Agents **room** (`groupRounds.ts:16-18`, 3 rounds / 12
+turns, DMs forbidden by protocol at `:79`, **no** synthesis seat) are the same
+product idea with different limits, on two screens — and the Agents surface reads
+`App.messages` while the dock reads `services/trade/chatStore.ts`
+(`AgentsView.tsx:10-25`).
 
 ---
 
