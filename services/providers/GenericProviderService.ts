@@ -1424,7 +1424,12 @@ async function sendChatRequestOnce(
                         toolChoice: options?.toolChoice,
                         reasoningPatch: reasoningPatchFor(effectiveConfig, options),
                     }),
-                    signal: options?.signal,
+                    // The dev proxy is the only transport with no cap of its own:
+                    // every other path in this file passes a timeout signal, and a
+                    // proxy request that wedges would hold the pipeline open until
+                    // the trader pressed Stop. Same budget as the transport it stands
+                    // in for.
+                    signal: withTimeoutSignal(options?.signal),
                 }).then(async response => {
                         const result = await response.json() as { ok?: boolean; status?: number; body?: string; reasoning?: string; message?: string };
                         if (!response.ok || !result.ok) {
@@ -1606,7 +1611,12 @@ async function sendChatTurnOnce(
                             toolChoice: options?.toolChoice,
                             reasoningPatch: reasoningPatchFor(effectiveConfig, options),
                         }),
-                        signal: options?.signal,
+                        // The stream's own budget, not the non-streaming one: a
+                        // reasoning-heavy answer streams its chain of thought first,
+                        // and 120 s would cut off a turn that is working. This is the
+                        // same cap `withStreamTimeoutSignal` gives the other streaming
+                        // transports.
+                        signal: withStreamTimeoutSignal(options?.signal),
                     });
                     const result = await response.json() as { ok?: boolean; status?: number; body?: string; reasoning?: string; message?: string };
                     if (!response.ok || !result.ok) {

@@ -31,11 +31,11 @@ Verdicts: **REAL** = reachable from the running app and does something ·
 | # | Feature | Verdict | Evidence |
 |---|---|---|---|
 | 1 | **Single-model tool turn** — one request, one model, desk-tool calling, no keyword routing | **REAL** | `services/trade/toolTurn.ts:131` (`runToolTurn`); `services/trade/chatSurfaceTurn.ts:57,308`; `services/trade/chatTurnRunner.ts:100,672`; `services/trade/automationTurn.ts:62,203`; routing comment `hooks/useAnalysisPipeline.ts:1218-1224` |
-| 2 | **Scheduled-run tool turn** — third sink, own ration, own bad news | **REAL** | `services/trade/automationTurn.ts:203-265`; caps `services/trade/automationTurn.ts:70`, `services/automation/AutomationService.ts:113` |
-| 3 | **Chart-dock multi-seat PANEL** — up to 5 models *or* roster agents answering one request together | **REAL** | UI: `components/trade/TradeChatPanel.tsx:1037-1038` ("New panel · up to 5 models"), seat picker `:1115-1141`; engine `services/trade/chatPanel.ts:81` (`planPanelTurn`), `:97` (`formatRoomTranscript`), `:107` (`parsePanelMentions`); runner `services/trade/chatTurnRunner.ts:1144-1300`; session kind `services/trade/chatSessions.ts:106,207` |
+| 2 | **Scheduled-run tool turn** — third sink, own ration, own bad news | **REAL** | `services/trade/automationTurn.ts:214-276`; caps `services/trade/automationTurn.ts:81`, `services/automation/AutomationService.ts:113` |
+| 3 | **Chart-dock multi-seat PANEL** — up to 5 models *or* roster agents answering one request together | **REAL** | UI: `components/trade/TradeChatPanel.tsx:1034-1035` ("New panel · up to 5 models"), seat picker `:1112-1138`; engine `services/trade/chatPanel.ts:81` (`planPanelTurn`), `:97` (`formatRoomTranscript`), `:107` (`parsePanelMentions`); runner `services/trade/chatTurnRunner.ts:1144-1300`; session kind `services/trade/chatSessions.ts:106,207` |
 | 4 | **Panel closing synthesis seat** — the last seat summarises the panel | **REAL** (closest thing to a moderator that survives) | `services/trade/chatPanel.ts:87-91`; `services/trade/chatTurnRunner.ts:1199-1201` (the synthesis turn prompt) |
 | 5 | **Panel cross-talk by @mention** — a seat can pull a peer in mid-round | **REAL** | `services/trade/chatPanel.ts:107-122`; `services/trade/chatTurnRunner.ts:1273-1276` |
-| 6 | **Inter-seat direct messaging over real tool calls** (`send_message` / `read_message`) | **REAL** — but **only inside the dock panel** | `services/analysis/DebateMailbox.ts:48` (`createDebateMailbox`), `:115` (`DEBATE_MAIL_TOOLS`); live construction `services/trade/chatTurnRunner.ts:1162`; tool merge `services/analysis/DeskToolsService.ts:4232,4245`; dispatch `:4351-4365`; inbox notice `:4272-4277` |
+| 6 | **Inter-seat direct messaging over real tool calls** (`send_message` / `read_message`) | **REAL** — but **only inside the dock panel** | `services/analysis/DebateMailbox.ts:48` (`createDebateMailbox`), `:115` (`DEBATE_MAIL_TOOLS`); live construction `services/trade/chatTurnRunner.ts:1162`; tool merge `services/analysis/DeskToolsService.ts:4250,4245`; dispatch `:4369-4383`; inbox notice `:4290-4295` |
 | 7 | **Named agent roster** (bots: name, title, provider/model, notebook scope, instructions) | **REAL** | `services/agents/agentRoster.ts:20-45` (`AgentBot`), `:47-53` (`AgentGroup`), `:95` (`getBots`), `:117` (`getGroups`), `:138-152` (CRUD); migration that strips the deleted role/enabledTools `:95-115` |
 | 8 | **Agent 1:1 threads as derived views over one flat message array** | **REAL** | `utils/agentThreads.ts:42` (`threadForProvider`), `:118` (`deskThread`), `:160` (`threadForGroup`), `:206` (`splitGroupThreads`), `:261` (`unreadCount`) |
 | 9 | **Teammate DM mailbox** (`[[dm:@handle]]` markers, `[[constraints:…]]`, `[[expecting:…]]`) | **REAL** | `services/agents/botMailbox.ts:84` (`parseDmMarkers`), `:133` (`buildTeammateProtocolSection`), `:220` (`validateDM`); drain loop `hooks/useBotMailbox.ts:130,265,317`; caps `services/agents/botMailbox.ts:33-42` (TTL 15 min, 3 hops, fanout 2, 12/60 s rate) |
@@ -46,7 +46,7 @@ Verdicts: **REAL** = reachable from the running app and does something ·
 | 14 | **Bot attention classification** (why a bot cannot answer, with a fix hint) | **REAL** | `services/agents/botAttention.ts:30` (`classifyBotAttention`); consumed `App.tsx:96,1185` |
 | 15 | **Bot-scoped routines** (a scheduled run that executes *as* a bot) | **REAL** | `services/agents/botRoutine.ts:80` (`runBotRoutineTurn`), `:56` (`BOT_ROUTINE_HOP`), `:142` (`botRoutineMessageRow`); wired `hooks/useAutomations.ts:374,444-447` |
 | 16 | **Seat personas** — a bot is its own instructions, else the general-analyst default | **REAL** | `services/agents/seatPersonas.ts:12` (`GENERAL_ANALYST_DEFAULT_PROMPT`), `:20` (`seatHasPersona`), `:24` (`seatPersonaPrompt`); assembled `services/agents/agentContext.ts:68` (`resolveAgentContext`) |
-| 17 | **Unified agent-context loader** (persona + notes + model, one place) | **REAL** | `services/agents/agentContext.ts:68`; consumers `components/trade/TradeChatPanel.tsx:480`, `services/agents/botLearning.ts:259` |
+| 17 | **Unified agent-context loader** (persona + notes + model, one place) | **REAL** | `services/agents/agentContext.ts:68`; consumers `components/trade/TradeChatPanel.tsx:477`, `services/agents/botLearning.ts:259` |
 | 18 | **Prompt registry** — 13 ids, zero `debate.*` | **REAL** | `constants/promptIds.ts:17-31`; `constants/promptRegistry.ts:57-164` |
 | 19 | **MODERATOR TURN** (a separate LLM seat that synthesised a binding verdict) | **DELETED** | deleted `48c3ee81` (2026-10-18, "stage 19's second tranche — the debate engine is deleted") — `services/providers/ensembleService.ts` (3,638 lines) and `constants/prompts/debatePrompts.ts` (deleted `04aff79a`, 2026-10-19). The prompts `MODERATOR_SYSTEM_PROMPT_V2`, `PURE_AI_MODERATOR_PROMPT`, `MODERATOR_FINAL_VERDICT_PROMPT`, `MODERATOR_FINAL_AUTHORITY_PROTOCOL` no longer exist anywhere in the tree. |
 | 20 | **ANALYST-ROLE SYSTEM** (Macro / Technical / Risk seats, lens prompts, per-role tool presets) | **DELETED** | deleted `6e1e09bb` (2026-10-19) — `services/ui/AnalystLensService.ts`, `services/ui/EnsembleAnalystService.ts`, `hooks/useLensAndEnsembleConfig.ts`, `utils/debateEnvelopes.ts`; role vocabulary gone (`services/agents/seatPersonas.ts:1-9` says so); `types/enums.ts` Analyst Lens enum deleted |
@@ -61,7 +61,7 @@ Verdicts: **REAL** = reachable from the running app and does something ·
 | 29 | **Debate-era `Message` fields** (`ensembleProgress`, `debateRunLog`, `debateCheckpoint`, `provisionalAnalysis`, `provisionalPlanFields`, `isDebating`, `activeDebateSpeakers`, `replacementOffer`) | **DELETED** | `1af3c6e7` (2026-10-18) + the 2026-10-19 passes recorded at `docs/plans/debate-deletion-status.md:1714-1728` |
 | 30 | **`Message.debateTurns`** — legacy transcript field | **COSMETIC** — no producer; four legacy readers only | field `types/message.ts:184`; copies `hooks/useTradeLogging.ts:427`, `utils/watchList.ts:30`; readers `utils/analysisUtils.ts:903,940,969`, `utils/reportExport.ts:241`, `hooks/useWatchAndAutopilot.ts:105`, `services/learning/monthlyReport.ts:224` |
 | 31 | **Debate marker sanitizers** (`<CLARIFICATION_*>`, `<MODERATOR_RETRY>`) | **REAL** (2 of 9 exports) | `constants/debateMarkers.ts:23,24` → `utils/analysisUtils.ts:18,859,860` |
-| 32 | **`ARBITER_ALLOWED_TOOLS`** | **COSMETIC** — a dead policy | `services/analysis/DeskToolsService.ts:3341-3357`; **no production importer** — only `tests/evidencePack.test.ts:33` and `tests/tradeLogTool.test.ts:11` |
+| 32 | **`ARBITER_ALLOWED_TOOLS`** | **COSMETIC** — a dead policy | `services/analysis/DeskToolsService.ts:3359-3375`; **no production importer** — only `tests/evidencePack.test.ts:33` and `tests/tradeLogTool.test.ts:11` |
 | 33 | **One-tap debate templates** (Scalp check / Swing thesis / Devil's advocate / Risk-only pass) | **COSMETIC** — extraction live, steering dead | `utils/debateTemplates.ts:18-44`; extraction `hooks/useAnalysisPipeline.ts:667-677`; **no UI produces a marker** (`debateTemplateMarker` has no production consumer); `template.steering` and `skipToVerdict` are read by nothing outside the module + `tests/debateTemplates.test.ts` |
 | 34 | **Run-contract stage ladder** (gate → openings → rebuttals → clarification → verdict → journal) | **COSMETIC** — types only, legacy rows only | `utils/runContract.ts:1-20` (explicitly types-only); `components/analysis/RunContractPanel.tsx:32-37` still names the six deleted stages |
 | 35 | **`Message.evidencePack`** ("what the moderator was actually shown") | **COSMETIC** — legacy rows only | type `types/message.ts:285`; renderer `components/analysis/VerdictAudit.tsx:58,100`; producer (`buildVerdictEvidencePack`) deleted with the finalizer |
@@ -177,7 +177,7 @@ feature, not a leftover of the debate."
 
 | Surface | Entry point | Runner | Fan-out | Synthesis seat? |
 |---|---|---|---|---|
-| **Chart dock panel** | `components/trade/TradeChatPanel.tsx:1037` | `services/trade/chatTurnRunner.ts:1144-1300` | up to 5 seats (models **or** roster agents) | **Yes** — last seat (`chatPanel.ts:87-91`) |
+| **Chart dock panel** | `components/trade/TradeChatPanel.tsx:1034` | `services/trade/chatTurnRunner.ts:1144-1300` | up to 5 seats (models **or** roster agents) | **Yes** — last seat (`chatPanel.ts:87-91`) |
 | **Agents 1:1 bot chat** | `hooks/useBotMailbox.ts:305` (`runUserBotTurn`) | `hooks/useBotMailbox.ts:130` (`runBotTurn`) | 1 | No |
 | **Agents group room** | `hooks/useAgentGroups.ts:126` (`runGroupThread`) | same | N members, serial, ≤3 rounds / ≤12 model turns | **No** |
 
@@ -269,7 +269,7 @@ What survives, and what each actually is:
 | `moderatorModel` on the monthly report | `services/learning/monthlyReport.ts:78,185-218,303`; `components/journal/MonthlyReportCard.tsx:64` | grades legacy rows, labelled *"moderator (legacy)"* (`monthlyReport.ts:210`) | COSMETIC (legacy data) |
 | `EFFORT_BY_TASK.moderatorVerdict` / `.rebuttal` / `.clarification` | `services/providers/reasoningControls.ts:72-78` | schedule entries with **no production caller** (`effortForTask` is called with `'analysis'`, `'chat'`, `'postMortem'`, `'ocr'`, `'supervision'` only) | COSMETIC (dead schedule rows) |
 | `TASK_BUDGETS.rebuttal` / `.clarification` | `services/providers/taskBudgets.ts:15-17` | same — no production consumer | COSMETIC (dead budget rows) |
-| `skill` audience `'moderator'` | `services/learning/MemoryRetrievalService.ts:204,440,480-483,533,733,748,786,851`; `services/trade/tradeChatContext.ts:243`; `services/learning/SkillMemoryService.ts:383,818,3862,3901` | an **audience axis that survives only on legacy skill files** — `SkillMemoryService.ts:382` says so: *"so 'moderator' survives only on legacy files."* The analyst index **filters them out** (`:3862`). | COSMETIC (legacy axis) |
+| `skill` audience `'moderator'` | `services/learning/MemoryRetrievalService.ts:204,440,480-483,533,733,748,786,851`; `services/trade/tradeChatContext.ts:248`; `services/learning/SkillMemoryService.ts:390,818,3862,3901` | an **audience axis that survives only on legacy skill files** — `SkillMemoryService.ts:389` says so: *"so 'moderator' survives only on legacy files."* The analyst index **filters them out** (`:3902`). | COSMETIC (legacy axis) |
 | `ThinkingRole = 'analyst' \| 'moderator' \| 'debate_turn'` | `types/thinking.ts:12`; branch `utils/thinkingSplit.ts:441` | the type union still admits three roles; nothing writes `'moderator'` or `'debate_turn'` any more (only tests do) | COSMETIC (dead type members) |
 | `RolePreset` `'moderator'` (+ `risk`/`macro`/`technical`/`sentiment`) | `components/chat/pixelAvatars.ts:40-49,81` | **still reachable**: `components/chat/NewBotDialog.tsx:28-29` derives the picker's choices from `Object.keys(ROLE_ACCENTS)`, filtering only `'unknown'` and `'postmortem'` — so the live New Bot dialog offers "Moderator" (and the three analyst roles) as avatar presets, defaulting to `'macro'` (`:43`) | COSMETIC **and live in the UI** |
 | `DebateSpeaker = string \| 'Moderator'` | `types/enums.ts:43` | the union still admits `'Moderator'` | COSMETIC (legacy type) |
@@ -280,7 +280,7 @@ What survives, and what each actually is:
 
 **There is no arbiter seat.** The word survives in three places:
 
-1. **`ARBITER_ALLOWED_TOOLS`** — `services/analysis/DeskToolsService.ts:3341-3357`:
+1. **`ARBITER_ALLOWED_TOOLS`** — `services/analysis/DeskToolsService.ts:3359-3375`:
    ```ts
    export const ARBITER_ALLOWED_TOOLS = [
        'recall', 'recall_chat', 'get_setup_history_stats',
@@ -294,7 +294,7 @@ What survives, and what each actually is:
    arbiter only."*
    **It is dead.** The only importers in the whole repo are two test files
    (`tests/evidencePack.test.ts:33,97-101` and `tests/tradeLogTool.test.ts:11,112`); the one
-   production mention is a *comment* at `DeskToolsService.ts:2370` listing it as an example of a
+   production mention is a *comment* at `DeskToolsService.ts:2375` listing it as an example of a
    caller-supplied allow-list. No seat, no run, no prompt ever reads it.
    The tool allow-list it was meant to feed **is** live and enforced — but the live allow-lists
    are `TRADE_TOOLS` (`services/trade/chatTurnRunner.ts:100`), `CHAT_SURFACE_TOOLS`
@@ -385,14 +385,14 @@ types schemas scripts electron App.tsx index.tsx`, excluding `tests/`).
 
 | # | Item | Evidence | Disposition |
 |---|---|---|---|
-| V5 | **`ARBITER_ALLOWED_TOOLS`** | `services/analysis/DeskToolsService.ts:3341-3357`. Only importers: `tests/evidencePack.test.ts:33`, `tests/tradeLogTool.test.ts:11`. | **Delete** the constant and its 7-line doc comment; delete the two test arms. If an arbiter policy is wanted later, it must be re-derived from a live seat. |
+| V5 | **`ARBITER_ALLOWED_TOOLS`** | `services/analysis/DeskToolsService.ts:3359-3375`. Only importers: `tests/evidencePack.test.ts:33`, `tests/tradeLogTool.test.ts:11`. | **Delete** the constant and its 7-line doc comment; delete the two test arms. If an arbiter policy is wanted later, it must be re-derived from a live seat. |
 | V6 | **`formatGuardContextBlock`** | `services/validation/SessionGuardService.ts:270-280` — *"Compact block injected into the debate context so the moderator can weigh it."* Only consumer: `tests/sessionGuard.test.ts:10,208-218`. | **Delete** (or keep `assessSession` and drop the prompt builder). |
 | V7 | **`generatePatternMemoryEnforcementContext`** + `**generateSynthesizedPromptInjection`** | `services/learning/PatternMemorySynthesisService.ts:982`, `:589`. Only consumers: `tests/patternMemoryGate.test.ts`, `tests/storeUnification.test.ts`. The first builds the whole *"MODERATOR ENFORCEMENT / MANDATORY QUESTIONS / HALT / REDUCE_SIZE"* block (`:1040-1075`). | **Delete the prompt builder; keep `generateMandatoryPatternCheck`** (`:882`), which has live data consumers. |
 | V8 | **`handleReplacementChoice`, `handleSteerSeat`, `handleStopSeat`, `steeringNotes`, `handleRemoveSteeringNote`** | `hooks/useAnalysisPipeline.ts:1778-1797`. **Zero consumers** outside the hook. `replacementChoiceRef` (`:361`) is never assigned a pending resolver (only nulled at `:365,1536`) → `handleReplacementChoice` always returns at `:364`. `seatSteeringRef` (`:353`) is written at `:794` and `:1791`, never read. `stoppedSeatsRef` (`:355`) likewise. | **Delete all five from the hook's return + the two refs + the reset at `:794-795`.** They are the deleted debate's mid-round controls. Keep the conversation-level steering queue (`:617-630`, `:1750-1757`), which is live. |
 | V9 | **`threadPreview` / `AgentThreadPreview`** | `utils/agentThreads.ts:225-251`. Only consumer: `tests/agentThreads.test.ts:8,76-89`. `previewTextFor` (`:235`) *is* live (imported by `components/agents/AgentsView.tsx:63`). | **Delete `threadPreview` + `AgentThreadPreview`**; keep `previewTextFor`. |
 | V10 | **`mailboxRosterHint`, `synthesizeReplyToLine`** | `services/analysis/DebateMailbox.ts:153-154`, `:162-169`. `mailboxRosterHint` — no consumer anywhere. `synthesizeReplyToLine` — only `tests/debateMailbox.test.ts:3,62-70`. | **Delete both.** The reply-to routing they supported is legacy (`utils/agentThreads.ts:95` still comments on it). |
 | V11 | **`EFFORT_BY_TASK.rebuttal` / `.moderatorVerdict` / `.clarification`; `TASK_BUDGETS.rebuttal` / `.clarification`** | `services/providers/reasoningControls.ts:72-78`; `services/providers/taskBudgets.ts:15-17`. No production `effortForTask(...)`/`TASK_BUDGETS.*` call uses them (`effortForTask` is called with `analysis`, `chat`, `postMortem`, `ocr`, `supervision` only). | **Delete the five rows** and the test arms at `tests/reasoningControls.test.ts:34-36,54-58`. |
-| V12 | **`requireFirstToolRound`** (the `toolChoice:'required'` round-0 forcing) | `services/analysis/DeskToolsService.ts:3635-3638` (*"used by debates running WITHOUT live hybrid market data"*), `:3738`. **No caller passes it.** | **Delete the option** (and its pass-through at `:4222,4339`). |
+| V12 | **`requireFirstToolRound`** (the `toolChoice:'required'` round-0 forcing) | `services/analysis/DeskToolsService.ts:3653-3656` (*"used by debates running WITHOUT live hybrid market data"*), `:3756`. **No caller passes it.** | **Delete the option** (and its pass-through at `:4222,4339`). |
 | V13 | **`onOpenTeam`** | `components/chat/GroupChatView.tsx:44` (declared), `:85` (destructured), and **never used in the render body**; `App.tsx:1232-1249` never passes it. Its comment: *"The debate harness is itself a room: the title links to the Team transcript."* | **Delete the prop.** The Team thread is gone as a debate backing. |
 
 ### 6.3 Dead data types / fields (legacy readers only)
@@ -409,8 +409,8 @@ types schemas scripts electron App.tsx index.tsx`, excluding `tests/`).
 
 | # | Item | Evidence | Disposition |
 |---|---|---|---|
-| V19 | **The desk-tools mandate names four deleted phases** | `services/analysis/DeskToolsService.ts:1776` — *"You can call live tools before you speak — **opening analysis, rebuttal, clarification, or moderator verdict**."* This string is sent to **every** model on every desk-tool turn. | **Rewrite** to the phases that exist ("before you answer, in any turn"). This is the single most-repeated piece of debate vocabulary still reaching a model. |
-| V20 | **The harness contract names the moderator** | `constants/prompts/harnessContract.ts:16` — *"The **moderator's** last block is the labeled markdown plan only."* Live in every desk-tool system prompt (`DeskToolsService.ts:4165,4173`) and every analysis prompt (`GenericAnalysisService.ts:359,400`). | **Rewrite** clause 3 to describe the single answering model. |
+| V19 | **The desk-tools mandate names four deleted phases** | `services/analysis/DeskToolsService.ts:1781` — *"You can call live tools before you speak — **opening analysis, rebuttal, clarification, or moderator verdict**."* This string is sent to **every** model on every desk-tool turn. | **Rewrite** to the phases that exist ("before you answer, in any turn"). This is the single most-repeated piece of debate vocabulary still reaching a model. |
+| V20 | **The harness contract names the moderator** | `constants/prompts/harnessContract.ts:16` — *"The **moderator's** last block is the labeled markdown plan only."* Live in every desk-tool system prompt (`DeskToolsService.ts:4183,4173`) and every analysis prompt (`GenericAnalysisService.ts:359,400`). | **Rewrite** clause 3 to describe the single answering model. |
 | V21 | **"INSTRUCTION FOR MODERATOR" injected into the hybrid packet** | `services/validation/calibrationPolicy.ts:808` — *"INSTRUCTION FOR MODERATOR: Weight X's analysis more heavily (n% accuracy)."* Injected live at `services/analysis/HybridIntelligenceService.ts:1269-1276,1291` into a **single-model** packet. | **Rewrite** to *"INSTRUCTION: the most accurate provider's record…"* — the text currently addresses a seat that does not exist. |
 | V22 | **The New Bot dialog still offers debate-role avatars** | `components/chat/NewBotDialog.tsx:28-29` derives choices from `Object.keys(ROLE_ACCENTS)` filtering only `'unknown'`/`'postmortem'` → **"Moderator"**, "Risk", "Macro", "Technical", "Sentiment" are offered; the default is `'macro'` (`:43`). `components/chat/pixelAvatars.ts:40-49,81` defines them. | **Rename the presets** to neutral ones (or keep the pixels but relabel). A trader today can name their bot's avatar "Moderator" and the app will imply a role that does not exist. |
 | V23 | **Dangling doc comment on `ProviderConfig`** | `types/provider.ts:84` — `/** Models included when Ensemble mode is enabled (maximum three total). */` immediately followed by `/** Optional USD per 1k prompt tokens … */` for `inputUsdPer1k`. The `ensembleModels` field was deleted; the comment now annotates the wrong field. | **Delete the orphan comment.** |
@@ -427,7 +427,7 @@ types schemas scripts electron App.tsx index.tsx`, excluding `tests/`).
 
 1. **The vocabulary and the product have drifted apart, and the drift is in the *prompts*, not
    just the code.** A single model reading the desk-tools mandate
-   (`DeskToolsService.ts:1776`) is told it may speak as "opening analysis, rebuttal, clarification,
+   (`DeskToolsService.ts:1781`) is told it may speak as "opening analysis, rebuttal, clarification,
    or moderator verdict"; the harness contract (`harnessContract.ts:16`) tells it "the moderator's
    last block is the labeled markdown plan only"; the hybrid packet
    (`calibrationPolicy.ts:808`) instructs a **MODERATOR** to weight providers. Three live prompts
@@ -436,7 +436,7 @@ types schemas scripts electron App.tsx index.tsx`, excluding `tests/`).
 
 2. **The `judge` half of the old product has no replacement anywhere, and three of its builders
    are still in the tree with nothing calling them** — `ARBITER_ALLOWED_TOOLS`
-   (`DeskToolsService.ts:3341`), `formatGuardContextBlock` (`SessionGuardService.ts:270`),
+   (`DeskToolsService.ts:3359`), `formatGuardContextBlock` (`SessionGuardService.ts:270`),
    `generatePatternMemoryEnforcementContext` (`PatternMemorySynthesisService.ts:982`). The
    pattern-memory gate still *computes* mandatory questions (`PatternMemorySynthesisService.ts:895-970`)
    and the session guard still *computes* a day-P&L/loss-streak block — **nothing injects either

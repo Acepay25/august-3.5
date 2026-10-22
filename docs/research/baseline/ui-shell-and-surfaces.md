@@ -54,7 +54,7 @@ Legend: **REAL** = the control/feature does what its label says, in the running 
 |---|---|---|---|---|
 | 14 | **Disclosure (the one expander)** | A native `<details>`: the transcript's thinking row, the tool-output expander, the wire audit, the automation card's reasoning and Settings' "Advanced". | REAL (for those five) / **MIXED** (a second mechanism survives) | `components/shared/Disclosure.tsx:73-88`. A second mechanism still exists — `.collapsible-content` (`index.css:1455-1468`), a `<button>` + grid-collapse `<div>`, used at `components/shared/StrategySearch.tsx:269,325` and `components/dashboards/learning/LessonsSection.tsx:81`. That is the exact mechanism `Disclosure.tsx:4-15` says was retired ("the automation card's 'Reasoning (N)' was a `<button>` plus a grid-collapse `<div>`"). |
 | 15 | **DetailModal (the one reader)** | Focus trap, `aria-modal`, Escape, backdrop click, view-only body. | REAL | `components/shared/DetailModal.tsx:43-93`; mounted for the agent card `components/agents/AgentsView.tsx:1643-1659`; probe/pins in `tests/rightPanelContract.test.tsx` family |
-| 16 | **Jump-to-latest FAB** | The one return-to-newest control, at the one `JUMP_AWAY_PX` threshold; shows an **indeterminate** ring while a turn runs — never a percentage. | REAL | `components/shared/JumpToLatestFab.tsx:51` (threshold), `:66-79` (ring); mounted by both homes: `components/agents/AgentsView.tsx:1531-1537` and `components/trade/TradeChatPanel.tsx:1219-1223` |
+| 16 | **Jump-to-latest FAB** | The one return-to-newest control, at the one `JUMP_AWAY_PX` threshold; shows an **indeterminate** ring while a turn runs — never a percentage. | REAL | `components/shared/JumpToLatestFab.tsx:51` (threshold), `:66-79` (ring); mounted by both homes: `components/agents/AgentsView.tsx:1531-1537` and `components/trade/TradeChatPanel.tsx:1216-1220` |
 | 17 | **Model menu (the one picker)** | `ModelMenu` + `ModelChip` + `ModelPicker`; the composer's trigger names Provider · Model · tier and one panel edits all three. | REAL | `components/shared/ModelMenu.tsx` (533 lines), `ModelChip.tsx`, `ModelPicker.tsx`; the composer's chip `App.tsx:208-223` |
 | 18 | **Effort ladder + dial refcount** | One six-stop ladder, and one refcount of "is a dial on screen right now", so `Ctrl/Cmd+Shift+E` only fires where the tier it edits is visible. | REAL | `components/shared/effortScale.ts:21-58`; `components/shared/effortDial.ts:18-30`; the chord's guard `App.tsx:1337-1340` |
 | 19 | **Tool-kind marks** | One glyph per tool kind, shared by the transcript row and the Settings catalogue. | REAL | `components/shared/toolKindIcons.tsx:15-23`; used at `components/shared/ToolActivityRow.tsx:122-128` and `components/settings/tabs/DeskToolCatalogue.tsx` |
@@ -851,7 +851,7 @@ The same pattern would work for the Chat surface's `ChatTranscriptRow` call.
    has no denominator anyone could honestly draw
    (`components/shared/JumpToLatestFab.tsx:14-24, 66-79`). And the threshold is ONE number
    both homes read (`JUMP_AWAY_PX = 240`, `:51`; `components/agents/AgentsView.tsx:577`;
-   `components/trade/TradeChatPanel.tsx:671, 726`) so one home cannot yank a reader the
+   `components/trade/TradeChatPanel.tsx:668, 726`) so one home cannot yank a reader the
    other offered a button for.
 
 4. **The failure row is shared, and the provider's own words are used.** The same

@@ -1,10 +1,15 @@
 # Harness research — status
 
 **Task:** exhaustive deep-dive of three reference harness repos, then evidence-based
-improvement proposals for the August Trading harness. RESEARCH ONLY — no August
-Trading source code is modified by this work.
+improvement proposals for the August Trading harness. The research itself is
+**read-only**: no reference-repo code was installed, built or executed, and no
+August source was touched by the reading. **Three of the resulting proposals have
+since been implemented in August** — P2, P10 and P3's allow-list half, in `e6787a8f`
+(2026-10-23) — which is why the corpus's own `file:line` citations were re-anchored
+afterwards; see the log.
 
-**Started:** 2026-10-22 (Asia/Manila) · **Finished:** 2026-10-22
+**Started:** 2026-10-22 (Asia/Manila) · **Finished:** 2026-10-22 · **Re-audited and
+partly implemented:** 2026-10-23
 
 ---
 
@@ -43,6 +48,7 @@ Trading source code is modified by this work.
 | 2 | `docs/research/<repo>/shards/<shard>.md` — one subagent per shard, full read | **DONE** |
 | 3 | `docs/research/<repo>/ARCHITECTURE.md` — synthesis + coverage summary (lead verifies) | **DONE — all three repos PASS** |
 | 4 | `docs/research/TRADING-IMPROVEMENTS.md` — proposals with verdicts and a ranked top-5 | **DONE** |
+| 5 | implementation of the proposals that needed no owner ruling (P2, P10, P3-half) | **DONE — `e6787a8f`**, 5,351 tests + `tsc` + eslint + the anchor gate green |
 
 ## The coverage gate — final result
 
@@ -180,3 +186,41 @@ ledgers into the manifest and diffs it against `git ls-files`), then
   ledgers rather than hand-edited. Deepseek-harness is now **13,041 read / 3,256
   skipped**; the run total is **33,020 / 5,959**. The merge re-verified the partition
   unchanged (16,297 rows, 0 missing, 0 phantom, 0 unknown, 0 failing rows).
+- **03:25 (2026-10-23)** — **Three proposals implemented (`e6787a8f`).** P2 (the
+  `propose_skill` reason survives to the human, a missing `steps` is refused, the
+  proposal queue reports a failed write as a failure), P10 (one `skillIndexRow`
+  projection feeds both surfaces and the index filter now applies the approval fact,
+  so an unapproved skill is not *named*), and P3's allow-list half (the detached skill
+  evaluator gets `AUTOMATION_EVALUATION_TOOLS`, the automation set minus
+  `present_trade` and `decline_trade`). Gates on the merged tree: **514 files / 5,351
+  tests green, `tsc` clean, eslint 0 errors / 655 warnings (unchanged), the flow-doc
+  anchor gate green at 410 anchors.** Each fix was proved red by disabling its guard
+  rather than only green by adding it — including the reason round trip, the missing-
+  `steps` refusal, the failed-write `null` and the index filter. **Withheld as owner
+  rulings:** P3's inversion (an absent `allowedTools` still means *everything*), P1,
+  P4, P5's row-furniture half, P6, P8, P9, P11.
+- **03:55 (2026-10-23)** — **The corpus re-anchored against the moved files.** The
+  commit shifted lines in ten source files, so every citation into them was re-derived
+  from the commit's own `-U0` hunk headers rather than re-measured by hand: **258 named
+  citations and 98 bare `:NNN` citations across nine research documents**, each move
+  asserted by requiring the bytes at the old line and the new line to be identical, and
+  every doc verified afterwards to differ from its committed form **in digits only**.
+  Where a claim itself changed truth value — the two "live problems" in the baseline,
+  the `propose_skill` defect read from both sides, the route-A row, weak spots 1/2/4 —
+  the prose now says *fixed*, names the commit, and keeps the pre-fix text as labelled
+  history. `PROPOSALS-DELTA.md` stays pinned to `f144cdf5` and says so.
+- **04:05 (2026-10-23)** — **P5's transport half implemented; P5's UI half shown to be
+  one decision.** Both `/__provider_proxy` branches were uncapped (the corpus named one;
+  a census of `signal: options?.signal` found the other) and now carry the budget of the
+  call they make — 120 s at `GenericProviderService.ts:1432`, 300 s at `:1619`, because a
+  reasoning stream is not a non-streaming request. New: `tests/devProxyTimeout.test.ts`
+  (2 cases; 5,353 in 515, `tsc` clean, eslint 0/655, anchors 410). And the measured reason
+  `Message.interrupted` alone would have been a **write-only field**:
+  `InterruptedRunNotice` returns `null` without a handler, and the Chat surface passes
+  none — so items 1 and 2 are one owner decision, recorded in §P5 with the line numbers,
+  along with the correction that `interruptedPrompt` has no producer anywhere in the tree.
+  Re-anchoring the corpus for this move surfaced a **false register row**: `open-items.md`
+  O-29 cited three evidence-floor constants at lines that had not held them since E-37
+  raised their values 2/3/5 → 10/20/10 on 2026-10-20. It is now CLOSED with the real
+  lines. `docs/plan/full-audit.md` was re-anchored by mistake and reverted — it is pinned
+  to `6a41a9f7` and its drift is by design.

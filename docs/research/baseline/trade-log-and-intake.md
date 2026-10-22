@@ -19,17 +19,17 @@ land somewhere other than the journal.
 | 2 | **The trade store** — one logical store, two physical backends: SQLite table `trades` (native) / IndexedDB `userProfiles` blob (web). Key = `LoggedTrade.id` (= the Message id) + `username`. | **REAL** | `services/infrastructure/SqliteService.ts:159-183` (schema), `:718-742` (row write), `:756-774` (row read); `services/infrastructure/dbService.ts:32-34, 61-82, 227-263` (web) |
 | 3 | **Section-diffing persistence** — a save rewrites only the changed sections, in one transaction, and deletes rows absent from the profile (so deletions and imports do not resurrect). | **REAL** | `services/infrastructure/SqliteService.ts:546-609` (`tradesJson` fingerprint → `sqliteSaveTrade` loop → `deleteAbsentRows`); `hooks/useProfilePersistence.ts:104, 156` |
 | 4 | **Schema-free column layout** — 18 core columns; every newer field is JSON in the `meta` TEXT column and spread back on read. No migration needed for new fields. | **REAL** | `services/infrastructure/SqliteService.ts:159-183, 711-742, 756-774`; asserted in `tests/sqliteService.test.ts` ("stage-3 trade fields round-trip") |
-| 5 | **The `get_trade_log` desk tool** — the model's on-demand read of the journal as rows. | **REAL** | `services/analysis/DeskToolsService.ts:1379-1397` (definition), `:3262-3286` (handler) |
+| 5 | **The `get_trade_log` desk tool** — the model's on-demand read of the journal as rows. | **REAL** | `services/analysis/DeskToolsService.ts:1384-1402` (definition), `:3280-3304` (handler) |
 | 6 | **The last-20 brief module** — one builder, two renderings (tape for analysts, tally for the moderator), explicit log-time ordering, dollar/percent units never merged. | **REAL** (as a module) | `utils/recentTradesBrief.ts:20, 97-123, 140-184, 195-210, 232-253, 256-258` |
 | 7 | **The last-20 CARD in the Journal** — "Last 20 logged trades" with a W/L · win-rate · avg-R · net-$ · streak header and one row per trade. | **REAL** (trader-facing) | `components/journal/Journal.tsx:323-380` (`data-testid="journal-last-20"`), wired at `:13, 324, 336` |
 | 8 | **The last-20 INJECTION into a model turn** (`recentFormBlock` → `getMemoryFilesContext` → `enhancedPrompt`). | **COSMETIC** — computed every send, **never sent**. See §3. | `services/learning/MemoryRetrievalService.ts:730-751, 923-935`; `hooks/analysisPipeline/memoryContext.ts:143`; `hooks/useAnalysisPipeline.ts:1168-1213` vs. the three sends at `:1258, 1384, 1411` |
-| 9 | **The Journal and the model read the SAME builder** — `buildTradeLogBrief` vs `buildRecentTradesBrief`+`selectRecentTrades`. They cannot disagree on the arithmetic. | **REAL** | `components/journal/Journal.tsx:324`; `services/analysis/DeskToolsService.ts:3273-3274`; shared module `utils/recentTradesBrief.ts:226-227` |
-| 10 | **The tool's enforce-at-the-executor allow-list** — an off-list tool name is refused before the cache and before the switch, on every transport (text-protocol seats included). | **REAL** | `services/analysis/DeskToolsService.ts:2478-2487`; refusals are `ok:false` (`:2426-2438`) |
-| 11 | **`get_trade_log` is deliberately NOT cached** — a trade logged during the turn that reads the log is visible immediately. | **REAL** | `services/analysis/DeskToolsService.ts:440-472` (`CACHEABLE_TOOLS` omits it), `:3304-3306`; pinned by `tests/tradeLogTool.test.ts:115-123` |
-| 12 | **`get_trade_log` is NOT a "market read"** — so it cannot satisfy the Full-analysis "you looked something up" check. | **REAL** (deliberate) | `services/analysis/DeskToolsService.ts:2403-2419`; consumed at `services/trade/chatSurfaceTurn.ts:362-371` |
+| 9 | **The Journal and the model read the SAME builder** — `buildTradeLogBrief` vs `buildRecentTradesBrief`+`selectRecentTrades`. They cannot disagree on the arithmetic. | **REAL** | `components/journal/Journal.tsx:324`; `services/analysis/DeskToolsService.ts:3291-3292`; shared module `utils/recentTradesBrief.ts:226-227` |
+| 10 | **The tool's enforce-at-the-executor allow-list** — an off-list tool name is refused before the cache and before the switch, on every transport (text-protocol seats included). | **REAL** | `services/analysis/DeskToolsService.ts:2483-2492`; refusals are `ok:false` (`:2431-2443`) |
+| 11 | **`get_trade_log` is deliberately NOT cached** — a trade logged during the turn that reads the log is visible immediately. | **REAL** | `services/analysis/DeskToolsService.ts:440-472` (`CACHEABLE_TOOLS` omits it), `:3322-3324`; pinned by `tests/tradeLogTool.test.ts:115-123` |
+| 12 | **`get_trade_log` is NOT a "market read"** — so it cannot satisfy the Full-analysis "you looked something up" check. | **REAL** (deliberate) | `services/analysis/DeskToolsService.ts:2408-2424`; consumed at `services/trade/chatSurfaceTurn.ts:345-354` |
 | 13 | **Trade-history intake: CSV file** — attached to a chat message. | **COSMETIC** for history: it becomes prompt text, never a trade row or a draft. | `components/trade/panels/ChatComposer.tsx:159`; `hooks/useChatAttachments.ts:64-65` (readAsText); `services/trade/chatTurnRunner.ts:922-925, 982` |
 | 14 | **Trade-history intake: pasted text** — the trader's own message. | **COSMETIC** for history: prompt text only. | `services/trade/chatTurnRunner.ts:982` |
-| 15 | **Trade-history intake: screenshot / image** — a real image part for a vision seat; an explicit "this model cannot see images" for a text-only seat. | **REAL** as analysis input; **COSMETIC** as journal intake (it produces a new AI message, not a row). | `hooks/useChatAttachments.ts:64`; `services/providers/imageProcessor.ts:43-103, 105-165`; `services/trade/chatTurnRunner.ts:160-173`; `services/trade/chatSurfaceTurn.ts:195-216`; `hooks/useAnalysisPipeline.ts:1415`; `hooks/useTradeLogging.ts:988-1024` |
+| 15 | **Trade-history intake: screenshot / image** — a real image part for a vision seat; an explicit "this model cannot see images" for a text-only seat. | **REAL** as analysis input; **COSMETIC** as journal intake (it produces a new AI message, not a row). | `hooks/useChatAttachments.ts:64`; `services/providers/imageProcessor.ts:43-103, 105-165`; `services/trade/chatTurnRunner.ts:160-173`; `services/trade/chatSurfaceTurn.ts:178-199`; `hooks/useAnalysisPipeline.ts:1415`; `hooks/useTradeLogging.ts:988-1024` |
 | 16 | **Trade-history intake: PDF** — text layer via pdfjs, scanned pages via vision OCR. | **COSMETIC** for the journal: it is wired to the **strategy book**, not to trades. There is **no PDF path into the journal at all**. | `services/infrastructure/pdfTextExtractor.ts:57-88`; `services/learning/pdfOcrService.ts:34-64`; sole callers `components/settings/StrategiesManager.tsx:4, 6, 94, 106` (accept `.pdf` at `:260`) |
 | 17 | **Trade-history IMPORT** (CSV → rows, broker statement → rows). | **ABSENT** — no importer exists anywhere. | `grep` for `importTrades|importCSV|parseCsv` → 0 hits; the only CSV code is the exporter `utils/reportExport.ts:31-54` |
 | 18 | **Training-data export (JSONL)** — one model-ready record per trade. | **REAL and mostly complete** (see §5 for the fields it omits). | `utils/reportExport.ts:142, 171-244, 252-255`; button `components/settings/tabs/ActionsTab.tsx:33-52`; fed from `components/settings/SettingsMenu.tsx:442, 488` → `components/settings/tabs/types.ts:20` |
@@ -38,8 +38,8 @@ land somewhere other than the journal.
 | 21 | **`ExportService` (Settings → Data export)** — **does NOT carry the trade log**; it is a Preferences-only surface. | **REAL but blind to the journal** | `services/infrastructure/ExportService.ts:638, 939, 1006`; `RAW_LOCAL_STORAGE_PREFIXES` at `:299`; nothing reads `tradeLog` |
 | 22 | **Outcome autopilot** — automatic settlement: kline-verified SL/TP, MAE/MFE, realized R, cost/net R, suggested size, resolution source. | **REAL** | `services/ui/OutcomeAutopilotService.ts:27-53, 514-592, 629-673`; `services/backtesting/outcomeEngine.ts:394-470` |
 | 23 | **Settlement reflection** — the ONE bounded model call at settlement; it is the only writer of `trade.postMortem`. | **REAL** | `services/learning/settlementReflection.ts:239-327`; called at `hooks/useTradeLogging.ts:524-555` |
-| 24 | **The decline ledger** (`decline_trade`) — a recorded skip. | **REAL as a record, deliberately NOT a journal row**: "no journal row exists; the skip is now auditable." It never reaches `get_trade_log` or the training export. | `services/analysis/DeskToolsService.ts:3231-3260`; `services/trade/declineLog.ts:10-17, 33, 62` |
-| 25 | **The arbiter allow-list** (`ARBITER_ALLOWED_TOOLS`) — the seat policy that put `get_trade_log` on the "seat that judges the record". | **DEAD** — the arbiter/moderator seat was deleted; the only importers are two test files. | `services/analysis/DeskToolsService.ts:3341-3357`; `docs/analysis/2026-10-21-04-cleanup-manifest.md:62` |
+| 24 | **The decline ledger** (`decline_trade`) — a recorded skip. | **REAL as a record, deliberately NOT a journal row**: "no journal row exists; the skip is now auditable." It never reaches `get_trade_log` or the training export. | `services/analysis/DeskToolsService.ts:3249-3278`; `services/trade/declineLog.ts:10-17, 33, 62` |
+| 25 | **The arbiter allow-list** (`ARBITER_ALLOWED_TOOLS`) — the seat policy that put `get_trade_log` on the "seat that judges the record". | **DEAD** — the arbiter/moderator seat was deleted; the only importers are two test files. | `services/analysis/DeskToolsService.ts:3359-3375`; `docs/analysis/2026-10-21-04-cleanup-manifest.md:62` |
 | 26 | **`Message.evidencePack`** ("what the moderator was actually shown") and **`Message.memoryRetrieved`** ("notebook files retrieved for this run"). | **DEAD fields** — no writer anywhere in the app. | `types/message.ts:281, 285-291`; `grep memoryRetrieved:` → 1 hit, a type; `grep evidencePack` → only readers + test fixtures |
 | 27 | **`LoggedTrade.postMortemImages`** — the Journal renders it. | **DEAD field** — no writer anywhere. | `types/trade.ts:79`; `components/journal/TradeLog.tsx:71`; `grep postMortemImages\s*[:=]` → 1 hit, a test fixture |
 
@@ -106,10 +106,10 @@ SURFACE TO THE TRADER
 SURFACE TO THE MODEL  (on demand, never pushed)
   the same `loggedTrades` array travels as DeskToolContext.trades
     App.tsx:2582 (dock) → services/trade/chatTurnRunner.ts:691
-    App.tsx:1475 → hooks/useAnalysisPipeline.ts:1418 → services/trade/chatSurfaceTurn.ts:313
-    services/trade/automationTurn.ts:208 (scheduled run)
+    App.tsx:1475 → hooks/useAnalysisPipeline.ts:1418 → services/trade/chatSurfaceTurn.ts:296
+    services/trade/automationTurn.ts:219 (scheduled run)
   the seat calls get_trade_log
-    services/analysis/DeskToolsService.ts:3262-3286
+    services/analysis/DeskToolsService.ts:3280-3304
       selectRecentTrades(context.trades, {…filter, limit})  (:3273)
         utils/recentTradesBrief.ts:97-123   filter → sort by decidedAt ASC → last N
       buildRecentTradesBrief(rows)                           (:3274)
@@ -135,7 +135,7 @@ EXPORT
 
 ### 3.1 It gets
 
-`get_trade_log` (`services/analysis/DeskToolsService.ts:1379-1397`, `:3262-3286`).
+`get_trade_log` (`services/analysis/DeskToolsService.ts:1384-1402`, `:3280-3304`).
 
 **Params** (`additionalProperties: false`, `:1385-1395`):
 
@@ -270,7 +270,7 @@ four *surfaces* carry no retrieved blob, never that the pipeline sends one.
   `services/agents/botLearning.ts:94-100` — with `trades = undefined`, and `recentFormBlock`
   returns `''` for undefined (`:735`). So the bot's shared-memory context can never carry the
   tape.
-- The skill-eval harness passes `[]` (`services/learning/SkillEvalScheduler.ts:211`).
+- The skill-eval harness passes `[]` (`services/learning/SkillEvalScheduler.ts:212`).
 
 **And the source list is dropped too**: `listRetrievedMemorySources` (`:783-801`) returns
 `journal/recent-form` among the sources, but `useAnalysisPipeline.ts:1066-1072` does **not**
@@ -296,7 +296,7 @@ function that no prompt calls.
 | **CSV file** | Yes — the chat composer accepts `.csv` | `useChatAttachments.attachFiles` → `reader.readAsText(file)` → the dock's `fileBlocks` → `[ATTACHED FILE — x.csv]\n<text>` appended to the user's message | **Prompt text only.** Not a trade row, not a draft, not parsed. | **COSMETIC** for history | `components/trade/panels/ChatComposer.tsx:159`; `hooks/useChatAttachments.ts:48-67`; `services/trade/chatTurnRunner.ts:922-925, 982` |
 | **CSV file → journal** | **No. There is no importer.** | — | — | **ABSENT** | `grep -rn "importTrades\|importCSV\|parseCsv\|readAsText.*csv"` → no importer; the only CSV code is the exporter `utils/reportExport.ts:31-54` |
 | **Pasted text** | Yes — the composer | becomes the user message | Prompt text only | **COSMETIC** for history | `services/trade/chatTurnRunner.ts:982` |
-| **Screenshot / image (chat)** | Yes — `accept="image/*"` | data URL → `userContentWithImage` → a real `image_url` part for a vision seat; for a text-only seat an explicit "this model cannot see images" (`chatTurnRunner.ts:172`). The Chat surface does the same (`chatSurfaceTurn.ts:195-216`, `useAnalysisPipeline.ts:1415`). | **A new AI analysis message.** Not a journal row. | **REAL** for analysis, **COSMETIC** for history | `hooks/useChatAttachments.ts:64`; `services/providers/imageProcessor.ts:43-165`; `services/trade/chatTurnRunner.ts:160-173` |
+| **Screenshot / image (chat)** | Yes — `accept="image/*"` | data URL → `userContentWithImage` → a real `image_url` part for a vision seat; for a text-only seat an explicit "this model cannot see images" (`chatTurnRunner.ts:172`). The Chat surface does the same (`chatSurfaceTurn.ts:178-199`, `useAnalysisPipeline.ts:1415`). | **A new AI analysis message.** Not a journal row. | **REAL** for analysis, **COSMETIC** for history | `hooks/useChatAttachments.ts:64`; `services/providers/imageProcessor.ts:43-165`; `services/trade/chatTurnRunner.ts:160-173` |
 | **Screenshot / image (Journal "update trade")** | Yes — the modal accepts `image/*` | `handleConfirmUpdateTrade(text, images)` → `handleSendMessage(text, metaImages, context, {isUpdate:true, …})` | **A new analysis message with the image.** It does **not** amend the logged row, and `LoggedTrade.postMortemImages` has no writer anywhere. | **COSMETIC** as a journal update | `components/journal/UpdateTradeModal.tsx:153`; `hooks/useTradeLogging.ts:988-1024`; `types/trade.ts:79`; `grep postMortemImages\s*[:=]` → one test fixture |
 | **PDF** | Only in Settings → Strategies (`accept=".pdf"`) | `extractPdfText` (pdfjs text layer; scanned pages rendered to PNG) → `ocrPdfPages` (vision OCR) → summarised into a **strategy** | **A strategy in the strategy book.** There is no PDF path into the journal. | **COSMETIC** for the journal | `services/infrastructure/pdfTextExtractor.ts:57-88`; `services/learning/pdfOcrService.ts:34-64`; sole callers `components/settings/StrategiesManager.tsx:4, 6, 94, 106, 260` |
 | **Broker statement (CSV/PDF) → rows** | **No.** | — | — | **ABSENT** | as above |
@@ -390,7 +390,7 @@ brief is assembled on every send (`hooks/useAnalysisPipeline.ts:1073`), folded i
 `enhancedPrompt` has six occurrences in the repo and no consumer (`grep enhancedPrompt`).
 The model therefore learns the trader's recent form **only** if it thinks to call
 `get_trade_log` — which no prompt, mandate or catalogue row encourages (the desk mandate
-names `recall` at `DeskToolsService.ts:1779` and never `get_trade_log`).
+names `recall` at `DeskToolsService.ts:1784` and never `get_trade_log`).
 
 **Cost of leaving it:** the journar's most valuable signal (form, streak, R) is one
 model-initiated tool call away from every answer, and the desk's own prompt never points
@@ -405,7 +405,7 @@ header will build the wrong thing.
 
 ### 6.3 The tool's description misstates one field
 
-`DeskToolsService.ts:1384` promises "the ISO time it **was logged**". The code prints
+`DeskToolsService.ts:1389` promises "the ISO time it **was logged**". The code prints
 `row.decidedAt` (`utils/recentTradesBrief.ts:136`) — the **decision** time, per the brief's own
 field docs (`:33-36`: *"The log time … (provenance)"* / *"The decision time — the clock this
 brief orders and shows"*). The Journal card prints the **log** time
@@ -459,7 +459,7 @@ for the aggregate.
   by nothing. `settlementReflection.ts:8` still names "a screenshot upload path" as a
   post-mortem writer — that path does not exist.
 - `decline_trade` records a skip and states plainly "no journal row exists"
-  (`DeskToolsService.ts:3255`), so passes never enter `get_trade_log`, never enter the
+  (`DeskToolsService.ts:3273`), so passes never enter `get_trade_log`, never enter the
   training export, and are visible only through the Journal's separate "Passes" stat
   (`Journal.tsx:305-311`) reading `services/trade/declineLog.ts`.
 
@@ -500,13 +500,13 @@ so at least the two surfaces agree.
    `outcomeResolvedAt`), which run and which prompt lane (`sourceRunId`, `promptVersion`,
    `promptLane`), and which model wrote the lesson (`postMortemModel`).
 5. **The tool is honest about what it does not know.** "No journal row matches that filter.
-   That is not evidence of inactivity — only of no match." (`DeskToolsService.ts:3281-3283`).
+   That is not evidence of inactivity — only of no match." (`DeskToolsService.ts:3299-3301`).
    The budget comment at `:520-525` names the exact silent-loss failure it prevents, and
    `tests/tradeLogTool.test.ts:90-109` pins that 20 rows arrive whole.
 6. **The right read is the wrong read.** `get_trade_log` is deliberately **not** cached, so a
    trade logged during the turn that reads the log is visible (`tests/tradeLogTool.test.ts:115`).
    It is also deliberately **not** a "market read", so it cannot be used to fake the
-   "I looked at the tape" check (`DeskToolsService.ts:2403-2419`).
+   "I looked at the tape" check (`DeskToolsService.ts:2408-2424`).
 7. **The refusal machinery is transport-agnostic.** The allow-list is enforced in the
    executor, not at offer time, so a text-protocol seat that emits a tag for a forbidden tool
    is refused rather than served (`:2478-2487`).
@@ -525,7 +525,7 @@ so at least the two surfaces agree.
     embedded (`reportExport.ts:142-244`).
 11. **The Journal card and the model read the same builder.** `buildTradeLogBrief` /
     `buildRecentTradesBrief` are one implementation, so the arithmetic cannot drift
-    (`Journal.tsx:320-324`; `DeskToolsService.ts:3273-3274`).
+    (`Journal.tsx:320-324`; `DeskToolsService.ts:3291-3292`).
 12. **The archive is real.** The trade log rides the profile JSON into every backup, and
     import validates and previews the count (`BackupService.ts:116-156, 666-726`).
 
