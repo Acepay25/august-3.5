@@ -21,7 +21,7 @@ does not mention is not claimed to be done.
 |---|---|---|---|
 | **E-11** | **The prompt contract test.** A new suite that asserts what is **sent** on the four model-call paths, not what is built. | `tests/promptContract.test.ts` (new) | `npx vitest run tests/promptContract.test.ts` → **16 tests, 16 pass** (2026-10-20). |
 | **E-60** | **The "one place to look" rule**, in one line, in `AGENTS.md`. | `AGENTS.md` § *The Plan* | Read back; the line names the working list, the evidence file, and the id a proposal must cite. |
-| **E-01a** (prompts thread) | **The harness contract reaches every live surface exactly once.** It is injected at the transport — `withDeskToolsSystemPrompt` (`services/analysis/DeskToolsService.ts:3759`, called from `:3804`) — not at each surface's composer. | `services/analysis/DeskToolsService.ts` | **Verified by outcome, not by diff:** `tests/promptContract.test.ts` asserts `HARNESS CONTRACT` appears exactly once in the sent system prompt on all four paths, and that the evaluation path — which composes the contract itself — does not get a second one at the transport. |
+| **E-01a** (prompts thread) | **The harness contract reaches every live surface exactly once.** It is injected at the transport — `withDeskToolsSystemPrompt` (`services/analysis/DeskToolsService.ts:3777`, called from `:3822`) — not at each surface's composer. | `services/analysis/DeskToolsService.ts` | **Verified by outcome, not by diff:** `tests/promptContract.test.ts` asserts `HARNESS CONTRACT` appears exactly once in the sent system prompt on all four paths, and that the evaluation path — which composes the contract itself — does not get a second one at the transport. |
 | **E-09** (prompts thread) | **`analysis.lens` is gone from the registry.** The editor entry the trader could edit but the model never saw is deleted; the registry now holds **12** ids. | `constants/promptRegistry.ts:54-162` | **Verified by reading the file** (no `analysis.lens` entry) **and by the new gate**: `tests/promptContract.test.ts` now asserts that the three registry ids the registry itself says reach `analyzeTradingView` — `analysis.master`, `analysis.risk_rules`, `analysis.memory_enforcement` — actually appear **in the sent system prompt**. That is E-09's own verification, done the way the plan asked for it: not "a `getPrompt()` call site exists" but "the prompt reaches a sent request". |
 | **3.6 (docs restructure)** | **The plan corpus landed in `docs/plan/`** — `README.md`, `open-items.md`, `full-audit.md` and `audit/` (seven sources). `docs/plans/` now holds **one** file: `debate-deletion-status.md`, the dated history ledger the anchor gate scans. | `docs/plan/`; `docs/plans/debate-deletion-status.md` | **Verified by listing the tree** at `40443692`: `docs/plans/` = 1 file, `docs/plan/` = 4 entries + 7 audit sources. |
 | **Q14 (answered and executed)** | **18 plan documents deleted, not archived.** | `docs/plans/` | **Verified by listing `docs/plans/`**: only the dated ledger survives, as the anchor gate's scan list (`scripts/check-flow-doc-anchors.cjs:44`) requires. |
@@ -109,7 +109,7 @@ and the assertions are exact counts, so a removed block cannot pass.
 | **P1 chat** | `runChatSurfaceTurn` (`services/trade/chatSurfaceTurn.ts`) | the contract once, the DESK TOOLS block once, the mandate present, only offered tools named, the allow-list is exactly `CHAT_SURFACE_TOOLS`, a skill NAMED once |
 | **P2 dock** | the exported `TRADE_CHAT_SYSTEM_PROMPT` + `buildSkillsIndexForPrompt` (`services/trade/tradeChatContext.ts`), source-pinned to the panel's composer | the same, plus the mailbox tools are never named |
 | **P3 automation** | `runAutomationTurn` (`services/trade/automationTurn.ts`) | the same, plus the allow-list is exactly the Chat surface's minus the denied eight, and no notebook-writing tool is named |
-| **P4 evaluation** | `analyzeTradingView` (`services/providers/GenericAnalysisService.ts`) — the skill-evaluation path, called from `services/learning/SkillEvalScheduler.ts:284` | the contract is composed once and not doubled, the retrieved context rides in the **user** turn and not the system prompt, and the registry prompts that claim the path really reach the wire |
+| **P4 evaluation** | `analyzeTradingView` (`services/providers/GenericAnalysisService.ts`) — the skill-evaluation path, called from `services/learning/SkillEvalScheduler.ts:285` | the contract is composed once and not doubled, the retrieved context rides in the **user** turn and not the system prompt, and the registry prompts that claim the path really reach the wire |
 
 ---
 
@@ -121,8 +121,8 @@ with the reason.
 
 | the plan says | what was done | why |
 |---|---|---|
-| E-11: *"for each of the four model-call paths (P1 chat, P2 dock, P3 automation, **P4 bot**)"* | **P4 is the evaluation path** — `analyzeTradingView` (`services/providers/GenericAnalysisService.ts`), which the plan's own tool table (`audit/2026-10-19-01-system-and-data-flow.md:904`) calls *"P5 evaluation"*, and which is what the skill-evaluation scheduler actually calls (`services/learning/SkillEvalScheduler.ts:284`). | The plan's prose and the plan's own table disagree about the fourth path, and the table's version is the one a unit test can drive end to end. The bot path is a `streamQuickResponse` turn and carries no separate system prompt to audit. |
-| E-11: *"build the **real** system prompt through the real function"* | **The dock's composer is a `useCallback` inside a component** (`components/trade/TradeChatPanel.tsx:453`), so the test asserts the contract over the two **exported** blocks the panel concatenates and **source-pins the concatenation**. | A copy of the composition inside the test would be the second implementation this repo keeps paying for — and the source pin is what stops the test from passing on a panel that stopped using those blocks. |
+| E-11: *"for each of the four model-call paths (P1 chat, P2 dock, P3 automation, **P4 bot**)"* | **P4 is the evaluation path** — `analyzeTradingView` (`services/providers/GenericAnalysisService.ts`), which the plan's own tool table (`audit/2026-10-19-01-system-and-data-flow.md:904`) calls *"P5 evaluation"*, and which is what the skill-evaluation scheduler actually calls (`services/learning/SkillEvalScheduler.ts:285`). | The plan's prose and the plan's own table disagree about the fourth path, and the table's version is the one a unit test can drive end to end. The bot path is a `streamQuickResponse` turn and carries no separate system prompt to audit. |
+| E-11: *"build the **real** system prompt through the real function"* | **The dock's composer is a `useCallback` inside a component** (`components/trade/TradeChatPanel.tsx:450`), so the test asserts the contract over the two **exported** blocks the panel concatenates and **source-pins the concatenation**. | A copy of the composition inside the test would be the second implementation this repo keeps paying for — and the source pin is what stops the test from passing on a panel that stopped using those blocks. |
 | E-11: *"assert … the tool list matches the surface's allow-list"* | **The check is made on the surface's OWN text, never on the enriched prompt**, and the shared DESK TOOLS catalogue — which names every tool the executor has — is measured separately. | Reading the catalogue as the surface's vocabulary would make the check vacuous: every surface would "name" every tool. The measured split is what lets the check mean something. |
 | E-11: *"no `debate`/`moderator` vocabulary may appear on a live surface"* | **An exact equation, not a ban.** Two shared blocks still carry the residue of the debate deletion — the harness contract's *"The moderator's last block…"* and the DESK TOOLS catalogue's *"…or moderator verdict"*. The wire prompt's count must equal the surface's own count plus the shared blocks' measured contribution. | A blanket ban fails on the shared blocks and teaches the next reader nothing. The equation fails when a **surface** reintroduces the word, and it fails when a shared block's copy disappears — so the residue cannot hide a new one. |
 | E-11: *"four tests, one per surface"* | **Sixteen tests across the four paths**, because each path is checked on four axes (present / absent / tools / skills) and the axes are the contract. | One test per surface would have to assert all four axes in one breath, and the first failure would hide the other three. |
@@ -334,9 +334,9 @@ re-building a cost cap the app had already stopped shipping.
 | Row | The defect | What landed | Verified by |
 | --- | --- | --- | --- |
 | **O-55**, **O-47** | The A/B lane and the prompt fingerprint had three readers and no writer, so the profile card's control/live split and every `promptVersion` on a journal row were `undefined`. | `hooks/useAnalysisPipeline.ts:951` opens the lane per run and `:955` stamps the corpus; both `runStats` builders persist the pair (`:1278-1279`, `:1443-1444`), which is what `hooks/useTradeLogging.ts:428-429` copies onto the trade. The fingerprint is `promptCorpusVersion()` in `services/infrastructure/PromptOverrideService.ts` — it hashes the EDITED-corpus state, so it is stable across builds and moves the moment the trader edits a prompt. It deliberately does NOT hash `PROMPT_REGISTRY`: importing the registry into the run path grew the entry chunk by 18.7 kB and the bundle ratchet is not a thing to loosen. | `tests/promptOverrideService.test.ts`: the lane's three branches, the fingerprint's stability and variation, and two source pins that the writers are still called from the pipeline |
-| **O-60** | The desk mandate ordered the seat to call `get_chart_view`, and the Chat surface's allow-list refuses it — a duty the executor would not honour, which reads to the model as an obligation rather than an absence. | The mandate is composed from the offer set: `deskToolsMandateFor(offered)` (`services/analysis/DeskToolsService.ts:1681`), `withDeskToolsSystemPrompt(…, offeredTools)` (`:3956`), the offer list built at `:4064` from `mergedAllowed` before falling back to the definitions. A home with no chart is told there is NO CHART to read here and must cite the candles; a home with no market read at all is told to name no shape. | `tests/deskSystemPrompt.test.ts` — the invariant that every tool the mandate NAMES is a tool this turn can call — plus the updated source assertion in `tests/promptContract.test.ts` |
+| **O-60** | The desk mandate ordered the seat to call `get_chart_view`, and the Chat surface's allow-list refuses it — a duty the executor would not honour, which reads to the model as an obligation rather than an absence. | The mandate is composed from the offer set: `deskToolsMandateFor(offered)` (`services/analysis/DeskToolsService.ts:1686`), `withDeskToolsSystemPrompt(…, offeredTools)` (`:3974`), the offer list built at `:4082` from `mergedAllowed` before falling back to the definitions. A home with no chart is told there is NO CHART to read here and must cite the candles; a home with no market read at all is told to name no shape. | `tests/deskSystemPrompt.test.ts` — the invariant that every tool the mandate NAMES is a tool this turn can call — plus the updated source assertion in `tests/promptContract.test.ts` |
 | **O-62** | The prompt promised a *fresh* packet; the code served an 8-second cache and, on a failed fetch, a bare "packet unavailable". | The fence stamps its own age — `packetAgeNote()` at `services/trade/tradeChatContext.ts:90` says `Ns old`, and past a minute `… — STALE: this snapshot predates the last N minute(s); call get_market_packet or get_chart_view for a newer read before you state a price` (into the header at `:128`). A failed fetch writes the `DATA_UNAVAILABLE` sentinel (`:102`) whose text says the state is UNKNOWN rather than missing. The system prompt now claims an age-stamped packet, not a fresh one. | `tests/tradeChatContext.test.ts` (the age, the sentinel, and the prompt's own sentence about it) |
-| **O-65** | Nothing near a streaming transcript was a live region, so an arriving answer was never announced. | `role="log" aria-live="polite" aria-busy=…` on both homes' scroll containers — `components/trade/TradeChatPanel.tsx:1080`, `components/agents/AgentsView.tsx:1346` — each with an `aria-label` naming the conversation. Per-row live regions were rejected deliberately: one per message re-announces the whole transcript on every token. | `tests/tradeChatPanelHarness.test.tsx`, the surface-switch case in `tests/surfaceSwitch.test.tsx` |
+| **O-65** | Nothing near a streaming transcript was a live region, so an arriving answer was never announced. | `role="log" aria-live="polite" aria-busy=…` on both homes' scroll containers — `components/trade/TradeChatPanel.tsx:1077`, `components/agents/AgentsView.tsx:1346` — each with an `aria-label` naming the conversation. Per-row live regions were rejected deliberately: one per message re-announces the whole transcript on every token. | `tests/tradeChatPanelHarness.test.tsx`, the surface-switch case in `tests/surfaceSwitch.test.tsx` |
 | **O-66** | Seven of eighteen dialogs rendered `role="dialog"` with no trap, no `aria-modal`, no restore. | Five modals now trap and are proven by mounting each one and asserting focus lands inside — `AutomationEditorModal`, `ThinkingModal`, `ImageViewerModal`, `NewBotDialog`, `NewGroupDialog` — plus the two the audit missed: the full-screen `LiveMarket` overlay (`components/market/LiveMarket.tsx:81`, and NOT when it is the embedded panel) and the update overlay's decidable phase (`components/shared/UpdateOverlay.tsx:140`, because `downloading` and `installing` contain nothing focusable and a trap there swallows Tab for minutes). The header's session popover stays a disclosure on purpose — `components/shared/Header.tsx:217` writes no `aria-modal` and Escape/outside-click dismiss it — and now carries `aria-controls` on its trigger. | `tests/useFocusTrap.test.tsx`: the five mounts, and a **population** gate that lexes every `.tsx` under `components/` plus `App.tsx` with the shared `jsxScan` and refuses any element that writes `aria-modal` without carrying the `useFocusTrap()` ref on that same tag. Reach is floored at the 18 measured sites, six named members must be in the set, two planted defects prove both finding branches fire, and a disclosure-only fixture proves it does not over-refuse. |
 | **O-53** | Four user-visible strings still named the deleted engine. | The editor's validation error is "Pick the model this run answers with." under a plain "Model" label (`components/automation/AutomationEditorModal.tsx:247`, `:508`); the journal's pre-merge badge reads `Ensemble (legacy)` (`components/journal/TradeLog.tsx:352`); the monthly card header says "Grade the panel — legacy debate rows only" (`components/journal/MonthlyReportCard.tsx:62`) and `services/learning/monthlyReport.ts` labels those columns legacy; `moderator` is out of the Settings search keywords. | grep over `components/**.tsx` — the two words survive only as code identifiers, in comments, and on these legacy-labelled rows |
 | **O-73** | "The desk home, which runs the longest jobs, has no Stop." | It has one, on both homes: `aria-label={busy ? 'Stop' : 'Send'}` at `components/trade/panels/ChatComposer.tsx:213` and the `(busy \|\| analysisRunning)` form at `components/agents/AgentsView.tsx:1515`. Recorded as verified rather than newly built — the row's premise is retired, and `ChatComposer.tsx:51-54` documents that a Stop which aborts only the chat turn is a lie. | read at the two cited lines |
@@ -1368,7 +1368,7 @@ new list, so the tab and its count cannot disagree.
 
 **The finding that changed this item's own premise, and is now O-140.** The plan said to thread
 the lane "at the measured call sites". Re-reading those sites showed the analysis prompts behind
-them are reached in production only from `services/learning/SkillEvalScheduler.ts:284`, that
+them are reached in production only from `services/learning/SkillEvalScheduler.ts:285`, that
 `analyzeTradingViewWithTransientRetry` (`hooks/useAnalysisPipeline.ts:249`) has no caller at all,
 and that `services/trade/**` contains ZERO `getPrompt` calls — the dock never resolves an override.
 Threading the lane into a path the trader's run never takes would have produced plumbing that looks
@@ -1468,7 +1468,7 @@ construction, and the rendered text is pinned at the jsdom layer instead.
 item found while choosing its own verification.
 
 `runAutomationTurn` already returns `notices`, `failedTools`, `refusedPlans` and `plansPresented`
-(`services/trade/automationTurn.ts:279-300`). The hook turned them into a WARNING toast
+(`services/trade/automationTurn.ts:290-311`). The hook turned them into a WARNING toast
 (`hooks/useAutomations.ts:566`) and stored nothing: `AutomationRun` had no field for a caveat, so the record of a
 run was silent about it the moment the toast expired. Worse, two of the three shapes had no prose to hide behind
 — an `error` or `skipped` row carries no message at all, and the card's analysis-shaped bubble rebuilds its text
@@ -1497,7 +1497,7 @@ act ruling (d) asked for. A switch OFF writes no reason, so a manual pause and a
 **Two items in this pass turned out to be already true, and are recorded rather than "fixed".** The quota reads
 `MAX_PLANS_PER_DAY` — plans per automation per local calendar day, ledger read at
 `services/automation/AutomationService.ts:144`, spent at `:157` — and the refusal receipt already prints "3 plans
-per day for this schedule" (`services/trade/automationTurn.ts:216`); no UI ever claimed symbols, so the semantics
+per day for this schedule" (`services/trade/automationTurn.ts:227`); no UI ever claimed symbols, so the semantics
 were left alone as the plan required. And no `model` field was added to the run: `message.modelsUsed` already
 names the model, the card now reads it (`AutomationRunCard.tsx:62`) and falls back to the raw id rather than
 saying nothing, so a second field would have been a second writer for one fact. `RAW_LOCAL_STORAGE_PREFIXES` was
@@ -1523,3 +1523,141 @@ regressed. The bot arm still has no `notices` to record, because `runBotRoutineT
 returns before the bridge is wired leaves no meta at all (pre-existing, untouched); and the breaker counts a run
 a human cancelled, which is a deliberate reading of `skipped` and is written into the constant's own comment
 rather than hidden in a branch.
+
+---
+
+## 33. The three research proposals that needed no ruling (2026-10-23)
+
+**Commit:** `e6787a8f`. **From:** `docs/research/TRADING-IMPROVEMENTS.md` P2, P10,
+P3 (ranked 3rd, 4th and 5th of the top five). **Closes:** nothing in the register —
+these were research items, not `O-nn` rows. **Opens:** nothing; the halves that
+remain are named below.
+
+**P2 — the `propose_skill` reason survives.** The tool's schema has required a
+`reason` since it was written and its handler never read it, so the human approving a
+draft was approving a rule whose stated evidence the app had thrown away. It now rides
+the whole chain: read at `services/analysis/DeskToolsService.ts:2687`, declared at
+`schemas/learning.ts:153` (clipped to 600 chars, the same budget every other clause
+carries), stamped by the ingest (`services/learning/SkillMemoryService.ts:2973`),
+serialised into the skill's frontmatter (`:1325`) and parsed back (`:726`), and printed
+as its own line on the Coach card (`components/chat/CoachThreadPanel.tsx:143`).
+`timeframe` joined the schema (`:2688`) because the replay proof silently assumed `1h`
+without it; `source` deliberately did **not**, because it is learner-stamped provenance
+and a model may not claim it. Two adjacent lies on the same path went with it: a
+proposal with no `steps` used to be coerced by `steps = [String(steps)]` into the
+one-element array `["undefined"]` — which satisfied `min(1)` and reached the draft as a
+real step — and now is refused (`:2668`); and `queueLearningProposal` returned the row
+it had just failed to store, so `write` now returns a boolean
+(`utils/learningQueue.ts:126`) and the caller yields `null` (`:156`), which is how
+`utils/skillDrafts.ts` already answered. `revise_skill`'s receipt
+(`DeskToolsService.ts:2827`) stopped calling a failed write "already pending".
+
+**P10 — the skills index and the skill injection read one filter.** An unapproved
+skill was *named* to the model in the index and then refused by the injection, which
+reads to a model as a broken promise and to the trader as a flaky system. The fix is
+one projection, not a second filter: `skillIndexRow`
+(`services/learning/SkillMemoryService.ts:1020`) turns a library row into the index
+row and carries `approved`, `skillIndexRows()` (`:1036`) is the only caller-facing
+builder, and `isIndexableSkill` (`services/trade/tradeChatContext.ts:277`) refuses a
+row whose approval fact is false. `approved` is **optional** on the row type
+(`:238`), so a caller that passes no fact still fails *open* — deliberate, because the
+field is new, and the reason both surfaces must go through the one projection rather
+than mapping `listSkills()` themselves. The dock's inline projection was deleted, and
+so was its **copy inside `tests/promptContract.test.ts`**: that copy is why the file
+stayed green while the production dock path sent an index the injection would never
+fill — a test that re-implements the thing it audits cannot fail when the thing breaks.
+
+**P3 (the half that was not a ruling) — the detached skill evaluator gets an
+allow-list.** `SkillEvalScheduler.ts:285` reached `analyzeTradingView` with no
+`allowedTools`, and an absent list means *everything*
+(`services/analysis/DeskToolsService.ts:2490`), so a background job could call
+`present_trade`, `decline_trade`, `propose_skill`, `forge_tool`, `write_memory_note`
+and every forged `custom_*` tool. It now passes `AUTOMATION_EVALUATION_TOOLS`
+(`services/trade/automationTurn.ts:73`), derived from the automation surface's own
+list by dropping the two tools that write to the journal, and applied at
+`services/learning/SkillEvalScheduler.ts:301`.
+
+**Proved red, five ways.** Disabling the index's approval check turned both
+negative assertions red (`tests/tradeChatContext.test.ts`, and the new wire-level
+`tests/promptContract.test.ts > does not name a skill the trader has not approved`).
+Dropping the ingest's reason stamp, emptying the `steps` guard, deleting the
+evaluator's `allowedTools` and forcing `queueLearningProposal` to return the row on a
+failed write each turned their own test red — the guard, not the fixture.
+
+**Gates.** `typecheck` ok · `vitest` **5,351 in 514 files**, 0 skipped — **8 new cases**
+(`git diff HEAD~1 HEAD -- tests`: 8 `it(` added, 0 removed), four of them the negative
+assertions named above, plus `tests/chatSurfacePrompt.test.ts` and
+`tests/tradeChatPanelHarness.test.tsx` — whose blanket `vi.mock` of the skill service
+silently swallowed the new `skillIndexRows` export and dropped the Chat mandate into
+its own `catch`, so the mock had to become `importOriginal` + the real projection
+before those existing cases could keep testing the path the app runs · lint 0
+errors / **655** warnings under the 659 cap (unchanged) · `check-flow-doc-anchors`
+**410 anchors, 0 unattributed, self-quota 0** — the three policed docs re-anchored for
+the lines these moved. `docs/research` is *not* policed, so its citations were
+re-derived from this commit's own `-U0` hunk headers: 258 named and 98 bare moves,
+each asserted by requiring the bytes at the old line and the new line to be identical,
+with every doc verified afterwards to differ from its committed form in digits only.
+
+**What this does NOT close.** The probe half of P2: `skill-approval-probe` seeds the
+draft bytes, so the segment between a model's `propose_skill` call and the inbox is
+still covered only by unit tests. The other half of P3: an absent `allowedTools` still
+means unrestricted — making consequential tools refuse an unattended context changes
+the executor's default for every caller, and is the owner's call. P10 fixed naming,
+not writing: the 14 unapproved-activation paths (O-32) are untouched. And nothing here
+touches P4, P1 or P5's row-furniture half.
+
+---
+
+## 34. The dev-proxy transport gets its timeout, and P5 is shown to be one decision (2026-10-23)
+
+**From:** `docs/research/TRADING-IMPROVEMENTS.md` P5 item 3. **Closes:** no register row.
+**Changes the shape of:** P5 items 1 and 2, which are now recorded as one decision.
+
+**What landed.** Both `/__provider_proxy` branches were sending `signal: options?.signal`
+— no timeout of their own — while every other transport path in the same file passes
+`withTimeoutSignal` (120 s) or `withStreamTimeoutSignal` (300 s). They now pass the one
+matching the call they make: the non-streaming request at
+`services/providers/GenericProviderService.ts:1432`, the streaming turn at `:1619`.
+The research corpus recorded this as one branch; a census of `signal: options?.signal`
+found the second, so the fix is wider than the finding and the three rows that named it
+now say so.
+
+**Why the streaming branch takes 300 s and not 120 s.** The proposal said "match the
+other two transports (120 s)". A stream is not a non-streaming call: a reasoning model
+streams its chain of thought before its answer, which is exactly why
+`withStreamTimeoutSignal` exists at all. Cutting a thinking turn at 120 s would be a new
+failure traded for an old one.
+
+**Proved red.** Reverting both lines to `signal: options?.signal` fails both new cases —
+the first on "the signal handed to `fetch` is not the caller's bare one", the second on
+"no timeout budget was ever requested". `tests/devProxyTimeout.test.ts` also asserts the
+caller's `abort()` still reaches the wire, so the fix cannot have replaced the Stop
+signal instead of combining with it, and it asserts the streaming path never asks for
+120 s.
+
+**What this pass also found, and did NOT "fix".** P5 items 1 and 2 cannot be taken
+separately. `InterruptedRunNotice` returns `null` without at least one handler
+(`components/shared/InterruptedRunNotice.tsx:27`), and the Chat surface mounts
+`ChatTranscriptRow` with only `row` — so adding `Message.interrupted` alone would render
+nothing at all. A flag whose only reader is suppressed by the component that reads it is
+a write-only field, which is the pattern P4 exists to delete. The pair needs the trader's
+call on what the stopped row offers. Recorded in
+`docs/research/TRADING-IMPROVEMENTS.md` §P5 with the measurements, together with the
+correction that `interruptedPrompt` has no producer anywhere in the tree (only
+`tests/interruptedRunNotice.test.tsx:29` sets it), so the dock's "Edit prompt" reads the
+previous entry instead.
+
+**A false register row, found while re-anchoring.** `open-items.md` O-29 cited
+`SkillMemoryService.ts:352/:360/:386` for the three evidence floors and stated them as
+2 / 3 / 5. The constants are at `:442/:443/:472` and are **10 / 20 / 10** — raised by
+E-37 in `8cae97c7` (2026-10-20), the same commit whose work this register was supposed to
+have noticed. So the row was not stale by a day: it had been false for three, citing
+lines that hold `whyAccepted` and the provenance fields, and it listed as OPEN an item
+that had closed. It is now **CLOSED by E-37** with the lines and values that resolve.
+This is the fourth false row in the register after O-34, O-105 and the triple D-24 —
+which is why the re-anchor pass asserts on bytes rather than trusting its own arithmetic.
+
+**Gates.** `typecheck` ok · `vitest` **5,353 in 515 files**, 0 skip · lint 0 errors /
+655 warnings · `check-flow-doc-anchors` 410 anchors, 0 unattributed, self-quota 0, and
+the AGENTS.md census arm green against the tracked file count (it failed at 514 until the
+new test file was staged — the gate measures `git ls-files`, not the working directory).

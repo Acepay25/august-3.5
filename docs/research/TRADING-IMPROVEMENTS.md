@@ -156,6 +156,19 @@ already exists (`utils/recentTradesBrief.ts`).
 
 # P2 — Fix the `propose_skill` contract
 
+> **LANDED `e6787a8f` (2026-10-23).** The reason the schema demands is now read
+> (`services/analysis/DeskToolsService.ts:2687`), carried by `CraftedSkillSchema`
+> (`schemas/learning.ts:153`), stamped by the ingest and serialised into the skill's
+> frontmatter and parsed back out (`services/learning/SkillMemoryService.ts:2973`,
+> `:1325`, `:726`), and printed as its own line on the Coach card
+> (`components/chat/CoachThreadPanel.tsx:143`). `timeframe` joined the schema
+> (`:2688`); `source` deliberately did not. A proposal with no `steps` is refused
+> (`:2668`) instead of coerced into `["undefined"]`, and the proposal queue reports a
+> failed write as a failure (`utils/learningQueue.ts:126`, `:156`). **Everything below
+> describes the pre-fix tree, and its line numbers are pre-fix.** Not done: the probe
+> half — `skill-approval-probe` still *seeds* the draft bytes, so the segment between
+> the model's tool call and the inbox is still unit-test-only.
+
 **Verdict: ADOPT**
 **Effort: S**
 **Source: the August baseline §2. Reference: `hermes-agent` `tools/skill_manager_tool.py`
@@ -244,6 +257,19 @@ fix. It removes a silent failure and adds no new machinery.
 ---
 
 # P3 — An unattended run may not do what a human must approve
+
+> **LANDED IN PART `e6787a8f` (2026-10-23).** The skill evaluator now gets an
+> allow-list — `AUTOMATION_EVALUATION_TOOLS` (`services/trade/automationTurn.ts:73`,
+> applied at `services/learning/SkillEvalScheduler.ts:301`) — so a detached job can no
+> longer call `present_trade`, `decline_trade`, `propose_skill`, `forge_tool` or
+> `write_memory_note`; `tests/skillEvalArms.test.ts` pins that both arms carry the
+> list, that it is non-empty (so the assertion cannot pass on an empty one), and that
+> it excludes those five, and `tests/automationToolTurn.test.ts` pins
+> that every name in it is a real desk tool. **The half that is an owner ruling is the
+> inversion:** an absent `allowedTools` still means *everything*
+> (`services/analysis/DeskToolsService.ts:2490`), and "the consequential tools refuse an
+> unattended context" would change the executor's default for every caller that exists
+> and every one added later. Everything below describes the pre-fix tree.
 
 **Verdict: ADOPT**
 **Effort: S**
@@ -343,7 +369,7 @@ evidence, is in the baseline. The ones that cost the most to keep:
 | `learning_rules_v2` | a write-only store with a backup | `StorageService.ts:105` loads it into the profile (`useProfilePersistence.ts:116`, migration at `:115`); nothing composes it into a turn |
 | `NavRail.tsx` | 242 lines; the **component** is never rendered, but the file keeps **three live exports** | unmount pinned by `tests/deadControlsGuard.test.ts:145` (`expect(appSrc).not.toMatch(/<NavRail/)`), and `App.tsx:2507-2515` is the comment saying so. Live: `AccountRow` + `NAV_RAIL_AUTO_COLLAPSE_PX` (`App.tsx:129`, used `:2735`/`:669`/`:672`) and `NAV_RAIL_EXPANDED_PX` (`AgentsView.tsx:73`, used `:972`). Dead: the component, `export default React.memo(NavRail)` (`:242`) and `NAV_RAIL_COLLAPSED_PX` (`:35`). Deleting the file breaks the build; relocating three symbols first does not |
 | `SurfaceMenuList`'s surface list | mounted with `hideSurfaces`, so the brand bar, the badge and `RunBusyBadge` are all dead | `App.tsx:2725-2731` |
-| `ARBITER_ALLOWED_TOOLS` | only test importers | `DeskToolsService.ts:3341-3357` |
+| `ARBITER_ALLOWED_TOOLS` | only test importers | `DeskToolsService.ts:3359-3375` |
 | ~~`applyNotebookSkillsToAnalysis`~~ | **CORRECTED — it is LIVE.** The baseline recorded it as dead; re-opening the source shows the E-35 fix landed: `services/trade/presentTradeTool.ts:113` calls it and a fired AVOID **refuses the presentation** (`:114-133`). Not a deletion target |
 | `MemoryConsolidationService.ts` | an orphan module — and two docs say its passes run | `pruneOutdatedInsights:74` / `aggregateSimilarInsights:102` have **no caller anywhere** (repo-wide grep: their own definitions plus one comment); `consolidateMemory`, the name `docs/learning-loop-map.md:167` uses, does not exist in the file. The module is 139 lines, not the 114 the prior cleanup manifest recorded |
 | the debate residue | 29 vestigial items | baseline §7 |
@@ -367,7 +393,7 @@ Two things make this worse than ordinary dead code:
   learning chain stops working with no replacement"*, and the code confirms it
   (`SkillCraftService.ts:145`).
 - **Live prompts still describe a committee that no longer exists**
-  (`DeskToolsService.ts:1776`, `constants/prompts/harnessContract.ts:16`,
+  (`DeskToolsService.ts:1781`, `constants/prompts/harnessContract.ts:16`,
   `calibrationPolicy.ts:808` — the last is injected into a single model's packet at
   `HybridIntelligenceService.ts:1269-1291`).
 
@@ -392,7 +418,7 @@ Two things make this worse than ordinary dead code:
 ### Concrete files touched
 
 The 12 modules named above, plus `docs/app-flow.md`,
-`constants/prompts/harnessContract.ts`, `services/analysis/DeskToolsService.ts:1776`,
+`constants/prompts/harnessContract.ts`, `services/analysis/DeskToolsService.ts:1781`,
 `services/validation/calibrationPolicy.ts:753/758/808`,
 `components/agents/AgentsView.tsx:10-33`.
 
@@ -431,6 +457,27 @@ load-bearing.
 
 # P5 — A stopped turn and a failed turn are different things
 
+> **Status 2026-10-23: item 3 LANDED; items 1 and 2 are ONE decision, not two — and
+> implementing 1 alone would be a no-op.** The dev-proxy timeout went in, on both
+> branches (see the bullet in "What August Trading does today"). The reason item 1 is
+> not taken by itself is measured, not guessed: `InterruptedRunNotice` returns `null`
+> unless it is handed **at least one** handler
+> (`components/shared/InterruptedRunNotice.tsx:27`, and its own comment says why — "a
+> 'Run stopped' label with no button beside it is a dead notice"), while the Chat
+> surface mounts `ChatTranscriptRow` with only `row` and therefore passes neither
+> `onRetry` nor `onEditPrompt`. So adding `Message.interrupted` and projecting it into
+> the row would change no pixel: the card stays suppressed by the very rule that keeps
+> it honest. Item 1 becomes real **only together with** the handlers — which is item 2's
+> row furniture, and that is a UI decision for the trader, not a silent repair. It also
+> needs `liveEntryFromMessage` (`services/trade/chatSessions.ts:491`) to carry the fact,
+> or the mirrored dock row and the canonical row disagree about whether the run stopped.
+> One further correction to this proposal: `interruptedPrompt` has **no producer in the
+> whole tree** — only `tests/interruptedRunNotice.test.tsx:29` sets it — so the dock's
+> "Edit prompt" is reached today by `ChatTranscriptList` reading the *previous entry*
+> (`components/trade/panels/ChatTranscriptList.tsx:207-210`), not by the row field this
+> document cites.
+
+
 **Verdict: ADOPT**
 **Effort: S**
 **Source: the August baseline §4 and §6. Reference: `pi`
@@ -455,8 +502,12 @@ returns is not the same as a stream that succeeded."* `deepseek-harness`
   (`AgentsView.tsx:1438-1441`), so it loses the dock's Key Levels card, Retry chip
   and Pin chip. The memory-provenance strip is dock-only
   (`ChatTranscriptList.tsx:245-251`).
-- The dev-proxy transport has **no timeout** (`GenericProviderService.ts:1411-1427`),
-  so a dev turn can hang indefinitely.
+- ~~The dev-proxy transport has **no timeout**~~ — **fixed 2026-10-23**. The proposal
+  named one branch; the streaming dev-proxy branch had the same missing signal, so both
+  now carry the budget of the transport they stand in for (120 s on the request, 300 s
+  on the turn — `services/providers/GenericProviderService.ts:1432`, `:1619`), pinned by
+  `tests/devProxyTimeout.test.ts`. A dev turn can no longer hang until the trader presses
+  Stop.
 
 ### The proposed change
 
@@ -466,7 +517,12 @@ returns is not the same as a stream that succeeded."* `deepseek-harness`
    `Message.toolIds` and `Message.botId`.
 2. **Give the Chat surface the same row furniture the dock has** by passing the
    same view model the dock passes — one row contract, two renderers.
-3. **Add the dev-proxy timeout** to match the other two transports (120 s).
+3. ~~**Add the dev-proxy timeout** to match the other two transports (120 s)~~ —
+   **done 2026-10-23, with one correction to the proposal:** there were **two** uncapped
+   dev-proxy branches, not one, and they are different kinds of call. The non-streaming
+   request gets the 120 s it asked for; the streaming turn gets the 300 s every other
+   streaming path already used, because 120 s would cut a reasoning model off in the
+   middle of its chain of thought.
 
 ### Benefit
 
@@ -805,8 +861,8 @@ pattern without the exclusion list"*. `deepseek-harness` `docs/agent-lifecycle.m
 
 **There is no runtime provider/model fallback on the chat, dock, analysis or
 automation path.** A provider 500/429/401 ends the turn
-(`GenericProviderService.ts:1501-1506/1722-1727`,
-`useAnalysisPipeline.ts:1338-1344`, `automationTurn.ts:95-116`). No second provider
+(`GenericProviderService.ts:1506-1511/1722-1727`,
+`useAnalysisPipeline.ts:1338-1344`, `automationTurn.ts:106-127`). No second provider
 is tried and there is no "answered by another model" notice.
 
 What *does* exist:
@@ -886,6 +942,18 @@ by removing the silent failure in (3), which is a simplification in its own righ
 ---
 
 # P10 — The skill index and the injection must use the same filter
+
+> **LANDED `e6787a8f` (2026-10-23).** One projection, one filter: `skillIndexRow`
+> (`services/learning/SkillMemoryService.ts:1020`) carries the approval fact, both
+> surfaces call `skillIndexRows()` (`:1036`) instead of mapping `listSkills()`
+> themselves, and `isIndexableSkill` refuses an unapproved row
+> (`services/trade/tradeChatContext.ts:277`) while still failing open when a caller
+> passes no approval fact. The dock's inline copy is gone — and so is its duplicate
+> inside `tests/promptContract.test.ts`, which is exactly why that file stayed green
+> while the real dock path was sending an index the injection would never fill. Pinned
+> by `tests/tradeChatContext.test.ts` (the filter) and, on the wire, by
+> `tests/promptContract.test.ts` (an unapproved skill is not *named*). Everything
+> below describes the pre-fix tree.
 
 **Verdict: ADOPT**
 **Effort: S**
@@ -1015,7 +1083,7 @@ tool list**, so a new tool cannot slip through unlabelled. `AGENTS.md` records t
 same discipline for `utils/turnStatus.ts` and `utils/toolKinds.ts`.
 
 What it does not have is the **schema** side. `DESK_TOOL_DEFINITIONS`
-(`services/analysis/DeskToolsService.ts:909-1543`) is a hand-maintained table, and
+(`services/analysis/DeskToolsService.ts:909-1548`) is a hand-maintained table, and
 the **model-facing** description, the JSON Schema and the human label live in
 several places. The result is exactly the P2 bug: the schema says `reason` is
 required and the handler ignores it — a drift that no test can see, because the
@@ -1153,6 +1221,15 @@ on the second surface.
 ---
 
 # The ranked top five
+
+> **Status 2026-10-23: three of these five have landed.** P2 (`propose_skill`
+> contract), P10 (one index filter) and P3's allow-list half went in as `e6787a8f`,
+> each proved red by disabling its guard, with 5,351 tests, `tsc`, eslint and the
+> flow-doc anchor gate green on the merged tree. **P4 and P1 have not**, because both
+> are bulk deletions the owner has to bless first (P4 deletes subsystems; P1 deletes
+> the context assembler and chooses what reaches a model). The order below is
+> therefore still the order for the two that remain — and P4 is now the *first* thing
+> to do, not the first of five.
 
 **Recommendation: do these five, in this order. Do not start anything else until
 they are done and green.** Each one is either a removal or a small addition that

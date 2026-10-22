@@ -6,6 +6,15 @@ reference-side claims were covered by the 22-report spot-check (§3 of the audit
 Proposals P6–P8 and P11–P12 were **not** independently re-verified line-by-line; P9
 was spot-checked here and its premise failed (see "Residual risk").
 
+> **Landed since this verification (2026-10-23, `e6787a8f`): P2, P10 and P3's
+> allow-list half.** The CONFIRMED verdicts below are therefore *still true of
+> `f144cdf5`* and no longer of the current tree — a "CONFIRMED" row here means "the
+> defect was real when it was checked", not "go and find it". This file's line
+> numbers are deliberately **not** re-anchored: it is a dated record, pinned to the
+> commit named above. The post-fix evidence is in `TRADING-IMPROVEMENTS.md`'s LANDED
+> blocks, `docs/research/STATUS.md`'s log and
+> `docs/plan/implementation-record.md`.
+
 ## Per-proposal verification
 
 | Proposal | Central claims | Verdict |

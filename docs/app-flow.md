@@ -509,7 +509,7 @@ The provider layer is four formats (`types/provider.ts`) behind one policy
 (`shared/providerRequestPolicy.cjs`): thinking gates, temperature, host rules and
 the redirect walker are shared by the renderer, the Vite dev proxy and Electron
 main. `GenericProviderService` is the one transport: `sendChatRequest`
-(`GenericProviderService.ts:1293`), `sendChatTurn` (`:1513`) and
+(`GenericProviderService.ts:1293`), `sendChatTurn` (`:1518`) and
 `streamChatRequest` all use the same retry/timeout wrapper. A
 context-length rejection is the one error that teaches the app a fact: the
 provider states its limit, `contextRecoveryMessages` compacts to that
