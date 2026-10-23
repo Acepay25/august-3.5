@@ -251,6 +251,12 @@ const AutomationEditorModal: React.FC<AutomationEditorModalProps> = ({ isVisible
         const now = Date.now();
 
         onSave({
+            // Spread the stored config first: the form owns the fields below,
+            // and a field it does not render (the breaker's
+            // consecutiveFailures/disabledReason) must survive an edit.
+            // Rebuilding the object dropped them, resetting the 3-strike streak
+            // and erasing the banner while the schedule stayed off.
+            ...(initial ?? {}),
             id: initial?.id ?? `automation_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
             name: name.trim(),
             enabled: initial?.enabled ?? true,
