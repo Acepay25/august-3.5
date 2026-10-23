@@ -25,10 +25,7 @@ name: Guards
 # NOT here, on purpose: a live Electron boot on Linux. The packaged-shell smoke
 # (`installer-smoke`) is Windows-only and builds with `--dir --win`, so a Linux
 # job cannot reuse it, and an xvfb job authored from Windows could not be
-# validated before landing. The drift that actually bit us — the provider
-# chunk bridge returning raw usage — is now covered deterministically by
-# tests/electronIpcContract.test.ts and tests/desktopUsageBridge.test.ts, which
-# run in ci.yml on every platform.
+# validated before landing.
 
 on:
   push:

@@ -14,8 +14,6 @@ export default tseslint.config(
       'coverage/**',
       'test-results/**',
       'playwright-report/**',
-      'tests/test-rl.cjs',
-      'tests/test-rule-extraction.cjs',
       // Desk tooling — one-off CJS scripts, never shipped.
       'scripts/**/*.cjs',
       // Same category, and a second problem: this directory is untracked, so CI
@@ -48,69 +46,17 @@ export default tseslint.config(
     },
   },
   {
-    // Test files mix the jsdom Window + Node globals (vi.advanceTimersByTime
-    // pulls setTimeout, the live-feed harness instantiates WebSocket + setInterval,
-    // a few helpers touch process / require). One block gives the whole tests/
-    // tree the union so no per-file eslint-env directive is ever needed.
-    files: ['tests/**/*.{ts,tsx}'],
-    languageOptions: {
-      globals: {
-        // Node
-        process: 'readonly',
-        Buffer: 'readonly',
-        console: 'readonly',
-        require: 'readonly',
-        setImmediate: 'readonly',
-        // Browser DOM
-        window: 'readonly',
-        document: 'readonly',
-        setTimeout: 'readonly',
-        clearTimeout: 'readonly',
-        setInterval: 'readonly',
-        clearInterval: 'readonly',
-        fetch: 'readonly',
-        WebSocket: 'readonly',
-        AbortController: 'readonly',
-        AbortSignal: 'readonly',
-        Event: 'readonly',
-        CustomEvent: 'readonly',
-        HTMLElement: 'readonly',
-        HTMLDivElement: 'readonly',
-        HTMLButtonElement: 'readonly',
-        HTMLInputElement: 'readonly',
-        Element: 'readonly',
-        Response: 'readonly',
-        URL: 'readonly',
-        Blob: 'readonly',
-        File: 'readonly',
-        FormData: 'readonly',
-        Headers: 'readonly',
-        Request: 'readonly',
-        URLSearchParams: 'readonly',
-        crypto: 'readonly',
-        MutationObserver: 'readonly',
-        ResizeObserver: 'readonly',
-        IntersectionObserver: 'readonly',
-        TextEncoder: 'readonly',
-        TextDecoder: 'readonly',
-        performance: 'readonly',
-        // vitest testing API
-        vi: 'readonly',
-      },
-    },
-    rules: {
-      // Test files can use whatever they want — the test runner cares.
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
-    },
-  },
-  {
     rules: {
       // Relax rules that would produce too many errors initially.
       //
-      // WARNING RATCHET: `npm run lint` runs with --max-warnings 659 in
+      // WARNING RATCHET: `npm run lint` runs with --max-warnings 385 in
       // package.json. The number must EQUAL the warning count on a clean main,
       // because the cap is only a ratchet if it actually binds.
+      //
+      // 659 -> 385: the 515-file test tree was deleted on 2026-10-23 and the
+      // tests/ eslint block carried 267 of the tree's warnings with it.
+      // Re-measured with `npm run lint:loose`; the cap was re-tightened to the
+      // exact count in the same commit, which is the only way it keeps binding.
       //
       // It did not, for a long time: the cap sat at 1020 while the tree stood
       // at 949, so 71 warnings could be added and CI would still pass. That is
