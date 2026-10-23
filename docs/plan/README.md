@@ -59,7 +59,7 @@ three of them are blocked behind a decision.
 |---|---|---|---|
 | 0.1 | **Let the in-flight work land.** It is deleting the analyst-role system and migrating stored profiles. | the cleanup manifest's HOLD list is waiting on it | — |
 | 0.2 | **Re-anchor to the new HEAD and re-run the four sweeps** — import graph, export sweep, localStorage/Preferences census, dead-path comment scan. | the orphan set, the dead-export set and the store census all changed | diff the sweep output against the manifest's tables |
-| 0.3 | **Recover the previous audit's six reports** from the `archive/prior-audit-2026-10-18` branch into a durable location. | they are the only record of the live-data findings (n = 0 outcomes, the 3 real plans, 100× leverage) — **no static audit can find those** | the branch exists and holds them |
+| 0.3 | ~~**Recover the previous audit's six reports** from the `archive/prior-audit-2026-10-18` branch.~~ **DROPPED (owner, 2026-10-23): the branch was deleted, so there is nothing to recover.** | they were the only record of the live-data findings (n = 0 outcomes, the 3 real plans, 100× leverage) — **no static audit can find those** | the figures survive only as register rows O-19/O-20/O-22, O-28, O-115, O-23/O-24 |
 | 0.4 | **Decide the fee tier, the backup contract, the context policy and the click gate.** | four rulings unblock ~10 items | — |
 | 0.5 | **Commit the lockfile fix** (1.0.30 → 1.3.0 + the `js-yaml` root block). | the only committed state that is wrong about the manifest | `npm ci` from a clean checkout |
 | 0.6 | **Turn on `noUncheckedIndexedAccess`** — as a warning first. | the highest-value missing compiler option; every `arr[0]` silently lies today | `npm run typecheck` |
@@ -158,7 +158,7 @@ closes none of them.
    the two row components.*
 8. **Should old post-mortems stay readable?** — *default: yes.*
 9. **How many minds answer "Full analysis"?** — *default: one, tool-driven.*
-10. ~~**Is `docs/analysis/` a live location, or scratch?**~~ — ✅ **ANSWERED (2026-10-20): scratch.** The eslint ignore is right, the directory is un-tracked on purpose, and the plan lives at **`docs/plan/`** — tracked, indexed from `AGENTS.md` and `README.md`. The previous generation's reports are preserved on the branch **`archive/prior-audit-2026-10-18`**, so `git gc` can no longer prune them.
+10. ~~**Is `docs/analysis/` a live location, or scratch?**~~ — ✅ **ANSWERED (2026-10-20): scratch.** The eslint ignore is right, the directory is un-tracked on purpose, and the plan lives at **`docs/plan/`** — tracked, indexed from `AGENTS.md` and `README.md`. The previous generation's reports were held on the branch **`archive/prior-audit-2026-10-18`**; the owner deleted that branch on 2026-10-23, so nothing of them remains in this repo and the live-data figures survive only as register rows.
 11. **Should the history be rewritten to drop the 52 MB of APKs?** — *default: not now; delete
     the merged branches first, then decide at the next major version boundary.*
 12. **Is the 1-second trade-surface clock needed, and is the root's 60 Hz re-render
@@ -188,7 +188,7 @@ These are not in the ordering report's numbered list; they are real, and they ar
 | **`npm run skill-approval-probe`** | the human-actuation path. Asserts notebook **bytes** after a real click. |
 | **the open-items register** (`open-items.md`) | every claim carries a `file:line` that proves it is open **at HEAD**. It is a *measurement*, not a transcription — which is why it corrected five rows from the previous audit rather than repeating them. |
 | **test citations in the register and the record** | **history, not a live gate.** They name the test that verified a landing. The `tests/` tree was removed on 2026-10-23, so they are evidence of the commit they landed in — re-check the `file:line` beside them, and read a row with no code citation as carrying no live witness. |
-| **the `archive/prior-audit-2026-10-18` branch** | the previous audit's six reports, which are the only record of the **live-data** findings. A branch makes the objects reachable, so `git gc` can no longer prune them. It is **local-only** (never pushed, so a fresh clone does not have it) and **must never be merged**: its commit is a root holding nothing but `docs/`, so a merge would restore the whole deleted `docs/analysis/` tree. Every open item it raises is already in this register — the last one was O-145. |
+| **the deleted `archive/prior-audit-2026-10-18` branch** | **history, not a mechanism.** It held the previous audit's six reports and nothing else; the owner deleted it on 2026-10-23, so it protects nothing now. It was unmergeable by construction (a root commit carrying only `docs/`, which a merge would have spread over the deleted `docs/analysis/` tree), and every open item it raised is in this register — the last one was O-145. |
 | **this file** | the order. If the order is wrong, fix it here first. |
 
 **A note on the previous audit, because it is the most important thing in this plan's history:**
