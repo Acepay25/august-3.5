@@ -224,9 +224,19 @@ describe('the memory detail reads as a document', () => {
         const { fileId } = await seedNotebook(user);
         renderPanel(fileId, user);
 
+        // WAIT FOR THE PARSED LIST, NOT FOR THE CONTAINER. `AnswerBody` routes
+        // through `MarkdownContent`, which is a `React.lazy` boundary: the
+        // first paint is `MarkdownFallback` — the raw markdown in a <div>, so
+        // the entry's two bullets are there as TEXT and there is no <li> at
+        // all. The container therefore exists in two different states, and the
+        // fallback is what the old assertion was measuring when a busy worker
+        // (another file's chunk load, a full-suite run) left it in place past
+        // the default 1s waitFor: "expected +0 to be 2" read like an empty
+        // notebook, but the data was never missing. The parse is the claim, so
+        // wait on the parsed shape with a window wide enough for the chunk.
         const details = await screen.findByTestId('memory-topic-details');
-        await waitFor(() => expect(details.querySelectorAll('li').length).toBe(2));
-        expect(details.querySelector('ul')).toBeTruthy();
+        await waitFor(() => expect(details.querySelector('ul')).toBeTruthy(), { timeout: 5000 });
+        expect(details.querySelectorAll('li').length).toBe(2);
         expect(details.textContent).toContain('Owns a 16GB gaming laptop');
     });
 

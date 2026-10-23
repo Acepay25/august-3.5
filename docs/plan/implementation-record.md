@@ -1935,11 +1935,87 @@ reason is worse than one that fails.
 655 warnings (baseline restored after the first cut of the tests leaked 4 unused-import
 warnings) · anchors 410, 0 unattributed.
 
-**A flake was investigated and exonerated, with the receipts.** `tests/memorySurfaces.test.tsx
+**A flake was investigated and exonerated, with the receipts.** `tests/memorySurfaces.test.tsx`
 > the Details are a bulleted list` failed in the first full run after this change and was
 proven NOT caused by it: the panel mounts standalone and never touches the loader, and
 three isolated runs of the same test with this change in place returned
-fail / pass / pass. The real signal is the test's own margin — the same test that failed
-passed with two `console.log` calls added, so its `waitFor` window is hair-thin. That is
-a bug report about `MemoryTopicPanel`'s async load, filed here rather than papered over
-with a longer timeout.
+fail / pass / pass. This section originally filed the remaining signal as a bug in
+`MemoryTopicPanel`'s async load; **that reading was wrong** — the panel is fully
+synchronous once the store holds the file. §39 names the real resource and fixes the test.
+
+## 39. The "shared-worker" flake was a lazy boundary, and two rules get one home (2026-10-23)
+
+**O-138 is closed, and its recorded diagnosis was wrong in the useful way.** The item said
+two test files pass solo and fail together, "that is state, not timing", and that the
+seeded notebook came back empty. Measured, none of that holds: `MemoryTopicPanel` reads
+`getMemoryFiles()` synchronously and seeds nothing, and the exact documented repro
+(`vitest run tests/memorySurfaces.test.tsx tests/referenceVoice.test.tsx
+--no-file-parallelism`, both orders) is green three times out of three on HEAD, as is the
+pair with the other reported partners (`chatTranscriptImageStub`, `answerEffortTier`,
+`realProviderError`). The state was never missing.
+
+The resource is `components/shared/MarkdownContent.tsx`: `AnswerBody` routes the entry's
+Summary and Details through it, and it is a `React.lazy` boundary — `lazy(() =>
+import('./MarkdownRenderer'))` inside a `<Suspense>` whose fallback is
+`MarkdownFallback`, which renders the raw markdown in a `<div>` with no parsing at all.
+So `memory-topic-details` exists in **two** states: the fallback (the bullets are there
+as text, and there is no `<ul>` or `<li>` anywhere) and the resolved renderer (a real
+list). The panel's own container renders whenever `parts.details` is non-empty, so
+`findByTestId` succeeds immediately in the fallback state and the old
+`querySelectorAll('li').length` reads `+0` — which looks exactly like an empty notebook
+and is not. That also explains the shape the item could not: the partner list kept
+changing because the only thing a partner has to do is keep the worker busy long enough
+for the chunk load to exceed `waitFor`'s 1 s default, and the chunk resolves per test
+file's module graph.
+
+Proved, not inferred: with the lazy import replaced by a never-resolving promise,
+`the Details are a bulleted list` fails in 5,061 ms at
+`expect(details.querySelector('ul')).toBeTruthy()` with `expected null to be truthy`;
+reverted. The fix is to wait on the **parsed list** with an explicit 5 s window and a
+comment naming the two states — the assertion now says what it wants instead of
+measuring a container that can legitimately be empty of list items. This is not the
+"widen the timeout" the item warned against: the default is untouched, and the state
+being waited for is the one the test is about. Left alone deliberately: the fallback's
+first-paint flash of raw markdown on every answer, which is the app-wide lazy-boundary
+tradeoff and a surface decision, not a test one.
+
+**The allow-list polarity has one home.** `seatAllows` had been hand-copied into five
+places in three shapes: the executor's deny-form, the offer-time definition filter, the
+forged-call refusal, the chart-tool filter, and the mail/panel merge. Four read the same
+sentence forwards; the fifth read it inverted to decide whether to widen a list. That is
+one sentence with two readings, so it is now two functions in one place —
+`seatIsRestricted` (a type predicate, so the merge narrows `string[] | undefined` without
+a cast) and `seatAllows`. `spillReceiptAllowed` is `seatAllows(allowedTools,
+'read_tool_output')`, which is what it always meant. Pinned by `tests/deskTools.test.ts`
+`the allow-list polarity has one readable home` (both readings, including "absent and
+empty are unrestricted" — the legacy callers' contract).
+
+**The wire's per-format reading has one home too.** Two things were duplicated rather
+than merely switch-shaped, and one of them had already drifted:
+
+- `readWireBody(format, data, statedReasoning)` is now the ONE reader of a proxied
+  response body. The dev proxy hands back the provider's own JSON, and both proxy paths
+  (the string request and the tool-capable turn) extracted it themselves: the turn path
+  passed an array `message.content` straight through as `text` where the request path
+  joined its parts, and only one of the two split an inline think block out of the
+  answer. Pinned by five cases in `tests/devProxyRouting.test.ts`, including the array
+  join and the think-block split.
+- `STRING_TRANSPORTS` + `stringTransportFor(format)` replace a `switch` in one function
+  and a nested ternary in another. The per-attempt timeout that three of the four
+  transports need is part of the table entry (`withRequestTimeout`), because that pairing
+  is part of the same rule; `chat_completions` stays unwrapped on purpose, since it
+  applies its own timeout for its jsonMode retry. An unknown format now throws instead of
+  returning `''` — an empty answer is indistinguishable from a model with nothing to say.
+
+This is **not** the per-format adapter package the deep read deferred: the format dispatch
+is still a switch, now one that cannot drift from its second caller. The genuinely
+flag-shaped provider work (capability regexes with no user override, the
+json_schema→json_object ladder, the hardcoded `max_tokens` field) is untouched and still
+the owner's call.
+
+**Gates.** `tsc` clean · 515 files / **5,368 tests**, 0 skipped (+6, no new files) ·
+eslint 0 errors / 652 warnings (three fewer: the duplicated body extractors took their
+`any` annotations with them) · anchors 410 / 0 unattributed, after re-pointing all
+sixteen flow-doc citations (`app-flow.md`, `app-flow.html`, the debate-deletion ledger)
+whose lines this section shifted — the anchor gate caught ten of them and the rest were
+the same symbols cited a second time.

@@ -328,7 +328,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 
 <h3>G.4 Desk tools are one catalogue with surface allow-lists</h3>
 <div class="flow"><div class="tier">
- <div class="n"><b>the catalogue</b><i><code>DESK_TOOL_DEFINITIONS</code> (<code>DeskToolsService.ts:909</code>) + <code>CHART_ACTION_TOOL_DEFS</code> (:1557) + mailbox tools</i></div>
+ <div class="n"><b>the catalogue</b><i><code>DESK_TOOL_DEFINITIONS</code> (<code>DeskToolsService.ts:926</code>) + <code>CHART_ACTION_TOOL_DEFS</code> (:1557) + mailbox tools</i></div>
  <div class="n"><b>the allow-list</b><i>dock <code>TRADE_TOOLS</code> · Chat <code>CHAT_SURFACE_TOOLS</code> · schedule <code>AUTOMATION_TOOLS</code> (minus the unattended writers) · panel adds chart actions only when named</i></div>
  <div class="n"><b>the mandate</b><i><code>deskToolsMandateFor</code> names only tools this turn can call; <code>streamChatWithDeskTools</code> filters the definitions</i></div>
  <div class="n"><b>the loop</b><i><code>runDeskToolLoop</code> eight rounds · 8,192 output · 180s · per-round compaction; <code>executeDeskTool</code> re-checks the allow-list</i></div>
@@ -437,9 +437,9 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>53</td><td>the chart gets its Entry/Stop/Target lines</td><td><code>latestChartVerdict(messages)</code> (<code>services/trade/chartData.ts</code>) is what App hands <code>TradeView</code> as <code>verdict</code>: the newest row carrying <code>Message.proposal</code>, with <code>Message.analysis</code> as the fallback for pre-debate history. Red-proved — the old selector keyed on the debate shapes and returned null for every tool-turn row. Gate state: render-probe PASSED on 2026-10-18 after these commits (zero pageerrors); it asserts no canvas overlay levels, so the drawn verdict line is still un-asserted, and lint / boot-probe / e2e remain unrun.</td></tr>
 <tr><td>54</td><td>request → context window</td><td><code>resolveContextWindow</code> (<code>utils/contextWindow.ts:136</code>) → <code>outputTokenBudget</code> (:187) / <code>promptTokenCeiling</code> (:169)</td></tr>
 <tr><td>55</td><td>array → compaction</td><td><code>compactForWire</code> (<code>services/providers/contextCompact.ts:343</code>) → <code>compactMessages</code> (:217); last user turn pinned</td></tr>
-<tr><td>56</td><td>tool round → bounded loop</td><td><code>runDeskToolLoop</code> (<code>services/analysis/DeskToolsService.ts:3594</code>) with the round/token/time caps</td></tr>
+<tr><td>56</td><td>tool round → bounded loop</td><td><code>runDeskToolLoop</code> (<code>services/analysis/DeskToolsService.ts:3611</code>) with the round/token/time caps</td></tr>
 <tr><td>57</td><td>tool result → artifact + payload</td><td><code>storeToolArtifact</code> (<code>services/analysis/toolArtifactStore.ts:82</code>) / <code>saveToolPayload</code> (<code>services/trade/toolPayloadStore.ts:110</code>)</td></tr>
-<tr><td>58</td><td>tool event → transcript trail</td><td><code>digestToolResult</code> (<code>DeskToolsService.ts:802</code>) → <code>Message.toolEvents</code>/<code>toolIds</code> → <code>ToolActivityRow</code></td></tr>
+<tr><td>58</td><td>tool event → transcript trail</td><td><code>digestToolResult</code> (<code>DeskToolsService.ts:819</code>) → <code>Message.toolEvents</code>/<code>toolIds</code> → <code>ToolActivityRow</code></td></tr>
 <tr><td>59</td><td>wire decision → audit row</td><td><code>buildReasoningPatch</code> (<code>services/providers/reasoningControls.ts:271</code>) → <code>WireAuditEntry</code> → <code>WireAuditRow</code></td></tr>
 <tr><td>60</td><td>trade close → journal + autopilot</td><td><code>logTradeWithFeedback</code> (<code>hooks/useTradeLogging.ts:275</code>) → <code>OutcomeAutopilotService.register</code></td></tr>
 <tr><td>61</td><td>autopilot → settlement</td><td><code>settlementActionFor</code> (<code>utils/outcomeSettlement.ts:47</code>) — automatic · shadow · confirm; 15s undo</td></tr>
@@ -451,7 +451,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>67</td><td>failure → failure row</td><td><code>toFriendlyProviderError</code> (<code>GenericProviderService.ts:1175</code>) → <code>Message.error</code> → <code>ChatFailureRow</code>, in both homes</td></tr>
 <tr><td>68</td><td>model control → tier</td><td><code>ModelChip</code>/<code>ModelMenu</code> · <code>nextEffortTier</code> (<code>effortScale.ts:50</code>) · <code>effortDialUp</code> (<code>effortDial.ts:27</code>)</td></tr>
 <tr><td>69</td><td>run → prompt lane + corpus version</td><td><code>beginPromptLane</code> (<code>PromptOverrideService.ts:34</code>) → <code>promptCorpusVersion</code> (:97) → <code>runStats</code></td></tr>
-<tr><td>70</td><td>Settings → tool catalogue</td><td><code>DESK_TOOL_DEFINITIONS</code> (<code>DeskToolsService.ts:909</code>) + <code>toolLabel</code> → <code>DeskToolCatalogue</code></td></tr>
+<tr><td>70</td><td>Settings → tool catalogue</td><td><code>DESK_TOOL_DEFINITIONS</code> (<code>DeskToolsService.ts:926</code>) + <code>toolLabel</code> → <code>DeskToolCatalogue</code></td></tr>
 </table>
 
 <p><b>The Agents desk is never seeded.</b> Two effects in the App built a fallback roster from the Analyst Lens assignments or the model picker, and a third rewrote a named bot model when those settings moved. All three are gone with the built-in Macro / Technical / Risk analysts (owner ruling, 2026-10-19), and the registry’s seedIfEmpty helper was deleted with its only caller, so a fresh profile opens on the empty state at <code>listedBots AgentsView.tsx:1128</code>: "No agents yet. Create one and it appears here with its own thread." Nothing went red when the seeding was removed because no test covered it — that silence is evidence nothing was watching, not evidence the feature was inert.</p>

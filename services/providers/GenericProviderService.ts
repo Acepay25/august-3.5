@@ -397,6 +397,52 @@ export function extractResponsesReasoning(output: unknown): string {
     return parts.join('\n');
 }
 
+/**
+ * The ONE reader of a provider's raw response body.
+ *
+ * The localhost dev proxy hands the provider's own JSON back untouched, so
+ * both proxy call paths need the same per-format extraction — and they had
+ * drifted: the request path joined an array `message.content`, the turn path
+ * passed the array itself through as `text`, and only one of them split an
+ * inline think block out of the visible answer. One reader means a fifth wire
+ * format, or a fix to one of the four, happens in one place.
+ *
+ * `statedReasoning` is what the proxy itself reported; when it is silent the
+ * body is asked, per format, where that provider hides its thinking.
+ */
+export const readWireBody = (
+    format: ProviderConfig['apiFormat'],
+    data: any,
+    statedReasoning?: string,
+): { text: string; reasoning: string } => {
+    const stated = statedReasoning || '';
+    if (format === 'messages') {
+        const text = Array.isArray(data.content)
+            ? data.content.filter((block: any) => block?.type === 'text').map((block: any) => block.text).join('\n')
+            : data.text || '';
+        return { text, reasoning: stated || extractMessagesThinking(data.content) };
+    }
+    if (format === 'responses') {
+        return { text: data.output_text || '', reasoning: stated || extractResponsesReasoning(data.output) };
+    }
+    if (format === 'google') {
+        const parsed = parseGeminiResponse(data);
+        return { text: parsed.text, reasoning: stated || parsed.reasoning };
+    }
+    // chat_completions: the proxy returns `reasoning` itself, so this only
+    // matters when it did not — and the answer may be an array of parts, or
+    // carry an inline think block in the string.
+    const message = data.choices?.[0]?.message || {};
+    const split = splitChatContent(message.content);
+    return {
+        text: split.text,
+        reasoning: stated
+            || extractReasoning(message.reasoning_content)
+            || extractReasoning(message.reasoning)
+            || split.reasoning,
+    };
+};
+
 // ─── Dev-proxy routing ───────────────────────────────────────────────────────
 
 /**
@@ -1287,6 +1333,38 @@ function parseProviderErrorBody(raw: string): string {
     }
 }
 
+type StringTransport = (
+    config: ProviderConfig,
+    messages: ChatMessage[],
+    options?: ChatRequestOptions,
+) => Promise<string>;
+
+/** The other three transports carry no per-attempt cap of their own; the
+ *  wrapper gives them the one budget the whole file stands behind. */
+const withRequestTimeout = (call: StringTransport): StringTransport =>
+    (config, messages, options) => call(config, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
+
+/** The ONE place a wire format names its string transport. It used to be a
+ *  switch in one function and a nested ternary in another, which is the shape
+ *  where one path learns about a new format and the other silently returns ''.
+ *  Keep both call paths going through `stringTransportFor`. */
+const STRING_TRANSPORTS: Record<ProviderConfig['apiFormat'], StringTransport> = {
+    // chatCompletionsCall applies its own per-attempt timeout internally
+    // (needed for its jsonMode retry), so it is NOT wrapped.
+    chat_completions: chatCompletionsCall,
+    messages: withRequestTimeout(messagesCall),
+    responses: withRequestTimeout(responsesCall),
+    google: withRequestTimeout(googleCall),
+};
+
+export const stringTransportFor = (format: ProviderConfig['apiFormat']): StringTransport => {
+    const call = (STRING_TRANSPORTS as Record<string, StringTransport | undefined>)[format];
+    // Refusing loudly beats the old `: ''` — an unknown format is a bug, and an
+    // empty answer is indistinguishable from a model with nothing to say.
+    if (!call) throw new Error(`Unknown API format: ${format}`);
+    return call;
+};
+
 /**
  * Send a chat request to any provider, routing to the correct API format.
  */
@@ -1445,35 +1523,11 @@ async function sendChatRequestOnce(
                             const message = e instanceof Error ? e.message : 'Unknown JSON parsing error';
                             throw new Error(`Provider proxy returned invalid JSON: ${message}. Body: ${(result.body || '').slice(0, 200)}`, { cause: e });
                         }
-                        let reasoning = result.reasoning || '';
-                        if (!reasoning) {
-                            // The localhost proxy returns `reasoning` for
-                            // chat_completions; fall back to a per-format parse
-                            // so messages/responses thinking survives the proxy.
-                            if (effectiveConfig.apiFormat === 'messages') {
-                                reasoning = extractMessagesThinking(data.content);
-                            } else if (effectiveConfig.apiFormat === 'responses') {
-                                reasoning = extractResponsesReasoning(data.output);
-                            } else if (effectiveConfig.apiFormat === 'google') {
-                                reasoning = parseGeminiResponse(data).reasoning;
-                            } else {
-                                reasoning = extractReasoning(data.choices?.[0]?.message?.reasoning_content) || extractReasoning(data.choices?.[0]?.message?.reasoning);
-                            }
-                        }
-                        let text: string;
-                        if (effectiveConfig.apiFormat === 'messages') {
-                            text = Array.isArray(data.content) ? data.content.filter((block: any) => block?.type === 'text').map((block: any) => block.text).join('\n') : data.text || '';
-                        } else if (effectiveConfig.apiFormat === 'responses') {
-                            text = data.output_text || '';
-                        } else if (effectiveConfig.apiFormat === 'google') {
-                            text = parseGeminiResponse(data).text;
-                        } else {
-                            const message = data.choices?.[0]?.message || {};
-                            const content = Array.isArray(message.content)
-                                ? message.content.filter((part: any) => typeof part?.text === 'string').map((part: any) => part.text).join('\n')
-                                : message.content;
-                            text = content || '';
-                        }
+                        // The localhost proxy returns `reasoning` for
+                        // chat_completions; the shared reader falls back to a
+                        // per-format parse so messages/responses thinking
+                        // survives the proxy too.
+                        const { text, reasoning } = readWireBody(effectiveConfig.apiFormat, data, result.reasoning);
                         if (reasoning.trim()) options?.onReasoning?.(reasoning.trim());
                         reportUsage(effectiveConfig, data, options, messages);
                         // The proxy hands back the raw provider body, so the
@@ -1482,20 +1536,7 @@ async function sendChatRequestOnce(
                         return text || '';
                     });
                 }
-                switch (effectiveConfig.apiFormat) {
-                    case 'chat_completions':
-                        // chatCompletionsCall applies its own per-attempt
-                        // timeout internally (needed for its jsonMode retry).
-                        return chatCompletionsCall(effectiveConfig, messages, options);
-                    case 'messages':
-                        return messagesCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
-                    case 'responses':
-                        return responsesCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
-                    case 'google':
-                        return googleCall(effectiveConfig, messages, { ...options, signal: withTimeoutSignal(options?.signal) });
-                    default:
-                        throw new Error(`Unknown API format: ${effectiveConfig.apiFormat}`);
-                }
+                return stringTransportFor(effectiveConfig.apiFormat)(effectiveConfig, messages, options);
             },
             (effectiveConfig.name as ProviderName) || 'Provider',
             3,
@@ -1666,22 +1707,10 @@ async function sendChatTurnOnce(
                             },
                         } satisfies ChatTurnResult;
                     }
-                    // Non-chat_completions via proxy: text only.
-                    let text: string;
-                    let reasoning = result.reasoning || '';
-                    if (effectiveConfig.apiFormat === 'messages') {
-                        text = Array.isArray(data.content) ? data.content.filter((block: any) => block?.type === 'text').map((block: any) => block.text).join('\n') : data.text || '';
-                        if (!reasoning) reasoning = extractMessagesThinking(data.content);
-                    } else if (effectiveConfig.apiFormat === 'responses') {
-                        text = data.output_text || '';
-                        if (!reasoning) reasoning = extractResponsesReasoning(data.output);
-                    } else if (effectiveConfig.apiFormat === 'google') {
-                        const parsed = parseGeminiResponse(data);
-                        text = parsed.text;
-                        if (!reasoning) reasoning = parsed.reasoning;
-                    } else {
-                        text = data.choices?.[0]?.message?.content || '';
-                    }
+                    // Non-chat_completions via proxy: text only. Same reader as
+                    // the request path — the two had already drifted on an
+                    // array `message.content`.
+                    const { text, reasoning } = readWireBody(effectiveConfig.apiFormat, data, result.reasoning);
                     if (reasoning.trim()) options?.onReasoning?.(reasoning.trim());
                     reportUsage(effectiveConfig, data, options, messages);
                     return {
@@ -1707,13 +1736,9 @@ async function sendChatTurnOnce(
                         options?.onFinishReason?.(reason);
                     },
                 };
-                const text = effectiveConfig.apiFormat === 'messages'
-                    ? await messagesCall(effectiveConfig, messages, { ...captured, signal: withTimeoutSignal(options?.signal) })
-                    : effectiveConfig.apiFormat === 'responses'
-                        ? await responsesCall(effectiveConfig, messages, { ...captured, signal: withTimeoutSignal(options?.signal) })
-                        : effectiveConfig.apiFormat === 'google'
-                            ? await googleCall(effectiveConfig, messages, { ...captured, signal: withTimeoutSignal(options?.signal) })
-                            : '';
+                // One dispatch, shared with sendChatRequestOnce: the format →
+                // transport rule is not restated per call path.
+                const text = await stringTransportFor(effectiveConfig.apiFormat)(effectiveConfig, messages, captured);
                 return {
                     text,
                     reasoning: '',
