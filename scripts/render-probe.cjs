@@ -968,7 +968,7 @@ async function main() {
             if (!stillStreaming) await sleep(100);
         }
         check('the dock turn is still generating before the hop', stillStreaming,
-            'no Stop button within 2.5s of sending — the mock answered too fast to measure a live turn');
+            stillStreaming ? 'Stop was offered while the answer was arriving' : 'no Stop button within 2.5s of sending — the mock answered too fast to measure a live turn');
         await page.evaluate(() => {
             const hit = document.querySelector('[data-testid="surface-switch-agents"]');
             if (hit) hit.click();
