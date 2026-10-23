@@ -1,9 +1,8 @@
 # E-56 — The quiet pass: the rail, the dock and the chart area stop shouting
 
-**Status:** IN FLIGHT — the rail and the dock have landed; the chart area's
-chrome and the skills/memory check are landing with it. The §0 scan below
-describes the tree BEFORE this work and is kept as written, because it is the
-measurement the plan was built on.
+**Status:** LANDED — **committed 2026-10-21** (`implementation-record.md` §26).
+The §0 scan below describes the tree BEFORE this work and is kept as written,
+because it is the measurement the plan was built on.
 **Owner:** the trader. **Covers:** **O-135** — the owner's *"make the chart
 surface and the sidebar in the chat surface look similar to the reference
 images"*, and *"how the current skills being formatted? also the memory too?"*.

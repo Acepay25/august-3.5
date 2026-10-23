@@ -1,7 +1,9 @@
 # E-57 — the verification pass: eight defects two reviews found, and the four they got wrong
 
 **Proposed:** 2026-10-21 · **Baseline:** `8e863522` at review, landed work measured at `8c88bee0`
-· **Owner:** the trader · **Status:** §8a, §2, §7, §4, §3, §5 and §6 landed; §1 open. — and §3 opened O-140, which changes its own premise.
+· **Owner:** the trader · **Status:** all eight items landed — §8a, §2 and §7 in `implementation-record.md` §27–§28,
+§4, §3, §5 and §6 in §29–§32, and §1 as `services/learning/settlementReflection.ts`
+(awaited from `hooks/useTradeLogging.ts:525`). §3 opened O-140, which changes its own premise.
 
 ## Why this exists
 

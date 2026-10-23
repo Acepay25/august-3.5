@@ -36,7 +36,8 @@ Plain-English log of change rounds. Newest first.
   rebuild would have produced `August-Trading-Setup-1.2.0.exe` with different
   bytes than the published asset of that name, and no user would ever be offered
   it, because the updater only moves between versions. The changelog now carries
-  the version it describes, and a test fails if it does not match `package.json`.
+  the version it describes; check it against `package.json` before packaging —
+  the check that used to be automated went with the test suite on 2026-10-23.
 
 - **Six surfaces, one rail.** Navigation became a persistent rail with hash
   routing, and the hamburger that used to hide the app's structure went. Nothing

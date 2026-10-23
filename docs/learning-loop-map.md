@@ -4,7 +4,6 @@ Anchors verified against the working tree on 2026-09-20 (the WS-4 hygiene pass
 re-checked every line below; the WS-1 anchors were verified 2026-09-19). This is
 the WS-1 acceptance artifact: every memory surface, its writers, its readers,
 and whether the pairing is actually closed.
-`tests/learningLoopE2E.test.ts` is the executable version of the top section.
 
 ## The loop as it runs
 

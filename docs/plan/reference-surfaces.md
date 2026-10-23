@@ -1,9 +1,8 @@
 # E-55 — The reference's other four surfaces: the work card, the skills, the memory, and the tools
 
-**Status:** IN FLIGHT — the chat surface's work card, the thinking block and the
-executed tools have landed; the skills catalogue and the memory surfaces are
-landing with it. The §0 scan below describes the tree BEFORE this work and is
-kept as written, because it is the measurement the plan was built on.
+**Status:** LANDED — **committed 2026-10-21** (`implementation-record.md` §25).
+The §0 scan below describes the tree BEFORE this work and is kept as written,
+because it is the measurement the plan was built on.
 **Owner:** the trader. **Covers:** **O-134** — the owner's second reference
 set (2026-10-21), *"you can take a look to see how should the skills, memory,
 thinking block and executed tools and more should be render, the chat surface
