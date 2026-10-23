@@ -19,9 +19,9 @@ This file contains guidelines and commands for agentic coding agents working in 
 Two things to know before you touch it. **The plan is a proposal, not a decision** — 23 of its
 items are rulings the trader must make, and the plan says which way it would recommend. And
 **the `docs/analysis/` directory is scratch, not a home for anything durable** — it is
-ignored by the lint config, and its dated 2026-10-21 reports are still tracked in git;
-treat them as frozen evidence of the tree they describe, not as the plan. A plan that
-must survive belongs in `docs/plan/`.
+ignored by the lint config, and the four dated 2026-10-21 reports it still held were
+removed from the index on 2026-10-23 (owner ruling D-10: the directory is untracked on
+purpose). A plan that must survive belongs in `docs/plan/`.
 
 **One place to look, one way to propose.** `docs/plan/` is the working list and
 `docs/plan/full-audit.md` is the evidence behind it; a proposal must cite the id it
