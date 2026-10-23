@@ -187,6 +187,7 @@ These are not in the ordering report's numbered list; they are real, and they ar
 | **`npm run render-probe`** | the rendered transcript. The only gate that can see a rendered row. |
 | **`npm run skill-approval-probe`** | the human-actuation path. Asserts notebook **bytes** after a real click. |
 | **the open-items register** (`open-items.md`) | every claim carries a `file:line` that proves it is open **at HEAD**. It is a *measurement*, not a transcription — which is why it corrected five rows from the previous audit rather than repeating them. |
+| **test citations in the register and the record** | **history, not a live gate.** They name the test that verified a landing. The `tests/` tree was removed on 2026-10-23, so they are evidence of the commit they landed in — re-check the `file:line` beside them, and read a row with no code citation as carrying no live witness. |
 | **the `archive/prior-audit-2026-10-18` branch** | the previous audit's six reports, which are the only record of the **live-data** findings. A branch makes the objects reachable, so `git gc` can no longer prune them. |
 | **this file** | the order. If the order is wrong, fix it here first. |
 

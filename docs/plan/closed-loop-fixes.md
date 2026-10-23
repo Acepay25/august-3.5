@@ -20,7 +20,7 @@ broken live paths, and six claims that were true had never been written down as 
 
 | The claim | What HEAD actually does |
 |---|---|
-| "`beginPromptLane` has zero callers, so the A/B lane is starved" | It has a production caller at `hooks/useAnalysisPipeline.ts:951`, pinned by `tests/promptOverrideService.test.ts:243`. The **sentence in `docs/app-flow.md` was stale**, and both reviewers inherited it. |
+| "`beginPromptLane` has zero callers, so the A/B lane is starved" | It has a production caller at `hooks/useAnalysisPipeline.ts:951` (the test that pinned it, `tests/promptOverrideService.test.ts`, went with the suite on 2026-10-23). The **sentence in `docs/app-flow.md` was stale**, and both reviewers inherited it. |
 | "Human sends no longer fetch real-time hybrid data" | The dock fetches and injects on every human send: `services/trade/chatTurnRunner.ts:906` → `:590` → `:914` → onto the wire at `:959`. What is true is narrower: `hooks/useAnalysisPipeline.ts:982,994` builds a `hybridDataInjection` string that only a dev log reads. |
 | "`utils/ticketSize.ts` is dead — zero production importers" | Three importers: `TradeProposalCard.tsx:20`, `useTradeLogging.ts:25`, `proposedTrade.ts:23`. **`O-129` said so too**, and O-129's orphan census was rebuilt (§8a). |
 | "Pre-trade validation is only structural" | The minEdge-with-fees refusal (`services/trade/proposalGate.ts:95`) and the skill-AVOID ceiling (`:258`) were already enforced, and they disable the Log button. What was *not* enforced was the R:R floor and the ATR stop bands — those lived in `TradeValidationGate.ts`, which nothing imports. **§5 lifted them into the live gate**, so the claim is now false in both directions. |
@@ -78,7 +78,7 @@ broken live paths, and six claims that were true had never been written down as 
   data does not exist in this app, and a warning that cannot be computed is a worse lie than a
   silence.
 - No indicator catalogue, no chart rewrite, no docking, no theme editor, no command palette
-  (deleted by ruling; `tests/deadControlsGuard.test.ts:106` pins it).
+  (deleted by ruling; the guard test that pinned it went with the suite on 2026-10-23).
 - No skill auto-approval and no unattended notebook write: every §1 output is a draft awaiting a
   human, exactly as the doctrine requires.
 - It does not re-run the reachability graph, and it says so rather than quoting a stale figure.
