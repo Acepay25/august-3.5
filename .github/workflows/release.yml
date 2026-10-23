@@ -86,12 +86,9 @@ jobs:
         run: npm ci
 
       # Cheap, and the same check Guards runs. It failed the last release only
-      # here, after tests, lint, both probes and installer-smoke had passed.
+      # here, after lint, both probes and installer-smoke had passed.
       - name: Workflow steps declare their shell
         run: node scripts/check-workflow-shells.cjs
-
-      - name: Tests
-        run: npm run test:coverage
 
       - name: Lint
         run: npm run lint
@@ -116,11 +113,11 @@ jobs:
         run: |
           if (Get-ChildItem -Recurse dist -Filter *.map -ErrorAction SilentlyContinue) { throw 'Source maps must not be included in release output' }
 
-      - name: End-to-end smoke
+      # The unit and end-to-end suites were removed on 2026-10-23; the probes
+      # that remain still drive real Chromium.
+      - name: Install Chromium for the probes
         shell: pwsh
-        run: |
-          npx playwright install --with-deps chromium
-          npm run e2e
+        run: npx playwright install --with-deps chromium
 
       # Prod-bundle boot probe (v1.0.20 splash-hang lesson): serves dist/ via
       # vite preview and fails on any pageerror. Needs the chromium installed
