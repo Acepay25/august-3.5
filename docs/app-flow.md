@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-22** (the anchor gate re-measured every citation here and in the stage ledger:
-**410 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**396 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 5 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -45,7 +45,7 @@ new detailed inventory of memory, skills, tools and the learning loop; the stage
 flowchart TD
     H["index.html"] --> I["index.tsx — error handlers first :28 :48"]
     I --> S["StrictMode › ErrorBoundary › ToastProvider › App :73-79"]
-    S --> SP["splash leaves #root index.tsx:91-96 — boot-probe.cjs:119 waits for it gone, smoke.spec.ts:54 :140 assert count 0"]
+    S --> SP["splash leaves #root index.tsx:91-96 — boot-probe.cjs:119 waits for it gone"]
     SP --> APP["App.tsx:209 — surfaces render from App.tsx:2543 down"]
     APP --> US["useSurface hooks/useSurface.ts:15 key, :16 valid set"]
     US --> UR["useSurfaceRouter hooks/useSurfaceRouter.ts:75 openJournal, :101 hash read, :159 serialize"]
@@ -59,7 +59,7 @@ flowchart TD
     SW --> K["Knowledge · learn-view · App:2522"]
     K -.-> AP["Approvals is a TAB of Knowledge — components/learn/LearnView.tsx:64"]
     NR["NavRail — imported App:129, NEVER rendered (see correction 5); its AccountRow export IS, App:2735; NAV_RAIL_AUTO_COLLAPSE_PX and NAV_RAIL_EXPANDED_PX are live too"]:::dead
-    SM["SurfaceMenuList components/shell/SurfaceMenuList.tsx:135 destination rows — only mount passes hideSurfaces (App:2608; pinned by tests/deadControlsGuard.test.ts:147-150)"]:::dead
+    SM["SurfaceMenuList components/shell/SurfaceMenuList.tsx:135 destination rows — only mount passes hideSurfaces (App:2608)"]:::dead
     classDef dead stroke-dasharray: 5 5,opacity:.5
 ```
 
@@ -401,9 +401,9 @@ trader's own note always wins; the row now also says which model wrote the note
 (`types/trade.ts:97`).
 **Sizing that by grep is a trap, so the recipe is part of the number — and the word
 boundary is load-bearing.** Counting the TOKEN, `grep -rE "postMortem" --include="*.ts"
---include="*.tsx" .`, measures **164 lines in 56 files**; counting the field reads needs
-`grep -rE "\.postMortem\b" …` and measures **49 lines in 27 files**. Drop the `\b` and the
-second figure silently becomes **55**, because six of those lines are a DIFFERENT field:
+--include="*.tsx" .`, measures **88 lines in 28 files**; counting the field reads needs
+`grep -rE "\.postMortem\b" …` and measures **36 lines in 22 files**. Drop the `\b` and the
+second figure silently becomes **40**, because four of those lines are a DIFFERENT field:
 `postMortemCreatedAt`, the timestamp twin (read at
 `hooks/analysisPipeline/memoryContext.ts:175` and
 `services/learning/DecisionReflectionService.ts:24`, and gated at
@@ -939,8 +939,8 @@ old answer.
 5. **`NavRail` is imported and NOT rendered — it is a dead node.** Verified three
    ways (re-anchored 2026-10-23): `grep -c NavRail App.tsx` = 18 occurrences and
    **none is a JSX element**; `grep '<NavRail'` repo-wide matches only
-   `components/shell/NavRail.tsx:140` (its own definition) and
-   `tests/agentsSurface.test.tsx:410` (a test mounting it directly); and
+   `components/shell/NavRail.tsx:140` (its own definition) — the second match the
+   grep used to find was a test that mounted it directly, removed with the suite; and
    the code says so out loud — `App.tsx:2507` is the comment reading "The
    NavRail is GONE: its five destination rows were the tab strip this redesign was
    asked to remove". Only the `AccountRow` export is rendered, at `App.tsx:2735`;
@@ -956,17 +956,17 @@ old answer.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 410 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 396 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 410 anchors verified, and the gate
+   the gate's own output: these docs state 396 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
    bold label onto the citation beside it, and a spliced token matches no file — so those rows
    were skipped, never checked, which is how this page reported green while 12 of its citations
    were unverifiable); and a citation whose file is not in the tree is now REPORTED instead of
-   swallowed, measured at 0 in these two docs and 3 in the dated stage ledger, where naming a
+   swallowed, measured at 0 in these two docs and 14 in the dated stage ledger, where naming a
    deleted file is history and pointing at its line number is not a live claim.
    A third rule polices the numbers these docs quote from a RECIPE rather than from this
    gate's own output: the two grep censuses in section D, the size of the table in section
@@ -981,27 +981,19 @@ old answer.
    those are widened to match every occurrence; and the history-dependent half prints
    SKIPPED rather than passing on a shallow clone, because CI's checkout is depth 1 and a
    gate that cannot see git history must say so instead of reporting zero findings.
-   A fourth rule measures `AGENTS.md` itself, because that file is the first thing an agent
-   reads and its counts were still hand-typed. Three sentences are bound. The smoke-test
-   figure is counted from the Playwright file it describes (5, from the test declarations in
-   `e2e/smoke.spec.ts`). The vitest census line must be internally consistent — 4665 pass +
-   0 skip = 4665 tests, 471 passing files + 0 skipped files = 471 files — and its file count
-   must equal what `git ls-files tests` actually lists (471). And every step named by the
-   `comm -13` asymmetry — `check-flow-doc-anchors`, `skill-approval-probe`, `test`,
-   `typecheck`, and `installer-smoke` on the other side — must appear as a WHOLE token in the
-   15 lines that print that recipe, so the "test" inside "tests" no longer counts as naming
-   the test step. Six control arms plant each of those defects in the real file and require
-   the rule to report it — the run prints `0 of 6 control arms failed`, and the arm count
-   itself is floored, so deleting an arm from the list fails the build rather than passing
-   silently. An absent recipe paragraph, an absent census sentence or an empty git listing
-   is itself a finding, so a doc edit cannot escape the census by making the pattern
-   unmatchable. What this rule cannot check is the pass/skip split itself: 4665
-   and 0 come from vitest's own summary block, and the gate only proves they agree with each
-   other and with git's file count — so a suite that changes size still needs `npm run test`
-   re-run and the line restated by hand.
+   A fourth rule measured `AGENTS.md`'s hand-typed counts — the smoke-test figure, the vitest
+   census and its `git ls-files tests` file count. **Those three arms are gone as of
+   2026-10-23, with the suite they counted.** What still binds is the paragraph below: every
+   step the `comm -13` recipe names — `check-flow-doc-anchors`, `skill-approval-probe` and
+   `typecheck` on CI's side, `installer-smoke` on release's — must appear as a WHOLE token in
+   the 15 lines that print that recipe, so the "test" inside "tests" is not a step name. Two
+   control arms plant those two defects in the real file and require the rule to report them;
+   the arm count is itself floored, so deleting an arm fails the build rather than passing
+   silently. An absent recipe paragraph is itself a finding, so a doc edit cannot escape the
+   rule by making the pattern unmatchable.
    **Coverage asymmetry, measured rather than trusted from prose:** the step runs
    in `ci.yml`, and `release.yml` does NOT run it — nor does it run the
-   skill-approval probe, the bare typecheck, or CI's second suite job, while
+   skill-approval probe or the bare typecheck, while
    `installer-smoke` is the only gate release has and CI lacks. That set
    difference is printed by a `comm -13` over the two workflow files' npm-run
    lines, and `AGENTS.md` now states it there rather than repeating "the same
@@ -1040,18 +1032,18 @@ old answer.
    restores it has also made stage 19 undeletable and given every schedule a debate
    nobody is watching.
 
-9. **"Does either gate actually wait for the splash to clear?" — yes, both, measured
-   rather than assumed.** `e2e/smoke.spec.ts:54` puts it in the shared `boot()` helper
-   and `e2e/smoke.spec.ts:140` asserts it again as "no white screen", both as
-   `toHaveCount(0)` on `#splash`; `scripts/boot-probe.cjs:119` blocks on
-   `!document.querySelector('#splash')` against the BUILT bundle. What they watch for
-   is prose, not code: the boot probe's opening comment, `scripts/boot-probe.cjs:5`,
+9. **"Does the gate actually wait for the splash to clear?" — yes, measured rather
+   than assumed.** `scripts/boot-probe.cjs:119` blocks on
+   `!document.querySelector('#splash')` against the BUILT bundle, and it is the only
+   gate that still does: the Playwright spec that asserted `toHaveCount(0)` on
+   `#splash` a second time went with the test suite on 2026-10-23. What the probe
+   watches for is prose, not code: its opening comment, `scripts/boot-probe.cjs:5`,
    records the v1.0.20 TDZ crash as a splash hang. A page that dies before React
-   mounts fails both gates, not just one.
+   mounts fails it.
 
 10. **The arrow table is 70 rows, and every citation in it resolves — and 69 of the 70 rows pair their citation with the symbol that must live on that line (23 → 28 → 31 → 33 → 43 → 48 → 50 → 52 → 69 across these passes), so those rows are checked for content, not just for a line that exists. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently. One row names no file at all — the ensemble row, whose stages the code never names — so a wrong figure inside it stays outside this gate's reach, which is why the sentence says 69/70 rather than 70/70.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
-    resolves all 386 unique anchors on every run, so coverage of the table is no
+    resolves all 396 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
 11. **"One service replacing nine" is falsifiable, and it is right — counted, not
     asserted.** `git log --diff-filter=D` over `services/providers/` names exactly nine
