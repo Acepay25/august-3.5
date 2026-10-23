@@ -39,7 +39,7 @@ land somewhere other than the journal.
 | 22 | **Outcome autopilot** — automatic settlement: kline-verified SL/TP, MAE/MFE, realized R, cost/net R, suggested size, resolution source. | **REAL** | `services/ui/OutcomeAutopilotService.ts:27-53, 514-592, 629-673`; `services/backtesting/outcomeEngine.ts:394-470` |
 | 23 | **Settlement reflection** — the ONE bounded model call at settlement; it is the only writer of `trade.postMortem`. | **REAL** | `services/learning/settlementReflection.ts:239-327`; called at `hooks/useTradeLogging.ts:524-555` |
 | 24 | **The decline ledger** (`decline_trade`) — a recorded skip. | **REAL as a record, deliberately NOT a journal row**: "no journal row exists; the skip is now auditable." It never reaches `get_trade_log` or the training export. | `services/analysis/DeskToolsService.ts:3254-3283`; `services/trade/declineLog.ts:10-17, 33, 62` |
-| 25 | **The arbiter allow-list** (`ARBITER_ALLOWED_TOOLS`) — the seat policy that put `get_trade_log` on the "seat that judges the record". | **DEAD** — the arbiter/moderator seat was deleted; the only importers are two test files. | `services/analysis/DeskToolsService.ts:3364-3380`; `docs/analysis/2026-10-21-04-cleanup-manifest.md:62` |
+| 25 | **The arbiter allow-list** (`ARBITER_ALLOWED_TOOLS`) — the seat policy that put `get_trade_log` on the "seat that judges the record". | **DEAD** — the arbiter/moderator seat was deleted; its only importers were two test files, removed with the suite on 2026-10-23. | `services/analysis/DeskToolsService.ts:3364-3380` |
 | 26 | **`Message.evidencePack`** ("what the moderator was actually shown") and **`Message.memoryRetrieved`** ("notebook files retrieved for this run"). | **DEAD fields** — no writer anywhere in the app. | `types/message.ts:281, 285-291`; `grep memoryRetrieved:` → 1 hit, a type; `grep evidencePack` → only readers + test fixtures |
 | 27 | **`LoggedTrade.postMortemImages`** — the Journal renders it. | **DEAD field** — no writer anywhere. | `types/trade.ts:79`; `components/journal/TradeLog.tsx:71`; `grep postMortemImages\s*[:=]` → 1 hit, a test fixture |
 
@@ -450,8 +450,8 @@ for the aggregate.
 ### 6.8 Dead seats, dead fields, dead records
 
 - `ARBITER_ALLOWED_TOOLS` (`:3341-3357`) — the seat policy that gave the journal to "the seat
-  that judges the record" — has **test-only importers**; the moderator was deleted
-  (`docs/analysis/2026-10-21-04-cleanup-manifest.md:62`).
+  that judges the record" — has **no importers at all**: its two were test files, removed
+  with the suite on 2026-10-23, and the moderator itself was deleted.
 - `Message.evidencePack` ("what the moderator was actually shown") and
   `Message.memoryRetrieved` ("notebook files retrieved for this run") have **no writer**;
   the Journal's "Retrieved sources" surface and the verdict-audit card are fed by nothing.

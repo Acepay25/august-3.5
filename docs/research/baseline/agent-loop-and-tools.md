@@ -52,7 +52,7 @@ Two defects dominate the rest:
 | 21 | **The queued-send drain** — text typed while a run is live parks and then runs as ONE follow-up turn when the run ends, however it ended. | **REAL** | `hooks/useAnalysisPipeline.ts:617-633` (park), `:1743-1757` (drain) |
 | 22 | **The prompt A/B lane** — a per-run `live`/`control` label stamped on `runStats.promptLane` + `promptVersion`. | **COSMETIC** — it is a *record*, not a wire change: `services/trade/**` contains **zero** `getPrompt` calls, so a "control" run and a "live" run send the same bytes. (Repo's own O-140.) | stamped `hooks/useAnalysisPipeline.ts:965-969`, written `:1296-1297` / `:1466`; the missing resolution `docs/plan/open-items.md:425` (O-140) |
 | 23 | **The Settings → Prompts registry** (`constants/promptRegistry.ts`) — user-editable prompts with imported fallbacks. | **COSMETIC for the four `analysis.*` prompts on the trader-facing path** (they reach a model only through the skill-eval harness); **REAL** for the other eight (`learning.chart_scan` via the `scan_chart_skills` tool, `notebook.chat_note` via the quick-save send, `notebook.note` / `learning.skill_craft` / `learning.skill_refine` / `learning.skill_worth` / `learning.settlement_reflection` in the learning loop, `strategy.summarize_pdf` / `strategy.ocr_page` in Settings) | registry `constants/promptRegistry.ts:55-175`; `getPrompt` call sites: `services/providers/GenericAnalysisService.ts:357, 363, 368, 401`, `services/learning/chartScanSkills.ts:296`, `services/learning/NotebookWriterService.ts:86, 137`, `services/learning/SkillCraftService.ts:155, 228`, `services/learning/skillWorthGate.ts:115`, `services/learning/settlementReflection.ts:295`, `services/learning/pdfOcrService.ts:42`, `services/learning/strategySummarizer.ts:70` — **none** under `services/trade/**` |
-| 24 | **`analyzeTradingViewWithTransientRetry`** — the wrapper the analysis prompts live behind. | **DEAD / COSMETIC** — defined, zero callers | `hooks/useAnalysisPipeline.ts:249-275`; `docs/analysis/2026-10-21-04-cleanup-manifest.md:64` |
+| 24 | **`analyzeTradingViewWithTransientRetry`** — the wrapper the analysis prompts live behind. | **DEAD / COSMETIC** — defined, zero callers | `hooks/useAnalysisPipeline.ts:249-275` |
 | 25 | **`enhancedPrompt`** — the memory slice + similar setups + weighted-voting learning context + the code-checked skill-trigger note + decision reflections. | **COSMETIC** — computed every send and **never sent**. See §4. | built `hooks/useAnalysisPipeline.ts:1168-1209`, read only at `:1213`; the three sends use `promptToSend` at `:1258`, `:1384`, `:1411` |
 | 26 | **The hybrid market-packet injection string** (`hybridDataInjection`). | **COSMETIC** — fetched by the scheduler, built, and read only by `devLog` | built `hooks/useAnalysisPipeline.ts:1008` / `:1048`, read only `:1214`; the repo's own flow doc says the same: `docs/app-flow.html:178` |
 | 27 | **The gate-keeper injection** (`gateInjection`). | **COSMETIC** — a literal `''` with a comment around it | `hooks/useAnalysisPipeline.ts:1203-1210` |
@@ -68,8 +68,8 @@ Two defects dominate the rest:
 | 32 | **The forged-tool gate** — a `custom_*` recipe is refused if the seat's list does not carry it, before the forge executor is reached. | **REAL** | `services/analysis/DeskToolsService.ts:3963-3982` (esp. `:3967-3970`) |
 | 33 | **The desk mandate, composed from the offer set** — `deskToolsMandateFor(offered)` writes the shape rule and the drawing rule from the tools *this* turn can call: no chart-view ⇒ "there is NO CHART to read on this home"; no market read ⇒ "name none of them". | **REAL** | `services/analysis/DeskToolsService.ts:1744-1789`; built from `mergedAllowed` at `:4284-4291`; pinned by `tests/deskSystemPrompt.test.ts:62-117` |
 | 34 | **The harness contract + mandate injection** — `withDeskToolsSystemPrompt` adds the contract once (only if the caller's prompt has none) and appends the mandate + the text-protocol fallback. | **REAL** | `services/analysis/DeskToolsService.ts:4176-4197`; pinned by `tests/deskSystemPrompt.test.ts:33-53` |
-| 35 | **`ARBITER_ALLOWED_TOOLS`** — a 9-name seat policy for the moderator. | **DEAD / COSMETIC** — the moderator seat was deleted; only two test files import it | `services/analysis/DeskToolsService.ts:3364-3380`; importers `tests/evidencePack.test.ts:33`, `tests/tradeLogTool.test.ts:11`; `docs/analysis/2026-10-21-04-cleanup-manifest.md:62` |
-| 36 | **`toAnthropicTools`** — the Anthropic-schema converter. | **DEAD / COSMETIC** — no production caller (the Anthropic transport sends no `tools` field) | `services/analysis/DeskToolsService.ts:1796-1801`; `docs/analysis/2026-10-21-02-enhancements.md:268` (B-19) |
+| 35 | **`ARBITER_ALLOWED_TOOLS`** — a 9-name seat policy for the moderator. | **DEAD / COSMETIC** — the moderator seat was deleted; its only importers were two test files, removed with the suite on 2026-10-23 | `services/analysis/DeskToolsService.ts:3364-3380`; its only importers were two test files, removed with the suite (2026-10-23) |
+| 36 | **`toAnthropicTools`** — the Anthropic-schema converter. | **DEAD / COSMETIC** — no production caller (the Anthropic transport sends no `tools` field) | `services/analysis/DeskToolsService.ts:1796-1801` |
 | 37 | **`requireFirstToolRound`** (round 0 forced to `toolChoice:'required'`). | **COSMETIC / unreachable** — no production caller ever sets it; the debate that needed it is deleted | declared `services/analysis/DeskToolsService.ts:3661`, `:4162`; used `:3760-3762`; no assignment outside the module |
 | 38 | **`AUTOMATION_UNATTENDED_DENY`** — a scheduled run may not write the trader's notebook; the deny list is derived from `CHAT_SURFACE_TOOLS` so a rename cannot silently un-deny it. | **REAL** | `services/trade/automationTurn.ts:56-64`; the derivation `:62-64`; pinned by `tests/automationToolTurn.test.ts:135-143` |
 | 39 | **The skill-evaluation path had NO seat allow-list** — an unattended background runner reached the same loop with `allowedTools` undefined, i.e. unrestricted. | **FIXED `e6787a8f`** — the evaluator now passes `AUTOMATION_EVALUATION_TOOLS`; `tests/skillEvalArms.test.ts` asserts every arm carries it, that the list is not empty, and that it excludes `propose_skill`, `present_trade`, `decline_trade`, `forge_tool` and `write_memory_note` | `services/learning/SkillEvalScheduler.ts:301`, `services/trade/automationTurn.ts:73` (was: no `allowedTools` at `:285-302`, `services/analysis/DeskToolsService.ts:2490` refusing only a non-empty list) |
@@ -404,8 +404,7 @@ recipe, whose endpoint the model itself wrote (a forged POST performs a write;
 The safeguard today is the *model's judgement*, not the app's: the analysis prompt does not
 mention any growth tool (`constants/prompts/analysisPrompts.ts` — zero matches for
 `propose_skill|write_memory_note|remember|forge_tool|amend_memory`), but the growth tools'
-full schemas are in the request, so the model can see and call them. The repo's own
-analysis says the same: `docs/analysis/2026-10-21-02-enhancements.md:33`.
+full schemas are in the request, so the model can see and call them.
 
 ### 4.4 The allow-list mechanism has four entry points and three policies — **MED**
 
@@ -482,8 +481,8 @@ The debate engine is gone; no production caller sets it. It is harmless, but it 
 ### 4.10 The tool catalogue is a large fixed per-request tax — **LOW/MED**
 
 31 core definitions + 8 chart definitions + every confirmed forged tool are filtered and
-sent on **every** round of **every** turn. `propose_skill`'s schema alone is ~2.7 k chars
-(`docs/analysis/2026-10-21-01-system-and-data-flow.md:221`), `run_monte_carlo` ~2.0 k, and
+sent on **every** round of **every** turn. `propose_skill`'s schema alone is ~2.7 k chars,
+`run_monte_carlo` ~2.0 k, and
 the Chat surface carries 30 of the 31 core tools. The loop re-sends the *definitions* on
 every round (`:3716-3724`), and compaction only shrinks the *messages*
 (`services/providers/contextCompact.ts:217-308`) — the schema tax is not part of the
