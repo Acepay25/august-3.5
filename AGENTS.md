@@ -29,10 +29,12 @@ covers — the `O-nn` item in `docs/plan/open-items.md`, or the `E-nn` / `N-nn` 
 `docs/plan/audit/` — so the plan and the code cannot drift apart silently.
 `docs/plan/implementation-record.md` says what has already landed, and how it was verified.
 
-The previous audit's reports are preserved on the `archive/prior-audit-2026-10-18` branch,
-which exists so that `git gc` cannot prune them. It is local-only, and it is an archive, not a
-branch to merge: its one commit is a root carrying nothing but `docs/`, so a merge would
-restore the whole deleted `docs/analysis/` tree.
+The previous audit's six reports lived on an `archive/prior-audit-2026-10-18` branch; the owner
+deleted that branch on 2026-10-23. It could never have been merged — its one commit was a root
+carrying nothing but `docs/`, so a merge would have restored the whole deleted `docs/analysis/`
+tree — and rather than keep a second copy of a tree this repo has ruled untracked, it is gone.
+The **live-data** findings it alone recorded survive as register rows: O-19/O-20/O-22 (the cost
+model), O-28 (the click gate), O-115 (inverted weighting), O-23/O-24 (size and leverage).
 
 ## Project Overview
 
