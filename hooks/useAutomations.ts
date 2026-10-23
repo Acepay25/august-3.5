@@ -451,25 +451,45 @@ export function useAutomations(params: UseAutomationsParams) {
             return;
         }
 
+        // The two permanent "nothing to run" exits below count toward the
+        // breaker. They happen before a run row exists, so without a row a
+        // schedule with no template (or `last_analysis` and no analysis to
+        // repeat) fires forever, toasting each time and recording nothing —
+        // the silent failure E-57 §6's breaker exists to stop. The transient
+        // guards above (another run in flight) stay uncounted: those are the
+        // app asking the schedule to wait, not the schedule producing nothing.
+        const runId = runUid();
+        const startedAt = new Date().toISOString();
+        const settlePermanentSkip = (reason: string): void => {
+            appendRun(config.id, {
+                id: runId, automationId: config.id, status: 'skipped',
+                startedAt, finishedAt: new Date().toISOString(), error: reason,
+            });
+            void persistConfigs(settleRunStreak(config, 'skipped', reason));
+        };
+
         // Build the input: fixed template, or replay the last manual analysis.
         let prompt = (config.promptTemplate ?? '').trim();
         let images: ImageMetadata[] | undefined;
         if (config.inputSource === 'last_analysis') {
             const last = await findLastManualAnalysis(conversationHistoryRef.current);
             if (!last) {
-                toast.warning('Automation skipped', `"${config.name}" — no previous analysis found to repeat.`);
+                const reason = 'no previous analysis found to repeat';
+                toast.warning('Automation skipped', `"${config.name}" — ${reason}.`);
+                settlePermanentSkip(reason);
                 return;
             }
             prompt = last.prompt;
             images = last.images;
         }
         if (!prompt) {
-            toast.warning('Automation skipped', `"${config.name}" has no prompt template.`);
+            const reason = 'no prompt template to run';
+            toast.warning('Automation skipped', `"${config.name}" has ${reason}.`);
+            settlePermanentSkip(reason);
             return;
         }
 
-        const runId = runUid();
-        const startedAt = new Date().toISOString();
+
         inFlightRef.current = config.id;
         setRunningAutomationId(config.id);
         appendRun(config.id, { id: runId, automationId: config.id, status: 'running', startedAt, finishedAt: startedAt });
