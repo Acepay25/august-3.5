@@ -50,12 +50,8 @@ npm run preview             # Preview production build locally
 npm run typecheck           # tsc --noEmit
 npm run typecheck:scripts   # tsc over scripts/** (tsconfig.scripts.json)
 npm run typecheck:electron  # node --check electron/*.cjs — see caveat below
-npm run test                # vitest run
-npm run test:watch          # vitest watch mode
-npm run test:coverage       # vitest run --coverage (CI has ratcheted thresholds)
 npm run lint                # eslint WITH a max-warnings ratchet (see Code Style)
 npm run lint:loose          # eslint without the cap, for a local cleanup pass
-npm run e2e                 # playwright (5 smoke tests, drives `npm run dev`)
 npm run boot-probe          # launch the built bundle in Chromium, fail on pageerror
 npm run render-probe        # drive the running app in Chromium; assert rendered
                             #   ROW COUNTS per conversation (dock + Agents),
@@ -77,10 +73,9 @@ npm run render-probe        # drive the running app in Chromium; assert rendered
 npm run skill-approval-probe  # drive the HUMAN ACTUATION path in Chromium: the
                             #   four skill-draft outcomes and the learning queue's
                             #   Apply, asserting the notebook BYTES after each click.
-                            #   Unit tests prove `approveSkillDraft` returns ok; only
-                            #   this proves a pressed "Save as skill" wrote a file,
-                            #   that a name collision produced `-2.md` instead of an
-                            #   unhandled rejection, and that a failed write leaves
+                            #   Nothing else proves a pressed "Save as skill" wrote a
+                            #   file, that a name collision produced `-2.md` instead of
+                            #   an unhandled rejection, or that a failed write leaves
                             #   the draft in the inbox. CI runs it after render-probe.
 npm run installer-smoke     # drive the PACKAGED exe; the strongest gate here
 npm run electron:dev        # Vite dev server + Electron window
@@ -96,59 +91,51 @@ npm run electron:release    # REFUSES locally and explains how to release. CI-on
 
 `tsconfig.json` lists only `**/*.ts` and `**/*.tsx` in `include`, so
 **`npm run typecheck` does not read the main process or preload** — a syntax
-break in `electron/main.cjs` passes tsc, passes `vitest`, and only fails when a
-user launches the packaged app. (`electron/` is not in `exclude`; it is out only
-because the include globs don't match `.cjs`. One shell file DOES reach tsc —
-`tests/sseParser.test.ts` imports `electron/sseParser.cjs` and `allowJs` is on —
-so the three files are not equally unchecked.) Run `npm run typecheck:electron`
+break in `electron/main.cjs` passes tsc and only fails when a user launches
+the packaged app. (`electron/` is not in `exclude`; it is out only because the
+include globs don't match `.cjs`, and the one `.ts` file that used to pull
+`electron/sseParser.cjs` into the program went with the test suite on
+2026-10-23, so all three are unchecked now.) Run `npm run typecheck:electron`
 (wired into both CI and the release gate) or `node --check` the file directly
 after editing it.
 
-**Unit tests cannot see the transcript.** `tests/` mounts components in jsdom, so
-a defect that only shows when a LIST of messages renders — a row dropped after
-the second one, or a decorative panel throwing inside `messages.map()` and taking
-every later message down with it — passes the whole suite green. Two finished
-panels shipped unmounted for exactly this reason and no test noticed. Any change
-to how a conversation renders must be checked with `npm run render-probe`, which
-counts rendered rows in a real browser instead of asserting a component returned
-the right thing. It now sweeps all four nav surfaces, the approvals inbox, the
-Agents desk pane, and Settings → Data (back up / export / import), Tab-focuses
-editable fields and reads back the computed keyboard focus indicator — the only
-gate that can see `index.css`, since jsdom mounts markup without resolving a
-stylesheet — and asserts zero pageerrors throughout. Two rules learned the hard
-way, both encoded in it:
-**overlays mount outside `<main>`**, so measuring `<main>` after opening one
-re-reports the previous surface and passes vacuously — assert the overlay's own
-root; and **a check whose measurement is identical across two different states
-is measuring the wrong thing.** Run it on an idle machine — alongside a build or
-the full suite it reports blank surfaces that the app was seconds from filling.
+**`npm run render-probe` is the only gate that can see a rendered row.** It
+drives the built app in Chromium and counts what actually appeared, because a
+compiler cannot see a component that returned clean and rendered nothing — two
+finished panels shipped unmounted for exactly that reason. It sweeps all four nav
+surfaces, the approvals inbox, the Agents desk pane and Settings → Data (back up /
+export / import), Tab-focuses editable fields and reads back the computed focus
+indicator (no other gate resolves `index.css`), and asserts zero pageerrors. Two
+rules learned the hard way, both encoded in it: **overlays mount outside
+`<main>`**, so measuring `<main>` after opening one re-reports the previous
+surface and passes vacuously — assert the overlay's own root; and **a check whose
+measurement is identical across two different states is measuring the wrong
+thing.** Run it on an idle machine — alongside a build it reports blank surfaces
+that the app was seconds from filling.
 
-CI (`.github/workflows/ci.yml`) runs `tsc`, `vitest`, `eslint`, the flow-doc
-anchor gate, the Playwright smoke suite, `vite build`, `boot-probe`,
-`render-probe` and `skill-approval-probe`, plus a second job that re-runs the
-suite with console interception on. The release gate
+CI (`.github/workflows/ci.yml`) runs `tsc`, `typecheck:scripts`,
+`typecheck:electron`, the flow-doc anchor gate, `eslint`, `vite build`,
+`boot-probe`, `render-probe` and `skill-approval-probe`. The release gate
 (`.github/workflows/release.yml`) runs the same chain MINUS two of its steps —
 no `check-flow-doc-anchors`, no `skill-approval-probe` — and adds
 `installer-smoke` on the packaged exe plus the signing, source-map, signature
 and updater-manifest checks, and only then builds and publishes. So a doc edit
 that breaks the flow docs' line numbers fails CI but not the tag push. The same gate
-re-measures the counts in this file — the smoke-test number above, the vitest census in the
-tree map, and the step names in this paragraph — so a stale figure here fails CI too.
+re-measures the step names in this paragraph against the two workflow files, so a stale
+figure here fails CI too.
 Measured, not assumed — this set-difference prints the whole asymmetry:
 `comm -13 <(grep -ohE "npm run [a-z0-9:._-]+" .github/workflows/release.yml | sort -u)`
 `<(grep -ohE "npm run [a-z0-9:._-]+" .github/workflows/ci.yml | sort -u)`
-→ `check-flow-doc-anchors`, `skill-approval-probe`, `test`, `typecheck`;
+→ `check-flow-doc-anchors`, `skill-approval-probe`, `typecheck`;
 flip `comm -23` → `installer-smoke` is the only command release has and CI
-lacks. `test:coverage`, `lint`, `typecheck:scripts`, `typecheck:electron`,
-`build`, `e2e`, `boot-probe` and `render-probe` are in both. Release has no
+lacks. `lint`, `typecheck:scripts`, `typecheck:electron`,
+`build`, `boot-probe` and `render-probe` are in both. Release has no
 bare `typecheck` step because `npm run build` starts with `tsc --noEmit`
 A `v*` tag push runs `release.yml`, which builds ONCE with
 `--publish never`, verifies the installer, and only then uploads the
 manifest-named bytes with `gh release upload --clobber` (one build, one
 publish, `GH_TOKEN` blanked during the signing gate). `render-probe` sits
-in both because it is the only gate that can see a rendered row: unit tests
-mount components in jsdom and cannot see a transcript drop one message out of a
-list. Steps run sequentially, so it never measures a surface while a build is
+in both because it is the only gate that can see a rendered row. Steps run sequentially, so it never measures a surface while a build is
 competing for the machine.
 
 ## Project Structure
@@ -183,7 +170,6 @@ competing for the machine.
 │                           #   imported by renderer, vite dev proxy AND electron main
 ├── types/                  # analysis, trade, provider, progress, message, learning …
 ├── utils/                  # See "Canonical single-source modules" below
-├── tests/                  # Vitest suites — 5368 tests in 515 files: 5368 pass in 515 and 0 skip across 0 wholly-skipped files. Read from vitest's own summary block 2026-10-23, after the prior fix pass, the Phase 3/4 implementation pass (E-37 evidence floors, E-38 validity window, E-39 effort, E-40 decidedAt, E-41 leverage/liquidation, E-42 decline, E-43 minEdge, E-35 enforcement, E-18 automatic settlement, E-19 one plan object, E-20 replay, E-23 notebook recovery, E-24 Electron behaviour, E-44 notebook sharding), the context-window pass (a thinking-sized tool-round budget, the thinking-cut re-ask, automatic compaction, discovered context windows), the register sweep (the desk mandate composed from the tools a turn can actually call, the packet's stated age, the transcript live region, the focus-trap population gate, the prompt A/B lane writer), E-51 Phases 1–4 (`tests/modelMenu.test.tsx` is the only NEW test file; `tests/chatEffortDial.test.tsx` covers the merged control, its chord and its guard, `tests/modelPicker.test.tsx` now that the picker mounts the same panel), the R:R/cost register pass, which found those two clusters already built by the earlier `tests/planE02.test.ts` / `tests/planE03.test.ts` and added 5 cases to `tests/chartDrawings.test.ts` and `tests/patternMemoryGate.test.ts` for the two copies that were still live, E-52 Phases 1–7 (`tests/turnStatus.test.ts` for the one grammar and the one tool vocabulary the turn's status line and the rows beneath it both read, `tests/answerEffortTier.test.tsx` for the thinking tier's path from the executor to the answer's row, `tests/disclosure.test.tsx` for the one expandable panel, `tests/toolTrailBothHomes.test.ts` for the tool trail and the payload ids reaching both homes, `tests/jumpToLatestFab.test.tsx` for the one jump control, `tests/agentLaunchList.test.tsx` for the launch list and the read-only agent card, and `tests/deskToolCatalogue.test.tsx` for the catalogue of the desk's tools), E-53 plus the real-error pass (`tests/wireAudit.test.tsx` for the wire's own record of what it was asked, and `tests/realProviderError.test.tsx` for the provider's real error reaching the trader — the cause chain under "fetch failed", and a failed turn drawn as a failure rather than as an answer), and the reference's voice (`tests/referenceVoice.test.tsx` — the answer is prose, the row does not shout, and both surfaces read the same one home for it), and E-57's verification pass (`tests/trade/tradingChartVerdictLevels.test.tsx` for the Entry/Stop/Target lines the trader actually stops out at — the chart paints them with `addSeries(LineSeries)` + `setData`, not `createPriceLine`, so the chat-levels recorder cannot see them, and the guard in `tests/deadControlsGuard.test.ts` for the harness-lesson readers that were deleted; E-57 §5 added no file and 13 cases — `tests/proposalGate.test.ts` for the R:R floor and the ATR stop bands now answered by the LIVE gate (six shape cases, including an inverted plan whose refusal must win over the min-edge one and a control that stands both bands down when the scan brings no volatility reading), `tests/proposalCard.test.tsx` for the caution the trader actually sees with *Log this trade* still enabled, and `tests/accuracyValidation.test.ts` for the `atr = 0` path that used to print `Infinityx ATR` on every plan; E-57 §6 added 17 cases and no file — `tests/automationSettlement.test.tsx` for what a scheduled run LEAVES (the caveats and the plan ration as fields on the row, the streak that disables a schedule after three runs that produced nothing, the human re-enable that clears it, and the bot arm feeding the same breaker), `tests/botRoutinesUI.test.tsx` for the card's caveat block in the open, the no-repeat guard, the model read off `modelsUsed`, and the banner that tells the breaker apart from a manual switch-off, and `tests/exportService.test.ts` for a notices-bearing run and a breaker-bearing config surviving export → wipe → import, which is the evidence that no allow-list change was needed; E-57 §1's reflection (`tests/settlementReflection.test.ts` — the packet, the `{"noLesson":true}` decline, the no-provider retry and every write-nothing path) and the callable key-levels feeder (`tests/getKeyLevelsTool.test.ts` — real candles, the fence the card parser accepts, and the empty-scan refusal), and the two homes’ live sync (`tests/surfaceLiveSync.test.tsx` — a dock turn mirrored into the conversation WHILE it streams, `Message.isStreaming` projected back so the dock knows an answer arriving from the Chat surface is not finished, one conversation minted for a session that never had a thread, and either home able to stop the other’s run)), and the three research proposals that needed no ruling (`tests/skillApprovalRoundTrip.test.ts` — the `propose_skill` reason reaching the notebook bytes, a no-`steps` proposal refused, a failed queue write answering `null`, and the skills index dropping an unapproved rule; `tests/tradeChatContext.test.ts` for the one approval filter; `tests/skillEvalArms.test.ts` for the detached evaluator's allow-list; `tests/coachThread.test.tsx` for the reason the approving human is shown — 8 cases, no new file in that commit), and P5's transport half (`tests/devProxyTimeout.test.ts` — NEW, the file the two UNCAPPED dev-proxy branches had no timeout signal at all (a third already carried the stream cap) and a test that reads the signal actually handed to `fetch`, because the finding under-recorded the hole: the streaming branch was uncapped too). The file count is the tracked `*.test.*` count `npm run check-flow-doc-anchors` re-measures, so a new test file must land with the census that mentions it.
 └── electron/               # main.cjs + preload.cjs (NOT covered by tsc)
 ```
 
@@ -206,9 +192,9 @@ is how the numbers drift apart:
   names the live activity ("Reading the order book"), `turnKindSummary` counts
   the work by kind ("3 reads, 1 search") and `turnWorkSummary` names it. The
   map is keyed by the tool's HUMAN LABEL, not its name — the transcript never
-  carries a name — and `tests/turnStatus.test.ts` measures it against the desk
-  service's own tool list, so a new tool cannot slip through unlabelled. An
-  unknown tool keeps its own label: never guess a verb for it.
+  carries a name — so a new tool needs its label in the same change that adds
+  it, checked against the desk service's own tool list. An unknown tool keeps
+  its own label: never guess a verb for it.
 - `components/shared/Disclosure.tsx` — the ONE expandable panel, and it is a
   native `<details>`: a toggle without JavaScript, keyboard-operable for free,
   and what the transcript's CSS and screen-reader behaviour were written
@@ -292,8 +278,7 @@ is how the numbers drift apart:
 - `utils/harnessMarks.ts` — the one voice for text THIS app withholds from a
   model: the `DATA_UNAVAILABLE` sentinel, the clipping notes (which must name
   how much was kept vs existed), the spill receipt, and the fence legend built
-  from those prefixes. Never hand-write a marker or describe one in a prompt —
-  `tests/harnessMarks.test.ts` fails on either. It also owns `harnessTurn()`,
+  from those prefixes. Never hand-write a marker or describe one in a prompt.
   which marks a harness-authored insertion that must travel in the `user` role:
   a seat cannot obey the split unless it can tell the trader's words from the
   harness's. Distinct from `finishReason.ts`, which answers the other question:
@@ -417,7 +402,7 @@ import { sanitizeAIResponse } from './utils/sanitizers';
   tool turn from inside `streamChatWithDeskTools` — not by its callers. It used to
   be called at each debate start; when the engine was deleted the call site went
   with it and nothing warned, so the clear now lives at the one choke point every
-  run passes. `tests/deskToolCache.test.ts` pins that wiring by source.
+  run passes.
   There is no generic AI-response cache (do not assume one exists)
 
 ### Security Best Practices
@@ -426,16 +411,18 @@ import { sanitizeAIResponse } from './utils/sanitizers';
 - Sanitize AI responses before rendering
 - Validate data from external sources (zod at boundaries)
 
-## Testing Notes
+## Verification
 
-`npm run test` (Vitest, jsdom). Key suites:
-- `tests/financialMath.test.ts` — leverage math, probability clamping
-- `tests/tradeAnalysisSchema.test.ts` — AI-boundary schema coercion
-- `tests/outcomeAutopilot.test.ts` — TP/SL auto-detection
-- `tests/providerConfigService.test.ts` — provider CRUD (mocked Preferences)
-
-When adding features: add/extend tests, verify in dev mode (`npm run dev`), then
-`npm run typecheck && npm run test && npm run build`.
+**There are no unit tests on this branch.** The Vitest suite and the Playwright
+smoke suite were removed on 2026-10-23, with their scripts and CI steps, and
+nothing in the tree imports a test helper. What verifies a change now, in order:
+`npm run typecheck`, `typecheck:scripts` and `typecheck:electron`, then
+`npm run lint` (the warning ratchet binds), `npm run build`,
+`npm run check-flow-doc-anchors`, and the three browser probes — `boot-probe`
+(does the built bundle start), `render-probe` (rendered rows, inert controls,
+zero pageerrors) and `skill-approval-probe` (the human-actuation path). Then run
+`npm run dev` and exercise the change by hand: that is the only check left for
+behaviour none of the above asserts.
 
 ## Environment Variables
 
@@ -480,7 +467,7 @@ Optional build-time variables:
   history keeps rendering, but it excludes any row stamped for a different bot.
   Do not reintroduce a model-shaped claim: it deleted the trader's own answers
   from the one pane that shows them (they were claimed into a bot thread that
-  never displayed them). `tests/deskThreadClaims.test.ts` pins both directions.
+  never displayed them).
 - **Writing a ref during render is a load-bearing idiom here, not a mistake.**
   `ref.current = value` on its own line inside a component body is deliberate
   and appears in many hooks (`composerModeRef`, `tradesRef`, `activeUsernameRef`).
