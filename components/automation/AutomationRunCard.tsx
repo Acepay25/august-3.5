@@ -151,12 +151,18 @@ const AutomationRunCard: React.FC<{
                         <ul className="mt-1 list-disc space-y-1 pl-4 text-ui-sm leading-relaxed text-amber-200/80">
                             {caveats.map(c => <li key={c}>{c}</li>)}
                         </ul>
-                        {run.plans && (
-                            <p className="mt-1.5 font-mono text-ui-2xs text-zinc-400" data-testid="automation-run-plans">
-                                Plans: {run.plans.presented} allowed{run.plans.refused > 0 ? `, ${run.plans.refused} refused by the ration` : ''}.
-                            </p>
-                        )}
                     </div>
+                )}
+
+                {run.plans && (
+                    // Outside the caveat block on purpose: a tool-turn run's bubble
+                    // prints `message.text` (which already carries the notices), so
+                    // the block above is suppressed there — and the ration count,
+                    // the one fact that path adds, was suppressed with it. The
+                    // count is a record of what the schedule did, not a caveat.
+                    <p className="mb-3 font-mono text-ui-2xs text-zinc-400" data-testid="automation-run-plans">
+                        Plans: {run.plans.presented} allowed{run.plans.refused > 0 ? `, ${run.plans.refused} refused by the ration` : ''}.
+                    </p>
                 )}
 
                 {run.userMessage?.text && (
