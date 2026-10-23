@@ -14,10 +14,10 @@ When a change violates two rules, the theme wins over the component.
 - [ ] Semantic hues come from `index.css @theme` and mean one thing everywhere:
       **emerald** = gain/up, **rose/red** = loss/down, **amber/yellow** =
       warning, **cyan** = info. Never introduce a new hue for a new state.
-      Enforced: `tests/themeContrast.test.ts` scans every file under
-      `components/` for a hue outside that ramp, so a new one fails CI rather
-      than surviving review. An exception needs a reason the file is not UI
-      chrome, added to that test's allowlist.
+      **Not machine-enforced since 2026-10-23** — the scan that checked every
+      file under `components/` for a hue outside that ramp went with the test
+      suite, so this one is review. An exception needs a reason the file is not
+      UI chrome.
 - [ ] Exactly **one cyan accent per view**. If you're adding a second cyan,
       something else in that view should stop being cyan.
 - [ ] The brand gradient (`--color-brand-start → mid → end`) is on the wordmark
@@ -65,13 +65,13 @@ ancestor and inflates to fill the surface.
       one dial, `--ui-font-size` (14px). Roles, not sizes: `text-ui-xs` says
       "micro-label", `text-[10px]` says nothing and cannot be scaled — moving the
       dial leaves a hard-coded literal exactly where it was. **Status: every step
-      the ramp can express is migrated — 9, 10, 11, 12 and 13px are all banned by
-      `tests/typeRamp.test.ts` and none appears in the source** (`dense` was the
+      the ramp can express is migrated — 9, 10, 11, 12 and 13px appear nowhere in
+      the source, though nothing bans them now that the suite is gone** (`dense` was the
       step 11px needed; `sm`/`caption` took 12/13px with no pixel movement). The
       literals are gone: 8px became `micro` (base − 6) and 15px became `lede`
       (base + 1), each exact at the default dial, on the same pattern `dense`
-      used for 11px. `tests/typeRamp.test.ts` now also bans a pixel literal on
-      ANY heading tag, so hero and card titles cannot drift back. Display type
+      used for 11px. A pixel literal on ANY heading tag is banned the same way —
+      by hand now, not by a check, so do not put one back. Display type
       has roles too — `display` (base + 12) and `hero` (base + 18). Do not add a
       new literal: name the role, or add the step deliberately and say why.
       `2xs` (9px) and `micro` (8px) are the dense-data floors and should not be
@@ -104,7 +104,7 @@ ancestor and inflates to fill the surface.
 - [ ] No `transition-all` — it animates geometry as well as paint, which is how
       a disclosure or a growing stream chunk slides the layout. Name the
       property: `transition-colors`, `transition-transform`,
-      `transition-[width]`. Enforced repo-wide by `tests/themeContrast.test.ts`.
+      `transition-[width]`. Not machine-enforced since the suite went: this is review.
       A duration longer than 180ms is allowed only where it animates a data
       value (a progress bar's width, the tick-flash read), and it says so.
 - [ ] No new `@keyframes`. The existing tick-flash and beacon patterns are the
@@ -137,15 +137,15 @@ ancestor and inflates to fill the surface.
       889 until 2026-10-21, when the tree was already under it and the number
       had become a figure nobody could check — a ratchet that is above the
       count it ratchets is not a ratchet.)
-- [ ] `npm run typecheck && npm run test && npm run build`.
-- [ ] **Look at it in a browser.** jsdom cannot see an inflated pill, a clipped
+- [ ] `npm run typecheck && npm run build`, with `npm run lint` inside the ratchet.
+- [ ] **Look at it in a browser.** No gate here sees an inflated pill, a clipped
       column, or a layout that only breaks at 800px — the Electron floor. Every
-      UI workstream in this repo has caught real defects at this step that the
-      suite passed.
-- [ ] New/merged surface ⇒ a jsdom smoke test (pattern:
-      `tests/learnSurface.test.tsx`, `tests/agentsSurface.test.tsx`).
+      UI workstream in this repo has caught real defects at this step that
+      everything else passed.
+- [ ] New/merged surface ⇒ walk it in `npm run render-probe`, the only gate that
+      can see a surface mount.
 - [ ] Anything that touches `index.css` focus or theme rules ⇒ `npm run
-      render-probe`. jsdom mounts markup and never resolves a stylesheet, so a
-      rule that silently removes an outline (or repaints a surface) passes the
-      whole suite; the probe Tab-focuses real fields in a browser and reads the
+      render-probe`. No other gate resolves a stylesheet, so a rule that
+      silently removes an outline (or repaints a surface) passes everything
+      else; the probe Tab-focuses real fields in a browser and reads the
       computed indicator back in both states.

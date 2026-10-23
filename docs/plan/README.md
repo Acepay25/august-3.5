@@ -69,10 +69,10 @@ three of them are blocked behind a decision.
 | # | action | impact | gate |
 |---|---|---|---|
 | 1.1 | **Re-tighten the lint ratchet** — delete the 8 dead disable directives, then set `--max-warnings 674`. **Do this FIRST in the phase:** every dead import removed lowers the count, and the cap must be lowered in the same change. | the gate starts catching regressions again | `npm run lint:loose` → ≤ 674 · `npm run lint` → 0 |
-| 1.2 | **Close the CSP's unused remote origins** — remove the three TradingView hosts from `script-src`/`frame-src`/`img-src` and fix the comment that says they are used. | the only remote-script hole, closed for free | `typecheck` · `lint` · `test` · **`build`** · **`boot-probe`** |
-| 1.3 | **Surface the swallowed failures** — the auto-backup and the pattern-memory sync. | a silent backup failure is the worst kind | `typecheck` · `lint` · `test` |
-| 1.4 | **One ticker, not 400** — the per-row intervals and the 1-second whole-surface clock. | speed | `typecheck` · `lint` · `test` · **`render-probe`** |
-| 1.5 | **Validate the sender frame on every IPC handler.** | defence in depth for the only privileged surface | `typecheck` · `lint` · `test` · **`typecheck:electron`** |
+| 1.2 | **Close the CSP's unused remote origins** — remove the three TradingView hosts from `script-src`/`frame-src`/`img-src` and fix the comment that says they are used. | the only remote-script hole, closed for free | `typecheck` · `lint` · **`build`** · **`boot-probe`** |
+| 1.3 | **Surface the swallowed failures** — the auto-backup and the pattern-memory sync. | a silent backup failure is the worst kind | `typecheck` · `lint` |
+| 1.4 | **One ticker, not 400** — the per-row intervals and the 1-second whole-surface clock. | speed | `typecheck` · `lint` · **`render-probe`** |
+| 1.5 | **Validate the sender frame on every IPC handler.** | defence in depth for the only privileged surface | `typecheck` · `lint` · **`typecheck:electron`** |
 | 1.6 | **Register the two un-recorded backup namespaces** (`trade_sidebar_open_v1`, `agent_threads_opened_v1`) — with the owner's eye on the shared WebView quota. | no silent native data loss | `test` incl. the 5 export suites |
 | 1.7 | **Lower the bundle ratchet** — 2,600 kB → ~1,400 kB, plus a step that fails when the ceiling is stale. | the gate starts catching eager-import regressions | `build` |
 
@@ -80,11 +80,11 @@ three of them are blocked behind a decision.
 
 | # | action | gate |
 |---|---|---|
-| 2.1 | **Write the test the roster deletion needed** — *"no test covered the seeding, so removing it turned nothing red."* | `npm run test` |
-| 2.2 | **One R:R, one formula** — make `utils/riskReward.ts` the single owner; delete the three other copies. **Replay the stored trades and diff the old and new verdicts before merging.** | `typecheck` · `lint` · `test` · `test:coverage` · **`render-probe`** |
-| 2.3 | **The cost model** — `netR` = gross R − a **user-set** fee and slippage. The fee tier must be the trader's setting, never a hardcoded exchange rate. | `typecheck` · `lint` · `test` · `test:coverage` |
-| 2.4 | **The prompt contract test** — four tests, one per model-call path, asserting what is **sent**. *This is the gate that would have caught F-01, F-09, F-10 and E-09.* | `typecheck` · `lint` · `test` |
-| 2.5 | **Re-home the position sizing** — wire `utils/ticketSize.ts` into the card and the journal. | `typecheck` · `lint` · `test` · **`render-probe`** |
+| 2.1 | **Write the test the roster deletion needed** — *"no test covered the seeding, so removing it turned nothing red."* | **`render-probe`** (the unit suite this assumed is gone) |
+| 2.2 | **One R:R, one formula** — make `utils/riskReward.ts` the single owner; delete the three other copies. **Replay the stored trades and diff the old and new verdicts before merging.** | `typecheck` · `lint` · **`render-probe`** |
+| 2.3 | **The cost model** — `netR` = gross R − a **user-set** fee and slippage. The fee tier must be the trader's setting, never a hardcoded exchange rate. | `typecheck` · `lint` |
+| 2.4 | **The prompt contract test** — four tests, one per model-call path, asserting what is **sent**. *This is the gate that would have caught F-01, F-09, F-10 and E-09.* | `typecheck` · `lint` |
+| 2.5 | **Re-home the position sizing** — wire `utils/ticketSize.ts` into the card and the journal. | `typecheck` · `lint` · **`render-probe`** |
 | 2.6 | **The docs restructure** — write the 8 documents, archive the rest, repair `docs/app-flow.md`'s anchors. | **`check-flow-doc-anchors`** |
 
 ### Phase 3 — the behavioural corrections *(need the Phase 0.4 decisions)*
@@ -123,8 +123,9 @@ three of them are blocked behind a decision.
    asserts the notebook **bytes** after a real click.
 4. **A change to rendered text needs `render-probe`.** It is the only gate that can see a rendered
    row or a rendered string; jsdom mounts markup without resolving a stylesheet.
-5. **A change to `ExportService` needs the five export suites** — a backup change is invisible to
-   every other gate.
+5. **A change to `ExportService` has no automated gate** — the five export suites went with
+   the test suite on 2026-10-23, and a backup change is invisible to every other gate:
+   exercise export → wipe → import by hand.
 6. **Never raise a numeric ceiling to go green.** The lint cap, the bundle ceiling and the coverage
    floors all ratchet **down**.
 7. **Do not widen the RAW localStorage list "for safety."** The WebView origin quota is shared;
@@ -182,7 +183,7 @@ These are not in the ordering report's numbered list; they are real, and they ar
 
 | mechanism | what it protects |
 |---|---|
-| **`npm run check-flow-doc-anchors`** | the line-number claims in `docs/app-flow.md` — **410** anchors verified, 0 unattributed (measured 2026-10-23; this file is not one of the gate's own documents, so the figure is restated by hand and had drifted from 296). **It cannot see a citation that names no symbol**, which is exactly where the stale ones live; that class is repaired by hand (§14 of the cleanup manifest). |
+| **`npm run check-flow-doc-anchors`** | the line-number claims in `docs/app-flow.md` — **396** anchors verified, 0 unattributed (measured 2026-10-23; this file is not one of the gate's own documents, so the figure is restated by hand and had drifted from 296). **It cannot see a citation that names no symbol**, which is exactly where the stale ones live; that class is repaired by hand (§14 of the cleanup manifest). |
 | **`npm run render-probe`** | the rendered transcript. The only gate that can see a rendered row. |
 | **`npm run skill-approval-probe`** | the human-actuation path. Asserts notebook **bytes** after a real click. |
 | **the open-items register** (`open-items.md`) | every claim carries a `file:line` that proves it is open **at HEAD**. It is a *measurement*, not a transcription — which is why it corrected five rows from the previous audit rather than repeating them. |

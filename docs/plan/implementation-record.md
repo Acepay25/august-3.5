@@ -1278,7 +1278,9 @@ warnings under the 659 cap · `check-flow-doc-anchors` ok with the AGENTS.md cen
 writes into `services/trade/chartDrawings.ts`, reach the canvas through the drawing overlay rather
 than this effect; they remain asserted at the data level only (`tests/chartDrawings.test.ts:200`,
 `tests/drawingGeometry.test.ts`), not as drawn pixels. `render-probe` gained no new level assertion
-in this pass. §4, §3, §5, §6 and §1 of E-57 are still open.
+in this pass. §4, §3, §5 and §6 landed afterwards, in §29–§32; §1 landed as
+`services/learning/settlementReflection.ts`, awaited from `hooks/useTradeLogging.ts:525`.
+Nothing in E-57 remains open.
 
 ## 29. E-57 §4 — a failed turn is never a finished answer, in either home (2026-10-22)
 
