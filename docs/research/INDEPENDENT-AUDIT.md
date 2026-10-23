@@ -182,3 +182,49 @@ run total 33,020 / 5,959); and (ii) §4.2's three header anomalies survive the r
 so the merge script's tolerance is load-bearing and undocumented — **still open**.
 The `dsh-web-deliverables-feedback` per-file read claims are now complete: 206 read,
 19 skipped with a reason.
+
+## 6. A second, independent citation census (2026-10-23) — and one class §2 did not measure
+
+The lead re-ran §2's measurement with a different tool (a resolver built for this
+session's own re-anchoring work, indexing `git ls-files` in all three pinned clones and
+matching exact → suffix → basename), over the 93 shard reports **plus** the three
+syntheses and `TRADING-IMPROVEMENTS.md`: **7,175 citations, of which 4,354 are
+path-qualified and resolvable to a tracked file and 2,821 (39 %) are written as a bare
+basename**. The two rates this tool can state without ambiguity are
+**no-such-file 0.32 % (14 / 4,354)** and **past-EOF 0.9 % (39 / 4,354)** — which agree
+with §2's `16 / 7,025 = 0.2 %` and `64 / 7,025 = 0.9 %` on the same defect classes. The
+comparison is directional, not identical: §2's matcher also credited *unambiguous*
+basenames as resolvable, and this one deliberately did not, so its 88.4 % resolvable rate
+is a wider net than the 4,354 counted here. That reproduces two of its hand-adjudicated
+rows exactly (`packages/core/agent-loop/src/runtime-types.ts`
+→ the file is `packages/core/agent/src/runtime-types.ts`; `cron/cron-model.ts` → the file is
+`apps/desktop/src/app/cron/cron-job-model.ts`, whose `:78` really does
+`return { provider: parsed[0], model: parsed[1] }`, so the claim stands and only the path
+is wrong). **Conclusion: §2's verdict survives a second measurement, and the defect class
+is still line drift, not fabrication.**
+
+Two things §2 did not measure, which this pass adds:
+
+1. **172 of the 4,354 path-qualified citations (3.9 %) land on a BLANK LINE.** A
+   blank line is not evidence: `agent.ts:311`, `proxy.ts:113` and
+   `apps/desktop/src/app/cron/…` style cites sit one or two lines past the construct they
+   describe. It is a small imprecision, not a credibility failure — but it is exactly the
+   category the repo's own anchor gate refuses to accept in `docs/app-flow.md`, so the
+   corpus is held to a looser standard than the flow docs, and §2's buckets hid that.
+2. **The `SYMBOL-MISS` heuristic is unusable here and was discarded.** 929 citations name a
+   backticked identifier that the cited line does not carry — but the sample that was
+   hand-checked is all one shape: a shard report citing a deepseek `SKILL.md` line while
+   naming the *August* symbols it is being compared against
+   (`dsh-agent-skills.md:96` cites `.agents/skills/dsh-find-simplifications/SKILL.md:22`
+   beside `toolForge`, `Message`, `WireAuditEntry`). A pairing rule that works on one
+   codebase's flow docs cannot be widened over a comparative corpus without inventing
+   hundreds of false defects, which is worth recording as a limit on the method rather
+   than a finding.
+
+**And one of §8's own attestations was too strong.** `pi/ARCHITECTURE.md`'s lead
+spot-check claimed the crash-loop breaker and `restartLimit` default were "verified
+exactly, at the cited lines". Re-opening them: `scheduler.ts:1364` is blank (the comment is
+`:1365`, the predicate `:1366-1367`), and `agent.ts:56` is the comment while
+`DEFAULT_RESTART_LIMIT = 5` is `:57`. Both corrections are now in that file, stated as
+corrections rather than silently restated — the same rule this audit applied to the ledger
+in §4.1.
