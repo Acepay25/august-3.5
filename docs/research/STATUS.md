@@ -337,3 +337,26 @@ ledgers into the manifest and diffs it against `git ls-files`), then
   the sweep, not by the earlier byte-identity pass, which cannot see a line it never moved.
   The pi synthesis's "verified exactly" attestation now says *verified, with two
   one-line corrections stated*.
+- **07:10 (2026-10-23)** — **The deepseek round-2 read yielded one real data defect,
+  fixed; the pi round-2 read yielded the scheduling-holes register.** Fixed:
+  `model_confidence_calibration` was counters-only, so a re-settled or deleted trade
+  never un-counted its sample while the Brier summary read the buckets as live
+  (`ModelPerformanceService.ts:1226`). It now rebuilds at boot from the same trade log
+  the other two rebuilds consume (`syncConfidenceCalibrationFromTradeLog`,
+  `hooks/useUserProfileLoader.ts:448`), sharing the ONE credit derivation, preserving
+  the legacy shelf, and skipping the persist when nothing changed. Proved both ways:
+  incremental-then-rebuild byte-identical, a WIN→LOSS re-settlement moves `highGap`
+  −30 → +70, mirrored plans count in neither writer, and the boot wiring is asserted
+  behaviourally in `useUserProfileLoader.test.tsx`. **Registered, not built:** a crashed
+  scheduled run escapes the 3-strike breaker (it counts only settled rows; pi counts the
+  death itself), a catch-up re-run can double-execute `present_trade` (pi records a
+  per-tool `replay` policy into the committed intent before executing), and the
+  route-A dead end wants a re-queue-to-inbox migration — all three are design
+  decisions, recorded in `implementation-record.md` §38 with the reference lines. Two
+  of the new tests were written wrong first (the Brier term for a loss is anchor², and
+  the module cache outlives `localStorage.clear()`), and a `memorySurfaces` flake was
+  investigated and exonerated with receipts: fail / pass / pass across three isolated
+  runs of the identical code, a panel that never mounts the loader, and a `waitFor`
+  window so thin that adding two `console.log` calls flips it. Gates: **515 files /
+  5,362 tests, `tsc` clean, eslint 0/655 (the first cut leaked 4 unused-import
+  warnings; baseline restored), anchors 410.**

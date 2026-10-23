@@ -73,3 +73,83 @@ describe('syncFromTradeLog — rebuild uses the same credit as the incremental p
         expect(provA.overallStats.total).toBe(2);
     });
 });
+
+describe('syncConfidenceCalibrationFromTradeLog — the buckets are derived, not accumulated', () => {
+    // `analysis.confidence` is what the incremental writer buckets on; the
+    // consensus entry decides whether the sample is a win for THIS provider.
+    const highCall = (providerId: string, callDirection = 'Long'): TradeAnalysis =>
+        ({ ...analysisWithConsensus('Long', providerId, callDirection), confidence: 'High' }) as unknown as TradeAnalysis;
+
+    // The service keeps its buckets in a module-level cache that deliberately
+    // outlives localStorage.clear(), so each test gets a FRESH module — the
+    // same reason syncFromTradeLog resets its own cache on rebuild.
+    let svc: typeof import('../services/backtesting/ModelPerformanceService');
+    beforeEach(async () => {
+        localStorage.clear();
+        vi.resetModules();
+        svc = await import('../services/backtesting/ModelPerformanceService');
+    });
+
+    it('a rebuild reproduces exactly what the incremental writer counted — two writers, one format', () => {
+        const trades = [
+            loggedTrade({ id: 'a', analysis: highCall('provA') }),
+            loggedTrade({ id: 'b', outcome: TradeOutcome.LOSS, analysis: highCall('provA') }),
+        ];
+        // The incremental path, verbatim from useTradeLogging.ts:177-191.
+        for (const t of trades) {
+            const isWin = t.outcome === TradeOutcome.WIN;
+            for (const p of svc.getTradeProviders(t)) {
+                svc.recordProviderConfidenceCalibration(
+                    p, (t.analysis as TradeAnalysis).confidence || 'Medium',
+                    svc.creditedWinForAnalyst(t.analysis, isWin, p),
+                );
+            }
+        }
+        const incremental = svc.getCalibrationSummaries().find(s => s.provider === 'provA');
+        svc.syncConfidenceCalibrationFromTradeLog(trades);
+        const rebuilt = svc.getCalibrationSummaries().find(s => s.provider === 'provA');
+        // If these drift apart, one of the two writers has its own idea of what
+        // a sample is, and the Brier panel changes shape across a restart.
+        expect(rebuilt?.samples).toBe(incremental?.samples);
+        expect(rebuilt?.brierScore).toBe(incremental?.brierScore);
+        expect(rebuilt?.samples).toBe(2);
+    });
+
+    it('a re-settled trade un-counts on the next rebuild (the counters-only defect)', () => {
+        // Logged as a WIN at High confidence…
+        svc.recordProviderConfidenceCalibration('provA', 'High', true);
+        expect(svc.getCalibrationSummaries().find(s => s.provider === 'provA')?.highGap).toBe(-30);
+        // …then re-settled to a LOSS. The incremental writer has no reverse
+        // gear, so the ONLY honest fix is deriving from the log: declared 70 %,
+        // realized 0 % ⇒ gap +70, not the stale −30 of a bucket that never
+        // heard about the re-settlement. The Brier term for a LOSS at the 0.7
+        // anchor is anchor² = 0.49 — a win would have been (1−0.7)² = 0.09.
+        svc.syncConfidenceCalibrationFromTradeLog([
+            loggedTrade({ id: 'a', outcome: TradeOutcome.LOSS, analysis: highCall('provA') }),
+        ]);
+        const s = svc.getCalibrationSummaries().find(x => x.provider === 'provA');
+        expect(s?.samples).toBe(1);
+        expect(s?.highGap).toBe(70);
+        expect(s?.brierScore).toBeCloseTo(0.49, 4);
+    });
+
+    it('a mirror-corrected plan counts in NEITHER writer', () => {
+        // The incremental writer skips mirrored plans (providers = []), so the
+        // rebuild must skip the same rows or a corrected trade starts counting
+        // for a call the model never made.
+        svc.syncConfidenceCalibrationFromTradeLog([
+            loggedTrade({ id: 'm', analysis: { ...highCall('provA'), levelsCorrected: true } as unknown as TradeAnalysis }),
+        ]);
+        expect(svc.getCalibrationSummaries().find(s => s.provider === 'provA')).toBeUndefined();
+    });
+
+    it('a provider the log cannot reconstruct survives the rebuild (the legacy shelf)', () => {
+        svc.recordProviderConfidenceCalibration('legacy-provider', 'Low', false);
+        svc.syncConfidenceCalibrationFromTradeLog([
+            loggedTrade({ id: 'x', analysis: highCall('provA') }),
+        ]);
+        const providers = svc.getCalibrationSummaries().map(s => s.provider);
+        expect(providers).toContain('legacy-provider');
+        expect(providers).toContain('provA');
+    });
+});

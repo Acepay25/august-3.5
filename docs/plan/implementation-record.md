@@ -1869,3 +1869,77 @@ writers of `approvedBy: 'human'` are a draft approval and a queued rewrite
 and neither exists for a file the closed-trade loop minted. Honest `Off` with no lever is
 still a dead end; the small fix is one Approve press on the skill card beside Undo, which
 is a product decision, not a repair.
+
+---
+
+## 38. The buckets that never un-counted, and what the harness deep-reads found (2026-10-23)
+
+**From the deepseek round-2 review, one real data defect, fixed.** The per-provider
+confidence-calibration store (`model_confidence_calibration`,
+`services/backtesting/ModelPerformanceService.ts:1226`) is counters-only — wins/total
+with no entry log — so a trade that was re-settled, deleted or mirror-corrected after the
+fact never un-counted its sample, while the Brier summary on the profile read the buckets
+as live. The fix follows the pattern the reference calls "possibly stale, never wrong"
+and the repo already uses twice on the same file: rebuild at boot from the same trade log
+(`syncConfidenceCalibrationFromTradeLog`, called at
+`hooks/useUserProfileLoader.ts:448` beside `syncFromTradeLog` and
+`syncRollingWindowFromTradeLog`), sharing the ONE derivation with the incremental writer
+(`getTradeProviders` + `creditedWinForAnalyst` + the same `levelsCorrected` skip), so the
+two writers cannot disagree. A provider the log cannot reconstruct (the migrated legacy
+shelf) is preserved, not dropped; and an identity rebuild is not persisted, because the
+Preferences write queue is shared with every boot read and a no-change write buys nothing
+but latency. Proved: incremental-then-rebuild produces byte-identical summaries (the
+two-writers contract); a WIN re-settled to LOSS moves `highGap` from −30 to +70; a
+mirrored plan counts in neither writer; and the boot wiring is pinned behaviourally in
+`tests/useUserProfileLoader.test.tsx` (the mock now asserts the call receives the same
+mapped rows). Two of this suite's own tests were written wrong first (expected
+`(1−p)²` for a loss; bucket state leaked through the module cache until the tests
+re-imported the module), which is recorded because a test that passes for the wrong
+reason is worse than one that fails.
+
+**Recorded, not built — the owner's call, from both deep reads:**
+
+- **A crashed scheduled run escapes the 3-strike breaker** (pi round-2, verified against
+  `hooks/useAutomations.ts:287-290`: the breaker counts only *settled* `error|skipped`
+  rows, and a run that dies mid-call writes no row, so catch-up re-fires while the
+  breaker stays blind — `pi` counts the death itself at `scheduler.ts:394-412`). The
+  repair is to write the run row before the provider call and settle the orphan as a
+  strike on boot. This changes what a schedule row looks like mid-run, so it is a design
+  decision, not a patch.
+- **A catch-up re-run can double-execute `present_trade`** — two identical plans armed
+  from one schedule after a crash (pi declares per-tool `replay: safe|unsafe` and records
+  it into the committed intent before execution, `tool.ts:181-197`; August's only analog
+  is the in-memory 30 s tool cache). Same decision family: an idempotency key of
+  `(automationId, tickIso)` would close it.
+- **A provider-compat table** (pi's flag-shaped answer to per-provider wire quirks):
+  three August branches qualify — the reasoning-capability regexes with no user override
+  (`services/providers/reasoningControls.ts:162-190`), the json_schema→json_object
+  response-format ladder (`GenericProviderService.ts:536-566`), and the hardcoded
+  `max_tokens` field. The four-format dispatch and the dev-proxy routing do NOT qualify.
+  Deferred, exactly as the proposals document said.
+- **The dead-end skill state** (route-A files reading `Off` with no approving press):
+  both references point the same way — the refusal naming the missing action is already
+  done (`SkillDetail.tsx:150-153`), and what fits is a **migration that re-queues**
+  unapproved non-draft files into the existing Approvals inbox, the shape deepseek's
+  blocked-goal reason (`goal/src/types.ts:45-66`) and August's own draft inbox both use.
+  Not built: it creates inbox rows, which is a product decision.
+- **Does not transfer:** pi's storage kernel and mutation line (August is single-seat; a
+  turn-start row buys the invariant without an engine), deepseek's file-backed spill
+  locator (August's id-based artifact store with `read_tool_output` paging already gives
+  the model what it needs, `DeskToolsService.ts:755-756`, `:2939`), and a per-format
+  adapter package for the wire (a fifth format would edit ~10 `apiFormat` sites, but a
+  reference-style adapter package fragments the retry/timeout/error mapping all four
+  formats share).
+
+**Gates.** `tsc` clean · 515 files / **5,362 tests**, 0 skipped (+4) · eslint 0 errors /
+655 warnings (baseline restored after the first cut of the tests leaked 4 unused-import
+warnings) · anchors 410, 0 unattributed.
+
+**A flake was investigated and exonerated, with the receipts.** `tests/memorySurfaces.test.tsx
+> the Details are a bulleted list` failed in the first full run after this change and was
+proven NOT caused by it: the panel mounts standalone and never touches the loader, and
+three isolated runs of the same test with this change in place returned
+fail / pass / pass. The real signal is the test's own margin — the same test that failed
+passed with two `console.log` calls added, so its `waitFor` window is hair-thin. That is
+a bug report about `MemoryTopicPanel`'s async load, filed here rather than papered over
+with a longer timeout.
