@@ -9,6 +9,7 @@ import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { initPromptOverrides } from '../services/infrastructure/PromptOverrideService';
 import { initStrategyDocs } from '../services/infrastructure/StrategyService';
 import { initMemoryFiles } from '../services/learning/MemoryFilesService';
+import { syncConfidenceCalibrationFromTradeLog } from '../services/backtesting/ModelPerformanceService';
 
 vi.mock('../services/infrastructure/dbService', () => ({
     initDatabase: vi.fn().mockResolvedValue(undefined),
@@ -25,6 +26,7 @@ vi.mock('../services/backtesting/ModelPerformanceService', () => ({
     initModelPerformanceService: vi.fn().mockResolvedValue(undefined),
     syncFromTradeLog: vi.fn(),
     syncRollingWindowFromTradeLog: vi.fn(),
+    syncConfidenceCalibrationFromTradeLog: vi.fn(),
 }));
 
 vi.mock('../services/ui/AnalystLensService', () => ({
@@ -218,6 +220,12 @@ describe('useUserProfileLoader', () => {
         expect(args.setIsLoading).toHaveBeenCalledWith(true);
         expect(args.setConversationHistory).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1', leverage: 100 })]);
         expect(args.setLoggedTrades).toHaveBeenCalledWith([expect.objectContaining({ id: 't1' })]);
+        // The confidence buckets are counters with no reverse gear, so the
+        // loader must rebuild them from the SAME mapped rows the other two
+        // rebuilds consume — a second log read is how the numbers drift apart.
+        expect(syncConfidenceCalibrationFromTradeLog).toHaveBeenCalledWith([
+            expect.objectContaining({ id: 't1', leverage: 100 }),
+        ]);
         expect(args.setActiveConversationId).toHaveBeenCalledWith('c1');
         expect(args.setActiveUsername).toHaveBeenCalledWith('alice');
         expect(result.current.profileReady).toBe(true);

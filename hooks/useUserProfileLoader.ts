@@ -5,6 +5,7 @@ import {
     initModelPerformanceService,
     syncFromTradeLog,
     syncRollingWindowFromTradeLog,
+    syncConfidenceCalibrationFromTradeLog,
 } from '../services/backtesting/ModelPerformanceService';
 import { initPromptOverrides } from '../services/infrastructure/PromptOverrideService';
 import { initStrategyDocs } from '../services/infrastructure/StrategyService';
@@ -445,6 +446,10 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 const tradeLogData = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || LEGACY_LEVERAGE }));
                 syncFromTradeLog(tradeLogData);
                 syncRollingWindowFromTradeLog(tradeLogData);
+                // The confidence buckets are counters with no entry log, so a
+                // re-settled trade never un-counted; rebuild them from the same
+                // rows (legacy-only providers are preserved, not dropped).
+                syncConfidenceCalibrationFromTradeLog(tradeLogData);
 
                 const lastActive = convs.find(c => c.id === profile.lastActiveConversationId) || convs[0];
                 setActiveConversationId(lastActive.id);

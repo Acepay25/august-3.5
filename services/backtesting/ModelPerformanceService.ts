@@ -1247,6 +1247,62 @@ export const recordProviderConfidenceCalibration = (
 };
 
 /**
+ * Rebuild the per-provider confidence buckets from the trade log at boot, the
+ * way `syncFromTradeLog` rebuilds the performance ledger beside it.
+ *
+ * `recordProviderConfidenceCalibration` is counters-only — wins/total with no
+ * entry log — so a trade that is re-settled, deleted or mirror-corrected after
+ * the fact never un-counts its sample, and the Brier summary reads the buckets
+ * as live. Rebuilding from the same rows the incremental writer consumed makes
+ * the store "possibly stale, never wrong", and BOTH writers share the one
+ * derivation (`getTradeProviders` + `creditedWinForAnalyst` + the same
+ * levelsMirrored skip), so they cannot quietly disagree.
+ *
+ * Providers the log cannot reconstruct (the migrated legacy shelf) are kept,
+ * not dropped: a rebuild that loses rows is its own kind of wrong.
+ */
+export const syncConfidenceCalibrationFromTradeLog = (trades: LoggedTrade[]): void => {
+    const rebuilt: ModelConfidenceCalibrationData['providers'] = {};
+    for (const trade of trades) {
+        if (trade.outcome !== 'WIN' && trade.outcome !== 'LOSS') continue;
+        const isWin = trade.outcome === 'WIN';
+        // The incremental writer credits NOTHING for a mirrored plan
+        // (`levelsCorrected` hides the model's own call), so the rebuild must
+        // skip the same rows or a corrected trade would start counting.
+        if (trade.analysis?.levelsCorrected === true) continue;
+        const confidence = (trade.analysis?.confidence || 'Medium').toLowerCase();
+        if (confidence !== 'high' && confidence !== 'medium' && confidence !== 'low') continue;
+        for (const p of getTradeProviders(trade)) {
+            const creditedWin = creditedWinForAnalyst(trade.analysis, isWin, p);
+            const buckets = rebuilt[p] || {
+                high: { wins: 0, total: 0 },
+                medium: { wins: 0, total: 0 },
+                low: { wins: 0, total: 0 },
+            };
+            buckets[confidence] = {
+                wins: buckets[confidence].wins + (creditedWin ? 1 : 0),
+                total: buckets[confidence].total + 1,
+            };
+            rebuilt[p] = buckets;
+        }
+    }
+    const existing = loadConfidenceCalibrationData();
+    _confidenceCalibrationCache = {
+        providers: { ...existing.providers, ...rebuilt },
+        lastUpdated: new Date().toISOString(),
+    };
+    // An identity rebuild is not persisted. The Preferences write queue is
+    // shared with every other boot read, and a write that changes nothing
+    // buys nothing but latency — which is exactly what a marginal reader
+    // downstream cannot afford.
+    if (JSON.stringify(existing.providers) !== JSON.stringify(_confidenceCalibrationCache.providers)) {
+        setPreferenceObject(CONFIDENCE_CALIBRATION_STORAGE_KEY, _confidenceCalibrationCache).catch(e =>
+            console.warn('[ModelPerformance] Failed to save rebuilt confidence calibration:', e)
+        );
+    }
+};
+
+/**
  * Load confidence calibration data
  */
 const loadConfidenceCalibrationData = (): ModelConfidenceCalibrationData => {
