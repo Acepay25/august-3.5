@@ -679,18 +679,13 @@ const providers = deletedProviders
     : [];
 // ── AGENTS.md numbers, measured the same way ─────────────────────────────────
 // AGENTS.md is the first file an agent reads, and its citations are scanned above,
-// but it also carries counts no rule reached: how many smoke tests Playwright runs,
-// the vitest census, and which npm steps exist in one workflow and not the other.
-// Each is recomputed from the tree — a claim that cannot be reproduced is a claim
-// the gate should refuse, not a sentence someone re-reads by eye.
+// but it also carried counts no rule reached: how many smoke tests Playwright runs
+// and the vitest census. **Those two arms were removed on 2026-10-23 with the test
+// suite they counted** — the census sentence and the `git ls-files tests` file count
+// went with it, and the gate no longer reads `e2e/` or `tests/` at all. What remains
+// of this section is the one count no rule reached that is still live: which npm
+// steps exist in one workflow and not the other, recomputed from the two files.
 const AGENTS_FILE = path.join(ROOT, 'AGENTS.md');
-function smokeTests() {
-    return (fs.readFileSync(path.join(ROOT, 'e2e', 'smoke.spec.ts'), 'utf8').match(/^\s*test\(/gm) || []).length;
-}
-function trackedTestFiles() {
-    return execFileSync('git', ['ls-files', 'tests'], { cwd: ROOT, encoding: 'utf8' })
-        .split('\n').map(l => l.trim()).filter(l => /\.test\.[cm]?[jt]sx?$/.test(l)).length;
-}
 function wfRuns(rel) {
     return new Set((fs.readFileSync(path.join(ROOT, rel), 'utf8').match(/npm run [a-z0-9:._-]+/g) || [])
         .map(x => x.slice('npm run '.length)));
@@ -708,26 +703,6 @@ function namesWholeWord(text, name) {
 }
 function agentsClaims(atext) {
     const out = [];
-    const smoke = smokeTests();
-    for (const m of atext.matchAll(/(\d+)\s+smoke tests/g)) {
-        if (+m[1] !== smoke) out.push(`AGENTS.md says ${m[1]} smoke tests; e2e/smoke.spec.ts defines ${smoke}`);
-    }
-    if (smoke === 0) out.push('the smoke census measured 0 tests in e2e/smoke.spec.ts — the scan has no population');
-    const testFiles = trackedTestFiles();
-    const c = atext.match(/(\d+)\s+tests\s+in\s+(\d+)\s+files:\s*(\d+)\s+pass\s+in\s+(\d+)\s+and\s+(\d+)\s+skip/);
-    if (!c) out.push('AGENTS.md no longer states the vitest census in the form the gate can check');
-    else {
-        const [, t, f, p, pf, sk] = c;
-        if (+t !== +p + +sk) out.push(`AGENTS.md census: ${t} tests, but ${p} pass + ${sk} skip = ${+p + +sk}`);
-        // The skipped-FILE count is read from the sentence (it defaulted to a
-        // hard-coded 1 while one measure file was skipped wholesale; that file
-        // went with the analyst-role deletion, so 0 is now a legal state).
-        const skipMatch = atext.match(/(\d+)\s+wholly-skipped files?/);
-        const skippedFiles = skipMatch ? +skipMatch[1] : 1;
-        if (+f !== +pf + skippedFiles) out.push(`AGENTS.md census: ${f} files, but ${pf} pass + ${skippedFiles} wholly-skipped = ${+pf + skippedFiles}`);
-        if (+f !== testFiles) out.push(`AGENTS.md census says ${f} test files; git tracks ${testFiles} under tests/`);
-    }
-    if (testFiles < 400) out.push(`git ls-files tests returned ${testFiles} files; the census has no population to bind to`);
     const { ciOnly, relOnly } = asymmetry();
     // The asymmetry is only a claim while the doc prints its recipe beside it, so
     // the names are checked in that paragraph — not "somewhere in a 160-line file".
@@ -748,22 +723,21 @@ function agentsClaims(atext) {
 const AGENTS_TEXT = fs.readFileSync(AGENTS_FILE, 'utf8');
 const plant = (re, rep) => agentsClaims(AGENTS_TEXT.replace(re, rep));
 const agentsArms = [
-    { msg: 'a +2 smoke-test count planted in the real sentence passed', check: () => plant(/(\d+)\s+smoke tests/, (m, d) => `${+d + 2} smoke tests`).some(m => /smoke tests; e2e/.test(m)) },
-    { msg: 'a census total planted 1 too high passed the arithmetic', check: () => plant(/(\d+)\s+tests\s+in\s+(\d+)\s+files:/, (m, t, f) => `${+t + 1} tests in ${f} files:`).some(m => /pass \+ \d+ skip =/.test(m)) },
-    { msg: 'a file count planted 7 off git ls-files passed', check: () => plant(/tests\s+in\s+(\d+)\s+files/, (m, f) => `tests in ${+f + 7} files`).some(m => /git tracks/.test(m)) },
-    { msg: 'a per-file pass count planted 1 off passed', check: () => plant(/pass\s+in\s+(\d+)/, (m, pf) => `pass in ${+pf + 1}`).some(m => /wholly-skipped =/.test(m)) },
     { msg: 'deleting the release-only step name from its own paragraph passed', check: () => plant(/`installer-smoke` is the only command/, () => 'the only command').some(m => /no longer names the asymmetric workflow step "installer-smoke"/.test(m)) },
     { msg: 'a doc that stopped naming its own recipe passed', check: () => plant(/comm -13/, () => 'comm -NN').some(m => /no longer quotes the comm -13 recipe/.test(m)) },
 ];
 const agentsControls = agentsArms.filter(a => !a.check()).map(a => a.msg);
 // Floor: the arm COUNT is a figure too. An arm quietly deleted from the list above
 // would make the pass silent, so the number of planted defects is asserted here.
-if (agentsArms.length < 6) agentsControls.push(`only ${agentsArms.length} AGENTS.md arms are planted; a rule with no defect to catch is not a rule`);
+// It is the LIVE arm count, lowered in the same change that removed an arm: it was
+// 6 while the smoke and vitest census arms existed; those four went with the test
+// suite on 2026-10-23, so the floor is the two that remain. Never lower it to pass.
+if (agentsArms.length < 2) agentsControls.push(`only ${agentsArms.length} AGENTS.md arms are planted; a rule with no defect to catch is not a rule`);
 if (agentsControls.some((c) => !c)) agentsControls.push('an AGENTS.md control arm produced an empty finding — it asserts nothing');
 const agents = agentsClaims(AGENTS_TEXT);
 agents.forEach(m => console.log(`  STALE CENSUS ${m}`));
 const asym = asymmetry();
-console.log(`agents-census: ${agents.length} AGENTS.md claim(s) disagree with the tree; ${agentsControls.length} of ${agentsArms.length} control arms failed — smoke tests ${smokeTests()}, test files ${trackedTestFiles()}, asymmetry ci-only [${asym.ciOnly.join(' ')}] release-only [${asym.relOnly.join(' ')}]`);
+console.log(`agents-census: ${agents.length} AGENTS.md claim(s) disagree with the tree; ${agentsControls.length} of ${agentsArms.length} control arms failed — asymmetry ci-only [${asym.ciOnly.join(' ')}] release-only [${asym.relOnly.join(' ')}]`);
 providers.forEach(m => console.log(`  STALE CENSUS ${m}`));
 const COVER_FLOOR = 52;
 const COVER_CITED_FLOOR = 52;
