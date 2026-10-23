@@ -319,3 +319,21 @@ ledgers into the manifest and diffs it against `git ls-files`), then
   at `config.ts:191-194`, not `:203-206`. The pi synthesis's own
   "6 of 6 claims verified; none false" line now carries the amendment, because that
   spot-check sampled the shard reports and never re-opened this summary.
+- **06:40 (2026-10-23)** — **A second citation census of the whole corpus, run by the
+  lead with a different tool than the audit's.** 7,175 citations across the 93 shard
+  reports + the three syntheses + the proposals: 4,354 path-qualified and resolvable,
+  2,821 (39 %) written as a bare basename. No-such-file **0.32 %**, past-EOF **0.9 %** —
+  independently reproducing §2's rates and two of its hand-adjudicated rows. New
+  measurement §2 did not have: **172 path-qualified citations (3.9 %) land on a BLANK
+  line** — the class the flow-doc gate refuses but the corpus never checked. Recorded in
+  `INDEPENDENT-AUDIT.md` §6, together with a heuristic this pass *discarded*: 929
+  "cited line does not carry the named symbol" flags are overwhelmingly shard reports
+  citing a deepseek `SKILL.md` line beside the August symbols it is compared with, so
+  the anchor gate's pairing rule cannot be widened over a comparative corpus without
+  inventing defects. Three verified line fixes applied: `scheduler.ts:1364` (blank;
+  comment `:1365`, predicate `:1366-1367`), `agent.ts:56` (the comment; the constant is
+  `:57`), and two `SkillMemoryService.ts` cites in P10's own section that this session's
+  commits had orphaned (`:3000→:3046`, `:3085→:3131`, `:3823→:3865`) — the last found by
+  the sweep, not by the earlier byte-identity pass, which cannot see a line it never moved.
+  The pi synthesis's "verified exactly" attestation now says *verified, with two
+  one-line corrections stated*.

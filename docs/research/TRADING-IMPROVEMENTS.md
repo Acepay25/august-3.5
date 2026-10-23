@@ -1020,10 +1020,13 @@ model as a broken promise and to the trader as a flaky system.
 Two related facts from the same area:
 
 - The IF/THEN auto-ingest writes a file with `prior: 'gated'` and **no
-  `approvedBy`** (`SkillMemoryService.ts:3000/3085`), so `isApprovedSkill` blocks it
+  `approvedBy`** (`SkillMemoryService.ts:3046` → `:3131`; the numbers this bullet
+  first carried, `:3000/3085`, were the tree before `e6787a8f` and now land on a blank
+  line), so `isApprovedSkill` blocks it
   — yet the index still names it.
 - The **hard avoid veto is live, but only on the plan path.**
-  `applyNotebookSkillsToAnalysis` (`SkillMemoryService.ts:3823`) is called at
+  `applyNotebookSkillsToAnalysis` (`SkillMemoryService.ts:3865`; `:3823` was its
+  line before this session moved the file) is called at
   `services/trade/presentTradeTool.ts:113`, and a fired AVOID **refuses the
   presentation** and writes the falsification ledger (`:114-133`). On the **chat**
   path there is no deterministic skill enforcement at all: the code-checked trigger's

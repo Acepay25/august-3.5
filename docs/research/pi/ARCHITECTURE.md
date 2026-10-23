@@ -323,9 +323,12 @@ than trusting the shard authors. `pi-ai`: the `StreamFunction` contract at
 `packages/ai/src/utils/overflow.ts:76-84`, and the validator's "Received arguments"
 echo at `packages/ai/src/utils/validation.ts:315-355` — **all three verified
 exactly, at the cited lines**. `pi-durable`: the crash-loop breaker at
-`packages/durable/src/harness/scheduler.ts:1364-1367` (*"A task cut off
-`restartLimit` times in a row"*, with the `#parked` predicate) and the
-`settings.restartLimit` default at `src/harness/agent.ts:56` — **verified exactly**.
+ `packages/durable/src/harness/scheduler.ts:1365-1367` — *"A task cut off
+`restartLimit` times in a row"* is the doc comment at `:1365` and the `#parked`
+predicate is `:1366-1367`; this citation used to begin at `:1364`, which is a blank
+line — and the `settings.restartLimit` default is `src/harness/agent.ts:57`
+(`export const DEFAULT_RESTART_LIMIT = 5;`), whose naming comment is `:56`.
+**Verified, with two one-line corrections stated rather than quietly restated.**
 **6 of 6 claims verified; none false** — *amended 2026-10-23: a later re-open found
 four claims of this file's own that were misattributed or miscounted (the ~90-flag census,
 the five-`additionalProperties` list, the overflow-before-retry attribution, and the
