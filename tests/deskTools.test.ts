@@ -7,6 +7,8 @@ import {
     stripTextToolCalls,
     formatToolResultsForModel,
     executeDeskTool,
+    seatAllows,
+    seatIsRestricted,
     toAnthropicTools,
 } from '../services/analysis/DeskToolsService';
 
@@ -155,5 +157,23 @@ describe('allowedTools is enforced in the EXECUTOR (transport-agnostic)', () => 
             { allowedTools: [] },
         );
         expect(res.ok).toBe(true);
+    });
+
+    // The polarity is ONE sentence — "absent or empty means unrestricted, a
+    // named list means exactly those tools" — and it had been hand-copied in
+    // four places and three shapes (the executor's deny-form, the offer-time
+    // filter, the forged-call refusal and the chart-tool filter). Each caller
+    // reads it from `seatAllows`, so the sentence has to be pinned once, here,
+    // rather than four times through the behaviour of four call sites.
+    it('the allow-list polarity has one readable home', () => {
+        expect(seatAllows(undefined, 'read_tool_output')).toBe(true);
+        expect(seatAllows([], 'read_tool_output')).toBe(true);
+        expect(seatAllows(['get_price_snapshot', 'read_tool_output'], 'read_tool_output')).toBe(true);
+        expect(seatAllows(['get_price_snapshot'], 'read_tool_output')).toBe(false);
+        // …and its other reading, which the mail/panel merge needs: widening a
+        // restricted list must leave an unrestricted one alone.
+        expect(seatIsRestricted(undefined)).toBe(false);
+        expect(seatIsRestricted([])).toBe(false);
+        expect(seatIsRestricted(['get_price_snapshot'])).toBe(true);
     });
 });

@@ -548,7 +548,24 @@ const TOOL_BUDGETS: Record<string, number> = {
  * of the very budget this file exists to protect.
  */
 export const spillReceiptAllowed = (allowedTools?: string[]): boolean =>
-    !allowedTools || allowedTools.length === 0 || allowedTools.includes('read_tool_output');
+    seatAllows(allowedTools, 'read_tool_output');
+
+/**
+ * The ONE home for the allow-list polarity: an absent or empty list means the
+ * seat is UNRESTRICTED, and a named list means exactly those tools. Both
+ * readings of that sentence live here — `seatIsRestricted` for callers that
+ * widen a restricted list, `seatAllows` for callers that test one name. It had
+ * been hand-copied five times in three shapes (the executor's deny-form, the
+ * offer-time filter, the forged-call refusal, the chart-tool filter and the
+ * mail/panel merge), which is how the same sentence drifts — and it is the
+ * seam the recorded P3 decision (fail-closed for unattended contexts) would
+ * flip, which should be a one-line change here, not five synchronized edits.
+ */
+export const seatIsRestricted = (allowedTools: readonly string[] | undefined): allowedTools is readonly string[] =>
+    Boolean(allowedTools && allowedTools.length > 0);
+
+export const seatAllows = (allowedTools: readonly string[] | undefined, name: string): boolean =>
+    !seatIsRestricted(allowedTools) || (allowedTools ?? []).includes(name);
 
 /**
  * Cut `body` to at most `visible` characters without breaking it.
@@ -2487,7 +2504,7 @@ export async function executeDeskTool(
     // writing `remember`/`write_memory_note`/`forget`). The executor is the
     // one chokepoint every transport passes through, so the list is enforced
     // HERE, before the cache and before the switch.
-    if (context.allowedTools && context.allowedTools.length > 0 && !context.allowedTools.includes(call.name)) {
+    if (!seatAllows(context.allowedTools, call.name)) {
         return rejectedResult(call, `${call.name} rejected: this tool is not available on this seat.`);
     }
     // Repeat calls within the TTL (every seat asks the same desk) are served
@@ -3741,9 +3758,7 @@ export async function runDeskToolLoop(params: {
             ? (extraToolDefs.length > 0 ? [...DESK_TOOL_DEFINITIONS, ...forgedDefs, ...extraToolDefs] : [...DESK_TOOL_DEFINITIONS, ...forgedDefs])
             : (extraToolDefs.length > 0 ? [...DESK_TOOL_DEFINITIONS, ...extraToolDefs] : DESK_TOOL_DEFINITIONS);
         const effectiveTools = nativeTools
-            ? (allowedTools && allowedTools.length > 0
-                ? allDefs.filter(d => allowedTools.includes(d.function.name))
-                : allDefs)
+            ? allDefs.filter(d => seatAllows(allowedTools, d.function.name))
             : undefined;
         // A stop click must end the loop BETWEEN rounds — never fire one
         // more request on an already-dead signal.
@@ -3964,7 +3979,7 @@ export async function runDeskToolLoop(params: {
         const builtInCalls: DeskToolCall[] = [];
         for (const call of coreCalls) {
             if (!call.name.startsWith('custom_')) { builtInCalls.push(call); continue; }
-            if (allowedTools && allowedTools.length > 0 && !allowedTools.includes(call.name)) {
+            if (!seatAllows(allowedTools, call.name)) {
                 forgedResults.push(rejectedResult(call, `${call.name} rejected: this tool is not available on this seat.`));
                 continue;
             }
@@ -4261,13 +4276,16 @@ export async function* streamChatWithDeskTools(
     // executor would have to refuse is the dead-affordance bug moved one layer
     // down into the prompt, where no test can see it.
     const chartDefs = executePanelTool
-        ? CHART_ACTION_TOOL_DEFS.filter(d => !allowedTools || allowedTools.length === 0 || allowedTools.includes(d.function.name))
+        ? CHART_ACTION_TOOL_DEFS.filter(d => seatAllows(allowedTools, d.function.name))
         : [];
     const extraDefs = [
         ...chartDefs,
         ...(mailActive ? DEBATE_MAIL_TOOLS : []),
     ];
-    const mergedAllowed = (mailActive || executePanelTool) && allowedTools && allowedTools.length > 0
+    // A RESTRICTED seat is widened by the extra defs; an unrestricted one is
+    // left unrestricted, because adding a name to an empty list would silently
+    // turn "every tool" into "only these".
+    const mergedAllowed = (mailActive || executePanelTool) && seatIsRestricted(allowedTools)
         ? [
             ...allowedTools,
             ...extraDefs.map(t => t.function.name),
