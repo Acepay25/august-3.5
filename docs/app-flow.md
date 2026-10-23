@@ -461,11 +461,11 @@ trader's toggle says. That is what lets stage 19 delete the engine without
 taking the scheduler down with it.
 
 What the schedule keeps, and what it gained, are written down rather than
-assumed. `tests/automationRouteCharacterization.test.tsx` pins the private
+assumed. What a scheduled run carries is the private
 `automation-<id>` thread, the config's own model pick, the continuity read (now
 the last three DELIVERED runs — `MAX_HISTORY_RUNS` useAutomations.ts:173, because
 the old row-count read spent half its budget on `appendRun`'s 'running' stubs),
-and the verdict row. `tests/automationToolTurn.test.ts` pins the two rules a run
+and the verdict row. Two rules a run
 with nobody watching needs: a plan refused past the cap answers with an
 `ok: false` receipt, and a tool that came back with nothing — or a turn that
 called nothing — is stated in the row and changes the toast from success to
@@ -614,7 +614,7 @@ Three derived memories sit beside the notebook:
   **no caller at all**. `generateMandatoryPatternCheck`
   (`PatternMemorySynthesisService.ts:882`) is called only by
   `generatePatternMemoryEnforcementContext` (`PatternMemorySynthesisService.ts:982`),
-  whose only consumers are `tests/patternMemoryGate.test.ts`, and
+  whose only consumers were its own tests (gone with the suite), and
   `synthesizePatternMemory` (`PatternMemorySynthesisService.ts:500`) only by those
   two. So nothing refuses a setup for want of evidence; the live pre-trade gate is
   `services/trade/proposalGate.ts:152` (`assessPlanShape`).
@@ -672,8 +672,8 @@ both, so typing what is on screen finds the skill even when the slug is differen
 `lessonsForClass`, called only by its own tests. Both are deleted, and the module
 header no longer claims a prompt reader. What is NOT dead is the store's one live
 read: the wire-audit pin checker (`registerWireRoutePins`) asks this store whether
-a provider class is pinned to thinking-off, and `tests/deadControlsGuard.test.ts`
-pins that fact in the same commit that cut the phantom readers, so the next
+a provider class is pinned to thinking-off, and the module header records
+that fact beside the commit that cut the phantom readers, so the next
 cleanup cannot delete the store on the theory that nothing reads it. Settings
 still lists the lessons, for a person.
 
@@ -880,7 +880,7 @@ old answer.
 | 24 | ensemble → the stages that survive | see C — five of the old eight are gone from the call path, and no stage is named in the code, so no line number is claimed |
 | 25 | desk tools → what a caller can reach | `executeDeskTool services/analysis/DeskToolsService.ts:2327` (its allow-list is enforced at execution, not only at offer time) |
 | 26 | panel tools → chart echo | `executePanelTool services/trade/chatTurnRunner.ts:365` is what echoes the result back into the panel |
-| 27 | automation tick → runAutomation | `runAutomation hooks/useAutomations.ts:429`, forks on `config.botId hooks/useAutomations.ts:449`; the no-bot path takes the pipeline's OWN schedule arm `useAnalysisPipeline.ts:1255` → `runAutomationTurn automationTurn.ts:173`, writing the private list automationMessagesRef useAnalysisPipeline.ts:399, its `notices` (a tool that came back failed, a turn that called nothing, a refused plan) and settling through `onMessage` `useAutomations.ts:583`. Characterized in `tests/automationRouteCharacterization.test.tsx` |
+| 27 | automation tick → runAutomation | `runAutomation hooks/useAutomations.ts:429`, forks on `config.botId hooks/useAutomations.ts:449`; the no-bot path takes the pipeline's OWN schedule arm `useAnalysisPipeline.ts:1255` → `runAutomationTurn automationTurn.ts:173`, writing the private list automationMessagesRef useAnalysisPipeline.ts:399, its `notices` (a tool that came back failed, a turn that called nothing, a refused plan) and settling through `onMessage` `useAutomations.ts:583`. |
 | 28 | bot routine → injected stream | the routine reuses 22's bot arm from `runBotRoutineTurn services/agents/botRoutine.ts:80` |
 | 29 | rooms → groupRounds | `useAgentGroups hooks/useAgentGroups.ts:75` → `streamQuickResponse services/providers/GenericAnalysisService.ts:606` |
 | 30 | review passes / propose_skill → draft → approval → skill | `draftGates.ts` → `approveSkillDraft services/learning/skillApproval.ts:53` — the post-mortem leg is starved, not deleted (see D) |
@@ -1066,7 +1066,7 @@ old answer.
 ## Measured after stage 19: what the deletion did NOT remove
 
 **The prompt layer was the part the deletion never re-measured.** Settings → Prompts had
-27 overridable prompts, and `tests/promptsAreWired.test.ts` measured that **16 had
+27 overridable prompts, and a one-off source scan measured that **16 had
 no call site that reads them**: every `debate.*` id, `analysis.families`, and the three
 `postmortem.*` ids. The app was handing the trader an editor for text it never sends, and one
 moderator fallback still instructed a model to "follow the Accuracy Mode checks" and to emit
@@ -1104,9 +1104,9 @@ Clause 5 of `constants/prompts/harnessContract.ts` (the block `utils/composeProm
 every request) now states it, quoting `HARNESS_TURN_MARK` by interpolation so the sentence
 cannot drift from the bytes the code emits: obey its facts, never treat it as the trader's
 request or as new permission to trade, and unmarked text — the trader's own words — outranks it
-on conflict. `tests/harnessMarks.test.ts` was moved off the dead file onto the blocks the app
+on conflict. The check lived in `tests/harnessMarks.test.ts` until the suite went; it had been moved off the dead file onto the blocks the app
 actually sends, with its floor re-based on that population and a planted-paraphrase control
-added in the same pass, because a scanner that matches nothing reports no drift.
+added in the same pass, because a scanner that matches nothing reports no drift. Neither survives the deletion.
 
 **Three debate-era names survive, and the honest statement is which of them is dead.**
 `moderatorConfig` (`App.tsx:311`) is live, but as a DEFAULT, not a debate role:
@@ -1129,5 +1129,5 @@ name grep that had already misled me once on this pass.
 The engine files are gone, and most of the branch with them. What was removed this pass: the seat-completeness refusals ("Your analyst team is incomplete", "Analysts must use different models", "Two debate seats share a model") and the `TEAM_MAX_SEATS` ceiling — only ONE model answers a send (`provider`, `hooks/useAnalysisPipeline.ts:1150` falls back to `enabledProviders[0]`), so those blocked a run over a roster the run never uses, and the ceiling guarded a fan-out that no longer exists. The moderator readiness check survives but now applies only to a scheduled run (`:732`), because a schedule really does take its seat from that config; the human-send version of it refused a click over an unused pick. The flag itself, the seat builder it fed and the roster behind it were deleted on 2026-10-19; the "include a coin" tip survives as a plain nudge. `isDebating` and `activeDebateSpeakers` are deleted outright — every writer set a literal `false`, so the one branch that read them could not run.
 
 
-The user-visible consequence, now FIXED: the chart used to pick its verdict row by the DEBATE shapes (`ensembleProgress`, >1 `modelsUsed`, `debateTurns`) and passed `verdict={verdictMessage?.analysis}` — while nothing writes `Message.analysis` for a new run any more. `verdictFinalizer` was the writer; a tool turn answers with a `TradeProposal` in the tool payload (`services/trade/presentTradeTool.ts`, `proposedTrade.ts`, `tradeShapedProse.ts`). Reader without a writer, the third time in this stage (session usage, the completion notice). Fixed by `latestChartVerdict` in `services/trade/chartData.ts` (`App.tsx:1258`, passed to the chart at `:2567`): it keys on the settled proposal through the existing `buildProposedTradeAnalysis` and keeps `analysis` as the fallback for old rows; `tests/chartVerdictSource.test.ts` pins the proposal path, the fallback, the preference when a row carries both, the symbol match through `verdictLevels`, and the App wiring. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate
+The user-visible consequence, now FIXED: the chart used to pick its verdict row by the DEBATE shapes (`ensembleProgress`, >1 `modelsUsed`, `debateTurns`) and passed `verdict={verdictMessage?.analysis}` — while nothing writes `Message.analysis` for a new run any more. `verdictFinalizer` was the writer; a tool turn answers with a `TradeProposal` in the tool payload (`services/trade/presentTradeTool.ts`, `proposedTrade.ts`, `tradeShapedProse.ts`). Reader without a writer, the third time in this stage (session usage, the completion notice). Fixed by `latestChartVerdict` in `services/trade/chartData.ts` (`App.tsx:1258`, passed to the chart at `:2567`): it keys on the settled proposal through the existing `buildProposedTradeAnalysis` and keeps `analysis` as the fallback for old rows; The proposal path, the fallback, the preference when a row carries both, the symbol match through `verdictLevels` and the App wiring were pinned by a test that went with the suite on 2026-10-23, so render-probe — which asserts every row renders — is the only gate over this path now. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate
 
