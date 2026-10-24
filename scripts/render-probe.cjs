@@ -1894,12 +1894,26 @@ async function main() {
             b.click();
             return 'clicked';
         });
-        await page.waitForTimeout(1500);
-        const reached = await page.evaluate(() => ({
-            knowledge: !!document.querySelector('[data-testid="learn-view"]'),
-            skillsTab: !!document.querySelector('[data-testid="learn-skills"]'),
-            studio: !!document.querySelector('[data-testid="studio-view"]'),
+        // The Studio rides a React.lazy chunk behind a Suspense, so the Skills
+        // tab appears BEFORE the Studio mounts. A fixed 1.5s wait sampled once
+        // and raced the chunk — the merge that deleted the automation chunk
+        // re-chunked the bundle enough to lose. Poll for the Studio's own
+        // root: the claim is the route MOUNTS it, not that it lands within a
+        // hard-coded window. The fallthrough re-samples once at the deadline
+        // so a failure still names which of the three facts was missing.
+        const studioMounted = await pollFor(async () => page.evaluate(() => {
+            const knowledge = !!document.querySelector('[data-testid="learn-view"]');
+            const skillsTab = !!document.querySelector('[data-testid="learn-skills"]');
+            const studio = !!document.querySelector('[data-testid="studio-view"]');
+            return knowledge && skillsTab && studio;
         }));
+        const reached = studioMounted === true
+            ? { knowledge: true, skillsTab: true, studio: true }
+            : await page.evaluate(() => ({
+                knowledge: !!document.querySelector('[data-testid="learn-view"]'),
+                skillsTab: !!document.querySelector('[data-testid="learn-skills"]'),
+                studio: !!document.querySelector('[data-testid="studio-view"]'),
+            }));
         // Three things, because landing on the right SURFACE is not the claim —
         // the row promises the library, so the Skills tab must be the one showing
         // and the Studio must actually be mounted inside it.
