@@ -447,6 +447,9 @@ const repeatCallNotice = (name: string, label: string, ageMs: number): string =>
  *  replayed the PRE-WRITE cached map ("the notebook map has no such file")
  *  and the model retracted writes that had landed, then duplicated them
  *  under new names. These local reads are cheap; nothing is lost. */
+/** \`\${SESSION_ID}\` fallback when a caller passes no sessionId: stable for
+ *  this boot, never a fabricated cross-session identity. */
+const DESK_BOOT_SESSION_ID = `desk-${new Date().toISOString().slice(0, 10)}`;
 const CACHEABLE_TOOLS = new Set([
     'get_market_packet',
     'get_all_timeframes',
@@ -795,6 +798,7 @@ const TOOL_LABELS: Record<string, string> = {
     clear_chart_drawings: 'chart clear',
     write_memory_note: 'memory note',
     get_notebook_map: 'notebook map',
+    skill_view: 'skill reader',
     propose_skill: 'skill proposal',
     propose_strategy: 'strategy plan',
     revise_skill: 'skill revision',
@@ -987,6 +991,26 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     content: { type: 'string', description: 'Markdown content — a timeless statement, not a session log' },
                 },
                 required: ['folder', 'file_name', 'content'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'skill_view',
+            description:
+                'Open ONE skill from the index and read it BEFORE acting on a task its description matches. '
+                + 'Without file_path: the skill\'s full body plus its bundled files (references/templates), ready to follow. '
+                + 'With file_path: ONE bundled file from the listed names. Skills carry instructions that are not in '
+                + 'your training data; reading one costs far less than redoing its work wrong.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    skill: { type: 'string', description: 'The skill\'s name/slug exactly as the skills index lists it.' },
+                    file_path: { type: 'string', description: 'Optional: one bundled file name from the L1 listing, e.g. "references__entry-checklist.md".' },
+                },
+                required: ['skill'],
                 additionalProperties: false,
             },
         },
@@ -2366,6 +2390,10 @@ async function runAllTimeframes(symbol: string, liveMark?: number | null): Promi
  *  plus the calling session's context (symbol fallback, abort, trade log). */
 export interface DeskToolContext {
     defaultSymbol?: string | null;
+    /** The conversation this turn belongs to — the value \`\${SESSION_ID}\`
+     *  substitutes inside skill bodies. Absent (older callers, probes) reads
+     *  as a stable per-boot id rather than an empty promise. */
+    sessionId?: string | null;
     signal?: AbortSignal;
     trades?: LoggedTrade[];
     chartInterval?: string;
@@ -2605,6 +2633,54 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
             case 'get_notebook_map': {
                 const { buildNotebookMapMarkdown } = await import('../learning/MemoryFilesService');
                 content = buildNotebookMapMarkdown();
+                break;
+            }
+            case 'skill_view': {
+                // The progressive-disclosure reader. L0 is the skills index the
+                // seat already carries; this is L1 (the body + the bundled-file
+                // list) and L2 (one bundled file). A skill hidden by the
+                // compatibility gate is not openable either — the index never
+                // promised it on this runtime.
+                const wanted = asString(call.arguments.skill).trim();
+                const filePath = asString(call.arguments.file_path || '').trim();
+                if (!wanted) return rejectedResult(call, 'skill_view rejected: skill is required');
+                const { skillIndexRows, listSkills } = await import('../learning/SkillMemoryService');
+                const slugOf = (fileName: string) => fileName.replace(/\.md$/i, '');
+                const row = skillIndexRows().find(r =>
+                    r.slug === wanted || r.slug.toLowerCase() === wanted.toLowerCase());
+                if (!row) {
+                    // Name the reason honestly: unknown, or gated off this runtime.
+                    const anyName = listSkills().some(({ file }) =>
+                        slugOf(file.name).toLowerCase() === wanted.toLowerCase());
+                    return rejectedResult(call, anyName
+                        ? `skill_view rejected: "${wanted}" exists but is not available on this runtime (its compatibility declares platforms/tools this desk does not have)`
+                        : `skill_view rejected: no skill named "${wanted}" in the index`);
+                }
+                const skill = listSkills().find(({ file }) => slugOf(file.name) === row.slug);
+                if (!skill) return rejectedResult(call, `skill_view rejected: "${wanted}" could not be opened`);
+                // Bundled files ride the same notebook folder, name-spaced to
+                // their skill: `<slug>__<role>__<name>.md`. A flat name with no
+                // separators and no traversal is the whole addressable space.
+                const bundlePrefix = `${row.slug}__`;
+                const { getMemoryFiles } = await import('../learning/MemoryFilesService');
+                const bundled = getMemoryFiles().files
+                    .filter(f => f.folderId === skill.file.folderId && f.name.startsWith(bundlePrefix))
+                    .map(f => f.name);
+                const skillDir = `notebook:skills/${row.slug}`;
+                const substitute = (text: string): string => text
+                    .replace(/\$\{(?:AUGUST|HERMES)_SKILL_DIR\}/g, skillDir)
+                    .replace(/\$\{(?:AUGUST|HERMES)_SESSION_ID\}/g, context.sessionId || DESK_BOOT_SESSION_ID);
+                if (filePath) {
+                    if (/[/\\]|^\.|\.\./.test(filePath) || !bundled.includes(filePath)) {
+                        return rejectedResult(call, `skill_view rejected: "${filePath}" is not one of ${row.slug}'s bundled files (path separators and .. are refused)`);
+                    }
+                    const bundledFile = getMemoryFiles().files.find(f => f.name === filePath);
+                    if (!bundledFile) return rejectedResult(call, `skill_view rejected: "${filePath}" could not be read`);
+                    content = `# ${filePath} — bundled file of ${row.slug}\n\n${substitute(bundledFile.content)}`;
+                    break;
+                }
+                content = `# ${row.slug}\n\n${substitute(skill.meta.body)}`
+                    + (bundled.length ? `\n\n## Bundled files (open one with file_path)\n${bundled.map(b => `- ${b}`).join('\n')}` : '');
                 break;
             }
             case 'remember': {

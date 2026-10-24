@@ -372,11 +372,11 @@ export const buildSkillsIndexForPrompt = (
         return `- ${r.slug}${r.status ? ` [${r.status}]` : ''} — ${kindTag}${desc || rule || '(see recall)'}${desc && rule ? ` · ${rule}` : ''}`;
     });
     return [
-        `## Skills library — ${eligible.length} skill${eligible.length === 1 ? '' : 's'}. Each line is WHEN to use it; the IF/THEN is the rule. APPLY any that match ${where} before answering; cite the slug you used, and pull its full body with recall/get_notebook_map when you act on it.`,
+        `## Skills library — ${eligible.length} skill${eligible.length === 1 ? '' : 's'}. Each line is WHEN to use it; the IF/THEN is the rule. APPLY any that match ${where} before answering; cite the slug you used, and open the full body with skill_view before acting on it.`,
         ...lines,
         // The honest count: what this seat may use, minus what it was shown.
         // Skills that were filtered out (retired, dormant, manual-only, another
         // seat's) are not counted — they are not this seat's to pull.
-        eligible.length > max ? `…and ${eligible.length - max} more — get_notebook_map or recall lists the full library.` : '',
+        eligible.length > max ? `…and ${eligible.length - max} more — skill_view reads any one of them by slug.` : '',
     ].filter(Boolean).join('\n');
 };
