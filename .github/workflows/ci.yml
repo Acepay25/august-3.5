@@ -35,14 +35,14 @@ jobs:
       - name: Type check scripts
         run: npm run typecheck:scripts
 
-      # tsc and vitest cannot see a doc line number. The flow docs carry hundreds of them
+      # tsc cannot see a doc line number. The flow docs carry hundreds of them
       # (the gate prints the live count), and they have gone stale three times during this
       # deletion, so the scan runs before anything that costs a build.
       - name: Flow docs cite real lines
         run: npm run check-flow-doc-anchors
 
-      # tsc excludes electron/*.cjs and vitest never imports the main process,
-      # so a syntax break in the desktop shell is invisible to every other gate
+      # tsc excludes electron/*.cjs, so a syntax break in the desktop shell is
+      # invisible to every other gate
       # here — and it only shows up when a user launches the packaged app.
       - name: Electron shell parses
         run: npm run typecheck:electron
@@ -58,9 +58,9 @@ jobs:
       - name: Production build
         run: npm run build
 
-      # Verify the PRODUCTION bundle boots (e2e above only covers `npm run
-      # dev`; v1.0.20 shipped a prod-only splash hang). Needs the chromium
-      # installed by the smoke step.
+      # Verify the PRODUCTION bundle boots (the dev server cannot catch a prod-only
+      # TDZ/splash hang; v1.0.20 shipped one). Needs the chromium
+      # installed above.
       - name: Boot probe (production bundle)
         run: npm run boot-probe
 
