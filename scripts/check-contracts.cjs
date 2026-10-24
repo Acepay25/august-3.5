@@ -23,7 +23,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -35,15 +34,23 @@ const ok = (name, cond, detail = '') => {
     failures.push(`${name}${detail ? ` — ${detail}` : ''}`);
 };
 
-/** Bundle one TS module to CJS with esbuild and require it. */
+/** Bundle one TS module to CJS with esbuild and require it.
+ *
+ *  Through esbuild's JS API, never the CLI bin: on Linux the npm install
+ *  REPLACES node_modules/esbuild/bin/esbuild with the ELF binary itself, and
+ *  `node <ELF>` dies with "Invalid or unexpected token" (it worked on Windows
+ *  only because there the bin path is a JS shim). */
 const loadModule = (rel) => {
     const tmp = path.join(os.tmpdir(), `contracts-${rel.replace(/[^a-z0-9]+/gi, '-')}-${process.pid}.cjs`);
-    execFileSync(process.execPath, [
-        path.join(ROOT, 'node_modules', 'esbuild', 'bin', 'esbuild'),
-        path.join(ROOT, rel),
-        '--bundle', '--platform=node', '--format=cjs',
-        `--outfile=${tmp}`, '--log-level=error',
-    ], { stdio: 'pipe' });
+    const esbuild = require(path.join(ROOT, 'node_modules', 'esbuild'));
+    esbuild.buildSync({
+        entryPoints: [path.join(ROOT, rel)],
+        bundle: true,
+        platform: 'node',
+        format: 'cjs',
+        outfile: tmp,
+        logLevel: 'error',
+    });
     try {
         return require(tmp);
     } finally {
