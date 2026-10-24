@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-24** (the anchor gate re-measured every citation here and in the stage ledger:
-**357 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**371 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 4 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -602,7 +602,7 @@ Health tab reads it. Backup/export carries the notebook with the profile
 Three derived memories sit beside the notebook:
 
 - **Profile memory** — `syncProfileMemory` copies the saved profile into the
-  `profile` folder, and `buildProfileMemoryIndex` (`profileMemory.ts:145`) renders
+  `profile` folder, and `buildProfileMemoryIndex` (`profileMemory.ts:196`) renders
   the index injected into a turn.
 - **Global memory** — `buildGlobalMemoryIndex` (`utils/memoryUtils.ts:19`) renders
   `familyPerformance`, `userPreferences`, `globalCorrections` and the frozen
@@ -630,6 +630,50 @@ metadata keeps `grossR`, `netR`, `netRKnown` and `rSampled` separately, because 
 gross sum read under a net label is a lie, and a missing cost is never stored as
 zero.
 
+**The memory loop, ported 2026-10-24** (the SKILL.md/memory design; the repo won
+where the spec and the code disagreed):
+
+- **Record shape** — a `ProfileMemoryEntry` carries `version` (the optimistic
+  lock, absent on legacy rows = 1), `tag` (`stated` = the trader said it — the
+  only tag the `remember` tool writes; `observed`/`inferred` come from system
+  paths, the trader learner stamps `observed`), `sensitive`, `aliases` (≤8
+  extra match words), and `previous` — the row as it read before the edit,
+  stamped only when the body actually changed ("now X, previously Y").
+  `rememberProfileMemory` (`profileMemory.ts:98`) takes `if_version` and
+  refuses a mismatched write by returning the row that IS stored, so the seat
+  merges and retries in the same turn.
+- **Write filters** — `filterMemoryWrite` (`utils/memoryWriteFilters.ts:54`)
+  is the code the prompt's "never store" list stands on: secrets (sk-/ghp_/
+  AKIA/xox/JWT/card-number/ID-labelled digits) and honesty-suppressing or
+  elevated-permission "preferences" are refused with the reason; sensitive
+  categories (health/finances/identity) are detected, REFUSED while the
+  Settings switch `sensitiveMemoryEnabled` is off (the default), and flagged
+  so the pre-read and unattended seats never surface them.
+- **The Settings memory toggle actually gates every path** — the analysis
+  pipeline always honoured it; since 2026-10-24 the flag threads
+  App → `runChatSurfaceTurn` (`chatSurfaceTurn.ts:150`) and App → TradeView →
+  the dock, and off strips BOTH memory blocks (profile and notebook topics)
+  from the seat prompt. Skills are procedures, not memory, and stay.
+- **Listing-first recall, one budget** — the profile index and the notebook
+  topics index (`buildNotebookTopicsIndex`, `memoryTopics.ts:241`) ride the
+  seat prompt beside the skills catalogue, and all three draw their line caps
+  from ONE table, `indexBudgetFor` (`utils/promptIndexBudget.ts:33`), scaled
+  to the seat's resolved context window (30/30/12 lines at ≥200k tokens down
+  to 4/4/2 below 32k) — the same table in both homes, so a small local model
+  gets small indexes everywhere.
+- **The deterministic pre-read** — `buildMemoryHints`
+  (`utils/memoryHints.ts:54`) string-matches the trader's message against the
+  memory index (slug words and aliases) and the skill slugs, and on a hit
+  appends at most two `read_memory` and two `skill_view` hints to the turn —
+  inside the harness's own HARNESS NOTE marker, never auto-loading a body,
+  never touching a `sensitive` row, and only when `isLikelySmallModel`
+  (`memoryHints.ts:84`) says the seat is a local server or a small local family. Strong
+  models never pay for it; no match adds zero bytes.
+- **The save chip with undo** — a `remember` receipt renders as
+  "Memory saved — slug" (`ToolActionsRow.tsx`), and the row carries the one
+  undo the chip style allows: a button that forgets the slug, fires the
+  `august-profile-memory` refresh event, and flips to Undone.
+
 ### G.3 Skills are files with a lifecycle
 
 A skill is a markdown file in `skills/`, parsed by `parseSkillMarkdown`
@@ -637,6 +681,45 @@ A skill is a markdown file in `skills/`, parsed by `parseSkillMarkdown`
 evidence counts, `netR`/`grossR`, r-sample and provenance. `listSkills` is the one roster. `skillEnabledFlag` is the one place
 `enabled` is derived — suspension is `enabled: false` plus `meta.suspendedAt`,
 never a fourth status.
+
+**The SKILL.md port, 2026-10-24** (same design pass as G.2's memory loop):
+
+- **Third-party frontmatter survives every rewrite.** `captureUnknownFrontmatter`
+  (`utils/skillFrontmatter.ts:38`) captures every key the app has no semantics
+  for — `author`, `license`, `metadata.hermes.*`, `required_environment_variables`
+  — verbatim at parse, and `serializeSkill` re-emits them verbatim, because a
+  rewrite that eats a key the importer's author wrote is data loss the next
+  round-trip turns into an unexplainable diff. One vocabulary module
+  (`utils/skillFrontmatter.ts`) is shared by parser and serializer so a key can
+  never be known to one and unknown to the other.
+- **Compatibility is ENFORCED, not just carried.** `skillRunsHere`
+  (`utils/skillFrontmatter.ts:113`) maps `platforms` onto the three runtimes
+  the app actually has (browser / Electron desktop / Capacitor mobile),
+  requires `requiresTools` to be a subset of the desk's list, and fails closed
+  on `requiresEnv` — a renderer cannot honestly verify an env var. A skill this
+  runtime cannot run leaves the index entirely, and `skill_view` refuses to
+  open it with that reason.
+- **`skill_view` — progressive disclosure on the desk.** L0 is the skills index
+  every seat already carries; the tool (`DeskToolsService.ts:2641`) is L1 (the
+  full body plus the bundled-file list) and L2 (one bundled file by flat name —
+  path separators and `..` are refused). `${SKILL_DIR}` and `${SESSION_ID}`
+  substitute inside bodies, with `${HERMES_SKILL_DIR}`/`${HERMES_SESSION_ID}`
+  accepted as aliases.
+- **Import: folder, URL, scanned.** A picked folder imports whole — the
+  `SKILL.md` claims its sibling files as bundled files name-spaced
+  `<slug>__<subpath>`, exactly what L2 addresses; `fetchSkillFromUrl`
+  (`SkillImportService.ts:202`) fetches one raw SKILL.md (https only, 15s
+  timeout, 400kB cap) into the same pipeline. EVERY imported byte runs
+  `scanSkillText` (`utils/skillFrontmatter.ts:166`): destructive filesystem
+  commands, fork bombs, piped shell downloads, credential-file reads and
+  credential-carrying URLs REFUSE the import with the finding named. Nothing
+  auto-runs — scripts are stored text, and this repo has no execution path
+  for them.
+- **Authoring caps** — `skillBodyCaps` (`utils/skillFrontmatter.ts:135`):
+  200-line soft warn (move material into `references/`), 100k-char hard
+  refuse; a description with no "Use when" trigger is warned on at import,
+  because the description is the activation key and a vague one rarely
+  activates.
 
 The lifecycle has four stages:
 
@@ -688,10 +771,15 @@ The catalogue is `DESK_TOOL_DEFINITIONS`
 (`DeskToolsService.ts:931`), plus `CHART_ACTION_TOOL_DEFS` (`:1574`) and the
 mailbox tools. The surface decides what is offered:
 
-- the dock uses `TRADE_TOOLS` (`chatTurnRunner.ts`);
+- the dock uses `TRADE_TOOLS` (`chatTurnRunner.ts`), which derives from
+  `DESK_TOOL_NAMES` (`utils/toolKinds.ts`) — the ONE tool-name list, so the
+  seat allow-list and the skill `compatibility.requiresTools` gate can never
+  disagree on a spelling;
 - the Chat surface uses `CHAT_SURFACE_TOOLS` (`chatSurfaceTurn.ts`), which has
-  no canvas tools but includes `present_trade`, `decline_trade` and
-  `read_tool_output`;
+  no canvas tools but includes `present_trade`, `decline_trade`,
+  `read_tool_output` and `skill_view` — the progressive-disclosure reader
+  (L1 body + bundled-file list, L2 one bundled file) that the skills index
+  header points every seat at;
 - a detached skill eval uses `DETACHED_EVAL_TOOLS` (`services/trade/unattendedTools.ts:21`),
   the Chat set minus the notebook-writers and the two journal-acting tools;
 - a panel seat adds the chart-action definitions only when its own allow-list
@@ -811,6 +899,8 @@ loop that hides a dead leg is worse than one that says which leg is dead.
 | dock sessions · active id · tool payloads | `trade_chat_sessions_v1_` · `trade_chat_active_v1_` · `trade_tool_payloads_v1_` |
 | notebook · queue · drafts · rules | `memory_files_v1_` · `learning_proposals_v1:` · `skill_drafts_v1:` · `approval_rules_v1:` |
 | roster · providers · legacy automations | `agents_bots_v1` · `provider_configs_v1` (keys `enc:v1:` via safeStorage) · `automations_v1_` (legacy: nothing writes it since 2026-10-24, still restorable) |
+| profile memory (the collaboration facts) | `profile_memory_v1_<user>` — raw localStorage by design (`ExportService.RAW_LOCAL_STORAGE_PREFIXES`, `ExportService.ts:299`), exported/restored through the prefix list, not Preferences |
+| learning rules · calibration stats · harness lessons | `learning_rules_v2_` · `model_confidence_calibration`/`confidence_calibration` · `august_harness_lessons_v1_` — the rest of the raw-localStorage family the export fallback reads |
 | screenshots · reasoning traces | IDB store `images` (`services/infrastructure/messageImageStore.ts`) · own db (`services/infrastructure/ThinkingStoreService.ts`) |
 | reduce-motion preference | `desk_idle_motion_v1_&lt;user&gt;` — the desk floor is deleted, the key is not, renaming it silently resets every profile |
 
@@ -928,6 +1018,7 @@ old answer.
 | 68 | model control → tier | `ModelChip`/`ModelMenu`; `nextEffortTier components/shared/effortScale.ts:50`; `effortDialUp components/shared/effortDial.ts:27` guards the chord |
 | 69 | run → prompt lane + corpus version | `beginPromptLane services/infrastructure/PromptOverrideService.ts:34` → `promptCorpusVersion :97` → `runStats.promptLane`/`promptVersion` |
 | 70 | Settings → tool catalogue | `DESK_TOOL_DEFINITIONS services/analysis/DeskToolsService.ts:931` + `toolLabel :812` → `DeskToolCatalogue`, grouped by `toolKinds` |
+| 71 | skills index → skill_view → the body or one bundled file | `case 'skill_view' services/analysis/DeskToolsService.ts:2641` — L1 body + bundled list, L2 one flat-named file (`..` refused); `${SKILL_DIR}`/`${SESSION_ID}` substitute, Hermes aliases accepted |
 
 ---
 
@@ -960,10 +1051,10 @@ old answer.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 357 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 371 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 357 anchors verified, and the gate
+   the gate's own output: these docs state 371 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -1045,9 +1136,9 @@ old answer.
    records the v1.0.20 TDZ crash as a splash hang. A page that dies before React
    mounts fails it.
 
-10. **The arrow table is 69 rows, and every citation in it resolves — and 65 of the 69 rows pair their citation with the symbol that must live on that line (23 → 31 → 33 → 43 → 48 → 50 → 52 → 69 across these passes), so those rows are checked for content, not just for a line that exists. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently. One row names no file at all — the ensemble row, whose stages the code never names — so a wrong figure inside it stays outside this gate's reach, which is why the sentence says 69/70 rather than 70/70.** An
+10. **The arrow table is 70 rows, and every citation in it resolves — and 65 of the 70 rows pair their citation with the symbol that must live on that line (23 → 31 → 33 → 43 → 48 → 50 → 52 → 69 across these passes), so those rows are checked for content, not just for a line that exists. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently. One row names no file at all — the ensemble row, whose stages the code never names — so a wrong figure inside it stays outside this gate's reach, which is why the sentence says 65/70 rather than 70/70.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
-    resolves all 357 unique anchors on every run, so coverage of the table is no
+    resolves all 371 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
 11. **"One service replacing nine" is falsifiable, and it is right — counted, not
     asserted.** `git log --diff-filter=D` over `services/providers/` names exactly nine
