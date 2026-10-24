@@ -73,7 +73,7 @@ three of them are blocked behind a decision.
 | 1.3 | **Surface the swallowed failures** — the auto-backup and the pattern-memory sync. | a silent backup failure is the worst kind | `typecheck` · `lint` |
 | 1.4 | **One ticker, not 400** — the per-row intervals and the 1-second whole-surface clock. | speed | `typecheck` · `lint` · **`render-probe`** |
 | 1.5 | **Validate the sender frame on every IPC handler.** | defence in depth for the only privileged surface | `typecheck` · `lint` · **`typecheck:electron`** |
-| 1.6 | **Register the two un-recorded backup namespaces** (`trade_sidebar_open_v1`, `agent_threads_opened_v1`) — with the owner's eye on the shared WebView quota. | no silent native data loss | `test` incl. the 5 export suites |
+| 1.6 | **Register the two un-recorded backup namespaces** (`trade_sidebar_open_v1`, `agent_threads_opened_v1`) — with the owner's eye on the shared WebView quota. | no silent native data loss | `render-probe` (drives Settings → Data back up / export / import; no gate reads the export manifest itself) |
 | 1.7 | **Lower the bundle ratchet** — 2,600 kB → ~1,400 kB, plus a step that fails when the ceiling is stale. | the gate starts catching eager-import regressions | `build` |
 
 ### Phase 2 — the roadmap's own wave

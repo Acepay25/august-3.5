@@ -22,7 +22,7 @@
  * The old banner ("DO NOT SHARE A STORE TODAY") was true of the arrays and
  * false of the thread, which is the unit the trader sees.
  * A conversation opened here and on the Chart surface is one conversation;
- * `docs/app-flow.md` states the contract and `tests/surfaceLiveSync.test.tsx` pins it.
+ * `docs/app-flow.md` states the contract (its unit suite went with the suite, 2026-10-23).
  *
  *  - a send routes on WHAT IS SELECTED, not on a mode switch (there is no
  *    switch any more): a bot answers through `runUserBotTurn`, the same
