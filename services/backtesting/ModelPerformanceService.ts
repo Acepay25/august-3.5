@@ -1266,21 +1266,16 @@ export const syncConfidenceCalibrationFromTradeLog = (trades: LoggedTrade[]): vo
     for (const trade of trades) {
         if (trade.outcome !== 'WIN' && trade.outcome !== 'LOSS') continue;
         const isWin = trade.outcome === 'WIN';
-        // The incremental writer returns before crediting a row with no
-        // analysis (`useTradeLogging.autoLearnFromOutcome`), so a rebuild that
-        // counted it would manufacture a sample at boot — and the card reads
-        // the rebuilt buckets as live. A row with no analysis has no model call
-        // to credit.
-        if (!trade.analysis) continue;
         // The incremental writer credits NOTHING for a mirrored plan
         // (`levelsCorrected` hides the model's own call), so the rebuild must
         // skip the same rows or a corrected trade would start counting. Same
         // for a settled trade with no analysis: the incremental writer returns
         // on `!analysis` (useTradeLogging autoLearnFromOutcome), so counting
         // it here as a default-Medium sample would inflate that bucket with
-        // rows the other writer never sees.
-        if (trade.analysis?.levelsCorrected === true) continue;
+        // rows the other writer never sees. (Both review branches added this
+        // skip independently; the merge kept one.)
         if (!trade.analysis) continue;
+        if (trade.analysis?.levelsCorrected === true) continue;
         const confidence = (trade.analysis?.confidence || 'Medium').toLowerCase();
         if (confidence !== 'high' && confidence !== 'medium' && confidence !== 'low') continue;
         for (const p of getTradeProviders(trade)) {
