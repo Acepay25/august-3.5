@@ -2839,6 +2839,24 @@ const ingestCraftedSkillUnlocked = async (
         }
         meta.kind = kind;
         meta.ifCondition = crafted.ifCondition;
+        // The rewrite contract (see requestRewriteApproval): an approved rule
+        // that gets a NEW then/predicate loses the yes it earned — the
+        // approval was for the rule as it read. Re-ingesting the SAME craft
+        // (same trade, unchanged THEN) must not un-approve, so the withdrawal
+        // fires only when the rule text actually changes.
+        const ruleChanges =
+            meta.thenAction !== crafted.thenAction
+            || meta.predicate !== sanitizePredicate(crafted.predicate);
+        if (ruleChanges && isApprovedSkill(meta)) {
+            requestRewriteApproval(meta,
+                { ifCondition: crafted.ifCondition, thenAction: crafted.thenAction },
+                {
+                    slug: existing.name.replace(/\.md$/i, ''),
+                    username,
+                    source: 'closed-trade craft',
+                    evidence: `settled ${trade.outcome} ${trade.realizedR != null ? `(${trade.realizedR}R)` : ''} on ${trade.id}`,
+                });
+        }
         meta.thenAction = crafted.thenAction;
         // Overwritten, never merged: a predicate describes its clause, so
         // rewriting the clause invalidates any predicate the old one carried.
