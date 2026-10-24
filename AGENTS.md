@@ -118,8 +118,9 @@ thing.** Run it on an idle machine — alongside a build it reports blank surfac
 that the app was seconds from filling.
 
 CI (`.github/workflows/ci.yml`) runs `tsc`, `typecheck:scripts`,
-`typecheck:electron`, the flow-doc anchor gate, `eslint`, `vite build`,
-`boot-probe`, `render-probe` and `skill-approval-probe`. The release gate
+`typecheck:electron`, the flow-doc anchor gate, `check:contracts`, `eslint`,
+`vite build`, `boot-probe`, `render-probe` and `skill-approval-probe`. The
+release gate
 (`.github/workflows/release.yml`) runs the same chain MINUS two of its steps —
 no `check-flow-doc-anchors`, no `skill-approval-probe` — and adds
 `installer-smoke` on the packaged exe plus the signing, source-map, signature
@@ -419,10 +420,17 @@ import { sanitizeAIResponse } from './utils/sanitizers';
 
 **There are no unit tests on this branch.** The Vitest suite and the Playwright
 smoke suite were removed on 2026-10-23, with their scripts and CI steps, and
-nothing in the tree imports a test helper. What verifies a change now, in order:
+nothing in the tree imports a test helper. One deliberate survivor followed
+(2026-10-24): `npm run check:contracts`, a single node script pinning the six
+PURE-LOGIC contracts no browser probe can reach — planned R:R math, provider
+retry classification, the harness mark dialect, notebook pressure tiers,
+tool-pair compaction, and AI-boundary coercion. It is not a suite and must not
+grow into one; a seventh contract needs the reason the six could not cover it.
+What verifies a change now, in order:
 `npm run typecheck`, `typecheck:scripts` and `typecheck:electron`, then
 `npm run lint` (the warning ratchet binds), `npm run build`,
-`npm run check-flow-doc-anchors`, and the three browser probes — `boot-probe`
+`npm run check-flow-doc-anchors`, `npm run check:contracts`, and the three
+browser probes — `boot-probe`
 (does the built bundle start), `render-probe` (rendered rows, inert controls,
 zero pageerrors) and `skill-approval-probe` (the human-actuation path). Then run
 `npm run dev` and exercise the change by hand: that is the only check left for

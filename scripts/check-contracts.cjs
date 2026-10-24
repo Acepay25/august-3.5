@@ -1,0 +1,208 @@
+#!/usr/bin/env node
+/**
+ * check-contracts — the minimal regression layer that survived the suite's
+ * removal (owner ruling, 2026-10-23). The old tree held ~530 test files; this
+ * is deliberately NOT that. It pins the six PURE-LOGIC contracts no browser
+ * probe can reach by construction, because they live below the render:
+ *
+ *   1. utils/riskReward.ts            — the planned R:R the trader is graded on
+ *   2. utils/apiErrorUtils.ts         — which failures deserve a retry
+ *   3. utils/harnessMarks.ts          — the sentinel/clip dialect a model reads
+ *   4. utils/memoryBudget.ts          — the pressure tiers that REFUSE growth
+ *   5. services/providers/contextCompact.ts — tool pairs live or die together
+ *   6. schemas/tradeAnalysis.ts       — lenient coercion at the AI boundary
+ *
+ * Plain node, no vitest, no jsdom, no network: each module is bundled from
+ * TypeScript with esbuild (already a vite dependency) into a temp file and
+ * required. Runs in CI and in the release gate BEFORE the build, the same
+ * slot the anchor gate occupies. If a contract here fails, the fix belongs in
+ * the module — never in this file's expectations.
+ */
+'use strict';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { execFileSync } = require('child_process');
+
+const ROOT = path.resolve(__dirname, '..');
+
+// ─── tiny assertion kit: run everything, report everything ─────────────────
+let passed = 0;
+const failures = [];
+const ok = (name, cond, detail = '') => {
+    if (cond) { passed++; return; }
+    failures.push(`${name}${detail ? ` — ${detail}` : ''}`);
+};
+
+/** Bundle one TS module to CJS with esbuild and require it. */
+const loadModule = (rel) => {
+    const tmp = path.join(os.tmpdir(), `contracts-${rel.replace(/[^a-z0-9]+/gi, '-')}-${process.pid}.cjs`);
+    execFileSync(process.execPath, [
+        path.join(ROOT, 'node_modules', 'esbuild', 'bin', 'esbuild'),
+        path.join(ROOT, rel),
+        '--bundle', '--platform=node', '--format=cjs',
+        `--outfile=${tmp}`, '--log-level=error',
+    ], { stdio: 'pipe' });
+    try {
+        return require(tmp);
+    } finally {
+        try { fs.unlinkSync(tmp); } catch { /* temp cleanup is best-effort */ }
+    }
+};
+
+const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
+
+// ─── 1. planned risk:reward — the number the trader is graded on ───────────
+(() => {
+    const rr = loadModule('utils/riskReward.ts');
+    // Long: entry 100, stop 95, targets 110/120 → nearest 110 → 10/5 = 2.
+    ok('rr: plain long 2.0',
+        rr.plannedRiskReward({ entry: 100, stopLoss: 95, takeProfits: [110, 120] }) === 2);
+    ok('rr: nearest target wins',
+        rr.plannedRiskReward({ entry: 100, stopLoss: 95, takeProfits: [120, 108] }) === fmt(8 / 5));
+    ok('rr: no usable target is 0, never NaN',
+        rr.plannedRiskReward({ entry: 100, stopLoss: 95, takeProfits: [null, undefined] }) === 0);
+    ok('rr: entry==stop is 0',
+        rr.plannedRiskReward({ entry: 100, stopLoss: 100, takeProfits: [110] }) === 0);
+    ok('rr: junk levels never NaN',
+        Number.isFinite(rr.plannedRiskReward({ entry: 'abc', stopLoss: {}, takeProfits: [110] })));
+    const inv = rr.plannedRiskRewardSigned({ entry: 100, stopLoss: 105, takeProfits: [110], direction: 'Long' });
+    ok('rr: inverted long is REFUSED (ratio 0) and flagged, never repaired', inv.ratio === 0 && inv.inverted === true,
+        `got ratio=${inv.ratio} inverted=${inv.inverted}`);
+    const short = rr.plannedRiskRewardSigned({ entry: 100, stopLoss: 105, takeProfits: [92], direction: 'Short' });
+    ok('rr: geometrically valid short computes', short.ratio === fmt(8 / 5) && short.inverted === false,
+        `got ratio=${short.ratio} inverted=${short.inverted}`);
+})();
+
+// ─── 2. provider error classification — what deserves a retry ──────────────
+(() => {
+    const { parseAPIError, shouldRetry, getRetryDelay } = loadModule('utils/apiErrorUtils.ts');
+    const rate = parseAPIError({ status: 429 }, 'prov');
+    ok('err: 429 is rate_limit and retryable', rate.type === 'rate_limit' && shouldRetry(rate));
+    ok('err: missing Retry-After falls back to 1s, not 30s', rate.retryAfterSeconds === 1,
+        `got ${rate.retryAfterSeconds}s`);
+    const rateHeader = parseAPIError({
+        status: 429,
+        headers: new Map([['retry-after', '7']]), // SDK Headers shape: .get()
+    }, 'prov');
+    ok('err: Retry-After header is honoured via .get()', rateHeader.retryAfterSeconds === 7,
+        `got ${rateHeader.retryAfterSeconds}s`);
+    const timeout = parseAPIError(new Error('The operation was aborted due to timeout'), 'prov');
+    ok('err: timeout is classified timeout', timeout.type === 'timeout');
+    ok('err: timeout is NEVER retried', shouldRetry(timeout) === false);
+    const quota = parseAPIError({ status: 403, message: 'billing' }, 'prov');
+    ok('err: 403/billing is quota_exceeded, not retried', quota.type === 'quota_exceeded' && !shouldRetry(quota));
+    const server = parseAPIError({ status: 503 }, 'prov');
+    ok('err: 5xx is server and retryable', server.type === 'server' && shouldRetry(server));
+    for (const attempt of [0, 1, 2, 5, 9]) {
+        const d = getRetryDelay(rate, attempt);
+        ok(`err: retry delay within jitter bounds at attempt ${attempt}`, d >= 0 && d <= 45_000, `got ${d}ms`);
+    }
+})();
+
+// ─── 3. harness marks — the dialect the model reads ────────────────────────
+(() => {
+    const hm = loadModule('utils/harnessMarks.ts');
+    const sentinel = hm.dataUnavailable('funding rate');
+    ok('mark: sentinel round-trips', hm.isDataUnavailable(sentinel) && sentinel.startsWith(hm.DATA_UNAVAILABLE_PREFIX));
+    ok('mark: ordinary text is not a sentinel', !hm.isDataUnavailable('DATA_UNAVAILABLE-ish prose'));
+    const note = hm.clipNote({ source: 'order_book', kept: 4, total: 118 });
+    ok('mark: clip note names kept vs existed', note.includes('first 4 of 118') && note.includes('order_book'));
+    ok('mark: clip note says MISSING, not absent', note.includes('MISSING, not absent'));
+    const seen = hm.findClipIn(`prefix ${note} suffix`);
+    ok('mark: clip note is findable in spliced text', seen !== null && seen.kept === 4 && seen.total === 118,
+        `got ${JSON.stringify(seen)}`);
+})();
+
+// ─── 4. notebook pressure — the tiers that REFUSE growth ───────────────────
+(() => {
+    const mb = loadModule('utils/memoryBudget.ts');
+    const MB = 1024 * 1024;
+    ok('budget: below soft is ok', mb.pressureForBytes(0) === 'ok' && mb.pressureForBytes(MB - 1) === 'ok');
+    ok('budget: soft tier at 1MB', mb.pressureForBytes(MB) === 'soft');
+    ok('budget: trigger tier at 1.5MB', mb.pressureForBytes(Math.round(1.5 * MB)) === 'trigger');
+    ok('budget: hard tier at 2MB', mb.pressureForBytes(2 * MB) === 'hard');
+    ok('budget: NaN reads as ok, never throws', mb.pressureForBytes(Number.NaN) === 'ok');
+    ok('budget: bytesOf(null) is 0', mb.bytesOf(null) === 0 && mb.bytesOf(undefined) === 0);
+    ok('budget: never-requested cleanup is due', mb.cleanupIsDue(null, Date.now()) === true);
+    ok('budget: recent cleanup is not due',
+        mb.cleanupIsDue(Date.now() - 1000, Date.now()) === false);
+})();
+
+// ─── 5. contextCompaction — tool pairs live or die together ────────────────
+(() => {
+    const cc = loadModule('services/providers/contextCompact.ts');
+    const big = (label) => `${label} ${'x'.repeat(4000)}`;
+    // 14 messages: the 6-message protected tail (MIN_KEEP_MESSAGES) must leave
+    // a compactable head, or nothing can be shortened by design.
+    const round = (n) => ([
+        { role: 'user', content: `q${n}` },
+        { role: 'assistant', content: null, tool_calls: [{ id: `c${n}`, type: 'function', function: { name: 'get_order_book', arguments: '{}' } }] },
+        { role: 'tool', tool_call_id: `c${n}`, content: big('tool result') },
+        { role: 'assistant', content: `a${n}` },
+    ]);
+    const msgs = [
+        ...round(1), ...round(2),
+        { role: 'user', content: 'q3' }, { role: 'assistant', content: 'a3' },
+        { role: 'user', content: 'q4' }, { role: 'assistant', content: 'a4' },
+        { role: 'user', content: 'recent question' },
+        { role: 'assistant', content: 'recent answer' },
+    ];
+    // A tiny ceiling forces compaction; tokens are ESTIMATES, so the contract
+    // asserted is structural, not byte-exact.
+    const out = cc.compactMessages({ messages: msgs, ceilingTokens: 150 });
+    const dangling = out.messages.filter(m => (m.tool_calls?.length ?? 0) > 0
+        && !out.messages.some(r => r.role === 'tool' && r.tool_call_id === m.tool_calls[0].id));
+    ok('compact: no tool_calls survives without its tool reply (the 400 class)', dangling.length === 0,
+        `${dangling.length} dangling`);
+    const tailUser = out.messages.findIndex(m => m.role === 'user' && m.content === 'recent question');
+    const tailAnswer = out.messages.findIndex(m => m.role === 'assistant' && m.content === 'recent answer');
+    ok('compact: the protected tail survives verbatim', tailUser >= 0 && tailAnswer > tailUser);
+    ok('compact: something was actually done', out.changed === true && out.actions.length > 0,
+        `changed=${out.changed} actions=${out.actions.length}`);
+    ok('compact: the trader gets a notice', typeof out.notice === 'string' && out.notice.length > 0);
+    ok('compact: the shrunk request now fits',
+        out.afterTokens <= 150 + 60 && out.stillOver === 0,
+        `after=${out.afterTokens} stillOver=${out.stillOver}`);
+
+    // The identity case must not rewrite anything.
+    const same = cc.compactMessages({ messages: msgs, ceilingTokens: 1_000_000 });
+    ok('compact: a fitting transcript passes through untouched',
+        same.changed === false && same.messages.length === msgs.length);
+})();
+
+// ─── 6. tradeAnalysis coercion — the AI boundary is lenient but not blind ──
+(() => {
+    const { CoercedTradeAnalysisSchema } = loadModule('schemas/tradeAnalysis.ts');
+    const parsed = CoercedTradeAnalysisSchema.parse({
+        coinName: 'BTCUSDT',
+        direction: 'long',
+        confidence: 72,                 // number where a string is expected
+        grade: 'b',                     // wrong case
+        strategy: ' liquidity sweep ',
+        entryPoints: [{ price: '95000' }],   // numeric-as-string
+        stopLoss: { level: 94500 },          // nested object
+    });
+    ok('schema: numeric confidence coerces to a string', parsed.confidence === '72', `got ${JSON.stringify(parsed.confidence)}`);
+    ok('schema: grade is upper-cased into the enum', parsed.grade === 'B');
+    ok('schema: strategy keeps its text', typeof parsed.strategy === 'string' && parsed.strategy.length > 0);
+    ok('schema: string price entry point survives', parsed.entryPoints.length >= 1, `got ${parsed.entryPoints.length}`);
+    ok('schema: stopLoss object is extracted, never "[object Object]"',
+        typeof parsed.stopLoss === 'string' && !parsed.stopLoss.includes('[object'));
+    ok('schema: direction synonyms coerce (bull→Long)', CoercedTradeAnalysisSchema.parse({ direction: 'bullish' }).direction === 'Long');
+    ok('schema: an unknown direction reads Neutral, the documented lenient arm',
+        CoercedTradeAnalysisSchema.parse({ direction: 'SIDEWAYS' }).direction === 'Neutral');
+    let threw = false;
+    try { CoercedTradeAnalysisSchema.parse(undefined); } catch { threw = true; }
+    ok('schema: a missing payload FAILS CLOSED', threw);
+})();
+
+// ─── report ────────────────────────────────────────────────────────────────
+console.log(`contracts: ${passed} passed, ${failures.length} failed`);
+for (const f of failures) console.log(`  FAIL ${f}`);
+if (failures.length) {
+    console.error('CONTRACT CHECK FAIL — a pinned contract broke; fix the module, not this file.');
+    process.exit(1);
+}
+console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction and AI-boundary coercion all hold.');
