@@ -126,3 +126,47 @@ export const skillRunsHere = (
     }
     return true;
 };
+
+/** Authoring caps: ~200 lines soft (warn, suggest `references/`), 100k chars
+ *  hard (refuse). Long material belongs in a bundled file, not the body. */
+export const SKILL_BODY_SOFT_LINES = 200;
+export const SKILL_BODY_HARD_CHARS = 100_000;
+
+export const skillBodyCaps = (body: string): { lines: number; chars: number; overSoft: boolean; overHard: boolean } => {
+    const lines = body.split('\n').length;
+    const chars = body.length;
+    return { lines, chars, overSoft: lines > SKILL_BODY_SOFT_LINES, overHard: chars > SKILL_BODY_HARD_CHARS };
+};
+
+/** A description that tells the model WHEN to use the skill — the trigger —
+ *  in the same spirit as the spec's "Use when / Don't use for". Warned on at
+ *  authoring, never blocking. */
+export const hasUseWhenTrigger = (description: string): boolean =>
+    /\b(?:use when|use this when|when|if|whenever|for|during|before|after)\b/i.test(description);
+
+/**
+ * Import scan for third-party skill text (item 6): exfiltration and
+ * destructive-command patterns a skill body or bundled file must not carry.
+ * Returns one finding per hit, human-readable. DESTRUCTIVE findings refuse
+ * the import; EXFIL findings refuse too — a procedure that phones home is
+ * not a procedure this app runs, and there is no terminal tool to run it on.
+ */
+export type ScanSeverity = 'destructive' | 'exfil';
+
+const SCAN_PATTERNS: Array<{ re: RegExp; severity: ScanSeverity; what: string }> = [
+    { re: /\brm\s+-rf\b|\bmkfs\b|\bdd\s+if=/i, severity: 'destructive', what: 'a destructive filesystem command (rm -rf / mkfs / dd)' },
+    { re: /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\};\s*:/, severity: 'destructive', what: 'a fork bomb' },
+    { re: /\b(?:curl|wget)\b[^\n]*\|\s*(?:ba)?sh/i, severity: 'exfil', what: 'a piped shell download (curl|sh)' },
+    { re: /\bbase64\s+(-d|--decode)\b/i, severity: 'exfil', what: 'inline base64 decoding' },
+    { re: /\b(?:cat|type)\b[^\n]*(?:\.ssh|id_rsa|credentials|\.env|\.aws)\b/i, severity: 'exfil', what: 'a credential-file read' },
+    { re: /\b(?:nc|ncat|netcat)\b[^\n]*\s-e\b/i, severity: 'exfil', what: 'a netcat reverse shell' },
+    { re: /\bhttps?:\/\/[^\s]*(?:token|key|secret|password)=[^\s]+/i, severity: 'exfil', what: 'a URL carrying a credential parameter' },
+];
+
+export const scanSkillText = (text: string): Array<{ severity: ScanSeverity; what: string }> => {
+    const hits: Array<{ severity: ScanSeverity; what: string }> = [];
+    for (const { re, severity, what } of SCAN_PATTERNS) {
+        if (re.test(text)) hits.push({ severity, what });
+    }
+    return hits;
+};
