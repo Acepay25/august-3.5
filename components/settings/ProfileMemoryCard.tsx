@@ -95,6 +95,24 @@ const ProfileMemoryCard: React.FC = () => {
                                         auto
                                     </StatusPill>
                                 )}
+                                {/* The spec's tiny provenance marker: stated (the
+                                    trader said it) vs observed/inferred (a system
+                                    path). Absent = legacy = stated. */}
+                                {e.tag === 'observed' && (
+                                    <StatusPill tone="neutral" kicker title="Recorded by a system path from watched behaviour — not something you said">
+                                        observed
+                                    </StatusPill>
+                                )}
+                                {e.tag === 'inferred' && (
+                                    <StatusPill tone="neutral" kicker title="Inferred by a system path — not something you said">
+                                        inferred
+                                    </StatusPill>
+                                )}
+                                {e.sensitive && (
+                                    <StatusPill tone="warn" kicker title="A sensitive-category fact — excluded from pre-reads and unattended contexts">
+                                        sensitive
+                                    </StatusPill>
+                                )}
                                 {/* The label — what the memory is called. */}
                                 <span className="min-w-0 flex-1 truncate text-ui-dense font-medium text-zinc-100" title={e.description}>
                                     {e.description}
