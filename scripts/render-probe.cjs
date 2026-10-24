@@ -26,6 +26,7 @@
  */
 
 const { spawn } = require('child_process');
+const net = require('net');
 const path = require('path');
 const { mkdirSync } = require('fs');
 const { chromium } = require('@playwright/test');
@@ -504,6 +505,29 @@ const check = (name, ok, detail) => {
 };
 
 async function main() {
+    // An occupied port is not a busy-port nuisance here, it is a gate that
+    // measures the WRONG TREE: our own vite/mock die on --strictPort (or on
+    // EADDRINUSE), `waitForServer` then answers for whoever owns the port, and
+    // every check below passes against another checkout's app — or an orphan
+    // that is still serving the code from before the change under review.
+    // Ask who owns each port BEFORE spawning, and refuse. PROBE_REUSE is the one
+    // case where an occupied port is the point, so it opts out.
+    if (!process.env.PROBE_REUSE) {
+        const free = (port) => new Promise((resolve) => {
+            const probe = net.createServer();
+            probe.once('error', () => resolve(false));
+            probe.once('listening', () => probe.close(() => resolve(true)));
+            probe.listen(port, '127.0.0.1');
+        });
+        for (const [label, port] of [['dev server', PORT], ['mock provider', MOCK_PORT]]) {
+            if (await free(port)) continue;
+            console.error(`RENDER PROBE FAIL: something this run did not start already owns port ${port} (${label}). `
+                + 'Refusing to drive it: waitForServer cannot tell that server from ours, so a pass here would prove '
+                + 'nothing about THIS tree. Free the port, or pass PROBE_PORT/MOCK_PORT.');
+            process.exitCode = 1;
+            return;
+        }
+    }
     const viteBin = path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
     // DEV server, not `vite preview`, and that is deliberate: the app's provider
     // fetches are same-origin under the dev proxy, so a loopback mock is
