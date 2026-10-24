@@ -37,6 +37,8 @@ import { TASK_BUDGETS } from '../providers/taskBudgets';
 import { resolveComposerEffort, type ReasoningEffort } from '../providers/reasoningControls';
 import { buildSkillsIndexForPrompt, rankSkillIndexRows } from './tradeChatContext';
 import { skillIndexRows } from '../learning/SkillMemoryService';
+import { getMemoryFiles } from '../learning/MemoryFilesService';
+import { buildNotebookTopicsIndex } from '../learning/memoryTopics';
 import { activeStrategiesBlock } from '../learning/strategyStore';
 import { buildProfileMemoryIndex } from '../learning/profileMemory';
 import { runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
@@ -121,6 +123,16 @@ export const surfacePromptWith = (mandate: string, where: string): ChatSurfacePr
     } catch {
         skills = [];
         skillsBlock = '';
+    }
+    // Listing-first notebook recall: one line per topic, bodies on demand.
+    // Same failure posture as the skills block — a read that cannot happen
+    // costs the block, never the turn.
+    let topicsBlock: string;
+    try {
+        const store = getMemoryFiles();
+        topicsBlock = buildNotebookTopicsIndex(store.files, store.folders);
+    } catch {
+        topicsBlock = '';
     }
     let strategiesBlock: string;
     try {
