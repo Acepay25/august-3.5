@@ -296,6 +296,21 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         && !mf.hasUseWhenTrigger('stuff'));
 })();
 
+// ─── 10. the shared index budget — one table, scaled to the window ─────────
+(() => {
+    const pb = loadModule('utils/promptIndexBudget.ts');
+    const big = pb.indexBudgetFor(1_000_000);
+    const small = pb.indexBudgetFor(8_000);
+    ok('budget: big windows keep the pre-budget defaults',
+        big.skills === 30 && big.memory === 30 && big.topics === 12);
+    ok('budget: a small local model shrinks all three',
+        small.skills === 4 && small.memory === 4 && small.topics === 2);
+    ok('budget: monotonic between the steps',
+        pb.indexBudgetFor(100_000).skills <= big.skills && pb.indexBudgetFor(32_000).skills <= pb.indexBudgetFor(100_000).skills);
+    ok('budget: junk input falls back to the big defaults',
+        JSON.stringify(pb.indexBudgetFor(Number.NaN)) === JSON.stringify(big));
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
