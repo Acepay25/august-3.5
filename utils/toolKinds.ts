@@ -96,6 +96,7 @@ const BY_LABEL: Record<string, ToolKindInfo> = {
 
     // ── searches: the desk is looking for something ──────────────────────
     'notebook recall': { kind: 'search', activity: 'Recalling the notebook' },
+    'skill reader': { kind: 'read', activity: 'Reading a skill' },
     'scan chart skills': { kind: 'search', activity: 'Scanning the chart for skills' },
     'scan setups': { kind: 'search', activity: 'Scanning for setups' },
     'session search': { kind: 'search', activity: 'Searching the session' },
