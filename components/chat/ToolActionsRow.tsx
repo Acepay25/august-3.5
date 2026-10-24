@@ -15,7 +15,7 @@
  * the line expands to the same per-item detail.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { AlertTriangle, Brain, Wrench, FilePlus2, NotebookPen } from '../shared/Icons';
 import type { ToolAction } from '../../types/message';
 
@@ -64,6 +64,10 @@ const actionLabel = (tool: string, items: ToolAction[]): string => {
             return n === 1
                 ? `Skill revision proposed — ${items[0].label} (review in Settings → Skills)`
                 : `${n} skill revisions proposed — review in Settings → Skills`;
+        case 'remember':
+            return n === 1
+                ? `Memory saved — ${(items[0].label.split('/')[1] ?? items[0].label)}`
+                : `${n} memories saved`;
         case 'write_memory_note':
             return n === 1
                 ? `Memory note saved — ${items[0].label} (Settings → Memory)`
@@ -111,6 +115,7 @@ interface Group {
 }
 
 export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
+    const [undoneSlugs, setUndoneSlugs] = useState<Set<string>>(new Set());
     if (!actions.length) return null;
     // Group by tool+ok — one row per class ("N items"). Fails are gathered
     // across classes into the single Blocked line below.
@@ -163,12 +168,44 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                             )}
                         </summary>
                         <div className="mb-1 mt-1 space-y-0.5 border-l border-white/10 pl-4">
-                            {g.items.map((a, i) => (
-                                <p key={`${a.at}-${i}`} className="truncate text-ui-xs leading-4 text-zinc-500" title={`${a.verb} ${a.label}${a.review ? ` — review: ${a.review}` : ''}`}>
-                                    <span className="text-zinc-400">{a.verb}</span> {a.label}
-                                    {a.review ? <span className="text-zinc-600"> — review: {a.review}</span> : null}
-                                </p>
-                            ))}
+                            {g.items.map((a, i) => {
+                                // The ONE undo the chip style carries: a memory
+                                // the model just saved can be taken back right
+                                // here, without going to Settings. The slug
+                                // rides the label ('kind/slug').
+                                const slug = a.tool === 'remember' ? (a.label.split('/')[1] ?? '') : '';
+                                const undone = slug !== '' && undoneSlugs.has(slug);
+                                return (
+                                    <p key={`${a.at}-${i}`} className="flex items-center gap-2 truncate text-ui-xs leading-4 text-zinc-500" title={`${a.verb} ${a.label}${a.review ? ` — review: ${a.review}` : ''}`}>
+                                        <span className="text-zinc-400">{a.verb}</span> <span className="min-w-0 flex-1 truncate">{a.label}</span>
+                                        {a.review ? <span className="text-zinc-600"> — review: {a.review}</span> : null}
+                                        {a.tool === 'remember' && slug !== '' && (
+                                            <button
+                                                type="button"
+                                                disabled={undone}
+                                                data-testid={`memory-undo-${slug}`}
+                                                onClick={() => {
+                                                    void (async () => {
+                                                        try {
+                                                            const { forgetProfileMemory } = await import('../../services/learning/profileMemory');
+                                                            const { getActiveUsername } = await import('../../utils/activeUser');
+                                                            if (forgetProfileMemory(slug, getActiveUsername())) {
+                                                                window.dispatchEvent(new Event('august-profile-memory'));
+                                                                setUndoneSlugs(prev => new Set(prev).add(slug));
+                                                            }
+                                                        } catch (err) {
+                                                            console.warn('[ToolActions] memory undo failed:', err instanceof Error ? err.message : String(err));
+                                                        }
+                                                    })();
+                                                }}
+                                                className="shrink-0 rounded-control border border-white/10 px-1.5 py-px text-ui-2xs font-bold uppercase tracking-wider text-zinc-400 transition-colors duration-[120ms] ease-[var(--ease-snappy)] hover:bg-zinc-800 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+                                            >
+                                                {undone ? 'Undone' : 'Undo'}
+                                            </button>
+                                        )}
+                                    </p>
+                                );
+                            })}
                         </div>
                     </details>
                 );
