@@ -26,6 +26,14 @@ export const KNOWN_SKILL_FRONTMATTER_KEYS: ReadonlySet<string> = new Set([
     'netR', 'grossR', 'netRKnown', 'netRUnknown', 'rSampled', 'tradeIds',
     'evidenceCount', 'birthEvidence', 'lastEvidenceAt', 'shadow', 'suspendedAt',
     'disabledByUser', 'prediction', 'supersededBy', 'revisedAt',
+    // The rest of the ledger face `serializeSkill` writes. Without these, a
+    // rewrite reads its OWN output back as third-party keys, appends them
+    // verbatim, and writes the ledger field a second time — every rewrite
+    // grew another copy of `modified:` and the eval/history fields.
+    'manualOnly', 'modified', 'evalVerdict', 'lastEvalAt', 'refinedAt',
+    'lastMatchedAt', 'evalStreak', 'controlIds', 'controlWins', 'controlLosses',
+    'overriddenIds', 'crossRegimeIds', 'regimeStats', 'claimTestedEvidence',
+    'history', 'previousVersion',
 ]);
 
 /**
@@ -151,7 +159,7 @@ export const hasUseWhenTrigger = (description: string): boolean =>
  * the import; EXFIL findings refuse too — a procedure that phones home is
  * not a procedure this app runs, and there is no terminal tool to run it on.
  */
-export type ScanSeverity = 'destructive' | 'exfil';
+export type ScanSeverity = 'destructive' | 'exfil' | 'policy';
 
 const SCAN_PATTERNS: Array<{ re: RegExp; severity: ScanSeverity; what: string }> = [
     { re: /\brm\s+-rf\b|\bmkfs\b|\bdd\s+if=/i, severity: 'destructive', what: 'a destructive filesystem command (rm -rf / mkfs / dd)' },
@@ -161,6 +169,11 @@ const SCAN_PATTERNS: Array<{ re: RegExp; severity: ScanSeverity; what: string }>
     { re: /\b(?:cat|type)\b[^\n]*(?:\.ssh|id_rsa|credentials|\.env|\.aws)\b/i, severity: 'exfil', what: 'a credential-file read' },
     { re: /\b(?:nc|ncat|netcat)\b[^\n]*\s-e\b/i, severity: 'exfil', what: 'a netcat reverse shell' },
     { re: /\bhttps?:\/\/[^\s]*(?:token|key|secret|password)=[^\s]+/i, severity: 'exfil', what: 'a URL carrying a credential parameter' },
+    // A third-party procedure has no business telling the seat to write the
+    // trader into its collaboration memory. It is not code execution, but it
+    // is an instruction to change future prompts, so it refuses at the door.
+    { re: /\b(?:remember|memorize)\b[^\n]{0,80}\b(?:the\s+)?(?:user|trader)\b/i, severity: 'policy', what: 'an instruction to write the user into memory' },
+    { re: /\b(?:write|save|store)\b[^\n]{0,40}\b(?:to\s+)?memory\b/i, severity: 'policy', what: 'an instruction to write memory' },
 ];
 
 export const scanSkillText = (text: string): Array<{ severity: ScanSeverity; what: string }> => {

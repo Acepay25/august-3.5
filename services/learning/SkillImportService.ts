@@ -58,25 +58,43 @@ export const importSkillFiles = async (files: Array<SkillFileRead & { content: s
     // `<slug>__<path with / → __>` — exactly the layout the skill_view L2
     // reader addresses. Files without a relPath keep the single-file path
     // below, unchanged.
-    const bundledGroups = new Map<string, Array<{ file: SkillFileRead & { content: string }; relSegments: string[] }>>();
+    const bundledGroups = new Map<string, { parent: string; files: Array<{ file: SkillFileRead & { content: string }; relSegments: string[] }> }>();
+    const roots: Array<{ path: string[]; entry: { file: SkillFileRead & { content: string }; relSegments: string[] } }> = [];
+    const support: Array<{ file: SkillFileRead & { content: string }; segs: string[] }> = [];
     const singles: typeof files = [];
     for (const file of files) {
         const rel = file.relPath;
         const segs = rel ? rel.split(/[/\\]/).filter(Boolean) : [];
         if (segs.length >= 2 && segs[segs.length - 1].toLowerCase() === 'skill.md') {
-            const parent = segs[segs.length - 2];
-            if (!bundledGroups.has(parent)) bundledGroups.set(parent, []);
-            bundledGroups.get(parent)!.push({ file, relSegments: segs });
-        } else if (segs.length >= 2 && segs.some(x => x.toLowerCase() === 'skill.md')) {
-            // A support file under a folder that (also) holds a SKILL.md —
-            // attach it to that skill, keeping its sub-path.
-            const skilIdx = segs.findIndex(x => x.toLowerCase() === 'skill.md');
-            const parent = skilIdx > 0 ? segs[skilIdx - 1] : segs[0];
-            if (!bundledGroups.has(parent)) bundledGroups.set(parent, []);
-            bundledGroups.get(parent)!.push({ file, relSegments: segs });
+            roots.push({ path: segs.slice(0, -1), entry: { file, relSegments: segs } });
+        } else if (segs.length >= 2) {
+            support.push({ file, segs });
         } else {
             singles.push(file);
         }
+    }
+    for (const root of roots) {
+        const key = root.path.join('/').toLowerCase();
+        if (!bundledGroups.has(key)) bundledGroups.set(key, { parent: root.path[root.path.length - 1], files: [] });
+        bundledGroups.get(key)!.files.push(root.entry);
+    }
+    for (const item of support) {
+        // Attach a support file to the LONGEST skill root that is an ancestor
+        // of its path. The prior test required "SKILL.md" to appear in the
+        // SUPPORT file's own path, which never happens for references/ or
+        // scripts/ — so every bundled file fell through as a failed single.
+        const match = roots
+            .filter(root => root.path.length < item.segs.length
+                && root.path.every((seg, i) => item.segs[i].toLowerCase() === seg.toLowerCase()))
+            .sort((a, b) => b.path.length - a.path.length)[0];
+        if (!match) {
+            singles.push(item.file);
+            continue;
+        }
+        const key = match.path.join('/').toLowerCase();
+        // Keep only the path BELOW the skill root: the bundled namespace is
+        // `<slug>__<role>__<name>`, and the root segment is the slug itself.
+        bundledGroups.get(key)!.files.push({ file: item.file, relSegments: item.segs.slice(match.path.length) });
     }
 
     /** Bundled-file name: `<slug>__<segments joined __>`, each segment
@@ -87,7 +105,7 @@ export const importSkillFiles = async (files: Array<SkillFileRead & { content: s
         return [slug, ...tail, base].join('__') + '.md';
     };
 
-    for (const [parent, group] of bundledGroups) {
+    for (const { parent, files: group } of bundledGroups.values()) {
         const skillEntry = group.find(g => g.file.name.toLowerCase() === 'skill.md');
         if (!skillEntry) {
             for (const g of group) singles.push(g.file);

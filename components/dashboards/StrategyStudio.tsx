@@ -425,7 +425,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
         }
     };
 
-    const onImportFiles = async (picked: FileList | null): Promise<void> => {
+    const onImportFiles = async (picked: FileList | File[] | null): Promise<void> => {
         if (!picked || picked.length === 0 || isImporting) return;
         setIsImporting(true);
         try {
@@ -492,7 +492,14 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                             multiple
                             data-testid="skills-import-input"
                             className="hidden"
-                            onChange={e => { const picked = e.target.files; e.target.value = ''; void onImportFiles(picked); }}
+                            onChange={e => {
+                                // Snapshot FIRST: clearing the input empties the
+                                // live FileList, so the async importer used to see
+                                // zero files and return without a toast.
+                                const chosen = e.target.files ? Array.from(e.target.files) : [];
+                                e.target.value = '';
+                                void onImportFiles(chosen);
+                            }}
                         />
                         {/* The folder picker: imports a SKILL.md folder whole — the
                             skill plus its references/templates as bundled files the
@@ -506,7 +513,11 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                             directory=""
                             data-testid="skills-import-folder-input"
                             className="hidden"
-                            onChange={e => { const picked = e.target.files; e.target.value = ''; void onImportFiles(picked); }}
+                            onChange={e => {
+                                const chosen = e.target.files ? Array.from(e.target.files) : [];
+                                e.target.value = '';
+                                void onImportFiles(chosen);
+                            }}
                         />
                     </label>
                     <input

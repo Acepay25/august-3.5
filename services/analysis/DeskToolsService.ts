@@ -2431,6 +2431,10 @@ export interface DeskToolContext {
      *  turn that produced them, and clearing this turn cannot delete another
      *  turn's live payloads. */
     artifactOwner?: string;
+    /** The Settings memory switch for THIS turn. False means the memory tools
+     *  refuse (no read, no write) and the pre-read hint pass does not run.
+     *  Undefined preserves legacy callers that never had a memory flag. */
+    memoryEnabled?: boolean;
 }
 
 /** Market-data tools whose result may need the coin named in the transcript —
@@ -2537,6 +2541,13 @@ export async function executeDeskTool(
     // HERE, before the cache and before the switch.
     if (!seatAllows(context.allowedTools, call.name)) {
         return rejectedResult(call, `${call.name} rejected: this tool is not available on this seat.`);
+    }
+    // The Settings switch is a PROMISE at the tool layer too, not just in the
+    // prompt: with memory off, a seat that still has these tools offered must
+    // not be able to read or write the trader's notebook.
+    if (context.memoryEnabled === false
+        && (call.name === 'remember' || call.name === 'read_memory' || call.name === 'forget')) {
+        return rejectedResult(call, `${call.name} rejected: memory is OFF for this turn — nothing is read or saved.`);
     }
     // Repeat calls within the TTL (every seat asks the same desk) are served
     // from cache — identical market data, zero extra network round-trips.
@@ -2671,8 +2682,10 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     .map(f => f.name);
                 const skillDir = `notebook:skills/${row.slug}`;
                 const substitute = (text: string): string => text
-                    .replace(/\$\{(?:AUGUST|HERMES)_SKILL_DIR\}/g, skillDir)
-                    .replace(/\$\{(?:AUGUST|HERMES)_SESSION_ID\}/g, context.sessionId || DESK_BOOT_SESSION_ID);
+                    // Bare ${SKILL_DIR}/${SESSION_ID} are the spec's names; the
+                    // AUGUST_/HERMES_ prefixes are the portability aliases.
+                    .replace(/\$\{(?:AUGUST_|HERMES_)?SKILL_DIR\}/g, skillDir)
+                    .replace(/\$\{(?:AUGUST_|HERMES_)?SESSION_ID\}/g, context.sessionId || DESK_BOOT_SESSION_ID);
                 if (filePath) {
                     if (/[/\\]|^\.|\.\./.test(filePath) || !bundled.includes(filePath)) {
                         return rejectedResult(call, `skill_view rejected: "${filePath}" is not one of ${row.slug}'s bundled files (path separators and .. are refused)`);
@@ -2702,6 +2715,14 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     const body = asString(call.arguments.body);
                     if (!description || !body) {
                         return rejectedResult(call, 'remember rejected: description and body are both required');
+                    }
+                    // The chat agent may write only facts the trader STATED.
+                    // observed/inferred are stamped by system paths; refusing
+                    // here is what makes the provenance claim true instead of
+                    // silently overwriting the caller's tag.
+                    const requestedTag = asString(call.arguments.tag).toLowerCase();
+                    if (requestedTag && requestedTag !== 'stated') {
+                        return rejectedResult(call, `remember rejected: the chat agent may only write tag "stated", not "${requestedTag}" — observed/inferred facts belong to system paths`);
                     }
                     const slug = asString(call.arguments.slug) || slugify(asString(call.arguments.name) || description);
                     // Tag the writer: profileMemory's convention is that MODEL
@@ -2742,6 +2763,9 @@ ${body}`);
                         });
                         break;
                     }
+                    if (result.persisted === false) {
+                        return rejectedResult(call, `remember rejected: the fact did not reach storage${result.error ? ` (${result.error})` : ''}. Nothing was saved.`);
+                    }
                     const { entry, created } = result;
                     content = JSON.stringify({
                         saved: true, slug: entry.slug, kind: entry.kind, created,
@@ -2758,9 +2782,15 @@ ${body}`);
                 const raw = call.arguments.slugs;
                 const slugs: string[] = Array.isArray(raw) ? raw.map(String) : (raw ? [String(raw)] : []);
                 const all = listProfileMemories();
+                // A restricted seat with no write tools is an unattended reader
+                // (the skill evaluator). Sensitive rows are not a pre-read there:
+                // the feature's "excluded from unattended contexts" claim has to
+                // include the explicit "all" read, not just the hint pass.
+                const unattended = seatIsRestricted(context.allowedTools) && !seatAllows(context.allowedTools, 'remember');
+                const visible = unattended ? all.filter(e => !e.sensitive) : all;
                 const picked = slugs.includes('all') || slugs.length === 0
-                    ? all
-                    : slugs.map(s => getProfileMemory(s)).filter((e): e is NonNullable<typeof e> => !!e);
+                    ? visible
+                    : slugs.map(s => getProfileMemory(s)).filter((e): e is NonNullable<typeof e> => !!e && (!unattended || !e.sensitive));
                 content = picked.length === 0
                     ? 'No matching memories. The index lists what exists; "all" returns every entry.'
                     : picked.map(e => `### [${e.kind}] ${e.slug}\n_${e.description}_\n\n${e.body}`).join('\n\n');
@@ -2818,6 +2848,21 @@ ${body}`);
                     });
                     if (!crafted) {
                         return rejectedResult(call, 'propose_skill rejected: the proposal is missing required fields (name, when, steps, if_condition, then_action).');
+                    }
+                    const { skillBodyCaps, hasUseWhenTrigger } = await import('../../utils/skillFrontmatter');
+                    const authoredBody = [
+                        crafted.when, ...crafted.steps, crafted.validate, crafted.output,
+                        crafted.ifCondition, crafted.thenAction,
+                    ].join('\n');
+                    const caps = skillBodyCaps(authoredBody);
+                    if (caps.overHard) {
+                        return rejectedResult(call, `propose_skill rejected: the authored body is ${caps.chars.toLocaleString()} chars — over the 100k hard cap; put long material in a bundled references/ file.`);
+                    }
+                    if (caps.overSoft) {
+                        console.warn(`[Skills] proposal "${crafted.name}": ${caps.lines} lines is over the ~200-line soft cap — long material belongs in a bundled references/ file`);
+                    }
+                    if (crafted.description && !hasUseWhenTrigger(crafted.description)) {
+                        console.warn(`[Skills] proposal "${crafted.name}": the description has no "Use when" trigger — it is the activation key, and a vague one rarely activates`);
                     }
                     // The same quality bar every other draft source passes:
                     // tombstone cooldown, duplicate skip, live-skill coverage
@@ -3776,6 +3821,8 @@ export async function runDeskToolLoop(params: {
     onToolPayload?: (payload: ToolPayload) => void;
     nativeTools?: boolean;
     allowedTools?: string[];
+    /** The Settings memory switch; see `DeskToolContext.memoryEnabled`. */
+    memoryEnabled?: boolean;
     trades?: LoggedTrade[];
     /** Additional tool definitions merged into the desk set (e.g. debate mail). */
     extraToolDefs?: DeskToolDefinition[];
@@ -3820,6 +3867,7 @@ export async function runDeskToolLoop(params: {
         speaker = '',
         nativeTools = config.apiFormat === 'chat_completions',
         allowedTools,
+        memoryEnabled,
         trades,
         extraToolDefs = [],
         executeExtraTool,
@@ -4124,6 +4172,7 @@ export async function runDeskToolLoop(params: {
                 // what's offered: text-protocol seats can emit a tag for any
                 // tool, and these calls bypass the offer-time filter.
                 allowedTools,
+                memoryEnabled,
             })
             : [];
         const results = [...replays, ...extraResults, ...forgedResults, ...coreResults];
@@ -4250,6 +4299,9 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     getFormingCandle?: () => FormingCandle | null;
     /** Override harness setting. Default: follow Settings → Desk Tools. */
     enabled?: boolean;
+    /** The Settings memory switch for this turn. False disables the pre-read
+     *  hint pass and makes the memory tools refuse in the executor. */
+    memoryEnabled?: boolean;
     /** Final-turn nudge after tools ran. */
     afterToolsNudge?: string;
     /** Live tool-call visibility (Floor chips) — fires before and after each
@@ -4356,7 +4408,7 @@ export async function* streamChatWithDeskTools(
     // user role inside the harness's own marker, the same voice the tool
     // nudges use, so the seat can tell the trader's words from the app's.
     let outbound = messages;
-    if (isLikelySmallModel(config)) {
+    if (options?.memoryEnabled !== false && isLikelySmallModel(config)) {
         try {
             const { listProfileMemories } = await import('../learning/profileMemory');
             const { skillIndexRows } = await import('../learning/SkillMemoryService');
@@ -4381,6 +4433,7 @@ export async function* streamChatWithDeskTools(
     const nativeTools = config.apiFormat === 'chat_completions';
     const {
         defaultSymbol,
+        memoryEnabled,
         afterToolsNudge,
         chartInterval,
         chartLevels,
@@ -4518,6 +4571,7 @@ export async function* streamChatWithDeskTools(
         getFormingCandle,
         nativeTools,
         allowedTools: mergedAllowed,
+        memoryEnabled,
         trades,
         requireFirstToolRound,
         extraToolDefs: extraDefs,
