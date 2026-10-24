@@ -72,7 +72,7 @@ each home maps them onto its own fields. That is what 20a builds.
 
 Second blocker for the cheaper "just lift the runner" route: the deps are captured
 **at construction** (`chatTurnRunner.ts:172-307`, `useMemo` over 35 fields at
-`TradeChatPanel.tsx:454-563`), including composer state (`draft`, `attachments`,
+`TradeChatPanel.tsx:477-571`), including composer state (`draft`, `attachments`,
 `setDraft`, `clearAttachments`, `setContextAt`) and `systemPromptFor`. Two surfaces
 cannot share one instance built per-mount, so 20a converts turn-scoped context into
 parameters and leaves the composer/state hooks with the caller.
@@ -2289,7 +2289,7 @@ went through the source: `runAutomation` is hooks/useAutomations.ts:429 (the tab
 file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1406. All three fixed in both flow docs. Newly bound and verified true:
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44, the Enter branch at
 components/trade/panels/ChatComposer.tsx:146, systemPromptFor components/trade/TradeChatPanel.tsx:431 with
-TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:485, useBotThread hooks/useAnalysisPipeline.ts:1315,
+TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:499, useBotThread hooks/useAnalysisPipeline.ts:1315,
 entriesForSession services/trade/chatSessions.ts:586, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:133
 with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
 services/trade/automationTurn.ts:81, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices
