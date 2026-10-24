@@ -1,15 +1,20 @@
 # August Trading — the complete flow
 
 Every node names the file and line that implements it. Verified against the tree on
-**2026-10-22** (the anchor gate re-measured every citation here and in the stage ledger:
-**365 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
-ZERO: 0 citations that land on a comment line (and 5 more cite a comment because the
+**2026-10-24** (the anchor gate re-measured every citation here and in the stage ledger:
+**358 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+ZERO: 0 citations that land on a comment line (and 4 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
 carrying more than one citation, and a sentence that wraps puts its number out of reach of
 its symbol, so four copies of one wrong number were fixed by hand after the gate called it
-zero. A doubt about a wrapped citation gets re-measured, not waved at the ceiling);
-this pass took out accuracy mode with the calibration
+zero. This pass re-checked every multi-citation line against the source by hand and moved 56
+citation numbers, 40 of them on a line the gate cannot see. A doubt about a wrapped citation
+gets re-measured, not waved at the ceiling);
+this pass deleted the scheduled-automation feature (section E): the Automations surface, its
+card feed, the editor modal, the cron tick, the boot catch-up planner, the failure breaker, the
+plan ration and the bot-scoped routine executor, plus the pipeline’s private `automation` run
+mode. It also took out accuracy mode with the calibration
 dashboards and the settings store that fed it (#17), the `savedAnalyses` store (#21), and
 `isDebating` / `activeDebateSpeakers` with the run-failure branch that read them. It follows
 the post-mortem, 2D desk floor, Saved-tab and Roles-tab deletions and
@@ -78,9 +83,9 @@ flowchart TD
         D1 -->|no bot| AN["onAnalyze(prompt, images) components/agents/AgentsView.tsx:784 → App:1589 handleRunAnalysisFromChat"]
     end
     subgraph DOCK["Chart AI dock — inside Trade, TradeView.tsx:1170"]
-        DC["ChatComposer.tsx:147 :222"] --> D2{"chatTurnRunner.send chatTurnRunner.ts:838 — branches on seats"}
-        D2 -->|solo| SO["runSeatTurn called services/trade/chatTurnRunner.ts:1045, defined :619"]
-        D2 -->|panel, 2+ seats| PN["per-seat services/trade/chatTurnRunner.ts:1226 + createDebateMailbox :1154 + planPanelTurn :1174"]
+        DC["ChatComposer.tsx:147 :222"] --> D2{"chatTurnRunner.send chatTurnRunner.ts:846 — branches on seats"}
+        D2 -->|solo| SO["runSeatTurn called services/trade/chatTurnRunner.ts:1045, defined :631"]
+        D2 -->|panel, 2+ seats| PN["per-seat services/trade/chatTurnRunner.ts:1234 + createDebateMailbox :1162 + planPanelTurn :1174"]
         D2 -->|Full analysis button| FA["runFullAnalysis components/trade/TradeChatPanel.tsx:558 → the SAME App:1589 wrapper — it holds the session run slot and writes no row"]
     end
     SO --> TT["runToolTurn — services/trade/toolTurn.ts:131"]
@@ -140,8 +145,9 @@ A desk seat on the Chat surface may call the canvas-free half of the dock's tool
 plus `present_trade`; the other seven `CHART_ACTION_TOOL_DEFS` are not offered at
 all, because `streamChatWithDeskTools` lists a chart-action definition only when a
 caller dispatches it **and** the seat's allow-list names it. Bots are the exception
-by ruling: a bot thread keeps the plain transport, and `useBotMailbox`,
-`botRoutine` and `groupRounds` are not on the tool turn.
+by ruling: a bot thread keeps the plain transport, and `useBotMailbox` and
+`groupRounds` are not on the tool turn (the third name here, `botRoutine`, was the routine
+executor and went with the automations on 2026-10-24).
 
 The card a presented plan draws lives on whichever row presented it — the dock's
 entry or `Message.proposal` — and the logged/dismissed disposition is one module
@@ -289,8 +295,9 @@ history and the current line. Before it goes on the wire:
    its timeout, and recovers once from a context-length rejection: it reads the
    provider's stated limit, compacts to it, remembers it as measured, and retries
    (`sendChatRequest`/`contextRecoveryMessages`,
-   `services/providers/GenericProviderService.ts:1292`/`:1324`;
-   `streamChatRequest`,). The provider's real cause chain is what
+   `sendChatRequest` at `services/providers/GenericProviderService.ts:1371`,
+   `contextRecoveryMessages` at `GenericProviderService.ts:1402`, `streamChatRequest` at
+   `GenericProviderService.ts:1884`). The provider's real cause chain is what
    `toFriendlyProviderError` preserves; a failed turn becomes
    `Message.error` and a `ChatFailureRow`, not an answer.
 6. The wire's per-call decision is `WireAuditEntry` — route, effort, applied and
@@ -338,8 +345,8 @@ prompt through `freshHybridData` into
 scheduled run that was its only producer. It is
 never handed to the turn, because the analyst and moderator prompts it used to ride
 are the files stage 19 deleted. The packet object does still have one consumer:
-`hooks/useAnalysisPipeline.ts:1079` passes it into
-`assemblePipelineMemoryContext` (the packet argument `freshHybridData` at `hooks/useAnalysisPipeline.ts:1079`),
+`hooks/useAnalysisPipeline.ts:926` passes it into
+`assemblePipelineMemoryContext` (the packet argument `freshHybridData` at `hooks/useAnalysisPipeline.ts:929`),
 which is where the learning coin and the notebook
 slice come from, so dropping the fetch is NOT a byte-preserving cleanup — that is
 why it is an owner decision rather than something I removed silently. The loading
@@ -507,7 +514,7 @@ The provider layer is four formats (`types/provider.ts`) behind one policy
 (`shared/providerRequestPolicy.cjs`): thinking gates, temperature, host rules and
 the redirect walker are shared by the renderer, the Vite dev proxy and Electron
 main. `GenericProviderService` is the one transport: `sendChatRequest`
-(`GenericProviderService.ts:1292`), `sendChatTurn` (`:1518`) and
+(`GenericProviderService.ts:1371`), `sendChatTurn` (`:1559`) and
 `streamChatRequest` all use the same retry/timeout wrapper. A
 context-length rejection is the one error that teaches the app a fact: the
 provider states its limit, `contextRecoveryMessages` compacts to that
@@ -634,8 +641,8 @@ never a fourth status.
 The lifecycle has four stages:
 
 1. **Draft** — review passes and tools queue candidates:
-   `runSessionSkillReview` (`sessionSkillReview.ts:207`), `runWeeklyReview`
-   (`weeklyReview.ts:128`), `runMonthlyReport` (`monthlyReport.ts:321`),
+   `runSessionSkillReview` (`sessionSkillReview.ts:207`), `runWeeklyReviewIfDue`
+   (`weeklyReview.ts:161`), `runMonthlyReportIfDue` (`monthlyReport.ts:337`),
    `passMining`, `chartScanSkills`, `selfImprovement`, `botLearning`, and the
    `propose_skill` desk tool. `queueSkillDraft` (`utils/skillDrafts.ts:65`) and
    `queueLearningProposal` (`utils/learningQueue.ts:145`) write the inbox.
@@ -678,7 +685,7 @@ still lists the lessons, for a person.
 ### G.4 The desk tools are one catalogue with surface allow-lists
 
 The catalogue is `DESK_TOOL_DEFINITIONS`
-(`DeskToolsService.ts:926`), plus `CHART_ACTION_TOOL_DEFS` (`:1557`) and the
+(`DeskToolsService.ts:926`), plus `CHART_ACTION_TOOL_DEFS` (`:1574`) and the
 mailbox tools. The surface decides what is offered:
 
 - the dock uses `TRADE_TOOLS` (`chatTurnRunner.ts`);
@@ -740,7 +747,7 @@ flowchart TD
     J --> A["OutcomeAutopilotService.register / subscribe"]
     A --> S["settlementActionFor outcomeSettlement.ts:47 — automatic · shadow · confirm"]
     S --> E["applySkillEvidence SkillMemoryService.ts:2243 · calculatePnlR PatternMemorySynthesisService.ts:249"]
-    E --> R["review passes — runSessionSkillReview · runWeeklyReview · runMonthlyReport · passMining · chartScanSkills"]
+    E --> R["review passes — runSessionSkillReview · runWeeklyReviewIfDue · runMonthlyReportIfDue · passMining · chartScanSkills"]
     R --> D["drafts — queueSkillDraft · queueLearningProposal"]
     D --> G{"draft gates — deterministicDraftGate · gateEvidenceBackedDraft"}
     G --> H{"HUMAN — approveSkillDraft"}
@@ -857,7 +864,7 @@ old answer.
 | 3 | App → useSurfaceRouter | surface + journalTab + journalOpenNonce, `useSurfaceRouter hooks/useSurfaceRouter.ts:54` |
 | 4 | useSurfaceRouter → useSurface | persisted value, key `august_surface_v1 hooks/useSurface.ts:15`, valid set `:16` |
 | 5 | useSurfaceRouter → appHash | `#/journal\|market\|settings\|watch` ⇄ state `parseAppHash hooks/useSurfaceRouter.ts:101`, serialize `serializeAppHash hooks/useSurfaceRouter.ts:159` |
-| 6 | App → Header | band `App.tsx:2338`, guard `surface App.tsx:2365` (surface !== 'agents') |
+| 6 | App → Header | band `App.tsx:2378`, guard `surface App.tsx:2377` (surface !== 'agents') |
 | 7 | App → 4 lazy surfaces | each wrapped in `SurfaceSkeleton` — `SurfaceSkeleton App.tsx:151` TradeView, `SurfaceSkeleton App.tsx:2451` Journal, `SurfaceSkeleton App.tsx:2473` LearnView, `SurfaceSkeleton App.tsx:2489` StrategyStudio |
 | 8 | Header → SurfaceSwitch | the destination set `App.tsx:2166`, list `SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44` |
 | 9 | App → AgentsView props | same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) on `AgentsView App.tsx:2516`, props `App.tsx:2516-2604` |
@@ -869,27 +876,27 @@ old answer.
 | 15 | ChatComposer → chatTurnRunner.send | key `Enter components/trade/panels/ChatComposer.tsx:147` / button `:201` → `services/trade/chatTurnRunner.ts:846` |
 | 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:1045` (definition `runSeatTurn services/trade/chatTurnRunner.ts:631`) |
 | 17 | runSeatTurn → the ONE turn executor | `runToolTurn toolTurn.ts:131` → `streamChatWithDeskTools :174` → `DeskToolsService` → `streamChatRequest` |
-| 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1234` · `:1154` · `:1174` |
+| 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1234` · `:1162` · `:1174` |
 | 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `systemPromptFor components/trade/TradeChatPanel.tsx:463` = the blocks below, assembled at `TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:485` |
 | 20 | every dock turn → chatStore | `mutate services/trade/chatStore.ts:361` · `beginRun services/trade/chatStore.ts:508` |
 | 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useBotThread hooks/useAnalysisPipeline.ts:1083`, anything else runs the tool turn `:1158`; the ensemble flag and the roster it fed are gone (2026-10-19) |
 | 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1132` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:236` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
 | 23 | casual frames → Message.text | `applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:28`; flush precedes the settle write useAnalysisPipeline.ts |
 | 24 | ensemble → the stages that survive | see C — five of the old eight are gone from the call path, and no stage is named in the code, so no line number is claimed |
-| 25 | desk tools → what a caller can reach | `executeDeskTool services/analysis/DeskToolsService.ts:2327` (its allow-list is enforced at execution, not only at offer time) |
+| 25 | desk tools → what a caller can reach | `executeDeskTool services/analysis/DeskToolsService.ts:2495` (its allow-list is enforced at execution, not only at offer time) |
 | 26 | panel tools → chart echo | `executePanelTool services/trade/chatTurnRunner.ts:365` is what echoes the result back into the panel |
 | 27 | ~~automation tick → runAutomation~~ | DELETED (2026-10-24, owner request): the surface, the scheduler, the ration, the breaker and the bot-scoped routine executor are gone — see E |
-| 29 | rooms → groupRounds | `useAgentGroups hooks/useAgentGroups.ts:75` → `streamQuickResponse services/providers/GenericAnalysisService.ts:606` |
+| 29 | rooms → groupRounds | `useAgentGroups hooks/useAgentGroups.ts:75` → `streamQuickResponse services/providers/GenericAnalysisService.ts:605` |
 | 30 | review passes / propose_skill → draft → approval → skill | `draftGates.ts` → `approveSkillDraft services/learning/skillApproval.ts:53` — the post-mortem leg is starved, not deleted (see D) |
 | 31 | approved skill → next prompt | `resolveInvokedSkills services/learning/SkillMemoryService.ts:601` — closes into 24's stage 3 |
 | 32 | logged trade → memory + autopilot | `useTradeLogging hooks/useTradeLogging.ts:100` writes the journal row and the memory note → MemoryService; proposedTrade leaves outcome PENDING so the autopilot watches it |
 | 33 | App messages + dock entries → one thread | `entriesForSession services/trade/chatSessions.ts:586` |
 | 34 | chatStore → localStorage | `saveSessions services/trade/chatSessions.ts:449` → debounced key |
 | 35 | App → profile persistence → engine | `useProfilePersistence hooks/useProfilePersistence.ts:82` → `dbService` or `SqliteService` |
-| 36 | providers → Preferences, keys encrypted | `saveProviderConfigs services/infrastructure/ProviderConfigService.ts:156` writes the whole roster and encrypts each key at rest on desktop |
+| 36 | providers → Preferences, keys encrypted | `saveProviderConfigs services/infrastructure/ProviderConfigService.ts:202` writes the whole roster and encrypts each key at rest on desktop |
 | 37 | every provider call → the policy | GenericProviderService is configured by `providerRequestPolicy services/providers/GenericProviderService.ts:29` — the same shared module the vite dev proxy and electron main import |
 | 38 | dev calls → the proxy | the dev proxy mounts `__provider_proxy vite.config.ts:73` |
-| 39 | desktop calls → IPC → sseParser → chunks | `ipcMain electron/main.cjs:1240` → sseParser.cjs |
+| 39 | desktop calls → IPC → sseParser → chunks | `trustedHandle electron/main.cjs:186` → `consumeProviderStream :645` → `createSseParser electron/sseParser.cjs:30` |
 | 40 | reasoning deltas → their own field | the trace rides ON THE ROW: `thoughtProcesses types/message.ts:174` is what the Thinking row draws. The thinking STORE is written when a trade is logged (`useTradeLogging hooks/useTradeLogging.ts:100`); `saveThinkingBatch services/infrastructure/ThinkingStoreService.ts:130` is the RESTORE/migration path (`BackupService`, `SqliteService`), not a per-delta write |
 | 41 | notebook writes → byte tiers | a write asks `notebookPressureAllows services/learning/MemoryFilesService.ts:649` before the notebook may grow; the tiers come from utils/memoryBudget.ts and Settings Health reads memoryHealth.ts |
 | 42 | heartbeat → hygiene + idle sweep | `useLearningHeartbeat hooks/useLearningHeartbeat.ts:42` → `memoryHygiene.ts` → `skillIdleLifecycle.ts` |
@@ -913,14 +920,14 @@ old answer.
 | 60 | trade close → journal + autopilot | `logTradeWithFeedback hooks/useTradeLogging.ts:275` writes the row/memory note and the measured R; `register services/ui/OutcomeAutopilotService.ts:189` watches it |
 | 61 | autopilot → settlement | `subscribe services/ui/OutcomeAutopilotService.ts:288` → `settlementActionFor utils/outcomeSettlement.ts:47` (automatic · shadow · confirm; 15s undo) |
 | 62 | outcome → skill ledger + pattern memory | `applySkillEvidence services/learning/SkillMemoryService.ts:2243` and `calculatePnlR services/learning/PatternMemorySynthesisService.ts:249` consume the measured outcome, never a ±1 stand-in |
-| 63 | review → draft | `runSessionSkillReview services/learning/sessionSkillReview.ts:207` · `runWeeklyReview :128` · `runMonthlyReport :321` → `queueSkillDraft utils/skillDrafts.ts:65` |
+| 63 | review → draft | `runSessionSkillReview services/learning/sessionSkillReview.ts:207` · `runWeeklyReviewIfDue services/learning/weeklyReview.ts:161` · `runMonthlyReportIfDue services/learning/monthlyReport.ts:337` → `queueSkillDraft utils/skillDrafts.ts:65` |
 | 64 | draft → gate → human | `deterministicDraftGate services/learning/draftGates.ts:85` / `gateEvidenceBackedDraft :199` → `approveSkillDraft services/learning/skillApproval.ts:53` |
 | 65 | approved skill → notebook → prompt | `approveSkillDraft services/learning/skillApproval.ts:53` writes the file; `resolveInvokedSkills services/learning/SkillMemoryService.ts:601` returns the rows the next prompt may name |
 | 66 | heartbeat → hygiene + idle | `useLearningHeartbeat hooks/useLearningHeartbeat.ts:42` → `runMemoryHygiene services/learning/memoryHygiene.ts:151` → `runSkillIdleSweep services/learning/skillIdleLifecycle.ts:264` |
-| 67 | failure → failure row | `toFriendlyProviderError services/providers/GenericProviderService.ts:1175` preserves the cause chain → `Message.error` → `ChatFailureRow`, in both homes |
+| 67 | failure → failure row | `toFriendlyProviderError services/providers/GenericProviderService.ts:1221` preserves the cause chain → `Message.error` → `ChatFailureRow`, in both homes |
 | 68 | model control → tier | `ModelChip`/`ModelMenu`; `nextEffortTier components/shared/effortScale.ts:50`; `effortDialUp components/shared/effortDial.ts:27` guards the chord |
 | 69 | run → prompt lane + corpus version | `beginPromptLane services/infrastructure/PromptOverrideService.ts:34` → `promptCorpusVersion :97` → `runStats.promptLane`/`promptVersion` |
-| 70 | Settings → tool catalogue | `DESK_TOOL_DEFINITIONS services/analysis/DeskToolsService.ts:926` + `toolLabel :790` → `DeskToolCatalogue`, grouped by `toolKinds` |
+| 70 | Settings → tool catalogue | `DESK_TOOL_DEFINITIONS services/analysis/DeskToolsService.ts:926` + `toolLabel :812` → `DeskToolCatalogue`, grouped by `toolKinds` |
 
 ---
 
@@ -953,17 +960,17 @@ old answer.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 365 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 358 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 365 anchors verified, and the gate
+   the gate's own output: these docs state 358 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
    bold label onto the citation beside it, and a spliced token matches no file — so those rows
    were skipped, never checked, which is how this page reported green while 12 of its citations
    were unverifiable); and a citation whose file is not in the tree is now REPORTED instead of
-   swallowed, measured at 0 in these two docs and 12 in the dated stage ledger, where naming a
+   swallowed, measured at 0 in these two docs and 21 in the dated stage ledger, where naming a
    deleted file is history and pointing at its line number is not a live claim.
    A third rule polices the numbers these docs quote from a RECIPE rather than from this
    gate's own output: the two grep censuses in section D, the size of the table in section
@@ -1008,8 +1015,8 @@ old answer.
    `components/trade/TradeChatPanel.tsx:558`, and `MAX_PLANS_PER_RUN` at
    The pass also moved four surface anchors
    that pointed inside a prop list onto the guard that mounts the surface:
-   `App.tsx:2392` trade, `App.tsx:2500` journal, `App.tsx:2371` learn,
-   `App.tsx:2413` agents, with the header band at `App.tsx:2338`. Counts were
+   `App.tsx:2404` trade, `App.tsx:2450` journal, `App.tsx:2472` learn,
+   `App.tsx:2514` agents, with the header band at `App.tsx:2378`. Counts were
    taken with `grep -c` rather than a truncated listing — the first version of
    correction 5 died by exactly that truncation. Numbers in section C are
    deliberately omitted: they are the lines stage 19 deletes.
@@ -1040,7 +1047,7 @@ old answer.
 
 10. **The arrow table is 69 rows, and every citation in it resolves — and 65 of the 69 rows pair their citation with the symbol that must live on that line (23 → 31 → 33 → 43 → 48 → 50 → 52 → 69 across these passes), so those rows are checked for content, not just for a line that exists. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently. One row names no file at all — the ensemble row, whose stages the code never names — so a wrong figure inside it stays outside this gate's reach, which is why the sentence says 69/70 rather than 70/70.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
-    resolves all 365 unique anchors on every run, so coverage of the table is no
+    resolves all 358 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
 11. **"One service replacing nine" is falsifiable, and it is right — counted, not
     asserted.** `git log --diff-filter=D` over `services/providers/` names exactly nine
@@ -1058,7 +1065,7 @@ old answer.
     `accuracy/`, the engine and its types (`debateScience.ts`, `ensembleService.ts`,
     `ensembleConsensus.ts`, `streamTypes.ts`, `debatePods.ts`) and `GroqKeyPool.ts`.
 
-12. **The Agents desk is never seeded.** Two effects in the App used to build a fallback roster from the Analyst Lens assignments or the model picker, and a third rewrote a named bot model whenever those settings moved. All three are gone with the built-in Macro / Technical / Risk analysts (owner ruling, 2026-10-19), and the registry’s seedIfEmpty helper was deleted with its only caller. A fresh profile therefore opens on the empty state at `listedBots AgentsView.tsx:1087` — "No agents yet. Create one and it appears here with its own thread" — and an agent exists only because the trader made one. Nothing went red when the seeding was removed, because no test covered it: that silence is evidence nothing was watching, not evidence the feature was inert.
+12. **The Agents desk is never seeded.** Two effects in the App used to build a fallback roster from the Analyst Lens assignments or the model picker, and a third rewrote a named bot model whenever those settings moved. All three are gone with the built-in Macro / Technical / Risk analysts (owner ruling, 2026-10-19), and the registry’s seedIfEmpty helper was deleted with its only caller. A fresh profile therefore opens on the empty state at `listedBots AgentsView.tsx:1101` — "No agents yet. Create one and it appears here with its own thread" — and an agent exists only because the trader made one. Nothing went red when the seeding was removed, because no test covered it: that silence is evidence nothing was watching, not evidence the feature was inert.
 
 ## Measured after stage 19: what the deletion did NOT remove
 
@@ -1106,7 +1113,7 @@ actually sends, with its floor re-based on that population and a planted-paraphr
 added in the same pass, because a scanner that matches nothing reports no drift. Neither survives the deletion.
 
 **Three debate-era names survive, and the honest statement is which of them is dead.**
-`moderatorConfig` (`App.tsx:301`) is live, but as a DEFAULT, not a debate role:
+`moderatorConfig` (`App.tsx:318`) is live, but as a DEFAULT, not a debate role:
 `readyProviders[0] || moderatorConfig` (`App.tsx:341`) resolves the vision/OCR provider and
 `memoryConfig: memoryConfig || moderatorConfig` (`App.tsx:607`) the memory one, and the journal prints
 `Mod:` from the stored `moderatorModel` (`TradeLog.tsx:354`). No moderator TURN exists — one
@@ -1122,8 +1129,8 @@ a table deletion must re-scan its rows' imports, because dead text kept alive by
 the same defect one layer down. Both removals were proven by `tsc` and `vite build`, not by the
 name grep that had already misled me once on this pass.
 
-The engine files are gone, and most of the branch with them. What was removed this pass: the seat-completeness refusals ("Your analyst team is incomplete", "Analysts must use different models", "Two debate seats share a model") and the `TEAM_MAX_SEATS` ceiling — only ONE model answers a send (`provider`, `hooks/useAnalysisPipeline.ts:1150` falls back to `enabledProviders[0]`), so those blocked a run over a roster the run never uses, and the ceiling guarded a fan-out that no longer exists. The moderator readiness check went with the schedule it protected (2026-10-24) — a human send answers from the composer's own pick, so refusing a click over an unused moderator config was a block with nothing behind it. The flag itself, the seat builder it fed and the roster behind it were deleted on 2026-10-19; the "include a coin" tip survives as a plain nudge. `isDebating` and `activeDebateSpeakers` are deleted outright — every writer set a literal `false`, so the one branch that read them could not run.
+The engine files are gone, and most of the branch with them. What was removed this pass: the seat-completeness refusals ("Your analyst team is incomplete", "Analysts must use different models", "Two debate seats share a model") and the `TEAM_MAX_SEATS` ceiling — only ONE model answers a send (`provider`, `hooks/useAnalysisPipeline.ts:1094` falls back to `enabledProviders[0]`), so those blocked a run over a roster the run never uses, and the ceiling guarded a fan-out that no longer exists. The moderator readiness check went with the schedule it protected (2026-10-24) — a human send answers from the composer's own pick, so refusing a click over an unused moderator config was a block with nothing behind it. The flag itself, the seat builder it fed and the roster behind it were deleted on 2026-10-19; the "include a coin" tip survives as a plain nudge. `isDebating` and `activeDebateSpeakers` are deleted outright — every writer set a literal `false`, so the one branch that read them could not run.
 
 
-The user-visible consequence, now FIXED: the chart used to pick its verdict row by the DEBATE shapes (`ensembleProgress`, >1 `modelsUsed`, `debateTurns`) and passed `verdict={verdictMessage?.analysis}` — while nothing writes `Message.analysis` for a new run any more. `verdictFinalizer` was the writer; a tool turn answers with a `TradeProposal` in the tool payload (`services/trade/presentTradeTool.ts`, `proposedTrade.ts`, `tradeShapedProse.ts`). Reader without a writer, the third time in this stage (session usage, the completion notice). Fixed by `latestChartVerdict` in `services/trade/chartData.ts` (`App.tsx:1182`, passed to the chart at `:2567`): it keys on the settled proposal through the existing `buildProposedTradeAnalysis` and keeps `analysis` as the fallback for old rows; The proposal path, the fallback, the preference when a row carries both, the symbol match through `verdictLevels` and the App wiring were pinned by a test that went with the suite on 2026-10-23, so render-probe — which asserts every row renders — is the only gate over this path now. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate
+The user-visible consequence, now FIXED: the chart used to pick its verdict row by the DEBATE shapes (`ensembleProgress`, >1 `modelsUsed`, `debateTurns`) and passed `verdict={verdictMessage?.analysis}` — while nothing writes `Message.analysis` for a new run any more. `verdictFinalizer` was the writer; a tool turn answers with a `TradeProposal` in the tool payload (`services/trade/presentTradeTool.ts`, `proposedTrade.ts`, `tradeShapedProse.ts`). Reader without a writer, the third time in this stage (session usage, the completion notice). Fixed by `latestChartVerdict` in `services/trade/chartData.ts` (`App.tsx:1182`, passed to the chart at `:2429`): it keys on the settled proposal through the existing `buildProposedTradeAnalysis` and keeps `analysis` as the fallback for old rows; The proposal path, the fallback, the preference when a row carries both, the symbol match through `verdictLevels` and the App wiring were pinned by a test that went with the suite on 2026-10-23, so render-probe — which asserts every row renders — is the only gate over this path now. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate
 
