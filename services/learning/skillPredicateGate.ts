@@ -13,6 +13,7 @@
  */
 
 import {
+    isApprovedSkill,
     listSkills,
     titleFromMeta,
     MIN_SAMPLE_FOR_VETO,
@@ -147,9 +148,14 @@ export async function evaluateSkillPredicates(args: {
     if (shouldSkillHoldout(args.runId)) return EMPTY;
     // `file.enabled` is what retirement writes (SkillMemoryService.ts:551), so
     // checking it here keeps a switched-off skill out of the clamp pool even if
-    // its markdown still reads active.
+    // its markdown still reads active. `isApprovedSkill` is the same activation
+    // gate retrieval applies (MemoryRetrievalService.ts:226) — a skill the app
+    // refuses to inject into a seat's prompt must not clamp that seat's verdict
+    // from the code side either. Nothing in the notebook reaches this pool
+    // unapproved today; an imported or hand-edited file can, and the invariant
+    // has to hold for that path too.
     const pool = predicateBearingSkills(
-        args.skills ?? listSkills().filter(s => s.file.enabled).map(s => s.meta),
+        args.skills ?? listSkills().filter(s => s.file.enabled && isApprovedSkill(s.meta)).map(s => s.meta),
         args.coin,
         args.direction,
     );
