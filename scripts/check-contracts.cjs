@@ -205,6 +205,43 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     ok('schema: a missing payload FAILS CLOSED', threw);
 })();
 
+// ─── 7. skill frontmatter — third-party keys survive, the face is checked ──
+(() => {
+    const sf = loadModule('utils/skillFrontmatter.ts');
+    const fm = [
+        'name: hermes-style-skill',
+        'description: Does a thing. Use when X.',
+        'author: someone',
+        'license: MIT',
+        'metadata:',
+        '  hermes:',
+        '    tags: [a, b]',
+        '    requires_tools:',
+        '      - get_order_book',
+        'required_environment_variables: FOO',
+        'version: 1',
+    ].join('\n');
+    const unknown = sf.captureUnknownFrontmatter(fm);
+    const joined = unknown.join('\n');
+    ok('fm: third-party keys are captured (author, license, metadata, env)', ['author:', 'license:', 'metadata:', 'required_environment_variables:'].every(k => joined.includes(k)));
+    ok('fm: the nested hermes block travels with its parent', joined.includes('hermes:') && joined.includes('get_order_book'));
+    ok('fm: known keys are NOT captured as unknown',
+        !/^(name|description|version):/m.test(joined));
+    ok('fm: an all-known frontmatter captures nothing',
+        sf.captureUnknownFrontmatter('name: x\ndescription: y\nstatus: candidate').length === 0);
+    ok('fm: valid face passes',
+        sf.skillFaceIssues({ name: 'my-skill', description: 'What it does.', body: '# Body' }).length === 0);
+    ok('fm: name rule enforced (case, spaces, length)',
+        sf.skillFaceIssues({ name: 'My Skill', description: 'd', body: 'b' }).length > 0
+        && sf.skillFaceIssues({ name: 'x'.repeat(65), description: 'd', body: 'b' }).length > 0);
+    ok('fm: missing description and empty body are issues',
+        sf.skillFaceIssues({ name: 'ok', description: '', body: '   ' }).length === 2);
+    ok('fm: description ceiling enforced',
+        sf.skillFaceIssues({ name: 'ok', description: 'x'.repeat(1025), body: 'b' }).length > 0);
+    ok('fm: platform aliases map onto the two runtimes',
+        sf.PLATFORM_OF.macos === 'native' && sf.PLATFORM_OF.web === 'web' && sf.PLATFORM_OF.windows === 'native');
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
