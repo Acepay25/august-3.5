@@ -1073,9 +1073,32 @@ async function createWindow() {
 
     if (isDev) {
         const port = process.env.PORT || 3000;
+        // A moved/renamed source file leaves the renderer's HTTP cache
+        // serving the module under its OLD url with bindings that no longer
+        // initialize — the user-visible crash was `Cannot read properties of
+        // null (reading 'useContext')` on the Knowledge surface, from a stale
+        // `components/chat/SessionUsagePanel.tsx` chunk after the file had
+        // moved to components/settings/. Dev modules are uncached-by-design,
+        // so clearing on every dev boot costs one reload and kills the whole
+        // class. Prod clears once per version, below.
+        try { await session.defaultSession.clearCache(); } catch { /* best-effort */ }
         await mainWindow.loadURL(`http://localhost:${port}`);
         mainWindow.webContents.openDevTools();
     } else {
+        // Same class, packaged: an auto-update swaps dist/ bytes under the
+        // same app:// urls; a stale cached chunk from the previous version
+        // can outlive the swap. One cache clear per NEW version — stamped
+        // into userData so an unchanged version pays nothing.
+        try {
+            const stampPath = path.join(app.getPath('userData'), 'renderer-cache-stamp');
+            const version = app.getVersion();
+            let stamped = '';
+            try { stamped = fs.readFileSync(stampPath, 'utf8'); } catch { /* first run */ }
+            if (stamped !== version) {
+                await session.defaultSession.clearCache();
+                fs.writeFileSync(stampPath, version);
+            }
+        } catch { /* best-effort */ }
         // Serve the built dist/ folder via the custom app:// protocol
         // (registered once at whenReady — see registerAppProtocol).
         mainWindow.loadURL('app://./index.html');
