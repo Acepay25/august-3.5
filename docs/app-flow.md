@@ -282,7 +282,7 @@ history and the current line. Before it goes on the wire:
    `tool_calls` block always stays with its replies, and the last user turn is
    pinned by `compactMessages`. The notice says what was cut, including
    `CONTEXT FULL` when nothing could be cut.
-3. `runDeskToolLoop` (`services/analysis/DeskToolsService.ts:3688`) bounds the
+3. `runDeskToolLoop` (`services/analysis/DeskToolsService.ts:3706`) bounds the
    turn: at most `MAX_DESK_TOOL_ROUNDS`, each round at
    `DESK_ROUND_MAX_TOKENS` and under `DESK_TURN_BUDGET_MS`;
    `budgetToolContent` clips one result, and `clearDeskToolCache`
@@ -697,7 +697,7 @@ mailbox tools. The surface decides what is offered:
 - a panel seat adds the chart-action definitions only when its own allow-list
   names them.
 
-`streamChatWithDeskTools` (`DeskToolsService.ts:4296`) composes the mandate from
+`streamChatWithDeskTools` (`DeskToolsService.ts:4314`) composes the mandate from
 the tools the turn can actually call (`deskToolsMandateFor`) filters
 the definitions, and then runs `runDeskToolLoop`. `executeDeskTool`
 re-checks the allow-list at execution, so a prompt that names a
@@ -883,7 +883,7 @@ old answer.
 | 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1132` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:236` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
 | 23 | casual frames → Message.text | `applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:28`; flush precedes the settle write useAnalysisPipeline.ts |
 | 24 | ensemble → the stages that survive | see C — five of the old eight are gone from the call path, and no stage is named in the code, so no line number is claimed |
-| 25 | desk tools → what a caller can reach | `executeDeskTool services/analysis/DeskToolsService.ts:2524` (its allow-list is enforced at execution, not only at offer time) |
+| 25 | desk tools → what a caller can reach | `executeDeskTool services/analysis/DeskToolsService.ts:2525` (its allow-list is enforced at execution, not only at offer time) |
 | 26 | panel tools → chart echo | `executePanelTool services/trade/chatTurnRunner.ts:327` is what echoes the result back into the panel |
 | 27 | ~~automation tick → runAutomation~~ | DELETED (2026-10-24, owner request): the surface, the scheduler, the ration, the breaker and the bot-scoped routine executor are gone — see E |
 | 29 | rooms → groupRounds | `useAgentGroups hooks/useAgentGroups.ts:75` → `streamQuickResponse services/providers/GenericAnalysisService.ts:605` |
@@ -913,7 +913,7 @@ old answer.
 | 53 | the chart gets its Entry/Stop/Target lines | `latestChartVerdict(messages)` `latestChartVerdict services/trade/chartData.ts:95` is what App hands `TradeView` as `verdict` — the newest row carrying `Message.proposal` (what `present_trade` stamps; `proposal services/trade/chatSurfaceTurn.ts:320`), with `Message.analysis` as the fallback for pre-debate history. Red-proved: the old selector keyed on `ensembleProgress` / >1 `modelsUsed` / `debateTurns` and returned null for every tool-turn row. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate |
 | 54 | request → context window | `resolveContextWindow utils/contextWindow.ts:136` resolves user → measured → model → assumed; `outputTokenBudget utils/contextWindow.ts:187` and `promptTokenCeiling utils/contextWindow.ts:169` size the two halves of one request |
 | 55 | array → compaction | `compactForWire services/providers/contextCompact.ts:343` → `compactMessages :217`; oldest payloads, then prose, then whole rounds; `tool_calls` stay paired and the last user turn is pinned |
-| 56 | tool round → bounded loop | `runDeskToolLoop services/analysis/DeskToolsService.ts:3688`; `MAX_DESK_TOOL_ROUNDS :197` · `DESK_ROUND_MAX_TOKENS :242` · `DESK_TURN_BUDGET_MS :209` |
+| 56 | tool round → bounded loop | `runDeskToolLoop services/analysis/DeskToolsService.ts:3706`; `MAX_DESK_TOOL_ROUNDS :197` · `DESK_ROUND_MAX_TOKENS :242` · `DESK_TURN_BUDGET_MS :209` |
 | 57 | tool result → artifact + payload | `storeToolArtifact services/analysis/toolArtifactStore.ts:82` (owner-scoped; `readToolArtifact :138`) and `saveToolPayload services/trade/toolPayloadStore.ts:110` (`readToolPayload :174`) |
 | 58 | tool event → transcript trail | `digestToolResult services/analysis/DeskToolsService.ts:824` → `Message.toolEvents` + `toolIds` → `ToolActivityRow`/`ChatWorkTimeline` |
 | 59 | wire decision → audit row | `buildReasoningPatch services/providers/reasoningControls.ts:271` → `WireAuditEntry` → `WireAuditRow`; the route, tier, applied and reason are recorded per call |

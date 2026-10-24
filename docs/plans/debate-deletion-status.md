@@ -88,7 +88,7 @@ The goal is one tool-capable turn in **both** chat homes. Facts, so the next
 session does not re-derive them:
 
 - `streamChatWithDeskTools` is an **async generator** returning text deltas
-  (`services/analysis/DeskToolsService.ts:4296`), and **every option is optional**
+  (`services/analysis/DeskToolsService.ts:4314`), and **every option is optional**
   (`StreamWithDeskToolsOptions`). It self-gates on
   `getHarnessSettings().deskToolsEnabled`, and `withDeskToolsSystemPrompt` will not
   double-inject the DESK TOOLS block if the system message already carries it.
@@ -127,7 +127,7 @@ So the target is NOT "keep the branch and shrink it to one seat". It is:
   SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
-  `streamChatWithDeskTools` (`DeskToolsService.ts:4296`), which the dock's solo
+  `streamChatWithDeskTools` (`DeskToolsService.ts:4314`), which the dock's solo
   seat already runs at `chatTurnRunner.ts:625`.
 - **The verdict and the journal row become tools the model chooses to call**, not
   a pipeline stage it has to earn. What already exists: `present_trade`

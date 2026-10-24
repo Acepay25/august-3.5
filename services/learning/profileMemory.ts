@@ -41,6 +41,10 @@ export interface ProfileMemoryEntry {
     source?: 'model' | 'auto' | 'user';
     createdAt: string;
     updatedAt: string;
+    /** Optimistic-lock counter, incremented on every write. Absent on legacy
+     *  rows — read as 1, so a first if_version against a legacy row succeeds
+     *  and stamps the field from then on. */
+    version?: number;
 }
 
 const KEY_PREFIX = 'profile_memory_v1';
@@ -95,13 +99,28 @@ export const getProfileMemory = (slug: string, username?: string): ProfileMemory
  * this environment's "update the file rather than create a duplicate").
  * Returns the entry + whether it was new.
  */
+export type RememberResult =
+    | { entry: ProfileMemoryEntry; created: boolean; conflict?: false }
+    /** `if_version` did not match: nothing was written. `current` is the row
+     *  that IS stored, so the caller can merge and retry in the same turn
+     *  instead of overwriting a concurrent edit blind. */
+    | { conflict: true; current: ProfileMemoryEntry };
+
 export const rememberProfileMemory = (input: {
     slug?: string; name?: string; description: string; kind: ProfileMemoryKind; body: string;
     source?: ProfileMemoryEntry['source'];
-}, username?: string): { entry: ProfileMemoryEntry; created: boolean } => {
+    /** Optimistic lock: when given and a row with this slug already exists,
+     *  the write only lands if the row's version is exactly this. */
+    ifVersion?: number;
+}, username?: string): RememberResult => {
     const user = username || getActiveUsername();
     const slug = input.slug?.trim() ? slugify(input.slug) : slugify(input.name || input.description);
     const now = new Date().toISOString();
+    const all = readAll(user);
+    const idx = all.findIndex(e => e.slug === (slug || ''));
+    if (idx >= 0 && typeof input.ifVersion === 'number' && (all[idx].version ?? 1) !== input.ifVersion) {
+        return { conflict: true, current: all[idx] };
+    }
     const entry: ProfileMemoryEntry = {
         slug: slug || `memory-${Date.now().toString(36)}`,
         description: input.description.trim().slice(0, MAX_DESC_CHARS),
@@ -110,9 +129,8 @@ export const rememberProfileMemory = (input: {
         ...(input.source ? { source: input.source } : {}),
         createdAt: now,
         updatedAt: now,
+        version: idx >= 0 ? (all[idx].version ?? 1) + 1 : 1,
     };
-    const all = readAll(user);
-    const idx = all.findIndex(e => e.slug === entry.slug);
     const created = idx < 0;
     if (created) {
         all.push(entry);
