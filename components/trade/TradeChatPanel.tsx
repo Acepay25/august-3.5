@@ -435,10 +435,14 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             // to pass none of the gate's facts, naming suspended, disabled,
             // manual-only, other-audience and unapproved rules to a seat.
             // The notebook topics ride the same block — listing-first recall,
-            // one line per subject, bodies on demand.
+            // one line per subject, bodies on demand. ONE budget shared with
+            // the Chat surface (utils/promptIndexBudget), scaled to the seat's
+            // context window, so a small local model gets small indexes in
+            // both homes.
+            const budget = indexBudgetFor(config?.contextWindowTokens ?? 200_000);
             const store = getMemoryFiles();
-            const topics = memoryEnabled !== false ? buildNotebookTopicsIndex(store.files, store.folders) : '';
-            return [buildSkillsIndexForPrompt(skillIndexRows()), topics].filter(Boolean).join('\n\n');
+            const topics = memoryEnabled !== false ? buildNotebookTopicsIndex(store.files, store.folders, budget.topics) : '';
+            return [buildSkillsIndexForPrompt(skillIndexRows(), budget.skills), topics].filter(Boolean).join('\n\n');
         } catch {
             return '';
         }

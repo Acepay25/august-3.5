@@ -94,7 +94,6 @@ export interface ChatSurfacePrompt {
 
 /** The window the index prints, and the list recorded, are the same window: a
  *  slug truncated out of the prompt is not a skill this turn had. */
-const SKILL_INDEX_WINDOW = 30;
 
 /**
  * Assemble a surface mandate with the trader's notebook under it: surface
