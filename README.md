@@ -99,6 +99,9 @@ installer, and only then uploads the signed bytes with `gh release upload`.
   you can apply to a diff
 - `docs/learning-loop-map.md` — how skills, rules, notebook memory and the
   supervisor get written, retrieved and injected
+- `docs/plan/skills-and-memory-2026-10-24.md` — the ported SKILL.md-format and
+  memory-loop design: eight items, each marked exists / extend / new, with its
+  live status
 - `docs/app-flow.md` — the living flow doc (with `docs/app-flow.html` as its
   printable view), every line number machine-checked by
   `npm run check-flow-doc-anchors`
