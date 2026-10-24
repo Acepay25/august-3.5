@@ -98,6 +98,11 @@ const ProfileMemoryCard: React.FC = () => {
                                 {/* The spec's tiny provenance marker: stated (the
                                     trader said it) vs observed/inferred (a system
                                     path). Absent = legacy = stated. */}
+                                {e.tag === 'stated' && (
+                                    <StatusPill tone="neutral" kicker title="The trader said this — the only provenance the chat agent may write">
+                                        stated
+                                    </StatusPill>
+                                )}
                                 {e.tag === 'observed' && (
                                     <StatusPill tone="neutral" kicker title="Recorded by a system path from watched behaviour — not something you said">
                                         observed

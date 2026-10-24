@@ -89,7 +89,10 @@ const readAll = (user: string): ProfileMemoryEntry[] => {
                 && typeof v.slug === 'string' && typeof v.description === 'string'
                 && typeof v.body === 'string' && normalizeKind(v.kind) !== null;
         });
-    } catch {
+    } catch (err) {
+        // A read that cannot happen must not look like an empty notebook: the
+        // prompt would silently forget every fact the trader taught it.
+        console.error('[profileMemory] read FAILED — memory is unavailable this turn:', err);
         return [];
     }
 };
@@ -97,7 +100,13 @@ const readAll = (user: string): ProfileMemoryEntry[] => {
 const writeAll = (user: string, entries: ProfileMemoryEntry[]): void => {
     try {
         localStorage.setItem(storageKey(user), JSON.stringify(entries.slice(-MAX_ENTRIES)));
-    } catch { /* private mode — memory stays in-session */ }
+    } catch (err) {
+        // The cache is not a store here: readAll() re-reads localStorage, so a
+        // swallowed throw means the tool says "saved" and the next turn knows
+        // nothing. Log it and let the caller report the failure.
+        console.error('[profileMemory] write FAILED — the fact is NOT on disk:', err);
+        throw err;
+    }
     // Nudge any open Settings → Memory card to re-read.
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('august-profile-memory'));
 };
@@ -115,7 +124,9 @@ export const getProfileMemory = (slug: string, username?: string): ProfileMemory
  * Returns the entry + whether it was new.
  */
 export type RememberResult =
-    | { entry: ProfileMemoryEntry; created: boolean; conflict?: false }
+    /** `persisted:false` means the entry was built but storage refused it —
+     *  the caller must NOT report success. */
+    | { entry: ProfileMemoryEntry; created: boolean; conflict?: false; persisted?: boolean; error?: string }
     /** `if_version` did not match: nothing was written. `current` is the row
      *  that IS stored, so the caller can merge and retry in the same turn
      *  instead of overwriting a concurrent edit blind. */
@@ -170,8 +181,12 @@ export const rememberProfileMemory = (input: {
     } else {
         all[idx] = { ...all[idx], ...entry, createdAt: all[idx].createdAt };
     }
-    writeAll(user, all);
-    return { entry, created };
+    try {
+        writeAll(user, all);
+        return { entry, created, persisted: true };
+    } catch (err) {
+        return { entry, created, persisted: false, error: err instanceof Error ? err.message : String(err) };
+    }
 };
 
 export const forgetProfileMemory = (slug: string, username?: string): boolean => {
@@ -179,8 +194,12 @@ export const forgetProfileMemory = (slug: string, username?: string): boolean =>
     const all = readAll(user);
     const next = all.filter(e => e.slug !== slug);
     if (next.length === all.length) return false;
-    writeAll(user, next);
-    return true;
+    try {
+        writeAll(user, next);
+        return true;
+    } catch {
+        return false;
+    }
 };
 
 /** How many index lines a prompt gets (capped; older entries fall off — the
@@ -194,17 +213,21 @@ const INDEX_LINE_MAX = 150;
  * composes cleanly into any prompt. The model reads bodies via read_memory.
  */
 export const buildProfileMemoryIndex = (username?: string, maxLines = INDEX_MAX_LINES): string => {
-    const all = listProfileMemories(username);
-    if (all.length === 0) return '';
-    const newest = all.slice(-maxLines);
+    // A sensitive fact never rides the always-on index: this block is injected
+    // into every turn, including turns that have nothing to do with health,
+    // money or identity. It stays readable by explicit slug when the trader
+    // asks; it is not advertised to every future prompt.
+    const visible = listProfileMemories(username).filter(e => !e.sensitive);
+    if (visible.length === 0) return '';
+    const newest = visible.slice(-maxLines);
     const lines = newest.map(e => {
         const desc = e.description.length > INDEX_LINE_MAX ? `${e.description.slice(0, INDEX_LINE_MAX - 1)}…` : e.description;
         const tagMark = e.tag === 'observed' ? ' ·observed' : e.tag === 'inferred' ? ' ·inferred' : '';
         return `- [${e.kind}] ${e.slug}${tagMark} — ${desc}`;
     });
-    const dropped = all.length - newest.length;
+    const dropped = visible.length - newest.length;
     return [
-        `## Your memory about this user — ${all.length} entr${all.length === 1 ? 'y' : 'ies'}. These are collaboration facts (who they are, how they want you to work, ongoing context), NOT trading lessons. When one matters, pull its full body with read_memory(slug). If this session teaches you something durable about the USER, save it with remember (update an existing slug rather than duplicating).`,
+        `## Your memory about this user — ${visible.length} entr${visible.length === 1 ? 'y' : 'ies'}. These are collaboration facts (who they are, how they want you to work, ongoing context), NOT trading lessons. When one matters, pull its full body with read_memory(slug). If this session teaches you something durable about the USER, save it with remember (update an existing slug rather than duplicating).`,
         ...lines,
         dropped > 0 ? `…${dropped} older entr${dropped === 1 ? 'y' : 'ies'} not listed — read_memory with slug "all" shows every entry.` : '',
     ].filter(Boolean).join('\n');

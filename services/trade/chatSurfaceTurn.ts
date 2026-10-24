@@ -387,6 +387,7 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
         effort: resolveComposerEffort(req.effort, 'tradingDecision'),
         transport,
         events: tracked,
+        memoryEnabled: req.memoryEnabled !== false,
     }));
     recordToolTurnUsage({
         startedAt: req.startedAt,

@@ -174,6 +174,9 @@ export interface ChatTurnRunnerDeps {
      *  context and every session write. */
     symbol: string;
     interval: string;
+    /** The Settings memory switch: false makes the tool stream skip the
+     *  pre-read hints and the executor refuse memory reads/writes. */
+    memoryEnabled?: boolean;
     /** The composer's thinking-effort choice (per-session shell state). */
     effort: ReasoningEffort | 'auto';
     /** The solo model selection — stamped onto the session on send. */
@@ -711,6 +714,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             keepTextHidden: hidePass ? panelCouldStillBePass : undefined,
             transport,
             events,
+            memoryEnabled: deps.memoryEnabled !== false,
         }));
         recordToolTurnUsage({
             startedAt: turnStartedAt,

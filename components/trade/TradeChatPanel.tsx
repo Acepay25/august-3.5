@@ -539,6 +539,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const runner = useMemo(() => createChatTurnRunner({
         symbol,
         interval,
+        memoryEnabled,
         effort,
         selectedChatModel,
         chartLevels,
@@ -568,7 +569,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         onSyncConversation,
         onRunAnalysis,
         onAnalysisError,
-    }), [symbol, interval, effort, selectedChatModel, chartLevels, allDrawings, trades, getChartSnapshot, provider, configForSeat, systemPromptFor, bots, activeId, draft, sessions, botThreadRows, conversationRows, attachments, attachedImages, clearAttachments, setDraft, setContextAt, addModelDrawings, clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onSoloTurnCommit, onSyncConversation, onRunAnalysis, onAnalysisError]);
+    }), [symbol, interval, memoryEnabled, effort, selectedChatModel, chartLevels, allDrawings, trades, getChartSnapshot, provider, configForSeat, systemPromptFor, bots, activeId, draft, sessions, botThreadRows, conversationRows, attachments, attachedImages, clearAttachments, setDraft, setContextAt, addModelDrawings, clearModelDrawings, clearAllDrawings, onPlanPresented, onBotTurnCommit, onSoloTurnCommit, onSyncConversation, onRunAnalysis, onAnalysisError]);
     const { send, runFullAnalysis, runHarnessTurn } = runner;
 
     // ── Per-session composer memory ─────────────────────────────────────────

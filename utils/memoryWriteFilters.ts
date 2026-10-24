@@ -33,8 +33,15 @@ const HONESTY_PATTERNS: RegExp[] = [
     /no\s+matter\s+what\s+i\s+say/i,
     /\bflatter\s+me\b/i,
     /(?:you\s+are|act\s+as|you\s+have)\s+(?:an\s+)?(?:admin|administrator|elevated|root|sudo)/i,
+    /\b(?:the\s+)?user\s+is\s+(?:an?\s+)?(?:admin|administrator|root|superuser|owner)\b/i,
+    /\balways\s+agree\s+with\s+(?:the\s+)?user\b/i,
     /override\s+your\s+(?:rules|instructions|guardrails)/i,
     /ignore\s+your\s+(?:rules|instructions|guardrails)/i,
+    /ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions/i,
+    // Second-person advice is the assistant's own suggestion, not a fact the
+    // trader stated. The seat prompt already forbids saving it; this is the
+    // backstop for a model that saves its own recommendation anyway.
+    /(?:^|\n)\s*(?:you\s+(?:should|must|ought|need\s+to)|i\s+(?:recommend|suggest)|my\s+advice)\b/i,
 ];
 
 const SENSITIVE_PATTERNS: RegExp[] = [
