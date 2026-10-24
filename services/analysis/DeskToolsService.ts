@@ -1044,6 +1044,7 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                 type: 'object',
                 properties: {
                     slug: { type: 'string', description: 'Existing entry slug to UPDATE, or omit to create (a kebab-case slug is derived from name).' },
+                    if_version: { type: 'number', description: 'On UPDATE only: the version the index/read last showed you. A mismatch returns the current content (saved:false, conflict:true) — merge and retry in the same turn.' },
                     name: { type: 'string', description: 'Short name for a new entry, e.g. "User runs 15m scalps".' },
                     kind: { type: 'string', enum: ['user', 'feedback', 'project', 'reference'], description: 'Memory kind.' },
                     description: { type: 'string', description: 'One line (≤140 chars) stating WHEN this memory matters — it decides future relevance.' },
@@ -2705,12 +2706,29 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     // Tag the writer: profileMemory's convention is that MODEL
                     // writes carry source:'model' — without it, human/user and
                     // model entries were indistinguishable in the notebook.
-                    const { entry, created } = rememberProfileMemory(
-                        { slug, description, kind, body, source: 'model' },
+                    const ifVersionRaw = call.arguments.if_version;
+                    const ifVersion = typeof ifVersionRaw === 'number' ? ifVersionRaw : undefined;
+                    const result = rememberProfileMemory(
+                        { slug, description, kind, body, source: 'model', ifVersion },
                         getActiveUsername(),
                     );
+                    if (result.conflict) {
+                        // Optimistic-lock miss: hand the caller the row that IS
+                        // stored, so it merges and retries in the same turn
+                        // instead of overwriting a concurrent edit blind.
+                        content = JSON.stringify({
+                            saved: false, conflict: true, slug: result.current.slug,
+                            if_version: result.current.version ?? 1,
+                            current_description: result.current.description,
+                            current_body: result.current.body,
+                            note: 'Version conflict — merge your update into this content and call remember again with if_version set to the number above.',
+                        });
+                        break;
+                    }
+                    const { entry, created } = result;
                     content = JSON.stringify({
                         saved: true, slug: entry.slug, kind: entry.kind, created,
+                        version: entry.version ?? 1,
                         note: created ? 'New memory saved — its index line now rides every future prompt.' : `Existing memory "${entry.slug}" UPDATED in place (no duplicate created).`,
                     });
                 } catch (err) {
