@@ -89,6 +89,9 @@ export { __clearPacketCacheForTests } from '../../services/trade/chatTurnRunner'
 export { __clearProposalStateForTests } from './panels/ChatTranscriptList';
 
 interface TradeChatPanelProps {
+    /** The Settings memory toggle — false strips the notebook-topics block
+     *  from the dock seat prompt, the same promise the Chat surface keeps. */
+    memoryEnabled?: boolean;
     symbol: string;
     interval: string;
     providers: ProviderConfig[];
@@ -293,7 +296,7 @@ export const ChartAiDockRail: React.FC<{
 );
 
 const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
-    symbol, interval, providers, selectedChatModel, onSelectChatModel, live = false,
+    memoryEnabled, symbol, interval, providers, selectedChatModel, onSelectChatModel, live = false,
     chartLevels, chartDrawings, modelDrawings, addModelDrawings, clearModelDrawings, clearAllDrawings,
     onCaptureChart, getChartSnapshot, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onAnalysisError, onStopRun, getAnalysisMessage, onLogProposedTrade, onPlanPresented,
     onChatLevelsChange,
@@ -433,7 +436,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             // The notebook topics ride the same block — listing-first recall,
             // one line per subject, bodies on demand.
             const store = getMemoryFiles();
-            const topics = buildNotebookTopicsIndex(store.files, store.folders);
+            const topics = memoryEnabled !== false ? buildNotebookTopicsIndex(store.files, store.folders) : '';
             return [buildSkillsIndexForPrompt(skillIndexRows()), topics].filter(Boolean).join('\n\n');
         } catch {
             return '';
