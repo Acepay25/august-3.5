@@ -531,7 +531,7 @@ export const liveEntryFromMessage = (m: Message): ProjectedChatEntry => {
         image: m.images?.[0],
         // The pipeline path's frozen work time, so a dock row built from a
         // pipeline Message still shows its "Analyzed for Ns" after a reload.
-        // Only the Chat rail writes `runStats` (useBotMailbox / botRoutine) —
+        // Only the Chat rail writes `runStats` (useBotMailbox) —
         // the dock stamps `workedMs` directly on the entry, so an undefined
         // here is normal for a dock-native turn, not a missing value.
         workedMs: typeof m.runStats?.durationMs === 'number' ? m.runStats.durationMs : undefined,

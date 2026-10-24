@@ -1127,7 +1127,7 @@ ${enhancedPrompt}`;
             if (useBotThread && activeBot) {
                 // BOTS STAY CHAT-ONLY (stage 20 ruling). The roster
                 // answers with its persona over the plain transport;
-                // `useBotMailbox`, `botRoutine` and `groupRounds` are
+                // `useBotMailbox` and `groupRounds` are
                 // deliberately NOT moved onto the tool turn.
                 responseText = await streamQuickResponse(
                     provider.config,
