@@ -63,6 +63,8 @@ import { saveBot, type AgentBot } from '../../services/agents/agentRoster';
 import { resolveAgentContext, SINGLE_AGENT_MEMORY_BUDGET, type ResolvedAgentContext } from '../../services/agents/agentContext';
 import { getFirstReadyProvider, isProviderReady, formatModelDisplayName, computeChatModelFallback } from '../../utils/providerUtils';
 import { skillIndexRows } from '../../services/learning/SkillMemoryService';
+import { getMemoryFiles } from '../../services/learning/MemoryFilesService';
+import { buildNotebookTopicsIndex } from '../../services/learning/memoryTopics';
 import { buildProfileMemoryIndex } from '../../services/learning/profileMemory';
 import {
     ensureSupervisorListeners, setSessionModel,
@@ -428,7 +430,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             // surface cannot drift from the Chat surface's filter again: it used
             // to pass none of the gate's facts, naming suspended, disabled,
             // manual-only, other-audience and unapproved rules to a seat.
-            return buildSkillsIndexForPrompt(skillIndexRows());
+            // The notebook topics ride the same block — listing-first recall,
+            // one line per subject, bodies on demand.
+            const store = getMemoryFiles();
+            const topics = buildNotebookTopicsIndex(store.files, store.folders);
+            return [buildSkillsIndexForPrompt(skillIndexRows()), topics].filter(Boolean).join('
+
+');
         } catch {
             return '';
         }

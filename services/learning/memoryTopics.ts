@@ -226,3 +226,35 @@ export const memoryUpdatedLabel = (at: number | string | undefined | null, now =
     if (days < 7) return `Updated ${days} day${days === 1 ? '' : 's'} ago`;
     return `Updated ${phtDay(ms)}`;
 };
+
+/**
+ * Listing-first recall for the NOTEBOOK (the topics are its subjects): a
+ * compact always-injected index — slug (the file stem), one ≤150-char
+ * summary, the folder — with bodies read on demand via the notebook tools.
+ * Profile memory already has its own always-loaded index
+ * (profileMemory.buildProfileMemoryIndex); this is the other store's, built
+ * from the same topics the Memory panel shows, so prompt and UI cannot
+ * disagree about what the notebook holds. Takes the store as parameters like
+ * every function here — the module reads nothing on its own. Empty string
+ * when the notebook has no topics, so it composes into any prompt block.
+ */
+export const buildNotebookTopicsIndex = (
+    files: MemoryFile[],
+    folders: Array<{ id: string; name: string }>,
+    maxLines = 12,
+): string => {
+    const topics = memoryTopicsFromStore(files, folders);
+    if (topics.length === 0) return '';
+    const shown = topics.slice(0, maxLines);
+    const lines = shown.map(t => {
+        const slug = t.file.name.replace(/\.md$/i, '');
+        const summary = t.summary.length > 150 ? `${t.summary.slice(0, 149)}…` : t.summary;
+        return `- ${slug} (${t.folderName}) — ${summary}`;
+    });
+    const dropped = topics.length - shown.length;
+    return [
+        `## Notebook topics — ${topics.length} subject${topics.length === 1 ? '' : 's'}. One line each; the full note is one recall/get_notebook_map away.`,
+        ...lines,
+        dropped > 0 ? `…and ${dropped} more — get_notebook_map lists every file.` : '',
+    ].filter(Boolean).join('\n');
+};
