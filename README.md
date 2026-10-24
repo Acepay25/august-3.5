@@ -64,11 +64,15 @@ npm run dev             # dev server on port 3000
 npm run build           # tsc --noEmit && vite build
 npm run typecheck       # tsc --noEmit
 npm run lint            # eslint, warnings capped by a ratchet (--max-warnings 385)
+npm run check:contracts # the six pure-logic contracts (R:R math, retries,
+                        #   harness marks, notebook pressure, compaction,
+                        #   AI-boundary coercion) — node only, no suite
 npm run electron:dev    # Vite dev server + Electron window
 npm run electron:build  # Windows installer
 ```
 
-CI runs `tsc`, both tooling parses, the flow-doc anchor gate, the three browser
+CI runs `tsc`, both tooling parses, the flow-doc anchor gate, the contract
+checks, the three browser
 probes, `lint` and `vite build`, then on `v*` tags
 `.github/workflows/release.yml` builds once (`--publish never`), verifies the
 installer, and only then uploads the signed bytes with `gh release upload`.

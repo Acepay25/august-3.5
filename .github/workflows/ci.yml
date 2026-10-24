@@ -41,6 +41,12 @@ jobs:
       - name: Flow docs cite real lines
         run: npm run check-flow-doc-anchors
 
+      # The six pure-logic contracts no browser probe can reach (planned R:R
+      # math, retry classification, harness marks, notebook pressure tiers,
+      # tool-pair compaction, AI-boundary coercion) — plain node, no suite.
+      - name: Contract checks
+        run: npm run check:contracts
+
       # tsc excludes electron/*.cjs, so a syntax break in the desktop shell is
       # invisible to every other gate
       # here — and it only shows up when a user launches the packaged app.

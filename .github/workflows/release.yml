@@ -93,6 +93,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Same six pure-logic contracts ci.yml checks (R:R math, retry
+      # classification, harness marks, notebook pressure, tool-pair
+      # compaction, AI-boundary coercion) — a broken contract is a broken
+      # app wherever it runs, and this gate ships the app.
+      - name: Contract checks
+        run: npm run check:contracts
+
       # Scripts/electron tooling types (tsconfig.scripts.json) — parity with
       # ci.yml. `npm run build` only runs the APP tsc (tsconfig.app/), so
       # without this a typecheck:scripts-only file could break unreleased.
