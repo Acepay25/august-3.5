@@ -716,10 +716,10 @@ async function main() {
             if (!clickedStop) await sleep(120);
         }
         check('an in-flight tool turn offers a working Stop', clickedStop,
-            'no enabled Stop button appeared within ~1.8s of sending');
+            clickedStop ? 'clicked Stop while the tool round was in flight' : 'no enabled Stop button appeared within ~1.8s of sending');
         const settled = await waitSendable(page, 20000);
         check('the stopped turn settles instead of streaming forever', settled,
-            'the composer never became sendable again after Stop');
+            settled ? 'the composer became sendable again after the abort' : 'the composer never became sendable again after Stop');
         const stopAfter = await page.locator('[data-testid="chat-entry-ai"]').count();
         check('a stopped turn leaves one row, not a placeholder beside an answer',
             stopAfter <= stopBefore + 1, `${stopBefore} -> ${stopAfter} answer rows`);
