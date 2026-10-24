@@ -37,7 +37,7 @@ Legend: **REAL** = the control/feature does what its label says, in the running 
 | 1 | **Surface router** | One hook owns the current surface, the Journal deep-link tab, and the two hash effects that keep the URL and the screen in agreement (apply-from-URL and write-back-to-URL, with a ref between them so they do not thrash). | REAL | `hooks/useSurfaceRouter.ts:54-171`; the ref discipline at `:71,102,137,145`; `serializeAppHash` write-back at `:159-162` |
 | 2 | **Surface persistence** | The surface is persisted in `localStorage` under `august_surface_v1`; the retired ids `'chat'`, `'boards'`, `'skills'` all migrate to `'trade'`. | REAL | `hooks/useSurface.ts:15-31` (migration at `:24`) |
 | 3 | **Title-bar surface switch** | The one navigation control: four icon buttons, `aria-current="page"` on the live one, `Alt+1/2/4/5` chords, live badge counts riding the glyph. | REAL | `components/shell/SurfaceSwitch.tsx:33-79`; built once in `App.tsx:2242-2260`; handed to the band (`App.tsx:2543`) and to the Chat surface (`App.tsx:2733`); chords `App.tsx:1343-1349` |
-| 4 | **Nav rail** | The persistent left column (`NavRail.tsx`, 242 lines) — expand/collapse, destination rows, update button, account row. | **COSMETIC** | The component is **never rendered by the app**. `App.tsx:2507-2515` says so in the source; `tests/deadControlsGuard.test.ts:145` pins `expect(appSrc).not.toMatch(/<NavRail/)`. Only two exports are live: `AccountRow` and `NAV_RAIL_AUTO_COLLAPSE_PX` (`App.tsx:129`). Its own collapse button (`NavRail.tsx:202-212`) and its `UpdateButton` (`NavRail.tsx:228`) are unreachable. The plan keeps it on purpose pending E-50 (`docs/plan/open-items.md:182`), and `tests/agentsSurface.test.tsx:401` still mounts it — so the file is alive in the suite and dead in the app. |
+| 4 | **Nav rail** | The persistent left column (`NavRail.tsx`, 242 lines) — expand/collapse, destination rows, update button, account row. | **COSMETIC** | The component is **never rendered by the app**. `App.tsx:2507-2515` says so in the source; the suite that pinned it (`tests/deadControlsGuard.test.ts`, removed 2026-10-23) used to assert `expect(appSrc).not.toMatch(/<NavRail/)`. Three exports are live: `AccountRow` and `NAV_RAIL_AUTO_COLLAPSE_PX` (`App.tsx:129`), and `NAV_RAIL_EXPANDED_PX` (`components/agents/AgentsView.tsx:73`). Its own collapse button (`NavRail.tsx:202-212`) and its `UpdateButton` (`NavRail.tsx:228`) are unreachable. The plan keeps it on purpose pending E-50 (`docs/plan/open-items.md:182`); the test that mounted it (`tests/agentsSurface.test.tsx:401`) went with the suite on 2026-10-23 — the file is now dead in the app and unexercised everywhere. |
 | 5 | **Surface menu list** | `SurfaceMenuList.tsx` — the "five surfaces" row list, the brand-gradient active bar, the "a conversation is still running" busy badge. | **COSMETIC** | Its only mount is `App.tsx:2725-2731` with `hideSurfaces` set, so `!hideSurfaces && SURFACE_ITEMS.map(...)` (`SurfaceMenuList.tsx:135`) never evaluates. The only live row is "Customize" (`:207-223`). Consequences: the brand-gradient active-nav bar (`:165-170`) and the busy badge (`:142, :188`) are dead. `tests/deadControlsGuard.test.ts:147-150` pins the *shape* of this but not the consequence. |
 | 6 | **Customize row** | The one live destination row: opens the Knowledge surface's Skills tab (the Strategy Studio). | REAL | `components/shell/SurfaceMenuList.tsx:207-223` → `App.tsx:477-480`; probe asserts it lands on the Skills tab: `scripts/render-probe.cjs:1868-1880` |
 | 7 | **Status cluster** | Save state, offline state, and the single opener for the Activity drawer. | REAL | `components/shell/StatusCluster.tsx:27-78`; built once `App.tsx:2261-2268` |
@@ -435,11 +435,14 @@ while reading as if it were.
 `components/shell/NavRail.tsx:140-240` (242 lines). The collapse button
 (`:202-212`), the `SurfaceMenuList` mount (`:216-222`) and the `UpdateButton` (`:228`) are
 all unreachable. The file reads as the app's navigation; it is not.
-`App.tsx:2507-2515` documents this; `tests/deadControlsGuard.test.ts:145` pins the absence.
-**Verdict: COSMETIC (whole file).** Only `AccountRow` (`:79-138`) and
-`NAV_RAIL_AUTO_COLLAPSE_PX` (`:43`) are live. The repo's plan keeps the module on purpose
-pending the E-50 decision (`docs/plan/open-items.md:182`) and `tests/agentsSurface.test.tsx:401`
-still mounts it — so it is exercised by the suite and unreachable by the user.
+`App.tsx:2507-2515` documents this; the suite that pinned the absence
+(`tests/deadControlsGuard.test.ts`) went with the test suite on 2026-10-23.
+**Verdict: COSMETIC (whole file).** Three exports are live: `AccountRow` (`:79-138`) and
+`NAV_RAIL_AUTO_COLLAPSE_PX` (`:43`) — both at `App.tsx:129` — plus
+`NAV_RAIL_EXPANDED_PX` (`:38`, imported by `components/agents/AgentsView.tsx:73`). The
+repo's plan keeps the module on purpose
+pending the E-50 decision (`docs/plan/open-items.md:182`); nothing mounts it since the
+suite's removal on 2026-10-23 — it is unreachable by the user and unexercised by the repo.
 
 ### C2. The five-surface list in `SurfaceMenuList` — mounted but gated off
 `components/shell/SurfaceMenuList.tsx:135-200`. Its only mount passes `hideSurfaces`
