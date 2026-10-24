@@ -30,6 +30,7 @@ import type { ProviderConfig } from '../../types/provider';
 import type { ChatMessage, ContentPart } from '../providers/GenericProviderService';
 import type { DeskToolCall, DeskToolResult } from '../analysis/DeskToolsService';
 import { fetchHybridData, generateHybridPromptInjection } from '../analysis/HybridIntelligenceService';
+import { DESK_TOOL_NAMES } from '../../utils/toolKinds';
 import { buildTradeChatContext, describeChartSnapshotForModel } from './tradeChatContext';
 import {
     describeDrawingsForModel, drawingFromChartTool, drawingsFromDetectedPattern, drawingsFromLevelTool, type ChartDrawing,
@@ -97,46 +98,7 @@ export interface PanelTurnContext {
     interval: string;
 }
 
-const TRADE_TOOLS = [
-    'get_price_snapshot', 'get_order_book', 'get_derivatives',
-    'get_liquidations', 'get_session_context', 'get_market_packet', 'get_all_timeframes', 'get_chart_view',
-    // The Key Levels card is fed from this: the app computes the published
-    // levels and hands back the exact fence, so the model cannot invent a
-    // price it is about to have drawn on the trader's chart.
-    'get_key_levels',
-    'get_btc_context', 'recall', 'get_setup_history_stats', 'web_search', 'scan_setups',
-    // The journal as rows, not as aggregates — the dock is where "how have my
-    // last ten trades actually gone" gets asked.
-    'get_trade_log',
-    'project_future_price',
-    // On-demand indicator studies (RSI/MACD/ADX/OBV/Ichimoku/structure/…).
-    // The dock is where a trader asks "what does the 4h RSI say about this
-    // setup?", and without this the dock could not ask — the studies only
-    // reached the model inside the analysis packet.
-    'get_indicators',
-    // Search past analysis sessions. A docked conversation is exactly where
-    // "what did I conclude about BTC last week?" gets asked.
-    'recall_chat',
-    // Market-wide discovery: grade the whole top-volume universe at once.
-    'run_screener', 'run_monte_carlo',
-    // Growth set: the model edits its own memory, skills and tools from here.
-    'write_memory_note', 'get_notebook_map', 'propose_skill', 'revise_skill', 'propose_strategy',
-    'amend_memory', 'forge_tool', 'scan_chart_skills',
-    // Chart-action set: the model draws on the live chart (levels, lines).
-    'draw_on_chart', 'draw_detected', 'mark_trade_levels', 'clear_chart_drawings', 'present_trade',
-    'decline_trade',
-    // Watch/schedule harness: real-time price triggers + time wake-ups.
-    'watch_price', 'wake_me', 'cancel_watch',
-    // Collaboration memory: this environment's MEMORY.md analogue — the model
-    // maintains durable facts about the USER (index always loaded, bodies on demand).
-    'remember', 'read_memory', 'forget',
-    // Read-back for a clipped tool result. Without this the dock had no way to
-    // recover a truncated result AND spillReceiptAllowed() suppressed the
-    // receipt that would have named the loss, so a clipped chart read was a
-    // dead end: the seat could not even learn it was holding part of a chart.
-    // Anything that can be clipped must be able to be re-read.
-    'read_tool_output',
-];
+const TRADE_TOOLS: string[] = [...DESK_TOOL_NAMES];
 
 /** An image the composer attached to this turn, in the shape the runner needs. */
 type ScreenshotAttachment = { kind: string; payload: string };

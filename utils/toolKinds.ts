@@ -140,3 +140,25 @@ export const toolKindOf = (label: string): ToolKindInfo => {
     const key = (label ?? '').trim().toLowerCase();
     return BY_LABEL[key] ?? { kind: 'other', activity: '' };
 };
+
+/**
+ * The desk's tool NAMES, one list — the same names `chatTurnRunner`'s
+ * TRADE_TOOLS allow-list carries and the skill `compatibility.requiresTools`
+ * gate checks against. A skill may only require a tool the desk can actually
+ * call, and both readers must agree on the spelling, so the list lives here
+ * in the vocabulary module where neither imports the other.
+ */
+export const DESK_TOOL_NAMES: readonly string[] = [
+    'get_price_snapshot', 'get_order_book', 'get_derivatives',
+    'get_liquidations', 'get_session_context', 'get_market_packet', 'get_all_timeframes', 'get_chart_view',
+    'get_key_levels',
+    'get_btc_context', 'recall', 'get_setup_history_stats', 'web_search', 'scan_setups',
+    'get_trade_log',
+    'project_future_price',
+    'get_indicators',
+    'recall_chat',
+    'run_screener', 'run_monte_carlo',
+    'write_memory_note', 'get_notebook_map', 'propose_skill', 'revise_skill', 'propose_strategy',
+    'amend_memory', 'forge_tool', 'scan_chart_skills',
+    'skill_view',
+];

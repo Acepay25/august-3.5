@@ -238,8 +238,19 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         sf.skillFaceIssues({ name: 'ok', description: '', body: '   ' }).length === 2);
     ok('fm: description ceiling enforced',
         sf.skillFaceIssues({ name: 'ok', description: 'x'.repeat(1025), body: 'b' }).length > 0);
-    ok('fm: platform aliases map onto the two runtimes',
-        sf.PLATFORM_OF.macos === 'native' && sf.PLATFORM_OF.web === 'web' && sf.PLATFORM_OF.windows === 'native');
+    ok('fm: platform aliases map onto the three runtimes',
+        sf.PLATFORM_OF.macos === 'desktop' && sf.PLATFORM_OF.windows === 'desktop'
+        && sf.PLATFORM_OF.web === 'web' && sf.PLATFORM_OF.android === 'mobile');
+    ok('fm: gating hides what this runtime cannot run',
+        sf.skillRunsHere(undefined, 'web', []) === true
+        && sf.skillRunsHere({ platforms: ['macos', 'windows'] }, 'web', []) === false
+        && sf.skillRunsHere({ platforms: ['macos', 'windows'] }, 'desktop', []) === true
+        && sf.skillRunsHere({ platforms: ['freebsd'] }, 'web', []) === true);
+    ok('fm: requiresTools must be a subset of the desk',
+        sf.skillRunsHere({ requiresTools: ['get_order_book'] }, 'web', ['get_order_book']) === true
+        && sf.skillRunsHere({ requiresTools: ['not_a_tool'] }, 'web', ['get_order_book']) === false);
+    ok('fm: requiresEnv fails closed in a renderer',
+        sf.skillRunsHere({ requiresEnv: ['FOO'] }, 'desktop', []) === false);
 })();
 
 // ─── report ────────────────────────────────────────────────────────────────
