@@ -1045,6 +1045,7 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                 properties: {
                     slug: { type: 'string', description: 'Existing entry slug to UPDATE, or omit to create (a kebab-case slug is derived from name).' },
                     if_version: { type: 'number', description: 'On UPDATE only: the version the index/read last showed you. A mismatch returns the current content (saved:false, conflict:true) — merge and retry in the same turn.' },
+                    aliases: { type: 'array', items: { type: 'string' }, description: 'Optional extra match words for recall (e.g. ["bun"]). Max 8.' },
                     name: { type: 'string', description: 'Short name for a new entry, e.g. "User runs 15m scalps".' },
                     kind: { type: 'string', enum: ['user', 'feedback', 'project', 'reference'], description: 'Memory kind.' },
                     description: { type: 'string', description: 'One line (≤140 chars) stating WHEN this memory matters — it decides future relevance.' },
@@ -2706,10 +2707,26 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     // Tag the writer: profileMemory's convention is that MODEL
                     // writes carry source:'model' — without it, human/user and
                     // model entries were indistinguishable in the notebook.
+                    // The chat agent may only write 'stated' facts; 'observed'
+                    // and 'inferred' belong to the system paths.
+                    const { filterMemoryWrite } = await import('../../utils/memoryWriteFilters');
+                    const verdict = filterMemoryWrite(`${description}
+${body}`);
+                    if (verdict.refused) {
+                        return rejectedResult(call, `remember rejected: ${verdict.refused}`);
+                    }
+                    const { getHarnessSettings } = await import('../../utils/harnessSettings');
+                    const sensitiveAllowed = getHarnessSettings().sensitiveMemoryEnabled === true;
+                    if (verdict.sensitive && !sensitiveAllowed) {
+                        return rejectedResult(call, 'remember rejected: this is a sensitive-category fact (health/finances/identity) and the sensitive-memory setting is off');
+                    }
+                    const aliasesRaw = Array.isArray(call.arguments.aliases)
+                        ? call.arguments.aliases.map(a => String(a)).slice(0, 8)
+                        : undefined;
                     const ifVersionRaw = call.arguments.if_version;
                     const ifVersion = typeof ifVersionRaw === 'number' ? ifVersionRaw : undefined;
                     const result = rememberProfileMemory(
-                        { slug, description, kind, body, source: 'model', ifVersion },
+                        { slug, description, kind, body, source: 'model', ifVersion, tag: 'stated', sensitive: verdict.sensitive || undefined, aliases: aliasesRaw },
                         getActiveUsername(),
                     );
                     if (result.conflict) {
@@ -4347,7 +4364,7 @@ export async function* streamChatWithDeskTools(
             const lastText = typeof last?.content === 'string' ? last.content : '';
             const hints = buildMemoryHints(
                 lastText,
-                listProfileMemories().map(e => ({ slug: e.slug, description: e.description })),
+                listProfileMemories().map(e => ({ slug: e.slug, description: e.description, aliases: e.aliases, sensitive: e.sensitive })),
                 skillIndexRows().map(r => r.slug),
             );
             if (hints.length > 0 && last) {

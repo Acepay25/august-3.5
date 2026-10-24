@@ -45,6 +45,21 @@ export interface ProfileMemoryEntry {
      *  rows — read as 1, so a first if_version against a legacy row succeeds
      *  and stamps the field from then on. */
     version?: number;
+    /** Provenance of the fact: 'stated' (the USER said it — the only tag the
+     *  chat agent may write), 'observed' (a system path watched behaviour) or
+     *  'inferred'. Absent on legacy rows reads as 'stated' — that is what
+     *  every pre-field row was. */
+    tag?: 'stated' | 'observed' | 'inferred';
+    /** A sensitive-category fact (health / finances / identity). Stored only
+     *  when the user's setting allows, and excluded from pre-reads and
+     *  unattended contexts. */
+    sensitive?: boolean;
+    /** Extra match strings the deterministic pre-read may hit on, beyond the
+     *  slug's own words ("bun" for user-runs-bun). */
+    aliases?: string[];
+    /** The row as it read BEFORE this edit — "now X, previously Y". One
+     *  generation deep; the history is provenance, not a version store. */
+    previous?: { body: string; description: string; updatedAt: string };
 }
 
 const KEY_PREFIX = 'profile_memory_v1';
@@ -109,6 +124,14 @@ export type RememberResult =
 export const rememberProfileMemory = (input: {
     slug?: string; name?: string; description: string; kind: ProfileMemoryKind; body: string;
     source?: ProfileMemoryEntry['source'];
+    /** Provenance of the fact — only 'stated' is writable by the chat agent;
+     *  'observed'/'inferred' come from separate system paths. */
+    tag?: ProfileMemoryEntry['tag'];
+    /** Sensitive-category flag (the caller decides, from the user's setting,
+     *  whether a detected sensitive write is refused or flagged). */
+    sensitive?: boolean;
+    /** Extra match strings for the deterministic pre-read. */
+    aliases?: string[];
     /** Optimistic lock: when given and a row with this slug already exists,
      *  the write only lands if the row's version is exactly this. */
     ifVersion?: number;
@@ -121,15 +144,25 @@ export const rememberProfileMemory = (input: {
     if (idx >= 0 && typeof input.ifVersion === 'number' && (all[idx].version ?? 1) !== input.ifVersion) {
         return { conflict: true, current: all[idx] };
     }
+    const prior = idx >= 0 ? all[idx] : undefined;
     const entry: ProfileMemoryEntry = {
         slug: slug || `memory-${Date.now().toString(36)}`,
         description: input.description.trim().slice(0, MAX_DESC_CHARS),
         kind: input.kind,
         body: input.body.trim().slice(0, MAX_BODY_CHARS),
         ...(input.source ? { source: input.source } : {}),
+        ...(input.tag ? { tag: input.tag } : {}),
+        ...(input.sensitive !== undefined ? { sensitive: input.sensitive } : {}),
+        ...(input.aliases ? { aliases: input.aliases.map(a => a.trim()).filter(Boolean).slice(0, 8) } : {}),
         createdAt: now,
         updatedAt: now,
-        version: idx >= 0 ? (all[idx].version ?? 1) + 1 : 1,
+        version: idx >= 0 ? (prior!.version ?? 1) + 1 : 1,
+        // "now X, previously Y": one generation of provenance, stamped only
+        // when the body actually changed — re-saving identical text is not
+        // history, it is churn.
+        ...(idx >= 0 && prior!.body !== input.body.trim()
+            ? { previous: { body: prior!.body, description: prior!.description, updatedAt: prior!.updatedAt } }
+            : {}),
     };
     const created = idx < 0;
     if (created) {
@@ -166,7 +199,8 @@ export const buildProfileMemoryIndex = (username?: string): string => {
     const newest = all.slice(-INDEX_MAX_LINES);
     const lines = newest.map(e => {
         const desc = e.description.length > INDEX_LINE_MAX ? `${e.description.slice(0, INDEX_LINE_MAX - 1)}…` : e.description;
-        return `- [${e.kind}] ${e.slug} — ${desc}`;
+        const tagMark = e.tag === 'observed' ? ' ·observed' : e.tag === 'inferred' ? ' ·inferred' : '';
+        return `- [${e.kind}] ${e.slug}${tagMark} — ${desc}`;
     });
     const dropped = all.length - newest.length;
     return [

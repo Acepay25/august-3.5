@@ -122,6 +122,7 @@ export const runTraderLearner = async (
                 kind,
                 body: fact.data.body,
                 source: 'auto',
+                tag: 'observed',
             }, username);
             written += 1;
         }
