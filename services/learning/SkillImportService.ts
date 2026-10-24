@@ -10,6 +10,7 @@
  */
 
 import { parseSkillMarkdown } from './SkillMemoryService';
+import { skillFaceIssues } from '../../utils/skillFrontmatter';
 import { createMemoryFile, getMemoryFiles } from './MemoryFilesService';
 import { getActiveUsername } from '../../utils/activeUser';
 import { slugifyName } from './MemoryFilesService';
@@ -52,10 +53,21 @@ export const importSkillFiles = async (files: Array<{ name: string; content: str
     }
     for (const file of files) {
         const meta = parseSkillMarkdown(file.content);
-        if (!meta) {
-            result.failed.push({ name: file.name, reason: 'Not a skill file — missing or invalid skill frontmatter' });
+        if (!meta || !meta.body.trim()) {
+            result.failed.push({ name: file.name, reason: meta ? 'empty body' : 'Not a skill file — missing or invalid skill frontmatter' });
             continue;
         }
+        // The SKILL.md name/description contract is WARNED on, not enforced:
+        // August's own exports carry prose titles in `name:`, and the contract
+        // governs third-party files, not this profile's own round-trips. An
+        // over-long description is truncated by the next rewrite, so it is
+        // said out loud here instead of silently shrinking later.
+        const issues = skillFaceIssues({
+            name: meta.name ?? file.name.replace(/\.md$/i, ''),
+            description: meta.description ?? '',
+            body: meta.body,
+        });
+        if (issues.length > 0) console.warn(`[Skills] import "${file.name}": ${issues.join('; ')} (imported anyway — August's own exports use prose names)`);
         // Same trigger already learned → skip as duplicate (honest, not
         // silent). Skills WITHOUT a trigger condition dedupe on the
         // normalized title (the first `# heading`), so frontmatter-less

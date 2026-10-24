@@ -30,6 +30,7 @@ import type { SkillIndexRow } from '../trade/tradeChatContext';
 import { netRiskReward, stopDistancePercent } from '../../utils/netRiskReward';
 import { parsePrice } from '../../utils/analysisUtils';
 import { formatCraftedSkillBody, refineSkillFromLosses } from './SkillCraftService';
+import { captureUnknownFrontmatter } from '../../utils/skillFrontmatter';
 import {
     recordWorthGateApproval,
     recordWorthGateConfirm,
@@ -108,6 +109,11 @@ export interface SkillCompatibility {
 export interface SkillMeta {
     status: SkillStatus;
     kind: SkillKind;
+    /** The spec's required identifier, as the file declares it (lowercase,
+     *  digits, hyphens, ≤64). August's own writer derives it from the title at
+     *  serialization time; an IMPORTED skill keeps the name it arrived with so
+     *  an export round-trips. */
+    name?: string;
     /** One-sentence semantic summary (zcode memory pattern): what this skill
      *  claims, in prose. Generated at creation from the worth-gate rationale
      *  (or the IF/THEN pair), consumed by index lines, the recall tool, the
@@ -430,6 +436,13 @@ export interface SkillMeta {
         invalidAt?: string;
         reason?: string;
     }>;
+    /** Raw lines of every frontmatter key the app has no semantics for,
+     *  captured VERBATIM at parse and re-emitted verbatim at serialization —
+     *  `author`, `license`, `metadata.hermes.*`, `platforms`, and anything a
+     *  third-party author put there. A rewrite that eats a key the importer's
+     *  author wrote is data loss the next round-trip turns into a diff the
+     *  user cannot explain. */
+    unknownFrontmatter?: string[];
 }
 
 /**
@@ -692,6 +705,13 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
     return {
         status,
         kind,
+        // The spec's identifier, as the FILE declares it. August's own writer
+        // derives name from the title at serialization; keeping the declared
+        // one here is what makes an imported skill round-trip. Face issues
+        // (bad casing, too long, missing) are NOT a parse failure — the file
+        // still loads; the importer decides whether to reject on them.
+        name: pick('name'),
+        unknownFrontmatter: captureUnknownFrontmatter(fm),
         version: pick('version'),
         compatibility: (() => {
             const raw = pick('compatibility');
@@ -1275,7 +1295,19 @@ export const skillStatusAt = (meta: SkillMeta, at: string | number): SkillStatus
 export const listSkills = (): Array<{ file: MemoryFile; meta: SkillMeta }> =>
     getMemoryFiles().files.filter(isSkillFile).map(file => {
         const meta = parseSkillMarkdown(file.content);
-        return meta ? { file, meta } : null;
+        if (!meta || !meta.body.trim()) {
+            // A bad skill never breaks discovery of the others — but it is
+            // NAMED, not silently filtered, because a skill that vanished
+            // from the index with no trace reads as a dead belief. Only real
+            // breakage skips here (no frontmatter, empty body); NAME and
+            // DESCRIPTION shape are validated at import, because August's own
+            // writer derives `name:` from prose titles and the spec's
+            // lowercase-hyphen rule is a third-party-file contract, not a
+            // discovery gate.
+            console.warn(`[Skills] skipped "${file.name}": ${meta ? 'empty body' : 'missing or invalid skill frontmatter'}`);
+            return null;
+        }
+        return { file, meta };
     }).filter((row): row is { file: MemoryFile; meta: SkillMeta } => Boolean(row));
 
 export const serializeSkill = (meta: SkillMeta, title: string): string => {
@@ -1324,8 +1356,13 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.whyAccepted ? [`whyAccepted: ${yamlString(meta.whyAccepted.replace(/\n/g, ' '))}`] : []),
         ...(meta.reason ? [`reason: ${yamlString(meta.reason.replace(/\n/g, ' '))}`] : []),
         ...(meta.originBotId ? [`originBotId: ${yamlString(meta.originBotId)}`] : []),
-        ...(meta.originBotName ? [`originBotName: ${yamlString(meta.originBotName.replace(/\n/g, ' '))}`] : []),
+        ...(meta.originBotName ? [`originBotName: ${yamlString(meta.originBotName)}`] : []),
         ...(meta.originMessageId ? [`originMessageId: ${yamlString(meta.originMessageId)}`] : []),
+        // Third-party keys ride VERBATIM after the portable face — never
+        // reinterpreted, never reordered, never dropped. These are lines the
+        // app has no semantics for; changing one byte of them is a rewrite
+        // the importer's author did not ask for.
+        ...(meta.unknownFrontmatter?.length ? meta.unknownFrontmatter : []),
     ];
 
     // ── LEDGER FACE: every outcome and lifecycle key, below the marker. The
