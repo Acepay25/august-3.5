@@ -65,6 +65,7 @@ import { getFirstReadyProvider, isProviderReady, formatModelDisplayName, compute
 import { skillIndexRows } from '../../services/learning/SkillMemoryService';
 import { getMemoryFiles } from '../../services/learning/MemoryFilesService';
 import { buildNotebookTopicsIndex } from '../../services/learning/memoryTopics';
+import { indexBudgetFor } from '../../utils/promptIndexBudget';
 import { buildProfileMemoryIndex } from '../../services/learning/profileMemory';
 import {
     ensureSupervisorListeners, setSessionModel,
@@ -427,7 +428,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
      *  or retired mid-session — in this dock or anywhere else — is in the
      *  next turn's prompt. One sync index read per send, against a network
      *  packet fetch: negligible. */
-    const skillsIndexForPrompt = (): string => {
+    const skillsIndexForPrompt = (config: ProviderConfig | null): string => {
         try {
             // The ONE projection (SkillMemoryService.skillIndexRows), so this
             // surface cannot drift from the Chat surface's filter again: it used
@@ -470,7 +471,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
      *  ends up knowing less in one place than the other. `roleNote` is about
      *  the ROOM (you are one of N seats), so it stays the caller's. */
     const systemPromptFor = useCallback((bot?: AgentBot, roleNote?: string): string => {
-        const skillsBlock = skillsIndexForPrompt();
+        const skillsBlock = skillsIndexForPrompt(provider);
         const strategiesBlock = strategiesForPrompt();
         const memoryBlock = buildProfileMemoryIndex();
         let agent: ResolvedAgentContext | null = null;

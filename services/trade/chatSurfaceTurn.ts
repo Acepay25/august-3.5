@@ -39,6 +39,7 @@ import { buildSkillsIndexForPrompt, rankSkillIndexRows } from './tradeChatContex
 import { skillIndexRows } from '../learning/SkillMemoryService';
 import { getMemoryFiles } from '../learning/MemoryFilesService';
 import { buildNotebookTopicsIndex } from '../learning/memoryTopics';
+import { indexBudgetFor } from '../../utils/promptIndexBudget';
 import { activeStrategiesBlock } from '../learning/strategyStore';
 import { buildProfileMemoryIndex } from '../learning/profileMemory';
 import { runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
@@ -109,7 +110,9 @@ const SKILL_INDEX_WINDOW = 30;
  * trader their answer: the prompt simply carries less, the same way the dock's
  * `skillsIndexForPrompt` swallows and returns ''.
  */
-export const surfacePromptWith = (mandate: string, where: string, memoryEnabled = true): ChatSurfacePrompt => {
+export const surfacePromptWith = (mandate: string, where: string, opts: { memoryEnabled?: boolean; windowTokens?: number } = {}): ChatSurfacePrompt => {
+    const memoryEnabled = opts.memoryEnabled !== false;
+    const budget = indexBudgetFor(opts.windowTokens ?? 200_000);
     let skillsBlock: string;
     let skills: string[];
     try {
@@ -118,8 +121,8 @@ export const surfacePromptWith = (mandate: string, where: string, memoryEnabled 
         // names exactly the skills the model was shown. Ranking it twice (here
         // and inside the builder) is idempotent — the sort is stable.
         const ranked = rankSkillIndexRows(rows);
-        skills = ranked.slice(0, SKILL_INDEX_WINDOW).map(r => r.slug);
-        skillsBlock = buildSkillsIndexForPrompt(rows, SKILL_INDEX_WINDOW, where);
+        skills = ranked.slice(0, budget.skills).map(r => r.slug);
+        skillsBlock = buildSkillsIndexForPrompt(rows, budget.skills, where);
     } catch {
         skills = [];
         skillsBlock = '';
@@ -130,7 +133,7 @@ export const surfacePromptWith = (mandate: string, where: string, memoryEnabled 
     let topicsBlock: string;
     try {
         const store = getMemoryFiles();
-        topicsBlock = memoryEnabled ? buildNotebookTopicsIndex(store.files, store.folders) : '';
+        topicsBlock = memoryEnabled ? buildNotebookTopicsIndex(store.files, store.folders, budget.topics) : '';
     } catch {
         topicsBlock = '';
     }
@@ -145,7 +148,7 @@ export const surfacePromptWith = (mandate: string, where: string, memoryEnabled 
         // The Settings toggle is a PROMISE: memory off means no memory block —
         // profile, topics, all of it. The analysis pipeline honoured this; the
         // chat path read the store anyway until 2026-10-24.
-        memoryBlock = memoryEnabled ? buildProfileMemoryIndex() : '';
+        memoryBlock = memoryEnabled ? buildProfileMemoryIndex(undefined, budget.memory) : '';
     } catch {
         memoryBlock = '';
     }
@@ -161,8 +164,8 @@ export const surfacePromptWith = (mandate: string, where: string, memoryEnabled 
  * skills heading says "what the trader asks about", because there is no chart
  * here to match against, and the mandate forbids the tool calls the canvas owns.
  */
-export const chatSurfaceSystemPrompt = (memoryEnabled = true): ChatSurfacePrompt =>
-    surfacePromptWith(CHAT_SURFACE_SYSTEM_PROMPT, 'what the trader asks about', memoryEnabled);
+export const chatSurfaceSystemPrompt = (opts: { memoryEnabled?: boolean; windowTokens?: number } = {}): ChatSurfacePrompt =>
+    surfacePromptWith(CHAT_SURFACE_SYSTEM_PROMPT, 'what the trader asks about', opts);
 
 /** The speaker key for this surface's live tool feed — `chatRowFrom` flattens
  *  `liveToolEvents` for the Chat row and `liveEntryFromMessage` does the same
@@ -352,7 +355,7 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
     // for, and a row claiming skills it never saw is worse than a silent row.
     const prompt = req.systemPrompt
         ? { text: req.systemPrompt, skills: [] as string[] }
-        : chatSurfaceSystemPrompt(req.memoryEnabled !== false);
+        : chatSurfaceSystemPrompt({ memoryEnabled: req.memoryEnabled !== false, windowTokens: req.config?.contextWindowTokens });
     if (prompt.skills.length > 0) req.patch(m => ({ ...m, injectedSkills: prompt.skills }));
 
     // A FULL ANALYSIS (stage 20f) is an instruction, not a keyword: the trader

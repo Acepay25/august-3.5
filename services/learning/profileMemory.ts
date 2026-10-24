@@ -193,10 +193,10 @@ const INDEX_LINE_MAX = 150;
  * `- [kind] slug — description`. Empty string when nothing is stored, so it
  * composes cleanly into any prompt. The model reads bodies via read_memory.
  */
-export const buildProfileMemoryIndex = (username?: string): string => {
+export const buildProfileMemoryIndex = (username?: string, maxLines = INDEX_MAX_LINES): string => {
     const all = listProfileMemories(username);
     if (all.length === 0) return '';
-    const newest = all.slice(-INDEX_MAX_LINES);
+    const newest = all.slice(-maxLines);
     const lines = newest.map(e => {
         const desc = e.description.length > INDEX_LINE_MAX ? `${e.description.slice(0, INDEX_LINE_MAX - 1)}…` : e.description;
         const tagMark = e.tag === 'observed' ? ' ·observed' : e.tag === 'inferred' ? ' ·inferred' : '';
