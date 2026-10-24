@@ -147,7 +147,7 @@ export const surfacePromptWith = (mandate: string, where: string): ChatSurfacePr
         memoryBlock = '';
     }
     return {
-        text: [mandate, skillsBlock, strategiesBlock, memoryBlock].filter(Boolean).join('\n\n'),
+        text: [mandate, skillsBlock, topicsBlock, strategiesBlock, memoryBlock].filter(Boolean).join('\n\n'),
         skills,
     };
 };

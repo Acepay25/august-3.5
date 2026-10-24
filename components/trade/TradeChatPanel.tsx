@@ -434,9 +434,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             // one line per subject, bodies on demand.
             const store = getMemoryFiles();
             const topics = buildNotebookTopicsIndex(store.files, store.folders);
-            return [buildSkillsIndexForPrompt(skillIndexRows()), topics].filter(Boolean).join('
-
-');
+            return [buildSkillsIndexForPrompt(skillIndexRows()), topics].filter(Boolean).join('\n\n');
         } catch {
             return '';
         }
