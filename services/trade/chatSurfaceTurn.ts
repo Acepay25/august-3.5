@@ -23,7 +23,7 @@
  *
  * BOTS ARE NOT HERE. A bot-bound thread in this surface keeps
  * `streamQuickResponse` (stage 20 owner ruling): the roster answers with its
- * persona and its own memory, and `useBotMailbox` / `botRoutine` / `groupRounds`
+ * persona and its own memory, and `useBotMailbox` / `groupRounds`
  * are deliberately not moved onto the tool turn.
  */
 
