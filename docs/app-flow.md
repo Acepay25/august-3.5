@@ -459,16 +459,16 @@ person pressing send, a bot mailbox delivery, or a room round.
 
 What survives is the one unattended caller that is not a conversation — the
 detached skill evaluator, reached from the trade-sync path
-(`runDueSkillEvalWithDefaultRunner services/learning/SkillMemoryService.ts:3850`)
+(`runDueSkillEvalWithDefaultRunner services/learning/SkillMemoryService.ts:3851`)
 and from the skill detail's own run. Because nobody is watching it, it runs on
-`DETACHED_EVAL_TOOLS` (`services/trade/unattendedTools.ts:22`): the Chat surface's
-set minus every notebook-writer and minus `present_trade` / `decline_trade`, so a
-scheduled judgement can read the tape and cannot act on the journal. The deny list
+`DETACHED_EVAL_TOOLS` (`services/trade/unattendedTools.ts:21`): the Chat surface's
+set minus every notebook-writer and minus `present_trade` / `decline_trade`, so a detached
+judgement can read the tape and cannot act on the journal. The deny list
 in that module is the single owner of "not without a human".
 
 Stored automation data was left alone deliberately: `automations_v1_`,
 `automation_runs_v1_` and `automation_last_seen_v1_` stay allow-listed for restore
-(`services/infrastructure/ExportService.ts:773`) so a backup taken before the
+(`services/infrastructure/ExportService.ts:775`) so a backup taken before the
 removal still comes back without dropping keys it names.
 
 **The Agents surface is a launch list, not a roster form.** A row says what the
@@ -685,7 +685,7 @@ mailbox tools. The surface decides what is offered:
 - the Chat surface uses `CHAT_SURFACE_TOOLS` (`chatSurfaceTurn.ts`), which has
   no canvas tools but includes `present_trade`, `decline_trade` and
   `read_tool_output`;
-- a detached skill eval uses `DETACHED_EVAL_TOOLS` (`services/trade/unattendedTools.ts:22`),
+- a detached skill eval uses `DETACHED_EVAL_TOOLS` (`services/trade/unattendedTools.ts:21`),
   the Chat set minus the notebook-writers and the two journal-acting tools;
 - a panel seat adds the chart-action definitions only when its own allow-list
   names them.
