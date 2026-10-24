@@ -22,6 +22,7 @@ import {
     clipNote, clipReceipt, dataUnavailable, findArtifactIdIn, findClipIn, harnessNoteLegend, harnessTurn,
     isDataUnavailable, MINIMAL_CLIP_NOTE, neutralizeHarnessNotes,
 } from '../../utils/harnessMarks';
+import { buildMemoryHints, isLikelySmallModel } from '../../utils/memoryHints';
 export { DATA_UNAVAILABLE_PREFIX, isDataUnavailable } from '../../utils/harnessMarks';
 import { HARNESS_CONTRACT_PROMPT } from '../../constants/prompts';
 import { executeForgedTool, confirmedForgedToolDefinitions } from '../tools/toolForge';
@@ -4312,6 +4313,36 @@ export async function* streamChatWithDeskTools(
     // a clear a future caller can forget.
     clearDeskToolCache();
 
+    // The deterministic safety net (utils/memoryHints): a weak or local model
+    // does not reliably decide to read memory or open a skill, so on a plain
+    // string match of the trader's own message the harness appends ONE marked
+    // hint naming what to read. Strong models never pay for it — the heuristic
+    // gates the whole block, and no match adds zero bytes. The hint rides the
+    // user role inside the harness's own marker, the same voice the tool
+    // nudges use, so the seat can tell the trader's words from the app's.
+    let outbound = messages;
+    if (isLikelySmallModel(config)) {
+        try {
+            const { listProfileMemories } = await import('../learning/profileMemory');
+            const { skillIndexRows } = await import('../learning/SkillMemoryService');
+            const last = messages[messages.length - 1];
+            const lastText = typeof last?.content === 'string' ? last.content : '';
+            const hints = buildMemoryHints(
+                lastText,
+                listProfileMemories().map(e => ({ slug: e.slug, description: e.description })),
+                skillIndexRows().map(r => r.slug),
+            );
+            if (hints.length > 0 && last) {
+                outbound = messages.slice(0, -1).concat([{
+                    ...last,
+                    content: `${lastText}\n\n${harnessTurn(hints.join('\n'))}`,
+                }]);
+            }
+        } catch (err) {
+            console.warn('[DeskTools] memory hint pass skipped:', err instanceof Error ? err.message : String(err));
+        }
+    }
+
     const nativeTools = config.apiFormat === 'chat_completions';
     const {
         defaultSymbol,
@@ -4382,7 +4413,7 @@ export async function* streamChatWithDeskTools(
             ...confirmedForgedToolDefinitions().map(d => d.function.name),
             ...extraDefs.map(d => d.function.name),
         ];
-    const enriched = withDeskToolsSystemPrompt(messages, nativeTools, offeredToolNames);
+    const enriched = withDeskToolsSystemPrompt(outbound, nativeTools, offeredToolNames);
     // Discoverability: the capability block rides EVERY seat turn so models
     // learn they can DM; the inbox notice (unread count + read first)
     // appends only when mail is actually waiting.

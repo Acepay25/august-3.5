@@ -253,6 +253,30 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         sf.skillRunsHere({ requiresEnv: ['FOO'] }, 'desktop', []) === false);
 })();
 
+// ─── 8. memory hints — the deterministic pre-read for weak models ──────────
+(() => {
+    const mh = loadModule('utils/memoryHints.ts');
+    const mem = [
+        { slug: 'user-runs-bun', description: 'Package manager preference: bun.' },
+        { slug: 'user-btc-scalps', description: 'Trades 15m BTC scalps in the London session.' },
+    ];
+    ok('hint: a slug match names a read',
+        mh.buildMemoryHints('which package manager do I use with bun?', mem, []).some(l => l.includes('read_memory "user-runs-bun"')));
+    ok('hint: an unrelated message matches nothing (capital of France)',
+        mh.buildMemoryHints('what is the capital of France?', mem, []).length === 0);
+    ok('hint: a skill slug match names a skill_view',
+        mh.buildMemoryHints('run the btc scalp routine', [], ['user-btc-scalps']).some(l => l.includes('skill_view')));
+    ok('hint: caps at two reads and two views',
+        mh.buildMemoryHints('bun btc scalps london package manager routine',
+            [{ slug: 'a-one' }, { slug: 'a-two' }, { slug: 'a-three' }].map(r => ({ ...r, description: 'bun btc scalps london routine' })),
+            ['s-one', 's-two', 's-three']).filter(l => l.includes('read_memory')).length <= 2);
+    ok('hint: local-server providers read as small',
+        mh.isLikelySmallModel({ baseUrl: 'http://localhost:11434/v1', modelId: 'llama3' }) === true
+        && mh.isLikelySmallModel({ baseUrl: 'http://127.0.0.1:1234/v1' }) === true);
+    ok('hint: cloud providers with big models do not',
+        mh.isLikelySmallModel({ baseUrl: 'https://api.example.com/v1', modelId: 'gpt-5' }) === false);
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
