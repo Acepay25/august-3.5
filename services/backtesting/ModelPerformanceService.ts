@@ -1268,8 +1268,13 @@ export const syncConfidenceCalibrationFromTradeLog = (trades: LoggedTrade[]): vo
         const isWin = trade.outcome === 'WIN';
         // The incremental writer credits NOTHING for a mirrored plan
         // (`levelsCorrected` hides the model's own call), so the rebuild must
-        // skip the same rows or a corrected trade would start counting.
+        // skip the same rows or a corrected trade would start counting. Same
+        // for a settled trade with no analysis: the incremental writer returns
+        // on `!analysis` (useTradeLogging autoLearnFromOutcome), so counting
+        // it here as a default-Medium sample would inflate that bucket with
+        // rows the other writer never sees.
         if (trade.analysis?.levelsCorrected === true) continue;
+        if (!trade.analysis) continue;
         const confidence = (trade.analysis?.confidence || 'Medium').toLowerCase();
         if (confidence !== 'high' && confidence !== 'medium' && confidence !== 'low') continue;
         for (const p of getTradeProviders(trade)) {
