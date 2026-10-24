@@ -109,7 +109,7 @@ const SKILL_INDEX_WINDOW = 30;
  * trader their answer: the prompt simply carries less, the same way the dock's
  * `skillsIndexForPrompt` swallows and returns ''.
  */
-export const surfacePromptWith = (mandate: string, where: string): ChatSurfacePrompt => {
+export const surfacePromptWith = (mandate: string, where: string, memoryEnabled = true): ChatSurfacePrompt => {
     let skillsBlock: string;
     let skills: string[];
     try {
@@ -130,7 +130,7 @@ export const surfacePromptWith = (mandate: string, where: string): ChatSurfacePr
     let topicsBlock: string;
     try {
         const store = getMemoryFiles();
-        topicsBlock = buildNotebookTopicsIndex(store.files, store.folders);
+        topicsBlock = memoryEnabled ? buildNotebookTopicsIndex(store.files, store.folders) : '';
     } catch {
         topicsBlock = '';
     }
@@ -142,7 +142,10 @@ export const surfacePromptWith = (mandate: string, where: string): ChatSurfacePr
     }
     let memoryBlock: string;
     try {
-        memoryBlock = buildProfileMemoryIndex();
+        // The Settings toggle is a PROMISE: memory off means no memory block —
+        // profile, topics, all of it. The analysis pipeline honoured this; the
+        // chat path read the store anyway until 2026-10-24.
+        memoryBlock = memoryEnabled ? buildProfileMemoryIndex() : '';
     } catch {
         memoryBlock = '';
     }
@@ -158,8 +161,8 @@ export const surfacePromptWith = (mandate: string, where: string): ChatSurfacePr
  * skills heading says "what the trader asks about", because there is no chart
  * here to match against, and the mandate forbids the tool calls the canvas owns.
  */
-export const chatSurfaceSystemPrompt = (): ChatSurfacePrompt =>
-    surfacePromptWith(CHAT_SURFACE_SYSTEM_PROMPT, 'what the trader asks about');
+export const chatSurfaceSystemPrompt = (memoryEnabled = true): ChatSurfacePrompt =>
+    surfacePromptWith(CHAT_SURFACE_SYSTEM_PROMPT, 'what the trader asks about', memoryEnabled);
 
 /** The speaker key for this surface's live tool feed — `chatRowFrom` flattens
  *  `liveToolEvents` for the Chat row and `liveEntryFromMessage` does the same
@@ -222,6 +225,10 @@ export interface ChatSurfaceTurnRequest {
     /** The composer's dial, forwarded exactly as `streamQuickResponse`
      *  forwarded it: unset means the task default, not a new tier. */
     effort?: ReasoningEffort;
+    /** The Settings memory toggle. Default true; false strips the profile
+     *  and topics blocks from the seat prompt (the write tools stay — the
+     *  toggle is about what the seat READS, and the UI hides writes). */
+    memoryEnabled?: boolean;
     symbol?: string | null;
     interval?: string;
     trades: LoggedTrade[];
@@ -345,7 +352,7 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
     // for, and a row claiming skills it never saw is worse than a silent row.
     const prompt = req.systemPrompt
         ? { text: req.systemPrompt, skills: [] as string[] }
-        : chatSurfaceSystemPrompt();
+        : chatSurfaceSystemPrompt(req.memoryEnabled !== false);
     if (prompt.skills.length > 0) req.patch(m => ({ ...m, injectedSkills: prompt.skills }));
 
     // A FULL ANALYSIS (stage 20f) is an instruction, not a keyword: the trader

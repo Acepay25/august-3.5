@@ -1159,6 +1159,7 @@ ${enhancedPrompt}`;
                     config: provider.config,
                     history: currentMessages,
                     prompt: promptToSend,
+                    memoryEnabled: isGlobalMemoryEnabled !== false,
                     // An attached screenshot is SENT, not mentioned: before
                     // this the camera on this surface painted a bubble the
                     // model never received.
