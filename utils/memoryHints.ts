@@ -39,6 +39,11 @@ const matches = (messageTokens: Set<string>, slug: string, description?: string)
 export interface MemoryHintRow {
     slug: string;
     description?: string;
+    /** Extra match words (item 7's aliases). */
+    aliases?: string[];
+    /** Sensitive rows are NEVER pre-read — the hint can wait for an explicit
+     *  ask; a leaked health or finance line in a pre-read cannot be unsaid. */
+    sensitive?: boolean;
 }
 
 /**
@@ -56,7 +61,8 @@ export const buildMemoryHints = (
     const lines: string[] = [];
     for (const m of memories.slice(0, 60)) {
         if (lines.length >= 2) break;
-        if (matches(msg, m.slug, m.description)) {
+        if (m.sensitive) continue;
+        if (matches(msg, m.slug, m.description) || (m.aliases ?? []).some(a => matches(msg, a))) {
             lines.push(`read_memory "${m.slug}" before answering — the index says it may change this answer.`);
         }
     }

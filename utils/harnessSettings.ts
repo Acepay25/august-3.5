@@ -44,6 +44,11 @@ export interface HarnessSettings {
      *  withdraws approval from every `prior: 'book'` skill at once, which is the
      *  whole point of gating the shelf rather than stamping 12 rows. */
     starterLibraryEnabled: boolean;
+    /** Whether a SENSITIVE-category fact (health/finances/identity, per
+     *  utils/memoryWriteFilters) may be stored at all. Default OFF — a
+     *  sensitive fact is refused until the trader opts in, and the write is
+     *  flagged `sensitive` so recall and pre-reads keep it contained. */
+    sensitiveMemoryEnabled: boolean;
     /** The trader's off-switch over CODE-SIDE enforcement — the confidence caps and
      *  the confirmed-avoid veto that `applyNotebookSkillsToAnalysis` /
      *  `confirmedAvoidForSetup` apply. It did not exist: a confirmed `avoid` skill
@@ -118,6 +123,7 @@ export const getHarnessSettings = (): HarnessSettings => {
         // default, and a default that silently disabled the shelf or the veto would
         // read as the app losing its rules.
         starterLibraryEnabled: stored.starterLibraryEnabled !== false,
+        sensitiveMemoryEnabled: stored.sensitiveMemoryEnabled === true,
         skillEnforcementEnabled: stored.skillEnforcementEnabled !== false,
         // Shadow first (E-18): resolve and SHOW every detected outcome, record
         // nothing. The trader flips to 'automatic' after the disagreement rate
