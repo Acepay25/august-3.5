@@ -231,8 +231,8 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <h2>E · Autonomy — rooms, alerts, one detached evaluator</h2>
 <div class="flow">
 <div class="tier">
- <div class="n run"><b>due skill eval</b><i>buildDefaultRunner services/learning/SkillEvalScheduler.ts:180 — reached from the trade-sync path (runDueSkillEvalWithDefaultRunner services/learning/SkillMemoryService.ts:3850) and the skill detail&rsquo;s own run</i></div>
- <div class="n"><b>DETACHED_EVAL_TOOLS</b><i>services/trade/unattendedTools.ts:22 — the Chat set minus every notebook-writer and minus present_trade / decline_trade: an unattended judgement may read the tape and may not act on the journal</i></div>
+ <div class="n run"><b>due skill eval</b><i>buildDefaultRunner services/learning/SkillEvalScheduler.ts:180 — reached from the trade-sync path (runDueSkillEvalWithDefaultRunner services/learning/SkillMemoryService.ts:3851) and the skill detail&rsquo;s own run</i></div>
+ <div class="n"><b>DETACHED_EVAL_TOOLS</b><i>services/trade/unattendedTools.ts:21 — the Chat set minus every notebook-writer and minus present_trade / decline_trade: an unattended judgement may read the tape and may not act on the journal</i></div>
  <div class="n store"><b>verdict</b><i>onto the skill file&rsquo;s eval fields, and one row in the Activity drawer</i></div>
 </div>
 <div class="down">↓ alongside the human-authored surfaces ↓</div>
@@ -241,7 +241,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
  <div class="n"><b>GroupChatView</b><i>mounted App:1156</i></div>
 </div>
 </div>
-<p class="note"><b>The scheduled-automation feature is deleted (owner request, 2026-10-24).</b> Out went the Automations surface and its card feed, the editor modal, the cron tick and boot catch-up, the per-run and per-day plan ration, the three-failure breaker, the bot-scoped routine executor and the pipeline&rsquo;s private-message <code>automation</code> run mode. Nothing in the app answers a model on a timer now: every turn begins with a person pressing send, a bot mailbox delivery, or a room round. Stored automation data was left alone on purpose — <code>automations_v1_</code>, <code>automation_runs_v1_</code> and <code>automation_last_seen_v1_</code> stay allow-listed for restore (<code>services/infrastructure/ExportService.ts:773</code>) so a backup taken before the removal still comes back whole.</p>
+<p class="note"><b>The scheduled-automation feature is deleted (owner request, 2026-10-24).</b> Out went the Automations surface and its card feed, the editor modal, the cron tick and boot catch-up, the per-run and per-day plan ration, the three-failure breaker, the bot-scoped routine executor and the pipeline&rsquo;s private-message <code>automation</code> run mode. Nothing in the app answers a model on a timer now: every turn begins with a person pressing send, a bot mailbox delivery, or a room round. Stored automation data was left alone on purpose — <code>automations_v1_</code>, <code>automation_runs_v1_</code> and <code>automation_last_seen_v1_</code> stay allow-listed for restore (<code>services/infrastructure/ExportService.ts:775</code>) so a backup taken before the removal still comes back whole.</p>
 <p class="note"><b>The Agents surface is a launch list, not a roster form.</b> A row says what the agent is for (title, or the first line of its description); <code>AgentDetailCard</code> is the read-only detail — model, notebook scope, standing instructions and the last trace — mounted through the one <code>DetailModal</code>, while editing stays in the roster dialog. Nothing is seeded.</p>
 </div>
 
@@ -317,7 +317,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <h3>G.4 Desk tools are one catalogue with surface allow-lists</h3>
 <div class="flow"><div class="tier">
  <div class="n"><b>the catalogue</b><i><code>DESK_TOOL_DEFINITIONS</code> (<code>DeskToolsService.ts:926</code>) + <code>CHART_ACTION_TOOL_DEFS</code> (:1557) + mailbox tools</i></div>
- <div class="n"><b>the allow-list</b><i>dock <code>TRADE_TOOLS</code> · Chat <code>CHAT_SURFACE_TOOLS</code> · detached eval <code>DETACHED_EVAL_TOOLS</code> (services/trade/unattendedTools.ts:22) · panel adds chart actions only when named</i></div>
+ <div class="n"><b>the allow-list</b><i>dock <code>TRADE_TOOLS</code> · Chat <code>CHAT_SURFACE_TOOLS</code> · detached eval <code>DETACHED_EVAL_TOOLS</code> (services/trade/unattendedTools.ts:21) · panel adds chart actions only when named</i></div>
  <div class="n"><b>the mandate</b><i><code>deskToolsMandateFor</code> names only tools this turn can call; <code>streamChatWithDeskTools</code> filters the definitions</i></div>
  <div class="n"><b>the loop</b><i><code>runDeskToolLoop</code> eight rounds · 8,192 output · 180s · per-round compaction; <code>executeDeskTool</code> re-checks the allow-list</i></div>
 </div>
