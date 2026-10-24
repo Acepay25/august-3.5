@@ -160,7 +160,13 @@ const ToolRowGroupView: React.FC<{ group: ToolRowGroup; running: boolean }> = ({
             summary={line}
         >
             {group.payloadIds.map((id, i) => (
-                <PayloadForKey key={`${id}-${i}`} toolCallId={id} />
+                <ToolCallBody
+                    key={`${id}-${i}`}
+                    toolCallId={id}
+                    label={group.label}
+                    state={group.states[i] ?? 'done'}
+                    detail={group.details[i] ?? ''}
+                />
             ))}
         </Disclosure>
     );
@@ -186,23 +192,42 @@ const languageOf = (text: string): string => {
 };
 
 /** One member of a folded group, resolved only while open. A member with no id
- *  contributes nothing rather than an empty box. */
-const PayloadForKey: React.FC<{ toolCallId: string }> = ({ toolCallId }) => {
+ *  contributes nothing rather than an empty box.
+ *
+ *  The body answers the reference's two questions per call — WHAT WAS ASKED
+ *  (Request) and WHAT CAME BACK (Response). The request line is the human
+ *  label (the one vocabulary the transcript carries; the machine name never
+ *  travels), with a failure's digest beside it — that digest is the error
+ *  summary the seat wrote. The response keeps the payload bytes, and a member
+ *  whose call FAILED wears the chip on the response, where the reference puts
+ *  it, so a red Failed never names a call that succeeded. */
+const ToolCallBody: React.FC<{
+    toolCallId: string;
+    label: string;
+    state: ToolRowState;
+    detail: string;
+}> = ({ toolCallId, label, state, detail }) => {
     const body = useMemo(() => (toolCallId ? resolvePayload(toolCallId) : null), [toolCallId]);
-    if (!body) return null;
-    if (!body.text) {
-        return <p className="tool-row-refused">{body.refused ?? 'full result not kept'}</p>;
-    }
+    const failed = state === 'failed';
     return (
-        <>
-            {/* The header names the block: the row says which tool, this says
-                what you are looking at, and the chip says what shape it is. */}
+        <div className="space-y-1">
             <div className="tool-row-output-head">
-                <span className="tool-row-output-title">Output</span>
-                <span className="tool-row-output-lang">{languageOf(body.text)}</span>
+                <span className="tool-row-output-title">Request</span>
             </div>
-            <pre className="tool-row-output">{body.text}</pre>
-        </>
+            <pre className="tool-row-output">{label}{failed && detail ? ` · ${detail}` : ''}</pre>
+            <div className="tool-row-output-head">
+                <span className="tool-row-output-title">Response</span>
+                {body?.text
+                    ? <span className="tool-row-output-lang">{languageOf(body.text)}</span>
+                    : null}
+                {failed && <span className="tool-row-output-lang tool-row-failed-chip">Failed</span>}
+            </div>
+            {body?.text ? (
+                <pre className="tool-row-output">{body.text}</pre>
+            ) : (
+                <p className="tool-row-refused">{body?.refused ?? 'full result not kept'}</p>
+            )}
+        </div>
     );
 };
 

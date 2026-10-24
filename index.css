@@ -923,6 +923,13 @@ body {
   padding: 0 5px;
   line-height: 1.4;
 }
+/* The failure status the reference puts on a call's response — rose is the
+   theme's failure colour, and the chip sits beside the language chip so a
+   failed call's response is identified before a byte is read. */
+.tool-row-failed-chip {
+  color: var(--color-rose-300);
+  border-color: var(--color-rose-400/40);
+}
 /* The honest refusal, matching the `imageOmitted` row's precedent: a tool row
    whose bytes were not kept SAYS so instead of opening onto a blank box that
    reads as an empty result. */
