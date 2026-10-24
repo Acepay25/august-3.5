@@ -12,7 +12,7 @@
  *
  * The human is not removed, they are promoted: the dock's supervisor
  * indicator + panel stream every step live, every verdict is overridable
- * after the fact, and the automation can be paused from the UI.
+ * after the fact, and the pass can be paused from the UI.
  *
  * WHO supervises: whatever model the CURRENT session is using — a panel's
  * FIRST seat when several are selected (the panel reports it via

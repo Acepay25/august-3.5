@@ -1,6 +1,6 @@
 /**
  * useModelCatalogRefresh — keeps every provider's model list fresh so all
- * model dropdowns (composer selector, bot dialog, team seats, automations)
+ * model dropdowns (composer selector, bot dialog, team seats)
  * show the provider's CURRENT catalog without anyone visiting Settings.
  *
  * Design: a quiet background sweep keyed on a persisted last-checked

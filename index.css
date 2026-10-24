@@ -335,7 +335,6 @@
                             UNDER the modal and buried every trigger inside
                             Settings. One rung above modal, below UpdateOverlay. */
   --z-confirm: 100;      /* ConfirmDialog, Toast */
-  --z-automation: 75;    /* AutomationView */
   --z-drawer: 50;        /* portaled drawers */
   --z-pipeline: 40;      /* the running pipeline card */
   --z-header: 20;        /* sticky header */
@@ -351,7 +350,6 @@
 @utility z-modal { z-index: var(--z-modal); }
 @utility z-flyout { z-index: var(--z-flyout); }
 @utility z-confirm { z-index: var(--z-confirm); }
-@utility z-automation { z-index: var(--z-automation); }
 @utility z-drawer { z-index: var(--z-drawer); }
 @utility z-pipeline { z-index: var(--z-pipeline); }
 @utility z-header { z-index: var(--z-header); }
@@ -1420,34 +1418,6 @@ code,
 
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
-}
-
-/* ── The automation card's reasoning disclosure ───────────────────────────
-   It used to be a `<button>` plus a grid-collapse `<div>` — a second
-   disclosure mechanism, older than the transcript's native `<details>`, and
-   the reason the same kind of content looked and behaved differently in two
-   places. It is now the SAME component (`components/shared/Disclosure.tsx`),
-   so the treatment below is all that is left of the old one. */
-.automation-run-reasoning > summary {
-  cursor: pointer;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--text-ui-xs);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-zinc-500);
-  transition: color 0.12s var(--ease-snappy);
-}
-.automation-run-reasoning > summary::-webkit-details-marker { display: none; }
-.automation-run-reasoning > summary:hover { color: var(--color-cyan-300); }
-.automation-run-reasoning-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 8px;
 }
 
 /* Grid-based collapse transition — avoids the max-height hack which

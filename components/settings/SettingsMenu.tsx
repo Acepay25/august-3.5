@@ -83,7 +83,7 @@ interface SettingsMenuProps {
     onToggleAlgorithmicSummary?: (enabled: boolean) => void;
     useAlgorithmicInsights?: boolean;
     onToggleAlgorithmicInsights?: (enabled: boolean) => void;
-    /** Trade count for the "Journal & automation" nav badge. The journal
+    /** Trade count for the "Journal" nav badge. The journal
      *  itself is the SHARED overlay (single instance, always in sync with
      *  the sidebar one — the old embedded duplicate drifted). */
     loggedTrades?: LoggedTrade[];

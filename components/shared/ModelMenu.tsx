@@ -3,7 +3,7 @@
  *
  * Why it exists: the composer carried `ModelChip` (an inline absolute panel,
  * provider-grouped, star-able) and `EffortChip` (a radio menu of six tiers),
- * while Settings, the automation editor and the seat picker carried
+ * while Settings and the seat picker carried
  * `ModelPicker` (a portaled two-column flyout, free-filter, no stars). Two
  * implementations of one decision, reading different stored values, and the
  * tier separated from the model whose behaviour it changes — `low` switches

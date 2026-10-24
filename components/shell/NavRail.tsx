@@ -13,7 +13,7 @@
  * way; below 1024px the rail is hidden whatever the user last chose.
  *
  * Stage 3 made the rail nav-only: conversation history lives in the Chat
- * surface's rail (AgentsView), automations live in the Activity drawer, and
+ * surface's rail (AgentsView), and
  * the account row owns profile actions. One column, one concern.
  *
  * The brand gradient is reserved: the active-surface bar and the account-row
