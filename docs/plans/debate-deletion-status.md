@@ -71,7 +71,7 @@ Chat surface. The extraction therefore takes an **event sink** — the executor 
 each home maps them onto its own fields. That is what 20a builds.
 
 Second blocker for the cheaper "just lift the runner" route: the deps are captured
-**at construction** (`chatTurnRunner.ts:210-307`, `useMemo` over 35 fields at
+**at construction** (`chatTurnRunner.ts:172-307`, `useMemo` over 35 fields at
 `TradeChatPanel.tsx:528-570`), including composer state (`draft`, `attachments`,
 `setDraft`, `clearAttachments`, `setContextAt`) and `systemPromptFor`. Two surfaces
 cannot share one instance built per-mount, so 20a converts turn-scoped context into
@@ -88,11 +88,11 @@ The goal is one tool-capable turn in **both** chat homes. Facts, so the next
 session does not re-derive them:
 
 - `streamChatWithDeskTools` is an **async generator** returning text deltas
-  (`services/analysis/DeskToolsService.ts:4219`), and **every option is optional**
+  (`services/analysis/DeskToolsService.ts:4295`), and **every option is optional**
   (`StreamWithDeskToolsOptions`). It self-gates on
   `getHarnessSettings().deskToolsEnabled`, and `withDeskToolsSystemPrompt` will not
   double-inject the DESK TOOLS block if the system message already carries it.
-- The dock consumes it at `chatTurnRunner.ts:672` with `allowedTools: TRADE_TOOLS`
+- The dock consumes it at `chatTurnRunner.ts:634` with `allowedTools: TRADE_TOOLS`
   (`:96`, ~20 names, chart-aware: `get_chart_view`, `mark_trade_levels`,
   `draw_on_chart`) plus a frozen `PanelTurnContext` so a background turn still
   writes into its own transcript.
@@ -108,7 +108,7 @@ numbering; the file is shorter now) — eight positional
   have no target there; (3) whether the Chat surface renders a tool chip (the dock's
   transcript rows already do).
 - Lifting `createChatTurnRunner` into App is **not** the cheap route: its deps
-  object (`chatTurnRunner.ts:210-307`) is 35 fields, most of them chart state
+  object (`chatTurnRunner.ts:172-307`) is 35 fields, most of them chart state
   owned by TradeView (`allDrawings`, `getChartSnapshot`, `addModelDrawings`,
   `onPlanPresented`). Do the transport swap, not the lift.
 
@@ -127,8 +127,8 @@ So the target is NOT "keep the branch and shrink it to one seat". It is:
   SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
-  `streamChatWithDeskTools` (`DeskToolsService.ts:4219`), which the dock's solo
-  seat already runs at `chatTurnRunner.ts:665`.
+  `streamChatWithDeskTools` (`DeskToolsService.ts:4295`), which the dock's solo
+  seat already runs at `chatTurnRunner.ts:625`.
 - **The verdict and the journal row become tools the model chooses to call**, not
   a pipeline stage it has to earn. What already exists: `present_trade`
   (proposal → `TradeAnalysis` with outcome PENDING, so the autopilot watches it),
@@ -1130,7 +1130,7 @@ than assumed — worth keeping as the record of what this phase actually needs:
    Fixed with a route click.
 3. a control send (plain text, same point in the run) failed IDENTICALLY, which
    exonerated the tool path — the hang was never an app defect, and the mock's
-   `Unknown tool` branch at DeskToolsService.ts:3041 settles fine.
+   `Unknown tool` branch at DeskToolsService.ts:3404 settles fine.
 4. the phase, moved next to the dock sends, called `navTo` before its `const`
    initialization (`ReferenceError`, probe line 636) → replaced with the same DOM
    click inline; `surface-switch-${id}` is real (SurfaceSwitch.tsx:54).
@@ -2364,12 +2364,12 @@ silently: a reader-less field can regain a writer with one line of code and no a
 
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions
 services/trade/chatSessions.ts:449, collectApprovalItems utils/approvalInbox.ts:57, resolveInvokedSkills
-services/learning/SkillMemoryService.ts:601), and the gate caught the pairing that insertion created: the row
+services/learning/SkillMemoryService.ts:615), and the gate caught the pairing that insertion created: the row
 also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1839, where the
 useMemo actually is. 31 of 53 rows cite a file, all bound; 22 name no file at all.
 
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions chatSessions.ts:449,
-collectApprovalItems approvalInbox.ts:57, resolveInvokedSkills SkillMemoryService.ts:601), and the gate caught the
+collectApprovalItems approvalInbox.ts:57, resolveInvokedSkills SkillMemoryService.ts:615), and the gate caught the
 pairing that insertion created: the same row also names approvalsWaiting, which is not on that line — a SYMBOL
 MISS, because pairing is positional. It now cites App.tsx:1839, where the useMemo actually is. 31 of 53 rows cite
 a file and every one of them binds a symbol; 22 name no file at all.
