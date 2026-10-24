@@ -8,7 +8,7 @@ import MarkdownContent from '../shared/MarkdownContent';
 import {FileTextIcon, ChevronRightIcon, ChevronLeftIcon, ChevronUpIcon, ChevronDownIcon, FolderIcon, FileText, Loader2} from '../shared/Icons';
 
 import { runNotebookReview } from '../../services/learning/MemoryReviewService';
-import { isSkillFile, parseSkillMarkdown, serializeSkill, titleFromMeta } from '../../services/learning/SkillMemoryService';
+import { isSkillFile, isApprovedSkill, parseSkillMarkdown, serializeSkill, titleFromMeta } from '../../services/learning/SkillMemoryService';
 import { topicSummaryOf } from '../../services/learning/memoryTopics';
 import { memoryUpdatedLabel } from './MemoryTopicsCard';
 import {
@@ -200,7 +200,15 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
             await updateMemoryFile(selectedFile.id, { content: draft }, activeUser);
             setIsDirty(false);
             refresh();
-            toast.success('Saved', `"${selectedFile.name}" is now injected into future prompts.`);
+            // "Injected into future prompts" is only true when the activation
+            // gate agrees: an unapproved skill file is saved but never reaches
+            // a seat, and the old copy promised the opposite beside a
+            // catalogue row that reads "Off" for exactly this file.
+            const savedMeta = isSkillFile(selectedFile) ? parseSkillMarkdown(draft) : null;
+            toast.success('Saved',
+                savedMeta && !isApprovedSkill(savedMeta)
+                    ? `"${selectedFile.name}" saved — a skill reaches a seat only after approval.`
+                    : `"${selectedFile.name}" is now injected into future prompts.`);
         } catch (e: unknown) {
             toast.error('Could not save', e instanceof Error ? e.message : 'Unknown error');
         }
@@ -236,9 +244,15 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
             }
             await updateMemoryFile(file.id, patch, activeUser);
             refresh();
+            // Same honesty rule as the save toast: the toggle flips injection
+            // for files the gate has approved; an unapproved skill stays
+            // unread by every seat no matter what the switch says.
+            const toggledMeta = enabling && isSkillFile(file) ? parseSkillMarkdown(file.content) : null;
             toast.success(enabling ? 'Enabled' : 'Disabled',
                 enabling
-                    ? `"${file.name}" is now injected into every prompt.`
+                    ? toggledMeta && !isApprovedSkill(toggledMeta)
+                        ? `"${file.name}" is on — a seat still needs approval to read it.`
+                        : `"${file.name}" is now injected into every prompt.`
                     : `"${file.name}" is no longer injected.`);
         } catch (e: unknown) {
             toast.error('Could not toggle file', e instanceof Error ? e.message : 'Unknown error');
