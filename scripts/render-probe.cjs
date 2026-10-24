@@ -26,6 +26,7 @@
  */
 
 const { spawn } = require('child_process');
+const net = require('net');
 const path = require('path');
 const { mkdirSync } = require('fs');
 const { chromium } = require('@playwright/test');
@@ -504,6 +505,29 @@ const check = (name, ok, detail) => {
 };
 
 async function main() {
+    // An occupied port is not a busy-port nuisance here, it is a gate that
+    // measures the WRONG TREE: our own vite/mock die on --strictPort (or on
+    // EADDRINUSE), `waitForServer` then answers for whoever owns the port, and
+    // every check below passes against another checkout's app — or an orphan
+    // that is still serving the code from before the change under review.
+    // Ask who owns each port BEFORE spawning, and refuse. PROBE_REUSE is the one
+    // case where an occupied port is the point, so it opts out.
+    if (!process.env.PROBE_REUSE) {
+        const free = (port) => new Promise((resolve) => {
+            const probe = net.createServer();
+            probe.once('error', () => resolve(false));
+            probe.once('listening', () => probe.close(() => resolve(true)));
+            probe.listen(port, '127.0.0.1');
+        });
+        for (const [label, port] of [['dev server', PORT], ['mock provider', MOCK_PORT]]) {
+            if (await free(port)) continue;
+            console.error(`RENDER PROBE FAIL: something this run did not start already owns port ${port} (${label}). `
+                + 'Refusing to drive it: waitForServer cannot tell that server from ours, so a pass here would prove '
+                + 'nothing about THIS tree. Free the port, or pass PROBE_PORT/MOCK_PORT.');
+            process.exitCode = 1;
+            return;
+        }
+    }
     const viteBin = path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
     // DEV server, not `vite preview`, and that is deliberate: the app's provider
     // fetches are same-origin under the dev proxy, so a loopback mock is
@@ -716,10 +740,10 @@ async function main() {
             if (!clickedStop) await sleep(120);
         }
         check('an in-flight tool turn offers a working Stop', clickedStop,
-            'no enabled Stop button appeared within ~1.8s of sending');
+            clickedStop ? 'clicked Stop while the tool round was in flight' : 'no enabled Stop button appeared within ~1.8s of sending');
         const settled = await waitSendable(page, 20000);
         check('the stopped turn settles instead of streaming forever', settled,
-            'the composer never became sendable again after Stop');
+            settled ? 'the composer became sendable again after the abort' : 'the composer never became sendable again after Stop');
         const stopAfter = await page.locator('[data-testid="chat-entry-ai"]').count();
         check('a stopped turn leaves one row, not a placeholder beside an answer',
             stopAfter <= stopBefore + 1, `${stopBefore} -> ${stopAfter} answer rows`);
@@ -968,7 +992,7 @@ async function main() {
             if (!stillStreaming) await sleep(100);
         }
         check('the dock turn is still generating before the hop', stillStreaming,
-            'no Stop button within 2.5s of sending — the mock answered too fast to measure a live turn');
+            stillStreaming ? 'Stop was offered while the answer was arriving' : 'no Stop button within 2.5s of sending — the mock answered too fast to measure a live turn');
         await page.evaluate(() => {
             const hit = document.querySelector('[data-testid="surface-switch-agents"]');
             if (hit) hit.click();

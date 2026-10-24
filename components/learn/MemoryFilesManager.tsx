@@ -8,7 +8,7 @@ import MarkdownContent from '../shared/MarkdownContent';
 import {FileTextIcon, ChevronRightIcon, ChevronLeftIcon, ChevronUpIcon, ChevronDownIcon, FolderIcon, FileText, Loader2} from '../shared/Icons';
 
 import { runNotebookReview } from '../../services/learning/MemoryReviewService';
-import { isSkillFile, isApprovedSkill, parseSkillMarkdown, serializeSkill, titleFromMeta } from '../../services/learning/SkillMemoryService';
+import { isApprovedSkill, isSkillFile, parseSkillMarkdown, serializeSkill, titleFromMeta } from '../../services/learning/SkillMemoryService';
 import { topicSummaryOf } from '../../services/learning/memoryTopics';
 import { memoryUpdatedLabel } from './MemoryTopicsCard';
 import {
@@ -200,15 +200,10 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
             await updateMemoryFile(selectedFile.id, { content: draft }, activeUser);
             setIsDirty(false);
             refresh();
-            // "Injected into future prompts" is only true when the activation
-            // gate agrees: an unapproved skill file is saved but never reaches
-            // a seat, and the old copy promised the opposite beside a
-            // catalogue row that reads "Off" for exactly this file.
-            const savedMeta = isSkillFile(selectedFile) ? parseSkillMarkdown(draft) : null;
-            toast.success('Saved',
-                savedMeta && !isApprovedSkill(savedMeta)
-                    ? `"${selectedFile.name}" saved — a skill reaches a seat only after approval.`
-                    : `"${selectedFile.name}" is now injected into future prompts.`);
+            // Saving is not the same fact as being offered to a model: a skill
+            // still needs approval, and notebook text is retrieved when relevant,
+            // not pasted into every prompt. Say what the write did.
+            toast.success('Saved', `"${selectedFile.name}" was saved to the notebook.`);
         } catch (e: unknown) {
             toast.error('Could not save', e instanceof Error ? e.message : 'Unknown error');
         }
@@ -244,16 +239,21 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
             }
             await updateMemoryFile(file.id, patch, activeUser);
             refresh();
-            // Same honesty rule as the save toast: the toggle flips injection
-            // for files the gate has approved; an unapproved skill stays
-            // unread by every seat no matter what the switch says.
-            const toggledMeta = enabling && isSkillFile(file) ? parseSkillMarkdown(file.content) : null;
+            // "Injected into every prompt" was never true of either store: a
+            // skill is offered only when its trigger matches AND it is approved
+            // (the same `isApprovedSkill` the index applies), and notebook text
+            // is retrieved when relevant. An enable toggle cannot promise more
+            // than it decides.
+            const metaNow = isSkillFile(file) ? parseSkillMarkdown(String(patch.content ?? file.content)) : null;
+            const approvedNow = metaNow ? isApprovedSkill(metaNow) : false;
             toast.success(enabling ? 'Enabled' : 'Disabled',
-                enabling
-                    ? toggledMeta && !isApprovedSkill(toggledMeta)
-                        ? `"${file.name}" is on — a seat still needs approval to read it.`
-                        : `"${file.name}" is now injected into every prompt.`
-                    : `"${file.name}" is no longer injected.`);
+                !enabling
+                    ? `"${file.name}" is no longer offered to the models.`
+                    : isSkillFile(file)
+                        ? (approvedNow
+                            ? `"${file.name}" is enabled — the models can use it when its trigger matches.`
+                            : `"${file.name}" is enabled, but it is not approved, so it stays inactive until you approve it.`)
+                        : `"${file.name}" is enabled — the models can read it when it is relevant.`);
         } catch (e: unknown) {
             toast.error('Could not toggle file', e instanceof Error ? e.message : 'Unknown error');
         }

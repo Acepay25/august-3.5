@@ -33,17 +33,7 @@ import { useProviderConfigs } from './hooks/useProviderConfigs';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useJournalUI } from './hooks/useJournalUI';
 import type { JournalUIState } from './hooks/useJournalUI';
-import { useAutomations } from './hooks/useAutomations';
-import type { AutomationConfig } from './types/automation';
 import { useCompareRuns } from './hooks/useCompareRuns';
-// Automations were statically imported, dragging the whole editor into the
-// startup chunk; they render only from the header's automation rows.
-// AutomationEditorModal keeps its own `isVisible` toggling (it must stay
-// mounted across opens per its hooks contract), so it is gated on
-// `editorIsOpen` at the render site — see the Suspense wrapper there.
-const AutomationView = React.lazy(() => import('./components/automation/AutomationView'));
-const AutomationEditorModal = React.lazy(() => import('./components/automation/AutomationEditorModal'));
-import type { ModelOption } from './components/automation/AutomationEditorModal';
 import { ChevronDownIcon, CloseIcon } from './components/shared/Icons';
 
 // Lazy-load heavy, conditionally-rendered components so the initial
@@ -86,7 +76,7 @@ import { defaultLeverage, createNewConversation, findReusableEmptyConversation }
 import { collectApprovalItems, setAutoJournalRule, type ApprovalItem } from './utils/approvalInbox';
 import { type ThreadSelection, threadForProvider } from './utils/agentThreads';
 import {
-    getBots, updateBot, 
+    updateBot, 
     groupDisplayName, 
     type AgentBot,
 } from './services/agents/agentRoster';
@@ -277,7 +267,7 @@ const App: React.FC = () => {
     } = useProviderConfigs();
 
     // Background model-catalog refresh: every dropdown (composer, bots,
-    // team seats, automations) stays on the provider's CURRENT model list —
+    // team seats) stays on the provider's CURRENT model list —
     // a quiet boot + 6h sweep merges freshly discovered ids per provider.
     const { refreshNow: refreshModelCatalog } = useModelCatalogRefresh(providerConfigs, handleUpdateProvider);
 
@@ -320,10 +310,10 @@ const App: React.FC = () => {
         useAlgorithmicInsights, setUseAlgorithmicInsights,
     } = useAppSettings();
 
-    // The fallback provider. The global moderator picker is gone; this is only
-    // the model a scheduled run falls back to when its own automation named
-    // none, plus the last-resort provider for the memory/vision/strategy
-    // fallbacks below. Prefer a provider that is not benched (P4 cooldown:
+    // The fallback provider. The global moderator picker is gone, and so is
+    // the scheduled run that used to name a model of its own; this is now only
+    // the last-resort provider for the memory/vision/strategy fallbacks
+    // below. Prefer a provider that is not benched (P4 cooldown:
     // ≥3 persisted errors in 15 min).
     const moderatorConfig: ProviderConfig = useMemo(() => {
         const healthy = readyProviders.find(p => !isProviderOnCooldown(p.id));
@@ -1009,52 +999,6 @@ const App: React.FC = () => {
     });
 
 
-    // ─── Automations: scheduled analyses (own card feed per automation) ───
-    // Placed after activeUsername — the scheduler is scoped to the active
-    // user's configs and re-arms on user switch.
-    const automations = useAutomations({
-        activeUsername,
-        runPipeline: handleSendMessage,
-        conversationHistory,
-        providerConfigs,
-        isAnalysisInProgress,
-        toast,
-        // live roster snapshot getter — App's bot state is declared
-        // below this hook, and a cron fire must see the CURRENT roster.
-        bots: () => getBots(),
-        // WS-3.2: a scheduled bot turn folds its bot's closed trades into the
-        // notebook, so it needs the live journal.
-        trades: () => loggedTradesRef.current,
-        messagesRef,
-        // Routine replies may carry [[dm:@…]] markers (pre-validated by the
-        // pure half) — deliver them through the mailbox like any turn.
-        onBotRoutineDMs: envelopes => {
-            const roster = getBots();
-            for (const env of envelopes) {
-                const from = roster.find(b => b.id === env.fromBotId);
-                if (from) mailboxRef.current?.deliverDM(env, from);
-            }
-        },
-    });
-
-    // Model options for the automation editor (provider :: model pairs).
-    const automationModelOptions = useMemo(() => {
-        const options: ModelOption[] = [];
-        for (const p of providerConfigs) {
-            if (!p.isEnabled || !p.apiKey.trim()) continue;
-            for (const m of p.models) {
-                options.push({ value: `${p.id}::${m}`, label: `${p.name} · ${m}` });
-            }
-        }
-        return options;
-    }, [providerConfigs]);
-
-    // Editor target — narrowed once here (property narrowing does not
-    // survive into the JSX callbacks below).
-    const editingAutomation = automations.editor && automations.editor.mode === 'edit'
-        ? automations.editor.automation
-        : undefined;
-    const editorIsOpen = automations.editor !== null;
 
     // Second of the two activeUsernameRef writers (see the declaration for why
     // both exist and what each one serves). This one is the canonical value:
@@ -1187,26 +1131,6 @@ const App: React.FC = () => {
         }
         return out;
     }, [bots, providerConfigs]);
-    // wire the automations hook to the Bot Mode
-    // half — bot-scoped routines append their reply row through the same
-    // message store as DM turns (App's roster state lives below useAuto-
-    // mations, so bots are handed as a live getter instead of a value).
-    useEffect(() => {
-        automations.assignAutomationsBridge({ appendMessage: appendGroupMessage });
-    }, [automations.assignAutomationsBridge, appendGroupMessage]);
-    // bot → its bot-scoped routines (rail disclosure), plus the Run-now
-    // handler that routes through the same engine as the scheduler.
-    const botRoutinesMap = useMemo(() => {
-        const out: Record<string, AutomationConfig[]> = {};
-        for (const c of automations.configs) {
-            if (!c.botId) continue;
-            (out[c.botId] ??= []).push(c);
-        }
-        return out;
-    }, [automations.configs]);
-    const runRoutineFromRail = useCallback((config: AutomationConfig) => {
-        automations.runNow(config);
-    }, [automations.runNow]);
     const sendGroupThread = useCallback((prompt: string) => {
         if (activeThread.kind !== 'group') return;
         const group = groups.find(g => g.id === activeThread.groupId);
@@ -1560,9 +1484,9 @@ const App: React.FC = () => {
     // Failed-run retry: rebuild the exact prompt + charts from the user
     // message the failed run was sent with (the error bubble carries its id).
     // ── Chart AI dock bridges ─────────────────────────────────────────────
-    // "Full analysis" from the trade chat: run the SAME ensemble pipeline the
-    // old Chat surface ran (automation-shaped private run), resolve with the
-    // verdict summary so the dock shows the answer in its own transcript.
+    // "Full analysis" from the trade chat: run the SAME pipeline the Chat
+    // surface runs, resolve with the verdict summary so the dock shows the
+    // answer in its own transcript.
     // "Log this trade" from a Chart AI proposal → append a PENDING analysis
     // message. The outcome autopilot (useWatchAndAutopilot) registers it and
     // scores it against the real outcome, so a chat-proposed trade is tracked
@@ -1649,8 +1573,8 @@ const App: React.FC = () => {
     /**
      * ONE analysis entry, for both chat homes.
      *
-     * The Chart AI dock used to run with the `automation` option, which sends
-     * the run into a private message list built here, so a Full analysis
+     * The Chart AI dock used to run with the scheduler's private-run option,
+     * which sent the run into a message list built here, so a Full analysis
      * started on the chart never appeared in the Chat surface's thread or the
      * rail's list. The Chat surface ran on the active conversation instead.
      * Two entries for one feature is how the two homes ended up showing
@@ -2389,78 +2313,6 @@ const App: React.FC = () => {
             </React.Suspense>
             <VisionDataViewer isVisible={isVisionDataVisible} onClose={() => setIsVisionDataVisible(false)} visionData={currentVisionData} />
 
-            {/* Automations: the selected automation's card feed + editor */}
-            {automations.viewAutomationId && (() => {
-                const config = automations.configs.find(c => c.id === automations.viewAutomationId);
-                if (!config) return null;
-                return (
-                    <div className="fixed inset-0 z-automation bg-zinc-950 animate-fade-in">
-                        <React.Suspense fallback={<SurfaceSkeleton />}>
-                        <AutomationView
-                            config={config}
-                            runs={automations.runsByAutomation[config.id] ?? []}
-                            isLoadingRuns={false}
-                            isRunning={automations.runningAutomationId === config.id}
-                            onBack={automations.closeAutomation}
-                            onEdit={() => automations.setEditor({ mode: 'edit', automation: config })}
-                            onDelete={() => {
-                                void confirmDialog({
-                                    title: 'Delete this automation?',
-                                    message: `"${config.name}" and its ${(automations.runsByAutomation[config.id] ?? []).length} stored runs will be removed.`,
-                                    confirmLabel: 'Delete',
-                                    destructive: true,
-                                }).then(ok => { if (ok) void automations.deleteAutomation(config.id); });
-                            }}
-                            onRunNow={() => automations.runNow(config)}
-                            onToggleEnabled={() => void automations.toggleAutomationEnabled(config.id)}
-                            onPauseUntil={(until) => void automations.pauseAutomationUntil(config.id, until)}
-                            onRefresh={() => automations.refreshRuns(config.id)}
-                            modelIdToName={modelIdToName}
-                            onConfirmOutcome={(run, outcome) => {
-                                const msg = run.message;
-                                if (!msg) return;
-                                if (outcome === 'entry_not_hit') {
-                                    confirmAutopilotEntryNotHit(msg);
-                                } else {
-                                    confirmAutopilotOutcome(msg, outcome === 'win' ? TradeOutcome.WIN : TradeOutcome.LOSS);
-                                }
-                            }}
-                        />
-                        </React.Suspense>
-                    </div>
-                );
-            })()}
-            {/* The editor is lazy, so it is gated on editorIsOpen — rendering it
-                unconditionally would fetch the chunk at startup for a modal
-                that opens rarely. Gating remounts it per open, which
-                re-initializes its form state from `initial`: the intended
-                trade-off (discarding unsaved edits on close) and incidentally
-                a fix — the always-mounted version never re-read `initial`, so
-                editing automation A, closing, then opening B showed A's values. */}
-            {editorIsOpen && (
-                <React.Suspense fallback={null}>
-                    <AutomationEditorModal
-                        isVisible={editorIsOpen}
-                        initial={editingAutomation}
-                        modelOptions={automationModelOptions}
-                        providers={providerConfigs}
-                        bots={bots}
-                        onClose={() => automations.setEditor(null)}
-                        onSave={(config) => {
-                            void automations.saveAutomation(config);
-                            automations.setEditor(null);
-                        }}
-                        onDelete={editingAutomation
-                            ? () => {
-                                void automations.deleteAutomation(editingAutomation.id);
-                                automations.setEditor(null);
-                            }
-                            : undefined}
-                    />
-                </React.Suspense>
-            )}
-
-
             {/* The band is no longer here. It renders as the first child of
                 <main>, so the sidebar runs the full height of the window the way
                 the reference's does and the title bar belongs to the content
@@ -2490,16 +2342,13 @@ const App: React.FC = () => {
                     onConfirmAutopilot={(messageId, conversationId) => runWatchListAction(conversationId, { type: 'autopilot', messageId })}
                 />
             </React.Suspense>
-            {/* Background-jobs drawer — visible autonomy. Stage 3 widened it
-                into the Activity drawer: the rail's automations section lives
-                here now, one drawer for everything the app does on its own. */}
+            {/* Activity drawer — the app's autonomous work that still exists:
+                each skill's latest detached-eval verdict. Scheduled automations
+                were removed on 2026-10-24. */}
             <React.Suspense fallback={null}>
                 <JobsDrawer
                     open={isJobsDrawerVisible}
                     onClose={() => setIsJobsDrawerVisible(false)}
-                    automations={automations.configs}
-                    onOpenAutomation={(id) => { setIsJobsDrawerVisible(false); automations.openAutomation(id); }}
-                    onCreateAutomation={() => { setIsJobsDrawerVisible(false); automations.setEditor({ mode: 'create' }); }}
                 />
             </React.Suspense>
 
@@ -2689,10 +2538,8 @@ const App: React.FC = () => {
                                     workingBotId={workingBotId ?? dmWorkingBotId}
                                     lastOpenedMap={threadOpenedMap}
                                     attentionMap={attentionMap}
-                                    botRoutines={botRoutinesMap}
                                     botStats={botStats}
                                     providerReady={readyProviders.length > 0}
-                                    onRunRoutine={runRoutineFromRail}
                                     onDeleteBot={deleteBot}
                                     onRenameBot={(botId, name) => updateBot(botId, { name })}
                                     onOpenCoach={openApprovalsInLearn}

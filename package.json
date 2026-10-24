@@ -23,7 +23,7 @@
     "probe:chip": "node scripts/chip-shot.cjs",
     "probe:census": "node scripts/surface-census.cjs",
     "probe:surfaces": "node scripts/surface-shots.cjs",
-    "lint": "eslint . --max-warnings 385",
+    "lint": "eslint . --max-warnings 379",
     "lint:loose": "eslint .",
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",

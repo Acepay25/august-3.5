@@ -156,14 +156,13 @@ competing for the machine.
 │   ├── analysis/           # Technical analysis, Monte Carlo (+ web worker), desk tools
 │   ├── backtesting/        # Backtesting, model performance, live backtest, outcomeEngine
 │   ├── learning/           # Skills, pattern memory, rules, insights, global memory
-│   ├── agents/             # Bot roster, mailbox, routines, group rounds
+│   ├── agents/             # Bot roster, mailbox, group rounds
 │   ├── bots/               # Per-bot memory + system notes
 │   ├── tools/              # toolForge (user/model-authored HTTPS tools)
 │   ├── trade/              # Trade journal actions + proposal parsing
 │   ├── desk/               # The reduce-motion preference only — the 2D desk floor
 │   │                       #   view and its seat layout were deleted (2026-10-18).
 │   │                       #   No market data lives here.
-│   ├── automation/         # Scheduled automations (cron + run history)
 │   ├── validation/         # Trade-plan validation + gate scoring (the service
 │   │                       #   keeps its Accuracy* name; the Accuracy Mode toggle is gone)
 │   ├── ui/                 # Outcome autopilot, auto-capture,
@@ -203,10 +202,10 @@ is how the numbers drift apart:
 - `components/shared/Disclosure.tsx` — the ONE expandable panel, and it is a
   native `<details>`: a toggle without JavaScript, keyboard-operable for free,
   and what the transcript's CSS and screen-reader behaviour were written
-  against. The thinking row, the tool-output expander, the automation card's
-  reasoning and the Settings' "Advanced" section all use it — the card's used
-  to be a `<button>` plus a grid-collapse `<div>`, a second mechanism for the
-  same kind of thing. It owns the SHAPE and nothing about what goes inside:
+  against. The thinking row, the tool-output expander and the Settings'
+  "Advanced" section all use it — the automation card's reasoning used to be a
+  `<button>` plus a grid-collapse `<div>`, a second mechanism for the same kind
+  of thing (that card is deleted, 2026-10-24). It owns the SHAPE and nothing about what goes inside:
   the summary, the body, the classes and the ref are the caller's.
 - `components/shared/toolKindIcons.tsx` — the ONE mark for each kind of tool,
   beside the vocabulary it belongs to (`utils/toolKinds.ts`). A kind with two
@@ -260,7 +259,7 @@ is how the numbers drift apart:
   were the same silence until this. `components/shared/WireAuditRow.tsx` draws
   it.
 - `components/shared/ModelMenu.tsx` — the one model menu. `ModelChip` (both
-  composers) and `ModelPicker` (Settings, automation, panel seats) mount it, so
+  composers) and `ModelPicker` (Settings, its only remaining host) mount it, so
   the star list and the free-only preference follow the trader everywhere; a new
   picker takes the panel, it does not grow a second flyout. `ModelPicker` keeps
   only the trigger and the value shape its `mode` speaks.

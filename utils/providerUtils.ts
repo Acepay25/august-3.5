@@ -135,7 +135,7 @@ export function computeChatModelFallback(
 
 /**
  * A provider config by id — the single lookup used everywhere a seat,
- * bot, or automation references its provider by id.
+ * bot references its provider by id.
  */
 export function findProviderById(configs: ProviderConfig[], id: string): ProviderConfig | undefined {
     return configs.find(c => c.id === id);

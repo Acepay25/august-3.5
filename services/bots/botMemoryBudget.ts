@@ -3,7 +3,7 @@
  * own notes may occupy in one prompt.
  *
  * A leaf on purpose. These live apart from `BotMemoryService` because that
- * module is `vi.mock`-ed with a PARTIAL factory by five suites (the automations,
+ * module was `vi.mock`-ed with a PARTIAL factory by five suites (the schedules,
  * the mailbox, the craft leg, the worth gate, the chart dock); importing a
  * constant from it makes every one of those mocks throw at import — a missing
  * named export is an error, not `undefined`. A module with two numbers and no
