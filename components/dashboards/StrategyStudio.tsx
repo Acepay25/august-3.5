@@ -461,7 +461,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                 <div className="flex shrink-0 items-center gap-2">
                     <label
                         className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-control border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-200 hover:border-white/20 hover:bg-zinc-700"
-                        title="Import skill .md files — they must carry valid skill frontmatter"
+                        title="Import skill .md files, or a whole SKILL.md folder (references and templates ride along)"
                     >
                         {isImporting
                             ? 'Importing…'
@@ -471,6 +471,20 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                             accept=".md,text/markdown,text/plain"
                             multiple
                             data-testid="skills-import-input"
+                            className="hidden"
+                            onChange={e => { const picked = e.target.files; e.target.value = ''; void onImportFiles(picked); }}
+                        />
+                        {/* The folder picker: imports a SKILL.md folder whole — the
+                            skill plus its references/templates as bundled files the
+                            skill_view reader opens. webkitdirectory supplies the
+                            relative paths the importer groups by. */}
+                        <input
+                            type="file"
+                            multiple
+                            // @ts-expect-error non-standard but universally supported directory picker attributes
+                            webkitdirectory=""
+                            directory=""
+                            data-testid="skills-import-folder-input"
                             className="hidden"
                             onChange={e => { const picked = e.target.files; e.target.value = ''; void onImportFiles(picked); }}
                         />

@@ -43,7 +43,7 @@ const uniqueName = (base: string): string => {
  * Import raw skill markdown strings (one per file). Returns a per-file
  * outcome so the UI can show exactly what happened.
  */
-export const importSkillFiles = async (files: Array<{ name: string; content: string }>): Promise<SkillImportResult> => {
+export const importSkillFiles = async (files: Array<SkillFileRead & { content: string }>): Promise<SkillImportResult> => {
     const username = getActiveUsername();
     const result: SkillImportResult = { imported: [], skipped: [], failed: [] };
     if (files.length === 0) return result;
@@ -51,7 +51,80 @@ export const importSkillFiles = async (files: Array<{ name: string; content: str
     if (!folderId) {
         return { imported: [], skipped: [], failed: files.map(f => ({ name: f.name, reason: 'Skills folder unavailable' })) };
     }
+    // ── FOLDER SHAPE (item 2): a picked folder whose files carry relPaths
+    // imports as the SKILL.md format ships them — one skill plus its bundled
+    // references/templates/scripts. A `SKILL.md` (basename) claims every
+    // sibling file under the same top folder as a BUNDLED file, name-spaced
+    // `<slug>__<path with / → __>` — exactly the layout the skill_view L2
+    // reader addresses. Files without a relPath keep the single-file path
+    // below, unchanged.
+    const bundledGroups = new Map<string, Array<{ file: SkillFileRead & { content: string }; relSegments: string[] }>>();
+    const singles: typeof files = [];
     for (const file of files) {
+        const rel = file.relPath;
+        const segs = rel ? rel.split(/[/\\]/).filter(Boolean) : [];
+        if (segs.length >= 2 && segs[segs.length - 1].toLowerCase() === 'skill.md') {
+            const parent = segs[segs.length - 2];
+            if (!bundledGroups.has(parent)) bundledGroups.set(parent, []);
+            bundledGroups.get(parent)!.push({ file, relSegments: segs });
+        } else if (segs.length >= 2 && segs.some(x => x.toLowerCase() === 'skill.md')) {
+            // A support file under a folder that (also) holds a SKILL.md —
+            // attach it to that skill, keeping its sub-path.
+            const skilIdx = segs.findIndex(x => x.toLowerCase() === 'skill.md');
+            const parent = skilIdx > 0 ? segs[skilIdx - 1] : segs[0];
+            if (!bundledGroups.has(parent)) bundledGroups.set(parent, []);
+            bundledGroups.get(parent)!.push({ file, relSegments: segs });
+        } else {
+            singles.push(file);
+        }
+    }
+
+    /** Bundled-file name: `<slug>__<segments joined __>`, each segment
+     *  slugified — the flat, traversal-proof namespace L2 reads. */
+    const bundledName = (slug: string, segs: string[]): string => {
+        const tail = segs.slice(0, -1).map(x => slugifyName(x)).filter(Boolean);
+        const base = slugifyName(segs[segs.length - 1].replace(/\.md$/i, '')) || 'file';
+        return [slug, ...tail, base].join('__') + '.md';
+    };
+
+    for (const [parent, group] of bundledGroups) {
+        const skillEntry = group.find(g => g.file.name.toLowerCase() === 'skill.md');
+        if (!skillEntry) {
+            for (const g of group) singles.push(g.file);
+            continue;
+        }
+        const meta = parseSkillMarkdown(skillEntry.file.content);
+        if (!meta || !meta.body.trim()) {
+            result.failed.push({ name: skillEntry.file.name, reason: meta ? 'empty body' : 'Not a skill file — missing or invalid skill frontmatter' });
+            for (const g of group) if (g !== skillEntry) singles.push(g.file);
+            continue;
+        }
+        // The skill's slug: the spec-shaped frontmatter name when valid, else
+        // the folder it arrived in — the folder is what the author called it.
+        const slug = meta.name && /^[a-z0-9][a-z0-9-]*$/.test(meta.name) && meta.name.length <= 64
+            ? meta.name
+            : (slugifyName(parent) || uniqueName(parent).replace(/\.md$/, ''));
+        const skillStored = uniqueName(`${slug}.md`);
+        try {
+            await createMemoryFile(folderId, skillStored, skillEntry.file.content, username, false);
+            result.imported.push(skillEntry.file.relPath ?? skillEntry.file.name);
+        } catch (err) {
+            result.failed.push({ name: skillEntry.file.name, reason: err instanceof Error ? err.message : String(err) });
+            continue;
+        }
+        for (const g of group) {
+            if (g === skillEntry) continue;
+            const name = bundledName(slug, g.relSegments);
+            try {
+                await createMemoryFile(folderId, uniqueName(name), g.file.content, username, false);
+                result.imported.push(g.file.relPath ?? g.file.name);
+            } catch (err) {
+                result.failed.push({ name: g.file.relPath ?? g.file.name, reason: err instanceof Error ? err.message : String(err) });
+            }
+        }
+    }
+
+    for (const file of singles) {
         const meta = parseSkillMarkdown(file.content);
         if (!meta || !meta.body.trim()) {
             result.failed.push({ name: file.name, reason: meta ? 'empty body' : 'Not a skill file — missing or invalid skill frontmatter' });
@@ -102,15 +175,22 @@ export interface SkillFileRead {
     name: string;
     content?: string;
     error?: string;
+    /** The path inside the picked folder, when the picker supplied one
+     *  (webkitRelativePath). This is what lets a FOLDER import keep its
+     *  shape: `my-skill/references/checklist.md` knows it belongs to the
+     *  skill whose SKILL.md sits in `my-skill/`. */
+    relPath?: string;
 }
 
 export const readSkillFiles = async (fileList: FileList | File[]): Promise<SkillFileRead[]> => {
     const results = await Promise.allSettled(
-        Array.from(fileList).map(file => new Promise<{ name: string; content: string }>((resolve, reject) => {
+        Array.from(fileList).map(file => new Promise<{ name: string; content: string; relPath?: string }>((resolve, reject) => {
+            const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
             const reader = new FileReader();
             reader.onload = () => {
-                if (typeof reader.result === 'string') resolve({ name: file.name, content: reader.result });
-                else reject(new Error('File is not readable as text'));
+                if (typeof reader.result === 'string') {
+                    resolve({ name: file.name, content: reader.result, ...(rel ? { relPath: rel } : {}) });
+                } else reject(new Error('File is not readable as text'));
             };
             reader.onerror = () => reject(reader.error ?? new Error(`Could not read ${file.name}`));
             reader.readAsText(file);
@@ -118,7 +198,7 @@ export const readSkillFiles = async (fileList: FileList | File[]): Promise<Skill
     );
     return results.map((r, i) =>
         r.status === 'fulfilled'
-            ? { name: r.value.name, content: r.value.content }
+            ? { name: r.value.name, content: r.value.content, ...(r.value.relPath ? { relPath: r.value.relPath } : {}) }
             : { name: (Array.from(fileList)[i] as File).name, error: r.reason instanceof Error ? r.reason.message : String(r.reason) },
     );
 };
