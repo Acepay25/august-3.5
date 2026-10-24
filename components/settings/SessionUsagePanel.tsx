@@ -226,6 +226,26 @@ export const HarnessControls: React.FC = () => {
                 </span>
             </label>
             <label className="block text-ui-dense text-zinc-400">
+                Sensitive memories
+                <span className="mt-0.5 block text-ui-2xs leading-4 text-zinc-500">
+                    Whether facts about health, finances or identity may be stored at all.
+                    Off (the default) means the write is refused with the reason; on, the fact is
+                    stored flagged and never surfaces in pre-reads or unattended runs.
+                </span>
+                <span className="mt-1 flex items-center gap-2">
+                    <input
+                        type="checkbox"
+                        checked={settings.sensitiveMemoryEnabled === true}
+                        onChange={e => persist({ sensitiveMemoryEnabled: e.target.checked })}
+                        data-testid="harness-sensitive-memory"
+                        className="h-3.5 w-3.5 accent-cyan-400"
+                    />
+                    <span className="text-ui-dense text-zinc-300">
+                        {settings.sensitiveMemoryEnabled === true ? 'Allowed — stored flagged' : 'Refused'}
+                    </span>
+                </span>
+            </label>
+            <label className="block text-ui-dense text-zinc-400">
                 Draft playbooks on its own
                 <span className="mt-0.5 block text-ui-2xs leading-4 text-zinc-500">
                     Studies finished conversations, bot closed trades, and the whole
