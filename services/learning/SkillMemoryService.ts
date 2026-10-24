@@ -30,7 +30,8 @@ import type { SkillIndexRow } from '../trade/tradeChatContext';
 import { netRiskReward, stopDistancePercent } from '../../utils/netRiskReward';
 import { parsePrice } from '../../utils/analysisUtils';
 import { formatCraftedSkillBody, refineSkillFromLosses } from './SkillCraftService';
-import { captureUnknownFrontmatter } from '../../utils/skillFrontmatter';
+import { captureUnknownFrontmatter, skillRunsHere, type SkillRuntime } from '../../utils/skillFrontmatter';
+import { DESK_TOOL_NAMES } from '../../utils/toolKinds';
 import {
     recordWorthGateApproval,
     recordWorthGateConfirm,
@@ -1052,8 +1053,30 @@ export const skillIndexRow = (file: { name: string }, meta: SkillMeta): SkillInd
     lastEvidenceAt: meta.lastEvidenceAt,
 });
 
-/** The library read through that one projection. */
-export const skillIndexRows = (): SkillIndexRow[] => listSkills().map(({ file, meta }) => skillIndexRow(file, meta));
+/** The library read through that one projection. Rows whose declared
+ *  `compatibility` this runtime cannot satisfy are NOT here — a hidden skill
+ *  leaves the index entirely, because an index line for a skill the seat
+ *  cannot load is a promise the desk would refuse. */
+export const skillIndexRows = (): SkillIndexRow[] =>
+    listSkills()
+        .filter(({ meta }) => skillRunsHere(meta.compatibility, currentSkillRuntime(), DESK_TOOL_NAMES))
+        .map(({ file, meta }) => skillIndexRow(file, meta));
+
+/** The runtime the skill library is being read from — the same three-way
+ *  distinction the app itself makes: the Electron shell (its bridge), the
+ *  Capacitor mobile shell, or a plain browser. A skill declaring
+ *  `platforms: [macos, windows]` is a DESKTOP skill and stays hidden in the
+ *  browser and on the phone; `platforms: [web]` hides it everywhere else. */
+const currentSkillRuntime = (): SkillRuntime => {
+    try {
+        if (typeof window !== 'undefined' && (window as { electronAPI?: unknown }).electronAPI) return 'desktop';
+    } catch { /* no window: treat as web */ }
+    try {
+        const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+        if (cap?.isNativePlatform?.()) return 'mobile';
+    } catch { /* fall through */ }
+    return 'web';
+};
 
 /** A rewrite invalidates the yes that came before it: the approval was for the rule
  *  as it read, so every path that moves a live skill's trigger must call this.

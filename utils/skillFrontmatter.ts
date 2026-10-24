@@ -76,23 +76,53 @@ export const skillFaceIssues = (face: { name: string; description: string; body:
 };
 
 /**
- * `platforms:` values this app understands, mapped onto the two runtimes it
- * actually has. Anything else (freebsd, …) leaves the list unmapped — the
- * caller treats an all-unknown list as "no constraint stated for a platform
- * we ship", which is the tolerant reading, not the silent-drop one.
+ * `platforms:` values this app understands, mapped onto the three runtimes it
+ * actually has (browser, Electron desktop, Capacitor mobile). Anything else
+ * (freebsd, …) is unmapped — an all-unmapped list states no constraint for a
+ * runtime we ship, which is the tolerant reading, not the silent-drop one.
  */
-export const PLATFORM_OF: Readonly<Record<string, 'web' | 'native'>> = {
+export type SkillRuntime = 'web' | 'desktop' | 'mobile';
+
+export const PLATFORM_OF: Readonly<Record<string, SkillRuntime>> = {
     web: 'web',
     webui: 'web',
     browser: 'web',
-    native: 'native',
-    desktop: 'native',
-    electron: 'native',
-    macos: 'native',
-    mac: 'native',
-    linux: 'native',
-    windows: 'native',
-    android: 'native',
-    ios: 'native',
-    mobile: 'native',
+    desktop: 'desktop',
+    electron: 'desktop',
+    macos: 'desktop',
+    mac: 'desktop',
+    linux: 'desktop',
+    windows: 'desktop',
+    native: 'mobile',
+    android: 'mobile',
+    ios: 'mobile',
+    mobile: 'mobile',
+};
+
+/**
+ * Invocation control, enforced: does THIS runtime satisfy the skill's declared
+ * compatibility? `platforms` hides a skill on runtimes it does not name;
+ * `requiresTools` hides it when the desk does not expose a tool it needs;
+ * `requiresEnv` hides it always in a renderer — there is no honest way to
+ * verify an environment variable from the app's process, and a constraint
+ * that cannot be checked must fail closed, not pass silently. Absent
+ * compatibility = no constraint, exactly as before the key existed.
+ */
+export const skillRunsHere = (
+    compat: { platforms?: string[]; requiresTools?: string[]; requiresEnv?: string[] } | undefined,
+    runtime: SkillRuntime,
+    availableTools: ReadonlySet<string> | readonly string[],
+): boolean => {
+    if (!compat) return true;
+    if (compat.requiresEnv && compat.requiresEnv.length > 0) return false;
+    if (compat.platforms?.length) {
+        const mapped = compat.platforms.map(p => PLATFORM_OF[(p || '').toLowerCase()]).filter(Boolean);
+        // Only entries that map count: [freebsd] is unreadable, not refused.
+        if (mapped.length > 0 && !mapped.includes(runtime)) return false;
+    }
+    if (compat.requiresTools?.length) {
+        const have = availableTools instanceof Set ? availableTools : new Set(availableTools);
+        if (!compat.requiresTools.every(t => have.has(t))) return false;
+    }
+    return true;
 };
