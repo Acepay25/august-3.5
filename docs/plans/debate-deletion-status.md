@@ -7,6 +7,11 @@ ledger. Accepted consequence: the closed-trade learning chain
 (recurring-mistake detection, insight extraction, global memory on close, lens
 memory, closed-trade skill crafting) stops working with no replacement.
 
+*(Superseded in code 2026-10-22, `49a603fe`: the chain's first leg did get a
+replacement — `services/learning/settlementReflection.ts` writes the settlement
+post-mortem for every closed trade, and the diary + IF/THEN draft fold from it
+again. The order above stands as the record of what was accepted on 10-17.)*
+
 ## Done (each: tsc + full vitest + lint + render-probe green)
 
 - `03fc0d5` post-mortem deleted: `usePostMortem`, `MistakePatternService`,

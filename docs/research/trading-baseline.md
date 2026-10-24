@@ -73,15 +73,25 @@ multi-seat debate engine's context assembler, left in place after the debate eng
 was deleted. The cost of leaving it is a large, maintained, tested, dead subsystem
 that makes the app *look* like it remembers the trader's journal when it does not.
 
-**The closed-trade learning chain is dead.** `post-mortems` were deleted
-(`usePostMortem`, `MistakePatternService`, `JobQueueService` — commit `03fc0d5`,
-2026-10-17), and the consequence is recorded in
-`docs/plans/debate-deletion-status.md:3-8`: *"the closed-trade learning chain stops
-working with no replacement."* The code confirms it —
-`craftSkillFromPostMortem` (`SkillCraftService.ts:140`) is still called from
-`botLearning.ts:234`, but its guard `pm.length < 40` (`:145`) makes it return null
-for **every** trade closed after 2026-10-17, because nothing writes a post-mortem
-any more. So a closed trade produces no lesson, and therefore no skill.
+**The closed-trade learning chain is NOT dead — the baseline's own §0 claim was
+wrong the day it was written.** `post-mortems` were deleted (`usePostMortem`,
+`MistakePatternService`, `JobQueueService` — commit `03fc0d5`, 2026-10-17), and
+`docs/plans/debate-deletion-status.md:3-8` recorded the accepted consequence
+(*"the closed-trade learning chain stops working with no replacement"*). But the
+replacement had already landed: `49a603fe` (2026-10-22 06:32, ~7h before this
+baseline was written) added `services/learning/settlementReflection.ts`, whose
+`reflectOnClosedTrade` writes `trade.postMortem` for every settled WIN/LOSS
+trade (`:310`); `hooks/useTradeLogging.ts:524-552` runs it FIRST on settlement
+and hands the row it wrote to `syncClosedTradeToNotebook`, which folds the
+diary entry and the IF/THEN skill draft from `trade.postMortem` — and
+`botLearning.ts:234`'s `craftSkillFromPostMortem` call is live again, its
+`pm.length < 40` guard returning null only when the reflection genuinely
+produced nothing. What remains true of the original claim is narrower: the
+IF/THEN drafts the chart-AI path crafts are human-approval-gated (they sit
+unapproved until saved), so *no automatically-approved skill* flows from a
+closed chart-path trade — "no lesson" was never true after 06:32 that morning.
+`baseline/review-and-learning.md` knew it: feature 27 (settlement reflection)
+is marked REAL there, and §0 contradicted its own evidence file.
 
 ---
 

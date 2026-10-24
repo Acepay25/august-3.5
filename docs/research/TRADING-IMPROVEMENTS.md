@@ -390,8 +390,11 @@ Two things make this worse than ordinary dead code:
   GENERATING in both homes"* over one `chatSessions` store; the banner now says two
   stores, one thread.
   `docs/plans/debate-deletion-status.md:3-8` records that *"the closed-trade
-  learning chain stops working with no replacement"*, and the code confirms it
-  (`SkillCraftService.ts:145`).
+  learning chain stops working with no replacement"* — the record of the
+  2026-10-17 order, superseded in code the morning of 2026-10-22 (`49a603fe`):
+  `services/learning/settlementReflection.ts:310` writes the post-mortem again,
+  so `SkillCraftService.ts:145`'s `pm.length < 40` guard no longer starves
+  every closed trade (see `trading-baseline.md` §0's correction).
 - **Live prompts still describe a committee that no longer exists**
   (`DeskToolsService.ts:1781`, `constants/prompts/harnessContract.ts:16`,
   `calibrationPolicy.ts:808` — the last is injected into a single model's packet at
