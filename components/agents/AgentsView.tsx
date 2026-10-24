@@ -37,7 +37,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Inbox, MessageSquare, Pencil, PanelLeftClose, Paperclip, Pin, Plus, Search, StopIcon, Timer, Trash2, Users } from '../shared/Icons';
+import { ArrowUp, ArrowUpDown, Bot, ChevronDown, Ellipsis, Inbox, MessageSquare, Pencil, PanelLeftClose, Paperclip, Pin, Plus, Search, StopIcon, Trash2, Users } from '../shared/Icons';
 import JumpToLatestFab, { JUMP_AWAY_PX } from '../shared/JumpToLatestFab';
 import { ModelFallbackBanner } from '../trade/panels/ChatComposer';
 import type { ProviderConfig } from '../../types/provider';
@@ -56,7 +56,6 @@ import { useSymbolUniverse } from '../../hooks/useSymbolUniverse';
 import { MENU_W, RowMenu, type RowMenuItem } from './RowMenu';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 import { groupDisplayName } from '../../services/agents/agentRoster';
-import type { AutomationConfig } from '../../types/automation';
 import type { Conversation } from '../../types';
 import type { BotLearningStat } from '../../services/agents/botLearning';
 import {
@@ -126,9 +125,6 @@ interface AgentsViewProps {
     lastOpenedMap?: AgentThreadOpenedMap;
     /** botId → one-line "cannot do its job" hint (the rail's ⚠ badge). */
     attentionMap?: Record<string, string>;
-    /** Routines scoped to a bot — the disclosure the old rail carried. */
-    botRoutines?: Record<string, AutomationConfig[]>;
-    onRunRoutine?: (config: AutomationConfig) => void;
     onDeleteBot?: (botId: string) => void;
     onDeleteGroup?: (groupId: string) => void;
     onEditGroup?: (groupId: string) => void;
@@ -313,14 +309,12 @@ const Row: React.FC<{
      *  owned, kept reachable now that this surface replaced its row model. */
     manage?: React.ReactNode;
     /** WS-6 §5's context menu. The same handlers the hover icons carry, plus
-     *  pin and routines, so right-clicking a row is not a second-class path. */
+     *  pin, so right-clicking a row is not a second-class path. */
     actions?: RowMenuItem[];
     /** Tiny mono count after the name — skills this bot authored. */
     stat?: number;
     /** Row identity for tests — the desk's own row needs its own. */
     testId?: string;
-    /** Routines disclosure trigger, rendered when the bot has schedules. */
-    routinesToggle?: React.ReactNode;
     children?: React.ReactNode;
     Icon: React.FC<{ className?: string }>;
     /** Identity graphic for this row. A bot's own `BotAvatar` face replaces the
@@ -328,7 +322,7 @@ const Row: React.FC<{
      *  already use, so a bot looks like the same bot in every list. */
     avatar?: React.ReactNode;
     onClick: () => void;
-}> = ({ active, title, preview, time, unread, working, pinned, attention, onPin, manage, actions, stat, testId = 'agent-row', routinesToggle, children, Icon, avatar, onClick }) => {
+}> = ({ active, title, preview, time, unread, working, pinned, attention, onPin, manage, actions, stat, testId = 'agent-row', children, Icon, avatar, onClick }) => {
     const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
     const hasActions = !!actions && actions.length > 0;
     return (
@@ -378,7 +372,6 @@ const Row: React.FC<{
                             </span>
                         )}
                     </span>
-                    {routinesToggle}
                 </span>
                 {/* The row's actions lie OVER the row instead of beside it. In
                     flow they cost 150px of a 223px row PERMANENTLY — every one of
@@ -459,7 +452,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     onSendBotTurn, onAnalyze, onLogProposedTrade, onAnalysisError, onStopRun, analysisRunning = false, renderGroup, coachCount, workingBotId,
     lastOpenedMap = {}, modelPicker, modelFallback = null, destinationMenu, accountRow,
     railExpanded = true, onToggleRailExpanded, statusCluster, surfaceSwitch,
-    attentionMap, botRoutines, onRunRoutine, onDeleteBot, onDeleteGroup, onEditGroup,
+    attentionMap, onDeleteBot, onDeleteGroup, onEditGroup,
     botStats,
     providerReady = false,
     onRenameBot,
@@ -519,7 +512,6 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         const sid = chatStore.getActiveSession()?.id;
         if (sid) chatStore.mutate(sid, sess => ({ ...sess, interval: next }));
     }, []);
-    const [openRoutines, setOpenRoutines] = useState<string | null>(null);
     // Below md the rail is an overlay, not a column — at 320px a permanent
     // 42vw list left no readable transcript.
     const [railOpen, setRailOpen] = useState(false);
@@ -812,10 +804,8 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     ];
 
     /** A bot row with everything the standalone roster rail used to own:
-     *  pin, the ⚠ fix hint, the routines disclosure, rename, delete. */
+     *  pin, the ⚠ fix hint, rename, delete. */
     const renderBotRow = (r: BotRow): React.ReactNode => {
-        const routines = botRoutines?.[r.bot.id] ?? [];
-        const open = openRoutines === r.bot.id;
         // The LAUNCH LIST's job: say what the agent is FOR, so the trader
         // picks the right one instead of guessing from a name. The role is
         // the agent's title, or the first line of its description — and when
@@ -840,10 +830,6 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         label: 'Rename',
                         onSelect: () => { setRenamingId(r.bot.id); setRenameDraft(r.bot.name); },
                     }] : []),
-                    ...(routines.length > 0 ? [{
-                        label: `Routines (${routines.length})`,
-                        onSelect: () => setOpenRoutines(open ? null : r.bot.id),
-                    }] : []),
                     ...(onDeleteBot ? [{
                         label: 'Delete bot', onSelect: () => onDeleteBot(r.bot.id), danger: true,
                     }] : []),
@@ -866,14 +852,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         )}
                     </>
                 )}
-                routinesToggle={routines.length > 0 ? (
-                    <button type="button" onClick={() => setOpenRoutines(open ? null : r.bot.id)}
-                        aria-expanded={open} data-testid="row-routines"
-                        className="flex items-center gap-1 rounded-full border border-zinc-800 px-1.5 py-0.5 text-ui-2xs text-zinc-500 transition-colors hover:text-zinc-300">
-                        <Timer className="h-3 w-3" aria-hidden="true" />{routines.length}
-                        <ChevronDown className={`h-2.5 w-2.5 transition-transform ${open ? 'rotate-180' : ''}`} />
-                    </button>
-                ) : undefined}>
+                >
                 {renamingId === r.bot.id && onRenameBot && (
                     <form className="flex items-center gap-1 px-2 pb-1.5 pl-9"
                         onSubmit={e => {
@@ -890,26 +869,6 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             Save
                         </button>
                     </form>
-                )}
-                {open && (
-                    <ul className="space-y-1 px-2 pb-2 pl-9">
-                        {routines.map(cfg => (
-                            <li key={cfg.id} className="flex items-baseline gap-2">
-                                <span className="min-w-0 flex-1 truncate text-ui-xs text-zinc-400" title={`${cfg.name} · ${cfg.schedule?.cron ?? '—'}`}>
-                                    {cfg.name}
-                                    <span className="ml-1 font-mono text-ui-2xs text-zinc-600">
-                                        {cfg.schedule?.cron ?? '—'}
-                                    </span>
-                                </span>
-                                {onRunRoutine && (
-                                    <button type="button" onClick={() => onRunRoutine(cfg)}
-                                        className="shrink-0 rounded-control border border-zinc-800 px-1.5 py-0.5 text-ui-2xs text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200">
-                                        Run
-                                    </button>
-                                )}
-                            </li>
-                        ))}
-                    </ul>
                 )}
             </Row>
         );

@@ -39,7 +39,7 @@ Legend: **REAL** = the control/feature does what its label says, in the running 
 | 3 | **Title-bar surface switch** | The one navigation control: four icon buttons, `aria-current="page"` on the live one, `Alt+1/2/4/5` chords, live badge counts riding the glyph. | REAL | `components/shell/SurfaceSwitch.tsx:33-79`; built once in `App.tsx:2242-2260`; handed to the band (`App.tsx:2543`) and to the Chat surface (`App.tsx:2733`); chords `App.tsx:1343-1349` |
 | 4 | **Nav rail** | The persistent left column (`NavRail.tsx`, 242 lines) — expand/collapse, destination rows, update button, account row. | **COSMETIC** | The component is **never rendered by the app**. `App.tsx:2507-2515` says so in the source; the suite that pinned it (`tests/deadControlsGuard.test.ts`, removed 2026-10-23) used to assert `expect(appSrc).not.toMatch(/<NavRail/)`. Three exports are live: `AccountRow` and `NAV_RAIL_AUTO_COLLAPSE_PX` (`App.tsx:129`), and `NAV_RAIL_EXPANDED_PX` (`components/agents/AgentsView.tsx:73`). Its own collapse button (`NavRail.tsx:202-212`) and its `UpdateButton` (`NavRail.tsx:228`) are unreachable. The plan keeps it on purpose pending E-50 (`docs/plan/open-items.md:182`); the test that mounted it (`tests/agentsSurface.test.tsx:401`) went with the suite on 2026-10-23 — the file is now dead in the app and unexercised everywhere. |
 | 5 | **Surface menu list** | `SurfaceMenuList.tsx` — the "five surfaces" row list, the brand-gradient active bar, the "a conversation is still running" busy badge. | **COSMETIC** | Its only mount is `App.tsx:2725-2731` with `hideSurfaces` set, so `!hideSurfaces && SURFACE_ITEMS.map(...)` (`SurfaceMenuList.tsx:135`) never evaluates. The only live row is "Customize" (`:207-223`). Consequences: the brand-gradient active-nav bar (`:165-170`) and the busy badge (`:142, :188`) are dead. `tests/deadControlsGuard.test.ts:147-150` pins the *shape* of this but not the consequence. |
-| 6 | **Customize row** | The one live destination row: opens the Knowledge surface's Skills tab (the Strategy Studio). | REAL | `components/shell/SurfaceMenuList.tsx:207-223` → `App.tsx:477-480`; probe asserts it lands on the Skills tab: `scripts/render-probe.cjs:1868-1880` |
+| 6 | **Customize row** | The one live destination row: opens the Knowledge surface's Skills tab (the Strategy Studio). | REAL | `components/shell/SurfaceMenuList.tsx:207-223` → `App.tsx:477-480`; probe asserts it lands on the Skills tab: `scripts/render-probe.cjs:1892-1904` |
 | 7 | **Status cluster** | Save state, offline state, and the single opener for the Activity drawer. | REAL | `components/shell/StatusCluster.tsx:27-78`; built once `App.tsx:2261-2268` |
 | 8 | **Activity drawer** | Background jobs, automations, skill audits — one drawer for everything the app does on its own. | REAL | `App.tsx:2496-2504`; `components/settings/JobsDrawer.tsx` |
 | 9 | **Right-panel contract** | One geometry/lifecycle contract for every right-hand panel: `push` vs `fullscreen`, hide ≠ close, per-surface persisted width, capsule strip only when >1 panel is open. | REAL | `hooks/useRightPanel.ts:82-207`; `components/shell/RightPanel.tsx:56-166`; mounted by the dock (`components/trade/TradeView.tsx:1151`) and by Learn (`components/learn/LearnView.tsx:325`) |
@@ -133,7 +133,7 @@ are valid at runtime; `'chat'` is in the type union yet rejected by the store
 
 - Every switch row goes somewhere real: `trade` → `TradeView`, `journal` → `Journal`,
   `agents` → `AgentsView`, `learn` → `LearnView` (`App.tsx:2555-2759`). The probe asserts
-  all four mount (`scripts/render-probe.cjs:1179-1198, 1407-1408`).
+  all four mount (`scripts/render-probe.cjs:1203-1222, 1431-1432`).
 - The surface **labels** are honest but the **ids** are not: the switch says "Chat" for the
   `agents` surface, and the Chat surface's own rail carries a row called "Chart AI"
   (`components/agents/AgentsView.tsx:1119`, `testId="chart-ai-row"`) for the **desk thread**
@@ -142,7 +142,7 @@ are valid at runtime; `'chat'` is in the type union yet rejected by the store
   "Chart AI" in the rail and **"Desk"** in the surface's own header
   (`components/agents/AgentsView.tsx:1365, 1372`: `activeSession?.title?.trim() || 'Desk'`).
   The render-probe clicks the "Chart AI" text to open the desk thread
-  (`scripts/render-probe.cjs:1131-1136`), so the name is load-bearing in a test too.
+  (`scripts/render-probe.cjs:1155-1160`), so the name is load-bearing in a test too.
   The code's own comment admits the split: "the dock row above keeps the 'Chart AI' name"
   (`:1364`, `:1371`).
 - **The lie:** `SurfaceMenuList` is documented as "the five surfaces"
@@ -240,7 +240,7 @@ switches; the switch's own handler intercepts Chat → Trade for the same reason
 SHARE A STORE TODAY" and said the Chat surface reads
 App's `messages` while the dock reads `chatStore` — a true statement about the *writers*,
 contradicted by the mirror and the merge that make them one transcript. The comment's
-own cited evidence (`render-probe.cjs:487-491`) had moved. The banner now states the
+own cited evidence (`render-probe.cjs:488-492`) had moved. The banner now states the
 contract: two row shapes, one thread.
 
 ### 3.3 Where the "one home" leaks
@@ -576,7 +576,7 @@ what to do instead) and is listed here only so the distinction is explicit.
   (`components/settings/tabs/JournalTab.tsx:98-121`).
 - `ToggleSwitch` itself is one primitive with `role="switch"` + `aria-checked`
   (`components/shared/ToggleSwitch.tsx:15-33`) — the render-probe's flip detector depends on
-  that (`scripts/render-probe.cjs:2129, 2159-2167`).
+  that (`scripts/render-probe.cjs:2153, 2183-2191`).
 - The SkillsCatalog's "Skill settings" gear is **hidden** when there is no handler
   (`components/learn/SkillsCatalog.tsx:601-606`), which is the correct pattern: App
   deliberately does not pass `onOpenSkillsSettings` (`App.tsx:2656-2661`).
@@ -800,7 +800,7 @@ The same pattern would work for the Chat surface's `ChatTranscriptRow` call.
    implementation either.
 
 4. **The inert-control sweep covers two of four surfaces.** `sweepSurface` runs for
-   Knowledge and Journal only (`scripts/render-probe.cjs:2198, 2338`). The Trade and Chat
+   Knowledge and Journal only (`scripts/render-probe.cjs:2222, 2362`). The Trade and Chat
    surfaces — where the composer, the model menu, the effort dial, the proposal cards and
    the verdict cards live — are never swept for dead controls. The probe's own reason for
    existing ("Mounting a surface proves the surface renders, not that its buttons work",
@@ -830,7 +830,7 @@ The same pattern would work for the Chat surface's `ChatTranscriptRow` call.
    STORE TODAY" (`components/agents/AgentsView.tsx:10-33`) was true of the writers and is
    false of the transcript; the mirror and the merge make them one thread. The next
    reader of that file is told the opposite of the truth, and the file's own cited
-   evidence (`render-probe.cjs:487-491`) has moved.
+   evidence (`render-probe.cjs:488-492`) has moved.
 
 ---
 

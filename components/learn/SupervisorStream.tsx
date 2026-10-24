@@ -5,7 +5,7 @@
  * amendment / ladder proposal) with its phase, the model's own verdict text,
  * and the decision — plus real intervention: any decision can be overridden
  * (reject an approved skill, or approve a rejected one from its stored
- * snapshot), the automation can be paused (finishes the current item, starts
+ * snapshot), the pass can be paused (finishes the current item, starts
  * nothing new), and "Run now" forces a pass even while paused.
  *
  * Extracted from SupervisorPanel so the dock overlay and the Learn surface's

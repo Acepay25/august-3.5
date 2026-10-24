@@ -24,6 +24,8 @@ export interface DeclineRecord {
     takeProfits?: number[];
     invalidation?: string;
     /** Who declined: a live desk turn or a scheduled run. */
+    /** `automation` is historical: the scheduled run that wrote it was
+     *  deleted on 2026-10-24, and stored rows still carry the value. */
     source: 'desk' | 'automation';
     createdAt: string;
 }

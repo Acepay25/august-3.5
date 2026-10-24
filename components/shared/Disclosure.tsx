@@ -3,10 +3,11 @@
  *
  * The app had three ways to hide content behind a toggle, and they drifted:
  * the transcript's thinking row and its tool rows were native `<details>`,
- * while the automation card's "Reasoning (N)" was a `<button>` plus a
+ * while the automation card's "Reasoning (N)" (deleted 2026-10-24) was a
+ * `<button>` plus a
  * grid-collapse `<div>`. Two mechanisms means two keyboard behaviours, two
  * focus treatments and two ways for the same content to look — and the
- * automation card's is the older one: a different disclosure for the same
+ * card's was the older one: a different disclosure for the same
  * kind of thing.
  *
  * So there is one component, and it is the NATIVE one: a `<details>` is a

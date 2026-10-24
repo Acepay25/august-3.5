@@ -5,7 +5,7 @@
  * It used to be two controls and a third somewhere else: this chip (an inline
  * absolute panel, provider-grouped, star-able) and `EffortChip` (a radio menu of
  * six tiers) sat on one footer row, while `ModelPicker` ran a portaled
- * two-column flyout in Settings, the automation editor and the seat picker. Two
+ * two-column flyout in Settings. Two
  * implementations of one decision reading different stored values, and the
  * thinking tier separated from the model whose behaviour it changes — `low`
  * switches thinking OFF on the GLM and DeepSeek routes

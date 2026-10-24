@@ -29,8 +29,8 @@ export const loadSessionUsage = async (): Promise<SessionUsageEntry[]> => {
     return Array.isArray(stored) ? stored : [];
 };
 
-// Read-modify-write on one key, so two runs settling together (an automation
-// run next to the trader's own) would read the same base array and the second
+// Read-modify-write on one key, so two runs settling together (a detached eval
+// beside the trader's own) would read the same base array and the second
 // write would drop the first entry — Settings → Session Usage would quietly
 // under-report. Same serialization shape as services/bots/BotRegistry.ts.
 let queue: Promise<unknown> = Promise.resolve();

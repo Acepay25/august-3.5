@@ -2861,6 +2861,14 @@ const ingestCraftedSkillUnlocked = async (
         // Overwritten, never merged: a predicate describes its clause, so
         // rewriting the clause invalidates any predicate the old one carried.
         meta.predicate = sanitizePredicate(crafted.predicate);
+        // The third writer of this format. The draft path stamps these and the
+        // trade-backed birth path was taught to (5d7332a6); re-ingesting a
+        // matching trigger still dropped them, so the reason a human reads and
+        // the timeframe/source the replay proof needs went missing on exactly
+        // the updates that carried new evidence.
+        if (crafted.reason?.trim()) meta.reason = crafted.reason.trim().slice(0, 600);
+        if (crafted.timeframe) meta.timeframe = crafted.timeframe;
+        if (crafted.source) meta.source = crafted.source;
         // A skill that never had the activation key gains it here; one that
         // has one keeps its own — a merge must not overwrite a description
         // the trader has already seen with the craft's new prose.

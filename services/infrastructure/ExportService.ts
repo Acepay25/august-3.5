@@ -697,7 +697,7 @@ export const exportPreferencesData = async (): Promise<Record<string, any>> => {
  * allow-list, which enumerates what the app itself writes at backup time:
  * the PREF_KEYS constants plus every username-scoped / service namespace
  * greppable in the codebase (memory files, learning rules, chat sessions,
- * drawings, automations, desk state, forged tools, agent roster, …).
+ * drawings, desk state, forged tools, agent roster, …).
  * Unknown keys are skipped and reported, never silently persisted.
  */
 const RESTORABLE_PREFERENCE_KEYS: ReadonlySet<string> = new Set<string>([
@@ -767,7 +767,9 @@ const RESTORABLE_PREFERENCE_KEY_PREFIXES: readonly string[] = [
     // `learning_measure_v1_<user>`).
     'learning_judge_gate_v1_',
     'learning_measure_v1_',
-    // Per-user prompt/strategy docs + automations
+    // Per-user prompt/strategy docs, plus the automation namespaces: the
+    // feature was deleted on 2026-10-24, but a backup taken before that still
+    // names these keys, and a restore must not silently drop them.
     'prompt_overrides_v1_',
     'strategy_docs_v1_',
     'automations_v1_',

@@ -1,16 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Inbox, Plus, X } from '../shared/Icons';
+import { Inbox, X } from '../shared/Icons';
 import { listSkills, type SkillMeta } from '../../services/learning/SkillMemoryService';
 import { EmptyState } from '../ui/EmptyState';
-import type { AutomationConfig } from '../../types/automation';
-import { humanizeCron } from '../../services/automation/cronParser';
 
 /**
  * Activity drawer: the app's autonomous work in one place — each skill's latest
- * automated-eval verdict, and the scheduled automations with their card feeds.
- * The rail's AUTOMATIONS section landed here (stage 3): one drawer owns "things
- * the app does on its own", and the header's Activity button is its only
- * opener, at every breakpoint.
+ * detached-eval verdict. Scheduled automations were removed on 2026-10-24; the
+ * header's Activity button is the drawer's only opener, at every breakpoint.
  *
  * It used to show a third source: the background job queue's insight-extraction
  * runs. The post-mortem that enqueued them is deleted, so the queue had no
@@ -27,17 +23,11 @@ const VERDICT_STYLE: Record<string, string> = {
 interface ActivityDrawerProps {
     open: boolean;
     onClose: () => void;
-    automations?: AutomationConfig[];
-    onOpenAutomation?: (id: string | null) => void;
-    onCreateAutomation?: () => void;
 }
 
 const JobsDrawer: React.FC<ActivityDrawerProps> = ({
     open,
     onClose,
-    automations = [],
-    onOpenAutomation,
-    onCreateAutomation,
 }) => {
     const [evaluated, setEvaluated] = useState<Array<{ name: string; meta: SkillMeta }>>([]);
 
@@ -59,8 +49,7 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
         refresh();
     }, [open]);
 
-    const hasContent =
-        evaluated.length > 0 || automations.length > 0 || !!onCreateAutomation;
+    const hasContent = evaluated.length > 0;
 
     if (!open) return null;
     return (
@@ -77,47 +66,8 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                         compact
                         icon={<Inbox className="h-5 w-5" aria-hidden="true" />}
                         title="Nothing running"
-                        description="Learning passes, evals and scheduled automations appear here."
+                        description="Detached skill evaluations appear here."
                     />
-                )}
-                {onCreateAutomation && (
-                    <>
-                        <div className="flex items-center justify-between pb-2">
-                            <p className="text-ui-2xs font-bold uppercase tracking-widest text-zinc-600">Automations</p>
-                            <button
-                                type="button"
-                                data-testid="activity-automation-new"
-                                onClick={onCreateAutomation}
-                                className="inline-flex items-center gap-1 rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200"
-                                title="New automation"
-                                aria-label="New automation"
-                            >
-                                <Plus className="h-3 w-3" aria-hidden="true" />
-                                New
-                            </button>
-                        </div>
-                        <div className="space-y-2 pb-4">
-                            {automations.length === 0 ? (
-                                <p className="rounded-control border border-white/5 bg-zinc-900/70 p-2.5 text-ui-xs leading-5 text-zinc-500">
-                                    No automations yet. Schedule an analysis to run itself.
-                                </p>
-                            ) : (
-                                automations.map(a => (
-                                    <button
-                                        key={a.id}
-                                        type="button"
-                                        data-testid="activity-automation-row"
-                                        onClick={() => onOpenAutomation?.(a.id)}
-                                        className="flex w-full items-center gap-2 rounded-control border border-white/5 bg-zinc-900/70 p-2.5 text-left transition-colors hover:bg-zinc-900"
-                                    >
-                                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${a.enabled ? 'bg-emerald-400' : 'bg-zinc-700'}`} />
-                                        <span className="min-w-0 flex-1 truncate text-ui-sm font-semibold text-zinc-200" title={a.name}>{a.name}</span>
-                                        <span className="shrink-0 text-ui-2xs text-zinc-600">{humanizeCron(a.schedule.cron)}</span>
-                                    </button>
-                                ))
-                            )}
-                        </div>
-                    </>
                 )}
                 {evaluated.length > 0 && (
                     <>

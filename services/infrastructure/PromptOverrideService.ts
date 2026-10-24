@@ -23,7 +23,7 @@ let overridesCache: Record<string, string> = {};
 /**
  * Which A/B lane THIS run resolved. There is deliberately no module state: the
  * lane used to be `let controlLane`, flipped on by `beginPromptLane()` and back
- * by an `endPromptLane()` in a `finally`, so a scheduled automation and a human
+ * by an `endPromptLane()` in a `finally`, so a detached job and a human
  * send deciding at the same moment overwrote each other and a run resolved
  * whichever lane the OTHER one happened to pick. The decision is returned as a
  * value now, and the caller hands it to `getPrompt` / `promptCorpusVersion` at

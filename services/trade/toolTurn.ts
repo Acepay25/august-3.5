@@ -124,7 +124,7 @@ type InnerOutcome = Omit<ToolTurnOutcome, 'usage' | 'usageCalls' | 'effort' | 'w
  * `streamChatWithDeskTools` forwards `onUsage` to the wire, and the wire calls it
  * with whatever the provider reported for THAT request — so this collects per
  * request, with no shared bus. A global subscriber would have attributed an
- * automation run's tokens to whichever interactive turn happened to be streaming
+ * a detached run's tokens to whichever interactive turn happened to be streaming
  * beside it. A turn whose provider sent no usage frame reports zeroes, and the
  * panel shows a gap instead of a number nobody measured.
  */

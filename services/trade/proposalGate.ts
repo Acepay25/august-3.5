@@ -311,7 +311,7 @@ export const isStampFresh = (gate?: ProposalGate): boolean => {
     return Number.isFinite(at) && Date.now() - at <= GATE_STAMP_STALE_MS;
 };
 
-/** The ONE call every log path makes — the card's button and the automation sink
+/** The ONE call every log path makes — the card's button and the rail's
  *  both await this, so a row is never written beside a scan that could have been
  *  consulted. Fresh stamp → reuse. Scan running → join it. Neither → scan now. */
 export const ensureStamp = async (
