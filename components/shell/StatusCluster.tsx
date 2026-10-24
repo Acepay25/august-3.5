@@ -56,7 +56,8 @@ const StatusCluster: React.FC<StatusClusterProps> = ({
             and this tray used to repeat it under a second name. Activity is the
             drawer's only opener and sits outside the desktop-only styling: touch
             never had a path to the job queue, and the rail's automation section
-            landed in this drawer (stage 3). Pinned signals moved to the Trade
+            landed in this drawer (stage 3) before that feature was deleted. Pinned
+            signals moved to the Trade
             surface's market row — a trading tool, not global chrome. */}
         {onOpenActivity && (
             <div className="inline-flex items-center rounded-bubble border border-white/[0.08] bg-zinc-800/60 p-0.5 shadow-sm">
