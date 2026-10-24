@@ -156,7 +156,7 @@ const DESK_SPEAKER = 'desk';
 
 /** Rolling cap on the live tool feed, matching the ensemble feed's window so a
  *  long tool round does not turn a bubble into a log. Exported because the
- *  schedule sink (`automationTurn`) writes the SAME field on its row and a
+ *  schedule sink (deleted 2026-10-24) wrote the SAME field on its row, and a
  *  second number there would mean one renderer trimming two ways. */
 export const MAX_LIVE_TOOL_LINES = 8;
 

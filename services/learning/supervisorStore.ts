@@ -7,7 +7,7 @@
  * anywhere in the tree, and so a run survives surface switches.
  *
  * The log is intentionally small and ephemeral (this session's supervision),
- * while the automation toggle is persisted per user. Phase names are what
+ * while the auto-run toggle is persisted per user. Phase names are what
  * the indicator renders: they must stay honest — the UI shows exactly the
  * phase the service set, never a generic spinner.
  */
@@ -62,7 +62,7 @@ export interface SupervisorSnapshot {
     /** Display name of the model currently doing the supervising. */
     modelName: string;
     running: boolean;
-    /** Automation toggle (persisted). When off, only an explicit "Run now" works. */
+    /** Auto-run toggle (persisted). When off, only an explicit "Run now" works. */
     autoEnabled: boolean;
     /** Queue items the supervisor has NOT acted on. Surfaced rather than
      *  left implicit: a per-pass call budget means a backlog can legitimately

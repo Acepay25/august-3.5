@@ -28,7 +28,7 @@ interface HeaderProps {
      *  to it instead of naming a symbol of its own. */
     liveMarketSymbol?: string;
     // Toolbar entries that stayed in the header when the drawer was retired.
-    /** Opens the Activity drawer: background jobs, skill audits, automations. */
+    /** Opens the Activity drawer: the app’s detached skill evaluations. */
     onOpenActivity?: () => void;
     /** Session-popover footer links. The rail's "Live Market" and "View Vision
      *  Data" rows landed here (stage 3): the popover is already the market-

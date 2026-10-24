@@ -1,6 +1,6 @@
 /**
  * ModelPicker — the cascading provider + model flyout used by Settings, the
- * automation editor and the panel-seat picker.
+ * panel-seat picker (both since deleted — Settings is its only host).
  *
  * It used to be a SECOND implementation of the composer's model menu: its own
  * two-column hover flyout, its own "free models only" checkbox, no stars, no
@@ -19,9 +19,8 @@
  * a mode nobody can reach is vocabulary, not a capability.
  *
  * The flyout is portaled by `ModelMenu`, not rendered in place: a transformed or
- * backdrop-filtered ancestor (this picker sits inside `AutomationEditorModal`,
- * which has both) becomes the containing block for `fixed` and misaligns the
- * panel from its trigger.
+ * backdrop-filtered ancestor (the Settings sheet has both) becomes the
+ * containing block for `fixed` and misaligns the panel from its trigger.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';

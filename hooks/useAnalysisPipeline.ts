@@ -16,17 +16,16 @@ import { getActiveUsername } from '../utils/activeUser';
 import { getBots, getGroups } from '../services/agents/agentRoster';
 
 // Analysis / validation / backtesting services
-import { tryFetchHybridDataFromPromptWithCalibration, generateHybridPromptInjection, HybridDataPacket } from '../services/analysis/HybridIntelligenceService';
+import type { HybridDataPacket } from '../services/analysis/HybridIntelligenceService';
 import { extractSymbolFromPrompt } from '../services/analysis/MarketDataService';
 import { LabeledMonteCarloResult } from '../services/analysis/MonteCarloService';
 import { type LiveBacktestResult } from '../services/backtesting/LiveBacktestService';
 
 // Utils
 import { TokenUsage, estimateCostUsd } from '../utils/tokenUsage';
-import { appendToolActions } from '../utils/toolActions';
 import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { splitThinkingFromOutput } from '../utils/thinkingSplit';
-import { chatModelIdOf, isProviderReady, resolveChatModelSelection } from '../utils/providerUtils';
+import { chatModelIdOf, resolveChatModelSelection } from '../utils/providerUtils';
 import { buildDecisionReflectionContext } from '../services/learning/DecisionReflectionService';
 import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
 import { assemblePipelineMemoryContext } from './analysisPipeline/memoryContext';
@@ -39,7 +38,6 @@ import {
     endConversationRunOwned,
     abortConversationRun,
 } from '../services/trade/chatStore';
-import { automationSeatFor, runAutomationTurn } from '../services/trade/automationTurn';
 import type { ToolTurnOutcome } from '../services/trade/toolTurn';
 import type { PredicateGateResult } from '../services/learning/skillPredicateGate';
 
@@ -57,18 +55,16 @@ const devLog = (...args: unknown[]) => { if ((import.meta as any).env?.DEV) cons
  *  re-fetched. `dataTimestamp` is when the assembly ran, so this is a FLOOR on
  *  the real age — every cell inside it additionally carries up to its own REST
  *  cache window. Reusing a minutes-old packet was the worst link in the chain:
- *  automation and follow-up runs got the previous tape labelled "real-time". */
+ *  a follow-up run got the previous tape labelled "real-time". */
 const HYBRID_REUSE_MAX_AGE_MS = 60_000;
 
 // Learning services
 import { generateWeightedVotingContext } from '../services/backtesting/ModelPerformanceService';
 import { threadForProvider } from '../utils/agentThreads';
 import { formatInvokedSkillSection, resolveInvokedSkills } from '../services/learning/SkillMemoryService';
-import { recordRegimeDay, marketRegimeToLedger } from '../services/learning/regimeLedger';
 import { extractDebateTemplate, DebateTemplate } from '../utils/debateTemplates';
 import { parseComposerIntent, formatComposerSteer } from '../utils/composerMentions';
 import { beginPromptLane, promptCorpusVersion } from '../services/infrastructure/PromptOverrideService';
-import GlobalLearningService from '../services/learning/GlobalLearningService';
 import { parseDmMarkers } from '../services/agents/botMailbox';
 import { notify } from '../services/infrastructure/notify';
 
@@ -100,12 +96,7 @@ export interface ChatRunOutcome {
 
 // ─── Per-conversation run ownership (E-45) ───────────────────────────────────
 
-/** The key a run with no conversation of its own is filed under — a scheduled
- *  run, which writes into a private message list and never touches a thread. */
-const AUTOMATION_RUN_KEY = '__automation__';
-
-/** The key a run with no conversation id at all is filed under. Distinct from
- *  AUTOMATION_RUN_KEY so the two can never share a slot. */
+/** The key a run with no conversation id at all is filed under. */
 const NO_CONVERSATION_KEY = '__no_conversation__';
 
 /** The registry key for a conversation. `null` and `undefined` are the same
@@ -394,10 +385,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
      *  concurrent render could tear. */
     const activeConversationIdRef = useRef<string | null>(activeConversationId);
     activeConversationIdRef.current = activeConversationId;
-    // Automation runs: private message list (results never touch the main
-    // conversation) + silent flag (step tracker / loading UI stay muted).
-    const automationMessagesRef = useRef<Message[]>([]);
-    const automationSilentRef = useRef(false);
     /** Latest handleSendMessage closure, for the queued-send drain effect at
      *  the bottom of this hook — the drain fires after commit, so it must
      *  call through the freshest closure, not the one that started the run.
@@ -441,18 +428,15 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
      * The app-level "is a run happening" flag, which the surfaces read for
      * their Stop button and the scheduler reads for its busy guard.
      *
-     * It means "THE CONVERSATION ON SCREEN is running" — plus a scheduled
-     * run, which has no conversation of its own. It must NOT mean "some
-     * background conversation is running": a run in a thread you are not
+     * It means "THE CONVERSATION ON SCREEN is running". It must NOT mean
+     * "some background conversation is running": a run in a thread you are not
      * looking at would otherwise turn this thread's send button into a Stop
-     * button, and the scheduler would refuse to fire for a chat you cannot
-     * even see.
+     * button for a chat you cannot even see.
      */
     const syncProgressFlag = useCallback((): void => {
         const activeKey = runKeyFor(activeConversationIdRef.current);
         const activeRun = runsRef.current.get(activeKey);
-        const scheduledLive = runsRef.current.get(AUTOMATION_RUN_KEY) !== undefined;
-        setIsAnalysisInProgress(Boolean(activeRun?.inFlight) || scheduledLive);
+        setIsAnalysisInProgress(Boolean(activeRun?.inFlight));
     }, []);
 
     /**
@@ -475,7 +459,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         const run = runsRef.current.get(key);
         setLoadingMessage(run?.loadingMessage ?? null);
         setSteeringNotes(steeringRef.current.get(key) ?? []);
-        setIsAnalysisInProgress(Boolean(run?.inFlight) || runsRef.current.get(AUTOMATION_RUN_KEY) !== undefined);
+        setIsAnalysisInProgress(Boolean(run?.inFlight));
     }, [activeConversationId]);
 
     /**
@@ -527,26 +511,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         priorAnalysis?: TradeAnalysis;
         priorMessageId?: string;
         presetHybridData?: HybridDataPacket | null;
-        /**
-         * Automation run: the analysis executes with the automation's own
-         * mode/model overrides and its results are delivered via onMessage
-         * instead of being written to the active conversation. The run uses
-         * a private message list, so the main chat is never touched.
-         */
-        automation?: {
-            automationId: string;
-            /** Synthetic conversation providing leverage + thread summary. */
-            conversation: Conversation;
-            /** Per-run overrides; absent fields fall back to global settings. */
-            overrides?: {
-                moderatorConfig?: ProviderConfig;
-                moderatorModel?: string;
-            };
-            /** Delivered once with the complete user prompt + AI card, the turn's caveats and the plan ration's counts — the same fields `AutomationRunDelivery` declares in hooks/useAutomations.ts, spelled here because this hook must not import the scheduler that it is wired TO. */
-            onMessage: (run: { userMessage: Message; aiMessage: Message; notices?: string[]; plans?: { presented: number; refused: number } }) => void;
-            /** Delivered when the run fails (user-safe message). */
-            onError: (error: string) => void;
-        };
         /** Continue an interrupted debate from persisted turns. */
         resumeMessageId?: string;
         /** Same-thread ticket follow-up: reuse OCR, skip leftover composer charts. */
@@ -570,12 +534,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
          *  half of the old keyword trigger, with the keyword gone (20c). */
         fullAnalysis?: boolean;
     }): Promise<ChatRunOutcome> => {
-        const isAutomationRun = !!options?.automation;
-        // Run-scoped model overrides — a scheduled run may name its own
-        // moderator (fall back to the profile setting when absent).
-        const runModeratorConfig = options?.automation?.overrides?.moderatorConfig ?? moderatorConfig;
-        const runModeratorModel = options?.automation?.overrides?.moderatorModel ?? moderatorModel;
-
         // ── Composer + hybrid snapshots ──────────────────────────────────
         // These three used to be dependencies of this callback, which is the
         // wrong shape twice over: `input` and `images` change on every
@@ -612,21 +570,18 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // bubbles above the composer — no toast, the bubbles ARE the
             // receipt. At the next debate step they steer in-run; anything
             // still parked when the run ends drains as one follow-up turn
-            // (see the drain effect). Automation runs skip queueing — the
-            // scheduler checks the in-flight state itself before firing.
-            if (!isAutomationRun) {
-                const draft = typeof customPrompt === 'string' ? customPrompt : composerInput;
-                if (draft.trim()) {
-                    const intent = parseComposerIntent(draft.trim());
-                    // Parked into THIS conversation's queue. A correction typed
-                    // in one thread must drain into that thread, so the queue is
-                    // keyed the same way the runs are.
-                    setSteeringFor(activeConversationId, [
-                        ...steeringFor(activeConversationId),
-                        formatComposerSteer(intent) || draft.trim(),
-                    ]);
-                    setInput('');
-                }
+            // (see the drain effect).
+            const draft = typeof customPrompt === 'string' ? customPrompt : composerInput;
+            if (draft.trim()) {
+                const intent = parseComposerIntent(draft.trim());
+                // Parked into THIS conversation's queue. A correction typed
+                // in one thread must drain into that thread, so the queue is
+                // keyed the same way the runs are.
+                setSteeringFor(activeConversationId, [
+                    ...steeringFor(activeConversationId),
+                    formatComposerSteer(intent) || draft.trim(),
+                ]);
+                setInput('');
             }
             // Parked into the steering queue (it WILL run against the live
             // debate or as the end-of-run drain) — consumed, not failed.
@@ -724,24 +679,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             return { ok: false };
         }
 
-        // Moderator pre-flight belongs to the one path that still reads that
-        // pick: a scheduled run takes its answering seat from it (`automationSeatFor`
-        // below). A human send answers from the composer's own selection — one
-        // model, :1368 — so refusing a click over an unused moderator config is a
-        // block with nothing behind it. The check stays where the config is read.
-        if (isAutomationRun && !isProviderReady(runModeratorConfig)) {
-            appendBlockedRunNotice(
-                'This schedule has no model to answer with: pick the model in Settings → AI setup, make sure it is enabled and has an API key, then run this again.'
-            );
-            return { ok: false };
-        }
-
         // ─── TRADER NOTEBOOK QUICK-SAVE ────────────────────────────────
         // "Save this to the notebook" short-circuits the ensemble: no chart
         // analysis, just the notebook write + a confirmation message. The
         // model reads the current notebook index and decides skip / append /
         // create (see writeNotebookNoteFromRequest).
-        if (!isAutomationRun && isNotebookQuickSaveRequest(effectiveInput)) {
+        if (isNotebookQuickSaveRequest(effectiveInput)) {
             await runNotebookQuickSave(effectiveInput, {
                 provider: memoryConfig || enabledProviders[0]?.config,
                 setLoadingMessage,
@@ -769,27 +712,20 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // PREVIOUS run of THIS conversation is correct (a second send in the
         // same thread supersedes the first); aborting ANOTHER conversation's
         // run is exactly the defect E-45 removes.
-        //
-        // A SCHEDULED run owns no thread: it writes into a private message
-        // list, so it is filed under its own key. Filing it under the active
-        // conversation would (a) light that thread's "running" badge for a run
-        // that never writes to it, and (b) let a manual send in that thread
-        // abort the schedule — which is a behaviour change the schedule's own
-        // route did not ask for.
         const requestConversationId = activeConversationId;
-        const requestRunKey = isAutomationRun ? AUTOMATION_RUN_KEY : runKeyFor(activeConversationId);
+        const requestRunKey = runKeyFor(activeConversationId);
         const previousRun = runsRef.current.get(requestRunKey);
         previousRun?.controller.abort();
         const currentAbortController = new AbortController();
         const runOwner = getActiveUsername();
         runsRef.current.set(requestRunKey, {
             controller: currentAbortController,
-            conversationId: isAutomationRun ? null : requestConversationId,
+            conversationId: requestConversationId,
             owner: runOwner,
             loadingMessage: null,
             inFlight: true,
         });
-        if (!isAutomationRun) beginConversationRun(requestConversationId ?? '', currentAbortController);
+        beginConversationRun(requestConversationId ?? '', currentAbortController);
         setSteeringFor(requestConversationId, []);
         seatSteeringRef.current = {};
         stoppedSeatsRef.current = new Set();
@@ -797,12 +733,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // request. This remains correct even if the user switches conversations
         // before a provider response or stream chunk arrives.
         const updateRequestMessages = (updater: (prevMessages: Message[]) => Message[]): void => {
-            if (isAutomationRun) {
-                // Automation runs keep a PRIVATE message list — the main
-                // conversation is never touched.
-                automationMessagesRef.current = updater(automationMessagesRef.current);
-                return;
-            }
             // A run never writes across a profile change. The profile switch
             // (hooks/useUserProfileLoader.ts) cancels BEFORE the username
             // flips, so its cancel cannot see that the trader changed; THIS is
@@ -832,7 +762,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             }
         };
 
-        if (imagesToUse.length > 0 && !isAutomationRun) {
+        if (imagesToUse.length > 0) {
             const visionData = imagesToUse.map(img => img.fullAnalysisText || `Chart ${imagesToUse.indexOf(img) + 1}: No analysis text available.`);
             setCurrentVisionData(visionData);
         }
@@ -853,7 +783,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // one. A surface that ALREADY has an instrument selected is not a bare
         // greeting, so it must not be nagged about one it is effectively
         // supplying.
-        if (!isAutomationRun && imagesToUse.length === 0 && !canResume
+        if (imagesToUse.length === 0 && !canResume
             && !extractSymbolFromPrompt(effectiveInput) && !options?.symbol) {
             toast.warning('Tip: include a coin', 'For a full analysis add a symbol like BTC, SOL or ETH — e.g. “analyze BTC”.');
         }
@@ -885,12 +815,8 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // cancel/error text on this row's `ensembleProgress`, and that guard goes
         // with it, so an interrupted run settles the answer row and nothing else.
         updateRequestMessages(prev => [...prev, userMessage]);
-        // Automation runs must not clear the composer (the user may be
-        // mid-draft while a scheduled run fires).
-        if (!isAutomationRun) {
-            setInput('');
-            setImages([]);
-        }
+        setInput('');
+        setImages([]);
 
         
         // Only claim the hybrid fetch when the feature is ON — the old
@@ -917,12 +843,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             && cachedHybridAgeMs <= HYBRID_REUSE_MAX_AGE_MS
             ? hybridAtSend
             : null;
-        // Hybrid intelligence: a SCHEDULED run always fetches real-time market
-        // data (that data IS the point of an automated analysis). A manual send
-        // no longer does — the seat pulls the same packet on demand through the
-        // get_market_packet desk tool, so an ordinary chat answer cannot spend
-        // an exchange round trip it never asked for.
-        const runHybridEnabled = isAutomationRun || isHybridIntelligenceEnabled;
+        // A manual send pulls the tape on demand through the desk tools; the
+        // only packet folded into the prompt here is one an upstream capture
+        // already fetched (auto-capture).
         let freshHybridData: HybridDataPacket | null = cachedHybridData;
         if (options?.presetHybridData) {
             setCurrentHybridData(options.presetHybridData);
@@ -939,15 +862,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         // tried (modelsUsed), so a failed 1:1 bot reply surfaces INSIDE that
         // bot's thread instead of vanishing from the scoped view.
         let casualErrorAttribution: Record<string, string> | undefined;
-        // Automation runs redirect message writes to a private list and mute
-        // the chat UI (loading text, step tracker, hybrid panel). The flag is
-        // set HERE — after every pre-flight early return — not at the top of
-        // the function: an automation that exits early (in-flight park, 429,
-        // no ready provider, blocked roster) used to leave it `true` and mute
-        // the step tracker of the manual run that was concurrently in flight.
-        // The `finally` below resets it, so set+reset are now paired.
-        automationSilentRef.current = isAutomationRun;
-        if (isAutomationRun) automationMessagesRef.current = [];
         try {
             // The prompt A/B lane is a VALUE decided per run, begun BEFORE any
             // prompt is resolved. It used to be a module flag flipped here and
@@ -967,9 +881,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // row can be grouped by the prompt that produced it — the version and
             // the lane are one measurement, not two. (O-47)
             const promptVersion = promptCorpusVersion(promptLane);
-            const currentMessages = isAutomationRun
-                ? [...(options?.automation?.conversation.messages ?? []), userMessage]
-                : [...messagesRef.current, userMessage];
+            const currentMessages = [...messagesRef.current, userMessage];
                         // Debate template steering rides the custom instructions so every
             // seat + the moderator see the framing (Scalp / Swing / Devil's
             // advocate / Risk-only).
@@ -984,72 +896,13 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // nested function can read it (hybridResult is block-scoped).
             
             // Skip fetching if preset data was already passed (from auto-capture)
-            let hybridDataInjection = '';
             devLog('[Hybrid Intelligence] ======= START =======');
             devLog('[Hybrid Intelligence] Enabled:', isHybridIntelligenceEnabled);
             devLog('[Hybrid Intelligence] HasPresetData:', !!options?.presetHybridData);
             devLog('[Hybrid Intelligence] User prompt:', effectiveInput);
-            // The toggle gates the fetch: with Hybrid Intelligence OFF no data
-            // is fetched and nothing is injected into the analyst prompts.
-            // Preset data (auto-capture) always wins — it was explicitly
-            // fetched for this analysis, so it is injected below regardless.
-            if (isAutomationRun && runHybridEnabled && !options?.presetHybridData) {
-                try {
-                    devLog('[Hybrid Intelligence] Attempting to fetch data for prompt:', effectiveInput);
-                    if (!isAutomationRun) setLoadingFor(requestConversationId, 'Fetching real-time market data...');
-                    const hybridResult = await tryFetchHybridDataFromPromptWithCalibration(
-                        effectiveInput,
-                        GlobalLearningService.getCalibration()
-                    );
-                    if (!isCurrentRequest()) assertCurrentRequest();
-                    if (!isAutomationRun) setIsHybridLoading(false);
-                    if (hybridResult) {
-                        // Use enhanced injection which includes calibration data
-                        hybridDataInjection = hybridResult.enhancedInjection || hybridResult.promptInjection;
-                        if (!isAutomationRun) setCurrentHybridData(hybridResult.data); // Store for UI display
-                        freshHybridData = hybridResult.data; // Use local var downstream (state is stale in this closure)
-
-                        // Store correlation risk if available - helpful for UI later
-                        if (hybridResult.correlationRisk) {
-                            devLog('[Hybrid Intelligence] Correlation Risk Score:', hybridResult.correlationRisk.correlationRiskScore);
-                        }
-
-                        devLog('[Hybrid Intelligence] SUCCESS - Got data for:', hybridResult.data.symbol);
-
-                        // Regime ledger (Macro-lens memory): record today's
-                        // regime for this coin so the regime seat can say "day 4
-                        // of ranging" instead of starting blank every run.
-                        // Fire-and-forget; deduped per coin×day.
-                        try {
-                            const ledgerRegime = marketRegimeToLedger(hybridResult.data.regime?.regime);
-                            if (hybridResult.data.symbol && ledgerRegime) {
-                                void recordRegimeDay(
-                                    { coin: hybridResult.data.symbol, regime: ledgerRegime, source: 'hybrid' },
-                                    getActiveUsername(),
-                                ).catch(() => { /* ledger is best-effort */ });
-                            }
-                        } catch { /* ledger is best-effort */ }
-
-                        devLog('[Hybrid Intelligence] Injection length:', hybridDataInjection.length);
-                        devLog('[Hybrid Intelligence] Injection preview:', hybridDataInjection.substring(0, 500));
-                    } else {
-                        devLog('[Hybrid Intelligence] FAILED - No symbol detected in prompt');
-                    }
-                } catch (hybridError) {
-                    if (!isCurrentRequest()) assertCurrentRequest();
-                    if (!isAutomationRun) setIsHybridLoading(false);
-                    console.error('[Hybrid Intelligence] ERROR fetching market data:', hybridError);
-                    if (!isAutomationRun) toast.warning('Hybrid data unavailable', 'Market data fetch failed — analysis will proceed without real-time data.');
-                }
-            } else if (options?.presetHybridData) {
-                // Auto-capture flow: the data was already fetched upstream —
-                // build the same injection so the three analysts still receive
-                // the hybrid market data in their prompts.
-                hybridDataInjection = generateHybridPromptInjection(options.presetHybridData);
-                devLog('[Hybrid Intelligence] SKIPPED - Using preset data from auto-capture');
-            } else {
-                devLog('[Hybrid Intelligence] SKIPPED - Feature not enabled');
-            }
+            // Preset data (auto-capture) reaches the prompt through
+            // `freshHybridData` below; no model turn fetches a packet implicit
+            // from its wording any more.
 
             // USER STRATEGIES (Settings → Strategies): enabled book summaries
             // are injected into every analyst prompt AND bundled with the
@@ -1211,112 +1064,9 @@ ${enhancedPrompt}`;
             // ========== END GATE KEEPER ==========
 
             devLog('[Hybrid Intelligence] Enhanced prompt length:', enhancedPrompt.length);
-            devLog('[Hybrid Intelligence] Has injection:', hybridDataInjection.length > 0);
             devLog('[AI Learning] Has learning injection:', learningInjection.length > 0);
             devLog('[Hybrid Intelligence] ======= END =======');
 
-            // ── What the SEND IS decides the branch; what it SAYS never did ────
-            // The routing predicate is the call itself: a scheduled run goes to
-            // the schedule arm below, and everything else answers through the
-            // tool turn. Prompt wording stopped being a route in stage 20c, and
-            // the ensemble toggle followed with the mode itself (owner ruling,
-            // 2026-10-19), so no branch remains for either to select.
-            if (isAutomationRun) {
-                // ── 20r: A SCHEDULED RUN ANSWERS WITH ITS TOOLS ────────────────
-                // The arm sits BEFORE the mode fork, not inside it, so one config
-                // has exactly one behaviour: the trader's ensemble toggle changes
-                // what a human send does and never what a schedule does. The run
-                // keeps the four properties stage 20t pinned — private thread
-                // (`automationMessagesRef`, built by `useAutomations`), its own
-                // continuity (the history in `currentMessages`), its own model
-                // pick (`automationSeatFor`), and a verdict row a human can act
-                // on — and gains two it never had: a ration on how many plans a
-                // schedule may present, and a failure the card cannot hide.
-                const automationId = options?.automation?.automationId ?? '';
-                const seat = automationSeatFor(
-                    runModeratorConfig ?? undefined,
-                    runModeratorModel,
-                    [],
-                    providerConfigs,
-                );
-                if (!seat) {
-                    // A schedule with no ready model is a FAILURE the trader sees,
-                    // not a run that silently produced nothing.
-                    options?.automation?.onError?.(
-                        'No AI model is ready for this schedule: its configured provider is disabled, has no API key, or no longer offers that model. Re-pick it in the automation editor.',
-                    );
-                    return { ok: false };
-                }
-                // A schedule is live: it has no thread of its own, so the
-                // app-level flag is re-derived rather than set — the flag means
-                // "the conversation on screen is running, or a schedule is".
-                syncProgressFlag();
-                const turnStartedAt = Date.now();
-                const out = await runAutomationTurn({
-                    config: seat.config,
-                    history: currentMessages,
-                    prompt: promptToSend,
-                    // A replayed chart from "repeat the last manual analysis" is
-                    // SENT, as a real image part — the same contract the Chat
-                    // surface got in 20b.
-                    image: dataURLs[0],
-                    symbol: finalSymbol ?? options?.symbol ?? null,
-                    interval: options?.interval,
-                    trades: loggedTrades,
-                    username: getActiveUsername(),
-                    automationId,
-                    signal: currentAbortController.signal,
-                    startedAt: turnStartedAt,
-                });
-                // A Stop on a scheduled run lands in the existing cancel path
-                // (`cancelled` → `{ ok: true }` → the scheduler settles it as
-                // 'skipped'), so a cut run is never written as if it finished.
-                if (!isCurrentRequest()) assertCurrentRequest();
-                const scheduleText = [out.text, ...out.notices].filter(part => part.trim()).join('\n\n');
-                const scheduleMessage: Message = {
-                    id: `ai-${Date.now()}`,
-                    role: MessageRole.AI,
-                    text: scheduleText,
-                    createdAt: new Date().toISOString(),
-                    modelsUsed: { [seat.config.id]: seat.model },
-                    thoughtProcesses: out.reasoning.trim() ? { [seat.config.id]: out.reasoning } : undefined,
-                    // The trail, one line per entry — the settled work card
-                    // draws these rows. The live feed beside it is the capped,
-                    // newline-joined version a bubble shows while it fills.
-                    toolEvents: out.toolLines.length ? [...out.toolLines] : undefined,
-                    liveToolEvents: out.toolLines.length ? { desk: out.toolLines.join('\n') } : undefined,
-                    injectedSkills: out.skills.length ? out.skills : undefined,
-                    ...(out.proposal ? { proposal: out.proposal, planId: out.proposal.planId } : {}),
-                    runStats: {
-                        runId: `schedule-${userMessage.id}`,
-                        // The A/B pair the profile card summarizes: written here,
-                        // read by `useTradeLogging` when the plan is logged, so the
-                        // lane a trade was answered under survives into the journal
-                        // row instead of dying with the run.
-                        promptLane,
-                        promptVersion,
-                        startedAt: new Date(turnStartedAt).toISOString(),
-                        finishedAt: new Date(turnStartedAt + out.workedMs).toISOString(),
-                        durationMs: out.workedMs,
-                        // The tier the schedule actually ran under, carried out
-                        // of the executor — a schedule answers with the SAME
-                        // tools as a human turn, so its row shows the tier
-                        // too.
-                        effort: out.effort,
-                    },
-                    imageSummaries: userMessage.imageSummaries,
-                };
-                // The side-effect ledger rides through the ONE cap helper, so a
-                // schedule's rows are trimmed exactly like a chat row's.
-                const aiMessage = appendToolActions([scheduleMessage], scheduleMessage.id, out.actions)[0];
-                updateRequestMessages(prev => [...prev, aiMessage]);
-                options?.automation?.onMessage({
-                    userMessage,
-                    aiMessage,
-                    ...(out.notices.length ? { notices: out.notices } : {}), ...(out.plansPresented || out.refusedPlans ? { plans: { presented: out.plansPresented, refused: out.refusedPlans } } : {}),
-                });
-                return { ok: true };
-            }
             // Casual chat: use the user-selected model when it maps to a
             // ready provider; otherwise fall back to the first ready
             // provider (previous behavior).
@@ -1517,8 +1267,7 @@ ${enhancedPrompt}`;
             if (useBotThread && activeBot && onBotReply) {
                 try { onBotReply(streamingMessageId, casualSplit.output || responseText); } catch { /* mailbox must never break the reply */ }
             }
-            // End of the try — the run completed (or, for automation runs,
-            // delivered through its own onMessage callback). Success.
+            // End of the try — the run completed. Success.
             return { ok: true };
         } catch (error: any) {
             // Runs for BOTH errors and user cancels. Previously the
@@ -1602,17 +1351,11 @@ ${enhancedPrompt}`;
             // though the seat had said the app's own error hint.
             updateRequestMessages(prev => [...prev, { id: `err-${Date.now()}`, role: MessageRole.SYSTEM, createdAt: new Date().toISOString(), text: safeMessage, error: safeMessage, retryOf: { userMessageId: userMessage.id }, modelsUsed: casualErrorAttribution }]);
 
-            // Automation runs surface failures through their own callback
-            // (the error bubble above lands in the private list).
-            if (isAutomationRun) {
-                options?.automation?.onError?.(safeMessage || 'Automation run failed.');
-            }
             // The generic error-bubble path: the analysis FAILED internally.
             // ok:false is what keeps an offline-queue replay on the
             // retry/backoff path instead of dequeuing a dead run (§2.3).
             return { ok: false };
         } finally {
-            automationSilentRef.current = false;
             // Release THIS run only. A run that is not the owner of its key
             // has already been replaced by a newer one in the same
             // conversation, which owns the state from there on.

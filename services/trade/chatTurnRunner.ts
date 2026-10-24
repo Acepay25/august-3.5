@@ -1087,7 +1087,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 // THE TURN HAS TO TEACH THE BOT. `recordBotTurnOutcome` writes
                 // the lesson into this bot's own memory.md and feeds a closed
                 // bot-authored trade into the shared skills/evidence path. The
-                // mailbox, the group rooms and the automations all call it on
+                // mailbox and the group rooms both call it on
                 // every reply — this dock did not, so asking a bot something
                 // in Chart AI taught it NOTHING, while the same question in
                 // the Chat surface did. A bot's memory was whichever surface

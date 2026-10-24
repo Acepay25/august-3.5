@@ -15,7 +15,7 @@ import { LoadingIcon, CheckIcon, CloudOffIcon, AlertTriangleIcon } from '../shar
 interface StatusClusterProps {
     saveStatus: 'SAVED' | 'SAVING' | 'ERROR';
     isOnline?: boolean;
-    /** Opens the Activity drawer: background jobs, skill audits, automations. */
+    /** Opens the Activity drawer: the app’s detached skill evaluations. */
     onOpenActivity?: () => void;
     /** Whether that drawer is standing open. The button is an OPENER, not a
      *  toggle — with the drawer out, pressing it again correctly does nothing —
@@ -55,7 +55,7 @@ const StatusCluster: React.FC<StatusClusterProps> = ({
         {/* Approvals is NOT here — the Activity drawer owns that queue (WS-5.2),
             and this tray used to repeat it under a second name. Activity is the
             drawer's only opener and sits outside the desktop-only styling: touch
-            never had a path to the job queue, and the rail's automations section
+            never had a path to the job queue, and the rail's automation section
             landed in this drawer (stage 3). Pinned signals moved to the Trade
             surface's market row — a trading tool, not global chrome. */}
         {onOpenActivity && (
@@ -67,7 +67,7 @@ const StatusCluster: React.FC<StatusClusterProps> = ({
                     aria-expanded={activityOpen}
                     aria-controls="activity-drawer"
                     className="inline-flex items-center rounded-control px-2.5 py-1 text-ui-dense font-semibold text-zinc-400 transition-colors hover:bg-zinc-700/60 hover:text-zinc-100"
-                    title="Activity — background jobs, skill audits, automations"
+                    title="Activity — background jobs and skill audits"
                     aria-label="Activity"
                 >
                     <span>Activity</span>

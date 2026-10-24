@@ -112,7 +112,7 @@ export const getPreferenceObject = async <T>(key: string): Promise<T | null> => 
 
 /**
  * Get a JSON ARRAY with a runtime check — the hardened read for the many
- * list-shaped prefs (automations, pass records, injection logs, tombstones).
+ * list-shaped prefs (pass records, injection logs, tombstones).
  * getPreferenceObject is `as T` with no check: a legacy/corrupted/foreign
  * blob (an object, a number, an array of junk items) used to flow straight
  * into callers' `.map`/`.filter`/`.slice` chains.

@@ -38,7 +38,7 @@ import {
     SKILL_EVAL_MAX_TRADES,
 } from './SkillEvalService';
 import { getMemoryFilesContext, SKILL_BLOCK_MAX } from './MemoryRetrievalService';
-import { AUTOMATION_EVALUATION_TOOLS } from '../trade/automationTurn';
+import { DETACHED_EVAL_TOOLS } from '../trade/unattendedTools';
 
 /** Minimum closed trades since a skill's last eval before it becomes due again. */
 export const EVAL_MIN_TRADES_BETWEEN = 10;
@@ -296,9 +296,9 @@ export const buildDefaultRunner = (
                 // never fires (an empty list means unrestricted), so an eval
                 // fired from the trade-sync path could call propose_skill,
                 // forge_tool or any forged custom_* tool with nobody watching.
-                // The automation list minus the two acting tools; the deny-list
-                // in `automationTurn` remains the one owner of that policy.
-                allowedTools: AUTOMATION_EVALUATION_TOOLS,
+                // The unattended read set minus the two acting tools; the deny
+                // list in `services/trade/unattendedTools.ts` is its one owner.
+                allowedTools: DETACHED_EVAL_TOOLS,
             });
             return {
                 confidence: typeof analysis.confidence === 'string' ? analysis.confidence : undefined,
