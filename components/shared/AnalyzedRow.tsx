@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronRight } from './Icons';
+import { formatElapsed } from './elapsed';
 import { subscribeSharedTicker } from '../../hooks/useSharedTicker';
 
 export interface AnalyzedRowProps {
@@ -109,10 +110,10 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
     // nothing. A reasoning-only turn keeps "Analyzed for Ns", where the
     // duration is the only thing that happened.
     const detail = running
-        ? (seconds !== null ? (runningActivity ? ` · ${seconds}s` : ` for ${seconds}s`) : '')
+        ? (seconds !== null ? (runningActivity ? ` · ${formatElapsed(seconds)}` : ` for ${formatElapsed(seconds)}`) : '')
         : ranTools
             ? (title ? ` · ${title.charAt(0).toLowerCase()}${title.slice(1)}` : '')
-            : (seconds !== null ? ` for ${seconds}s` : '') + (title ? ` · ${title.charAt(0).toLowerCase()}${title.slice(1)}` : '');
+            : (seconds !== null ? ` for ${formatElapsed(seconds)}` : '') + (title ? ` · ${title.charAt(0).toLowerCase()}${title.slice(1)}` : '');
 
     return (
         <details

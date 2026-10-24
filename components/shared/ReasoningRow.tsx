@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Brain, Lightbulb } from './Icons';
+import { formatElapsed } from './elapsed';
 import { stripTraceMarkers, traceLines } from '../../utils/traceText';
 import { subscribeSharedTicker } from '../../hooks/useSharedTicker';
 import Disclosure from './Disclosure';
@@ -114,7 +115,7 @@ const ReasoningRow: React.FC<ReasoningRowProps> = ({
     if (!trimmed) return null;
 
     const seconds = running ? liveSeconds : settledSeconds;
-    const meta = seconds !== null ? `${seconds}s` : null;
+    const meta = seconds !== null ? formatElapsed(seconds) : null;
 
     // Inner truncation applies to the SETTLED expanded body only — a live
     // stream shows everything (the user opened it deliberately mid-run).
