@@ -37,7 +37,7 @@ import { familyRegimeEdge, matrixSummaryBlock, hydrateStrategyRegimeMatrix, getS
 import { classifyStrategyFamily } from '../../utils/strategyFamily';
 import { normalizeStrategyFamily, STRATEGY_FAMILIES, type StrategyFamily } from '../../types/strategy';
 import { getActiveUsername } from '../../utils/activeUser';
-import { importSkillFiles, readSkillFiles } from '../../services/learning/SkillImportService';
+import { importSkillFiles, readSkillFiles, fetchSkillFromUrl } from '../../services/learning/SkillImportService';
 import { subscribeMemoryFilesChanged } from '../../services/learning/MemoryFilesService';
 import { consumePendingSkillOpen } from '../chat/skillDeepLink';
 import { useToastActions } from '../shared/Toast';
@@ -405,6 +405,26 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
         });
     };
 
+    const [skillUrl, setSkillUrl] = useState('');
+    const [isFetchingUrl, setIsFetchingUrl] = useState(false);
+    const onImportUrl = async (): Promise<void> => {
+        if (!skillUrl.trim() || isFetchingUrl) return;
+        setIsFetchingUrl(true);
+        try {
+            const fetched = await fetchSkillFromUrl(skillUrl);
+            if (fetched.error || !fetched.content) {
+                toast.error('Import failed', fetched.error ?? 'The URL returned nothing readable.');
+                return;
+            }
+            const result = await importSkillFiles([{ name: fetched.name ?? 'imported-skill.md', content: fetched.content }]);
+            if (result.imported.length > 0) toast.success('Skill imported', `"${result.imported[0]}" added from the URL — scanned and stored as text only.`);
+            for (const fail of result.failed) toast.error(`Import failed: ${fail.name}`, fail.reason);
+            setSkillUrl('');
+        } finally {
+            setIsFetchingUrl(false);
+        }
+    };
+
     const onImportFiles = async (picked: FileList | null): Promise<void> => {
         if (!picked || picked.length === 0 || isImporting) return;
         setIsImporting(true);
@@ -489,6 +509,24 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                             onChange={e => { const picked = e.target.files; e.target.value = ''; void onImportFiles(picked); }}
                         />
                     </label>
+                    <input
+                        type="url"
+                        value={skillUrl}
+                        onChange={e => setSkillUrl(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void onImportUrl(); } }}
+                        placeholder="…or paste a raw SKILL.md URL"
+                        data-testid="skills-import-url"
+                        className="w-52 shrink-0 rounded-control border border-white/10 bg-zinc-950 px-2 py-1.5 text-ui-dense text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+                    />
+                    <button
+                        type="button"
+                        disabled={!skillUrl.trim() || isFetchingUrl}
+                        onClick={() => void onImportUrl()}
+                        data-testid="skills-import-url-go"
+                        className="inline-flex shrink-0 cursor-pointer items-center rounded-control border border-white/10 bg-zinc-800 px-2 py-1.5 text-ui-dense font-bold uppercase tracking-wider text-zinc-300 transition-colors duration-[120ms] ease-[var(--ease-snappy)] hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        {isFetchingUrl ? 'Fetching…' : 'Fetch'}
+                    </button>
                     {onOpenStrategySearch && (
                         <button
                             type="button"

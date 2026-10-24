@@ -10,7 +10,7 @@
  */
 
 import { parseSkillMarkdown } from './SkillMemoryService';
-import { skillFaceIssues } from '../../utils/skillFrontmatter';
+import { skillFaceIssues, skillBodyCaps, hasUseWhenTrigger, scanSkillText } from '../../utils/skillFrontmatter';
 import { createMemoryFile, getMemoryFiles } from './MemoryFilesService';
 import { getActiveUsername } from '../../utils/activeUser';
 import { slugifyName } from './MemoryFilesService';
@@ -99,6 +99,11 @@ export const importSkillFiles = async (files: Array<SkillFileRead & { content: s
             for (const g of group) if (g !== skillEntry) singles.push(g.file);
             continue;
         }
+        const groupFindings = group.flatMap(g => scanSkillText(g.file.content).map(f => `${g.file.relPath ?? g.file.name}: ${f.what}`));
+        if (groupFindings.length > 0) {
+            result.failed.push({ name: skillEntry.file.name, reason: `refused by the import scan: ${groupFindings.join('; ')}` });
+            continue;
+        }
         // The skill's slug: the spec-shaped frontmatter name when valid, else
         // the folder it arrived in — the folder is what the author called it.
         const slug = meta.name && /^[a-z0-9][a-z0-9-]*$/.test(meta.name) && meta.name.length <= 64
@@ -130,6 +135,23 @@ export const importSkillFiles = async (files: Array<SkillFileRead & { content: s
             result.failed.push({ name: file.name, reason: meta ? 'empty body' : 'Not a skill file — missing or invalid skill frontmatter' });
             continue;
         }
+        // The import scan (item 6): destructive or exfiltrating text REFUSES
+        // the file with the finding named — a procedure that phones home or
+        // wipes a disk is not a procedure this app stores, whatever the
+        // frontmatter says. Nothing auto-runs either way; the scan is what
+        // keeps the text from ever sitting in the library as a loaded recipe.
+        const findings = scanSkillText(file.content);
+        if (findings.length > 0) {
+            result.failed.push({ name: file.name, reason: `refused by the import scan: ${findings.map(f => f.what).join('; ')}` });
+            continue;
+        }
+        const caps = skillBodyCaps(meta.body);
+        if (caps.overHard) {
+            result.failed.push({ name: file.name, reason: `body is ${caps.chars.toLocaleString()} chars — over the 100k hard cap; move material into references/` });
+            continue;
+        }
+        if (caps.overSoft) console.warn(`[Skills] import "${file.name}": ${caps.lines} lines is over the ~200-line soft cap — long material belongs in a bundled references/ file`);
+        if (!hasUseWhenTrigger(meta.description ?? '')) console.warn(`[Skills] import "${file.name}": the description has no "Use when" trigger — it is the activation key, and a vague one rarely activates`);
         // The SKILL.md name/description contract is WARNED on, not enforced:
         // August's own exports carry prose titles in `name:`, and the contract
         // governs third-party files, not this profile's own round-trips. An
@@ -165,6 +187,32 @@ export const importSkillFiles = async (files: Array<SkillFileRead & { content: s
         }
     }
     return result;
+};
+
+/** Fetch ONE raw SKILL.md from a URL (item 6). Text only, 15s timeout, a
+ *  sane size cap; the caller then treats it exactly like a pasted file —
+ *  same validation, same scan, same confirmation the importer UI already
+ *  requires. A network failure is a returned error, never a throw. */
+export interface UrlSkillFetch {
+    name?: string;
+    content?: string;
+    error?: string;
+}
+
+export const fetchSkillFromUrl = async (rawUrl: string): Promise<UrlSkillFetch> => {
+    const url = rawUrl.trim();
+    if (!/^https:\/\//i.test(url)) return { error: 'only https:// URLs are fetched' };
+    try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+        if (!res.ok) return { error: `the URL answered ${res.status}` };
+        const text = await res.text();
+        if (text.length > 400_000) return { error: `the URL returned ${(text.length / 1000).toFixed(0)}kB of text — over the 400kB fetch cap` };
+        const slug = decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() ?? '')
+            .replace(/\.md$/i, '') || 'imported-skill';
+        return { name: `${slug}.md`, content: text };
+    } catch (err) {
+        return { error: err instanceof Error ? (err.name === 'TimeoutError' ? 'the fetch timed out after 15s' : err.message) : String(err) };
+    }
 };
 
 /** Read a FileList of .md files into per-file outcomes. One unreadable

@@ -120,7 +120,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <div class="tier">
  <div class="n run"><b>runToolTurn — the ONE turn executor</b><i>services/trade/toolTurn.ts:131 · owns the TRANSITION, the caller owns the ROW</i></div>
  <div class="n"><b>streamChatWithDeskTools</b><i>toolTurn.ts:174 → DeskToolsService → streamChatRequest</i></div>
- <div class="n"><b>the dock's prompt</b><i>systemPromptFor TradeChatPanel.tsx:438 = TRADE_CHAT_SYSTEM_PROMPT + skills + strategies + profile + persona</i></div>
+ <div class="n"><b>the dock's prompt</b><i>systemPromptFor TradeChatPanel.tsx:431 = TRADE_CHAT_SYSTEM_PROMPT + skills + strategies + profile + persona</i></div>
 </div>
 <div class="down">↓ the Chat surface's non-bot branch also enters the pipeline ↓</div>
 <div class="tier">
@@ -133,8 +133,8 @@ body{padding:24px;max-width:1180px;margin:0 auto}
   <div class="n run"><b>streamQuickResponse</b><i>hooks/useAnalysisPipeline.ts:1132 → GenericAnalysisService, tier via resolveComposerEffort</i></div>
  </div></div>
  <div class="col"><h3>no — the desk, WITH its tools</h3><div class="flow">
-  <div class="n run"><b>runChatSurfaceTurn</b><i>services/trade/chatSurfaceTurn.ts:255 · tools from CHAT_SURFACE_TOOLS :59</i></div>
-  <div class="n"><b>prompt — services/trade/chatSurfaceTurn.ts:149 chatSurfaceSystemPrompt</b><i>CHAT_SURFACE_SYSTEM_PROMPT chatPrompts.ts:40 (the casual prompt + a calling mandate + "NO CHART HERE") + skills index + active strategies + memory index, read fresh per turn; the 30 slugs printed are the 30 recorded on the row (types/message.ts:326)</i></div>
+  <div class="n run"><b>runChatSurfaceTurn</b><i>services/trade/chatSurfaceTurn.ts:258 · tools from CHAT_SURFACE_TOOLS :60</i></div>
+  <div class="n"><b>prompt — services/trade/chatSurfaceTurn.ts:134 chatSurfaceSystemPrompt</b><i>CHAT_SURFACE_SYSTEM_PROMPT chatPrompts.ts:40 (the casual prompt + a calling mandate + "NO CHART HERE") + skills index + active strategies + memory index, read fresh per turn; the 30 slugs printed are the 30 recorded on the row (types/message.ts:326)</i></div>
   <div class="n"><b>→ back into runToolTurn</b><i>arrow 17</i></div>
  </div></div>
  <div class="col"><h3>true → the ensemble branch (ENGINE deleted; one tool turn answers, no seat refusals)</h3><div class="flow">
@@ -388,13 +388,13 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>16</td><td>solo → runSeatTurn</td><td><code>services/trade/chatTurnRunner.ts:1033</code> (definition <code>chatTurnRunner.ts:581</code>)</td></tr>
 <tr><td>17</td><td>runSeatTurn → the ONE turn executor</td><td><code>runToolTurn toolTurn.ts:131</code> → <code>streamChatWithDeskTools :174</code> → <code>DeskToolsService</code> → <code>streamChatRequest</code></td></tr>
 <tr><td>18</td><td>panel → per-seat + mailbox</td><td><code>services/trade/chatTurnRunner.ts:1196</code> · <code>chatTurnRunner.ts:1124</code> · <code>chatTurnRunner.ts:1136</code></td></tr>
-<tr><td>19</td><td>systemPromptFor → prompt</td><td><code>TRADE_CHAT_SYSTEM_PROMPT</code> + skills + strategies + profile + persona <code>TradeChatPanel.tsx:438</code>, assembled <code>:485</code></td></tr>
+<tr><td>19</td><td>systemPromptFor → prompt</td><td><code>TRADE_CHAT_SYSTEM_PROMPT</code> + skills + strategies + profile + persona <code>TradeChatPanel.tsx:431</code>, assembled <code>:485</code></td></tr>
 <tr><td>20</td><td>every dock turn → chatStore</td><td><code>mutate services/trade/chatStore.ts:361</code> · <code>beginRun services/trade/chatStore.ts:508</code></td></tr>
 <tr><td>21</td><td>handleSendMessage → the fork</td><td>the fork is gone (19): a bot thread streams <code>hooks/useAnalysisPipeline.ts:1132</code>, anything else runs the tool turn <code>:1158</code>; the ensemble flag and the roster it fed are gone (2026-10-19)</td></tr>
-<tr><td>22</td><td>the casual arms</td><td>a bot thread → <code>streamQuickResponse useAnalysisPipeline.ts:1132</code> (plain transport); the desk → <code>runChatSurfaceTurn chatSurfaceTurn.ts:255</code> → arrow 17. Tier on both via <code>resolveComposerEffort</code>; a Full-analysis send also sets <code>requireTools</code></td></tr>
+<tr><td>22</td><td>the casual arms</td><td>a bot thread → <code>streamQuickResponse useAnalysisPipeline.ts:1132</code> (plain transport); the desk → <code>runChatSurfaceTurn chatSurfaceTurn.ts:258</code> → arrow 17. Tier on both via <code>resolveComposerEffort</code>; a Full-analysis send also sets <code>requireTools</code></td></tr>
 <tr><td>23</td><td>casual frames → Message.text</td><td><code>hooks/analysisPipeline/streamThrottlers.ts:28</code>; flush precedes the settle write <code>useAnalysisPipeline.ts</code></td></tr>
 <tr><td>24</td><td>ensemble → the stages that survive</td><td>see C — five of the old eight are gone from the call path, and no stage is named in the code, so no line number is claimed</td></tr>
-<tr><td>25</td><td>desk tools → what a caller can reach</td><td><code>executeDeskTool services/analysis/DeskToolsService.ts:2525</code> (its allow-list is enforced at execution, not only at offer time)</td></tr>
+<tr><td>25</td><td>desk tools → what a caller can reach</td><td><code>executeDeskTool services/analysis/DeskToolsService.ts:2526</code> (its allow-list is enforced at execution, not only at offer time)</td></tr>
 <tr><td>26</td><td>panel tools → chart echo</td><td><code>executePanelTool services/trade/chatTurnRunner.ts:327</code> is what echoes the result back into the panel</td></tr>
 <tr><td>27</td><td>automation tick → runAutomation</td><td><b>DELETED</b> (2026-10-24, owner request): the surface, the scheduler, the plan ration, the breaker and the bot-scoped routine executor — see E. The row number is kept so the arrows below keep pointing at their stages</td></tr>
 <tr><td>29</td><td>rooms → groupRounds</td><td><code>useAgentGroups hooks/useAgentGroups.ts:75</code> → <code>streamQuickResponse services/providers/GenericAnalysisService.ts:605</code></td></tr>
@@ -414,7 +414,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>43</td><td>approval tray → badge</td><td><code>collectApprovalItems</code> → <code>approvalsWaiting</code> → Knowledge tab only</td></tr>
 <tr><td>44</td><td>the pane filters what it shows</td><td><code>agentThreads.ts</code> read at <code>AgentsView.tsx</code></td></tr>
 <tr><td>45</td><td><code>present_trade</code> → a card in either home</td><td><code>runPresentTrade presentTradeTool.ts:78</code> ← dock sink <code>chatTurnRunner.ts</code> / desk sink <code>chatSurfaceTurn.ts</code>; gate scan starts there, the cap binds at log time (<code>ensureStamp services/trade/proposalGate.ts:317</code>), and the same stamp answers for the shape of the plan — <code>assessPlanShape services/trade/proposalGate.ts:152</code> refuses an inverted one and warns on a sub-floor ratio or an out-of-band stop, per ruling (c), E-57 §5</td></tr>
-<tr><td>46</td><td><code>chatSurfaceSystemPrompt</code> → the desk arm's prompt</td><td><code>chatSurfaceTurn.ts:149</code> — mandate (<code>chatPrompts.ts:40</code>) + skills index + active strategies + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (<code>types/message.ts:326</code>)</td></tr>
+<tr><td>46</td><td><code>chatSurfaceSystemPrompt</code> → the desk arm's prompt</td><td><code>chatSurfaceTurn.ts:134</code> — mandate (<code>chatPrompts.ts:40</code>) + skills index + active strategies + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (<code>types/message.ts:326</code>)</td></tr>
 <tr><td>47</td><td>prose that never called the tool → the same decision</td><td><code>planFromProse services/trade/tradeShapedProse.ts:51</code> tradeShapedProse.ts reads the labelled entry/stop/target out of the row, parseTradeProposal decides whether that is a plan, and the chip mints the ONE plan-id shape (mintPlanId) before calling onLogProposedTrade</td></tr>
 <tr><td>48</td><td>a scheduled run → a rationed plan</td><td><b>DELETED with the feature</b>; the two live turn owners still ration nothing</td></tr>
 <tr><td>49</td><td>a schedule’s failure → the row and the toast</td><td><b>DELETED with the feature.</b> The rule it carried still binds anything unattended: a run that called nothing must not settle as a clean answer</td></tr>
@@ -424,7 +424,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>53</td><td>the chart gets its Entry/Stop/Target lines</td><td><code>latestChartVerdict(messages)</code> (<code>services/trade/chartData.ts</code>) is what App hands <code>TradeView</code> as <code>verdict</code>: the newest row carrying <code>Message.proposal</code>, with <code>Message.analysis</code> as the fallback for pre-debate history. Red-proved — the old selector keyed on the debate shapes and returned null for every tool-turn row. Gate state: render-probe PASSED on 2026-10-18 after these commits (zero pageerrors); it asserts no canvas overlay levels, so the drawn verdict line is still un-asserted, and lint / boot-probe / e2e remain unrun.</td></tr>
 <tr><td>54</td><td>request → context window</td><td><code>resolveContextWindow</code> (<code>utils/contextWindow.ts:136</code>) → <code>outputTokenBudget</code> (:187) / <code>promptTokenCeiling</code> (:169)</td></tr>
 <tr><td>55</td><td>array → compaction</td><td><code>compactForWire</code> (<code>services/providers/contextCompact.ts:343</code>) → <code>compactMessages</code> (:217); last user turn pinned</td></tr>
-<tr><td>56</td><td>tool round → bounded loop</td><td><code>runDeskToolLoop</code> (<code>services/analysis/DeskToolsService.ts:3706</code>) with the round/token/time caps</td></tr>
+<tr><td>56</td><td>tool round → bounded loop</td><td><code>runDeskToolLoop</code> (<code>services/analysis/DeskToolsService.ts:3672</code>) with the round/token/time caps</td></tr>
 <tr><td>57</td><td>tool result → artifact + payload</td><td><code>storeToolArtifact</code> (<code>services/analysis/toolArtifactStore.ts:82</code>) / <code>saveToolPayload</code> (<code>services/trade/toolPayloadStore.ts:110</code>)</td></tr>
 <tr><td>58</td><td>tool event → transcript trail</td><td><code>digestToolResult</code> (<code>DeskToolsService.ts:824</code>) → <code>Message.toolEvents</code>/<code>toolIds</code> → <code>ToolActivityRow</code></td></tr>
 <tr><td>59</td><td>wire decision → audit row</td><td><code>buildReasoningPatch</code> (<code>services/providers/reasoningControls.ts:271</code>) → <code>WireAuditEntry</code> → <code>WireAuditRow</code></td></tr>
