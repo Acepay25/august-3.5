@@ -46,5 +46,16 @@ all hold. Nothing retired was recreated; no parallel system added.
   authoring path; URL import with fetch-timeout + exfiltration/destructive scan.
 - **(f) item 18:** stated/inferred marker on the topics card; re-verify 13.
 
-Status per row updated in this file per commit. Later, still: autonomous evolution
+Status per row updated in this file per commit.
+
+## Landed (all six build items, 2026-10-24)
+
+- (a) `c1ab20b5` — the memory toggle gates the chat path and the dock.
+- (b) `b1ac29e3` — tag/sensitive/aliases/previous + `memoryWriteFilters`.
+- (c) `4204d7e8` — `promptIndexBudget`, one shared table scaled to the window.
+- (d) `0852c192` — the save chip label + Undo.
+- (e) `9ea71c5c` — caps, Use-when warn, `fetchSkillFromUrl`, `scanSkillText`.
+- (f) `59c213d9` — the sensitive toggle + the provenance markers.
+
+Contract layer: 84 assertions. Live chain re-verified after the changes. Later, still: autonomous evolution
 rails; `fallback_for_*`.
