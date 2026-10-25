@@ -22,7 +22,7 @@ import {
     clipNote, clipReceipt, dataUnavailable, findArtifactIdIn, findClipIn, harnessNoteLegend, harnessTurn,
     isDataUnavailable, MINIMAL_CLIP_NOTE, neutralizeHarnessNotes,
 } from '../../utils/harnessMarks';
-import { buildMemoryHints, isLikelySmallModel } from '../../utils/memoryHints';
+import { buildMemoryHints } from '../../utils/memoryHints';
 export { DATA_UNAVAILABLE_PREFIX, isDataUnavailable } from '../../utils/harnessMarks';
 import { HARNESS_CONTRACT_PROMPT } from '../../constants/prompts';
 import type { GoalPatch, GoalRef, GoalTrigger } from '../../schemas/goal';
@@ -1064,6 +1064,7 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     aliases: { type: 'array', items: { type: 'string' }, description: 'Optional extra match words for recall (e.g. ["bun"]). Max 8.' },
                     name: { type: 'string', description: 'Short name for a new entry, e.g. "User runs 15m scalps".' },
                     kind: { type: 'string', enum: ['user', 'feedback', 'project', 'reference'], description: 'Memory kind.' },
+                    subject: { type: 'string', enum: ['profile', 'preference', 'topic', 'area', 'person'], description: 'What the fact is ABOUT — the person or thing the claim concerns (optional; derived from kind when omitted). "person" for a fact about someone other than the trader.' },
                     description: { type: 'string', description: 'One line (≤140 chars) stating WHEN this memory matters — it decides future relevance.' },
                     body: { type: 'string', description: 'The fact itself. feedback/project bodies end with **Why:** and **How to apply:** lines.' },
                 },
@@ -2910,7 +2911,7 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                 // duplicates. The index rides every system prompt, so the model
                 // already sees what exists before choosing slug vs new.
                 try {
-                    const { normalizeKind, slugify } = await import('../learning/profileMemory');
+                    const { normalizeKind, normalizeSubject, slugify } = await import('../learning/profileMemory');
                     const { getActiveUsername } = await import('../../utils/activeUser');
                     const kind = normalizeKind(call.arguments.kind);
                     if (!kind) {
@@ -2953,7 +2954,15 @@ ${body}`);
                     const ifVersion = typeof ifVersionRaw === 'number' ? ifVersionRaw : undefined;
                     const { rememberWithConsolidation } = await import('../learning/profileMemoryConsolidation');
                     const consolidated = await rememberWithConsolidation(
-                        { slug, description, kind, body, source: 'model', ifVersion, tag: 'stated', sensitive: verdict.sensitive || undefined, aliases: aliasesRaw },
+                        {
+                            slug, description, kind, body, source: 'model', ifVersion,
+                            tag: 'stated', sensitive: verdict.sensitive || undefined,
+                            aliases: aliasesRaw,
+                            subject: normalizeSubject(call.arguments.subject) ?? undefined,
+                            // The conversation the fact was heard in. A fact the
+                            // trader cannot place is a fact they cannot audit.
+                            sourceSession: context.sessionId ?? undefined,
+                        },
                         { username: getActiveUsername() },
                     );
                     if (!consolidated.ok) {
@@ -2989,7 +2998,7 @@ ${body}`);
                 break;
             }
             case 'read_memory': {
-                const { listProfileMemories, getProfileMemory } = await import('../learning/profileMemory');
+                const { listProfileMemories, getProfileMemory, subjectOf } = await import('../learning/profileMemory');
                 const raw = call.arguments.slugs;
                 const slugs: string[] = Array.isArray(raw) ? raw.map(String) : (raw ? [String(raw)] : []);
                 const all = listProfileMemories();
@@ -2998,13 +3007,31 @@ ${body}`);
                 // the feature's "excluded from unattended contexts" claim has to
                 // include the explicit "all" read, not just the hint pass.
                 const unattended = seatIsRestricted(context.allowedTools) && !seatAllows(context.allowedTools, 'remember');
-                const visible = unattended ? all.filter(e => !e.sensitive) : all;
-                const picked = slugs.includes('all') || slugs.length === 0
-                    ? visible
-                    : slugs.map(s => getProfileMemory(s)).filter((e): e is NonNullable<typeof e> => !!e && (!unattended || !e.sensitive));
+                const askedByName = !slugs.includes('all') && slugs.length > 0;
+                // "all" is a bulk read the SEAT chose, not the trader. A health
+                // or finance line rides it into the prompt exactly as it would
+                // ride the index, so it is held out of the bulk read for every
+                // seat and named back as a count. A slug asked for by name is a
+                // different act: the store's own index never advertises a
+                // sensitive slug, so naming one means the trader raised it.
+                const held = all.filter(e => e.sensitive).length;
+                const picked = askedByName
+                    ? slugs.map(s => getProfileMemory(s)).filter((e): e is NonNullable<typeof e> => !!e && (!unattended || !e.sensitive))
+                    : all.filter(e => !e.sensitive);
                 content = picked.length === 0
                     ? 'No matching memories. The index lists what exists; "all" returns every entry.'
-                    : picked.map(e => `### [${e.kind}] ${e.slug}\n_${e.description}_\n\n${e.body}`).join('\n\n');
+                    : [
+                        picked.map(e => [
+                            `### [${e.kind}] ${e.slug}`,
+                            `_${e.description}_`,
+                            `subject: ${subjectOf(e)} · tag: ${e.tag ?? 'stated'}${e.sourceSession ? ` · written in session ${e.sourceSession}` : ''}`,
+                            '',
+                            e.body,
+                        ].join('\n')).join('\n\n'),
+                        !askedByName && held > 0
+                            ? `${held} sensitive entr${held === 1 ? 'y is' : 'ies are'} not included in a bulk read. Read one by slug only when the trader raises it.`
+                            : '',
+                    ].filter(Boolean).join('\n\n');
                 break;
             }
             case 'forget': {
@@ -4826,15 +4853,19 @@ export async function* streamChatWithDeskTools(
     // a clear a future caller can forget.
     clearDeskToolCache();
 
-    // The deterministic safety net (utils/memoryHints): a weak or local model
-    // does not reliably decide to read memory or open a skill, so on a plain
-    // string match of the trader's own message the harness appends ONE marked
-    // hint naming what to read. Strong models never pay for it — the heuristic
-    // gates the whole block, and no match adds zero bytes. The hint rides the
-    // user role inside the harness's own marker, the same voice the tool
+    // The deterministic pre-read (utils/memoryHints), on EVERY model: a plain
+    // string match of the trader's own message against the memory index and the
+    // skill slugs, and on a hit the harness attaches the matched record's own
+    // body — at most two, never a sensitive one — so the answer is decided with
+    // the fact in front of it instead of relying on the seat to go fetch it.
+    // Forgetting is not a weakness only small models have, and the cost is
+    // bounded by the match: a message that names nothing adds zero bytes, and
+    // this runs before the first token, so no answer waits on it. A skill is
+    // only NAMED — a procedure body is never injected unasked. The block rides
+    // the user role inside the harness's own marker, the same voice the tool
     // nudges use, so the seat can tell the trader's words from the app's.
     let outbound = messages;
-    if (options?.memoryEnabled !== false && isLikelySmallModel(config)) {
+    if (options?.memoryEnabled !== false) {
         try {
             const { listProfileMemories } = await import('../learning/profileMemory');
             const { skillIndexRows } = await import('../learning/SkillMemoryService');
@@ -4842,7 +4873,10 @@ export async function* streamChatWithDeskTools(
             const lastText = typeof last?.content === 'string' ? last.content : '';
             const hints = buildMemoryHints(
                 lastText,
-                listProfileMemories().map(e => ({ slug: e.slug, description: e.description, aliases: e.aliases, sensitive: e.sensitive })),
+                listProfileMemories().map(e => ({
+                    slug: e.slug, description: e.description, aliases: e.aliases,
+                    sensitive: e.sensitive, body: e.body,
+                })),
                 skillIndexRows().map(r => r.slug),
             );
             if (hints.length > 0 && last) {

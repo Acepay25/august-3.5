@@ -260,28 +260,51 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         sf.skillRunsHere({ requiresEnv: ['FOO'] }, 'desktop', []) === false);
 })();
 
-// ─── 8. memory hints — the deterministic pre-read for weak models ──────────
+// ─── 8. memory hints — the deterministic pre-read, on every model ──────────
 (() => {
     const mh = loadModule('utils/memoryHints.ts');
     const mem = [
-        { slug: 'user-runs-bun', description: 'Package manager preference: bun.' },
+        { slug: 'user-runs-bun', description: 'Package manager preference: bun.', body: 'The trader uses bun, not npm. Their scripts assume it.' },
         { slug: 'user-btc-scalps', description: 'Trades 15m BTC scalps in the London session.' },
     ];
-    ok('hint: a slug match names a read',
-        mh.buildMemoryHints('which package manager do I use with bun?', mem, []).some(l => l.includes('read_memory "user-runs-bun"')));
+    ok('hint: a slug match attaches the record itself, not a promise to fetch it',
+        mh.buildMemoryHints('which package manager do I use with bun?', mem, [])
+            .some(l => l.includes('"user-runs-bun"') && l.includes('uses bun, not npm')),
+        JSON.stringify(mh.buildMemoryHints('which package manager do I use with bun?', mem, [])));
+    ok('hint: a record with no body falls back to naming the read',
+        mh.buildMemoryHints('run the btc scalp routine in london', [], []).length === 0
+        && mh.buildMemoryHints('btc scalps london session', [mem[1]], [])
+            .some(l => l.includes('read_memory "user-btc-scalps"')));
     ok('hint: an unrelated message matches nothing (capital of France)',
         mh.buildMemoryHints('what is the capital of France?', mem, []).length === 0);
-    ok('hint: a skill slug match names a skill_view',
-        mh.buildMemoryHints('run the btc scalp routine', [], ['user-btc-scalps']).some(l => l.includes('skill_view')));
-    ok('hint: caps at two reads and two views',
-        mh.buildMemoryHints('bun btc scalps london package manager routine',
-            [{ slug: 'a-one' }, { slug: 'a-two' }, { slug: 'a-three' }].map(r => ({ ...r, description: 'bun btc scalps london routine' })),
-            ['s-one', 's-two', 's-three']).filter(l => l.includes('read_memory')).length <= 2);
-    ok('hint: local-server providers read as small',
-        mh.isLikelySmallModel({ baseUrl: 'http://localhost:11434/v1', modelId: 'llama3' }) === true
-        && mh.isLikelySmallModel({ baseUrl: 'http://127.0.0.1:1234/v1' }) === true);
-    ok('hint: cloud providers with big models do not',
-        mh.isLikelySmallModel({ baseUrl: 'https://api.example.com/v1', modelId: 'gpt-5' }) === false);
+    ok('hint: a skill slug match names a skill_view and never a body',
+        mh.buildMemoryHints('run the btc scalp routine', [], ['user-btc-scalps'])
+            .some(l => l.includes('skill_view') && !l.includes('procedure')));
+    ok('hint: a sensitive record is never pre-read, matched or not',
+        mh.buildMemoryHints('what medication do I take, antidepressant?',
+            [{ slug: 'health-medication', description: 'antidepressant', body: 'I take antidepressants daily.', sensitive: true }], [])
+            .length === 0);
+    // The reach control for the line above: the SAME row without the flag does
+    // match, so the zero is the exclusion working, not a message that hit nothing.
+    ok('hint: that same text without the sensitive flag IS pre-read',
+        mh.buildMemoryHints('what medication do I take, antidepressant?',
+            [{ slug: 'health-medication', description: 'antidepressant', body: 'I take antidepressants daily.' }], [])
+            .length === 1);
+    ok('hint: an alias alone triggers it — the trader never says the slug',
+        mh.buildMemoryHints('how do I install things here?',
+            [{ slug: 'user-pkg-mgr', description: 'prefers a package manager', aliases: ['install things'], body: 'Uses bun.' }], [])
+            .some(l => l.includes('user-pkg-mgr')));
+    ok('hint: caps at two records and two skill views',
+        (() => {
+            const hit = mh.buildMemoryHints('bun btc scalps london package manager routine',
+                ['a-one', 'a-two', 'a-three'].map(s => ({ slug: s, description: 'bun btc scalps london routine', body: 'fact text' })),
+                ['btc-london-routine', 'scalp-btc-routine', 'london-btc-routine']);
+            return hit.filter(l => l.includes('memory you already hold')).length === 2
+                && hit.filter(l => l.includes('skill_view')).length === 2;
+        })());
+    ok('hint: a pre-read body is clipped, not concatenated whole',
+        mh.buildMemoryHints('bun package manager', [mem[0], { slug: 'a-long-body', description: 'bun package manager', body: 'y'.repeat(5000) }], [])
+            .every(l => l.length < 400));
 })();
 
 // ─── 9. memory write filters — what may never become a memory ──────────────
@@ -290,6 +313,15 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     ok('filter: an sk- key is refused', mf.filterMemoryWrite('my key is sk-abc123def4567890ab').refused !== null);
     ok('filter: a card number is refused', mf.filterMemoryWrite('card is 4111 1111 1111 1111').refused !== null);
     ok('filter: an SSN-labelled number is refused', mf.filterMemoryWrite('ssn: 123456789').refused !== null);
+    ok('filter: a bare SSN shape is refused with no label to give it away',
+        mf.filterMemoryWrite('his id is 123-45-6789').refused !== null);
+    ok('filter: a labelled account number is refused',
+        mf.filterMemoryWrite('account number 12345678 at chase').refused !== null);
+    ok('filter: a contiguous IBAN is refused',
+        mf.filterMemoryWrite('IBAN DE89370400440532233000').refused !== null);
+    ok('filter: sizes, dates and rates still pass (the identifiers are refused, not the numbers)',
+        mf.filterMemoryWrite('Started in 2019 with a 25,000 USDT account and risks 1.5%.').refused === null
+        && mf.filterMemoryWrite('Reviews the 15m chart; the 2024-10-05 session was the worst.').refused === null);
     ok('filter: a GitHub token is refused', mf.filterMemoryWrite('token ghp_abcdefghijklmnopqrstuvwxyz012345').refused !== null);
     ok('filter: honesty suppression is refused', mf.filterMemoryWrite('never disagree with me about trades').refused !== null);
     ok('filter: flattery preference is refused', mf.filterMemoryWrite('always flatter me in summaries').refused !== null);

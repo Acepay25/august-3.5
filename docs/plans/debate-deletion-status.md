@@ -88,7 +88,7 @@ The goal is one tool-capable turn in **both** chat homes. Facts, so the next
 session does not re-derive them:
 
 - `streamChatWithDeskTools` is an **async generator** returning text deltas
-  (`services/analysis/DeskToolsService.ts:4809`), and **every option is optional**
+  (`services/analysis/DeskToolsService.ts:4836`), and **every option is optional**
   (`StreamWithDeskToolsOptions`). It self-gates on
   `getHarnessSettings().deskToolsEnabled`, and `withDeskToolsSystemPrompt` will not
   double-inject the DESK TOOLS block if the system message already carries it.
@@ -127,7 +127,7 @@ So the target is NOT "keep the branch and shrink it to one seat". It is:
   SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
-  `streamChatWithDeskTools` (`DeskToolsService.ts:4809`), which the dock's solo
+  `streamChatWithDeskTools` (`DeskToolsService.ts:4836`), which the dock's solo
   seat already runs at `chatTurnRunner.ts:630`.
 - **The verdict and the journal row become tools the model chooses to call**, not
   a pipeline stage it has to earn. What already exists: `present_trade`
@@ -749,7 +749,7 @@ watching the suite stay green:
    now stripped before matching, so a consumer must use the name in its body. That second
    hole briefly accused `harnessNoteLegend` of being orphaned — a false red from my own
    stripper closing an import run on a line ending in a backtick; the real call is
-   `DeskToolsService.ts:4082`. The control that caught it is the new
+   `DeskToolsService.ts:4109`. The control that caught it is the new
    `the reachability walk separates live from dead` test.
 
 Proof of load-bearing: producer reverted → `withDetectedTradeType` FAILS; restored →
@@ -1130,7 +1130,7 @@ than assumed — worth keeping as the record of what this phase actually needs:
    Fixed with a route click.
 3. a control send (plain text, same point in the run) failed IDENTICALLY, which
    exonerated the tool path — the hang was never an app defect, and the mock's
-   `Unknown tool` branch at DeskToolsService.ts:3804 settles fine.
+   `Unknown tool` branch at DeskToolsService.ts:3831 settles fine.
 4. the phase, moved next to the dock sends, called `navTo` before its `const`
    initialization (`ReferenceError`, probe line 636) → replaced with the same DOM
    click inline; `surface-switch-${id}` is real (SurfaceSwitch.tsx:54).

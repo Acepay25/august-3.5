@@ -48,6 +48,11 @@ export interface ConsolidationInput {
     tag?: ProfileMemoryEntry['tag'];
     sensitive?: boolean;
     aliases?: string[];
+    /** What the fact is about, and the session it was written in — passed
+     *  straight through to the store, so consolidation cannot quietly drop the
+     *  two provenance fields a writer just set. */
+    subject?: ProfileMemoryEntry['subject'];
+    sourceSession?: string;
     ifVersion?: number;
 }
 

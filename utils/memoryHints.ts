@@ -1,18 +1,21 @@
 /**
- * memoryHints — the deterministic safety net for weak and local models.
+ * memoryHints — the deterministic pre-read, on every model.
  *
- * A small model will not reliably DECIDE to read memory or open a skill, so
- * the harness does the deciding for it: a plain string match of the trader's
- * message against the memory index lines and the skill slugs, and on a hit a
- * one-line marked hint telling the seat what to read. No model call, no
- * vector anything, no body ever auto-loaded — the hint names the record, the
- * seat still has to fetch it, which is what keeps the pair honest on strong
- * models too (where this never fires).
+ * A plain string match of the trader's message against the memory index and the
+ * skill slugs. No model call, no vector anything. On a match the harness does
+ * the remembering the seat might not bother to do: it attaches the matched
+ * record's own body (at most two, never a sensitive one) so the answer is
+ * decided WITH the fact in front of it, and for a skill it names the slug and
+ * still requires `skill_view` — a procedure body is never injected unasked.
  *
- * Sensitive records: this repo's memory kinds carry no sensitivity flag (the
- * ported spec's `sensitive` field has no analogue here), so there is nothing
- * to exclude yet — when a flag appears, the matcher must skip those rows
- * here, in the one place that builds hints.
+ * It runs for a strong model too, for the reason the spec gives: forgetting is
+ * not a weakness only small models have. The cost is bounded by the match — a
+ * message that names nothing adds zero bytes — and it happens before the first
+ * token is sent, so no answer waits on it.
+ *
+ * Sensitive rows are excluded here, in the one place that builds the pre-read:
+ * a health or finance line the trader did not raise cannot be unsaid once it is
+ * in front of the model. They stay readable by explicit slug.
  */
 
 /** Word tokens worth matching: ≥4 chars, lowercase, no digits-only. Hyphens
@@ -44,12 +47,24 @@ export interface MemoryHintRow {
     /** Sensitive rows are NEVER pre-read — the hint can wait for an explicit
      *  ask; a leaked health or finance line in a pre-read cannot be unsaid. */
     sensitive?: boolean;
+    /** The record's own body. Attached on a match, which is the whole point:
+     *  the seat decides with the fact already in front of it. */
+    body?: string;
 }
 
+/** Two records, each kept short: a pre-read that arrives as a paragraph is a
+ *  second note the model has to read before answering the question. */
+export const MEMORY_PRE_READ_MAX = 2;
+export const MEMORY_PRE_READ_CHARS = 240;
+export const SKILL_HINT_MAX = 2;
+
+const clip = (text: string, max: number): string =>
+    text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+
 /**
- * The hint lines, in the harness's own marked voice — empty array when
- * nothing matched, which is the common case and must add zero bytes.
- * At most two memory reads and two skill views per turn.
+ * What the harness attaches to the trader's message before the turn is sent.
+ * Empty array when nothing matched, which is the common case and must add zero
+ * bytes.
  */
 export const buildMemoryHints = (
     message: string,
@@ -60,29 +75,18 @@ export const buildMemoryHints = (
     if (msg.size === 0) return [];
     const lines: string[] = [];
     for (const m of memories.slice(0, 60)) {
-        if (lines.length >= 2) break;
+        if (lines.length >= MEMORY_PRE_READ_MAX) break;
         if (m.sensitive) continue;
-        if (matches(msg, m.slug, m.description) || (m.aliases ?? []).some(a => matches(msg, a))) {
-            lines.push(`read_memory "${m.slug}" before answering — the index says it may change this answer.`);
-        }
+        if (!matches(msg, m.slug, m.description) && !(m.aliases ?? []).some(a => matches(msg, a))) continue;
+        const body = (m.body ?? '').trim();
+        lines.push(body
+            ? `memory you already hold — "${m.slug}": ${clip(body, MEMORY_PRE_READ_CHARS)}`
+            : `read_memory "${m.slug}" before answering — the index says it may change this answer.`);
     }
+    const skills: string[] = [];
     for (const slug of skillSlugs.slice(0, 60)) {
-        if (lines.length >= 4) break;
-        if (matches(msg, slug)) {
-            lines.push(`skill_view "${slug}" before acting — its description matches this task.`);
-        }
+        if (skills.length >= SKILL_HINT_MAX) break;
+        if (matches(msg, slug)) skills.push(`skill_view "${slug}" before acting — its description matches this task.`);
     }
-    return lines;
-};
-
-/**
- * Weak/local model heuristic, ONE place: a provider pointed at a local server
- * (Ollama / LM Studio / vLLM on localhost) or a model from the small local
- * families. Conservative on purpose — a false "strong" costs a hint that the
- * model can ignore; a false "weak" spends a few prompt bytes.
- */
-export const isLikelySmallModel = (config: { baseUrl?: string; modelId?: string }): boolean => {
-    const url = (config.baseUrl ?? '').toLowerCase();
-    if (/(localhost|127\.0\.0\.1|0\.0\.0\.0|:11434|:1234)/.test(url)) return true;
-    return /(llama|qwen|gemma|phi-|ministral|smollm)/i.test(config.modelId ?? '');
+    return [...lines, ...skills];
 };

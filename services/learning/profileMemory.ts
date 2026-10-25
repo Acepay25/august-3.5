@@ -57,6 +57,16 @@ export interface ProfileMemoryEntry {
     /** Extra match strings the deterministic pre-read may hit on, beyond the
      *  slug's own words ("bun" for user-runs-bun). */
     aliases?: string[];
+    /** What the fact is ABOUT. `kind` says where it came from (a user fact, a
+     *  piece of feedback, project context); this says whose or what the claim
+     *  concerns, which is what decides whether it applies to a new question.
+     *  Absent on legacy rows, where `subjectOf()` derives it from `kind` rather
+     *  than pretending the record has no subject. */
+    subject?: 'profile' | 'preference' | 'topic' | 'area' | 'person';
+    /** The conversation this was written in. Provenance the trader can act on:
+     *  "which session did it learn this in" has an answer, and a fact the model
+     *  cannot place is a fact the trader cannot audit. */
+    sourceSession?: string;
     /** The row as it read BEFORE this edit — "now X, previously Y". One
      *  generation deep; the history is provenance, not a version store. */
     previous?: { body: string; description: string; updatedAt: string };
@@ -77,6 +87,20 @@ const KINDS: readonly string[] = ['user', 'feedback', 'project', 'reference'];
 
 export const normalizeKind = (v: unknown): ProfileMemoryKind | null =>
     typeof v === 'string' && KINDS.includes(v) ? v as ProfileMemoryKind : null;
+
+const SUBJECTS: readonly ProfileMemoryEntry['subject'][] =
+    ['profile', 'preference', 'topic', 'area', 'person'];
+
+export const normalizeSubject = (v: unknown): ProfileMemoryEntry['subject'] | null =>
+    SUBJECTS.includes(v as ProfileMemoryEntry['subject']) ? v as ProfileMemoryEntry['subject'] : null;
+
+/** Every record has a subject, including the ones written before the field
+ *  existed — derived from the one thing they do carry. A reader that returned
+ *  undefined would make half the store look like it was about nothing. */
+export const subjectOf = (e: ProfileMemoryEntry): NonNullable<ProfileMemoryEntry['subject']> =>
+    e.subject ?? (e.kind === 'user' ? 'profile'
+        : e.kind === 'feedback' ? 'preference'
+            : e.kind === 'project' ? 'area' : 'topic');
 
 /** Kebab-case slug from a name (stable, collision-safe enough). */
 export const slugify = (name: string): string =>
@@ -147,6 +171,10 @@ export const rememberProfileMemory = (input: {
     sensitive?: boolean;
     /** Extra match strings for the deterministic pre-read. */
     aliases?: string[];
+    /** What the fact is about; derived from `kind` when omitted. */
+    subject?: ProfileMemoryEntry['subject'];
+    /** The conversation the write happened in, stamped by the caller that knows. */
+    sourceSession?: string;
     /** Optimistic lock: when given and a row with this slug already exists,
      *  the write only lands if the row's version is exactly this. */
     ifVersion?: number;
@@ -154,6 +182,7 @@ export const rememberProfileMemory = (input: {
     const user = username || getActiveUsername();
     const slug = input.slug?.trim() ? slugify(input.slug) : slugify(input.name || input.description);
     const now = new Date().toISOString();
+    const subjectField = normalizeSubject(input.subject);
     const all = readAll(user);
     const idx = all.findIndex(e => e.slug === (slug || ''));
     if (idx >= 0 && typeof input.ifVersion === 'number' && (all[idx].version ?? 1) !== input.ifVersion) {
@@ -169,6 +198,8 @@ export const rememberProfileMemory = (input: {
         ...(input.tag ? { tag: input.tag } : {}),
         ...(input.sensitive !== undefined ? { sensitive: input.sensitive } : {}),
         ...(input.aliases ? { aliases: input.aliases.map(a => a.trim()).filter(Boolean).slice(0, 8) } : {}),
+        ...(subjectField ? { subject: subjectField } : {}),
+        ...(input.sourceSession?.trim() ? { sourceSession: input.sourceSession.trim().slice(0, 80) } : {}),
         createdAt: now,
         updatedAt: now,
         version: idx >= 0 ? (prior!.version ?? 1) + 1 : 1,
@@ -210,11 +241,20 @@ export const forgetProfileMemory = (slug: string, username?: string): boolean =>
  *  newest remember more, like this environment trimming its index). */
 const INDEX_MAX_LINES = 30;
 const INDEX_LINE_MAX = 150;
+/** Two aliases, twenty characters each: enough to carry the trader's own word
+ *  for a fact, not enough to turn the index into a keyword dump. */
+const INDEX_ALIAS_MAX = 2;
+const INDEX_ALIAS_CHARS = 20;
 
 /**
  * The always-loaded memory index for prompts — one line per entry:
- * `- [kind] slug — description`. Empty string when nothing is stored, so it
- * composes cleanly into any prompt. The model reads bodies via read_memory.
+ * `- [kind] slug ~aliases — description`. Empty string when nothing is stored,
+ * so it composes cleanly into any prompt. The aliases ride the line because
+ * they are the words the trader actually uses: a slug is the store's naming,
+ * and a seat that cannot see "bun" on the row has to guess whether
+ * `user-pkg-mgr` matters before it spends a read. Bodies still come through
+ * read_memory; the line stays inside INDEX_LINE_MAX by shortening the
+ * description, not the aliases, so the added words never grow the block.
  */
 export const buildProfileMemoryIndex = (username?: string, maxLines = INDEX_MAX_LINES): string => {
     // A sensitive fact never rides the always-on index: this block is injected
@@ -225,9 +265,14 @@ export const buildProfileMemoryIndex = (username?: string, maxLines = INDEX_MAX_
     if (visible.length === 0) return '';
     const newest = visible.slice(-maxLines);
     const lines = newest.map(e => {
-        const desc = e.description.length > INDEX_LINE_MAX ? `${e.description.slice(0, INDEX_LINE_MAX - 1)}…` : e.description;
         const tagMark = e.tag === 'observed' ? ' ·observed' : e.tag === 'inferred' ? ' ·inferred' : '';
-        return `- [${e.kind}] ${e.slug}${tagMark} — ${desc}`;
+        const aliasSource = (e.aliases ?? []).map(a => a.trim()).filter(Boolean);
+        const aliasMark = aliasSource.length
+            ? ` ~${aliasSource.slice(0, INDEX_ALIAS_MAX).map(a => a.slice(0, INDEX_ALIAS_CHARS)).join(', ')}`
+            : '';
+        const descMax = Math.max(40, INDEX_LINE_MAX - aliasMark.length);
+        const desc = e.description.length > descMax ? `${e.description.slice(0, descMax - 1)}…` : e.description;
+        return `- [${e.kind}] ${e.slug}${tagMark}${aliasMark} — ${desc}`;
     });
     const dropped = visible.length - newest.length;
     return [
