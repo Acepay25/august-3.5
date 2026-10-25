@@ -16,14 +16,15 @@ that the whole target is done.
   (skills/memory fixes) → `a140f181` `56301d6e` (goal core + plan) →
   `315c46d0` `7576778c` `55e53507` `50963684` (self-mod rails, docs, plan,
   lint ignore) → `056f1a1a` (memory loop) → `bee2933b` (rail + chip) →
-  `935d7832` (inverse gate).
-- Gates: `check:contracts` **102**; anchor gate **414** anchors, 0 comment-line,
+  `935d7832` (inverse gate) → `323d6185` (this record) → `9a487648` (declared
+  compatibility keys honoured).
+- Gates: `check:contracts` **107**; anchor gate **414** anchors, 0 comment-line,
   0 symbol-miss, 0 unattributed; `npm run lint` **0 errors / 379 warnings** (the
   ratchet, and `.verify/**` is now ignored so it reproduces CI); typecheck ×3,
   build, `boot-probe`, `render-probe`, `skill-approval-probe` 25/25 (its
   `pageErrors=2` is the planted quota arm).
 - Verification scaffolding is untracked in `.verify/`: `node-*.cjs` harnesses
-  (95 + 13 + 5 + 9 + 9 + 19 + 54 checks) and `live-probe4.cjs` (**42/42**) which
+  (106 + 13 + 5 + 9 + 9 + 19 + 54 checks) and `live-probe4.cjs` (**42/42**) which
   drives the goals/self-mod flows in Chromium against a scripted mock provider.
   `.verify/wip/GoalRailPanel.tsx` is dead — the component shipped from it.
 - Two probe facts that cost time: a `SelectMenu` flyout never stays open to a
@@ -175,11 +176,20 @@ pinned by the node harness, not by the app.
    pre-read runs on every model and attaches the record's own body, aliases
    ride the index line, a record carries `subject` and `sourceSession`,
    `read_memory "all"` holds sensitive rows back for every seat, and the secret
-   table refuses a bare SSN shape, an IBAN and a labelled account number. The
-   skills half is still open: source badge and delete-for-user-skills-only in
-   the list, manual authoring caps, URL import pulling referenced support files,
-   and `fallback_for_tools` / `fallback_for_toolsets` (implemented or retired —
-   a tolerated key nothing reads is a false promise to a skill author).
+   table refuses a bare SSN shape, an IBAN and a labelled account number. A
+   full-store merge also stopped costing the survivor its aliases: the
+   consolidation write now carries both sets, the subject and the session, so
+   consolidating no longer makes recall worse at the moment it is meant to fix
+   it (proved red without the change — the merged row came back `["pnpm","bun"]`
+   with the new fact's match word dropped). The
+   skills half is now: `requires_tools` / `fallback_for_tools` / `platforms` are
+   read from a declared file (flat, nested, or inline-JSON) and honoured, with
+   the blob winning and the author's lines still round-tripping;
+   `requires_toolsets` / `fallback_for_toolsets` are announced at import as
+   preserved-but-unenforced rather than left silent. Still open: URL import
+   pulling the referenced support files (only the one SKILL.md is fetched, so a
+   skill with `references/` arrives broken), and a delete affordance for user
+   skills in the catalog (the starter shelf is already separated and badged).
 4. **Live proof** — measured already: the focused goal narrowing the offered
    tools AND the executor refusing a tool outside its policy, the ledger row's
    Undo press, the chip's release press, and the pre-read reaching a seat whose

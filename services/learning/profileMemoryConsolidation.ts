@@ -174,6 +174,14 @@ export const rememberWithConsolidation = async (
             body: mergedBody,
             source: 'auto',
             tag: 'inferred',
+            // A merge must not quietly cost the survivor its match words. The
+            // aliases are what the deterministic pre-read hits on, and dropping
+            // them at the exact moment the store fills is the opposite of what
+            // consolidation is for; subject and the session the merge happened
+            // in travel with the row for the same reason.
+            aliases: [...new Set([...(keeper.aliases ?? []), ...(input.aliases ?? [])])].slice(0, 8),
+            subject: input.subject ?? keeper.subject,
+            sourceSession: input.sourceSession ?? keeper.sourceSession,
         }, user);
         if (mergeResult.conflict || mergeResult.persisted === false) {
             return { ok: false, error: 'the merged memory could not be stored; nothing was deleted' };
