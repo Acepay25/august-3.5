@@ -25,6 +25,7 @@ import {
 import { buildMemoryHints, isLikelySmallModel } from '../../utils/memoryHints';
 export { DATA_UNAVAILABLE_PREFIX, isDataUnavailable } from '../../utils/harnessMarks';
 import { HARNESS_CONTRACT_PROMPT } from '../../constants/prompts';
+import type { GoalPatch, GoalRef, GoalTrigger } from '../../schemas/goal';
 import { executeForgedTool, confirmedForgedToolDefinitions } from '../tools/toolForge';
 import type { ChatMessage, ChatRequestOptions } from '../providers/GenericProviderService';
 import { sendChatTurn, streamChatRequest } from '../providers/GenericProviderService';
@@ -812,6 +813,11 @@ const TOOL_LABELS: Record<string, string> = {
     project_future_price: 'price projection',
     send_message: 'direct message',
     read_message: 'read inbox',
+    list_goals: 'goal list',
+    open_goal: 'goal reader',
+    create_goal: 'goal creation',
+    update_goal: 'goal update',
+    restore_goal: 'goal restore',
 };
 
 export const toolLabel = (name: string): string => TOOL_LABELS[name] ?? name.replace(/_/g, ' ');
@@ -1086,6 +1092,98 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     slug: { type: 'string', description: 'The entry slug to delete.' },
                 },
                 required: ['slug'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'list_goals',
+            description:
+                'List the trader\'s goal environments. A goal is durable work state — objective, next step, inputs, outputs, triggers and a tool policy — stored as JSON in the notebook goals folder. Call this when the trader asks what you are working on, before creating a new goal, or when a message may belong to one.',
+            parameters: { type: 'object', properties: {}, additionalProperties: false },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'open_goal',
+            description:
+                'Read ONE goal environment in full: objective, next step, inputs, outputs, triggers, tool policy and the recent revision history. Use it before acting inside a goal or before editing it.',
+            parameters: {
+                type: 'object',
+                properties: { slug: { type: 'string', description: 'The goal slug exactly as list_goals prints it.' } },
+                required: ['slug'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'create_goal',
+            description:
+                'Create a new goal environment. It is written immediately as a JSON file in the notebook goals folder and is versioned; the trader can see and restore it. A goal\'s allowed_tools may only narrow the tools this seat already has. Pass focused:true only when this goal should become the active work environment now (it applies from the NEXT turn).',
+            parameters: {
+                type: 'object',
+                properties: {
+                    title: { type: 'string', description: 'Short goal name, e.g. "Q4 journal review"' },
+                    objective: { type: 'string', description: 'What done looks like; the durable aim, not the next step' },
+                    status: { type: 'string', enum: ['active', 'paused', 'done'], description: 'Default active' },
+                    next: { type: 'string', description: 'The next concrete step' },
+                    inputs: { type: 'string', description: 'JSON array of {kind, ref, note?}; kind is notebook|skill|strategy|memory|watch|symbol|bot|url' },
+                    outputs: { type: 'string', description: 'JSON array of {kind, ref, note?} — what this goal produces' },
+                    triggers: { type: 'string', description: 'JSON array of {kind:"message",match:[phrases]} | {kind:"price",watchId} | {kind:"session",when:"start"}' },
+                    allowed_tools: { type: 'array', items: { type: 'string' }, description: 'Tool names this goal may use; omit for the seat\'s normal list. Can only narrow.' },
+                    focused: { type: 'boolean', description: 'Make this the active goal environment now' },
+                    bot_id: { type: 'string', description: 'Optional agent/bot that owns this goal' },
+                    strategy: { type: 'string', description: 'Optional strategy slug this goal follows' },
+                },
+                required: ['title', 'objective'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'update_goal',
+            description:
+                'Change the goal you are working inside — objective, next step, status, inputs, outputs, triggers, tool policy or focus. The edit is DIRECT and versioned; the previous snapshot is kept in history and can be restored. The goal can only narrow this seat\'s tools, never add one. Pass if_version to avoid overwriting a concurrent edit; a mismatch returns the current goal so you merge and retry in the same turn.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    slug: { type: 'string', description: 'The goal to edit' },
+                    if_version: { type: 'number', description: 'The version open_goal/list_goals last showed you' },
+                    title: { type: 'string' },
+                    objective: { type: 'string' },
+                    status: { type: 'string', enum: ['active', 'paused', 'done'] },
+                    next: { type: 'string' },
+                    inputs: { type: 'string', description: 'JSON array of {kind, ref, note?}' },
+                    outputs: { type: 'string', description: 'JSON array of {kind, ref, note?}' },
+                    triggers: { type: 'string', description: 'JSON array of message/price/session triggers' },
+                    allowed_tools: { type: 'array', items: { type: 'string' }, description: 'Replace the goal tool policy; may only narrow this seat\'s list' },
+                    focused: { type: 'boolean', description: 'Make this the active goal environment (or release focus)' },
+                },
+                required: ['slug'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'restore_goal',
+            description:
+                'Restore a previous goal version as a NEW revision. Use it when a goal edit went wrong; the restore itself is recorded in history and the current state is kept as its previous snapshot.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    slug: { type: 'string' },
+                    version: { type: 'number', description: 'The `version` shown in the history entry you want' },
+                },
+                required: ['slug', 'version'],
                 additionalProperties: false,
             },
         },
@@ -2497,6 +2595,42 @@ const rejectedResult = (call: DeskToolCall, reason: string): DeskToolResult => (
     content: reason,
 });
 
+/** A goal's list argument may arrive as an array or a JSON string (the tool
+ *  schema asks for a string); anything else is a malformed call, not an empty
+ *  list. */
+const goalArrayArg = (value: unknown): unknown[] | undefined | null => {
+    if (value === undefined) return undefined;
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+        try {
+            const parsed: unknown = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : null;
+        } catch {
+            return null;
+        }
+    }
+    return null;
+};
+
+/** Goal policy tools are a SUBSET of this seat's tools and of the built-in
+ *  catalog. The executor also intersects them at turn time; this check makes
+ *  the refusal explicit instead of letting a goal silently lose a tool. */
+const goalToolPolicyArg = (value: unknown, seat: readonly string[] | undefined):
+    | { ok: true; tools?: string[] }
+    | { ok: false; error: string } => {
+    if (value === undefined) return { ok: true };
+    if (!Array.isArray(value)) return { ok: false, error: 'allowed_tools must be an array of tool names' };
+    const catalog = new Set(DESK_TOOL_DEFINITIONS.map(d => d.function.name));
+    const tools = [...new Set(value.map(String).map(s => s.trim()).filter(Boolean))];
+    for (const tool of tools) {
+        if (!catalog.has(tool)) return { ok: false, error: `"${tool}" is not a desk tool` };
+        if (seat && !seat.includes(tool)) {
+            return { ok: false, error: `"${tool}" is not available on this seat; a goal can only narrow the tools it already has` };
+        }
+    }
+    return { ok: true, tools };
+};
+
 /** Fresh read when the surface offers one, frozen turn-start value otherwise.
  *  Falls back instead of failing: a surface with no getter keeps behaving
  *  exactly as it did before these existed. */
@@ -2820,6 +2954,126 @@ ${body}`);
                     return rejectedResult(call, `forget rejected: no memory with slug "${slug}". Check the index for the exact slug.`);
                 }
                 content = JSON.stringify({ removed: true, slug, note: 'The memory is deleted and gone from every future index.' });
+                break;
+            }
+            case 'list_goals': {
+                try {
+                    const { listGoals } = await import('../goals/GoalService');
+                    const goals = listGoals();
+                    content = goals.length === 0
+                        ? 'No goals yet. create_goal makes one; a goal is a durable work environment, not a chat title.'
+                        : goals.map(g => `- ${g.slug} [${g.status}]${g.focused ? ' · FOCUSED' : ''} — ${g.title}: ${g.objective}${g.next ? ` · next: ${g.next}` : ''}`).join('\n');
+                } catch (err) {
+                    return rejectedResult(call, `list_goals rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case 'open_goal': {
+                try {
+                    const { getGoal } = await import('../goals/GoalService');
+                    const slug = asString(call.arguments.slug).trim();
+                    if (!slug) return rejectedResult(call, 'open_goal rejected: slug is required');
+                    const goal = getGoal(slug);
+                    if (!goal) return rejectedResult(call, `open_goal rejected: no goal "${slug}". list_goals names every goal.`);
+                    content = JSON.stringify({ ...goal, history: goal.history.slice(-5) }, null, 2);
+                } catch (err) {
+                    return rejectedResult(call, `open_goal rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case 'create_goal': {
+                try {
+                    const { createGoal } = await import('../goals/GoalService');
+                    const title = asString(call.arguments.title).trim();
+                    const objective = asString(call.arguments.objective).trim();
+                    if (!title || !objective) return rejectedResult(call, 'create_goal rejected: title and objective are required');
+                    const inputs = goalArrayArg(call.arguments.inputs);
+                    const outputs = goalArrayArg(call.arguments.outputs);
+                    const triggers = goalArrayArg(call.arguments.triggers);
+                    if (inputs === null || outputs === null || triggers === null) {
+                        return rejectedResult(call, 'create_goal rejected: inputs, outputs and triggers must be JSON arrays');
+                    }
+                    const allowed = goalToolPolicyArg(call.arguments.allowed_tools, context.allowedTools);
+                    if (!allowed.ok) return rejectedResult(call, `create_goal rejected: ${allowed.error}`);
+                    const goal = await createGoal({
+                        title,
+                        objective,
+                        status: (asString(call.arguments.status) || 'active') as 'active' | 'paused' | 'done',
+                        ...(asString(call.arguments.next) ? { next: asString(call.arguments.next) } : {}),
+                        inputs: (inputs ?? []) as GoalRef[],
+                        outputs: (outputs ?? []) as GoalRef[],
+                        triggers: (triggers ?? []) as GoalTrigger[],
+                        policy: allowed.tools ? { allowedTools: allowed.tools } : {},
+                        focused: call.arguments.focused === true,
+                        ...(asString(call.arguments.bot_id) ? { botId: asString(call.arguments.bot_id) } : {}),
+                        ...(asString(call.arguments.strategy) ? { strategy: asString(call.arguments.strategy) } : {}),
+                    }, { source: 'model', by: 'model', summary: 'created' });
+                    content = JSON.stringify({
+                        saved: true, slug: goal.slug, version: goal.version, focused: goal.focused,
+                        note: 'Goal environment created in the notebook goals folder. Its previous state is versioned; restore_goal can undo later edits.',
+                        ...(goal.focused ? { focus: 'applies from the NEXT turn' } : {}),
+                    });
+                } catch (err) {
+                    return rejectedResult(call, `create_goal rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case 'update_goal': {
+                try {
+                    const { updateGoal } = await import('../goals/GoalService');
+                    const slug = asString(call.arguments.slug).trim();
+                    if (!slug) return rejectedResult(call, 'update_goal rejected: slug is required');
+                    const patch: Record<string, unknown> = {};
+                    for (const key of ['title', 'objective', 'status', 'next'] as const) {
+                        if (call.arguments[key] !== undefined) patch[key] = asString(call.arguments[key]);
+                    }
+                    for (const key of ['inputs', 'outputs', 'triggers'] as const) {
+                        const parsed = goalArrayArg(call.arguments[key]);
+                        if (parsed === null) return rejectedResult(call, `update_goal rejected: ${key} must be a JSON array`);
+                        if (parsed !== undefined) patch[key] = parsed;
+                    }
+                    const allowed = goalToolPolicyArg(call.arguments.allowed_tools, context.allowedTools);
+                    if (!allowed.ok) return rejectedResult(call, `update_goal rejected: ${allowed.error}`);
+                    if (allowed.tools !== undefined) patch.policy = { allowedTools: allowed.tools };
+                    if (call.arguments.focused !== undefined) patch.focused = call.arguments.focused === true;
+                    if (Object.keys(patch).length === 0) return rejectedResult(call, 'update_goal rejected: nothing to update');
+                    const ifVersion = typeof call.arguments.if_version === 'number' ? call.arguments.if_version : undefined;
+                    const result = await updateGoal(slug, patch as GoalPatch, {
+                        ifVersion, by: 'model', summary: Object.keys(patch).join(', '),
+                    });
+                    if ('conflict' in result) {
+                        content = JSON.stringify({
+                            saved: false, conflict: true, slug,
+                            if_version: result.current.version,
+                            current_objective: result.current.objective,
+                            current_next: result.current.next,
+                            current_status: result.current.status,
+                            current_focused: result.current.focused,
+                            note: 'Version conflict — merge your change into the current goal and call update_goal again with if_version set to the number above.',
+                        });
+                        break;
+                    }
+                    content = JSON.stringify({
+                        saved: true, slug, version: result.goal.version, focused: result.goal.focused,
+                        note: 'Goal updated; the previous snapshot is in history. restore_goal undoes it. A focus/policy change applies from the NEXT turn.',
+                    });
+                } catch (err) {
+                    return rejectedResult(call, `update_goal rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case 'restore_goal': {
+                try {
+                    const { restoreGoal } = await import('../goals/GoalService');
+                    const slug = asString(call.arguments.slug).trim();
+                    const version = typeof call.arguments.version === 'number' ? call.arguments.version : NaN;
+                    if (!slug || !Number.isFinite(version)) return rejectedResult(call, 'restore_goal rejected: slug and a numeric version are required');
+                    const result = await restoreGoal(slug, version, { by: 'model' });
+                    if ('conflict' in result) return rejectedResult(call, 'restore_goal rejected: the goal changed while restoring; open_goal and retry');
+                    content = JSON.stringify({ restored: true, slug, version: result.goal.version, note: 'Restored as a new revision; the prior state is still in history.' });
+                } catch (err) {
+                    return rejectedResult(call, `restore_goal rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
                 break;
             }
             case 'propose_skill': {
@@ -4324,6 +4578,10 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     memoryEnabled?: boolean;
     /** The trader's latest message, for the forget guard. */
     lastUserMessage?: string;
+    /** The focused goal's declared tool policy. The effective allow-list is
+     *  the intersection with the seat's own list, so a goal can only narrow —
+     *  never widen — what the seat may call. */
+    goalAllowedTools?: string[];
     /** Final-turn nudge after tools ran. */
     afterToolsNudge?: string;
     /** Live tool-call visibility (Floor chips) — fires before and after each
@@ -4470,6 +4728,7 @@ export async function* streamChatWithDeskTools(
         onToolAction,
         onStreamReset,
         allowedTools,
+        goalAllowedTools,
         trades,
         mailbox,
         mailboxSeat,
@@ -4517,8 +4776,15 @@ export async function* streamChatWithDeskTools(
     // names the loop will honour (an allow-list filters the definitions; without
     // one, everything including the chart actions and the mailbox is offered),
     // so it is what the prose gets composed from — see `deskToolsMandateFor`.
-    const offeredToolNames = mergedAllowed && mergedAllowed.length > 0
-        ? mergedAllowed
+    // A focused goal narrows the seat. The intersection is computed HERE, at
+    // the one place both the prompt and the executor read, so the model is
+    // never told about a tool the goal removed and the executor never grants
+    // one. An empty goal policy means "the seat's list unchanged".
+    const effectiveAllowed = goalAllowedTools && goalAllowedTools.length > 0
+        ? goalAllowedTools.filter(t => !allowedTools || allowedTools.includes(t))
+        : mergedAllowed;
+    const offeredToolNames = effectiveAllowed && effectiveAllowed.length > 0
+        ? effectiveAllowed
         : [
             ...DESK_TOOL_DEFINITIONS.map(d => d.function.name),
             ...confirmedForgedToolDefinitions().map(d => d.function.name),
@@ -4593,7 +4859,7 @@ export async function* streamChatWithDeskTools(
         getLiveMarkPrice,
         getFormingCandle,
         nativeTools,
-        allowedTools: mergedAllowed,
+        allowedTools: effectiveAllowed,
         memoryEnabled,
         lastUserMessage: optsLastUserMessage,
         trades,

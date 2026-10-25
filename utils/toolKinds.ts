@@ -121,6 +121,11 @@ const BY_LABEL: Record<string, ToolKindInfo> = {
     'forget': { kind: 'write', activity: 'Forgetting a memory' },
     'memory note': { kind: 'write', activity: 'Writing a memory note' },
     'remember': { kind: 'write', activity: 'Remembering something' },
+    'goal list': { kind: 'read', activity: 'Reading the goals' },
+    'goal reader': { kind: 'read', activity: 'Opening a goal' },
+    'goal creation': { kind: 'write', activity: 'Creating a goal' },
+    'goal update': { kind: 'write', activity: 'Updating a goal' },
+    'goal restore': { kind: 'write', activity: 'Restoring a goal version' },
     'skill proposal': { kind: 'write', activity: 'Proposing a skill' },
     'skill revision': { kind: 'write', activity: 'Revising a skill' },
     'watch price': { kind: 'write', activity: 'Setting a price watch' },
@@ -166,4 +171,6 @@ export const DESK_TOOL_NAMES: readonly string[] = [
     // They were refused at the executor because this list did not name them;
     // the chart copilot can now save/recall/forget like the Chat surface.
     'remember', 'read_memory', 'forget',
+    // Goal environments: durable work state, edited mid-task.
+    'list_goals', 'open_goal', 'create_goal', 'update_goal', 'restore_goal',
 ];

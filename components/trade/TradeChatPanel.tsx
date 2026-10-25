@@ -67,6 +67,7 @@ import { getMemoryFiles } from '../../services/learning/MemoryFilesService';
 import { buildNotebookTopicsIndex } from '../../services/learning/memoryTopics';
 import { indexBudgetFor } from '../../utils/promptIndexBudget';
 import { buildProfileMemoryIndex } from '../../services/learning/profileMemory';
+import { buildGoalsIndex } from '../../services/goals/GoalService';
 import {
     ensureSupervisorListeners, setSessionModel,
 } from '../../services/learning/skillSupervisor';
@@ -442,7 +443,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             const budget = indexBudgetFor(config?.contextWindowTokens ?? 200_000);
             const store = getMemoryFiles();
             const topics = memoryEnabled !== false ? buildNotebookTopicsIndex(store.files, store.folders, budget.topics) : '';
-            return [buildSkillsIndexForPrompt(skillIndexRows(), budget.skills), topics].filter(Boolean).join('\n\n');
+            const goals = buildGoalsIndex(budget.goals);
+            return [goals, buildSkillsIndexForPrompt(skillIndexRows(), budget.skills), topics].filter(Boolean).join('\n\n');
         } catch {
             return '';
         }

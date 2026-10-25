@@ -31,6 +31,7 @@ import type { ChatMessage, ContentPart } from '../providers/GenericProviderServi
 import type { DeskToolCall, DeskToolResult } from '../analysis/DeskToolsService';
 import { fetchHybridData, generateHybridPromptInjection } from '../analysis/HybridIntelligenceService';
 import { DESK_TOOL_NAMES } from '../../utils/toolKinds';
+import { focusedGoal } from '../goals/GoalService';
 import { buildTradeChatContext, describeChartSnapshotForModel } from './tradeChatContext';
 import {
     describeDrawingsForModel, drawingFromChartTool, drawingsFromDetectedPattern, drawingsFromLevelTool, type ChartDrawing,
@@ -635,6 +636,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         const transport: ToolTurnRequest['transport'] = {
             defaultSymbol: symbol,
             allowedTools: TRADE_TOOLS,
+            goalAllowedTools: focusedGoal()?.policy.allowedTools,
             maxTokens: TASK_BUDGETS.chat,
             temperature: 0.4,
             reasoningEffort: turnEffort,

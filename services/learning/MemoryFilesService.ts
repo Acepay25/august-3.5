@@ -119,6 +119,10 @@ const DEFAULT_FOLDERS: MemoryFolder[] = [
     { id: 'bots', name: 'bots', order: 5 },
     { id: 'settled-beliefs', name: 'settled-beliefs', order: 6 },
     { id: 'distilled', name: 'distilled', order: 7 },
+    // Goal environments (goals/*.json). A goal is durable work state, not a
+    // skill or a note; it lives in the SAME notebook blob so backup/export and
+    // the one-store rule already cover it.
+    { id: 'goals', name: 'goals', order: 8 },
     // Strategy plans (strategies/*.md). Lives in the SAME notebook blob as
     // everything else on purpose: a second persistence path would need a
     // second backup/export namespace, and a namespace nothing writes is a
@@ -876,7 +880,8 @@ export const createMemoryFileUnlocked = async (
     /** Harness-written files (diary, profile, recurring mistakes) label themselves "auto" in the UI. */
     autoManaged = false
 ): Promise<MemoryFile> => {
-    const cleanName = name.trim().toLowerCase().endsWith('.md') ? name.trim() : `${name.trim()}.md`;
+    const requested = name.trim();
+    const cleanName = /\.(md|json)$/i.test(requested) ? requested : `${requested}.md`;
     if (!cleanName || cleanName === '.md') throw new Error('File name is required');
     if (memoryCache.files.some(f => f.folderId === folderId && f.name === cleanName)) {
         throw new Error(`"${cleanName}" already exists in this folder`);

@@ -42,6 +42,7 @@ import { buildNotebookTopicsIndex } from '../learning/memoryTopics';
 import { indexBudgetFor } from '../../utils/promptIndexBudget';
 import { activeStrategiesBlock } from '../learning/strategyStore';
 import { buildProfileMemoryIndex } from '../learning/profileMemory';
+import { buildGoalsIndex, focusedGoal } from '../goals/GoalService';
 import { runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
 import { isMarketReadTool } from '../analysis/DeskToolsService';
 import { runPresentTrade } from './presentTradeTool';
@@ -71,6 +72,8 @@ export const CHAT_SURFACE_TOOLS = [
     'write_memory_note', 'get_notebook_map', 'propose_skill', 'revise_skill', 'propose_strategy',
     'amend_memory', 'forge_tool',
     'remember', 'read_memory', 'forget',
+    // Goal environments — durable work state the agent can shape mid-task.
+    'list_goals', 'open_goal', 'create_goal', 'update_goal', 'restore_goal',
     // The verdict IS a tool call in the post-debate app (stage 20's premise), so
     // the desk must be able to present a plan wherever the trader asks. The
     // shared executor draws nothing and arms no watch for this sink — and says
@@ -151,8 +154,16 @@ export const surfacePromptWith = (mandate: string, where: string, opts: { memory
     } catch {
         memoryBlock = '';
     }
+    // The goal is the work environment, not memory; it rides even with memory
+    // off. One compact line per goal, the focused one first.
+    let goalsBlock: string;
+    try {
+        goalsBlock = buildGoalsIndex(budget.goals);
+    } catch {
+        goalsBlock = '';
+    }
     return {
-        text: [mandate, skillsBlock, topicsBlock, strategiesBlock, memoryBlock].filter(Boolean).join('\n\n'),
+        text: [mandate, goalsBlock, skillsBlock, topicsBlock, strategiesBlock, memoryBlock].filter(Boolean).join('\n\n'),
         skills,
     };
 };
@@ -310,6 +321,7 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
     const transport: ToolTurnRequest['transport'] = {
         defaultSymbol: req.symbol ?? null,
         allowedTools: CHAT_SURFACE_TOOLS,
+        goalAllowedTools: focusedGoal()?.policy.allowedTools,
         maxTokens: TASK_BUDGETS.chat,
         temperature: 0.4,
         reasoningEffort: resolveComposerEffort(req.effort, 'tradingDecision'),
