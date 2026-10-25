@@ -162,4 +162,8 @@ export const DESK_TOOL_NAMES: readonly string[] = [
     'write_memory_note', 'get_notebook_map', 'propose_skill', 'revise_skill', 'propose_strategy',
     'amend_memory', 'forge_tool', 'scan_chart_skills',
     'skill_view',
+    // The collaboration-memory trio the dock's own mandate already asks for.
+    // They were refused at the executor because this list did not name them;
+    // the chart copilot can now save/recall/forget like the Chat surface.
+    'remember', 'read_memory', 'forget',
 ];

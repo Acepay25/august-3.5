@@ -63,8 +63,12 @@ export interface ProfileMemoryEntry {
 }
 
 const KEY_PREFIX = 'profile_memory_v1';
-const MAX_ENTRIES = 40;
-const MAX_BODY_CHARS = 2_000;
+/** The store's hard limits. Exported so the consolidation pass and the UI use
+ *  the same numbers the write path enforces. */
+export const PROFILE_MEMORY_MAX_ENTRIES = 40;
+export const PROFILE_MEMORY_MAX_BODY_CHARS = 2_000;
+const MAX_ENTRIES = PROFILE_MEMORY_MAX_ENTRIES;
+const MAX_BODY_CHARS = PROFILE_MEMORY_MAX_BODY_CHARS;
 const MAX_DESC_CHARS = 160;
 
 const storageKey = (user: string): string => `${KEY_PREFIX}_${user}`;

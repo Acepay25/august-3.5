@@ -705,6 +705,12 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         // truncated body is a SUCCESS-shaped response, so nothing else in the
         // transport reports it. Bracket the seat's turn so the line the trader
         // reads is a measured fact, not a guess from a missing sentence.
+        const lastUser = [...messages].reverse().find(m => m && m.role === 'user');
+        const lastUserMessage = typeof lastUser?.content === 'string'
+            ? lastUser.content
+            : Array.isArray(lastUser?.content)
+                ? lastUser.content.map(p => (typeof p === 'string' ? p : (p as { text?: string }).text ?? '')).join('\n')
+                : undefined;
         const { value: outcome, summary } = await withTruncationWindow(async () => await runToolTurn({
             config,
             messages,
@@ -715,6 +721,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             transport,
             events,
             memoryEnabled: deps.memoryEnabled !== false,
+            lastUserMessage,
         }));
         recordToolTurnUsage({
             startedAt: turnStartedAt,

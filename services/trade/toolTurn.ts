@@ -116,6 +116,8 @@ export interface ToolTurnRequest {
     /** The Settings memory switch for this turn (prompt index, pre-read hints
      *  and the memory tools all obey it). */
     memoryEnabled?: boolean;
+    /** The trader's latest message, for the forget guard. */
+    lastUserMessage?: string;
 }
 
 /** What the turn produced before usage is folded in. */
@@ -177,6 +179,7 @@ const runToolTurnInner = async (req: ToolTurnRequest): Promise<InnerOutcome> => 
     const stream = streamChatWithDeskTools(req.config, req.messages, {
         ...req.transport,
         memoryEnabled: req.memoryEnabled !== false,
+        lastUserMessage: req.lastUserMessage,
         signal,
         // The transport's reactive path (a provider that rejected the request
         // and stated its limit). The proactive one reports through

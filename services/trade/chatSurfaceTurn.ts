@@ -388,6 +388,7 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
         transport,
         events: tracked,
         memoryEnabled: req.memoryEnabled !== false,
+        lastUserMessage: typeof req.prompt === 'string' ? req.prompt : undefined,
     }));
     recordToolTurnUsage({
         startedAt: req.startedAt,

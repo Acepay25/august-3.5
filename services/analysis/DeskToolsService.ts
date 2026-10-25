@@ -2435,6 +2435,9 @@ export interface DeskToolContext {
      *  refuse (no read, no write) and the pre-read hint pass does not run.
      *  Undefined preserves legacy callers that never had a memory flag. */
     memoryEnabled?: boolean;
+    /** The trader's latest message, when the caller has it. `forget` is only
+     *  allowed when that message asks to forget/delete/remove something. */
+    lastUserMessage?: string;
 }
 
 /** Market-data tools whose result may need the coin named in the transcript —
@@ -2548,6 +2551,13 @@ export async function executeDeskTool(
     if (context.memoryEnabled === false
         && (call.name === 'remember' || call.name === 'read_memory' || call.name === 'forget')) {
         return rejectedResult(call, `${call.name} rejected: memory is OFF for this turn — nothing is read or saved.`);
+    }
+    if (call.name === 'forget' && typeof context.lastUserMessage === 'string') {
+        const asked = /\b(?:forget|delete|remove|drop|erase|wipe|stop\s+(?:remembering|saving)|don['’]?t\s+remember)\b/i
+            .test(context.lastUserMessage);
+        if (!asked) {
+            return rejectedResult(call, "forget rejected: the trader's latest message did not ask to forget anything; ask before deleting a memory.");
+        }
     }
     // Repeat calls within the TTL (every seat asks the same desk) are served
     // from cache — identical market data, zero extra network round-trips.
@@ -2705,7 +2715,7 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                 // duplicates. The index rides every system prompt, so the model
                 // already sees what exists before choosing slug vs new.
                 try {
-                    const { rememberProfileMemory, normalizeKind, slugify } = await import('../learning/profileMemory');
+                    const { normalizeKind, slugify } = await import('../learning/profileMemory');
                     const { getActiveUsername } = await import('../../utils/activeUser');
                     const kind = normalizeKind(call.arguments.kind);
                     if (!kind) {
@@ -2746,10 +2756,15 @@ ${body}`);
                         : undefined;
                     const ifVersionRaw = call.arguments.if_version;
                     const ifVersion = typeof ifVersionRaw === 'number' ? ifVersionRaw : undefined;
-                    const result = rememberProfileMemory(
+                    const { rememberWithConsolidation } = await import('../learning/profileMemoryConsolidation');
+                    const consolidated = await rememberWithConsolidation(
                         { slug, description, kind, body, source: 'model', ifVersion, tag: 'stated', sensitive: verdict.sensitive || undefined, aliases: aliasesRaw },
-                        getActiveUsername(),
+                        { username: getActiveUsername() },
                     );
+                    if (!consolidated.ok) {
+                        return rejectedResult(call, `remember rejected: ${consolidated.error}`);
+                    }
+                    const result = consolidated.result;
                     if (result.conflict) {
                         // Optimistic-lock miss: hand the caller the row that IS
                         // stored, so it merges and retries in the same turn
@@ -2771,6 +2786,7 @@ ${body}`);
                         saved: true, slug: entry.slug, kind: entry.kind, created,
                         version: entry.version ?? 1,
                         note: created ? 'New memory saved — its index line now rides every future prompt.' : `Existing memory "${entry.slug}" UPDATED in place (no duplicate created).`,
+                        ...(consolidated.consolidation ? { consolidation: consolidated.consolidation } : {}),
                     });
                 } catch (err) {
                     return rejectedResult(call, `remember rejected: ${err instanceof Error ? err.message : String(err)}`);
@@ -3823,6 +3839,8 @@ export async function runDeskToolLoop(params: {
     allowedTools?: string[];
     /** The Settings memory switch; see `DeskToolContext.memoryEnabled`. */
     memoryEnabled?: boolean;
+    /** See `DeskToolContext.lastUserMessage` (the forget guard). */
+    lastUserMessage?: string;
     trades?: LoggedTrade[];
     /** Additional tool definitions merged into the desk set (e.g. debate mail). */
     extraToolDefs?: DeskToolDefinition[];
@@ -3868,6 +3886,7 @@ export async function runDeskToolLoop(params: {
         nativeTools = config.apiFormat === 'chat_completions',
         allowedTools,
         memoryEnabled,
+        lastUserMessage,
         trades,
         extraToolDefs = [],
         executeExtraTool,
@@ -4173,6 +4192,7 @@ export async function runDeskToolLoop(params: {
                 // tool, and these calls bypass the offer-time filter.
                 allowedTools,
                 memoryEnabled,
+                lastUserMessage,
             })
             : [];
         const results = [...replays, ...extraResults, ...forgedResults, ...coreResults];
@@ -4302,6 +4322,8 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     /** The Settings memory switch for this turn. False disables the pre-read
      *  hint pass and makes the memory tools refuse in the executor. */
     memoryEnabled?: boolean;
+    /** The trader's latest message, for the forget guard. */
+    lastUserMessage?: string;
     /** Final-turn nudge after tools ran. */
     afterToolsNudge?: string;
     /** Live tool-call visibility (Floor chips) — fires before and after each
@@ -4434,6 +4456,7 @@ export async function* streamChatWithDeskTools(
     const {
         defaultSymbol,
         memoryEnabled,
+        lastUserMessage: optsLastUserMessage,
         afterToolsNudge,
         chartInterval,
         chartLevels,
@@ -4572,6 +4595,7 @@ export async function* streamChatWithDeskTools(
         nativeTools,
         allowedTools: mergedAllowed,
         memoryEnabled,
+        lastUserMessage: optsLastUserMessage,
         trades,
         requireFirstToolRound,
         extraToolDefs: extraDefs,
