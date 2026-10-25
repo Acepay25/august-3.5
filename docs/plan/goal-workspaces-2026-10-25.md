@@ -18,14 +18,15 @@ target is done.
   lint ignore) → `056f1a1a` (memory loop) → `bee2933b` (rail + chip) →
   `935d7832` (inverse gate) → `323d6185` (this record) → `9a487648` (declared
   compatibility keys honoured) → `e017e202` (merge keeps its aliases) →
-  `491540f6` (URL support-file import) → `defe61da` (delete takes the bundles).
-- Gates: `check:contracts` **130**; anchor gate **426** anchors, 0 comment-line,
+  `491540f6` (URL support-file import) → `defe61da` (delete takes the bundles) →
+`82d9e878` (goal editor + the narrowing fix).
+- Gates: `check:contracts` **130**; anchor gate **427** anchors, 0 comment-line,
   0 symbol-miss, 0 unattributed; `npm run lint` **0 errors / 379 warnings** (the
   ratchet, and `.verify/**` is now ignored so it reproduces CI); typecheck ×3,
   build, `boot-probe`, `render-probe` **131 ok**, `skill-approval-probe` 25/25
   (its `pageErrors=2` is the planted quota arm).
 - Verification scaffolding is untracked in `.verify/`: `node-*.cjs` harnesses
-  (134 + 13 + 5 + 9 + 12 + 19 + 54 checks) and `live-probe4.cjs` (**56/56, 0 blocked**) which
+  (134 + 25 + 57 + 13 + 12 + 9 + 5 checks) and `live-probe4.cjs` (**64/64, 0 blocked**) which
   drives the goals/self-mod flows in Chromium against a scripted mock provider.
   `.verify/wip/GoalRailPanel.tsx` is dead — the component shipped from it.
   `.verify/url-ref-probe.cjs` is the one that measured how the URL parser treats
@@ -188,6 +189,28 @@ reason the picker's universe is the seat's own list rather than the whole
 vocabulary. A control that can only offer valid choices is cheaper to trust
 than a transport that has to fail closed.
 
+## A trigger nobody called — the second defect the goal slice turned up
+
+`goalMatchesMessage` (`services/goals/GoalService.ts:278`) shipped complete, was
+cited by `docs/app-flow.md` as "the deterministic pre-read that resurfaces a goal
+from the trader's own words", and had NO caller. The flow doc therefore described
+a label the model reads in the index as if it were a behavior. Nothing in the gate
+set could see it: the function is correct, `buildGoalsIndex` prints the trigger
+words either way, and a prose claim about a live path is not something the anchor
+gate can contradict — it checks that a citation lands, not that the cited thing
+runs.
+
+Wired now, at the one place the seat prompt is composed
+(`surfacePromptWith services/trade/chatSurfaceTurn.ts:178`), matching only the
+TRADER'S OWN line (`matchText` from `req.prompt`) and appending one hint line that
+names the goal and offers `open_goal`. Three rules it keeps, all pinned:
+a non-match attaches nothing; the hint never changes `focused` (an environment
+switch stays the trader's call, per the untrusted-input rule); and an unattended
+run passes no `matchText` at all, because a tool output or a fetched page must not
+be what points the seat at an environment. `node-goals` holds six arms of it and
+the live probe holds the turn-side wiring — the part no unit arm can prove, since
+the wiring IS the call site.
+
 ## Next slices
 
 1. **Goals UI** — landed. The Chat rail's third tab (`components/agents/GoalRailPanel.tsx`)
@@ -227,11 +250,21 @@ than a transport that has to fail closed.
    row — checked, not built. Item 18's skills list is therefore closed.
 4. **Live proof** — measured already: the focused goal narrowing the offered
    tools AND the executor refusing a tool outside its policy, the ledger row's
-   Undo press, the chip's release press, and the pre-read reaching a seat whose
-   config reads as a strong, non-local model. Still blocked on a funded or local
-   provider: the model *choosing* `propose_self_change` or a `skill_view`
-   unprompted, a shadow prompt edit settling on real closed trades, and a goal
-   restore used after a deliberate bad edit.
+   Undo press, the chip's release press, the pre-read reaching a seat whose
+   config reads as a strong, non-local model, `create_goal` refusing a policy
+   that names a tool the acting seat lacks, the rail's in-place editor writing
+   objective/next/triggers/policy into the stored goal under the version lock,
+   and a human history restore undoing a deliberate bad edit as a NEW revision.
+   The shadow settle is proven at its CALL SITE, not just as a function —
+   `node-selfmod` drives the real `syncClosedTradeToNotebook` pass and reads the
+   ledger afterwards, and deleting the call at `SkillMemoryService.ts:3947`
+   turns that arm red with `status=shadow` (57/57 with it, 56/57 without).
+   Still blocked, and named as blocked rather than upgraded: the model
+   *choosing* `propose_self_change` or a `skill_view` unprompted. That needs a
+   real completion, and the verification profile has none — measured this pass:
+   no model server listens on any local port (`11434/8080/1234/8000/4000` all
+   closed), and the funded keys live in the packaged profile's encrypted store,
+   which the isolated probe cannot and should not read.
 5. **UI/merge** — the owner's redesign branch and this branch both touch
    `TradeChatPanel.tsx`; merge the goal core first, then mount the UI.
 

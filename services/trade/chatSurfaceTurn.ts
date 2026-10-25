@@ -42,7 +42,7 @@ import { buildNotebookTopicsIndex } from '../learning/memoryTopics';
 import { indexBudgetFor } from '../../utils/promptIndexBudget';
 import { activeStrategiesBlock } from '../learning/strategyStore';
 import { buildProfileMemoryIndex } from '../learning/profileMemory';
-import { buildGoalsIndex, focusedGoal } from '../goals/GoalService';
+import { buildGoalsIndex, focusedGoal, goalMatchesMessage, listGoals } from '../goals/GoalService';
 import { runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
 import { isMarketReadTool } from '../analysis/DeskToolsService';
 import { runPresentTrade } from './presentTradeTool';
@@ -116,7 +116,7 @@ export interface ChatSurfacePrompt {
  * trader their answer: the prompt simply carries less, the same way the dock's
  * `skillsIndexForPrompt` swallows and returns ''.
  */
-export const surfacePromptWith = (mandate: string, where: string, opts: { memoryEnabled?: boolean; windowTokens?: number } = {}): ChatSurfacePrompt => {
+export const surfacePromptWith = (mandate: string, where: string, opts: { memoryEnabled?: boolean; windowTokens?: number; matchText?: string } = {}): ChatSurfacePrompt => {
     const memoryEnabled = opts.memoryEnabled !== false;
     const budget = indexBudgetFor(opts.windowTokens ?? 200_000);
     let skillsBlock: string;
@@ -166,6 +166,25 @@ export const surfacePromptWith = (mandate: string, where: string, opts: { memory
     } catch {
         goalsBlock = '';
     }
+    // A goal's `message` trigger is something the seat RESPONDS TO, not a label
+    // it reads. Deterministic substring match against the trader's own line —
+    // no extra call, no model judgement — and it changes NOTHING by itself: it
+    // names the goal and stops there. An unattended run passes no `matchText`,
+    // because a web page or a tool output must never be what points the seat at
+    // an environment.
+    if (opts.matchText) {
+        try {
+            const hit = listGoals()
+                .filter(g => !g.focused && g.status === 'active' && goalMatchesMessage(g, opts.matchText as string))
+                .slice(0, 2);
+            if (hit.length > 0) {
+                goalsBlock = [goalsBlock, `A goal's trigger matches this message: ${hit.map(g => `"${g.title}" (${g.slug})`).join(', ')} — read it with open_goal, and make it the environment only if the trader asks.`]
+                    .filter(Boolean).join('\n\n');
+            }
+        } catch {
+            /* an unreadable goal store costs the hint, never the answer */
+        }
+    }
     return {
         text: [mandate, goalsBlock, skillsBlock, topicsBlock, strategiesBlock, memoryBlock].filter(Boolean).join('\n\n'),
         skills,
@@ -178,7 +197,7 @@ export const surfacePromptWith = (mandate: string, where: string, opts: { memory
  * skills heading says "what the trader asks about", because there is no chart
  * here to match against, and the mandate forbids the tool calls the canvas owns.
  */
-export const chatSurfaceSystemPrompt = (opts: { memoryEnabled?: boolean; windowTokens?: number } = {}): ChatSurfacePrompt =>
+export const chatSurfaceSystemPrompt = (opts: { memoryEnabled?: boolean; windowTokens?: number; matchText?: string } = {}): ChatSurfacePrompt =>
     surfacePromptWith(CHAT_SURFACE_SYSTEM_PROMPT, 'what the trader asks about', opts);
 
 /** The speaker key for this surface's live tool feed — `chatRowFrom` flattens
@@ -370,7 +389,14 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
     // for, and a row claiming skills it never saw is worse than a silent row.
     const prompt = req.systemPrompt
         ? { text: req.systemPrompt, skills: [] as string[] }
-        : chatSurfaceSystemPrompt({ memoryEnabled: req.memoryEnabled !== false, windowTokens: req.config?.contextWindowTokens });
+        : chatSurfaceSystemPrompt({
+            memoryEnabled: req.memoryEnabled !== false,
+            windowTokens: req.config?.contextWindowTokens,
+            // Only the trader's own line is matched — see the note in
+            // `surfacePromptWith`. A caller that brought its own mandate gets
+            // that mandate verbatim and no hint.
+            matchText: typeof req.prompt === 'string' ? req.prompt : undefined,
+        });
     if (prompt.skills.length > 0) req.patch(m => ({ ...m, injectedSkills: prompt.skills }));
 
     // A FULL ANALYSIS (stage 20f) is an instruction, not a keyword: the trader
