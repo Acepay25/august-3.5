@@ -1,9 +1,9 @@
 # Goal Workspaces — goal-as-environment, native in August (2026-10-25)
 
 Status: **the goals core, the self-modification rails, the memory-loop gaps,
-the rail/chip UI and the URL support-file import are all landed on branch
-`goal-workspaces-20261025`.** What is left is named at the bottom of this file
-(Next slices) and none of it is a secret: a user-skill delete, the in-place goal
+the rail/chip UI, the URL support-file import and the library's own delete are
+all landed on branch `goal-workspaces-20261025`.** What is left is named at the
+bottom of this file (Next slices) and none of it is a secret: the in-place goal
 editor with its tool-policy picker, and the live proof that needs a funded or
 local provider. This is a plan and status record, not a claim that the whole
 target is done.
@@ -17,11 +17,12 @@ target is done.
   `315c46d0` `7576778c` `55e53507` `50963684` (self-mod rails, docs, plan,
   lint ignore) → `056f1a1a` (memory loop) → `bee2933b` (rail + chip) →
   `935d7832` (inverse gate) → `323d6185` (this record) → `9a487648` (declared
-  compatibility keys honoured) → `e017e202` (merge keeps its aliases).
-- Gates: `check:contracts` **124**; anchor gate **417** anchors, 0 comment-line,
+  compatibility keys honoured) → `e017e202` (merge keeps its aliases) →
+  `491540f6` (URL support-file import).
+- Gates: `check:contracts` **124**; anchor gate **420** anchors, 0 comment-line,
   0 symbol-miss, 0 unattributed; `npm run lint` **0 errors / 379 warnings** (the
   ratchet, and `.verify/**` is now ignored so it reproduces CI); typecheck ×3,
-  build, `boot-probe`, `render-probe` **128 ok**, `skill-approval-probe` 25/25
+  build, `boot-probe`, `render-probe` **131 ok**, `skill-approval-probe` 25/25
   (its `pageErrors=2` is the planted quota arm).
 - Verification scaffolding is untracked in `.verify/`: `node-*.cjs` harnesses
   (134 + 13 + 5 + 9 + 9 + 19 + 54 checks) and `live-probe4.cjs` (**42/42**) which
@@ -201,9 +202,11 @@ pinned by the node harness, not by the app.
    out of running the real path on a non-`.md` file: `bundledName` slugified the
    leaf, so `scripts/helper.py` was stored as `helperpy.md` and the address the
    body handed the model no longer resolved; and discovery used to reject an
-   escaping `references/../../x.md` silently instead of reporting it. Still
-   open: a delete affordance for user skills in the catalog (the starter shelf
-   is already separated and badged).
+   escaping `references/../../x.md` silently instead of reporting it. The library's
+   own delete now takes the head WITH its `<slug>__…` bundled siblings in one
+   notebook write (proved red head-only: two orphan files left behind), and the
+   enable toggle, source badge and two-click delete were already shipped on every
+   row — checked, not built. Item 18's skills list is therefore closed.
 4. **Live proof** — measured already: the focused goal narrowing the offered
    tools AND the executor refusing a tool outside its policy, the ledger row's
    Undo press, the chip's release press, and the pre-read reaching a seat whose

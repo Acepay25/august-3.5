@@ -353,6 +353,43 @@ async function seedVerdicts(page) {
                 enabled: true,
                 createdAt: iso(1500),
                 updatedAt: iso(1500),
+            }, {
+                // A skill that arrived as a FOLDER, so it owns bundled files.
+                // The delete arm below proves pressing Delete once more takes
+                // the bundles with it — deleting only the head would leave
+                // three rows' worth of bytes addressed by nothing.
+                id: 'probe-bundle-1',
+                name: 'probe-bundle-skill.md',
+                content: [
+                    '---',
+                    'name: probe-bundle-skill',
+                    'description: "Use when the verifier deletes a bundled skill."',
+                    'kind: "repeat"',
+                    '# august:skill-ledger',
+                    'status: candidate',
+                    '---',
+                    'Open references/note.md and scripts/helper.py.',
+                ].join('\n'),
+                folderId: 'skills',
+                enabled: true,
+                createdAt: iso(1400),
+                updatedAt: iso(1400),
+            }, {
+                id: 'probe-bundle-2',
+                name: 'probe-bundle-skill__references__note.md',
+                content: 'The bundled note that must go with its skill.\n',
+                folderId: 'skills',
+                enabled: true,
+                createdAt: iso(1400),
+                updatedAt: iso(1400),
+            }, {
+                id: 'probe-bundle-3',
+                name: 'probe-bundle-skill__scripts__helper.py.md',
+                content: 'def helper():\n    return 1\n',
+                folderId: 'skills',
+                enabled: true,
+                createdAt: iso(1400),
+                updatedAt: iso(1400),
             }],
         }));
         const analysis = (over) => ({
@@ -1944,6 +1981,49 @@ async function main() {
         check('a non-https skill URL is refused out loud, not dropped',
             refusalShown === 1, refusalShown === 1 ? '' : 'no refusal text on the page');
         await urlBox.fill('').catch(() => {});
+
+        // ── The row's two-click Delete must take the BUNDLED files with the
+        //    head. A skill that arrived as a folder owns `<slug>__…` siblings
+        //    that only it addresses, so a head-only delete leaves bytes in the
+        //    library nothing can open — invisible in the DOM, which is exactly
+        //    why this reads the stored notebook rather than the row count.
+        const bundleNames = ['probe-bundle-skill.md',
+            'probe-bundle-skill__references__note.md',
+            'probe-bundle-skill__scripts__helper.py.md'];
+        const readBundles = () => page.evaluate((wanted) => {
+            const nk = Object.keys(localStorage).find(k => k.startsWith('memory_files_v1'));
+            if (!nk) return null;
+            let store = {};
+            try { store = JSON.parse(localStorage.getItem(nk) || '{}'); } catch { return null; }
+            const skills = (store.folders || []).find(f => f.name === 'skills');
+            let all = store.files || [];
+            const shardKey = skills && store.shards ? (store.shards[skills.id] || {}).key : null;
+            if (shardKey) {
+                try { all = all.concat(JSON.parse(localStorage.getItem(shardKey) || '{}').files || []); } catch { /* shard unreadable */ }
+            }
+            const names = skills ? all.filter(f => f.folderId === skills.id).map(f => f.name) : [];
+            return wanted.filter(w => names.includes(w));
+        }, bundleNames);
+        const beforeDelete = await readBundles();
+        const delSel = '[data-testid="studio-delete-probe-bundle-skill"]';
+        let deletePressed = 'no control';
+        try {
+            await page.waitForSelector(delSel, { timeout: 6000 });
+            await page.click(delSel);
+            await page.click(delSel);
+            deletePressed = 'clicked twice';
+        } catch (err) { deletePressed = `unreachable: ${String(err).slice(0, 60)}`; }
+        const cleared = await pollFor(async () => {
+            const left = await readBundles();
+            return left && left.length === 0 ? 0 : null;
+        }, 8000);
+        check('a bundled skill seeds with its support files in the notebook',
+            Array.isArray(beforeDelete) && beforeDelete.length === 3, JSON.stringify(beforeDelete));
+        check('the row Delete is reachable on a bundled skill',
+            deletePressed === 'clicked twice', deletePressed);
+        check('Delete takes the bundled files with the head, in the stored notebook',
+            cleared === 0, JSON.stringify(await readBundles()));
+        await page.waitForTimeout(400);
 
         // ── Settings → Data hosts the backup manager. Its "Import from file"
         //    control is new, and the Settings overlay mounts outside <main> like

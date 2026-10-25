@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-25** (the anchor gate re-measured every citation here and in the stage ledger:
-**417 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**420 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 5 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -780,6 +780,16 @@ never a fourth status.
   refuse; a description with no "Use when" trigger is warned on at import,
   because the description is the activation key and a vague one rarely
   activates.
+- **The trader keeps the hard controls.** Each library row (`SkillsCatalog.tsx`,
+  `SkillDetail.tsx:126`) carries the enable toggle derived by
+  `skillEnabledFlag` — the ONE place `enabled` may be read — and
+  `requestRowDelete` (`StrategyStudio.tsx:391`) arms ONE row and no other, so a
+  second click on that same row is the only thing that erases it.
+  `deleteSkillFile` (`SkillDetail.tsx:87`) takes the head AND every `<slug>__…`
+  bundled sibling in the same folder, inside one notebook write lock: a skill
+  that arrived as a folder owns files nothing else addresses, so a head-only
+  delete would leave bytes in the library that no row, no L1 list and no reader
+  can reach.
 
 The lifecycle has four stages:
 
@@ -1209,10 +1219,10 @@ Learn and Journal surfaces), so the presses are proven live instead.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 417 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 420 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 417 anchors verified, and the gate
+   the gate's own output: these docs state 420 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -1296,7 +1306,7 @@ Learn and Journal surfaces), so the presses are proven live instead.
 
 10. **The arrow table is 74 rows, and every citation in it resolves — and 69 of the 74 rows pair their citation with the symbol that must live on that line (65 of 70 before the goal, self-modification and rail rows landed; the figure has only ever moved up, and the run prints it with a floor, so a row rewritten without its symbol stops being coverage silently), so those rows are checked for content, not just for a line that exists. One row names no file at all — the ensemble row, whose stages the code never names — so a wrong figure inside it stays outside this gate's reach, which is why the sentence says 69/74 rather than 74/74.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
-    resolves all 417 unique anchors on every run, so coverage of the table is no
+    resolves all 420 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
 11. **"One service replacing nine" is falsifiable, and it is right — counted, not
     asserted.** `git log --diff-filter=D` over `services/providers/` names exactly nine
