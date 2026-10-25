@@ -1,12 +1,12 @@
 # Goal Workspaces — goal-as-environment, native in August (2026-10-25)
 
-Status: **the goals core, the self-modification rails, the memory-loop gaps and
-the rail/chip UI are all landed on branch `goal-workspaces-20261025`.** What is
-left is named at the bottom of this file (Next slices) and none of it is a
-secret: the Hermes→`compatibility` key mapping, URL import of referenced support
-files, a user-skill delete, the in-place goal editor, and the live proof that
-needs a funded or local provider. This is a plan and status record, not a claim
-that the whole target is done.
+Status: **the goals core, the self-modification rails, the memory-loop gaps,
+the rail/chip UI and the URL support-file import are all landed on branch
+`goal-workspaces-20261025`.** What is left is named at the bottom of this file
+(Next slices) and none of it is a secret: a user-skill delete, the in-place goal
+editor with its tool-policy picker, and the live proof that needs a funded or
+local provider. This is a plan and status record, not a claim that the whole
+target is done.
 
 **Resume facts** (measured at this tip, re-measure rather than quoting):
 - This branch lives in the worktree `C:\Dev\august-verify-20261024`;
@@ -17,16 +17,18 @@ that the whole target is done.
   `315c46d0` `7576778c` `55e53507` `50963684` (self-mod rails, docs, plan,
   lint ignore) → `056f1a1a` (memory loop) → `bee2933b` (rail + chip) →
   `935d7832` (inverse gate) → `323d6185` (this record) → `9a487648` (declared
-  compatibility keys honoured).
-- Gates: `check:contracts` **107**; anchor gate **414** anchors, 0 comment-line,
+  compatibility keys honoured) → `e017e202` (merge keeps its aliases).
+- Gates: `check:contracts` **124**; anchor gate **417** anchors, 0 comment-line,
   0 symbol-miss, 0 unattributed; `npm run lint` **0 errors / 379 warnings** (the
   ratchet, and `.verify/**` is now ignored so it reproduces CI); typecheck ×3,
-  build, `boot-probe`, `render-probe`, `skill-approval-probe` 25/25 (its
-  `pageErrors=2` is the planted quota arm).
+  build, `boot-probe`, `render-probe` **128 ok**, `skill-approval-probe` 25/25
+  (its `pageErrors=2` is the planted quota arm).
 - Verification scaffolding is untracked in `.verify/`: `node-*.cjs` harnesses
-  (106 + 13 + 5 + 9 + 9 + 19 + 54 checks) and `live-probe4.cjs` (**42/42**) which
+  (134 + 13 + 5 + 9 + 9 + 19 + 54 checks) and `live-probe4.cjs` (**42/42**) which
   drives the goals/self-mod flows in Chromium against a scripted mock provider.
   `.verify/wip/GoalRailPanel.tsx` is dead — the component shipped from it.
+  `.verify/url-ref-probe.cjs` is the one that measured how the URL parser treats
+  a backslash reference; `check:contracts` cites it.
 - Two probe facts that cost time: a `SelectMenu` flyout never stays open to a
   Playwright pointer click inside the Settings modal (drive it by keyboard, and
   walk `data-active` rather than counting presses), and a background learner
@@ -186,10 +188,22 @@ pinned by the node harness, not by the app.
    read from a declared file (flat, nested, or inline-JSON) and honoured, with
    the blob winning and the author's lines still round-tripping;
    `requires_toolsets` / `fallback_for_toolsets` are announced at import as
-   preserved-but-unenforced rather than left silent. Still open: URL import
-   pulling the referenced support files (only the one SKILL.md is fetched, so a
-   skill with `references/` arrives broken), and a delete affordance for user
-   skills in the catalog (the starter shelf is already separated and badged).
+   preserved-but-unenforced rather than left silent, and a URL import now brings
+   the files the fetched SKILL.md names: `skillSupportRefs` reads the body for
+   its `references/`, `templates/`, `scripts/` and `assets/` siblings and
+   `resolveSiblingUrl` refuses anything that is not https, not on the skill's
+   own host, or not under the SKILL.md's own folder, before a request leaves.
+   The result is fed to the SAME `importSkillFiles` folder path with folder-style
+   relPaths, so bundling, the `scanSkillText` screen and the trader's
+   confirmation are one pipeline, not two. Caps: 12 siblings, 200kB each, 600kB
+   per batch (spent in body order, so a concurrent pair cannot double-count),
+   one shared 20s deadline; every refusal is named in the receipt. Two bugs fell
+   out of running the real path on a non-`.md` file: `bundledName` slugified the
+   leaf, so `scripts/helper.py` was stored as `helperpy.md` and the address the
+   body handed the model no longer resolved; and discovery used to reject an
+   escaping `references/../../x.md` silently instead of reporting it. Still
+   open: a delete affordance for user skills in the catalog (the starter shelf
+   is already separated and badged).
 4. **Live proof** — measured already: the focused goal narrowing the offered
    tools AND the executor refusing a tool outside its policy, the ledger row's
    Undo press, the chip's release press, and the pre-read reaching a seat whose

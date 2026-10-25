@@ -1922,6 +1922,29 @@ async function main() {
             `${customize} knowledge=${reached.knowledge} skills=${reached.skillsTab} studio=${reached.studio}`);
         await page.waitForTimeout(600);
 
+        // ── The Studio's URL importer (item 6). It is the one control in the
+        //    app that pulls bytes off the network into the skill library, and
+        //    the shipped rule is "https only" — which has to REACH THE TRADER
+        //    as text, not vanish. `http://` is used deliberately: it refuses
+        //    before any request leaves, so this arm needs no network, cannot
+        //    flake on DNS, and still exercises the whole click → fetch →
+        //    toast chain. The button's empty state is measured first because
+        //    two zeros are not a contrast: an always-dead button would answer
+        //    the same click with the same nothing.
+        const urlBox = page.locator('[data-testid="skills-import-url"]');
+        const urlGo = page.locator('[data-testid="skills-import-url-go"]');
+        const disabledBefore = await urlGo.isDisabled().catch(() => null);
+        await urlBox.fill('http://insecure.example/skills/x/SKILL.md').catch(() => {});
+        const disabledAfter = await urlGo.isDisabled().catch(() => null);
+        await urlGo.click().catch(() => {});
+        const refusalShown = await pollFor(async () => page.evaluate(() =>
+            (/only https:\/\/ URLs are fetched/.test(document.body.innerText || '')) ? 1 : null));
+        check('the URL Fetch button arms only once the field holds a URL',
+            disabledBefore === true && disabledAfter === false, `before=${disabledBefore} after=${disabledAfter}`);
+        check('a non-https skill URL is refused out loud, not dropped',
+            refusalShown === 1, refusalShown === 1 ? '' : 'no refusal text on the page');
+        await urlBox.fill('').catch(() => {});
+
         // ── Settings → Data hosts the backup manager. Its "Import from file"
         //    control is new, and the Settings overlay mounts outside <main> like
         //    the approvals inbox, so <main> can never show it. The trigger's

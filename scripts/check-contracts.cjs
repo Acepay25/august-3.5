@@ -374,6 +374,65 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     ok('caps: Use-when detection',
         sf.hasUseWhenTrigger('Use when sizing into funding extremes')
         && !sf.hasUseWhenTrigger('Momentum.'));
+
+    // URL import (item 6): the body of a fetched SKILL.md is the only manifest
+    // of its support files, and these two functions decide what leaves the
+    // machine. A browser probe cannot reach either failure by construction —
+    // a ref that silently resolves onto someone else's host, or a `..` that
+    // escapes the skill's folder, renders nothing and logs nothing. So the
+    // whitelist, the escape checks and the reach controls are pinned here.
+    const HEAD = new URL('https://skills.example.com/authors/my-skill/SKILL.md');
+    const body = [
+        'Read references/checklist.md before sizing.',
+        'The template is [report.md](templates/report.md).',
+        'See references/checklist.md again, and assets/grid.png.',
+        'Do not read ../secrets/token.md or /etc/passwd.',
+        'Nothing lives at https://other.example.com/references/away.md.',
+        'The scripts/ directory holds the helpers.',
+        'Run scripts/sync.py:12 for the batch.',
+    ].join('\n');
+    const refs = sf.skillSupportRefs(body);
+    ok('refs: the four roles are the whitelist, deduped and in body order',
+        JSON.stringify(refs) === JSON.stringify(['references/checklist.md', 'templates/report.md', 'assets/grid.png', 'scripts/sync.py']),
+        JSON.stringify(refs));
+    ok('refs: a bare role directory is prose, not a fetch candidate',
+        !refs.some(r => r === 'references/' || r === 'scripts/'));
+    ok('refs: an absolute URL that merely contains a role path is not a candidate',
+        !refs.some(r => r.includes('away.md')), JSON.stringify(refs));
+    ok('refs: discovery returns MAX + 1 so an overflow is announceable',
+        sf.skillSupportRefs(Array.from({ length: 20 }, (_, i) => `references/f${i}.md`).join('\n')).length === sf.SKILL_SUPPORT_REF_MAX + 1);
+    // The name is what the author wrote; the DECISION belongs to the resolver,
+    // so an escape attempt is announced in the receipt instead of vanishing.
+    const escapeCandidate = sf.skillSupportRefs('Read references/../../env.md first.');
+    ok('refs: an escaping path is still a candidate, so it can be reported',
+        JSON.stringify(escapeCandidate) === JSON.stringify(['references/../../env.md']), JSON.stringify(escapeCandidate));
+    const resolve = (ref) => sf.resolveSiblingUrl(HEAD, ref);
+    const good = resolve('references/checklist.md');
+    ok('siblings: an ordinary sibling resolves under the head folder (the reach control)',
+        good.ok === true && good.url === 'https://skills.example.com/authors/my-skill/references/checklist.md', JSON.stringify(good));
+    const nested = resolve('references/deep/note.md');
+    ok('siblings: a nested subfolder of the skill folder still resolves',
+        nested.ok === true && nested.url.endsWith('/my-skill/references/deep/note.md'), JSON.stringify(nested));
+    for (const [label, ref, needle] of [
+        ['traversal', '../secrets/token.md', 'leave the skill folder'],
+        ['absolute path', '/etc/passwd', 'absolute path'],
+        ['own scheme', 'https://evil.example/a.md', 'own scheme'],
+        ['protocol relative', '//evil.example/a.md', 'protocol-relative'],
+        // NOT a hypothetical: the URL parser treats `\` as `/` for an https
+        // base, so a Windows-authored body's `\\host\path` ref carries no
+        // scheme and no leading slash — only the host lock stops it. Measured
+        // with .verify/url-ref-probe.cjs before this row was written.
+        ['unc host', '\\\\evil.example\\a.md', 'not skills.example.com'],
+        ['backslash parent hop', '..\\..\\env.md', 'outside the skill'],
+        ['parent escape', '../../env.md', 'leave the skill folder'],
+        ['encoded escape', 'references/%2e%2e/%2e%2e/env.md', 'outside the skill'],
+        ['empty segment', 'references//note.md', 'empty segment'],
+        ['javascript scheme', 'javascript:alert(1)', 'own scheme'],
+    ]) {
+        const r = resolve(ref);
+        ok(`siblings: ${label} refused before any request`,
+            r.ok === false && String(r.reason).includes(needle), JSON.stringify(r));
+    }
 })();
 
 // ─── 10. the shared index budget — one table, scaled to the window ─────────

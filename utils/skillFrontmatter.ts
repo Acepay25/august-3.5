@@ -337,3 +337,80 @@ export const scanSkillText = (text: string): Array<{ severity: ScanSeverity; wha
     }
     return hits;
 };
+
+/**
+ * ── Support-file references (item 6's URL import) ──────────────────────────
+ * A SKILL.md folder keeps its extra material in four role directories beside
+ * the head file. When a skill arrives by URL instead of as a picked folder,
+ * the body is the ONLY manifest of what else exists, so those four prefixes
+ * are the whitelist of what the fetcher may even consider.
+ *
+ * The match is anchored on the role, not on a filename-looking word: a
+ * reference must read `references/x.md`, so `See the references folder`,
+ * an absolute URL and a bare word all yield nothing. The lookbehind rejects a
+ * `/`, `:` or word character before the role, which is what keeps
+ * `https://other.example/references/a.md` out of the candidate set — that is
+ * another site's path that merely happens to be spelled like a role.
+ */
+export const SKILL_SUPPORT_ROLES = ['references', 'templates', 'scripts', 'assets'] as const;
+
+/** How many siblings one URL import will fetch. A skill naming more is not a
+ *  skill this notebook has room for, and the remainder is REPORTED, never
+ *  silently dropped — so discovery returns MAX + 1 and the extra slot is the
+ *  caller's proof that there was an overflow to announce. */
+export const SKILL_SUPPORT_REF_MAX = 12;
+
+const SUPPORT_REF_RE = /(?<![\w./-])(?:references|templates|scripts|assets)\/[^\s)\]'"<>,;:#]+/g;
+
+export const skillSupportRefs = (text: string): string[] => {
+    const found: string[] = [];
+    const seen = new Set<string>();
+    for (const raw of text.match(SUPPORT_REF_RE) ?? []) {
+        const ref = raw.replace(/[.,;:!?]+$/, '');
+        // Only "is this a file at all" is decided here. Path legality is NOT:
+        // a `references/../../env.md` escape must reach resolveSiblingUrl so
+        // the receipt can say it was refused, instead of the author's named
+        // file vanishing without a word.
+        const last = ref.split('/').pop() ?? '';
+        if (!/\.[A-Za-z0-9]{1,10}$/.test(last)) continue;
+        if (seen.has(ref)) continue;
+        seen.add(ref);
+        found.push(ref);
+        if (found.length > SKILL_SUPPORT_REF_MAX) break;
+    }
+    return found;
+};
+
+/**
+ * Resolve one support reference against the SKILL.md it was named in, or say
+ * why it is not fetched. Pure, and it runs BEFORE any request leaves.
+ *
+ * Two layers, and they are not equally load-bearing. The textual rules
+ * (scheme, `//`, leading `/`, `..`) give the precise reason and stop anything
+ * a body could spell normally. The RESOLVED checks are what actually holds,
+ * because the URL parser treats `\` as `/` for an https base — so
+ * `references\..\..\env.md` sails through every textual rule and is caught
+ * only by "the resolved path is still under the head file's own folder".
+ * Measured with .verify/url-ref-probe.cjs, not assumed. The host lock is the
+ * same kind of second guard: discovery's role prefix makes a cross-host ref
+ * unreachable today, and a guard at an untrusted-text boundary should not
+ * depend on that staying true.
+ */
+export type SiblingUrl = { ok: true; url: string } | { ok: false; reason: string };
+
+export const resolveSiblingUrl = (head: URL, ref: string): SiblingUrl => {
+    if (/^[a-z][a-z0-9+.-]*:/i.test(ref)) return { ok: false, reason: 'it names its own scheme — a URL import fetches only siblings beside the SKILL.md' };
+    if (ref.startsWith('//')) return { ok: false, reason: 'it is protocol-relative — a URL import fetches only siblings beside the SKILL.md' };
+    if (ref.startsWith('/')) return { ok: false, reason: 'it is an absolute path — a URL import fetches only siblings beside the SKILL.md' };
+    if (ref.split('/').some(s => s === '' || s === '.' || s === '..')) return { ok: false, reason: 'it tries to leave the skill folder (.. or an empty segment)' };
+    let abs: URL;
+    try { abs = new URL(ref, head) } catch { return { ok: false, reason: 'it is not a usable path' } }
+    if (abs.protocol !== 'https:') return { ok: false, reason: `it resolves to ${abs.protocol}// — only https:// is fetched` };
+    if (abs.host !== head.host) return { ok: false, reason: `it points at ${abs.host}, not ${head.host} — only the skill's own server is fetched` };
+    const folderPath = decodeURIComponent(head.pathname).replace(/[^/]*$/, '');
+    const resolvedPath = decodeURIComponent(abs.pathname);
+    if (!resolvedPath.startsWith(folderPath) || resolvedPath.split('/').some(s => s === '..')) {
+        return { ok: false, reason: `it resolves to ${resolvedPath}, outside the skill's own folder` };
+    }
+    return { ok: true, url: abs.toString() };
+};

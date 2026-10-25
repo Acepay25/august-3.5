@@ -412,13 +412,20 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
         setIsFetchingUrl(true);
         try {
             const fetched = await fetchSkillFromUrl(skillUrl);
-            if (fetched.error || !fetched.content) {
+            if (fetched.error || !fetched.files || fetched.files.length === 0) {
                 toast.error('Import failed', fetched.error ?? 'The URL returned nothing readable.');
                 return;
             }
-            const result = await importSkillFiles([{ name: fetched.name ?? 'imported-skill.md', content: fetched.content }]);
-            if (result.imported.length > 0) toast.success('Skill imported', `"${result.imported[0]}" added from the URL — scanned and stored as text only.`);
+            // The head plus every sibling the body named, already shaped as a
+            // folder pick would have shaped them — so this is the same import
+            // path, the same scan and the same refusal of anything dangerous.
+            const result = await importSkillFiles(fetched.files);
+            if (result.imported.length > 0) {
+                const extra = result.imported.length - 1;
+                toast.success('Skill imported', `${result.imported[0]} added from the URL${extra > 0 ? ` with ${extra} bundled file${extra === 1 ? '' : 's'}` : ''} — stored as text only; nothing fetched here is ever run.`);
+            }
             for (const fail of result.failed) toast.error(`Import failed: ${fail.name}`, fail.reason);
+            for (const miss of fetched.refused ?? []) toast.error(`Not fetched: ${miss.path}`, miss.reason);
             setSkillUrl('');
         } finally {
             setIsFetchingUrl(false);
