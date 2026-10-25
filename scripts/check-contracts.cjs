@@ -258,6 +258,22 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         && sf.skillRunsHere({ requiresTools: ['not_a_tool'] }, 'web', ['get_order_book']) === false);
     ok('fm: requiresEnv fails closed in a renderer',
         sf.skillRunsHere({ requiresEnv: ['FOO'] }, 'desktop', []) === false);
+    // The other vocabulary a SKILL.md arrives with. A declared key the reader
+    // cannot see is a constraint the app silently ignores, so the reader is
+    // pinned here in the three forms files actually use.
+    ok('fm: a nested declaration block is read',
+        JSON.stringify(sf.declaredCompatibility('metadata:\n  hermes:\n    requires_tools:\n      - web_search\n      - run_screener\n    platforms: [desktop]\n'))
+        === JSON.stringify({ requiresTools: ['web_search', 'run_screener'], platforms: ['desktop'] }),
+        JSON.stringify(sf.declaredCompatibility('metadata:\n  hermes:\n    requires_tools:\n      - web_search\n      - run_screener\n    platforms: [desktop]\n')));
+    ok('fm: the inline-JSON metadata form is read',
+        sf.declaredCompatibility('metadata: {"hermes": {"fallback_for_tools": ["recall"]}}').fallbackForTools?.[0] === 'recall');
+    ok('fm: a flat declaration with no metadata block is read',
+        sf.declaredCompatibility("requires_tools: ['web_search']\n").requiresTools?.length === 1);
+    ok('fm: a declared toolset is reported inert rather than honoured',
+        JSON.stringify(sf.inertDeclaredKeys(sf.declaredCompatibility('requires_toolsets: [browser]\nfallback_for_toolsets: [terminal]\n')))
+        === '["requires_toolsets","fallback_for_toolsets"]');
+    ok('fm: nothing declared asserts nothing',
+        Object.keys(sf.declaredCompatibility('author: someone\nlicense: MIT\n')).length === 0);
     // The inverse gate: a procedure that covers a tool stops being needed the
     // moment the tool is there, and must stop being injected then.
     ok('fm: fallbackForTools hides the skill once the covered tool exists',

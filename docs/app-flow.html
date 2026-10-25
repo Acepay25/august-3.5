@@ -231,7 +231,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <h2>E · Autonomy — rooms, alerts, one detached evaluator</h2>
 <div class="flow">
 <div class="tier">
- <div class="n run"><b>due skill eval</b><i>buildDefaultRunner services/learning/SkillEvalScheduler.ts:180 — reached from the trade-sync path (runDueSkillEvalWithDefaultRunner services/learning/SkillMemoryService.ts:3920) and the skill detail&rsquo;s own run</i></div>
+ <div class="n run"><b>due skill eval</b><i>buildDefaultRunner services/learning/SkillEvalScheduler.ts:180 — reached from the trade-sync path (runDueSkillEvalWithDefaultRunner services/learning/SkillMemoryService.ts:3942) and the skill detail&rsquo;s own run</i></div>
  <div class="n"><b>DETACHED_EVAL_TOOLS</b><i>services/trade/unattendedTools.ts:27 — the Chat set minus every notebook-writer and minus present_trade / decline_trade: an unattended judgement may read the tape and may not act on the journal</i></div>
  <div class="n store"><b>verdict</b><i>onto the skill file&rsquo;s eval fields, and one row in the Activity drawer</i></div>
 </div>
@@ -336,7 +336,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <div class="tier">
  <div class="n run"><b>trade closes</b><i><code>logTradeWithFeedback</code> (<code>hooks/useTradeLogging.ts:275</code>) writes the journal row, memory note and measured R</i></div>
  <div class="n"><b>outcome</b><i><code>OutcomeAutopilotService.register</code> / <code>subscribe</code> → <code>settlementActionFor</code> (<code>utils/outcomeSettlement.ts:47</code>): automatic · shadow · confirm, 15s undo</i></div>
- <div class="n"><b>evidence</b><i><code>applySkillEvidence</code> (<code>SkillMemoryService.ts:2312</code>) · <code>calculatePnlR</code> (<code>PatternMemorySynthesisService.ts:249</code>)</i></div>
+ <div class="n"><b>evidence</b><i><code>applySkillEvidence</code> (<code>SkillMemoryService.ts:2334</code>) · <code>calculatePnlR</code> (<code>PatternMemorySynthesisService.ts:249</code>)</i></div>
  <div class="n"><b>review</b><i><code>runSessionSkillReview</code> · <code>runWeeklyReviewIfDue</code> · <code>runMonthlyReportIfDue</code> · <code>passMining</code> · <code>chartScanSkills</code></i></div>
 </div>
 <div class="down">↓</div>
@@ -432,7 +432,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>59</td><td>wire decision → audit row</td><td><code>buildReasoningPatch</code> (<code>services/providers/reasoningControls.ts:271</code>) → <code>WireAuditEntry</code> → <code>WireAuditRow</code></td></tr>
 <tr><td>60</td><td>trade close → journal + autopilot</td><td><code>logTradeWithFeedback</code> (<code>hooks/useTradeLogging.ts:275</code>) → <code>OutcomeAutopilotService.register</code></td></tr>
 <tr><td>61</td><td>autopilot → settlement</td><td><code>settlementActionFor</code> (<code>utils/outcomeSettlement.ts:47</code>) — automatic · shadow · confirm; 15s undo</td></tr>
-<tr><td>62</td><td>outcome → skill ledger + pattern memory</td><td><code>applySkillEvidence</code> (<code>SkillMemoryService.ts:2312</code>) · <code>calculatePnlR</code> (<code>PatternMemorySynthesisService.ts:249</code>)</td></tr>
+<tr><td>62</td><td>outcome → skill ledger + pattern memory</td><td><code>applySkillEvidence</code> (<code>SkillMemoryService.ts:2334</code>) · <code>calculatePnlR</code> (<code>PatternMemorySynthesisService.ts:249</code>)</td></tr>
 <tr><td>63</td><td>review → draft</td><td><code>runSessionSkillReview</code> / <code>runWeeklyReviewIfDue</code> / <code>runMonthlyReportIfDue</code> → <code>queueSkillDraft</code></td></tr>
 <tr><td>64</td><td>draft → gate → human</td><td><code>deterministicDraftGate</code> / <code>gateEvidenceBackedDraft</code> → <code>approveSkillDraft</code> (<code>skillApproval.ts:53</code>)</td></tr>
 <tr><td>65</td><td>approved skill → notebook → prompt</td><td><code>approveSkillDraft</code> writes the file; <code>resolveInvokedSkills</code> (<code>SkillMemoryService.ts:622</code>) returns the rows the next prompt may name</td></tr>

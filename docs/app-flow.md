@@ -466,7 +466,7 @@ person pressing send, a bot mailbox delivery, or a room round.
 
 What survives is the one unattended caller that is not a conversation — the
 detached skill evaluator, reached from the trade-sync path
-(`runDueSkillEvalWithDefaultRunner services/learning/SkillMemoryService.ts:3920`)
+(`runDueSkillEvalWithDefaultRunner services/learning/SkillMemoryService.ts:3942`)
 and from the skill detail's own run. Because nobody is watching it, it runs on
 `DETACHED_EVAL_TOOLS` (`services/trade/unattendedTools.ts:27`): the Chat surface's
 set minus every notebook-writer and minus `present_trade` / `decline_trade`, so a detached
@@ -723,7 +723,7 @@ never a fourth status.
   (`utils/skillFrontmatter.ts`) is shared by parser and serializer so a key can
   never be known to one and unknown to the other.
 - **Compatibility is ENFORCED, not just carried.** `skillRunsHere`
-  (`utils/skillFrontmatter.ts:121`) maps `platforms` onto the three runtimes
+  (`utils/skillFrontmatter.ts:260`) maps `platforms` onto the three runtimes
   the app actually has (browser / Electron desktop / Capacitor mobile),
   requires `requiresTools` to be a subset of the desk's list, and fails closed
   on `requiresEnv` — a renderer cannot honestly verify an env var. It also reads
@@ -732,9 +732,19 @@ never a fourth status.
   procedure duplicating a live tool would tax every prompt for nothing.
   `fallbackForToolsets` round-trips and gates nothing, because August names no
   toolsets; guessing a set out of tool names would hide a skill for a reason no
-  author wrote. A skill this
-  runtime cannot run leaves the index entirely, and `skill_view` refuses to
-  open it with that reason.
+  author wrote. A skill this runtime cannot run leaves the index entirely, and
+  `skill_view` refuses to open it with that reason.
+- **Two vocabularies, one gate.** That gate used to read ONE shape — the
+  `compatibility:` blob this app writes. An imported file declares the same
+  thing as frontmatter keys (`requires_tools`, `fallback_for_tools`,
+  `platforms`, flat or nested under `metadata:` / `hermes:`), and
+  `declaredCompatibility` (`utils/skillFrontmatter.ts`) reads all three forms
+  (dash list, inline `[a, b]`, inline JSON) so a declaration a reader cannot see
+  stops being a constraint nobody enforces. The blob wins a key both spell; the
+  declaration fills the rest. Reading is not owning — the author's own lines stay
+  in `unknownFrontmatter` and re-emit verbatim, and a key August cannot honour
+  (`requires_toolsets`, `fallback_for_toolsets` — it names no toolsets) is
+  announced at import by `inertDeclaredKeys` rather than ignored in silence.
 - **`skill_view` — progressive disclosure on the desk.** L0 is the skills index
   every seat already carries; the tool (`DeskToolsService.ts:2837`) is L1 (the
   full body plus the bundled-file list) and L2 (one bundled file by flat name —
@@ -744,14 +754,14 @@ never a fourth status.
 - **Import: folder, URL, scanned.** A picked folder imports whole — the
   `SKILL.md` claims its sibling files as bundled files name-spaced
   `<slug>__<subpath>`, exactly what L2 addresses; `fetchSkillFromUrl`
-  (`SkillImportService.ts:202`) fetches one raw SKILL.md (https only, 15s
+  (`SkillImportService.ts:210`) fetches one raw SKILL.md (https only, 15s
   timeout, 400kB cap) into the same pipeline. EVERY imported byte runs
-  `scanSkillText` (`utils/skillFrontmatter.ts:194`): destructive filesystem
+  `scanSkillText` (`utils/skillFrontmatter.ts:333`): destructive filesystem
   commands, fork bombs, piped shell downloads, credential-file reads and
   credential-carrying URLs REFUSE the import with the finding named. Nothing
   auto-runs — scripts are stored text, and this repo has no execution path
   for them.
-- **Authoring caps** — `skillBodyCaps` (`utils/skillFrontmatter.ts:150`):
+- **Authoring caps** — `skillBodyCaps` (`utils/skillFrontmatter.ts:289`):
   200-line soft warn (move material into `references/`), 100k-char hard
   refuse; a description with no "Use when" trigger is warned on at import,
   because the description is the activation key and a vague one rarely
@@ -871,7 +881,7 @@ flowchart TD
     T["trade closes — useTradeLogging.logTradeWithFeedback useTradeLogging.ts:275"] --> J["journal row + memory note + realizedR/netR"]
     J --> A["OutcomeAutopilotService.register / subscribe"]
     A --> S["settlementActionFor outcomeSettlement.ts:47 — automatic · shadow · confirm"]
-    S --> E["applySkillEvidence SkillMemoryService.ts:2312 · calculatePnlR PatternMemorySynthesisService.ts:249"]
+    S --> E["applySkillEvidence SkillMemoryService.ts:2334 · calculatePnlR PatternMemorySynthesisService.ts:249"]
     E --> R["review passes — runSessionSkillReview · runWeeklyReviewIfDue · runMonthlyReportIfDue · passMining · chartScanSkills"]
     R --> D["drafts — queueSkillDraft · queueLearningProposal"]
     D --> G{"draft gates — deterministicDraftGate · gateEvidenceBackedDraft"}
@@ -1036,7 +1046,7 @@ surfaces actually change how this app behaves:
   in `SHADOW_MIN_TRADES_PER_SIDE services/selfMod/SelfModificationService.ts:61`
   and in `maybePinWinningPromptLane utils/promptVersionStats.ts:45` — and
   promotes, leaves in shadow, or auto-reverts. It runs from the learning pass
-  beside `maybePinWinningPromptLane services/learning/SkillMemoryService.ts:3920`
+  beside `maybePinWinningPromptLane services/learning/SkillMemoryService.ts:3942`
   so a self-edit is judged by outcomes, not by the model's opinion of its own
   edit.
 
@@ -1139,7 +1149,7 @@ Learn and Journal surfaces), so the presses are proven live instead.
 | 59 | wire decision → audit row | `buildReasoningPatch services/providers/reasoningControls.ts:271` → `WireAuditEntry` → `WireAuditRow`; the route, tier, applied and reason are recorded per call |
 | 60 | trade close → journal + autopilot | `logTradeWithFeedback hooks/useTradeLogging.ts:275` writes the row/memory note and the measured R; `register services/ui/OutcomeAutopilotService.ts:189` watches it |
 | 61 | autopilot → settlement | `subscribe services/ui/OutcomeAutopilotService.ts:288` → `settlementActionFor utils/outcomeSettlement.ts:47` (automatic · shadow · confirm; 15s undo) |
-| 62 | outcome → skill ledger + pattern memory | `applySkillEvidence services/learning/SkillMemoryService.ts:2312` and `calculatePnlR services/learning/PatternMemorySynthesisService.ts:249` consume the measured outcome, never a ±1 stand-in |
+| 62 | outcome → skill ledger + pattern memory | `applySkillEvidence services/learning/SkillMemoryService.ts:2334` and `calculatePnlR services/learning/PatternMemorySynthesisService.ts:249` consume the measured outcome, never a ±1 stand-in |
 | 63 | review → draft | `runSessionSkillReview services/learning/sessionSkillReview.ts:207` · `runWeeklyReviewIfDue services/learning/weeklyReview.ts:161` · `runMonthlyReportIfDue services/learning/monthlyReport.ts:337` → `queueSkillDraft utils/skillDrafts.ts:65` |
 | 64 | draft → gate → human | `deterministicDraftGate services/learning/draftGates.ts:85` / `gateEvidenceBackedDraft :199` → `approveSkillDraft services/learning/skillApproval.ts:53` |
 | 65 | approved skill → notebook → prompt | `approveSkillDraft services/learning/skillApproval.ts:53` writes the file; `resolveInvokedSkills services/learning/SkillMemoryService.ts:622` returns the rows the next prompt may name |
@@ -1151,7 +1161,7 @@ Learn and Journal surfaces), so the presses are proven live instead.
 | 71 | skills index → skill_view → the body or one bundled file | `case 'skill_view' services/analysis/DeskToolsService.ts:2837` — L1 body + bundled list, L2 one flat-named file (`..` refused); `${SKILL_DIR}`/`${SESSION_ID}` substitute, Hermes aliases accepted |
 | 72 | message → focused goal → a narrower toolset | `focusedGoal services/goals/GoalService.ts:72` · `goalMatchesMessage :278` → `goalAllowedTools services/trade/chatSurfaceTurn.ts:328` → `effectiveAllowed services/analysis/DeskToolsService.ts:4963`, an intersection — a goal may only narrow the seat |
 | 73 | seat → goal edit → snapshot → undo | `case 'update_goal' services/analysis/DeskToolsService.ts:3109` → `updateGoal services/goals/GoalService.ts:164` keeps the previous snapshot → `case 'restore_goal' services/analysis/DeskToolsService.ts:3153` → `restoreGoal services/goals/GoalService.ts:202` |
-| 74 | seat → self-change → ledger → outcomes | `case 'propose_self_change' services/analysis/DeskToolsService.ts:3195` → `proposeKnobChange services/selfMod/SelfModificationService.ts:259` / `proposePromptOverride services/selfMod/SelfModificationService.ts:305` → `writeSelfChange services/selfMod/SelfChangeLedger.ts:100` → `settleSelfChanges services/selfMod/SelfModificationService.ts:452`, run from `settleSelfChanges services/learning/SkillMemoryService.ts:3927` |
+| 74 | seat → self-change → ledger → outcomes | `case 'propose_self_change' services/analysis/DeskToolsService.ts:3195` → `proposeKnobChange services/selfMod/SelfModificationService.ts:259` / `proposePromptOverride services/selfMod/SelfModificationService.ts:305` → `writeSelfChange services/selfMod/SelfChangeLedger.ts:100` → `settleSelfChanges services/selfMod/SelfModificationService.ts:452`, run from `settleSelfChanges services/learning/SkillMemoryService.ts:3949` |
 | 75 | rail Goals tab → focus / undo → the header chip | `focusGoal services/goals/GoalService.ts:230` and `revertSelfChange services/selfMod/SelfModificationService.ts:378` pressed from `GoalRailPanel components/agents/GoalRailPanel.tsx:166` → `ActiveGoalChip components/agents/ActiveGoalChip.tsx:27` names it, and its own press releases it |
 
 ---

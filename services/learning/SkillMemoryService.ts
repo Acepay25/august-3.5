@@ -30,7 +30,7 @@ import type { SkillIndexRow } from '../trade/tradeChatContext';
 import { netRiskReward, stopDistancePercent } from '../../utils/netRiskReward';
 import { parsePrice } from '../../utils/analysisUtils';
 import { formatCraftedSkillBody, refineSkillFromLosses } from './SkillCraftService';
-import { captureUnknownFrontmatter, skillRunsHere, type SkillRuntime } from '../../utils/skillFrontmatter';
+import { captureUnknownFrontmatter, declaredCompatibility, skillRunsHere, type SkillRuntime } from '../../utils/skillFrontmatter';
 import { DESK_TOOL_NAMES } from '../../utils/toolKinds';
 import {
     recordWorthGateApproval,
@@ -722,32 +722,54 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         unknownFrontmatter: captureUnknownFrontmatter(fm),
         version: pick('version'),
         compatibility: (() => {
-            const raw = pick('compatibility');
-            if (!raw) return undefined;
-            try {
-                const parsed: unknown = JSON.parse(raw);
-                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
-                const shape = parsed as Record<string, unknown>;
-                const list = (key: string): string[] | undefined => {
-                    const value = shape[key];
-                    if (!Array.isArray(value)) return undefined;
-                    const items = value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
-                    return items.length ? items : undefined;
-                };
-                const compat: SkillCompatibility = {
-                    ...(list('requiresTools') ? { requiresTools: list('requiresTools') } : {}),
-                    ...(list('fallbackForTools') ? { fallbackForTools: list('fallbackForTools') } : {}),
-                    ...(list('fallbackForToolsets') ? { fallbackForToolsets: list('fallbackForToolsets') } : {}),
-                    ...(list('requiresEnv') ? { requiresEnv: list('requiresEnv') } : {}),
-                    ...(list('platforms') ? { platforms: list('platforms') } : {}),
-                };
-                // An empty object means "no constraint" — which is what an
-                // absent key means, so it is stored as absent.
-                return Object.keys(compat).length ? compat : undefined;
-            } catch {
-                // A hand-edited or corrupt value must not poison the file.
-                return undefined;
-            }
+            // Two vocabularies state the same constraint: August's own
+            // `compatibility:` blob, and the SKILL.md keys an imported file
+            // arrives with (`requires_tools`, `platforms`, flat or under
+            // `metadata: hermes:`). The blob wins a key it declares — it is the
+            // shape this app writes and the one the desk's own tooling updates —
+            // and the declaration fills the keys the blob leaves silent, so an
+            // imported skill is never carrying a constraint nobody enforces.
+            const fromBlob = (): Partial<SkillCompatibility> => {
+                const raw = pick('compatibility');
+                if (!raw) return {};
+                try {
+                    const parsed: unknown = JSON.parse(raw);
+                    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+                    const shape = parsed as Record<string, unknown>;
+                    const list = (key: string): string[] | undefined => {
+                        const value = shape[key];
+                        if (!Array.isArray(value)) return undefined;
+                        const items = value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+                        return items.length ? items : undefined;
+                    };
+                    return {
+                        ...(list('requiresTools') ? { requiresTools: list('requiresTools') } : {}),
+                        ...(list('fallbackForTools') ? { fallbackForTools: list('fallbackForTools') } : {}),
+                        ...(list('fallbackForToolsets') ? { fallbackForToolsets: list('fallbackForToolsets') } : {}),
+                        ...(list('requiresEnv') ? { requiresEnv: list('requiresEnv') } : {}),
+                        ...(list('platforms') ? { platforms: list('platforms') } : {}),
+                    };
+                } catch {
+                    // A hand-edited or corrupt value must not poison the file.
+                    return {};
+                }
+            };
+            const blob = fromBlob();
+            const declared = declaredCompatibility(fm);
+            const compat: SkillCompatibility = {
+                ...(blob.requiresTools ? { requiresTools: blob.requiresTools } : {}),
+                ...(!blob.requiresTools && declared.requiresTools?.length ? { requiresTools: declared.requiresTools } : {}),
+                ...(blob.fallbackForTools ? { fallbackForTools: blob.fallbackForTools } : {}),
+                ...(!blob.fallbackForTools && declared.fallbackForTools?.length ? { fallbackForTools: declared.fallbackForTools } : {}),
+                ...(blob.fallbackForToolsets ? { fallbackForToolsets: blob.fallbackForToolsets } : {}),
+                ...(!blob.fallbackForToolsets && declared.fallbackForToolsets?.length ? { fallbackForToolsets: declared.fallbackForToolsets } : {}),
+                ...(blob.requiresEnv ? { requiresEnv: blob.requiresEnv } : {}),
+                ...(blob.platforms ? { platforms: blob.platforms } : {}),
+                ...(!blob.platforms && declared.platforms?.length ? { platforms: declared.platforms } : {}),
+            };
+            // An empty object means "no constraint" — which is what an
+            // absent key means, so it is stored as absent.
+            return Object.keys(compat).length ? compat : undefined;
         })(),
         coin: pick('coin'),
         timeframe: pick('timeframe'),

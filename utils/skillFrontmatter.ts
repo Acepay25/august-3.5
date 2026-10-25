@@ -67,6 +67,145 @@ export const SKILL_NAME_MAX = 64;
 export const SKILL_DESCRIPTION_MAX = 1024;
 
 /**
+ * Compatibility stated in the OTHER vocabulary skills arrive with.
+ *
+ * A SKILL.md writer declares what a skill needs as frontmatter keys —
+ * `requires_tools`, `fallback_for_tools`, `platforms`, either flat or nested
+ * under `metadata: hermes:` — while August keeps its own `compatibility:` JSON
+ * blob. Until now only the blob was read, so an imported skill declared a
+ * constraint this app never enforced: a false promise to its author, and the
+ * drift the key registry exists to prevent, just on the semantics side.
+ *
+ * Pure text in, plain data out. Nothing here imports the skill service (the
+ * parser calls it, not the other way round), and the keys it reads are still
+ * captured VERBATIM by `captureUnknownFrontmatter` — reading a key is not the
+ * same as owning it, and a rewrite must still emit the author's line.
+ */
+export interface DeclaredCompatibility {
+    requiresTools?: string[];
+    fallbackForTools?: string[];
+    platforms?: string[];
+    /** Read and reported, never acted on: August names no toolsets, so there
+     *  is nothing to resolve one against. Kept distinct from the live gates so
+     *  a caller can say "declared, inert" instead of pretending. */
+    requiresToolsets?: string[];
+    fallbackForToolsets?: string[];
+}
+
+/** The declaration keys this app gives meaning to, in the spelling the file
+ *  uses. `requires_toolsets` / `fallback_for_toolsets` are recorded, not honoured. */
+const DECLARED_KEYS: Readonly<Record<string, keyof DeclaredCompatibility>> = {
+    requires_tools: 'requiresTools',
+    requiresTools: 'requiresTools',
+    fallback_for_tools: 'fallbackForTools',
+    fallbackForTools: 'fallbackForTools',
+    platforms: 'platforms',
+    requires_toolsets: 'requiresToolsets',
+    requiresToolsets: 'requiresToolsets',
+    fallback_for_toolsets: 'fallbackForToolsets',
+    fallbackForToolsets: 'fallbackForToolsets',
+};
+
+interface Node { inline: string; items: string[]; children: Map<string, Node>; }
+
+/** The YAML subset a frontmatter block actually uses: `key: value`,
+ *  `key: [a, b]`, a `key:` followed by `- item` lines, nesting by indentation,
+ *  and quoted scalars. Anything richer stays in the verbatim capture — this
+ *  reader is deliberately not a YAML implementation, and a key it cannot read
+ *  is a key that declares no constraint rather than a guess at one. */
+const parseBlock = (text: string): Map<string, Node> => {
+    const root = new Map<string, Node>();
+    const stack: Array<{ indent: number; node: Node | null; map: Map<string, Node> }> =
+        [{ indent: -1, node: null, map: root }];
+    for (const line of text.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const indent = line.length - trimmed.length;
+        while (stack.length > 1 && indent <= stack[stack.length - 1].indent) stack.pop();
+        const frame = stack[stack.length - 1];
+        const kv = /^([A-Za-z_][A-Za-z0-9_-]*):[ \t]*(.*)$/.exec(trimmed);
+        if (kv) {
+            const node: Node = { inline: kv[2].trim(), items: [], children: new Map() };
+            frame.map.set(kv[1], node);
+            stack.push({ indent, node, map: node.children });
+            continue;
+        }
+        const item = /^-\s*(.*)$/.exec(trimmed);
+        if (item && frame.node) {
+            frame.node.items.push(item[1].trim().replace(/^['"]|['"]$/g, ''));
+            continue;
+        }
+        // A line this reader cannot place (a folded scalar, a nested map under a
+        // list item) ends the block it would have belonged to. Ignoring it is
+        // honest: no constraint is asserted that the file did not plainly state.
+        if (frame.node) frame.node.inline = frame.node.inline || '';
+    }
+    return root;
+};
+
+const unquote = (v: string): string => v.trim().replace(/^['"]|['"]$/g, '');
+
+/** One node's value as a list, in whichever of the three forms it appears. */
+const listOf = (node: Node | undefined): string[] | undefined => {
+    if (!node) return undefined;
+    if (node.items.length > 0) return node.items.map(unquote).filter(Boolean);
+    const inline = node.inline.trim();
+    if (!inline) return undefined;
+    if (inline.startsWith('[')) {
+        const close = inline.lastIndexOf(']');
+        const inner = close > 0 ? inline.slice(1, close) : inline.slice(1);
+        return inner.split(',').map(unquote).filter(Boolean);
+    }
+    return [unquote(inline)].filter(Boolean);
+};
+
+const metadataHermes = (tree: Map<string, Node>): Map<string, Node> | undefined => {
+    const meta = tree.get('metadata');
+    if (!meta) return undefined;
+    const nested = meta.children.get('hermes');
+    if (nested) return nested.children;
+    // `metadata: {"hermes": {…}}` — the inline-JSON form this app's own
+    // serializer uses for a map inside a YAML scalar.
+    const inline = meta.inline.trim();
+    if (!inline.startsWith('{')) return undefined;
+    try {
+        const parsed: unknown = JSON.parse(inline);
+        const hermes = (parsed as { hermes?: unknown })?.hermes;
+        if (!hermes || typeof hermes !== 'object' || Array.isArray(hermes)) return undefined;
+        const out = new Map<string, Node>();
+        for (const [key, value] of Object.entries(hermes as Record<string, unknown>)) {
+            out.set(key, Array.isArray(value)
+                ? { inline: '', items: value.map(v => String(v)), children: new Map() }
+                : { inline: typeof value === 'string' ? value : JSON.stringify(value), items: [], children: new Map() });
+        }
+        return out;
+    } catch { return undefined; }
+};
+
+/** Read every declaration the block makes, nested first, flat second. */
+export const declaredCompatibility = (frontmatter: string): DeclaredCompatibility => {
+    const tree = parseBlock(frontmatter || '');
+    const hermes = metadataHermes(tree);
+    const out: Record<string, string[]> = {};
+    for (const [rawKey, field] of Object.entries(DECLARED_KEYS)) {
+        const found = [...(listOf(hermes?.get(rawKey)) ?? []), ...(listOf(tree.get(rawKey)) ?? [])]
+            .map(v => String(v).trim())
+            .filter(Boolean);
+        const merged = [...new Set(found)];
+        if (merged.length) out[field] = merged;
+    }
+    return out as DeclaredCompatibility;
+};
+
+/** Which declared keys this app can honour, and which it cannot say it will.
+ *  Used by the review and the import receipt so an author is told the truth
+ *  about a key that round-trips and does nothing. */
+export const inertDeclaredKeys = (declared: DeclaredCompatibility): string[] => [
+    ...(declared.requiresToolsets ? ['requires_toolsets'] : []),
+    ...(declared.fallbackForToolsets ? ['fallback_for_toolsets'] : []),
+];
+
+/**
  * Face validation for import and discovery. Returns one issue per problem, in
  * the caller's display vocabulary — empty array means the face is valid. A
  * skill with issues is SKIPPED with these reasons logged, never silently

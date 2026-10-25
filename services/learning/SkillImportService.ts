@@ -10,7 +10,7 @@
  */
 
 import { parseSkillMarkdown } from './SkillMemoryService';
-import { skillFaceIssues, skillBodyCaps, hasUseWhenTrigger, scanSkillText } from '../../utils/skillFrontmatter';
+import { skillFaceIssues, skillBodyCaps, hasUseWhenTrigger, scanSkillText, declaredCompatibility, inertDeclaredKeys } from '../../utils/skillFrontmatter';
 import { createMemoryFile, getMemoryFiles } from './MemoryFilesService';
 import { getActiveUsername } from '../../utils/activeUser';
 import { slugifyName } from './MemoryFilesService';
@@ -181,6 +181,14 @@ export const importSkillFiles = async (files: Array<SkillFileRead & { content: s
             body: meta.body,
         });
         if (issues.length > 0) console.warn(`[Skills] import "${file.name}": ${issues.join('; ')} (imported anyway — August's own exports use prose names)`);
+        // A key this app cannot honour is SAID, not quietly ignored. The author
+        // who wrote `requires_toolsets` believes it gates something; August
+        // names no toolsets, so it says so and moves on. The line itself still
+        // round-trips untouched — reading a declaration is not owning it.
+        const inert = inertDeclaredKeys(declaredCompatibility((meta.unknownFrontmatter || []).join('\n')));
+        if (inert.length > 0) {
+            console.warn(`[Skills] import "${file.name}": ${inert.join(', ')} ${inert.length === 1 ? 'is' : 'are'} kept and honoured by nothing — August names no toolsets to resolve them against`);
+        }
         // Same trigger already learned → skip as duplicate (honest, not
         // silent). Skills WITHOUT a trigger condition dedupe on the
         // normalized title (the first `# heading`), so frontmatter-less
