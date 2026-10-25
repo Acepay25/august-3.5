@@ -1,8 +1,39 @@
 # Goal Workspaces — goal-as-environment, native in August (2026-10-25)
 
-Status: **core landed on branch `goal-workspaces-20261025`; UI and the
-skill/prompt/tool self-modification rails are next.** This is the plan and
-status record, not a claim that the whole target is done.
+Status: **the goals core, the self-modification rails, the memory-loop gaps and
+the rail/chip UI are all landed on branch `goal-workspaces-20261025`.** What is
+left is named at the bottom of this file (Next slices) and none of it is a
+secret: the Hermes→`compatibility` key mapping, URL import of referenced support
+files, a user-skill delete, the in-place goal editor, and the live proof that
+needs a funded or local provider. This is a plan and status record, not a claim
+that the whole target is done.
+
+**Resume facts** (measured at this tip, re-measure rather than quoting):
+- This branch lives in the worktree `C:\Dev\august-verify-20261024`;
+  `C:\Dev\august-3.5` holds the owner's 22 in-flight files and was never written
+  to. Nothing is pushed.
+- Commits, oldest first: `e66d8cf7` `05a8a127` `e0449741` `22b05ba8` `51afd154`
+  (skills/memory fixes) → `a140f181` `56301d6e` (goal core + plan) →
+  `315c46d0` `7576778c` `55e53507` `50963684` (self-mod rails, docs, plan,
+  lint ignore) → `056f1a1a` (memory loop) → `bee2933b` (rail + chip) →
+  `935d7832` (inverse gate).
+- Gates: `check:contracts` **102**; anchor gate **414** anchors, 0 comment-line,
+  0 symbol-miss, 0 unattributed; `npm run lint` **0 errors / 379 warnings** (the
+  ratchet, and `.verify/**` is now ignored so it reproduces CI); typecheck ×3,
+  build, `boot-probe`, `render-probe`, `skill-approval-probe` 25/25 (its
+  `pageErrors=2` is the planted quota arm).
+- Verification scaffolding is untracked in `.verify/`: `node-*.cjs` harnesses
+  (95 + 13 + 5 + 9 + 9 + 19 + 54 checks) and `live-probe4.cjs` (**42/42**) which
+  drives the goals/self-mod flows in Chromium against a scripted mock provider.
+  `.verify/wip/GoalRailPanel.tsx` is dead — the component shipped from it.
+- Two probe facts that cost time: a `SelectMenu` flyout never stays open to a
+  Playwright pointer click inside the Settings modal (drive it by keyboard, and
+  walk `data-active` rather than counting presses), and a background learner
+  (notebook reviewer / skill supervisor) issues its own provider calls mid-turn,
+  so every seat assertion must filter requests by the text the probe typed.
+- The live packaged profile was hash-verified unchanged before and after this
+  branch's work; the app's journal still cannot be read headlessly, so exact live
+  row counts remain BLOCKED, not verified.
 
 ## Reference and what transfers
 
