@@ -157,6 +157,42 @@ export const toolKindOf = (label: string): ToolKindInfo => {
  * call, and both readers must agree on the spelling, so the list lives here
  * in the vocabulary module where neither imports the other.
  */
+/**
+ * The allow-list that means "this seat is offered NOTHING".
+ *
+ * An empty array cannot mean that: every gate here reads a missing or empty
+ * allow-list as "unrestricted", so a narrowed-to-nothing seat passed as `[]`
+ * gets the whole desk back. The one name no tool can ever carry is the value
+ * that does mean nothing — the definition filter matches no tool against it
+ * and the executor refuses every call. Transport-only: never written into a
+ * goal, never shown to the trader.
+ */
+export const NO_TOOLS_ALLOWED: string[] = [''];
+
+/**
+ * The ONE rule for how a goal's tool policy meets a seat's allow-list.
+ *
+ * A goal may only NARROW, so the answer is the intersection with what this
+ * seat can actually call — and only with names that have a definition, so a
+ * goal cannot resurrect a tool this build does not ship.
+ *
+ * The interesting case is the empty one. A goal authored on a wider seat (the
+ * Chat surface's list is not the trade seat's `TRADE_TOOLS`) can name tools
+ * this seat never had; returning `[]` there would NOT mean "nothing", because
+ * `[]` reads as unrestricted. So an empty intersection returns
+ * `NO_TOOLS_ALLOWED`. Pure and exported because the never-widen invariant
+ * fires only for a mis-shaped goal, which no render probe can produce —
+ * `check:contracts` pins it.
+ */
+export const intersectGoalPolicy = (
+    seat: readonly string[] | undefined,
+    policy: readonly string[],
+    realToolNames: readonly string[],
+): string[] => {
+    const keep = policy.filter(t => (!seat || seat.includes(t)) && realToolNames.includes(t));
+    return keep.length > 0 ? keep : [...NO_TOOLS_ALLOWED];
+};
+
 export const DESK_TOOL_NAMES: readonly string[] = [
     'get_price_snapshot', 'get_order_book', 'get_derivatives',
     'get_liquidations', 'get_session_context', 'get_market_packet', 'get_all_timeframes', 'get_chart_view',

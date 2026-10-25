@@ -17,7 +17,8 @@
  *   9. utils/memoryWriteFilters.ts    — what may never become a memory
  *  10. skill import scan + body caps  — third-party text is screened
  *  11. utils/promptIndexBudget.ts     — one shared table, scaled to the window
- *  12. services/selfMod/*             — the policy table a self-change cannot pass
+ *  12. services/selfMod/* + utils/toolKinds.ts — the policy tables: what a
+ *      self-change cannot move, and what a goal can never grant
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -450,12 +451,14 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         JSON.stringify(pb.indexBudgetFor(Number.NaN)) === JSON.stringify(big));
 })();
 
-// ─── 12. self-modification policy — what the agent may never move ──────────
+// ─── 12. policy tables — what the agent may never move, what a goal may never grant
 // The "should this be a contract?" question, answered: the sections above pin
 // arithmetic, dialects and coercion. None of them pins a POLICY TABLE, and the
 // self-mod rails are one. A renamed setting key would silently open a knob no
 // trader ever allowed, and a browser probe cannot reach a refusal it never
 // triggers — so the table is pinned here, synchronously, with no storage.
+// The goal policy table joins it for the same reason: its dangerous shape is
+// reachable only cross-surface, which no probe in this repo can drive.
 (() => {
     const hs = loadModule('utils/harnessSettings.ts');
     const sm = loadModule('services/selfMod/SelfModificationService.ts');
@@ -499,6 +502,34 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     ok('selfmod: a ledger row refuses an unexplained or valueless change',
         SelfChangeSchema.safeParse({ ...row, reason: '' }).success === false
         && SelfChangeSchema.safeParse({ ...row, before: undefined }).success === false);
+
+    // The other policy table in this build: a goal's tool policy against a
+    // seat's allow-list. Same reason this section exists at all — a refusal no
+    // probe ever triggers. Measured, not assumed: `create_goal` validates a
+    // policy against the CURRENT seat, so the dangerous shape (a goal naming
+    // tools this seat lacks) only arrives cross-surface — the Chat surface's
+    // list is not the trade seat's TRADE_TOOLS — and there the old code
+    // returned an empty list, which every gate reads as "unrestricted". The
+    // live probe cannot reach it: the write gate blocks the same-surface case.
+    const tk = loadModule('utils/toolKinds.ts');
+    const REAL = ['get_order_book', 'get_trade_log', 'recall', 'skill_view', 'draw_on_chart'];
+    const SEAT = ['get_order_book', 'get_trade_log'];
+    const keep = tk.intersectGoalPolicy(SEAT, ['get_trade_log', 'recall'], REAL);
+    ok('goal policy: an in-seat policy narrows to exactly what it names (the reach control)',
+        JSON.stringify(keep) === JSON.stringify(['get_trade_log']), JSON.stringify(keep));
+    const stranded = tk.intersectGoalPolicy(SEAT, ['skill_view', 'draw_on_chart'], REAL);
+    ok('goal policy: naming only tools this seat lacks does NOT return an empty list',
+        stranded.length > 0, JSON.stringify(stranded));
+    ok('goal policy: …and what it returns matches no real tool, so the seat gets nothing',
+        stranded.length === 1 && stranded[0] === '' && !REAL.some(n => stranded.includes(n)),
+        JSON.stringify(stranded));
+    ok('goal policy: a mixed policy keeps the tool the seat has and drops the one it has not',
+        JSON.stringify(tk.intersectGoalPolicy(SEAT, ['get_order_book', 'skill_view'], REAL))
+        === JSON.stringify(['get_order_book']));
+    ok('goal policy: an unrestricted seat is still narrowed by the goal',
+        JSON.stringify(tk.intersectGoalPolicy(undefined, ['recall'], ['recall', 'web_search'])) === JSON.stringify(['recall']));
+    ok('goal policy: a name the build never shipped matches nothing, and fails closed',
+        JSON.stringify(tk.intersectGoalPolicy(SEAT, ['made_up_tool'], REAL)) === JSON.stringify(['']));
 })();
 
 // ─── report ────────────────────────────────────────────────────────────────
@@ -508,4 +539,4 @@ if (failures.length) {
     console.error('CONTRACT CHECK FAIL — a pinned contract broke; fix the module, not this file.');
     process.exit(1);
 }
-console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget and the self-modification policy table all hold.');
+console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget and both policy tables (self-modification, goal tool narrowing) all hold.');

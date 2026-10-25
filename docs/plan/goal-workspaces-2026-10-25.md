@@ -18,14 +18,14 @@ target is done.
   lint ignore) → `056f1a1a` (memory loop) → `bee2933b` (rail + chip) →
   `935d7832` (inverse gate) → `323d6185` (this record) → `9a487648` (declared
   compatibility keys honoured) → `e017e202` (merge keeps its aliases) →
-  `491540f6` (URL support-file import).
-- Gates: `check:contracts` **124**; anchor gate **420** anchors, 0 comment-line,
+  `491540f6` (URL support-file import) → `defe61da` (delete takes the bundles).
+- Gates: `check:contracts` **130**; anchor gate **426** anchors, 0 comment-line,
   0 symbol-miss, 0 unattributed; `npm run lint` **0 errors / 379 warnings** (the
   ratchet, and `.verify/**` is now ignored so it reproduces CI); typecheck ×3,
   build, `boot-probe`, `render-probe` **131 ok**, `skill-approval-probe` 25/25
   (its `pageErrors=2` is the planted quota arm).
 - Verification scaffolding is untracked in `.verify/`: `node-*.cjs` harnesses
-  (134 + 13 + 5 + 9 + 9 + 19 + 54 checks) and `live-probe4.cjs` (**42/42**) which
+  (134 + 13 + 5 + 9 + 12 + 19 + 54 checks) and `live-probe4.cjs` (**56/56, 0 blocked**) which
   drives the goals/self-mod flows in Chromium against a scripted mock provider.
   `.verify/wip/GoalRailPanel.tsx` is dead — the component shipped from it.
   `.verify/url-ref-probe.cjs` is the one that measured how the URL parser treats
@@ -162,18 +162,36 @@ and the mode switch — the audit rail is next-slice 1's host. The live shadow
 promotion cannot be observed without real closed trades, so its thresholds are
 pinned by the node harness, not by the app.
 
+## Goal narrowing could widen — found by building the picker, not by a review
+
+`policy.allowedTools` intersects with the seat's list at the transport, and the
+first version of that intersection had a hole the invariant lives on: an empty
+result was passed on as `[]`, and in this file `seatIsRestricted([])` is false,
+so an empty allow-list means *unrestricted* to every gate. A goal whose policy
+named tools the acting seat does not have therefore did not narrow that seat —
+it handed it the whole desk. That is reachable because the two seat lists are
+different (`CHAT_SURFACE_TOOLS` for the Chat surface, `TRADE_TOOLS` for the
+trade seat): a goal authored in one can be focused in the other.
+
+`create_goal`/`update_goal` already refuse a name the acting seat lacks, which
+is why no probe had ever hit it — the write gate hides the transport bug rather
+than fixing it. Now the rule is one exported pure function,
+`intersectGoalPolicy utils/toolKinds.ts:187`, and an empty intersection returns
+`NO_TOOLS_ALLOWED` (`utils/toolKinds.ts:170`) — a name no tool can carry, which
+matches no definition and refuses every call, so "narrowed to nothing" means
+nothing at both layers. `check:contracts` pins it (six arms, including the
+reach control that an in-seat policy still narrows normally); proved red by
+returning `keep` — three arms failed with the exact value `[]`.
+
+Worth saying plainly: the picker was the point, and the bug it exposed is the
+reason the picker's universe is the seat's own list rather than the whole
+vocabulary. A control that can only offer valid choices is cheaper to trust
+than a transport that has to fail closed.
+
 ## Next slices
 
-1. **Goals UI** — landed, except the in-place editor. The Chat rail carries a
-   third tab (`components/agents/GoalRailPanel.tsx`) listing every goal with its
-   focus control, Pause/Resume, the last three history restores, a delete that
-   asks once before it commits, and a create form; under it the change ledger
-   lists what is in force with one Undo per row. The Chat header carries the
-   active-goal chip (`components/agents/ActiveGoalChip.tsx`) and its single
-   press releases the goal — the chip exists because a focused goal changes
-   which tools the next turn is offered. Still open: editing a goal's
-   objective/next/triggers in place (the desk does that through `update_goal`;
-   the trader cannot yet), and a picker for the goal's tool policy.
+1. **Goals UI** — landed. The Chat rail's third tab (`components/agents/GoalRailPanel.tsx`)
+   lists every goal with its focus control, Pause/Resume, the last three history restores, a delete that asks once before it commits, and a create form; under it the change ledger lists what is in force with one Undo per row. The Chat header carries the active-goal chip (`components/agents/ActiveGoalChip.tsx`) and its single press releases the goal — the chip exists because a focused goal changes which tools the next turn is offered. The row's `Edit` press now opens an in-place editor over the same fields the desk writes — objective, next step, the phrases that resurface the goal, and a tool-policy picker limited to tools THIS seat can reach — through `updateGoal` with the same `ifVersion` lock: a model edit mid-session makes the human press name the revision that won and keep the editor open rather than overwrite it. Two rules the editor had to keep: replacing only the `message` trigger (a `price` trigger names a watch id the rail cannot offer, so a prose edit must not un-arm it), and `policy: {}` on a cleared switch, which means "unchanged seat list" rather than a stored empty array.
 2. ~~Self-modification rails~~ — landed above.
 3. **Remaining target gaps** — the memory half landed with this pass: the
    pre-read runs on every model and attaches the record's own body, aliases

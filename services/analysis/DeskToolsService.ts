@@ -59,6 +59,7 @@ import type { LoggedTrade } from '../../types';
 import type { ToolAction } from '../../types/message';
 import type { ChartDrawing } from '../trade/chartDrawings';
 import { DEBATE_MAIL_TOOLS, type DebateMailbox } from './DebateMailbox';
+import { intersectGoalPolicy } from '../../utils/toolKinds';
 import { PREDICATE_GRAMMAR_HINT } from './skillPredicate';
 
 /**
@@ -4960,16 +4961,22 @@ export async function* streamChatWithDeskTools(
     // the one place both the prompt and the executor read, so the model is
     // never told about a tool the goal removed and the executor never grants
     // one. An empty goal policy means "the seat's list unchanged".
-    const effectiveAllowed = goalAllowedTools && goalAllowedTools.length > 0
-        ? goalAllowedTools.filter(t => !allowedTools || allowedTools.includes(t))
-        : mergedAllowed;
-    const offeredToolNames = effectiveAllowed && effectiveAllowed.length > 0
-        ? effectiveAllowed
-        : [
-            ...DESK_TOOL_DEFINITIONS.map(d => d.function.name),
-            ...confirmedForgedToolDefinitions().map(d => d.function.name),
-            ...extraDefs.map(d => d.function.name),
-        ];
+    const allToolNames = [
+        ...DESK_TOOL_DEFINITIONS.map(d => d.function.name),
+        ...confirmedForgedToolDefinitions().map(d => d.function.name),
+        ...extraDefs.map(d => d.function.name),
+    ];
+    const goalList = goalAllowedTools && goalAllowedTools.length > 0 ? goalAllowedTools : null;
+    // A goal narrows; it never widens. `intersectGoalPolicy` owns that rule —
+    // including why an empty intersection must NOT travel on as `[]`, which
+    // every gate in this file reads as "unrestricted".
+    const narrowed = goalList ? intersectGoalPolicy(allowedTools, goalList, allToolNames) : [];
+    const effectiveAllowed = goalList ? narrowed : mergedAllowed;
+    const offeredToolNames = goalList
+        ? narrowed.filter(n => allToolNames.includes(n))
+        : effectiveAllowed && effectiveAllowed.length > 0
+            ? effectiveAllowed
+            : allToolNames;
     const enriched = withDeskToolsSystemPrompt(outbound, nativeTools, offeredToolNames);
     // Discoverability: the capability block rides EVERY seat turn so models
     // learn they can DM; the inbox notice (unread count + read first)
