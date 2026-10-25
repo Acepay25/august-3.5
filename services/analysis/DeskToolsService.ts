@@ -529,6 +529,13 @@ const TOOL_BUDGETS: Record<string, number> = {
     // 2400 default would have cut to 17 rows SILENTLY to the seat — the exact
     // failure the get_chart_view budget exists to prevent.
     get_trade_log: 4000,
+    // The self-change audit reads as rows, and a row the seat never saw is a
+    // change it cannot revert. Measured on a ledger with a config row, a
+    // promoted prompt row and a reverted row: 8 rows = 1,733 chars, widest row
+    // 259 (`- <id> [<status> · <actor>] <target>: now <50> (was <50>; asked:
+    // <80>) · <evidence>`), so the all-widest payload is ~2.3k — which the 2,400
+    // default would cut, silently dropping the oldest change off the list.
+    list_self_changes: 2600,
     // The publishable block rides INSIDE this result: a clip that cut it in
     // half would leave the model copying a malformed fence, which the card
     // parser drops. Sized for the whole level list + block with headroom.
@@ -818,6 +825,9 @@ const TOOL_LABELS: Record<string, string> = {
     create_goal: 'goal creation',
     update_goal: 'goal update',
     restore_goal: 'goal restore',
+    list_self_changes: 'change ledger',
+    propose_self_change: 'self-change',
+    revert_self_change: 'self-change undo',
 };
 
 export const toolLabel = (name: string): string => TOOL_LABELS[name] ?? name.replace(/_/g, ' ');
@@ -1184,6 +1194,50 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     version: { type: 'number', description: 'The `version` shown in the history entry you want' },
                 },
                 required: ['slug', 'version'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'list_self_changes',
+            description:
+                'Read the harness change ledger: every change to the agent\'s own behavior knobs and prompt text, with its previous value, status and evidence. Call it before proposing a change (a target already in force must be reverted first) and whenever the trader asks what you have changed about yourself.',
+            parameters: { type: 'object', properties: {}, additionalProperties: false },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'propose_self_change',
+            description:
+                'Change the harness you are running in, now. Only works when the trader enabled self-modification. kind:"knob" moves an open behavior knob (thinking effort, confirmed-skill library cap); it applies immediately and AUTO-REVERTS after 24h. kind:"prompt" rewrites one registered prompt; it is refused unless the trader turned on shadow mode AND the prompt A/B is armed, and it is judged by the closed trades that ran under it. Risk settings, privacy switches, the memory off-switch, the A/B settings and self-modification itself are blocked. Say why in one sentence.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    kind: { type: 'string', enum: ['knob', 'prompt'], description: 'Which surface you are changing' },
+                    target: { type: 'string', description: 'Knob name (e.g. "responseEffort") or prompt id (e.g. "analysis.master")' },
+                    value: { type: 'string', description: 'For a knob, the value in JSON form: "fast" for an effort tier, 60 for a number. For a prompt, the replacement text itself.' },
+                    reason: { type: 'string', description: 'Why this change makes the work better — verbatim in the audit ledger' },
+                },
+                required: ['kind', 'target', 'value', 'reason'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'revert_self_change',
+            description:
+                'Undo one change from the ledger, restoring the exact previous value it recorded. You may revert a change you made; a change the trader made is theirs to revert.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    id: { type: 'string', description: 'The ledger id exactly as list_self_changes prints it' },
+                },
+                required: ['id'],
                 additionalProperties: false,
             },
         },
@@ -1917,6 +1971,13 @@ export const deskToolsMandateFor = (offered?: readonly string[]): string => {
     const levelRule = has('get_key_levels')
         ? ' When the user asks for KEY LEVELS (or asks where the levels are), call `get_key_levels` BEFORE you answer: it computes support/resistance, pivots, Fibonacci, round numbers and VWAP for the asked symbol/timeframe and returns a `key-levels` fence. Copy that fence VERBATIM at the end of your answer — it is what puts the Key Levels card on the chart. Never retype its prices.'
         : '';
+    // The self-modification line rides ONLY when the trader turned the
+    // capability on. An off switch that still advertised the tool would send the
+    // seat to an executor that refuses it — the same mistake the chart rule
+    // above exists to stop.
+    const selfModRule = has('propose_self_change') && getHarnessSettings().selfModificationMode !== 'off'
+        ? 'You run inside a harness you may adjust: `propose_self_change` moves a behavior knob (thinking effort, the confirmed-skill library cap — it reverts itself within 24h) or, in shadow mode, rewrites one prompt and lets the trades that run under it judge it. Call `list_self_changes` first: a target already in force must be reverted before it changes again, and a change you did not need is a change you should revert. Risk limits, privacy, memory, the prompt A/B settings and self-modification itself are blocked — asking for them is not a failure, it is a question for the trader.\n'
+        : '';
 
     return `
 **DESK TOOLS (available anytime on this turn)**
@@ -1926,7 +1987,7 @@ The chart symbol is only the DEFAULT: every market tool accepts a \`symbol\` arg
 Your own trading memory is one of these tools: the recall tool searches your notebook (doctrine, rules, similar past trades) - call it when prior experience with this setup could change your stance.
 ${shapeRule} The market packet you are shown carries code-calculated summaries, and its printed candle rows depend on the surface you were opened in: the full packet prints EIGHT rows per timeframe, the compact one (used by surfaces that ask for brevity) prints NONE and keeps only the summaries. Either way — eight printed rows are not a chart, and a shape described from them is invented, not read. If the rows are not in front of you, call ${groundingTool ?? 'nothing'}; if you have not, either call it or say "inferred from the rows shown" and give it no confidence. ${drawingRule}${levelRule}
 run_monte_carlo simulates a concrete plan: pass direction (long/short), entry, stop_loss, and take_profits (1–3 absolute prices). Optional atr is in price units; without it volatility is assumed from twice the stop distance, NOT fetched from the market. Optional timeframe is a label, num_simulations (100–5000) and max_steps (10–1000) control the run. For account drawdown estimates pass account_balance, position_size (margin in account currency), and leverage together. Report the simulation assumptions and timeout rate, not guaranteed or historical performance.
-Do not call tools you do not need. Prefer 0–2 calls. After tool results arrive, write your Floor reply from the findings — no JSON, no restated tool schemas.
+${selfModRule}Do not call tools you do not need. Prefer 0–2 calls. After tool results arrive, write your Floor reply from the findings — no JSON, no restated tool schemas.
 `;
 };
 
@@ -3073,6 +3134,91 @@ ${body}`);
                     content = JSON.stringify({ restored: true, slug, version: result.goal.version, note: 'Restored as a new revision; the prior state is still in history.' });
                 } catch (err) {
                     return rejectedResult(call, `restore_goal rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case 'list_self_changes': {
+                try {
+                    const { listSelfChanges } = await import('../selfMod/SelfChangeLedger');
+                    const { getSelfModMode } = await import('../selfMod/SelfModificationService');
+                    const rows = listSelfChanges();
+                    const shown = rows.slice(0, 8);
+                    const line = (r: typeof shown[number]): string => {
+                        const window = r.status === 'shadow'
+                            ? ' · in shadow, being measured'
+                            : r.status === 'active' && r.expiresAt
+                                ? ` · reverts ${r.expiresAt.slice(0, 16)}Z` : '';
+                        const was = r.before ? `was ${r.before.slice(0, 50)}; ` : '';
+                        const ev = r.evidence ? ` · ${r.evidence.slice(0, 80)}` : '';
+                        return `- ${r.id} [${r.status} · ${r.actor}] ${r.target.slice(0, 40)}: now ${r.after.slice(0, 50)} (${was}asked: ${r.reason.slice(0, 80)})${window}${ev}`;
+                    };
+                    content = [
+                        `Self-modification is "${getSelfModMode()}". ${rows.length} ledger row(s)`
+                        + `${rows.length > shown.length ? `, the ${shown.length} newest:` : ':'}`,
+                        ...shown.map(line),
+                        rows.length === 0
+                            ? 'Nothing has been changed about the harness yet.'
+                            : 'revert_self_change restores the exact value a row recorded. A config row reverts itself when its window closes; a shadow row is settled by the trades that ran under it.',
+                    ].join('\n');
+                } catch (err) {
+                    return rejectedResult(call, `list_self_changes rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case 'propose_self_change': {
+                try {
+                    const svc = await import('../selfMod/SelfModificationService');
+                    const kind = asString(call.arguments.kind).trim();
+                    const target = asString(call.arguments.target).trim();
+                    const reason = asString(call.arguments.reason).trim();
+                    if (!target || !reason) return rejectedResult(call, 'propose_self_change rejected: target and reason are both required');
+                    // A knob value may arrive as a JSON scalar or a string; the
+                    // service decodes JSON either way, so normalize here rather
+                    // than refuse a call that meant well.
+                    const raw = call.arguments.value;
+                    const value = typeof raw === 'string' ? raw : JSON.stringify(raw);
+                    // A detached/restricted seat that was not given the write
+                    // tool is read-only for its own harness, exactly as an
+                    // unattended run is read-only for memory.
+                    const readOnly = seatIsRestricted(context.allowedTools)
+                        && !seatAllows(context.allowedTools, 'propose_self_change');
+                    const opts = { actor: 'agent' as const, readOnly };
+                    const res = kind === 'prompt'
+                        ? await svc.proposePromptOverride(target, value, reason, opts)
+                        : kind === 'knob'
+                            ? await svc.proposeKnobChange(target, value, reason, opts)
+                            : null;
+                    if (!res) return rejectedResult(call, 'propose_self_change rejected: kind must be "knob" or "prompt"');
+                    if (!res.ok) return rejectedResult(call, `propose_self_change rejected: ${res.error}`);
+                    content = JSON.stringify({
+                        changed: true,
+                        id: res.change.id,
+                        target: res.change.target,
+                        status: res.change.status,
+                        ...(res.change.expiresAt ? { revertsAt: res.change.expiresAt } : {}),
+                        note: res.note ?? 'The previous value is in the ledger; revert_self_change restores it.',
+                    });
+                } catch (err) {
+                    return rejectedResult(call, `propose_self_change rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case 'revert_self_change': {
+                try {
+                    const svc = await import('../selfMod/SelfModificationService');
+                    const id = asString(call.arguments.id).trim();
+                    if (!id) return rejectedResult(call, 'revert_self_change rejected: id is required');
+                    const readOnly = seatIsRestricted(context.allowedTools)
+                        && !seatAllows(context.allowedTools, 'revert_self_change');
+                    if (readOnly) return rejectedResult(call, 'revert_self_change rejected: this seat is read-only for the harness');
+                    const res = await svc.revertSelfChange(id, 'agent');
+                    if (!res.ok) return rejectedResult(call, `revert_self_change rejected: ${res.error}`);
+                    content = JSON.stringify({
+                        reverted: true, id: res.change.id, target: res.change.target,
+                        note: 'The exact previous value is restored; the row keeps its audit history.',
+                    });
+                } catch (err) {
+                    return rejectedResult(call, `revert_self_change rejected: ${err instanceof Error ? err.message : String(err)}`);
                 }
                 break;
             }

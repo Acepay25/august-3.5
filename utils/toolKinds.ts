@@ -126,6 +126,9 @@ const BY_LABEL: Record<string, ToolKindInfo> = {
     'goal creation': { kind: 'write', activity: 'Creating a goal' },
     'goal update': { kind: 'write', activity: 'Updating a goal' },
     'goal restore': { kind: 'write', activity: 'Restoring a goal version' },
+    'change ledger': { kind: 'read', activity: 'Reading the change ledger' },
+    'self-change': { kind: 'write', activity: 'Changing its own harness' },
+    'self-change undo': { kind: 'write', activity: 'Reverting a self-change' },
     'skill proposal': { kind: 'write', activity: 'Proposing a skill' },
     'skill revision': { kind: 'write', activity: 'Revising a skill' },
     'watch price': { kind: 'write', activity: 'Setting a price watch' },
@@ -173,4 +176,6 @@ export const DESK_TOOL_NAMES: readonly string[] = [
     'remember', 'read_memory', 'forget',
     // Goal environments: durable work state, edited mid-task.
     'list_goals', 'open_goal', 'create_goal', 'update_goal', 'restore_goal',
+    // The harness change ledger: reading and moving its own self-modifications.
+    'list_self_changes', 'propose_self_change', 'revert_self_change',
 ];

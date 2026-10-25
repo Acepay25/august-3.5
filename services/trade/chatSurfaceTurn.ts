@@ -74,6 +74,10 @@ export const CHAT_SURFACE_TOOLS = [
     'remember', 'read_memory', 'forget',
     // Goal environments — durable work state the agent can shape mid-task.
     'list_goals', 'open_goal', 'create_goal', 'update_goal', 'restore_goal',
+    // The harness's own change ledger. Reading it is always available; the two
+    // writes are refused by the service unless the trader enabled
+    // self-modification, and by UNATTENDED_DENY for any detached run.
+    'list_self_changes', 'propose_self_change', 'revert_self_change',
     // The verdict IS a tool call in the post-debate app (stage 20's premise), so
     // the desk must be able to present a plan wherever the trader asks. The
     // shared executor draws nothing and arms no watch for this sink — and says

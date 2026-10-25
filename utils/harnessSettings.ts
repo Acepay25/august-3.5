@@ -6,6 +6,7 @@ import {
     SessionGuardConfig,
 } from '../services/validation/SessionGuardService';
 import type { OutcomeSettlement } from './outcomeSettlement';
+import type { SelfModMode } from '../schemas/selfChange';
 
 export interface HarnessSettings {
     equityUsd: number;
@@ -73,6 +74,22 @@ export interface HarnessSettings {
      * gate changes — this only decides whether drafts are produced at all.
      */
     autoDraftingEnabled: boolean;
+    /**
+     * How much the agent may change the harness it is running in, mid-task.
+     *
+     * 'off' — nothing. Every self-change tool refuses; the ledger still reads.
+     * 'config' — reversible BEHAVIOR knobs (thinking speed, library cap). Each
+     *             one applies now and auto-reverts when its window closes, so a
+     *             mid-task speed-up cannot become a permanent drift.
+     * 'shadow' — additionally what the model is TOLD (prompt overrides), which
+     *             only earns its place after settled trades rate it above the
+     *             built-in text it replaced.
+     *
+     * OFF by default and owner-only: no desk tool may write this key, so the
+     * agent cannot grant itself the capability it is being refused. Opt-IN is
+     * also deliberate — the same reading as `autoDraftingEnabled`.
+     */
+    selfModificationMode: SelfModMode;
 }
 
 const KEY = 'harness_settings_v1';
@@ -135,6 +152,12 @@ export const getHarnessSettings = (): HarnessSettings => {
         // Opt-IN, deliberately: an absent key means the loop does not draft on
         // its own. The old behaviour (always drafting) is what this turns off.
         autoDraftingEnabled: stored.autoDraftingEnabled === true,
+        // Opt-IN too, and the only rail on self-modification: an absent or
+        // malformed value means the agent may change nothing about its own
+        // harness. Anything other than the two named levels fails to 'off'.
+        selfModificationMode: stored.selfModificationMode === 'config' || stored.selfModificationMode === 'shadow'
+            ? stored.selfModificationMode
+            : 'off',
     };
 };
 

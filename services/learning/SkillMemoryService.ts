@@ -3909,6 +3909,21 @@ export const syncClosedTradeToNotebook = async (
     }
     await consolidateSkills(username);
     maybePinWinningPromptLane(allTrades);
+    // The self-modification rails, on the same evidence beat the prompt A/B
+    // already uses: a config window that has closed reverts the knob it moved,
+    // and a shadow prompt is judged by the trades that actually ran under it.
+    try {
+        const { expireSelfChanges, settleSelfChanges } = await import('../selfMod/SelfModificationService');
+        const expired = await expireSelfChanges(Date.now(), { username });
+        const settled = await settleSelfChanges(allTrades, { username });
+        for (const row of expired) console.log(`[SelfMod] window closed — "${row.target}" reverted`);
+        for (const row of settled) console.log(`[SelfMod] shadow settled — "${row.target}" ${row.status}`);
+    } catch (e) {
+        // Best-effort, like the doctrine pass beside it: a failed settle leaves
+        // every row exactly as it was, so a shadow edit cannot quietly promote
+        // itself because the pass threw.
+        console.warn('[SelfMod] settle pass failed — the ledger is unchanged:', e);
+    }
     // Doctrine consolidation: every N newly-closed trades an LLM pass
     // rewrites profile/doctrine.md into settled first-person beliefs.
     // Best-effort + gated on evidence count; never blocks the sync.

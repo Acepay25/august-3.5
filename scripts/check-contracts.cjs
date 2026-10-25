@@ -2,8 +2,9 @@
 /**
  * check-contracts — the minimal regression layer that survived the suite's
  * removal (owner ruling, 2026-10-23). The old tree held ~530 test files; this
- * is deliberately NOT that. It pins the six PURE-LOGIC contracts no browser
- * probe can reach by construction, because they live below the render:
+ * is deliberately NOT that. It pins the twelve PURE-LOGIC contracts no browser
+ * probe can reach by construction, because they live below the render. Each one
+ * added since the six had to answer why the six could not cover it:
  *
  *   1. utils/riskReward.ts            — the planned R:R the trader is graded on
  *   2. utils/apiErrorUtils.ts         — which failures deserve a retry
@@ -11,6 +12,12 @@
  *   4. utils/memoryBudget.ts          — the pressure tiers that REFUSE growth
  *   5. services/providers/contextCompact.ts — tool pairs live or die together
  *   6. schemas/tradeAnalysis.ts       — lenient coercion at the AI boundary
+ *   7. utils/skillFrontmatter.ts      — third-party keys survive a rewrite
+ *   8. utils/memoryHints.ts           — the deterministic alias pre-read
+ *   9. utils/memoryWriteFilters.ts    — what may never become a memory
+ *  10. skill import scan + body caps  — third-party text is screened
+ *  11. utils/promptIndexBudget.ts     — one shared table, scaled to the window
+ *  12. services/selfMod/*             — the policy table a self-change cannot pass
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -329,6 +336,57 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         JSON.stringify(pb.indexBudgetFor(Number.NaN)) === JSON.stringify(big));
 })();
 
+// ─── 12. self-modification policy — what the agent may never move ──────────
+// The "should this be a contract?" question, answered: the sections above pin
+// arithmetic, dialects and coercion. None of them pins a POLICY TABLE, and the
+// self-mod rails are one. A renamed setting key would silently open a knob no
+// trader ever allowed, and a browser probe cannot reach a refusal it never
+// triggers — so the table is pinned here, synchronously, with no storage.
+(() => {
+    const hs = loadModule('utils/harnessSettings.ts');
+    const sm = loadModule('services/selfMod/SelfModificationService.ts');
+    const { SelfChangeSchema } = loadModule('schemas/selfChange.ts');
+
+    ok('selfmod: with nothing stored, the agent may change nothing about itself',
+        hs.getHarnessSettings().selfModificationMode === 'off');
+    const mem = new Map();
+    global.localStorage = {
+        getItem: k => (mem.has(k) ? mem.get(k) : null),
+        setItem: (k, v) => mem.set(k, String(v)),
+        removeItem: k => mem.delete(k),
+    };
+    mem.set('harness_settings_v1', JSON.stringify({ selfModificationMode: 'everything' }));
+    ok('selfmod: an unknown stored mode fails to off, not open',
+        hs.getHarnessSettings().selfModificationMode === 'off', hs.getHarnessSettings().selfModificationMode);
+    mem.set('harness_settings_v1', JSON.stringify({ selfModificationMode: 'shadow' }));
+    ok('selfmod: the two named modes are the whole vocabulary',
+        hs.getHarnessSettings().selfModificationMode === 'shadow');
+    delete global.localStorage;
+
+    const defaults = hs.getHarnessSettings();
+    const knobs = sm.openKnobNames();
+    ok('selfmod: every open knob names a real harness setting',
+        knobs.length > 0 && knobs.every(k => k in defaults), JSON.stringify(knobs));
+    ok('selfmod: the mode itself is not a knob the seat can turn',
+        !knobs.includes('selfModificationMode') && sm.isBlockedKnob('selfModificationMode') === true);
+    ok('selfmod: the risk-rules prompt is not a self-editable prompt',
+        sm.BLOCKED_PROMPT_IDS.includes('analysis.risk_rules'));
+
+    const row = {
+        schemaVersion: 1, id: 'config-a1', tier: 'config', target: 'knob:responseEffort',
+        before: '"quality"', after: '"fast"', reason: 'a long sweep needs a light touch',
+        status: 'active', actor: 'agent', version: 1,
+        createdAt: '2026-10-25T00:00:00.000Z', updatedAt: '2026-10-25T00:00:00.000Z',
+    };
+    ok('selfmod: a ledger row is only what the schema says it is',
+        SelfChangeSchema.safeParse(row).success === true);
+    ok('selfmod: a ledger row refuses a smuggled key',
+        SelfChangeSchema.safeParse({ ...row, smuggled: 1 }).success === false);
+    ok('selfmod: a ledger row refuses an unexplained or valueless change',
+        SelfChangeSchema.safeParse({ ...row, reason: '' }).success === false
+        && SelfChangeSchema.safeParse({ ...row, before: undefined }).success === false);
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
@@ -336,4 +394,4 @@ if (failures.length) {
     console.error('CONTRACT CHECK FAIL — a pinned contract broke; fix the module, not this file.');
     process.exit(1);
 }
-console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction and AI-boundary coercion all hold.');
+console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget and the self-modification policy table all hold.');

@@ -19,6 +19,9 @@ export const UNATTENDED_DENY = [
     // A detached evaluator may read the environment it judges; it must not
     // reshape the trader's goals.
     'create_goal', 'update_goal', 'restore_goal',
+    // Nor reshape the harness it runs in. Reading the change ledger is allowed;
+    // moving a knob or a prompt is not, in a run nobody is watching.
+    'propose_self_change', 'revert_self_change',
 ];
 
 export const DETACHED_EVAL_TOOLS: string[] = CHAT_SURFACE_TOOLS.filter(

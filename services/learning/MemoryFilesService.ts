@@ -123,6 +123,10 @@ const DEFAULT_FOLDERS: MemoryFolder[] = [
     // skill or a note; it lives in the SAME notebook blob so backup/export and
     // the one-store rule already cover it.
     { id: 'goals', name: 'goals', order: 8 },
+    // The self-modification ledger (self-changes/*.json). One row per file for
+    // the same reason a goal is one file: the notebook write lock, backup and
+    // the byte budget already do the work a second store would need to re-do.
+    { id: 'self-changes', name: 'self-changes', order: 10 },
     // Strategy plans (strategies/*.md). Lives in the SAME notebook blob as
     // everything else on purpose: a second persistence path would need a
     // second backup/export namespace, and a namespace nothing writes is a
