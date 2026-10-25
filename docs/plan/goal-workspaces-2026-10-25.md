@@ -129,21 +129,33 @@ pinned by the node harness, not by the app.
 
 ## Next slices
 
-1. **Goals UI** — Agents rail Goals list, active-goal chip, detail/editor,
-   status/focus, history/restore — and the same rail hosting the change ledger
-   (rows, status, evidence, a revert press). The owner has in-flight edits in
-   `AgentsView.tsx`/`LearnView.tsx`/`TradeChatPanel.tsx`; land this after those
-   or in a separate worktree to avoid a blind merge.
+1. **Goals UI** — landed, except the in-place editor. The Chat rail carries a
+   third tab (`components/agents/GoalRailPanel.tsx`) listing every goal with its
+   focus control, Pause/Resume, the last three history restores, a delete that
+   asks once before it commits, and a create form; under it the change ledger
+   lists what is in force with one Undo per row. The Chat header carries the
+   active-goal chip (`components/agents/ActiveGoalChip.tsx`) and its single
+   press releases the goal — the chip exists because a focused goal changes
+   which tools the next turn is offered. Still open: editing a goal's
+   objective/next/triggers in place (the desk does that through `update_goal`;
+   the trader cannot yet), and a picker for the goal's tool policy.
 2. ~~Self-modification rails~~ — landed above.
-3. **Remaining target gaps** — alias pre-read for all models + description,
-   aliases in the memory index, subject type/source session, sensitive-read
-   policy and bare bank/ID filters, skills source/read-only/manual caps, URL
-   support files.
-4. **Live proof** — with a funded or local provider: a message trigger surfaces
-   the goal, the model loads a matching skill, the focused policy is visible in
-   the offered tools, and a goal restore is used after a deliberate bad edit.
-   Also live: the seat choosing `propose_self_change` on its own, and a shadow
-   prompt edit settling on real closed trades.
+3. **Remaining target gaps** — the memory half landed with this pass: the
+   pre-read runs on every model and attaches the record's own body, aliases
+   ride the index line, a record carries `subject` and `sourceSession`,
+   `read_memory "all"` holds sensitive rows back for every seat, and the secret
+   table refuses a bare SSN shape, an IBAN and a labelled account number. The
+   skills half is still open: source badge and delete-for-user-skills-only in
+   the list, manual authoring caps, URL import pulling referenced support files,
+   and `fallback_for_tools` / `fallback_for_toolsets` (implemented or retired —
+   a tolerated key nothing reads is a false promise to a skill author).
+4. **Live proof** — measured already: the focused goal narrowing the offered
+   tools AND the executor refusing a tool outside its policy, the ledger row's
+   Undo press, the chip's release press, and the pre-read reaching a seat whose
+   config reads as a strong, non-local model. Still blocked on a funded or local
+   provider: the model *choosing* `propose_self_change` or a `skill_view`
+   unprompted, a shadow prompt edit settling on real closed trades, and a goal
+   restore used after a deliberate bad edit.
 5. **UI/merge** — the owner's redesign branch and this branch both touch
    `TradeChatPanel.tsx`; merge the goal core first, then mount the UI.
 

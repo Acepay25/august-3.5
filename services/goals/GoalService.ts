@@ -17,7 +17,7 @@ import {
 import { getActiveUsername } from '../../utils/activeUser';
 import {
     GoalSchema, GoalSnapshotSchema, GoalCreateSchema, GoalPatchSchema,
-    type Goal, type GoalCreate, type GoalPatch, type GoalSnapshot,
+    type Goal, type GoalCreateInput, type GoalPatch, type GoalSnapshot,
 } from '../../schemas/goal';
 
 const GOALS_FOLDER = 'goals';
@@ -128,7 +128,7 @@ export type GoalUpdateResult =
 
 /** Create a goal environment. An explicit slug may be supplied for re-imports;
  *  collisions get -2, -3… instead of overwriting a live goal. */
-export const createGoal = async (input: GoalCreate, opts: GoalWriteOptions = {}): Promise<Goal> => {
+export const createGoal = async (input: GoalCreateInput, opts: GoalWriteOptions = {}): Promise<Goal> => {
     const username = opts.username || getActiveUsername();
     const parsed = GoalCreateSchema.parse(input);
     const now = new Date().toISOString();

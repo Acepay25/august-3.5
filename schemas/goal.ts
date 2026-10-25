@@ -109,5 +109,10 @@ export const GoalPatchSchema = GoalCreateSchema.partial().omit({ focused: true }
     focused: z.boolean().optional(),
 });
 
-export type GoalCreate = z.infer<typeof GoalCreateSchema>;
+/** What a caller actually has to supply. `z.infer` of the create schema keeps
+ *  every defaulted field required, which forces a caller to restate defaults
+ *  the parser fills anyway — the rail's "New goal" form knows a title and an
+ *  objective and nothing else. `createGoal` parses through the output side, so
+ *  what it stores is still the complete shape. */
+export type GoalCreateInput = z.input<typeof GoalCreateSchema>;
 export type GoalPatch = z.infer<typeof GoalPatchSchema>;

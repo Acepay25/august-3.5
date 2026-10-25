@@ -54,6 +54,8 @@ import TimeframeBar from '../trade/TimeframeBar';
 import type { ChartInterval } from '../trade/TradingChart';
 import { useSymbolUniverse } from '../../hooks/useSymbolUniverse';
 import { MENU_W, RowMenu, type RowMenuItem } from './RowMenu';
+import GoalRailPanel from './GoalRailPanel';
+import ActiveGoalChip from './ActiveGoalChip';
 import type { AgentBot, AgentGroup } from '../../services/agents/agentRoster';
 import { groupDisplayName } from '../../services/agents/agentRoster';
 import type { Conversation } from '../../types';
@@ -893,7 +895,10 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     // NOT here: the charted form of the desk is a SURFACE, and the switch at the
     // top of this column already routes to it — a second control claiming the
     // same jump is the duplication this redesign exists to remove.
-    const [railTab, setRailTab] = useState<'chats' | 'bots'>('chats');
+    // `goals` is the opposite case: a goal is work state this surface's turns
+    // run inside, it has no other home, and the desk reshapes it mid-task — so
+    // the list, the focus and the undo belong beside the threads.
+    const [railTab, setRailTab] = useState<'chats' | 'bots' | 'goals'>('chats');
 
 
     // One switch, one home. The open column's header is its reference position —
@@ -1014,7 +1019,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     lived in the bot header only by accident. */}
                 <div className="flex shrink-0 items-center gap-1 border-b border-zinc-800/80 px-2 pb-1.5">
                     <div role="tablist" aria-label="Sidebar lists" className="flex items-center gap-1">
-                        {([['chats', 'Chats'], ['bots', 'Bots']] as const).map(([id, label]) => (
+                        {([['chats', 'Chats'], ['bots', 'Bots'], ['goals', 'Goals']] as const).map(([id, label]) => (
                             <button key={id} type="button" role="tab" data-testid={`rail-tab-${id}`}
                                 aria-selected={railTab === id}
                                 aria-controls="rail-list-panel"
@@ -1066,6 +1071,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             )}
                         </div>
                     )}
+                    {railTab === 'goals' && <GoalRailPanel username={username} />}
                     {railTab === 'chats' && (<section data-testid="rail-pinned">
                         <h4 className="px-1 pb-1 text-ui-dense text-zinc-500">Pinned</h4>
                         {/* WS-6: the desk's own conversation is a first-class row,
@@ -1325,6 +1331,11 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                             dock row above keeps the "Chart AI" name. */
                                         : (activeSession?.title?.trim() || 'Desk')}
                                 </span>
+                                {/* Which goal the seat is working inside — and the
+                                    one press that ends it. Its tool policy is
+                                    applied from the next turn, so the header that
+                                    names the session must also name that. */}
+                                <ActiveGoalChip />
                                 {activeBot && (
                                     <StatusPill
                                         tone={botIsolated ? 'neutral' : 'info'}

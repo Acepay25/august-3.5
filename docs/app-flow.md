@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-25** (the anchor gate re-measured every citation here and in the stage ledger:
-**408 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**414 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 5 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -78,9 +78,9 @@ Stored surface values `'chat'`, `'boards'`, `'skills'` all migrate to `'trade'`
 ```mermaid
 flowchart TD
     subgraph CHAT["Chat surface (agents)"]
-        CB["composer textarea — AgentsView.tsx:575 ref, Enter :1522"] --> D1{"send() :754 branches on what is SELECTED"}
-        D1 -->|a bot is selected| BOT["onSendBotTurn components/agents/AgentsView.tsx:794 → App:2529 → useBotMailbox → runBotTurn"]
-        D1 -->|no bot| AN["onAnalyze(prompt, images) components/agents/AgentsView.tsx:784 → App:1589 handleRunAnalysisFromChat"]
+        CB["composer textarea — AgentsView.tsx:577 ref, Enter :1522"] --> D1{"send() :754 branches on what is SELECTED"}
+        D1 -->|a bot is selected| BOT["onSendBotTurn components/agents/AgentsView.tsx:796 → App:2529 → useBotMailbox → runBotTurn"]
+        D1 -->|no bot| AN["onAnalyze(prompt, images) components/agents/AgentsView.tsx:786 → App:1589 handleRunAnalysisFromChat"]
     end
     subgraph DOCK["Chart AI dock — inside Trade, TradeView.tsx:1170"]
         DC["ChatComposer.tsx:147 :222"] --> D2{"chatTurnRunner.send chatTurnRunner.ts:821 — branches on seats"}
@@ -179,7 +179,7 @@ duplicate or hide it.
   CONVERSATION id as well as its session id, `cancelRunAt`
   (`hooks/useAnalysisPipeline.ts:489`) falls back to that registry when it owns
   no pipeline run, and `AgentsView` folds `snap.conversationRunning` into its
-  busy flag (`components/agents/AgentsView.tsx:507`) so the composer never
+  busy flag (`components/agents/AgentsView.tsx:509`) so the composer never
   offers Send over an answer that is arriving. The dock does the same with
   `conversationBusy` (`components/trade/TradeChatPanel.tsx:399`).
 
@@ -1053,6 +1053,22 @@ included: `setSelfModMode services/selfMod/SelfModificationService.ts:166`
 and the toggle sits beside the knobs it governs, in the Harness block at
 `Self-modification components/settings/SessionUsagePanel.tsx:281`
 
+**Where the trader sees it.** The Chat rail's third tab is the audit and the
+undo for both kinds of state —
+`GoalRailPanel components/agents/GoalRailPanel.tsx:166`
+lists every goal with its focus control, its status, its history restores and a
+delete that asks once before it commits, and under it the changes still in force
+with one Undo each
+(`rail-self-changes components/agents/GoalRailPanel.tsx:285`).
+The panel mounts where the roster and the conversations do, on the same tab row
+(`railTab components/agents/AgentsView.tsx:1074`). The header names the goal the
+seat is inside and its × releases it —
+`ActiveGoalChip components/agents/ActiveGoalChip.tsx:27`
+— because a focused goal changes which tools the NEXT turn is offered, so a
+trader who could not see it was being shaped by a state they never chose. A
+goal-only control gets no coverage from the inert-control sweep (it walks the
+Learn and Journal surfaces), so the presses are proven live instead.
+
 ## H · Every arrow
 
 | # | from → to | what crosses |
@@ -1067,9 +1083,9 @@ and the toggle sits beside the knobs it governs, in the Harness block at
 | 8 | Header → SurfaceSwitch | the destination set `App.tsx:2166`, list `SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44` |
 | 9 | App → AgentsView props | same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) on `AgentsView App.tsx:2516`, props `App.tsx:2516-2604` |
 | 10 | TradeView → TradeChatPanel | the dock, inside Trade `TradeChatPanel components/trade/TradeView.tsx:1170` |
-| 11 | AgentsView.send → bot branch | the selected bot answered at `onSendBotTurn components/agents/AgentsView.tsx:802` |
+| 11 | AgentsView.send → bot branch | the selected bot answered at `onSendBotTurn components/agents/AgentsView.tsx:804` |
 | 12 | bot branch → useBotMailbox | `runUserBotTurn hooks/useBotMailbox.ts:305` → `runBotTurn hooks/useBotMailbox.ts:130` |
-| 13 | AgentsView.send → analysis branch | `onAnalyze components/agents/AgentsView.tsx:795` → `handleRunAnalysisFromChat App.tsx:1589` — the dock's `onRunAnalysis` reaches the SAME wrapper |
+| 13 | AgentsView.send → analysis branch | `onAnalyze components/agents/AgentsView.tsx:797` → `handleRunAnalysisFromChat App.tsx:1589` — the dock's `onRunAnalysis` reaches the SAME wrapper |
 | 14 | dock Full analysis → the run slot | `runFullAnalysis components/trade/TradeChatPanel.tsx:575` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
 | 15 | ChatComposer → chatTurnRunner.send | key `Enter components/trade/panels/ChatComposer.tsx:147` / button `:201` → `services/trade/chatTurnRunner.ts:821` |
 | 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:1209` (definition `runSeatTurn services/trade/chatTurnRunner.ts:597`) |
@@ -1130,6 +1146,7 @@ and the toggle sits beside the knobs it governs, in the Harness block at
 | 72 | message → focused goal → a narrower toolset | `focusedGoal services/goals/GoalService.ts:72` · `goalMatchesMessage :278` → `goalAllowedTools services/trade/chatSurfaceTurn.ts:328` → `effectiveAllowed services/analysis/DeskToolsService.ts:4963`, an intersection — a goal may only narrow the seat |
 | 73 | seat → goal edit → snapshot → undo | `case 'update_goal' services/analysis/DeskToolsService.ts:3109` → `updateGoal services/goals/GoalService.ts:164` keeps the previous snapshot → `case 'restore_goal' services/analysis/DeskToolsService.ts:3153` → `restoreGoal services/goals/GoalService.ts:202` |
 | 74 | seat → self-change → ledger → outcomes | `case 'propose_self_change' services/analysis/DeskToolsService.ts:3195` → `proposeKnobChange services/selfMod/SelfModificationService.ts:259` / `proposePromptOverride services/selfMod/SelfModificationService.ts:305` → `writeSelfChange services/selfMod/SelfChangeLedger.ts:100` → `settleSelfChanges services/selfMod/SelfModificationService.ts:452`, run from `settleSelfChanges services/learning/SkillMemoryService.ts:3918` |
+| 75 | rail Goals tab → focus / undo → the header chip | `focusGoal services/goals/GoalService.ts:230` and `revertSelfChange services/selfMod/SelfModificationService.ts:378` pressed from `GoalRailPanel components/agents/GoalRailPanel.tsx:166` → `ActiveGoalChip components/agents/ActiveGoalChip.tsx:27` names it, and its own press releases it |
 
 ---
 
@@ -1151,7 +1168,7 @@ and the toggle sits beside the knobs it governs, in the Harness block at
    NavRail is GONE: its five destination rows were the tab strip this redesign was
    asked to remove". Only the `AccountRow` export is rendered, at `App.tsx:2582`;
    `NAV_RAIL_AUTO_COLLAPSE_PX` (`App.tsx:119`, used `:659`/`:662`) and
-   `NAV_RAIL_EXPANDED_PX` (`components/agents/AgentsView.tsx:72`, used `:931`) are
+   `NAV_RAIL_EXPANDED_PX` (`components/agents/AgentsView.tsx:74`, used `:931`) are
    the other two live exports, so the file cannot be deleted whole.
    (The fourth way used to be an ESLint finding on an unused `NavRail` default
    import. It no longer exists: `App.tsx:119` now imports only the two used symbols,
@@ -1162,10 +1179,10 @@ and the toggle sits beside the knobs it governs, in the Harness block at
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 408 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 414 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 408 anchors verified, and the gate
+   the gate's own output: these docs state 414 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -1247,9 +1264,9 @@ and the toggle sits beside the knobs it governs, in the Harness block at
    records the v1.0.20 TDZ crash as a splash hang. A page that dies before React
    mounts fails it.
 
-10. **The arrow table is 73 rows, and every citation in it resolves — and 68 of the 73 rows pair their citation with the symbol that must live on that line (23 → 31 → 33 → 43 → 48 → 50 → 52 → 69 → 68 across these passes), so those rows are checked for content, not just for a line that exists. The run prints the figure and floors it, so a row rewritten without its symbol stops being coverage silently. One row names no file at all — the ensemble row, whose stages the code never names — so a wrong figure inside it stays outside this gate's reach, which is why the sentence says 68/73 rather than 73/73.** An
+10. **The arrow table is 74 rows, and every citation in it resolves — and 69 of the 74 rows pair their citation with the symbol that must live on that line (65 of 70 before the goal, self-modification and rail rows landed; the figure has only ever moved up, and the run prints it with a floor, so a row rewritten without its symbol stops being coverage silently), so those rows are checked for content, not just for a line that exists. One row names no file at all — the ensemble row, whose stages the code never names — so a wrong figure inside it stays outside this gate's reach, which is why the sentence says 69/74 rather than 74/74.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
-    resolves all 408 unique anchors on every run, so coverage of the table is no
+    resolves all 414 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
 11. **"One service replacing nine" is falsifiable, and it is right — counted, not
     asserted.** `git log --diff-filter=D` over `services/providers/` names exactly nine
@@ -1267,7 +1284,7 @@ and the toggle sits beside the knobs it governs, in the Harness block at
     `accuracy/`, the engine and its types (`debateScience.ts`, `ensembleService.ts`,
     `ensembleConsensus.ts`, `streamTypes.ts`, `debatePods.ts`) and `GroqKeyPool.ts`.
 
-12. **The Agents desk is never seeded.** Two effects in the App used to build a fallback roster from the Analyst Lens assignments or the model picker, and a third rewrote a named bot model whenever those settings moved. All three are gone with the built-in Macro / Technical / Risk analysts (owner ruling, 2026-10-19), and the registry’s seedIfEmpty helper was deleted with its only caller. A fresh profile therefore opens on the empty state at `listedBots AgentsView.tsx:1101` — "No agents yet. Create one and it appears here with its own thread" — and an agent exists only because the trader made one. Nothing went red when the seeding was removed, because no test covered it: that silence is evidence nothing was watching, not evidence the feature was inert.
+12. **The Agents desk is never seeded.** Two effects in the App used to build a fallback roster from the Analyst Lens assignments or the model picker, and a third rewrote a named bot model whenever those settings moved. All three are gone with the built-in Macro / Technical / Risk analysts (owner ruling, 2026-10-19), and the registry’s seedIfEmpty helper was deleted with its only caller. A fresh profile therefore opens on the empty state at `listedBots AgentsView.tsx:1107` — "No agents yet. Create one and it appears here with its own thread" — and an agent exists only because the trader made one. Nothing went red when the seeding was removed, because no test covered it: that silence is evidence nothing was watching, not evidence the feature was inert.
 
 ## Measured after stage 19: what the deletion did NOT remove
 
