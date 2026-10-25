@@ -117,7 +117,10 @@ export const PLATFORM_OF: Readonly<Record<string, SkillRuntime>> = {
  * compatibility = no constraint, exactly as before the key existed.
  */
 export const skillRunsHere = (
-    compat: { platforms?: string[]; requiresTools?: string[]; requiresEnv?: string[] } | undefined,
+    compat: {
+        platforms?: string[]; requiresTools?: string[]; requiresEnv?: string[];
+        fallbackForTools?: string[]; fallbackForToolsets?: string[];
+    } | undefined,
     runtime: SkillRuntime,
     availableTools: ReadonlySet<string> | readonly string[],
 ): boolean => {
@@ -128,10 +131,22 @@ export const skillRunsHere = (
         // Only entries that map count: [freebsd] is unreadable, not refused.
         if (mapped.length > 0 && !mapped.includes(runtime)) return false;
     }
+    const have = availableTools instanceof Set ? availableTools : new Set(availableTools);
     if (compat.requiresTools?.length) {
-        const have = availableTools instanceof Set ? availableTools : new Set(availableTools);
         if (!compat.requiresTools.every(t => have.has(t))) return false;
     }
+    // `fallback_for_tools` is the inverse gate, and it means what it says: the
+    // skill exists to cover a tool the desk does not have. So once that tool IS
+    // available the skill stops being injected — a procedure that duplicates a
+    // live tool taxes every prompt for nothing, which is the failure the
+    // starter shelf's approval exists to avoid.
+    if (compat.fallbackForTools?.length) {
+        if (compat.fallbackForTools.some(t => have.has(t))) return false;
+    }
+    // `fallback_for_toolsets` stays tolerated-but-inert on purpose: August has
+    // no named toolsets, so there is nothing to resolve a set name against.
+    // It round-trips untouched and gates nothing; guessing a set out of tool
+    // names would make a skill invisible for a reason no author wrote.
     return true;
 };
 

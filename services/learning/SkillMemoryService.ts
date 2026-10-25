@@ -101,6 +101,13 @@ export const SKILL_FILE_VERSION = '1';
 export interface SkillCompatibility {
     /** Tool names the skill needs (e.g. 'run_screener'). */
     requiresTools?: string[];
+    /** Tool names the skill COVERS: it is injected only while none of them is
+     *  available, because it exists to do by procedure what the tool does by
+     *  call. Once the tool is here the procedure stops being needed. */
+    fallbackForTools?: string[];
+    /** Toolset names the skill covers. Tolerated and inert until August names
+     *  toolsets — `skillRunsHere` never guesses at a set it cannot resolve. */
+    fallbackForToolsets?: string[];
     /** Environment variable names the skill needs. */
     requiresEnv?: string[];
     /** Platforms the skill supports (e.g. 'web', 'native'). */
@@ -729,6 +736,8 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
                 };
                 const compat: SkillCompatibility = {
                     ...(list('requiresTools') ? { requiresTools: list('requiresTools') } : {}),
+                    ...(list('fallbackForTools') ? { fallbackForTools: list('fallbackForTools') } : {}),
+                    ...(list('fallbackForToolsets') ? { fallbackForToolsets: list('fallbackForToolsets') } : {}),
                     ...(list('requiresEnv') ? { requiresEnv: list('requiresEnv') } : {}),
                     ...(list('platforms') ? { platforms: list('platforms') } : {}),
                 };

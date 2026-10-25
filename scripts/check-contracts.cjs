@@ -258,6 +258,13 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         && sf.skillRunsHere({ requiresTools: ['not_a_tool'] }, 'web', ['get_order_book']) === false);
     ok('fm: requiresEnv fails closed in a renderer',
         sf.skillRunsHere({ requiresEnv: ['FOO'] }, 'desktop', []) === false);
+    // The inverse gate: a procedure that covers a tool stops being needed the
+    // moment the tool is there, and must stop being injected then.
+    ok('fm: fallbackForTools hides the skill once the covered tool exists',
+        sf.skillRunsHere({ fallbackForTools: ['web_search'] }, 'web', []) === true
+        && sf.skillRunsHere({ fallbackForTools: ['web_search'] }, 'web', ['web_search']) === false);
+    ok('fm: fallbackForToolsets gates nothing (August names no toolsets)',
+        sf.skillRunsHere({ fallbackForToolsets: ['anything'] }, 'web', ['web_search']) === true);
 })();
 
 // ─── 8. memory hints — the deterministic pre-read, on every model ──────────
