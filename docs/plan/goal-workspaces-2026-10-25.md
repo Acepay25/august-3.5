@@ -67,17 +67,74 @@ compiled app source.
 - `scripts/check-contracts.cjs` still passes; `.verify` has the goal harness
   (19 checks) and the earlier skills/memory harnesses.
 
+## Self-modification rails (next-slice 2) — what landed
+
+Built as the owner asked: the capability is real, and the ceiling is real. Two
+surfaces actually change how this app behaves, and both are open; everything
+that could change a *decision the trader owns* is closed by name.
+
+- `schemas/selfChange.ts` — `off | config | shadow` mode, and the ledger row:
+  target, verbatim previous value, new value, the stated reason, status, actor,
+  window, corpus fingerprint, evidence. `z.strictObject` refuses a smuggled key.
+- `services/selfMod/SelfChangeLedger.ts` — one JSON file per change in the
+  notebook `self-changes/` folder (a default folder, like `goals`). The row is
+  why undo is a read and not a guess. Capped at 60 rows, terminal rows first.
+- `services/selfMod/SelfModificationService.ts` — the policy.
+  - **config**: `responseEffort`, `skillLibraryCap` (both owner-visible dials in
+    Settings → Analysis). Applies now, auto-reverts after 24h, per-target
+    6h cooldown, at most 8 changes active-or-measuring at once.
+  - **shadow**: a registered prompt override, refused unless the app's own
+    prompt A/B is armed (rate > 0, no lane pin), because an edit nobody is
+    compared against is not a shadow. Settled by `settleSelfChanges` on the
+    closed trades that ran under its corpus fingerprint, at the same
+    5-per-side / 8-point bar `maybePinWinningPromptLane` uses. It runs from the
+    learning pass beside that call, so no new scheduler exists.
+  - **blocked, by name**: equity, risk, leverage, edge floor, session guard,
+    outcome settlement, skill veto, starter shelf, auto-drafting, sensitive
+    memory, desk tools, the A/B rate and pin, and the mode itself. Skills are
+    not a self-change target at all: the approval inbox plus `meta.shadow` and
+    `settleShadow` remain the only route to a live rule.
+- Desk tools `list_self_changes` (read, works with the mode off and on a
+  detached seat), `propose_self_change`, `revert_self_change`. Both writes are
+  in `UNATTENDED_DENY`, and a restricted seat that lacks them is read-only.
+- The seat is told about the capability only while the trader has it on: the
+  mandate line is gated on the mode, so an off switch removes a promise instead
+  of leaving one the executor refuses.
+- `setSelfModMode` is the one writer of the switch (Settings → Analysis →
+  Advanced → Self-modification) and pulling it to `off` reverts every agent
+  change in force, promoted ones included.
+- A prompt override edit is refused by the same content scan that screens
+  third-party skill text, and by the placeholder check, so an injected
+  instruction or a broken `{{TOKEN}}` cannot ride in as "self-improvement".
+
+**Verified.** `.verify/node-selfmod.cjs` **54/54**; `live-probe4` (Chromium,
+mock provider, Chat surface) **33/33** — mode-off refusal moved nothing, the
+switch stored the mode, a knob landed and was audited with the value it
+replaced, the cooldown and the blocked risk key held, a goal narrowed the
+offered tools *and* the executor refused a tool outside its policy, revert
+restored the exact previous value, shadow edit + switch-off round-tripped
+through the prompt store. `check:contracts` 84 → **93** (a 12th section pins
+the policy table: no earlier section pinned a table, and a renamed setting key
+would silently open a knob). Flow docs re-anchored by byte-verified line map:
+**403 anchors**, 0 on a comment line, 0 missing their symbol; the earlier stated
+"4 exempt comment citations" was wrong since the pass that wrote it and is now
+5. `typecheck`, `typecheck:scripts`, `typecheck:electron`, `lint` (0 errors,
+379 warnings = the ratchet), `build`, `boot-probe`, `render-probe`,
+`skill-approval-probe` (25/25) all green.
+
+**Not done.** No UI surface yet for the ledger beyond the notebook file browser
+and the mode switch — the audit rail is next-slice 1's host. The live shadow
+promotion cannot be observed without real closed trades, so its thresholds are
+pinned by the node harness, not by the app.
+
 ## Next slices
 
 1. **Goals UI** — Agents rail Goals list, active-goal chip, detail/editor,
-   status/focus, history/restore. The owner has in-flight edits in
+   status/focus, history/restore — and the same rail hosting the change ledger
+   (rows, status, evidence, a revert press). The owner has in-flight edits in
    `AgentsView.tsx`/`LearnView.tsx`/`TradeChatPanel.tsx`; land this after those
    or in a separate worktree to avoid a blind merge.
-2. **Self-modification rails** — a generic change ledger for skills, prompt
-   overrides and tool descriptors; deterministic validator + reviewer; undo;
-   shadow and cooldown; owner-only enable switch; the agent cannot enable it or
-   widen its policy. Only after these rails do the non-goal artifacts become
-   agent-writable.
+2. ~~Self-modification rails~~ — landed above.
 3. **Remaining target gaps** — alias pre-read for all models + description,
    aliases in the memory index, subject type/source session, sensitive-read
    policy and bare bank/ID filters, skills source/read-only/manual caps, URL
@@ -85,6 +142,8 @@ compiled app source.
 4. **Live proof** — with a funded or local provider: a message trigger surfaces
    the goal, the model loads a matching skill, the focused policy is visible in
    the offered tools, and a goal restore is used after a deliberate bad edit.
+   Also live: the seat choosing `propose_self_change` on its own, and a shadow
+   prompt edit settling on real closed trades.
 5. **UI/merge** — the owner's redesign branch and this branch both touch
    `TradeChatPanel.tsx`; merge the goal core first, then mount the UI.
 
@@ -97,3 +156,12 @@ compiled app source.
 - Goal edits are versioned and restorable; an invalid goal file never breaks
   discovery of the others.
 - No scheduler, no autonomous background run, no compiled-source editing.
+- Self-modification cannot widen itself: the mode is not a knob, a blocked key
+  is refused before the whitelist can be reached, and the tools that write are
+  denied to every seat that has no human watching.
+- A shadow edit exists only inside a measurement. Refusing the edit when the
+  prompt A/B is disarmed is the rail; promoting it on closed trades is the
+  outcome. An edit that ties is left in shadow, because "no verdict" is the
+  honest state and not a licence to keep the change.
+- Skills keep one route: the approval inbox and the existing shadow/refine
+  window. A self-change never becomes a second way past that gate.
