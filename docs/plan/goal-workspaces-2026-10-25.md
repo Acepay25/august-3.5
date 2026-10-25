@@ -265,7 +265,19 @@ the wiring IS the call site.
    no model server listens on any local port (`11434/8080/1234/8000/4000` all
    closed), and the funded keys live in the packaged profile's encrypted store,
    which the isolated probe cannot and should not read.
-5. **UI/merge** — the owner's redesign branch and this branch both touch
+5. **Forget and "anything derived solely from it" (spec item 9)** — stated as a
+   reading, not silently shipped. `forget` deletes the named line and, in the
+   desk tool, the bulk path holds sensitive rows back. It does NOT chase derived
+   content, because on this store nothing is derived SOLELY from one line: the
+   only derivation that exists is the consolidation merge, whose survivor absorbs
+   TWO or more inputs, and the survivor keeps no record of which slugs it ate. So
+   the requirement is currently vacuous rather than unmet. Making it non-vacuous
+   would mean a `mergedFrom` provenance field on merged rows — additive, small,
+   and then `forget` could say "this also carried N merged facts" instead of
+   quietly deleting them. Not built this pass: it is a new field on a record the
+   trader edits directly, and the honest state today is that a forget loses merged
+   history it cannot name. Decide before building.
+6. **UI/merge** — the owner's redesign branch and this branch both touch
    `TradeChatPanel.tsx`; merge the goal core first, then mount the UI.
 
 ## Invariants
