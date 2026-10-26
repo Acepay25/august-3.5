@@ -168,7 +168,13 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setVisionModel(profile.settings?.visionModel || '');
         setUseAlgorithmicSummary(profile.settings?.useAlgorithmicSummary ?? false);
         setUseAlgorithmicInsights(profile.settings?.useAlgorithmicInsights ?? false);
-        setIsGlobalMemoryEnabled(profile.settings?.isGlobalMemoryEnabled ?? false);
+        // Default ON for a profile that never touched the switch: the memory loop
+        // is what makes the assistant remember (item 8 injects the profile,
+        // preferences and index every turn), and item 18 frames this setting as
+        // turning memory OFF — which presupposes it was on. `?? false` made every
+        // existing profile silently run without memory until the trader found the
+        // switch, and a stored false still means the trader said no.
+        setIsGlobalMemoryEnabled(profile.settings?.isGlobalMemoryEnabled ?? true);
         setIsStrategiesEnabled(profile.settings?.isStrategiesEnabled ?? false);
 
         // Accuracy mode is gone: its two instruction lists fold into Standard on
@@ -220,7 +226,9 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         setTradeSummaries([]);
         setFinalTradeSummary(null);
         setGlobalMemory(undefined);
-        setIsGlobalMemoryEnabled(false);
+        // Back to the SHIPPED default, which is on — resetting a profile must not
+        // quietly persist "this trader asked for no memory".
+        setIsGlobalMemoryEnabled(true);
         setMemoryConfig(null);
         setMemoryModel('');
         setCustomInstructions({ general: [] });

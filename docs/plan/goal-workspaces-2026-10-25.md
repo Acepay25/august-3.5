@@ -20,13 +20,13 @@ target is done.
   compatibility keys honoured) → `e017e202` (merge keeps its aliases) →
   `491540f6` (URL support-file import) → `defe61da` (delete takes the bundles) →
 `82d9e878` (goal editor + the narrowing fix).
-- Gates: `check:contracts` **130**; anchor gate **431** anchors, 0 comment-line,
+- Gates: `check:contracts` **130**; anchor gate **434** anchors, 0 comment-line,
   0 symbol-miss, 0 unattributed; `npm run lint` **0 errors / 379 warnings** (the
   ratchet, and `.verify/**` is now ignored so it reproduces CI); typecheck ×3,
   build, `boot-probe`, `render-probe` **131 ok**, `skill-approval-probe` 25/25
   (its `pageErrors=2` is the planted quota arm).
 - Verification scaffolding is untracked in `.verify/`: `node-*.cjs` harnesses
-  (134 + 25 + 57 + 13 + 22 + 9 + 5 checks) and `live-probe4.cjs` (**70 passed, 0 failed, 1
+  (134 + 25 + 57 + 13 + 22 + 9 + 5 checks) and `live-probe4.cjs` (**77 passed, 0 failed, 1
   blocked**) which
   drives the goals/self-mod flows in Chromium against a scripted mock provider.
   `.verify/wip/GoalRailPanel.tsx` is dead — the component shipped from it.
@@ -211,6 +211,38 @@ run passes no `matchText` at all, because a tool output or a fetched page must n
 be what points the seat at an environment. `node-goals` holds six arms of it and
 the live probe holds the turn-side wiring — the part no unit arm can prove, since
 the wiring IS the call site.
+
+## The memory loop shipped switched OFF — and the probe had been hiding it
+
+`isGlobalMemoryEnabled` is a per-profile setting that gates the profile index,
+the notebook topics index, the deterministic pre-read and the
+`remember`/`read_memory`/`forget` seat. Its default was `?? false` on load and
+`useState(false)` before that, so **every profile that never discovered the switch
+ran with no memory at all** — which is every profile this repo ships. Spec item 18
+calls the control "a setting to turn memory off entirely", and item 8 injects the
+profile/preferences/index each turn; both presuppose it is on. Fixed at the three
+sites that decided it (loader default, hook initial, profile reset), each with the
+reason beside it.
+
+Two things this is worth recording as method, not just as a diff:
+
+- **The live probe had been asserting the property while destroying the evidence
+  for it.** Its seeded profile row carried `isGlobalMemoryEnabled: true`, so every
+  memory arm ran with the loop switched on BY HAND and none of them could see the
+  default. The seed no longer sets it; the default arm now measures what it
+  actually claims.
+- **Writing a store the app owns, to prove what the app does with it, is the
+  probe fighting the product.** Two drafts set `settings.isGlobalMemoryEnabled`
+  through IndexedDB and reloaded; the row read back `true` every time, because
+  `useProfilePersistence` re-persists live state. The fix was not a longer wait —
+  it was clicking the switch the trader clicks, at
+  `MemoryFilesManager.tsx:366` on the Learn surface (Settings → Memory holds the
+  LIST, not the switch, which is why an arm aimed there finds nothing).
+
+Five arms now cover it: the pristine profile reads the switch ON and gets both the
+index and the pre-read; one press reads back `aria-checked=false` and the next turn
+carries neither; `remember` lands no row while off; pressing again restores the
+index, which also leaves the state as every later arm expects.
 
 ## Next slices
 

@@ -15,7 +15,10 @@ export function useAppSettings() {
     // Memory Provider Selection
     const [memoryConfig, setMemoryConfig] = useState<ProviderConfig | null>(null);
     const [memoryModel, setMemoryModel] = useState<string>('');
-    const [isGlobalMemoryEnabled, setIsGlobalMemoryEnabled] = useState<boolean>(false);
+    // The shipped default, so a turn that runs before the profile loader hydrates
+    // this is not a turn without memory. `useUserProfileLoader` overwrites it with
+    // the stored value (or the same default) the moment the profile arrives.
+    const [isGlobalMemoryEnabled, setIsGlobalMemoryEnabled] = useState<boolean>(true);
 
     // User-uploaded strategy summaries (Settings → Strategies): master switch
     // that gates whether enabled docs are injected into analysis prompts.

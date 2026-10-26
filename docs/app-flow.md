@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-25** (the anchor gate re-measured every citation here and in the stage ledger:
-**431 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**434 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 5 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -687,11 +687,27 @@ where the spec and the code disagreed):
   store's own index never advertises a sensitive slug, so a row that comes back
   was named by the trader; that is the distinction the bulk read cannot make on
   its own, and it is why the rule sits in the tool rather than in the prompt.
-- **The Settings memory toggle actually gates every path** — the analysis
+- **The memory off-switch actually gates every path** — the analysis
   pipeline always honoured it; since 2026-10-24 the flag threads
   App → `runChatSurfaceTurn` (`chatSurfaceTurn.ts:157`) and App → TradeView →
   the dock, and off strips BOTH memory blocks (profile and notebook topics)
   from the seat prompt. Skills are procedures, not memory, and stay.
+  Its ONE writer is the `Global memory` toggle in the notebook manager
+  (`MemoryFilesManager.tsx:366`), on the Learn surface — Settings → Memory shows
+  the LIST, not the switch, which is why a probe that looks for it there finds
+  nothing. It is a per-profile setting
+  (`useProfilePersistence.ts:108` writes `settings.isGlobalMemoryEnabled`,
+  `useUserProfileLoader.ts:177` reads it with `?? true`), and the shipped default
+  is ON: item 18 frames this control as turning memory OFF, which presupposes it
+  was running, and item 8 injects the profile, preferences and index every turn.
+  It read `?? false` until 2026-10-26, so every profile that never found the
+  switch — including the one this repo ships — ran with no memory at all, and no
+  live arm could catch it because the probe's own seed set the flag to `true` by
+  hand. With the seed silent, five arms measure it through the UI: the pristine
+  profile shows the switch on and gets the index plus the pre-read; one press
+  reads back off and strips both from the next turn and stores no `remember` row;
+  pressing again restores it. The seat cannot move the switch itself —
+  `openKnobNames()` never names it, so a self-change cannot reach it.
 - **Listing-first recall, one budget** — the profile index and the notebook
   topics index (`buildNotebookTopicsIndex`, `memoryTopics.ts:241`) ride the
   seat prompt beside the skills catalogue, and all three draw their line caps
@@ -1265,10 +1281,10 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 431 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 434 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 431 anchors verified, and the gate
+   the gate's own output: these docs state 434 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -1352,7 +1368,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 
 10. **The arrow table is 74 rows, and every citation in it resolves — and 69 of the 74 rows pair their citation with the symbol that must live on that line (65 of 70 before the goal, self-modification and rail rows landed; the figure has only ever moved up, and the run prints it with a floor, so a row rewritten without its symbol stops being coverage silently), so those rows are checked for content, not just for a line that exists. One row names no file at all — the ensemble row, whose stages the code never names — so a wrong figure inside it stays outside this gate's reach, which is why the sentence says 69/74 rather than 74/74.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
-    resolves all 431 unique anchors on every run, so coverage of the table is no
+    resolves all 434 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
 11. **"One service replacing nine" is falsifiable, and it is right — counted, not
     asserted.** `git log --diff-filter=D` over `services/providers/` names exactly nine
