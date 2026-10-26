@@ -70,6 +70,16 @@ export interface ProfileMemoryEntry {
     /** The row as it read BEFORE this edit — "now X, previously Y". One
      *  generation deep; the history is provenance, not a version store. */
     previous?: { body: string; description: string; updatedAt: string };
+    /** Other lines whose content now lives inside this one — written by the
+     *  consolidation merge, which absorbs its inputs and deletes them. This is
+     *  a HISTORY, not a live dependency: the named slugs are already gone, and
+     *  forgetting the survivor must not pretend it never carried them.
+     *
+     *  It is also what makes "delete anything derived solely from it" decidable
+     *  — see `forgetProfileMemory`. A row whose ONLY source is the line being
+     *  forgotten goes with it; a merge survivor does not, because it was derived
+     *  from more than that one line. */
+    derivedFrom?: string[];
 }
 
 const KEY_PREFIX = 'profile_memory_v1';
@@ -175,6 +185,10 @@ export const rememberProfileMemory = (input: {
     subject?: ProfileMemoryEntry['subject'];
     /** The conversation the write happened in, stamped by the caller that knows. */
     sourceSession?: string;
+    /** Absorbed-line history, written by the consolidation merge. An ordinary
+     *  write leaves this untouched (see the entry build): an edit to the
+     *  survivor must not cost it the record of what it ate. */
+    derivedFrom?: string[];
     /** Optimistic lock: when given and a row with this slug already exists,
      *  the write only lands if the row's version is exactly this. */
     ifVersion?: number;
@@ -200,6 +214,13 @@ export const rememberProfileMemory = (input: {
         ...(input.aliases ? { aliases: input.aliases.map(a => a.trim()).filter(Boolean).slice(0, 8) } : {}),
         ...(subjectField ? { subject: subjectField } : {}),
         ...(input.sourceSession?.trim() ? { sourceSession: input.sourceSession.trim().slice(0, 80) } : {}),
+        // Absorbed history is the merge's, not the caller's: an explicit list
+        // wins, and an ordinary edit keeps what the row already carried. Without
+        // the fallback, the next `remember` on a survivor would silently erase
+        // the provenance that `forgetProfileMemory`'s cascade rule reads.
+        ...(input.derivedFrom?.length
+            ? { derivedFrom: [...new Set(input.derivedFrom.map(s => s.trim()).filter(Boolean))].slice(0, 12) }
+            : prior?.derivedFrom?.length ? { derivedFrom: prior.derivedFrom } : {}),
         createdAt: now,
         updatedAt: now,
         version: idx >= 0 ? (prior!.version ?? 1) + 1 : 1,
@@ -224,7 +245,73 @@ export const rememberProfileMemory = (input: {
     }
 };
 
-export const forgetProfileMemory = (slug: string, username?: string): boolean => {
+export interface ForgetResult {
+    /** False when no line had that slug — the caller said nothing was forgotten. */
+    gone: boolean;
+    /** Every slug this call removed, the named one first. Longer than one when
+     *  a line was the ONLY source of another line. */
+    removed: string[];
+    /** The named line's own absorbed history, when it had one — the slugs whose
+     *  content this row was carrying. Nothing else is deleted for them; they
+     *  were already merged away, and a forget that could not say so would be
+     *  silently erasing more of the trader's record than it names. */
+    carried: string[];
+}
+
+/**
+ * Forget a line — and, per the record's own provenance, anything derived
+ * SOLELY from it.
+ *
+ * The rule is transitive and it is narrow: a row goes with the named slug only
+ * when its `derivedFrom` list resolves entirely to slugs that are already
+ * doomed by this same delete. A merge survivor keeps its facts (it was built
+ * from more than one line, so "solely" does not apply) and nothing else is
+ * touched. Written as a loop rather than a single check because A derived from
+ * B derived from C must all fall, and a one-level check would strand C's copy.
+ *
+ * Every caller now reads `.gone` rather than the bare return: a truthy
+ * `ForgetResult` would otherwise report success on a forget that deleted
+ * nothing.
+ */
+export const forgetProfileMemory = (slug: string, username?: string): ForgetResult => {
+    const user = username || getActiveUsername();
+    const all = readAll(user);
+    const target = all.find(e => e.slug === slug);
+    if (!target) return { gone: false, removed: [], carried: [] };
+    const doomed = new Set<string>([slug]);
+    for (let grew = true; grew;) {
+        grew = false;
+        for (const e of all) {
+            if (doomed.has(e.slug)) continue;
+            const src = e.derivedFrom ?? [];
+            if (src.length > 0 && src.every(s => doomed.has(s))) { doomed.add(e.slug); grew = true; }
+        }
+    }
+    const next = all.filter(e => !doomed.has(e.slug));
+    try {
+        writeAll(user, next);
+    } catch {
+        return { gone: false, removed: [], carried: [] };
+    }
+    return {
+        gone: true,
+        removed: [slug, ...all.filter(e => doomed.has(e.slug) && e.slug !== slug).map(e => e.slug)],
+        carried: target.derivedFrom ?? [],
+    };
+};
+
+/**
+ * Delete one line by slug, with NO derivation cascade.
+ *
+ * This is what the consolidation pass retires: an input it has just absorbed
+ * into the survivor. It must not cascade, because the survivor's `derivedFrom`
+ * names exactly these slugs — running the trader-facing `forgetProfileMemory`
+ * here would delete the merged row moments after writing it, on a two-candidate
+ * merge whose whole provenance list is the one loser being retired. Same store,
+ * same write path, different operation: the trader forgetting a fact is not the
+ * consolidator consuming one.
+ */
+export const retireMergedMemory = (slug: string, username?: string): boolean => {
     const user = username || getActiveUsername();
     const all = readAll(user);
     const next = all.filter(e => e.slug !== slug);

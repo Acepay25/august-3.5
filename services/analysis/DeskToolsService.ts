@@ -3038,11 +3038,22 @@ ${body}`);
             case 'forget': {
                 const { forgetProfileMemory } = await import('../learning/profileMemory');
                 const slug = asString(call.arguments.slug);
-                const gone = slug ? forgetProfileMemory(slug) : false;
-                if (!gone) {
+                const gone = slug ? forgetProfileMemory(slug) : { gone: false, removed: [], carried: [] };
+                if (!gone.gone) {
                     return rejectedResult(call, `forget rejected: no memory with slug "${slug}". Check the index for the exact slug.`);
                 }
-                content = JSON.stringify({ removed: true, slug, note: 'The memory is deleted and gone from every future index.' });
+                // Say what actually left the store. A line that was the ONLY
+                // source of another line goes with it, and a survivor that
+                // absorbed other facts took those records down too — either
+                // case is more than the trader named, and a receipt that said
+                // only "removed: true" would under-report a delete.
+                content = JSON.stringify({
+                    removed: true,
+                    slug,
+                    ...(gone.removed.length > 1 ? { alsoRemoved: gone.removed.slice(1) } : {}),
+                    ...(gone.carried.length > 0 ? { itAlsoCarried: gone.carried } : {}),
+                    note: 'The memory is deleted and gone from every future index.',
+                });
                 break;
             }
             case 'list_goals': {

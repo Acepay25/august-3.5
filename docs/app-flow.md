@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-25** (the anchor gate re-measured every citation here and in the stage ledger:
-**427 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**431 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 5 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -282,7 +282,7 @@ history and the current line. Before it goes on the wire:
    `tool_calls` block always stays with its replies, and the last user turn is
    pinned by `compactMessages`. The notice says what was cut, including
    `CONTEXT FULL` when nothing could be cut.
-3. `runDeskToolLoop` (`services/analysis/DeskToolsService.ts:4212`) bounds the
+3. `runDeskToolLoop` (`services/analysis/DeskToolsService.ts:4223`) bounds the
    turn: at most `MAX_DESK_TOOL_ROUNDS`, each round at
    `DESK_ROUND_MAX_TOKENS` and under `DESK_TURN_BUDGET_MS`;
    `budgetToolContent` clips one result, and `clearDeskToolCache`
@@ -563,7 +563,7 @@ and `strategies`. The folder is the write scope, not the model's choice:
 
 | folder | owner / writer | what the next prompt may see |
 |---|---|---|
-| `profile` | `syncProfileMemoryUnlocked` (`MemoryFilesService.ts:1107`) from the saved profile | the profile memory index (`buildProfileMemoryIndex`, `profileMemory.ts:259`) |
+| `profile` | `syncProfileMemoryUnlocked` (`MemoryFilesService.ts:1107`) from the saved profile | the profile memory index (`buildProfileMemoryIndex`, `profileMemory.ts:346`) |
 | `trader-diary` | the trader and diary appends | free prose; not a generated index |
 | `rules` | the seed `risk-rules.md` plus trader edits | `riskRulesBlock`; the model treats each line as binding |
 | `skills` | approved skill files | the skills index / recall tool (G.3) |
@@ -602,7 +602,7 @@ Health tab reads it. Backup/export carries the notebook with the profile
 Three derived memories sit beside the notebook:
 
 - **Profile memory** — `syncProfileMemory` copies the saved profile into the
-  `profile` folder, and `buildProfileMemoryIndex` (`profileMemory.ts:259`) renders
+  `profile` folder, and `buildProfileMemoryIndex` (`profileMemory.ts:346`) renders
   the index injected into a turn.
 - **Global memory** — `buildGlobalMemoryIndex` (`utils/memoryUtils.ts:19`) renders
   `familyPerformance`, `userPreferences`, `globalCorrections` and the frozen
@@ -633,6 +633,23 @@ zero.
 **The memory loop, ported 2026-10-24** (the SKILL.md/memory design; the repo won
 where the spec and the code disagreed):
 
+- **Forget deletes the line and anything derived SOLELY from it** —
+  `forgetProfileMemory services/learning/profileMemory.ts:276` returns
+  `{ gone, removed, carried }`, not a boolean, because the honest answer can be
+  "more than the one you named". A row goes with the forgotten slug only when its
+  `derivedFrom` list resolves entirely to slugs this delete already dooms, and the
+  rule is a loop rather than one test: C derived from B derived from A must all
+  fall. A merge survivor keeps its facts (it was built from more than one line)
+  and keeps its absorbed history, because that list is provenance, not a live
+  dependency. What makes `derivedFrom` exist is the consolidation merge
+  (`profileMemoryConsolidation.ts:204`), which records the inputs it absorbed
+  before retiring them — and retires them through
+  `retireMergedMemory services/learning/profileMemory.ts:314`, NOT through the
+  trader-facing forget: the survivor's list names those very slugs, so cascading
+  there would delete the merged row moments after writing it. The desk tool's
+  receipt prints `alsoRemoved` / `itAlsoCarried`, and the Settings memory list
+  (`ProfileMemoryCard.tsx:56`) says the same in a `role="status"` line, so a
+  delete that took two rows never looks like a delete that took one.
 - **Record shape** — the entry interface
   (`ProfileMemoryEntry services/learning/profileMemory.ts:30`)
   carries, besides its slug, description, kind and body: `version` (the
@@ -646,11 +663,11 @@ where the spec and the code disagreed):
   `subject` is whose or what the claim concerns (profile, preference, topic,
   area, person) — a different question from which kind wrote it, and derived
   from that kind for rows that predate the field, so no record is about nothing:
-  `subjectOf services/learning/profileMemory.ts:100`
+  `subjectOf services/learning/profileMemory.ts:110`
 
   `sourceSession` is the conversation the fact was heard in — a fact the trader
   cannot place is a fact they cannot audit.
-  `rememberProfileMemory services/learning/profileMemory.ts:163`
+  `rememberProfileMemory services/learning/profileMemory.ts:173`
   takes `if_version` and refuses a mismatched write by returning the row that IS
   stored, so the seat merges and retries in the same turn.
 - **Write filters** — `filterMemoryWrite` (`utils/memoryWriteFilters.ts:71`)
@@ -685,7 +702,7 @@ where the spec and the code disagreed):
   (`~bun, package manager`) when it has them, because a slug is the store's
   naming and the trader's word is the one that decides relevance; the
   description gives up exactly what the aliases take
-  (`INDEX_ALIAS_MAX services/learning/profileMemory.ts:246`), so the row count
+  (`INDEX_ALIAS_MAX services/learning/profileMemory.ts:333`), so the row count
   and the line cap keep their measured cost.
 - **The deterministic pre-read, on every model** — `buildMemoryHints`
   (`utils/memoryHints.ts:69`) string-matches the trader's message against the
@@ -856,7 +873,7 @@ mailbox tools. The surface decides what is offered:
 - a panel seat adds the chart-action definitions only when its own allow-list
   names them.
 
-`streamChatWithDeskTools` (`DeskToolsService.ts:4837`) composes the mandate from
+`streamChatWithDeskTools` (`DeskToolsService.ts:4848`) composes the mandate from
 the tools the turn can actually call (`deskToolsMandateFor`) filters
 the definitions, and then runs `runDeskToolLoop`. `executeDeskTool`
 re-checks the allow-list at execution, so a prompt that names a
@@ -1035,7 +1052,7 @@ brings a snapshot back as a NEW revision, and exactly one goal is focused:
 `focusedGoal services/goals/GoalService.ts:72`
 The focused goal's `policy.allowedTools` is intersected with the seat's own list
 at the transport — `goalAllowedTools services/trade/chatSurfaceTurn.ts:347`
-› `effectiveAllowed services/analysis/DeskToolsService.ts:4974`, and the rule
+› `effectiveAllowed services/analysis/DeskToolsService.ts:4985`, and the rule
 itself is `intersectGoalPolicy utils/toolKinds.ts:187`
 so a goal can only NARROW what a seat may call, and no goal text can widen a
 policy. The intersection has one hard case: a goal authored on the Chat surface
@@ -1196,7 +1213,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 53 | the chart gets its Entry/Stop/Target lines | `latestChartVerdict(messages)` `latestChartVerdict services/trade/chartData.ts:95` is what App hands `TradeView` as `verdict` — the newest row carrying `Message.proposal` (what `present_trade` stamps; `proposal services/trade/chatSurfaceTurn.ts:377`), with `Message.analysis` as the fallback for pre-debate history. Red-proved: the old selector keyed on `ensembleProgress` / >1 `modelsUsed` / `debateTurns` and returned null for every tool-turn row. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate |
 | 54 | request → context window | `resolveContextWindow utils/contextWindow.ts:136` resolves user → measured → model → assumed; `outputTokenBudget utils/contextWindow.ts:187` and `promptTokenCeiling utils/contextWindow.ts:169` size the two halves of one request |
 | 55 | array → compaction | `compactForWire services/providers/contextCompact.ts:343` → `compactMessages :217`; oldest payloads, then prose, then whole rounds; `tool_calls` stay paired and the last user turn is pinned |
-| 56 | tool round → bounded loop | `runDeskToolLoop services/analysis/DeskToolsService.ts:4212`; `MAX_DESK_TOOL_ROUNDS :199` · `DESK_ROUND_MAX_TOKENS :244` · `DESK_TURN_BUDGET_MS :211` |
+| 56 | tool round → bounded loop | `runDeskToolLoop services/analysis/DeskToolsService.ts:4223`; `MAX_DESK_TOOL_ROUNDS :199` · `DESK_ROUND_MAX_TOKENS :244` · `DESK_TURN_BUDGET_MS :211` |
 | 57 | tool result → artifact + payload | `storeToolArtifact services/analysis/toolArtifactStore.ts:82` (owner-scoped; `readToolArtifact :138`) and `saveToolPayload services/trade/toolPayloadStore.ts:110` (`readToolPayload :174`) |
 | 58 | tool event → transcript trail | `digestToolResult services/analysis/DeskToolsService.ts:841` → `Message.toolEvents` + `toolIds` → `ToolActivityRow`/`ChatWorkTimeline` |
 | 59 | wire decision → audit row | `buildReasoningPatch services/providers/reasoningControls.ts:271` → `WireAuditEntry` → `WireAuditRow`; the route, tier, applied and reason are recorded per call |
@@ -1212,9 +1229,9 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 69 | run → prompt lane + corpus version | `beginPromptLane services/infrastructure/PromptOverrideService.ts:34` → `promptCorpusVersion :97` → `runStats.promptLane`/`promptVersion` |
 | 70 | Settings → tool catalogue | `DESK_TOOL_DEFINITIONS services/analysis/DeskToolsService.ts:948` + `toolLabel :812` → `DeskToolCatalogue`, grouped by `toolKinds` |
 | 71 | skills index → skill_view → the body or one bundled file | `case 'skill_view' services/analysis/DeskToolsService.ts:2838` — L1 body + bundled list, L2 one flat-named file (`..` refused); `${SKILL_DIR}`/`${SESSION_ID}` substitute, Hermes aliases accepted |
-| 72 | message → focused goal → a narrower toolset | `focusedGoal services/goals/GoalService.ts:72` · `goalMatchesMessage :278` → `goalAllowedTools services/trade/chatSurfaceTurn.ts:347` → `intersectGoalPolicy utils/toolKinds.ts:187` › `effectiveAllowed services/analysis/DeskToolsService.ts:4974`, an intersection — a goal may only narrow the seat, and narrowing to nothing leaves it `NO_TOOLS_ALLOWED utils/toolKinds.ts:170` rather than the whole desk |
-| 73 | seat → goal edit → snapshot → undo | `case 'update_goal' services/analysis/DeskToolsService.ts:3110` → `updateGoal services/goals/GoalService.ts:164` keeps the previous snapshot → `case 'restore_goal' services/analysis/DeskToolsService.ts:3154` → `restoreGoal services/goals/GoalService.ts:202` |
-| 74 | seat → self-change → ledger → outcomes | `case 'propose_self_change' services/analysis/DeskToolsService.ts:3196` → `proposeKnobChange services/selfMod/SelfModificationService.ts:259` / `proposePromptOverride services/selfMod/SelfModificationService.ts:305` → `writeSelfChange services/selfMod/SelfChangeLedger.ts:100` → `settleSelfChanges services/selfMod/SelfModificationService.ts:452`, run from `settleSelfChanges services/learning/SkillMemoryService.ts:3949` |
+| 72 | message → focused goal → a narrower toolset | `focusedGoal services/goals/GoalService.ts:72` · `goalMatchesMessage :278` → `goalAllowedTools services/trade/chatSurfaceTurn.ts:347` → `intersectGoalPolicy utils/toolKinds.ts:187` › `effectiveAllowed services/analysis/DeskToolsService.ts:4985`, an intersection — a goal may only narrow the seat, and narrowing to nothing leaves it `NO_TOOLS_ALLOWED utils/toolKinds.ts:170` rather than the whole desk |
+| 73 | seat → goal edit → snapshot → undo | `case 'update_goal' services/analysis/DeskToolsService.ts:3121` → `updateGoal services/goals/GoalService.ts:164` keeps the previous snapshot → `case 'restore_goal' services/analysis/DeskToolsService.ts:3165` → `restoreGoal services/goals/GoalService.ts:202` |
+| 74 | seat → self-change → ledger → outcomes | `case 'propose_self_change' services/analysis/DeskToolsService.ts:3207` → `proposeKnobChange services/selfMod/SelfModificationService.ts:259` / `proposePromptOverride services/selfMod/SelfModificationService.ts:305` → `writeSelfChange services/selfMod/SelfChangeLedger.ts:100` → `settleSelfChanges services/selfMod/SelfModificationService.ts:452`, run from `settleSelfChanges services/learning/SkillMemoryService.ts:3949` |
 | 75 | rail Goals tab → focus / undo → the header chip | `focusGoal services/goals/GoalService.ts:230` and `revertSelfChange services/selfMod/SelfModificationService.ts:378` pressed from `GoalRailPanel components/agents/GoalRailPanel.tsx:333` → `ActiveGoalChip components/agents/ActiveGoalChip.tsx:27` names it, and its own press releases it |
 
 ---
@@ -1248,10 +1265,10 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 427 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 431 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 427 anchors verified, and the gate
+   the gate's own output: these docs state 431 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -1335,7 +1352,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 
 10. **The arrow table is 74 rows, and every citation in it resolves — and 69 of the 74 rows pair their citation with the symbol that must live on that line (65 of 70 before the goal, self-modification and rail rows landed; the figure has only ever moved up, and the run prints it with a floor, so a row rewritten without its symbol stops being coverage silently), so those rows are checked for content, not just for a line that exists. One row names no file at all — the ensemble row, whose stages the code never names — so a wrong figure inside it stays outside this gate's reach, which is why the sentence says 69/74 rather than 74/74.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
-    resolves all 427 unique anchors on every run, so coverage of the table is no
+    resolves all 431 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
 11. **"One service replacing nine" is falsifiable, and it is right — counted, not
     asserted.** `git log --diff-filter=D` over `services/providers/` names exactly nine

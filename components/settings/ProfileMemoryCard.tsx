@@ -42,10 +42,27 @@ const updatedLabelOf = (entry: ProfileMemoryEntry): string => {
 const ProfileMemoryCard: React.FC = () => {
     const [entries, setEntries] = useState<ProfileMemoryEntry[]>([]);
     const [learning, setLearning] = useState(true);
+    const [forgetNote, setForgetNote] = useState('');
 
     const refresh = (): void => {
         setEntries([...listProfileMemories()].reverse());
         setLearning(isTraderLearningEnabled());
+    };
+
+    /** Forget the named line, and say what ACTUALLY left. A row whose only
+     *  source was this line goes with it, and a survivor that had absorbed other
+     *  facts took those records down too — either case deletes more than the
+     *  trader clicked, and a list that just shrinks under-reports it. */
+    const forgetOne = (slug: string): void => {
+        const r = forgetProfileMemory(slug);
+        const extra = r.removed.length - 1;
+        setForgetNote(!r.gone
+            ? `"${slug}" was already gone.`
+            : extra > 0 || r.carried.length > 0
+                ? `Forgot "${slug}"${extra > 0 ? ` and ${extra} other line${extra === 1 ? '' : 's'} derived solely from it (${r.removed.slice(1).join(', ')})` : ''}.`
+                    + (r.carried.length > 0 ? ` It also carried the merged record of ${r.carried.join(', ')}.` : '')
+                : '');
+        refresh();
     };
 
     useEffect(() => {
@@ -124,7 +141,7 @@ const ProfileMemoryCard: React.FC = () => {
                                 </span>
                                 {/* The updated date, on the right. */}
                                 <span className="shrink-0 text-ui-dense text-zinc-500">{updatedLabelOf(e)}</span>
-                                <button type="button" onClick={() => { forgetProfileMemory(e.slug); refresh(); }}
+                                <button type="button" onClick={() => forgetOne(e.slug)}
                                     aria-label={`Forget memory ${e.slug}`} title="Forget"
                                     className="shrink-0 rounded-control border border-zinc-800 p-1.5 text-zinc-500 transition-colors hover:border-rose-500/40 hover:text-rose-300">
                                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -136,6 +153,12 @@ const ProfileMemoryCard: React.FC = () => {
                         </li>
                     ))}
                 </ul>
+            )}
+            {forgetNote && (
+                <p role="status" data-testid="profile-memory-forget-note"
+                    className="mt-2 rounded-control border border-zinc-800 bg-zinc-950/40 px-2.5 py-1.5 text-ui-dense leading-4 text-zinc-400">
+                    {forgetNote}
+                </p>
             )}
         </div>
     );

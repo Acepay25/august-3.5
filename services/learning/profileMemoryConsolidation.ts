@@ -20,7 +20,7 @@
 import { getQuickResponse } from '../providers/GenericProviderService';
 import { getReadyProviders, loadProviderConfigs } from '../infrastructure/ProviderConfigService';
 import {
-    forgetProfileMemory, listProfileMemories, rememberProfileMemory, slugify,
+    listProfileMemories, rememberProfileMemory, retireMergedMemory, slugify,
     PROFILE_MEMORY_MAX_BODY_CHARS, PROFILE_MEMORY_MAX_ENTRIES,
     type ProfileMemoryEntry, type ProfileMemoryKind, type RememberResult,
 } from './profileMemory';
@@ -182,12 +182,25 @@ export const rememberWithConsolidation = async (
             aliases: [...new Set([...(keeper.aliases ?? []), ...(input.aliases ?? [])])].slice(0, 8),
             subject: input.subject ?? keeper.subject,
             sourceSession: input.sourceSession ?? keeper.sourceSession,
+            // What this row now contains that used to be somewhere else. The
+            // losers are deleted a few lines below, so without this the merged
+            // record would be untraceable — and `forgetProfileMemory`'s
+            // "delete anything derived solely from it" rule would have nothing
+            // to read. The keeper's own history rides along, so a row merged
+            // twice does not lose its first merge.
+            derivedFrom: [...new Set([
+                ...(keeper.derivedFrom ?? []),
+                ...candidates.slice(1).map(c => c.slug),
+            ])].filter(s => s !== keeper.slug).slice(0, 12),
         }, user);
         if (mergeResult.conflict || mergeResult.persisted === false) {
             return { ok: false, error: 'the merged memory could not be stored; nothing was deleted' };
         }
         for (const candidate of candidates.slice(1)) {
-            if (forgetProfileMemory(candidate.slug, user)) outcome.removed.push(candidate.slug);
+            // retire, not forget: the survivor's derivedFrom names these very
+            // slugs, and the trader-facing cascade would take the merged row
+            // down with its own first input.
+            if (retireMergedMemory(candidate.slug, user)) outcome.removed.push(candidate.slug);
         }
         outcome.merged = keeper.slug;
         if (listProfileMemories(user).length >= PROFILE_MEMORY_MAX_ENTRIES && !existing) {

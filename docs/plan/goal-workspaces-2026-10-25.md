@@ -20,13 +20,14 @@ target is done.
   compatibility keys honoured) → `e017e202` (merge keeps its aliases) →
   `491540f6` (URL support-file import) → `defe61da` (delete takes the bundles) →
 `82d9e878` (goal editor + the narrowing fix).
-- Gates: `check:contracts` **130**; anchor gate **427** anchors, 0 comment-line,
+- Gates: `check:contracts` **130**; anchor gate **431** anchors, 0 comment-line,
   0 symbol-miss, 0 unattributed; `npm run lint` **0 errors / 379 warnings** (the
   ratchet, and `.verify/**` is now ignored so it reproduces CI); typecheck ×3,
   build, `boot-probe`, `render-probe` **131 ok**, `skill-approval-probe` 25/25
   (its `pageErrors=2` is the planted quota arm).
 - Verification scaffolding is untracked in `.verify/`: `node-*.cjs` harnesses
-  (134 + 25 + 57 + 13 + 12 + 9 + 5 checks) and `live-probe4.cjs` (**64/64, 0 blocked**) which
+  (134 + 25 + 57 + 13 + 22 + 9 + 5 checks) and `live-probe4.cjs` (**70 passed, 0 failed, 1
+  blocked**) which
   drives the goals/self-mod flows in Chromium against a scripted mock provider.
   `.verify/wip/GoalRailPanel.tsx` is dead — the component shipped from it.
   `.verify/url-ref-probe.cjs` is the one that measured how the URL parser treats
@@ -259,24 +260,31 @@ the wiring IS the call site.
    `node-selfmod` drives the real `syncClosedTradeToNotebook` pass and reads the
    ledger afterwards, and deleting the call at `SkillMemoryService.ts:3947`
    turns that arm red with `status=shadow` (57/57 with it, 56/57 without).
-   Still blocked, and named as blocked rather than upgraded: the model
-   *choosing* `propose_self_change` or a `skill_view` unprompted. That needs a
-   real completion, and the verification profile has none — measured this pass:
-   no model server listens on any local port (`11434/8080/1234/8000/4000` all
-   closed), and the funded keys live in the packaged profile's encrypted store,
-   which the isolated probe cannot and should not read.
-5. **Forget and "anything derived solely from it" (spec item 9)** — stated as a
-   reading, not silently shipped. `forget` deletes the named line and, in the
-   desk tool, the bulk path holds sensitive rows back. It does NOT chase derived
-   content, because on this store nothing is derived SOLELY from one line: the
-   only derivation that exists is the consolidation merge, whose survivor absorbs
-   TWO or more inputs, and the survivor keeps no record of which slugs it ate. So
-   the requirement is currently vacuous rather than unmet. Making it non-vacuous
-   would mean a `mergedFrom` provenance field on merged rows — additive, small,
-   and then `forget` could say "this also carried N merged facts" instead of
-   quietly deleting them. Not built this pass: it is a new field on a record the
-   trader edits directly, and the honest state today is that a forget loses merged
-   history it cannot name. Decide before building.
+   Still blocked, and now measured rather than asserted: the model *choosing*
+   `propose_self_change` or a `skill_view` unprompted. `live-probe4` probes four
+   local model endpoints each run (`11434/1234/8080/4000`) and prints
+   `BLOCKED [live-model]` with the list of what it tried and that all were
+   closed — the detection itself is exercised, because the probe asserts its own
+   mock answers `/v1/models`. Start any local OpenAI-compatible server and that
+   arm turns into a NOTE naming the endpoint to point one real completion at;
+   until then the scripted mock proves the wiring, never the choice.
+5. **Forget and "anything derived solely from it" (spec item 9)** — BUILT, and
+   it needed provenance to be decidable at all. `forgetProfileMemory` now returns
+   `{ gone, removed, carried }` and takes with the named line every row whose
+   whole `derivedFrom` list resolves to slugs this delete already dooms —
+   transitively, because a one-level check strands C when C derives from B
+   derives from A. The field is written by the consolidation merge, which was
+   already deleting its inputs and recording nothing; the survivor now says which
+   lines it absorbed. Two consequences worth naming: the merge must retire its
+   inputs through a NON-cascading delete (`retireMergedMemory`), because the
+   survivor's list names exactly those slugs and running the trader-facing forget
+   there would delete the merged row seconds after writing it (caught while
+   writing the arms, not after shipping); and an ordinary re-save of a survivor
+   keeps its `derivedFrom`, or the next `remember` would erase the record the rule
+   reads. Both the desk receipt (`alsoRemoved` / `itAlsoCarried`) and the Settings
+   memory list say what actually left, so a delete of two rows is never presented
+   as a delete of one. Ten harness arms, three of which go red when the cascade is
+   neutered, plus five live arms in the real Settings list.
 6. **UI/merge** — the owner's redesign branch and this branch both touch
    `TradeChatPanel.tsx`; merge the goal core first, then mount the UI.
 

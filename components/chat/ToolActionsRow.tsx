@@ -189,7 +189,7 @@ export const ToolActionsRow: React.FC<ToolActionsRowProps> = ({ actions }) => {
                                                         try {
                                                             const { forgetProfileMemory } = await import('../../services/learning/profileMemory');
                                                             const { getActiveUsername } = await import('../../utils/activeUser');
-                                                            if (forgetProfileMemory(slug, getActiveUsername())) {
+                                                            if (forgetProfileMemory(slug, getActiveUsername()).gone) {
                                                                 window.dispatchEvent(new Event('august-profile-memory'));
                                                                 setUndoneSlugs(prev => new Set(prev).add(slug));
                                                             }
