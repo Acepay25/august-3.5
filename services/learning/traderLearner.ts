@@ -117,6 +117,19 @@ export const runTraderLearner = async (
             if (!slug) continue;
             if (known.has(`${slug}|${fact.data.description.toLowerCase()}`)) continue; // no churn
             const kind: ProfileMemoryKind = normalizeKind(fact.data.kind) ?? 'user';
+            // The SAME gate the `remember` tool runs, on the path nobody presses.
+            // The learner used to store whatever the model distilled with no
+            // classification and no setting check, so a health/finances/identity
+            // fact could be written unflagged and then advertised in the index
+            // every seat reads (docs/AUDIT.md M-2). A refused fact is dropped; a
+            // sensitive one is stored FLAGGED, and only when the trader allows
+            // sensitive memory at all.
+            const { filterMemoryWrite } = await import('../../utils/memoryWriteFilters');
+            const { getHarnessSettings } = await import('../../utils/harnessSettings');
+            const verdict = filterMemoryWrite(`${fact.data.description}
+${fact.data.body}`);
+            if (verdict.refused) continue;
+            if (verdict.sensitive && getHarnessSettings().sensitiveMemoryEnabled !== true) continue;
             const saved = await rememberWithConsolidation({
                 slug, name: fact.data.name,
                 description: fact.data.description,
@@ -124,6 +137,7 @@ export const runTraderLearner = async (
                 body: fact.data.body,
                 source: 'auto',
                 tag: 'observed',
+                ...(verdict.sensitive ? { sensitive: true } : {}),
             }, { username });
             if (saved.ok && !('conflict' in saved.result) && saved.result.persisted !== false) written += 1;
         }
