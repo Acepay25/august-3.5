@@ -80,6 +80,12 @@ const escapeHtml = (value: unknown): string => {
 /**
  * Export the trade log as a printable HTML report (monochrome, print
  * stylesheet included — open it and use the browser's print-to-PDF).
+ *
+ * On the web the report opens in a new tab. In the Electron shell the
+ * window-open handler denies every target that is not https:, so a blob:
+ * URL could never become a window there — the button clicked and nothing
+ * happened. Desktop downloads the same file instead (the path the CSV and
+ * JSONL exports already use); open it and print-to-PDF as before.
  */
 export const exportTradesHTML = (trades: LoggedTrade[]): void => {
     const completed = trades.filter(t => t.outcome === TradeOutcome.WIN || t.outcome === TradeOutcome.LOSS);
@@ -143,6 +149,12 @@ export const exportTradesHTML = (trades: LoggedTrade[]): void => {
 </body>
 </html>`;
 
+    const onDesktop = typeof window !== 'undefined'
+        && !!(window as { electronAPI?: { isElectron?: boolean } }).electronAPI?.isElectron;
+    if (onDesktop) {
+        downloadBlob(html, `august-trades-${dateStamp()}.html`, 'text/html;charset=utf-8');
+        return;
+    }
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
