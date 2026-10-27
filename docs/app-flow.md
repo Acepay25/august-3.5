@@ -466,7 +466,7 @@ person pressing send, a bot mailbox delivery, or a room round.
 
 What survives is the one unattended caller that is not a conversation — the
 detached skill evaluator, reached from the trade-sync path
-(`runDueSkillEvalWithDefaultRunner services/learning/SkillMemoryService.ts:3990`)
+(`runDueSkillEvalWithDefaultRunner services/learning/SkillMemoryService.ts:4034`)
 and from the skill detail's own run. Because nobody is watching it, it runs on
 `DETACHED_EVAL_TOOLS` (`services/trade/unattendedTools.ts:27`): the Chat surface's
 set minus every notebook-writer and minus `present_trade` / `decline_trade`, so a detached
@@ -744,7 +744,7 @@ where the spec and the code disagreed):
   Use-when check ran only inside `SkillImportService` (and, as a courtesy
   message, in `propose_skill`), so a draft queued by a post-mortem craft — or
   one written before those gates existed — could be approved with a body no
-  import would accept. `craftedBodyGate services/learning/SkillMemoryService.ts:2903`
+  import would accept. `craftedBodyGate services/learning/SkillMemoryService.ts:2947`
   is the one rule both ingest paths call: over the 100k hard cap REFUSES
   (`over-hard-cap`, the draft stays in the inbox and the toast names the size),
   over the 200-line soft cap and a description with no trigger WARN, exactly as
@@ -808,7 +808,7 @@ where the spec and the code disagreed):
 ### G.3 Skills are files with a lifecycle
 
 A skill is a markdown file in `skills/`, parsed by `parseSkillMarkdown`
-(`SkillMemoryService.ts:653`) into `SkillMeta` (`:117`): status, kind, scope,
+(`SkillMemoryService.ts:660`) into `SkillMeta` (`:117`): status, kind, scope,
 evidence counts, `netR`/`grossR`, r-sample and provenance. `listSkills` is the one roster. `skillEnabledFlag` is the one place
 `enabled` is derived — suspension is `enabled: false` plus `meta.suspendedAt`,
 never a fourth status.
@@ -903,14 +903,14 @@ The lifecycle has four stages:
 2. **Gate** — `deterministicDraftGate` (`draftGates.ts:85`) rejects duplicates and
    malformed clauses; `gateEvidenceBackedDraft` requires evidence before
    a draft can reach a human.
-3. **Human approval** — `approveSkillDraft` (`skillApproval.ts:53`) is the only
+3. **Human approval** — `approveSkillDraft` (`skillApproval.ts:55`) is the only
    writer that turns a draft into a skill file; it reads the library back, and a
    failed write leaves the draft in the inbox. `collectApprovalItems`
    (`utils/approvalInbox.ts:57`) is the one badge/list source for every queue.
 4. **Retrieval and decay** — `rankSkillIndexRows`
    (`services/trade/tradeChatContext.ts:335`) ranks the 30-slot index;
    `buildSkillsIndexForPrompt` renders it; `resolveInvokedSkills`
-   (`SkillMemoryService.ts:622`) returns the rows the model actually saw, and
+   (`SkillMemoryService.ts:629`) returns the rows the model actually saw, and
    `applySkillEvidence` updates the ledger from closed outcomes.
    `runSkillIdleSweep` (`skillIdleLifecycle.ts:264`) suspends a silent skill
    after 90 days and archives it after 180; `buildMemoryHealthReport`
@@ -1012,7 +1012,7 @@ flowchart TD
     T["trade closes — useTradeLogging.logTradeWithFeedback useTradeLogging.ts:275"] --> J["journal row + memory note + realizedR/netR"]
     J --> A["OutcomeAutopilotService.register / subscribe"]
     A --> S["settlementActionFor outcomeSettlement.ts:47 — automatic · shadow · confirm"]
-    S --> E["applySkillEvidence SkillMemoryService.ts:2334 · calculatePnlR PatternMemorySynthesisService.ts:249"]
+    S --> E["applySkillEvidence SkillMemoryService.ts:2378 · calculatePnlR PatternMemorySynthesisService.ts:249"]
     E --> R["review passes — runSessionSkillReview · runWeeklyReviewIfDue · runMonthlyReportIfDue · passMining · chartScanSkills"]
     R --> D["drafts — queueSkillDraft · queueLearningProposal"]
     D --> G{"draft gates — deterministicDraftGate · gateEvidenceBackedDraft"}
@@ -1194,7 +1194,7 @@ surfaces actually change how this app behaves:
   in `SHADOW_MIN_TRADES_PER_SIDE services/selfMod/SelfModificationService.ts:61`
   and in `maybePinWinningPromptLane utils/promptVersionStats.ts:45` — and
   promotes, leaves in shadow, or auto-reverts. It runs from the learning pass
-  beside `maybePinWinningPromptLane services/learning/SkillMemoryService.ts:3990`
+  beside `maybePinWinningPromptLane services/learning/SkillMemoryService.ts:4034`
   so a self-edit is judged by outcomes, not by the model's opinion of its own
   edit.
 
@@ -1277,8 +1277,8 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 26 | panel tools → chart echo | `executePanelTool services/trade/chatTurnRunner.ts:350` is what echoes the result back into the panel |
 | 27 | ~~automation tick → runAutomation~~ | DELETED (2026-10-24, owner request): the surface, the scheduler, the ration, the breaker and the bot-scoped routine executor are gone — see E |
 | 29 | rooms → groupRounds | `useAgentGroups hooks/useAgentGroups.ts:75` → `streamQuickResponse services/providers/GenericAnalysisService.ts:605` |
-| 30 | review passes / propose_skill → draft → approval → skill | `draftGates.ts` → `approveSkillDraft services/learning/skillApproval.ts:53` — the post-mortem leg is starved, not deleted (see D) |
-| 31 | approved skill → next prompt | `resolveInvokedSkills services/learning/SkillMemoryService.ts:622` — closes into 24's stage 3 |
+| 30 | review passes / propose_skill → draft → approval → skill | `draftGates.ts` → `approveSkillDraft services/learning/skillApproval.ts:55` — the post-mortem leg is starved, not deleted (see D) |
+| 31 | approved skill → next prompt | `resolveInvokedSkills services/learning/SkillMemoryService.ts:629` — closes into 24's stage 3 |
 | 32 | logged trade → memory + autopilot | `useTradeLogging hooks/useTradeLogging.ts:100` writes the journal row and the memory note → MemoryService; proposedTrade leaves outcome PENDING so the autopilot watches it |
 | 33 | App messages + dock entries → one thread | `entriesForSession services/trade/chatSessions.ts:593` |
 | 34 | chatStore → localStorage | `saveSessions services/trade/chatSessions.ts:456` → debounced key |
@@ -1309,10 +1309,10 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 59 | wire decision → audit row | `buildReasoningPatch services/providers/reasoningControls.ts:271` → `WireAuditEntry` → `WireAuditRow`; the route, tier, applied and reason are recorded per call |
 | 60 | trade close → journal + autopilot | `logTradeWithFeedback hooks/useTradeLogging.ts:275` writes the row/memory note and the measured R; `register services/ui/OutcomeAutopilotService.ts:189` watches it |
 | 61 | autopilot → settlement | `subscribe services/ui/OutcomeAutopilotService.ts:288` → `settlementActionFor utils/outcomeSettlement.ts:47` (automatic · shadow · confirm; 15s undo) |
-| 62 | outcome → skill ledger + pattern memory | `applySkillEvidence services/learning/SkillMemoryService.ts:2334` and `calculatePnlR services/learning/PatternMemorySynthesisService.ts:249` consume the measured outcome, never a ±1 stand-in |
+| 62 | outcome → skill ledger + pattern memory | `applySkillEvidence services/learning/SkillMemoryService.ts:2378` and `calculatePnlR services/learning/PatternMemorySynthesisService.ts:249` consume the measured outcome, never a ±1 stand-in |
 | 63 | review → draft | `runSessionSkillReview services/learning/sessionSkillReview.ts:207` · `runWeeklyReviewIfDue services/learning/weeklyReview.ts:181` · `runMonthlyReportIfDue services/learning/monthlyReport.ts:337` → `queueSkillDraft utils/skillDrafts.ts:65` |
-| 64 | draft → gate → human | `deterministicDraftGate services/learning/draftGates.ts:85` / `gateEvidenceBackedDraft :199` → `approveSkillDraft services/learning/skillApproval.ts:53` |
-| 65 | approved skill → notebook → prompt | `approveSkillDraft services/learning/skillApproval.ts:53` writes the file; `resolveInvokedSkills services/learning/SkillMemoryService.ts:622` returns the rows the next prompt may name |
+| 64 | draft → gate → human | `deterministicDraftGate services/learning/draftGates.ts:85` / `gateEvidenceBackedDraft :199` → `approveSkillDraft services/learning/skillApproval.ts:55` |
+| 65 | approved skill → notebook → prompt | `approveSkillDraft services/learning/skillApproval.ts:55` writes the file; `resolveInvokedSkills services/learning/SkillMemoryService.ts:629` returns the rows the next prompt may name |
 | 66 | heartbeat → hygiene + idle | `useLearningHeartbeat hooks/useLearningHeartbeat.ts:42` → `runMemoryHygiene services/learning/memoryHygiene.ts:151` → `runSkillIdleSweep services/learning/skillIdleLifecycle.ts:264` |
 | 67 | failure → failure row | `toFriendlyProviderError services/providers/GenericProviderService.ts:1221` preserves the cause chain → `Message.error` → `ChatFailureRow`, in both homes |
 | 68 | model control → tier | `ModelChip`/`ModelMenu`; `nextEffortTier components/shared/effortScale.ts:50`; `effortDialUp components/shared/effortDial.ts:27` guards the chord |
@@ -1321,7 +1321,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 71 | skills index → skill_view → the body or one bundled file | `case 'skill_view' services/analysis/DeskToolsService.ts:2866` — L1 body + bundled list, L2 one flat-named file (`..` refused); `${SKILL_DIR}`/`${SESSION_ID}` substitute, Hermes aliases accepted |
 | 72 | message → focused goal → a narrower toolset | `focusedGoal services/goals/GoalService.ts:72` · `goalMatchesMessage :278` → `goalAllowedTools services/trade/chatSurfaceTurn.ts:357` → `intersectGoalPolicy utils/toolKinds.ts:187` › `effectiveAllowed services/analysis/DeskToolsService.ts:5132`, an intersection — a goal may only narrow the seat, and narrowing to nothing leaves it `NO_TOOLS_ALLOWED utils/toolKinds.ts:170` rather than the whole desk |
 | 73 | seat → goal edit → snapshot → undo | `case 'update_goal' services/analysis/DeskToolsService.ts:3168` → `updateGoal services/goals/GoalService.ts:164` keeps the previous snapshot → `case 'restore_goal' services/analysis/DeskToolsService.ts:3212` → `restoreGoal services/goals/GoalService.ts:202` |
-| 74 | seat → self-change → ledger → outcomes | `case 'propose_self_change' services/analysis/DeskToolsService.ts:3254` → `proposeKnobChange services/selfMod/SelfModificationService.ts:259` / `proposePromptOverride services/selfMod/SelfModificationService.ts:305` → `writeSelfChange services/selfMod/SelfChangeLedger.ts:100` → `settleSelfChanges services/selfMod/SelfModificationService.ts:452`, run from `settleSelfChanges services/learning/SkillMemoryService.ts:3997` |
+| 74 | seat → self-change → ledger → outcomes | `case 'propose_self_change' services/analysis/DeskToolsService.ts:3254` → `proposeKnobChange services/selfMod/SelfModificationService.ts:259` / `proposePromptOverride services/selfMod/SelfModificationService.ts:305` → `writeSelfChange services/selfMod/SelfChangeLedger.ts:100` → `settleSelfChanges services/selfMod/SelfModificationService.ts:452`, run from `settleSelfChanges services/learning/SkillMemoryService.ts:4041` |
 | 75 | rail Goals tab → focus / undo → the header chip | `focusGoal services/goals/GoalService.ts:230` and `revertSelfChange services/selfMod/SelfModificationService.ts:378` pressed from `GoalRailPanel components/agents/GoalRailPanel.tsx:333` → `ActiveGoalChip components/agents/ActiveGoalChip.tsx:27` names it, and its own press releases it |
 
 ---

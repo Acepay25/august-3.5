@@ -2364,12 +2364,12 @@ silently: a reader-less field can regain a writer with one line of code and no a
 
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions
 services/trade/chatSessions.ts:456, collectApprovalItems utils/approvalInbox.ts:57, resolveInvokedSkills
-services/learning/SkillMemoryService.ts:622), and the gate caught the pairing that insertion created: the row
+services/learning/SkillMemoryService.ts:629), and the gate caught the pairing that insertion created: the row
 also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1844, where the
 useMemo actually is. 31 of 53 rows cite a file, all bound; 22 name no file at all.
 
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions chatSessions.ts:456,
-collectApprovalItems approvalInbox.ts:57, resolveInvokedSkills SkillMemoryService.ts:622), and the gate caught the
+collectApprovalItems approvalInbox.ts:57, resolveInvokedSkills SkillMemoryService.ts:629), and the gate caught the
 pairing that insertion created: the same row also names approvalsWaiting, which is not on that line — a SYMBOL
 MISS, because pairing is positional. It now cites App.tsx:1844, where the useMemo actually is. 31 of 53 rows cite
 a file and every one of them binds a symbol; 22 name no file at all.
