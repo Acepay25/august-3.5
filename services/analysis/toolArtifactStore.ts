@@ -22,8 +22,14 @@
  * are market snapshots that are WRONG an hour later, and the app's persistent
  * layer is one rewritten JSON blob this app already has a byte budget for.
  * Writing per-call megabytes of stale order books into it would be a regression
- * dressed as a feature. So the store is bounded, aged, and cleared at every
- * debate start beside the result cache it mirrors.
+ * dressed as a feature. So the store is bounded and aged — and each turn's
+ * artifacts are dropped by the turn that owns them (`clearToolArtifacts(owner)`
+ * in the streaming wrapper's tail). It is deliberately NOT cleared beside the
+ * result cache: that clear runs at the START of a turn, and a concurrent
+ * dock/Chat turn would lose the payloads its model is still paging through.
+ * (This comment used to say "cleared at every debate start"; the debate engine is
+ * deleted, and a comment naming a caller that no longer exists is how a future
+ * edit "restores" the bug.)
  *
  * The one rule that must not be bent: `budgetToolContent` promises the returned
  * string fits its cap, and callers size `tailReserve` so their live-price

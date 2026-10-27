@@ -13,7 +13,6 @@
 
 import { getPreferenceArray, setPreferenceObject } from '../infrastructure/PreferencesService';
 import { withSerializedPref } from '../infrastructure/serializedPrefs';
-import { parseFollowedSkills, normalizeSkillSlug } from '../../utils/followedSkills';
 
 export interface InjectedSource {
     path: string;
@@ -211,124 +210,17 @@ export const skillAdherenceForRun = async (
     return 'injected-unknown';
 };
 
-/** slug (file name, `.md` included) → the skill's IF clause, for arm 3 of
- *  the citation join. Built per annotate call, never cached across calls:
- *  skills are edited between verdicts and a stale clause would stamp the
- *  wrong way. DYNAMIC imports on purpose — SkillMemoryService statically
- *  imports THIS module (`recordMemoryInjection`, `skillAdherenceForRun`),
- *  so importing it statically here would be a cycle. Any failure yields an
- *  empty map: arms 1-2 need no store, so the stamp degrades to the
- *  two-join behavior instead of failing the commit. */
-const loadSkillConditions = async (): Promise<Map<string, string>> => {
-    const map = new Map<string, string>();
-    try {
-        const [memoryFiles, skillMemory] = await Promise.all([
-            import('./MemoryFilesService'),
-            import('./SkillMemoryService'),
-        ]);
-        for (const file of memoryFiles.getMemoryFiles().files) {
-            if (!skillMemory.isSkillFile(file)) continue;
-            const condition = skillMemory.parseSkillMarkdown(file.content)?.ifCondition;
-            if (condition) map.set(file.name, condition);
-        }
-    } catch {
-        // Citation stamping is telemetry — never fail the verdict commit.
-    }
-    return map;
-};
+
 
 /**
- * Citation stamp — called once at verdict commit with the final
- * verdict's own text. For every skill source in the NEWEST verdict-stage
- * record that carries it, set `cited` by a deterministic textual join with
- * THREE arms, tried in order by `cites` below:
- *   1. the verdict echoes the skill's file stem;
- *   2. it carries every significant word of the skill's title (the stem
- *      split on - and _);
- *   3. it carries a MAJORITY of the significant words of the skill's
- *      IF clause — at least 3 distinct words AND more than half of them.
- * Arm 3 matters because the honest citation often never names the file: a
- * verdict that FOLLOWS a skill describes its condition in its own words.
- * With only stems and titles, such a verdict was stamped `cited:false` —
- * scored 'overridden', counting against the skill's evidence and queueing
- * amendment proposals against a rule the verdict actually obeyed. The
- * ≥3-word floor stops two generic words ("rising average") from citing a
- * long clause on coincidence.
- * Opening-stage records are never stamped (an analyst seeing a skill is not
- * the moderator citing it), so unannotated verdicts keep the conservative
- * 'injected-unknown' credit.
+ * (The verdict-citation annotator that lived here was REMOVED 2026-10-28: it had
+ * no production caller, and its input — `verdict`-stage injection records — is
+ * written by no live path since the debate engine left. Attribution on the path
+ * that runs today is carried by `Message.injectedSkills`, stamped by the seat
+ * prompt builder, and read by the settlement reflection
+ * (services/learning/settlementReflection.ts) into the skill ledger. A function
+ * that guesses which skills a verdict followed cannot be the basis of counted
+ * evidence if nothing ever calls it; leaving it here implied verdicts were
+ * annotated. Docs: docs/AUDIT.md M-6.)
  */
-export const annotateVerdictCitations = async (
-    username: string,
-    verdictText: string,
-    runId?: string,
-): Promise<void> => {
-    try {
-        const key = keyFor(username);
-        // P1-5: the moderator now NAMES the skills it followed, so the join is
-        // exact for any verdict carrying the line. `null` = the line is absent
-        // (an older transcript) and the word-overlap heuristic below stands in.
-        const declared = parseFollowedSkills(verdictText || '');
-        // P1-5: await the EXACT in-flight write for this run instead of
-        // sleeping in ten 100 ms polls hoping the record landed. In the common
-        // case retrieval already recorded the verdict slice while the
-        // moderator was still streaming, so this returns immediately.
-        const recs = await awaitInjectionRecord(username, runId, 'verdict');
-        if (recs.length === 0) return;
-        const conditionBySlug = await loadSkillConditions();
-        const text = (verdictText || '').toLowerCase();
-        const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-        const verdictNorm = norm(text);
-        const verdictWords = new Set(verdictNorm.split(' ').filter(w => w.length > 3));
-        const cites = (slug: string): boolean => {
-            // P1-5: the declared line WINS when it is present. A model that
-            // named its skills has answered the question; the heuristic below
-            // is a guess about a question it already answered, and the guess is
-            // what misrouted real evidence.
-            if (declared) return declared.includes(normalizeSkillSlug(slug));
-            const stem = slug.replace(/\.md$/i, '').toLowerCase();
-            if (stem && text.toLowerCase().includes(stem)) return true;
-            const title = norm(stem.replace(/[-_]/g, ' '));
-            const titleWords = title.split(' ').filter(w => w.length > 3);
-            if (titleWords.length >= 2 && titleWords.every(w => verdictWords.has(w))) return true;
-            // Arm 3 — the IF clause: a verdict that follows the skill by
-            // PARAPHRASING its condition still cites it. Majority of the
-            // clause's significant words (≥3 distinct, > half of them); the
-            // floor keeps two generic words from citing a long clause.
-            const condition = conditionBySlug.get(slug);
-            if (!condition) return false;
-            const condWords = new Set(norm(condition).split(' ').filter(w => w.length > 3));
-            if (condWords.size === 0) return false;
-            let matched = 0;
-            for (const w of condWords) if (verdictWords.has(w)) matched += 1;
-            return matched >= 3 && matched * 2 > condWords.size;
-        };
-        await withSerializedPref(key, async () => {
-            // Re-read INSIDE the lock: the polls above may have raced appends
-            // that landed after the last read.
-            const current = await getRecentMemoryInjections(username);
-            if (current.length === 0) return;
-            // Newest-first: only the first verdict-stage record per slug is
-            // stamped. With a runId, ONLY that run's record is a candidate
-            // (exact join).
-            const seen = new Set<string>();
-            let changed = false;
-            for (const r of current) {
-                if (r.stage !== 'verdict') continue;
-                if (runId && r.runId !== runId) continue;
-                for (const s of r.sources) {
-                    if (s.kind !== 'skill' || !s.path.startsWith('skills/')) continue;
-                    const slug = s.path.slice('skills/'.length);
-                    if (!slug || seen.has(slug)) continue;
-                    seen.add(slug);
-                    s.cited = cites(slug);
-                    changed = true;
-                }
-            }
-            if (!changed) return;
-            await setPreferenceObject(key, current.slice(0, MAX_INJECTION_RECORDS));
-        });
-    } catch {
-        // Telemetry must never break the verdict commit.
-    }
-};
+
