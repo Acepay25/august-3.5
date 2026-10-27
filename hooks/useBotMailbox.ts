@@ -81,6 +81,11 @@ export interface UseBotMailboxResult {
      *  teammate protocol, reply dispatched for DM markers. Returns false
      *  when the bot's provider is not ready (caller falls back). */
     runUserBotTurn: (bot: AgentBot, prompt: string) => Promise<boolean>;
+    /** Abort the bot's in-flight reply (queue-drained or user-initiated).
+     *  Returns true when a turn was actually stopped. The queued envelopes
+     *  behind it keep draining — Stop answers for the reply on screen, not
+     *  for the mailbox contract. */
+    cancelDmTurn: (botId: string) => boolean;
 }
 
 /**
@@ -103,14 +108,23 @@ export const useBotMailbox = ({
     // Per-target serial queues (a per-profile lock, in-memory).
     const queues = useRef<Map<string, DMEnvelope[]>>(new Map());
     const busy = useRef<Set<string>>(new Set());
+    // Bots running a USER-initiated turn. Separate from `busy` on purpose:
+    // that set is the queue's serial lock, and joining it would make a DM
+    // delivered mid-user-turn skip the drain instead of queueing behind it.
+    // The working pulse and Stop still need to see user turns.
+    const userTurns = useRef<Set<string>>(new Set());
     const rate = useRef<number[]>([]);
     const processed = useRef<Set<string>>(new Set());
     const [dmActivityCount, setDmActivityCount] = useState(0);
     const [dmBusy, setDmBusy] = useState(false);
-    // Which bots are draining a queue right now (rail working-pulse).
+    // Which bots are streaming a reply right now (rail working-pulse).
     const [busyIds, setBusyIds] = useState<string[]>([]);
+    // In-flight requests by bot id. A SET, not one controller: a user turn
+    // does not take the per-target queue lock, so a queue-drained turn and a
+    // user send can legally overlap and both must be stoppable.
+    const controllers = useRef<Map<string, Set<AbortController>>>(new Map());
     const syncBusy = useCallback(() => {
-        const ids = [...busy.current];
+        const ids = [...new Set([...busy.current, ...userTurns.current])];
         setBusyIds(ids);
         setDmBusy(ids.length > 0);
     }, []);
@@ -194,6 +208,10 @@ export const useBotMailbox = ({
             botId: bot.id,
             isStreaming: true,
         });
+        const controller = new AbortController();
+        let live = controllers.current.get(bot.id);
+        if (!live) { live = new Set(); controllers.current.set(bot.id, live); }
+        live.add(controller);
         try {
             const replyStartedAt = Date.now();
             const raw = await streamQuickResponse(
@@ -201,6 +219,7 @@ export const useBotMailbox = ({
                 prompt,
                 history,
                 system,
+                controller.signal,
             );
             // The bubble must carry the reply (markers included for now —
             // dispatch strips them when present). Without this the DM
@@ -249,16 +268,28 @@ export const useBotMailbox = ({
                 setDmActivityCount(n => n + 1);
             }
         } catch (error) {
-            // Surface the transport's user-safe reason (toFriendlyProviderError)
-            // — a bare "provider error" hid WHY every DM turn was dying.
-            const rawReason = error instanceof Error ? error.message.trim() : '';
-            const reason = rawReason
-                ? /[.!?]$/.test(rawReason) ? rawReason.slice(0, 160) : `${rawReason.slice(0, 160)}.`
-                : 'provider error';
-            patchMessage(replyId, {
-                text: `(${bot.name} could not process the DM — ${reason})`,
-                isStreaming: false,
-            });
+            if (controller.signal.aborted) {
+                // A deliberate Stop, not a failure: the provider never erred
+                // and the turn must not read as one.
+                patchMessage(replyId, {
+                    text: `(${bot.name}'s reply was stopped.)`,
+                    isStreaming: false,
+                });
+            } else {
+                // Surface the transport's user-safe reason (toFriendlyProviderError)
+                // — a bare "provider error" hid WHY every DM turn was dying.
+                const rawReason = error instanceof Error ? error.message.trim() : '';
+                const reason = rawReason
+                    ? /[.!?]$/.test(rawReason) ? rawReason.slice(0, 160) : `${rawReason.slice(0, 160)}.`
+                    : 'provider error';
+                patchMessage(replyId, {
+                    text: `(${bot.name} could not process the DM — ${reason})`,
+                    isStreaming: false,
+                });
+            }
+        } finally {
+            live?.delete(controller);
+            if (live && live.size === 0) controllers.current.delete(bot.id);
         }
     }, [appendMessage, patchMessage, messagesRef, notice, username, hybridEnabled, loggedTradesRef]);
 
@@ -304,9 +335,23 @@ export const useBotMailbox = ({
 
     const runUserBotTurn = useCallback(async (bot: AgentBot, prompt: string): Promise<boolean> => {
         if (!isProviderReadyFor(configsRef.current, bot.providerId, bot.modelId)) return false;
-        await runBotTurn(bot, prompt, {});
+        userTurns.current.add(bot.id);
+        syncBusy();
+        try {
+            await runBotTurn(bot, prompt, {});
+        } finally {
+            userTurns.current.delete(bot.id);
+            syncBusy();
+        }
         return true;
-    }, [runBotTurn]);
+    }, [runBotTurn, syncBusy]);
+
+    const cancelDmTurn = useCallback((botId: string): boolean => {
+        const live = controllers.current.get(botId);
+        if (!live || live.size === 0) return false;
+        for (const c of live) c.abort();
+        return true;
+    }, []);
 
     // dispatchFromBotReply needs deliverDM, and runBotTurn (via drain) needs
     // dispatch — break the cycle with a ref assigned after both exist.
@@ -351,8 +396,8 @@ export const useBotMailbox = ({
     dispatchRef.current = dispatchFromBotReply;
 
     return useMemo(
-        () => ({ dmActivityCount, dmBusy, dmBusyBotIds: busyIds, deliverDM, dispatchFromBotReply, runUserBotTurn }),
-        [dmActivityCount, dmBusy, busyIds, deliverDM, dispatchFromBotReply, runUserBotTurn],
+        () => ({ dmActivityCount, dmBusy, dmBusyBotIds: busyIds, deliverDM, dispatchFromBotReply, runUserBotTurn, cancelDmTurn }),
+        [dmActivityCount, dmBusy, busyIds, deliverDM, dispatchFromBotReply, runUserBotTurn, cancelDmTurn],
     );
 };
 

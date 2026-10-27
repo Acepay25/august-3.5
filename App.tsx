@@ -633,8 +633,17 @@ const App: React.FC = () => {
     // analysis" and the gallery's Locate call it. Ids are the chatStore
     // entry ids stamped as `data-message-id` on each rendered entry.
     const scrollToMessageRef = useRef<((messageId: string) => void) | null>(null);
+    // A "Show the trade" pressed from another surface can only land the user
+    // on Trade — the dock that owns the scroller is not mounted yet. The id
+    // parks here and replays once the dock registers.
+    const pendingLocateRef = useRef<string | null>(null);
     const registerScrollToMessage = useCallback((fn: ((messageId: string) => void) | null): void => {
         scrollToMessageRef.current = fn;
+        if (fn && pendingLocateRef.current) {
+            const id = pendingLocateRef.current;
+            pendingLocateRef.current = null;
+            fn(id);
+        }
     }, []);
     // ── Nav rail (D2) ───────────────────────────────────────────────────────
     // The rail is the navigation now: a 56px column that expands to 280px,
@@ -1221,6 +1230,19 @@ const App: React.FC = () => {
             scrollToMessageRef.current?.(messageId);
         }
     }, [messages]);
+
+    // The Agents composer's Stop answers for whichever run is live: the
+    // analysis pipeline when one is, otherwise the bot DM turn the mailbox
+    // is streaming — which had no stopper at all (Stop cancelled the
+    // pipeline and left the bot's request running to completion).
+    const handleStopAgentsRun = useCallback(() => {
+        if (isAnalysisInProgress) {
+            handleCancelAnalysis();
+            return;
+        }
+        const busyBotId = mailboxRef.current?.dmBusyBotIds[0] ?? null;
+        if (busyBotId) mailboxRef.current?.cancelDmTurn(busyBotId);
+    }, [isAnalysisInProgress, handleCancelAnalysis]);
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -2131,12 +2153,13 @@ const App: React.FC = () => {
                 onOpen={(item) => {
                     // The dock owns the only transcript scroller, and it
                     // registers its bridge on mount — so from another surface
-                    // this can honestly do one thing: land the user on Trade.
-                    // Calling the bridge there would be a null deref that
-                    // silently scrolls nothing.
+                    // this parks the row and locates it once the dock has
+                    // mounted; calling the bridge there would be a null deref
+                    // that silently scrolls nothing.
                     const dockIsMounted = surface === 'trade';
                     setSurface('trade');
                     if (dockIsMounted) handleLocateMessage(item.messageId);
+                    else pendingLocateRef.current = item.messageId;
                 }}
             />
         </React.Suspense>
@@ -2516,7 +2539,7 @@ const App: React.FC = () => {
                                     onAnalyze={handleRunAnalysisFromChat}
                                     onLogProposedTrade={handleLogProposedTrade}
                                     onAnalysisError={(message) => toast.error(message)}
-                                    onStopRun={handleCancelAnalysis}
+                                    onStopRun={handleStopAgentsRun}
                                     analysisRunning={isAnalysisInProgress}
                                     renderGroup={g => renderGroupSurface(g.id)}
                                     coachCount={coachCount}
