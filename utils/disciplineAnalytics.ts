@@ -13,6 +13,7 @@
  * uses, so rows from both capture paths are counted.
  */
 
+import { phtDayKey } from './timezone';
 import { LoggedTrade } from '../types/trade';
 import { TradeOutcome } from '../types/enums';
 import { rowPnlUsd } from '../services/validation/SessionGuardService';
@@ -111,13 +112,18 @@ const buildRow = (label: string, trades: LoggedTrade[]): DisciplineRow => {
     };
 };
 
-/** UTC day key for the post-red and giveback buckets. */
-const utcDayKey = (ts: string | undefined): string | null => {
+/**
+ * Calendar-day key for the post-red and giveback buckets — in PHILIPPINE time.
+ *
+ * It was a UTC slice, and `utils/timezone.phtDayKey` is explicitly the one day
+ * key every ledger groups by for exactly this reason: an evening session in
+ * UTC+8 straddles the UTC midnight, so "green day turned red" was measured across
+ * two days for one trading day (docs/AUDIT.md A-8).
+ */
+const dayKey = (ts: string | undefined): string | null => {
     if (!ts) return null;
     const t = Date.parse(ts);
-    if (!Number.isFinite(t)) return null;
-    const d = new Date(t);
-    return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+    return Number.isFinite(t) ? phtDayKey(t) || null : null;
 };
 
 export const buildDisciplineAnalytics = (trades: LoggedTrade[]): DisciplineAnalytics => {
@@ -144,7 +150,7 @@ export const buildDisciplineAnalytics = (trades: LoggedTrade[]): DisciplineAnaly
     const before: LoggedTrade[] = [];
     const byDay = new Map<string, LoggedTrade[]>();
     for (const t of trades) {
-        const key = utcDayKey(t.timestamp);
+        const key = dayKey(t.timestamp);
         if (!key) continue;
         byDay.set(key, [...(byDay.get(key) ?? []), t]);
     }

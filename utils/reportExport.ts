@@ -7,7 +7,7 @@
 import { LoggedTrade } from '../types';
 import { TradeOutcome } from '../types';
 import { Conversation, Message } from '../types';
-import { phtDayKey } from './timezone';
+import { phtDayKey, phtDayYear, phtFullStamp } from './timezone';
 
 const dateStamp = (): string => phtDayKey();
 
@@ -93,7 +93,7 @@ export const exportTradesHTML = (trades: LoggedTrade[]): void => {
 
     const rows = trades.map(t => `
         <tr>
-            <td>${new Date(t.timestamp).toLocaleDateString()}</td>
+            <td>${phtDayYear(t.timestamp)}</td>
             <td>${escapeHtml(t.analysis.coinName) || '—'}</td>
             <td>${escapeHtml(t.analysis.direction) || '—'}</td>
             <td>${escapeHtml(t.outcome)}</td>
@@ -129,7 +129,7 @@ export const exportTradesHTML = (trades: LoggedTrade[]): void => {
 </head>
 <body>
   <h1>Trading Journal — Report</h1>
-  <div class="sub">Generated ${new Date().toLocaleString()} · ${trades.length} trades (${wins} W / ${losses} L)</div>
+  <div class="sub">Generated ${phtFullStamp(Date.now())} · ${trades.length} trades (${wins} W / ${losses} L)</div>
   <div class="stats">
     <div class="stat"><b>${winRate}%</b><span>Win rate</span></div>
     <div class="stat"><b>${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</b><span>Net PnL (USD)</span></div>
