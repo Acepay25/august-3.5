@@ -71,8 +71,8 @@ Chat surface. The extraction therefore takes an **event sink** — the executor 
 each home maps them onto its own fields. That is what 20a builds.
 
 Second blocker for the cheaper "just lift the runner" route: the deps are captured
-**at construction** (`chatTurnRunner.ts:192-292`, `useMemo` over 35 fields at
-`TradeChatPanel.tsx:483-571`), including composer state (`draft`, `attachments`,
+**at construction** (`chatTurnRunner.ts:213-292`, `useMemo` over 35 fields at
+`TradeChatPanel.tsx:478-571`), including composer state (`draft`, `attachments`,
 `setDraft`, `clearAttachments`, `setContextAt`) and `systemPromptFor`. Two surfaces
 cannot share one instance built per-mount, so 20a converts turn-scoped context into
 parameters and leaves the composer/state hooks with the caller.
@@ -127,7 +127,7 @@ So the target is NOT "keep the branch and shrink it to one seat". It is:
   SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
-  `streamChatWithDeskTools` (`DeskToolsService.ts:4991`), which the dock's solo
+  `streamChatWithDeskTools` (`DeskToolsService.ts:5130`), which the dock's solo
   seat already runs at `chatTurnRunner.ts:649`.
 - **The verdict and the journal row become tools the model chooses to call**, not
   a pipeline stage it has to earn. What already exists: `present_trade`
@@ -278,7 +278,7 @@ reading is expensive to undo.
   (`if (runEnsembleEnabled) {` also appears at the data pull, so a bare match would
   stay green with the fork deleted) and to forbid the call shape `Prompt.includes(`.
 - **20s (#25)** — the Chat surface finally has a prompt of its own.
-  `chatSurfaceSystemPrompt` (`chatSurfaceTurn.ts:204`) leads with
+  `chatSurfaceSystemPrompt` (`chatSurfaceTurn.ts:223`) leads with
   `CHAT_SURFACE_SYSTEM_PROMPT` (`chatPrompts.ts:40`), which is
   `CASUAL_CHAT_SYSTEM_PROMPT` **plus** a calling mandate and an explicit
   "NO CHART HERE" — so the output discipline that fixed the
@@ -699,8 +699,8 @@ and `featuresAreWired`, `harnessFeatures`, `scalpDetection`,
 `automationRouteCharacterization`, `analysisPipelineSendIdentity` green.
 
 Still blocked: `verdictFinalizer.ts` (the ~15 application sites above), and the engine
-cluster it feeds. Also two comments now make a false claim — `components/agents/AgentsView.tsx:262`
-and the second comment, `components/shared/ChatTranscriptRow.tsx:18`, cite `verdictFinalizer.ts` as where a
+cluster it feeds. Also two comments now make a false claim — `components/agents/AgentsView.tsx:262 (comment)`
+and the second comment, `components/shared/ChatTranscriptRow.tsx:18 (comment)`, cite `verdictFinalizer.ts` as where a
 verdict payload is written, and it has no production caller. Not edited this pass (no turn to
 verify the sentence around them); fix with the re-home.
 
@@ -917,7 +917,7 @@ not from the plan:
 - `isDebating: true` is now written in exactly ONE place: the resume path
   (`:924`). Everything that once set it lived in the debate loop.
 
-**The live consequence, and it is the next job:** `App.tsx:1150` picks
+**The live consequence, and it is the next job:** `App.tsx:1147` picks
 `verdictMessage` out of the debate shapes — `ensembleProgress`, >1 `modelsUsed`,
 `debateTurns` — and hands it to the chart as `verdict={verdictMessage?.analysis}`
 (`App.tsx`, and there is no line to give it: as of 2026-10-19 nothing passes an analysis prop there at all). After this tranche nothing sets `Message.analysis` for a new
@@ -1360,7 +1360,7 @@ with an offer to migrate that text into the general list before the tabs go.
 **Attempted #19's tail in an isolated worktree on 2026-10-18 and stopped at the third site — with
 two couplings the list above did not contain.** They are the reason this is a design pass and not a
 grep-and-delete:
-- `isEnsembleEnabled` gated **live market polling** too: `App.tsx:474` passed it to
+- `isEnsembleEnabled` gated **live market polling** too: `App.tsx:472` passed it to
   `hooks/useMarketData.ts`, which uses it at `:44` (clears `liveMarketConditions` when off), `:127`
   and `:161` (the Binance reachability check) and `:118`/`:192` (effect deps). So deleting the
   toggle silently kills the market ticker the header shows, unless the polling is re-parented onto
@@ -2270,7 +2270,7 @@ tsc 0; `vite build` ✓; flow-doc anchors 261 verified, 0 unattributed, 0 census
 file at all, and only 5 write the symbol beside the citation — the only shape the gate can bind to content.
 So 48 rows are line-resolved and nothing more, and the run prints `arrow coverage: 5/53` with a floor on both
 figures so coverage cannot fall silently. Row 7 came out wrong outright: the lazy-surface `SurfaceSkeleton`
-boundaries are App.tsx:2408 TradeView, :2456 Journal, :2478 LearnView, :2494 StrategyStudio plus the
+boundaries are App.tsx:2408 TradeView, :2456 Journal, :2466 LearnView, :2494 StrategyStudio plus the
 automation modal at :2298 — not the :2493/:2538/:2560/:2602 the table had, which are a prop, a component
 open tag and two unrelated lines. Those five are now cited with the symbol beside each path. Raising coverage is per-row verification work, not a rule change, and the docs say that
 instead of implying the table is checked.
@@ -2288,7 +2288,7 @@ went through the source: `runAutomation` is hooks/useAutomations.ts:429 (the tab
 :423 (it said :431), and the row that attributes `Message.proposal` to the pipeline cited line 1293 of that
 file — a ternary arm — while the stamp was in hooks/useAnalysisPipeline.ts (no line claimed; the pipeline no longer stamps that field). All three fixed in both flow docs. Newly bound and verified true:
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44, the Enter branch at
-components/trade/panels/ChatComposer.tsx:155, systemPromptFor components/trade/TradeChatPanel.tsx:436 with
+components/trade/panels/ChatComposer.tsx:155, systemPromptFor components/trade/TradeChatPanel.tsx:438 with
 TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:512, useBotThread hooks/useAnalysisPipeline.ts:1098,
 entriesForSession services/trade/chatSessions.ts:593, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:140
 with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
