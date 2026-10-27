@@ -37,8 +37,13 @@ export interface ReadyProviderModel {
 
 export const readyProviderModels = (configs: readonly ProviderConfig[]): ReadyProviderModel[] =>
     configs
-        .filter((c) => c.isEnabled && c.apiKey.trim().length > 0 && c.selectedModel && c.models.includes(c.selectedModel))
-        .map((c) => ({ config: c, name: c.name, model: c.selectedModel }))
+        // ONE definition of ready. This used to require a non-empty apiKey and a
+        // selectedModel that appears in `models`, while `isProviderReady` accepts
+        // a keyless local endpoint — so a local-only setup showed a configured
+        // provider and then reported "no AI models are ready" (docs/AUDIT.md L-10).
+        .filter(isProviderReady)
+        .map((c) => ({ config: c, name: c.name, model: c.selectedModel || c.models[0] || '' }))
+        .filter((p) => p.model.length > 0)
         .slice(0, 3);
 
 export function getFirstReadyProvider(configs: ProviderConfig[]): ProviderConfig | null {
