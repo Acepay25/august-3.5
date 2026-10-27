@@ -84,8 +84,13 @@ export const queueSkillDraft = (draft: Omit<SkillDraft, 'id' | 'createdAt'>, use
 export const takeSkillDraft = (id: string, username?: string): SkillDraft | null => {
     const drafts = listSkillDrafts(username);
     const hit = drafts.find(d => d.id === id) ?? null;
-    write(drafts.filter(d => d.id !== id), username);
-    return hit;
+    if (!hit) return null;
+    // The removal is part of the operation, not a side effect: the same read-back
+    // discipline as `queueSkillDraft`. A refused write leaves the draft in the
+    // inbox and is REPORTED, because a caller that assumes removal can approve the
+    // same draft twice (docs/AUDIT.md S-6).
+    if (!write(drafts.filter(d => d.id !== id), username)) return null;
+    return listSkillDrafts(username).some(d => d.id === id) ? null : hit;
 };
 
 // ─── Rejection tombstones ───────────────────────────────────────────────────

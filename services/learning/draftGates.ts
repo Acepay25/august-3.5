@@ -238,7 +238,13 @@ export const gateEvidenceBackedDraft = async (input: EvidenceGateInput): Promise
                     description: crafted.description || defaultDescription(crafted) || undefined,
                     prediction: decision.prediction ?? defaultPrediction({ coin, family }),
                 };
-                queueSkillDraft({ tradeId, coin, crafted: gated }, username);
+                // The receipt must match the queue. `queueSkillDraft` returns null
+                // when the bytes did not reach storage (it reads the store back);
+                // reporting 'queued' anyway told the model a proposal was waiting
+                // that the human could never see (docs/AUDIT.md S-6).
+                if (!queueSkillDraft({ tradeId, coin, crafted: gated }, username)) {
+                    return { action: 'skipped', judged: false, reason: 'the draft could not be stored, so nothing was queued' };
+                }
                 return { action: 'queued', crafted: gated };
             }
             // The worth gate JUDGED this idea and said skip — a verdict,
@@ -250,6 +256,8 @@ export const gateEvidenceBackedDraft = async (input: EvidenceGateInput): Promise
     // the human inbox decides. This keeps drafts flowing when offline.
     const det = deterministicDraftGate({ crafted, tradeId, username, coin, direction, family });
     if (!det.ok) return { action: 'skipped', judged: det.judged, reason: det.reason };
-    queueSkillDraft({ tradeId, coin, crafted: det.crafted }, username);
+    if (!queueSkillDraft({ tradeId, coin, crafted: det.crafted }, username)) {
+        return { action: 'skipped', judged: false, reason: 'the draft could not be stored, so nothing was queued' };
+    }
     return { action: 'queued', crafted: det.crafted };
 };
