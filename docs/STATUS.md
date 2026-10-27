@@ -296,6 +296,58 @@ the unreachable update/download action.
    it to provider+model, and honouring a `Retry-After` the provider sends, are both trader-visible
    changes.
 
+## Session 6 — the §8 residue: the fixes the defect list never carried a number for
+
+The 23 numbered defects were closed by session 4; what remained was the audit's §8 feature
+table — verdicts of **Fix** that no defect id covered. Each was re-verified at HEAD before
+it was believed (three of the eight candidates had already been resolved by earlier work),
+fixed live, and proven with a scratch driver against the running app. Mid-session the
+desktop-storage work (session 5) landed underneath it; the baseline moved `ed57e83f` →
+`2d02ed50` and every gate was re-run on the new base.
+
+| item | change | proof |
+|---|---|---|
+| **Bot-DM Stop** (§8 "roster + DMs": Stop cancelled the pipeline, not the mailbox request) | `useBotMailbox` registers a per-bot SET of AbortControllers, passes the signal to `streamQuickResponse`, and writes "(X's reply was stopped.)" on a deliberate stop instead of a provider failure. User turns join the working set through their own ref, so `dmBusyBotIds` — the rail pulse AND Stop's routing — sees them. App routes the Agents composer's Stop: analysis when one runs, else the streaming DM | **PROVEN live**: Stop mid-stream → `(Probe Bot's reply was stopped.)`, request does not run to completion; at HEAD the reply completed and the tokens were spent |
+| **Watch fire/lapse lost off-Trade** (§8 "price watches": the only subscriber was the mounted Trade surface; expiry was deleted in silence and never persisted) | The subscription moved to App (never unmounted): a fire queues the wake into the arming thread + pings the OS; a lapse queues a closure line without the banner. `watchService` emits one `expired` event and persists the deletion (no more re-lapse on reload). `formatWatchFiredForModel` renders the lapse so the seat closes the loop its note promised | **PROVEN live**: a watch armed by the desk tool through the app's own service lapses while the trader is on Knowledge; the queue holds `[HARNESS TRIGGER — a watch lapsed …]` and returning to Trade renders the ⚡ row. At HEAD the signal had no listener and was lost |
+| **"Show the trade" never located its row** (§8 approvals inbox) | From another surface it only landed the trader on Trade; the id now parks in a pending ref and replays when the dock registers its `scrollToMessage` bridge | CODE + the same registration render-probe asserts |
+| **Printable report dead on desktop** (§8 CSV/report: the blob window Electron denies) | `exportTradesHTML` keeps `window.open` on the web and downloads the same file when `window.electronAPI?.isElectron` — the path CSV/JSONL already use | **PROVEN live** (bridge stubbed): the call produces `august-trades-2026-10-28.html` as a download; zero page errors. The packaged shell itself is installer-smoke territory and remains unexercised |
+| **Status copy that misdescribed its lists** (§8 cosmetic copy) | Settings' Developer note now points at **Learn → Health** (where `learn-system` actually renders); the Skills tab's "Active only" / "Awaiting approval" pills became "Draft · Active · Retired" / "Candidates + confirmed" | **PROVEN live**: Knowledge → Skills renders the new pills, neither stale string remains |
+
+Three §8 candidates re-verified as ALREADY RESOLVED before any edit: the provider-draft
+discard (a dirty probe + a "Discard unsaved changes?" confirm exist in `ProviderManager`),
+the `available`-state update affordance (the header `UpdateButton` renders the chip + the
+download), and the Ctrl/Cmd+B dead affordance (the chord is bound in `App.tsx`).
+
+**Also landed:** the flow-doc anchor debt this batch created was paid the same session —
+29 citations re-anchored, ranges and bare `:NNNN` forms included, and the docs' own anchor
+count restated to the gate's measurement (`28f70ce0`).
+
+### Session 6 gate state — all green at `28f70ce0`
+
+`typecheck` / `typecheck:scripts` / `typecheck:electron` 0 · `lint` 0 errors / 375 warnings ·
+`build` ✓ · `check-flow-doc-anchors` **457 anchors, 0 unattributed** · `check:contracts` 138 ·
+`boot-probe`, `render-probe`, `skill-approval-probe` all OK · live driver: stop, lapse queue +
+row, desktop download, pills — zero page errors.
+
+**Driver lesson recorded:** a page-level `import('/services/…')` in a dev server that has
+served HMR updates returns a SECOND module instance — mid-session it silently split the
+probe from the app (the arm reached the app's map, the probe read an empty queue). The
+readings above were re-taken against a freshly started server where one URL is one instance.
+
+### Still open
+
+- **N-2 (OKX import)** — excluded on the owner's request (session 3), still the only
+  unstarted Phase-3 item.
+- **L-5's Electron half** — the SSE parser is proven in Node; the packaged shell (and with it
+  `installer-smoke`, safeStorage, the updater) has not run this pass.
+- **levelWatchService's subscription** still lives in TradeView (a level hit while the Trade
+  surface is unmounted has the same exposure the watch fix closed); it was left alone because
+  the audit scoped the finding to watchService and its hits arm only while Trade is mounted.
+- §8's **Merge** verdicts (duplicate Journal launchers, `SkillsCatalog` vs Studio browsing)
+  and the **GallerySaver** owner call (decision 6) remain owner territory.
+- The concurrent storage session's **installer-smoke / packaged verification** is recorded in
+  its own session 5 notes, not re-verified here.
+
 ## Session 5 — desktop storage: chats and the notebook leave the 5 MiB budget
 
 Approved by the owner after the audit's quota finding. The rule it resolves: **"store
