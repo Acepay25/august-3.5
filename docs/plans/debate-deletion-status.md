@@ -127,7 +127,7 @@ So the target is NOT "keep the branch and shrink it to one seat". It is:
   SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
-  `streamChatWithDeskTools` (`DeskToolsService.ts:4908`), which the dock's solo
+  `streamChatWithDeskTools` (`DeskToolsService.ts:4922`), which the dock's solo
   seat already runs at `chatTurnRunner.ts:630`.
 - **The verdict and the journal row become tools the model chooses to call**, not
   a pipeline stage it has to earn. What already exists: `present_trade`
