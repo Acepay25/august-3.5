@@ -144,9 +144,16 @@ export const runScreener = async (options: ScreenerOptions = {}): Promise<Screen
     return rows;
 };
 
-/** Compact markdown digest for the model (run_screener desk tool). */
+/** Compact markdown digest for the model (run_screener desk tool).
+ *
+ *  An empty array here does NOT mean the feed failed — the caller checks
+ *  `scan.universeFailed` and says UNKNOWN in that case, before ever reaching this
+ *  formatter. The one model-facing caller filters `setupsOnly` after a healthy scan,
+ *  so this line used to tell the seat "universe fetch failed" when the truth was
+ *  "the scan ran and nothing matched" — an outage that never happened, in the one
+ *  digest the model reads (docs/AUDIT.md T-9). */
 export const screenerToMarkdown = (rows: ScreenerRow[]): string => {
-    if (rows.length === 0) return 'SCREENER — no rows (universe fetch failed; treat as UNKNOWN).';
+    if (rows.length === 0) return 'SCREENER — 0 rows: the scan completed and nothing met this filter. This is a real result, not a feed failure.';
     const head = 'symbol | price | 24h% | RSI14 | regime | setups | your edge';
     const lines = rows.map(r => {
         const setups = r.setups.length > 0 ? r.setups.map(s => `${s.title} (${s.side})`).join('; ') : '—';
