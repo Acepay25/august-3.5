@@ -18,7 +18,7 @@
 import React, { useEffect, useState } from 'react';
 import { Trash2 } from '../shared/Icons';
 import {
-    listProfileMemories, forgetProfileMemory,
+    listProfileMemories, forgetProfileMemory, rememberProfileMemory,
     type ProfileMemoryEntry,
 } from '../../services/learning/profileMemory';
 import {
@@ -43,6 +43,36 @@ const ProfileMemoryCard: React.FC = () => {
     const [entries, setEntries] = useState<ProfileMemoryEntry[]>([]);
     const [learning, setLearning] = useState(true);
     const [forgetNote, setForgetNote] = useState('');
+    // N-3: the trader can CORRECT what the app remembers, not only delete it.
+    // The store already supports an optimistic-locked edit (`ifVersion`); this is
+    // the human surface that was missing.
+    const [editing, setEditing] = useState<{ slug: string; description: string; body: string; version?: number } | null>(null);
+    const [editError, setEditError] = useState('');
+
+    /** Save an edit as a STATED fact — the trader wrote it, so it outranks an
+     *  observed one — and refuse silently losing a concurrent change. */
+    const saveEdit = (): void => {
+        if (!editing) return;
+        const r = rememberProfileMemory({
+            slug: editing.slug,
+            description: editing.description.trim() || editing.slug,
+            body: editing.body,
+            kind: entries.find(e => e.slug === editing.slug)?.kind ?? 'user',
+            tag: 'stated',
+            ifVersion: editing.version,
+        });
+        if ('conflict' in r) {
+            setEditError('This memory changed while you were editing it. Reopen it to see the current text.');
+            return;
+        }
+        if (r.persisted === false) {
+            setEditError(r.error ?? 'The change could not be saved.');
+            return;
+        }
+        setEditing(null);
+        setEditError('');
+        refresh();
+    };
 
     const refresh = (): void => {
         setEntries([...listProfileMemories()].reverse());
@@ -141,6 +171,12 @@ const ProfileMemoryCard: React.FC = () => {
                                 </span>
                                 {/* The updated date, on the right. */}
                                 <span className="shrink-0 text-ui-dense text-zinc-500">{updatedLabelOf(e)}</span>
+                                <button type="button"
+                                    onClick={() => { setEditError(''); setEditing({ slug: e.slug, description: e.description, body: e.body, version: e.version }); }}
+                                    aria-label={`Edit memory ${e.slug}`} title="Edit"
+                                    className="shrink-0 rounded-control border border-zinc-800 px-1.5 py-1 text-ui-2xs font-semibold text-zinc-400 transition-colors hover:border-white/25 hover:text-zinc-100">
+                                    Edit
+                                </button>
                                 <button type="button" onClick={() => forgetOne(e.slug)}
                                     aria-label={`Forget memory ${e.slug}`} title="Forget"
                                     className="shrink-0 rounded-control border border-zinc-800 p-1.5 text-zinc-500 transition-colors hover:border-rose-500/40 hover:text-rose-300">
@@ -150,6 +186,36 @@ const ProfileMemoryCard: React.FC = () => {
                             {/* The description — what it says. */}
                             <p className="mt-1 whitespace-pre-wrap text-ui-dense leading-relaxed text-zinc-400">{e.body}</p>
                             <p className="mt-1 font-mono text-ui-2xs text-zinc-600">{e.slug}</p>
+                            {editing?.slug === e.slug && (
+                                <div className="mt-2 space-y-1.5 rounded-control border border-white/10 bg-zinc-950/60 p-2" data-testid={`profile-memory-editor-${e.slug}`}>
+                                    <input
+                                        value={editing.description}
+                                        onChange={ev => setEditing({ ...editing, description: ev.target.value })}
+                                        aria-label="Memory label"
+                                        placeholder="What this memory is called"
+                                        className="w-full rounded-control border border-white/10 bg-zinc-900 px-2 py-1 text-ui-dense text-zinc-100 placeholder:text-zinc-600 focus:border-cyan-500/40 focus:outline-none"
+                                    />
+                                    <textarea
+                                        value={editing.body}
+                                        onChange={ev => setEditing({ ...editing, body: ev.target.value })}
+                                        aria-label="Memory text"
+                                        rows={3}
+                                        className="w-full resize-y rounded-control border border-white/10 bg-zinc-900 px-2 py-1 text-ui-dense text-zinc-100 focus:border-cyan-500/40 focus:outline-none"
+                                    />
+                                    {editError && <p role="alert" className="text-ui-xs leading-snug text-rose-300">{editError}</p>}
+                                    <div className="flex items-center gap-1.5">
+                                        <button type="button" onClick={saveEdit} disabled={!editing.body.trim()}
+                                            data-testid={`profile-memory-save-${e.slug}`}
+                                            className="rounded-control bg-zinc-100 px-2.5 py-1 text-ui-xs font-bold text-zinc-900 disabled:opacity-40">
+                                            Save
+                                        </button>
+                                        <button type="button" onClick={() => { setEditing(null); setEditError(''); }}
+                                            className="rounded-control border border-zinc-800 px-2.5 py-1 text-ui-xs font-semibold text-zinc-400 hover:text-zinc-100">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </li>
                     ))}
                 </ul>
