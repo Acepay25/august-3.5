@@ -113,6 +113,27 @@ a mock that answers the buffered analysis call with a `status`-bearing 429 body.
 *Decision recorded:* the cooldown is global, not per provider/model — one 429 from one provider backs
 off every conversation. Narrowing it is an owner call (decision 8), so the behaviour is preserved.
 
+**F-3 — the desk loop receives the payload sink** (audit **L-3**).
+`services/analysis/DeskToolsService.ts:4966-4992,5162` — the wrapper's option destructure never named
+`onToolPayload`, so it landed in the `...chatOptions` rest-spread and was forwarded to the loop inside
+`options`, while the loop reads it off its **own** parameters (`:4370`). Its single emission site is
+guarded by `if (onToolPayload)` (`:4722`), so the guard was false on every real turn: the store, the
+failure recording, the transcript id, the row expander and the CSV column were all correct and starved.
+Now destructured and passed at the loop's top level, with a comment naming the rest-spread trap.
+
+*Verified:* **red and green with the same driver, the same turn, and one line changed.** As shipped:
+`PAYLOAD_STORE present:false rows:0`, persisted `toolIds: ["",""]` (no id, so the row cannot open).
+After: `present:true rows:1` (`get_market_packet`, 124 chars kept) and
+`toolIds: ["","call_mvqvtxif"]`. The turn itself was identical across both runs (settled, one reply,
+16 provider calls, zero page errors), which is what makes the pair a measurement of the sink rather
+than of the network. A market read that was refused by the blocked egress still counts: the defect was
+that *no* result was ever persisted.
+*Deferred:* the durable browser assertion. This repo's tool-bearing probe is `render-probe`, and
+`:8787` is currently held by another session's leftover mock — running it now would be served by that
+stale process, which is unattributable (see the project probe-hygiene note). The step goes in with the
+consolidated gate pass; the scratch driver at
+`%TEMP%/august-payload-probe.cjs` is what stands behind "done" for now.
+
 ### Pending
 Status legend: `pending` · `in-progress` · `done`.
 
@@ -121,7 +142,7 @@ Status legend: `pending` · `in-progress` · `done`.
 | **F-1** | A failed notebook write must not leave the bytes in the cache, so a retried approval cannot report "Already learned" and delete the trader's draft | M-1 | **done** — see the record below |
 | **F-2a** | A streaming provider failure must carry its HTTP status, or a real 429 is filed as a generic error and no backoff ever arms | L-1b | **done** — PROVEN |
 | **F-2b** | One armed 429 must not lock every Chat-surface send for the session; the reset is keyed to a cooldown epoch, not to a run registration the `finally` already deleted | L-1 | **done** — CODE-certain, live lock not reproducible (see record) |
-| **F-3** | Forward `onToolPayload` into the desk loop so the transcript can persist and open a tool's real output | L-3 | pending — CODE |
+| **F-3** | Forward `onToolPayload` into the desk loop so the transcript can persist and open a tool's real output | L-3 | **done** — PROVEN red and green |
 | **F-4** | Isolate a Monte Carlo worker crash to its own worker (`pending.worker` is already tagged; `ejectWorker` already exists) | T-3 | pending — PROVEN red |
 | **F-5** | Profile switch must pause every save path and adopt identity + data atomically, so profile B is never written into profile A's store | L-2 | pending — CODE |
 | **F-6** | Give `withinToolDeadline` a child `AbortController` and propagate it through every call site; forward `context.signal` to the screener | T-1 | pending — PROVEN red |

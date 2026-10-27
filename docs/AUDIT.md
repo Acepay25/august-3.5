@@ -141,21 +141,30 @@ path. A switch that outlives the 1.5s debounce can therefore write profile B's r
 store. The notebook store already learned this lesson and documents it
 (`MemoryFilesService.ts:181-191`, "OWNER + BYTES SWAP TOGETHER"); the profile store has not.
 
-**L-3 — the real tool output is never persisted** — **CODE**, and it makes a documented contract
+**L-3 — the real tool output is never persisted** — **PROVEN**, and it makes a documented contract
 false. `runToolTurn` passes `onToolPayload: payload => events.attachPayload(payload)` into the
 transport options (`services/trade/toolTurn.ts:198`); `StreamWithDeskToolsOptions` declares it with a
 comment promising "a payload can be persisted from the streaming loop too"
-(`services/analysis/DeskToolsService.ts:4839`). The wrapper then calls `runDeskToolLoop` at
-`:5102-5164` and passes `artifactOwner`, `onToolAction`, `onToolCall`, `speaker`, `onToolEvent` —
-**and not `onToolPayload`**. The loop destructures it at `:4370` and its only emission site is guarded
-at `:4722` (`if (onToolPayload)`), which is therefore always false in the only path that reaches a
-model. Downstream, everything is correct and starves: `chatSurfaceTurn.ts:323-343` (save + stamp the
-id), `chatTurnRunner.ts:674` (dock), `services/trade/toolPayloadStore.ts:110` (store, budget, failure
-recording), `components/shared/ToolActivityRow.tsx:89` (the expander), and
-`utils/reportExport.ts:335,421` (the `toolPayloads` CSV column, permanently empty).
-`docs/app-flow.md:973-976` documents the write as live. AGENTS.md's canonical description of
-`Message.toolEvents` + `Message.toolIds` — "the ids are what let a row open onto the REAL output the
-tool returned" — is not true at HEAD.
+(`services/analysis/DeskToolsService.ts:4839`). The wrapper destructures its options at `:4966-4992`
+and `onToolPayload` was **not among the named keys** — it fell into the `...chatOptions` rest-spread,
+which is forwarded to the loop as `options: chatOptions`. But the loop reads it off its **own**
+parameters (`:4370`), so the guard at `:4722` (`if (onToolPayload)`) was always false in the only path
+that reaches a model. Downstream, everything is correct and starves: `chatSurfaceTurn.ts:323-343`
+(save + stamp the id), `chatTurnRunner.ts:674` (dock), `services/trade/toolPayloadStore.ts:110`
+(store, budget, failure recording), `components/shared/ToolActivityRow.tsx:89` (the expander), and
+`utils/reportExport.ts:335,421` (the `toolPayloads` CSV column).
+`docs/app-flow.md:973-976` documents the write as live, and `check-flow-doc-anchors` passes because it
+verifies line numbers, not dataflow. AGENTS.md's canonical description of `Message.toolEvents` +
+`Message.toolIds` — "the ids are what let a row open onto the REAL output the tool returned" — was not
+true at HEAD.
+
+*Measured pair* (same driver, same turn shape, one line changed):
+
+| | payload store | persisted `toolIds` |
+|---|---|---|
+| as shipped | `present:false, rows:0` | `["",""]` — no id, so no row can open |
+| named in the destructure and passed at the loop's top level | `present:true, rows:1` (`get_market_packet`, 124 chars) | `["","call_mvqvtxif"]` |
+
 
 **L-4 — a cancelled or failed seat row stays live** — **CODE**. Group cancellation bumps the nonce at
 `hooks/useAgentGroups.ts:117-124`, and the reply cleanup is gated on that nonce (`:247,303-347`), so

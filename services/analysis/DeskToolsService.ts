@@ -4978,6 +4978,10 @@ export async function* streamChatWithDeskTools(
         onToolEvent,
         onToolCall,
         onToolAction,
+        // NOT part of `chatOptions`: the loop reads this off its OWN parameters,
+        // so leaving it in the rest-spread meant it was forwarded to the provider
+        // request and never to the payload sink (docs/AUDIT.md L-3).
+        onToolPayload,
         onStreamReset,
         allowedTools,
         goalAllowedTools,
@@ -5156,6 +5160,7 @@ export async function* streamChatWithDeskTools(
         appendSystemNotice,
         onToolAction,
         onToolCall,
+        onToolPayload,
         speaker: seatName,
         onToolEvent: line => {
             onToolEvent?.(line);
