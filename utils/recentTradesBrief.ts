@@ -23,7 +23,11 @@ export interface TradeLogFilter {
     coin?: string;
     outcome?: string;
     strategy?: string;
-    /** ISO date/datetime; rows DECIDED at or after it. */
+    /** Which clock `since` and the ordering read. Defaults to `decided`, the
+     *  clock the dashboards have always used; the journal TOOL asks for `logged`
+     *  because that is what its own description promises. */
+    by?: 'logged' | 'decided';
+    /** ISO date/datetime; rows at or after it on the `by` clock. */
     since?: string;
     limit?: number;
 }
@@ -72,10 +76,23 @@ export interface RecentTradesBrief {
 const UNPARSEABLE = 0;
 
 /** Decision time as an epoch number, with the same legacy fallbacks the
- *  dashboards use. Rows without a readable stamp sort first. */
-const logTime = (t: LoggedTrade): number => {
+ *  dashboards use. Rows without a readable stamp sort first.
+ *
+ *  NOTE THE NAME. This function was called `logTime` while reading `decidedAt`,
+ *  and the tool that advertises "logged at or after" filtered and sorted on it —
+ *  so a trade logged on the 27th but decided on the 25th was invisible to
+ *  `since: 2026-10-26` and printed the 25th's date (docs/AUDIT.md T-4). Both
+ *  clocks are real and differ; each is named for the one it reads. */
+const decidedTime = (t: LoggedTrade): number => {
     const ms = Date.parse(decidedAtOf(t));
     return Number.isFinite(ms) ? ms : UNPARSEABLE;
+};
+
+/** When the row was WRITTEN to the journal (`timestamp`), falling back to the
+ *  decision clock for rows that predate it. */
+const loggedTime = (t: LoggedTrade): number => {
+    const ms = Date.parse(t.timestamp ?? '');
+    return Number.isFinite(ms) ? ms : decidedTime(t);
 };
 
 const mean = (nums: number[]): number | null =>
@@ -99,6 +116,7 @@ export const selectRecentTrades = (trades: LoggedTrade[], filter: TradeLogFilter
     const outcome = filter.outcome?.trim().toUpperCase();
     const strategy = filter.strategy?.trim().toLowerCase();
     const sinceMs = filter.since ? Date.parse(filter.since) : NaN;
+        const clock = filter.by === 'logged' ? loggedTime : decidedTime;
 
     const kept = (trades ?? []).filter(t => {
         if (coin) {
@@ -112,13 +130,13 @@ export const selectRecentTrades = (trades: LoggedTrade[], filter: TradeLogFilter
             const family = (t.analysis?.strategyFamily ?? '').toLowerCase();
             if (!row.includes(strategy) && family !== strategy) return false;
         }
-        if (Number.isFinite(sinceMs) && logTime(t) < sinceMs) return false;
+    if (Number.isFinite(sinceMs) && clock(t) < sinceMs) return false;
         return true;
     });
 
     const limit = filter.limit ?? RECENT_TRADES_WINDOW;
     if (!Number.isFinite(limit) || limit <= 0) return [];
-    const sorted = [...kept].sort((a, b) => logTime(a) - logTime(b));
+    const sorted = [...kept].sort((a, b) => clock(a) - clock(b));
     return sorted.slice(Math.max(0, sorted.length - Math.floor(limit)));
 };
 
@@ -133,12 +151,14 @@ const rowLine = (row: Omit<TradeLogRow, 'line'>): string => {
         : '';
     const strategy = row.strategy ? ` · ${row.strategy}` : '';
     const tags = row.tags.length ? ` · [${row.tags.join(',')}]` : '';
-    return `${row.decidedAt || '—'} ${row.symbol} ${row.direction} ${row.outcome}${pnl}${r}${strategy}${tags}`;
+    // The stamp a trader reads is when the row was logged; the decision time is
+    // still carried on the structured row for anyone comparing the two.
+    return `${row.loggedAt || row.decidedAt || '—'} ${row.symbol} ${row.direction} ${row.outcome}${pnl}${r}${strategy}${tags}`;
 };
 
 /** Header stats + one row per trade over the given (already-windowed) trades. */
 export const buildRecentTradesBrief = (trades: LoggedTrade[]): RecentTradesBrief => {
-    const ordered = [...(trades ?? [])].sort((a, b) => logTime(a) - logTime(b));
+    const ordered = [...(trades ?? [])].sort((a, b) => loggedTime(a) - loggedTime(b));
     const rows: TradeLogRow[] = ordered.map(t => {
         const tags = [
             ...(t.mistakeTags ?? []),
@@ -178,8 +198,11 @@ export const buildRecentTradesBrief = (trades: LoggedTrade[]): RecentTradesBrief
         netPnLDollars: round(sum(dollarRows.map(t => t.pnlAmount as number))),
         netPnLPercent: round(sum(percentRows.map(t => t.pnlPercent as number)), 1),
         streak: stats.currentStreak,
-        from: rows[0]?.decidedAt ?? null,
-        to: rows[rows.length - 1]?.decidedAt ?? null,
+        // The window header states the same clock the rows print. Reading the
+        // decision stamp here made a tally say "(2026-10-25)" over a row dated
+        // 2026-10-27 — one card, two dates for the same trade (docs/AUDIT.md T-4).
+        from: rows[0]?.loggedAt || rows[0]?.decidedAt || null,
+        to: rows[rows.length - 1]?.loggedAt || rows[rows.length - 1]?.decidedAt || null,
     };
 };
 
