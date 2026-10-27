@@ -72,6 +72,9 @@ export const CHAT_SURFACE_TOOLS = [
     'write_memory_note', 'get_notebook_map', 'propose_skill', 'revise_skill', 'propose_strategy',
     'amend_memory', 'forge_tool',
     'remember', 'read_memory', 'forget',
+    // The one tool with a human in it: it suspends the turn until the trader
+    // answers (services/analysis/askUserInput.ts).
+    'ask_user_input',
     // Goal environments — durable work state the agent can shape mid-task.
     'list_goals', 'open_goal', 'create_goal', 'update_goal', 'restore_goal',
     // The harness's own change ledger. Reading it is always available; the two

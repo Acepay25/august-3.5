@@ -46,6 +46,7 @@ const UserProfileManager = React.lazy(() => import('./components/settings/UserPr
 const WatchListPanel = React.lazy(() => import('./components/analysis/WatchListPanel'));
 const ActionApprovalsPanel = React.lazy(() => import('./components/learn/ActionApprovals'));
 const JobsDrawer = React.lazy(() => import('./components/settings/JobsDrawer'));
+import { AskUserInputCard } from './components/shared/AskUserInputCard';
 const SettingsMenu = React.lazy(() => import('./components/settings/SettingsMenu'));
 
 // (LogTradeModal was removed — the capture flow uses DataCaptureModal.)
@@ -2356,6 +2357,10 @@ const App: React.FC = () => {
                     onClose={() => setIsJobsDrawerVisible(false)}
                 />
             </React.Suspense>
+            {/* The trader's half of ask_user_input: a seat that parked its turn on
+                a question renders here, above the composer, in BOTH homes. It owns
+                no state of its own — the channel does. */}
+            <AskUserInputCard />
 
 
             {/* Main row. The NavRail is GONE: its five destination rows were the

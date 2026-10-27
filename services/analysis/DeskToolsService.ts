@@ -1655,6 +1655,46 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
     {
         type: 'function',
         function: {
+            name: 'ask_user_input',
+            description:
+                'STOP and ask the trader 1-3 short questions with tappable options, then continue with their answer. The turn suspends — nothing runs while it waits (up to ~4 minutes), and the trader can cancel. Use it when a decision is genuinely theirs and a wrong guess would change the analysis: which account or size, whether a risk level is acceptable, which of two setups they mean. Do NOT use it to stall, to confirm what you were already told, or for anything you could look up with another tool.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    questions: {
+                        type: 'array',
+                        description: '1-3 questions, each with its own id.',
+                        items: {
+                            type: 'object',
+                            properties: {
+                                id: { type: 'string', description: 'Stable id, e.g. q1.' },
+                                question: { type: 'string', description: 'One short sentence, trader-facing.' },
+                                options: {
+                                    type: 'array',
+                                    description: '2-4 tappable answers.',
+                                    items: {
+                                        type: 'object',
+                                        properties: {
+                                            id: { type: 'string' },
+                                            label: { type: 'string', description: 'What the trader reads on the button.' },
+                                        },
+                                        required: ['id', 'label'],
+                                    },
+                                },
+                                allowText: { type: 'boolean', description: 'Also accept free text (implied when there are no options).' },
+                            },
+                            required: ['id', 'question'],
+                        },
+                    },
+                },
+                required: ['questions'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
             name: 'recall',
             description:
                 'Search your own trading notebook - lessons learned, IF/THEN rules, similar past trades, and your doctrine for a setup. Use when you suspect prior experience with this coin/setup or need your own loss history before arguing a stance.',
@@ -2851,6 +2891,58 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
          *  freshness `tail` below. */
         let pagingTail = '';
         switch (call.name) {
+            case 'ask_user_input': {
+                // SUSPENDS the turn. Deliberately not wrapped by the 20s tool
+                // deadline — a human cannot answer in 20 seconds — so the batch
+                // call site exempts it and this waits on the turn signal plus its
+                // own window (services/analysis/askUserInput.ts).
+                const { requestUserInput } = await import('./askUserInput');
+                const rawQuestions = Array.isArray(call.arguments.questions) ? call.arguments.questions : [];
+                const questions = rawQuestions.slice(0, 3).map((q, i) => {
+                    const item = q as Record<string, unknown>;
+                    const opts = Array.isArray(item.options) ? item.options : [];
+                    return {
+                        id: asString(item.id) || `q${i + 1}`,
+                        question: asString(item.question) || '',
+                        allowText: item.allowText === true || opts.length === 0,
+                        options: opts.slice(0, 4).map((o, j) => {
+                            const opt = o as Record<string, unknown>;
+                            return {
+                                id: asString(opt.id) || `o${j + 1}`,
+                                label: asString(opt.label) || `Option ${j + 1}`,
+                            };
+                        }),
+                    };
+                }).filter(q => q.question.trim().length > 0);
+                if (questions.length === 0) {
+                    return rejectedResult(call, 'ask_user_input rejected: it needs 1-3 questions with text.');
+                }
+                const outcome = await requestUserInput(questions, { asker: 'the desk', signal: context.signal });
+                if (outcome.kind === 'answered') {
+                    const lines = questions.map(q => `${q.question} → ${outcome.answers[q.id] ?? '(no answer given)'}`);
+                    return {
+                        toolCallId: call.id,
+                        name: call.name,
+                        ok: true,
+                        content: `The trader answered:\n${lines.join('\n')}`,
+                    };
+                }
+                const why = outcome.kind === 'timeout'
+                    ? 'the trader did not answer within the window'
+                    : outcome.kind === 'superseded'
+                        ? 'a newer question replaced this one before it was answered'
+                        : outcome.reason;
+                return {
+                    toolCallId: call.id,
+                    name: call.name,
+                    ok: false,
+                    content: dataUnavailable(
+                        toolLabel(call.name),
+                        why,
+                        'Do not invent an answer. Continue only on assumptions you state out loud, or say the plan waits on the trader.',
+                    ),
+                };
+            }
             case 'amend_memory': {
                 // Model proposing a notebook correction. PENDING only — a
                 // human approves in Settings → Memory; nothing is applied here.
@@ -4132,11 +4224,16 @@ export async function executeDeskTools(
 ): Promise<DeskToolResult[]> {
     // Every call gets its own deadline and hears the seat's Stop, so one hung
     // lookup can no longer hold the round (and the bubble) open.
-    return Promise.all(calls.map(call => withinToolDeadline(
-        call,
-        (signal) => executeDeskTool(call, { ...context, signal }),
-        context.signal,
-    )));
+    return Promise.all(calls.map(call => {
+        // One tool asks a HUMAN, and a human is not a 20-second lookup: the
+        // question carries its own window and rides the turn's stop signal.
+        if (call.name === 'ask_user_input') return executeDeskTool(call, context);
+        return withinToolDeadline(
+            call,
+            (signal) => executeDeskTool(call, { ...context, signal }),
+            context.signal,
+        );
+    }));
 }
 
 /** Parse OpenAI-style tool_calls from a chat message. */
