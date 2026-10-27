@@ -254,7 +254,11 @@ export const DESK_ROUND_MAX_TOKENS = 8192;
  */
 export async function withinToolDeadline(
     call: DeskToolCall,
-    work: () => Promise<DeskToolResult>,
+    /** Receives a signal that aborts when the deadline passes or the turn is
+     *  stopped. A tool that cannot honour it is not cancelled — it is only
+     *  REPORTED as failed, which is the lie this parameter exists to stop a tool
+     *  from having to tell (docs/AUDIT.md T-1). */
+    work: (signal: AbortSignal) => Promise<DeskToolResult>,
     signal?: AbortSignal,
     timeoutMs: number = DESK_TOOL_TIMEOUT_MS,
 ): Promise<DeskToolResult> {
@@ -277,13 +281,22 @@ export async function withinToolDeadline(
             signal?.removeEventListener('abort', onAbort);
             resolve(r);
         };
-        const timer = window.setTimeout(
-            () => finish(stopped(`did not answer within ${Math.round(timeoutMs / 1000)}s`)),
-            timeoutMs,
-        );
-        const onAbort = (): void => { finish(stopped('the turn was stopped while this lookup ran')); };
+        // ONE child controller per call. The receipt and the work must agree about
+        // whether the lookup is over: before this, a timed-out fetch kept running
+        // (and a mutating tool kept mutating) after the seat had already been told
+        // it failed. Aborting is best-effort — an executor that ignores the signal
+        // still cannot outlive the receipt's meaning, it just cannot be stopped.
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => {
+            try { controller.abort(); } catch { /* older runtimes */ }
+            finish(stopped(`did not answer within ${Math.round(timeoutMs / 1000)}s`));
+        }, timeoutMs);
+        const onAbort = (): void => {
+            try { controller.abort(); } catch { /* older runtimes */ }
+            finish(stopped('the turn was stopped while this lookup ran'));
+        };
         signal?.addEventListener('abort', onAbort, { once: true });
-        work().then(finish, () => finish(stopped('the lookup threw before it returned')));
+        work(controller.signal).then(finish, () => finish(stopped('the lookup threw before it returned')));
     });
 }
 
@@ -1632,7 +1645,8 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     coin: { type: 'string', description: 'Base coin, e.g. BTC or BTCUSDT. Omit for the whole journal.' },
                     outcome: { type: 'string', enum: ['WIN', 'LOSS', 'PENDING', 'ENTRY_NOT_HIT', 'SKIPPED'], description: 'Only rows with this outcome.' },
                     strategy: { type: 'string', description: 'Substring of the strategy named at analysis time, or an exact strategy family.' },
-                    since: { type: 'string', description: 'ISO date or datetime — only trades logged at or after it, e.g. 2026-10-01.' },
+                    since: { type: 'string', description: 'ISO date or datetime — only trades LOGGED at or after it, e.g. 2026-10-01.' },
+                    records: { type: 'boolean', description: 'Return full journal records (default 5, max 20) instead of one-line rows: plan id, both timestamps, entry/stop/targets, R with its cost siblings, excursions, models used, notes.' },
                 },
                 additionalProperties: false,
             },
@@ -3849,7 +3863,7 @@ ${body}`);
                 const setupsOnly = call.arguments.setupsOnly === true;
                 const sort = asString(call.arguments.sort) || 'volume';
                 const { runScreenerWithStatus, screenerToMarkdown } = await import('../trade/screener');
-                const scan = await runScreenerWithStatus({ limit: top, trades: context.trades || [] });
+                const scan = await runScreenerWithStatus({ limit: top, trades: context.trades || [], signal: context.signal });
                 if (scan.universeFailed) {
                     // Feed unreachable ≠ "nothing matches". The human panel and
                     // the model digest both say UNKNOWN; the receipt must not
@@ -3999,17 +4013,72 @@ ${body}`);
                 break;
             }
             case 'get_trade_log': {
+                const wantsRecords = call.arguments.records === true;
                 const rawLimit = Number(call.arguments.limit);
+                // Full records are ~6x a one-line row, so their ceiling is lower;
+                // the per-tool budget plus the spill/serve path cover the rest.
+                const ceiling = wantsRecords ? 20 : 50;
+                const defaultLimit = wantsRecords ? 5 : RECENT_TRADES_WINDOW;
                 const limit = Number.isFinite(rawLimit)
-                    ? Math.max(1, Math.min(50, Math.floor(rawLimit)))
-                    : RECENT_TRADES_WINDOW;
+                    ? Math.max(1, Math.min(ceiling, Math.floor(rawLimit)))
+                    : defaultLimit;
                 const filter = {
                     coin: asString(call.arguments.coin) || undefined,
                     outcome: asString(call.arguments.outcome) || undefined,
                     strategy: asString(call.arguments.strategy) || undefined,
                     since: asString(call.arguments.since) || undefined,
                 };
-                const rows = selectRecentTrades(context.trades ?? [], { ...filter, limit });
+                // `by: 'logged'` because the description above, and `since`, say
+                // LOGGED. The tool used to read the decision clock, so a trade
+                // written on the 27th from a call made on the 25th printed the
+                // 25th and was invisible to `since: 2026-10-26` (docs/AUDIT.md T-4).
+                const rows = selectRecentTrades(context.trades ?? [], { ...filter, by: 'logged', limit });
+                if (wantsRecords) {
+                    // `records` is the review payload: everything a post-mortem or a
+                    // training row needs, without the raw analysis blob. Notes are
+                    // the ONE field that can be arbitrarily large, so they are cut
+                    // and say so.
+                    content = JSON.stringify({
+                        ...filter,
+                        limit,
+                        returned: rows.length,
+                        records: rows.map(t => ({
+                            id: t.id,
+                            planId: t.planId ?? null,
+                            loggedAt: t.timestamp ?? null,
+                            decidedAt: t.decidedAt ?? null,
+                            outcomeResolvedAt: t.outcomeResolvedAt ?? null,
+                            symbol: t.analysis?.coinName ?? null,
+                            direction: t.analysis?.direction ?? null,
+                            outcome: t.outcome,
+                            entry: t.analysis?.entryPoints?.[0]?.price ?? null,
+                            stopLoss: t.analysis?.stopLoss ?? null,
+                            takeProfits: (t.analysis?.takeProfit ?? []).map(tp => tp.price),
+                            leverage: t.leverage ?? null,
+                            pnlAmount: t.pnlAmount ?? null,
+                            pnlPercent: t.pnlPercent ?? null,
+                            realizedR: t.realizedR ?? null,
+                            costR: t.costR ?? null,
+                            netR: t.netR ?? null,
+                            maxAdverseExcursion: t.maxAdverseExcursion ?? null,
+                            maxFavorableExcursion: t.maxFavorableExcursion ?? null,
+                            modelsUsed: t.modelsUsed ?? null,
+                            strategy: t.analysis?.strategy ?? null,
+                            confidence: t.analysis?.confidence ?? null,
+                            tags: [
+                                ...(t.mistakeTags ?? []),
+                                ...(t.rootCauseClass ? [t.rootCauseClass] : []),
+                            ],
+                            notes: typeof t.postMortem === 'string' && t.postMortem.length > 600
+                                ? `${t.postMortem.slice(0, 600)}… (${t.postMortem.length - 600} more chars)`
+                                : (t.postMortem ?? null),
+                        })),
+                        ...(rows.length === 0
+                            ? { note: 'No journal row matches that filter. That is not evidence of inactivity — only of no match.' }
+                            : {}),
+                    }, null, 2);
+                    break;
+                }
                 const brief = buildRecentTradesBrief(rows);
                 content = JSON.stringify({
                     ...filter,
@@ -4065,7 +4134,7 @@ export async function executeDeskTools(
     // lookup can no longer hold the round (and the bubble) open.
     return Promise.all(calls.map(call => withinToolDeadline(
         call,
-        () => executeDeskTool(call, context),
+        (signal) => executeDeskTool(call, { ...context, signal }),
         context.signal,
     )));
 }
@@ -4677,7 +4746,7 @@ export async function runDeskToolLoop(params: {
             const FORGED_MISS = '__not_a_forged_tool__';
             const forged = await withinToolDeadline(
                 call,
-                async () => (await executeForgedTool(call.name, call, options?.signal))
+                async (signal) => (await executeForgedTool(call.name, call, signal ?? options?.signal))
                     ?? { toolCallId: call.id, name: call.name, ok: true, content: FORGED_MISS },
                 options?.signal,
             );
