@@ -55,7 +55,7 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
     return (
         <div id="activity-drawer" data-testid="activity-drawer" className="fixed inset-y-0 right-0 z-drawer flex w-full max-w-sm flex-col border-l border-white/10 bg-zinc-950 shadow-2xl shadow-black/60 animate-fade-in">
             <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
-                <p className="text-ui-dense font-bold uppercase tracking-widest text-zinc-400">Activity</p>
+                <p className="text-ui-dense font-bold uppercase tracking-widest text-zinc-400" title="Completed skill evaluations — not a job queue">Activity · skill audits</p>
                 <button type="button" onClick={onClose} className="rounded-control p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors" aria-label="Close activity">
                     <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
@@ -65,8 +65,8 @@ const JobsDrawer: React.FC<ActivityDrawerProps> = ({
                     <EmptyState
                         compact
                         icon={<Inbox className="h-5 w-5" aria-hidden="true" />}
-                        title="Nothing running"
-                        description="Detached skill evaluations appear here."
+                        title="No audits yet"
+                        description="Each skill's latest detached evaluation appears here once it has run."
                     />
                 )}
                 {evaluated.length > 0 && (
