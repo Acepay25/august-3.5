@@ -142,7 +142,9 @@ export const memoryTopicsFromStore = (
 ): MemoryTopic[] => {
     const folderNamesById = new Map(folders.map(f => [f.id, f.name]));
     return files
-        .filter(file => !file.autoManaged && !isSkillFile(file, folderNamesById))
+        // `enabled` too: a note the trader switched off was still listed to the
+        // model, which reads as "this is in force" (docs/AUDIT.md M-3).
+        .filter(file => file.enabled !== false && !file.autoManaged && !isSkillFile(file, folderNamesById))
         .filter(file => file.content.trim().length > 0)
         .map(file => ({
             file,

@@ -483,7 +483,14 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const systemPromptFor = useCallback((bot?: AgentBot, roleNote?: string): string => {
         const skillsBlock = skillsIndexForPrompt(provider);
         const strategiesBlock = strategiesForPrompt();
-        const memoryBlock = buildProfileMemoryIndex();
+        // ONE setting, one answer: the Chat surface gates this block on the same
+        // flag AND passes the same scaled budget (chatSurfaceTurn.ts:155-162).
+        // The dock used to inject the profile index with memory switched OFF and
+        // with the default row count on an 8k model, so the two homes disagreed
+        // about both the toggle and the size (docs/AUDIT.md M-3).
+        const memoryBlock = memoryEnabled !== false
+            ? buildProfileMemoryIndex(undefined, indexBudgetFor(provider?.contextWindowTokens ?? 200_000).memory)
+            : '';
         let agent: ResolvedAgentContext | null = null;
         if (bot) {
             try {
