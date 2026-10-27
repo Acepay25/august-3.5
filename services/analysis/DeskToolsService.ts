@@ -222,6 +222,9 @@ export const DESK_TURN_WRAPUP_AT = 0.8;
  * `DESK_TURN_BUDGET_MS`, or one lookup spends the entire turn. */
 export const DESK_TOOL_TIMEOUT_MS = 20_000;
 
+/** A lookup that outlives this says so on its own row. Two seconds is the
+ *  threshold the mission sets for "anything over about 2 seconds". */
+const SLOW_CALL_NOTICE_MS = 2_000;
 /**
  * Output budget for ONE tool round, and why it is no longer 4096.
  *
@@ -261,6 +264,7 @@ export async function withinToolDeadline(
     work: (signal: AbortSignal) => Promise<DeskToolResult>,
     signal?: AbortSignal,
     timeoutMs: number = DESK_TOOL_TIMEOUT_MS,
+    onSlow?: (label: string) => void,
 ): Promise<DeskToolResult> {
     const label = toolLabel(call.name);
     const stopped = (reason: string): DeskToolResult => ({
@@ -278,9 +282,16 @@ export async function withinToolDeadline(
             if (settled) return;
             settled = true;
             window.clearTimeout(timer);
+            window.clearTimeout(slowTimer);
             signal?.removeEventListener('abort', onAbort);
             resolve(r);
         };
+        // One "still working" line per slow call. Not a spinner: the transcript
+        // row already exists, so this is the only thing a seat (and the trader)
+        // can be told without inventing a percentage.
+        const slowTimer = window.setTimeout(() => {
+            if (!settled) onSlow?.(label);
+        }, SLOW_CALL_NOTICE_MS);
         // ONE child controller per call. The receipt and the work must agree about
         // whether the lookup is over: before this, a timed-out fetch kept running
         // (and a mutating tool kept mutating) after the seat had already been told
@@ -2654,6 +2665,11 @@ export interface DeskToolContext {
      *  as a stable per-boot id rather than an empty promise. */
     sessionId?: string | null;
     signal?: AbortSignal;
+    /** Fires ONCE per call that outlives SLOW_CALL_NOTICE_MS, so a lookup that
+     *  takes ten seconds says so on the row instead of looking hung (Phase 4:
+     *  progress for anything over ~2s). The loop supplies it; a context without
+     *  one is silent exactly as before. */
+    onSlowCall?: (label: string) => void;
     trades?: LoggedTrade[];
     chartInterval?: string;
     chartLevels?: { label: string; price: number }[];
@@ -4237,6 +4253,8 @@ export async function executeDeskTools(
             call,
             (signal) => executeDeskTool(call, { ...context, signal }),
             context.signal,
+            DESK_TOOL_TIMEOUT_MS,
+            context.onSlowCall,
         );
     }));
 }
@@ -4905,6 +4923,7 @@ export async function runDeskToolLoop(params: {
                 memoryEnabled,
                 lastUserMessage,
                 untrustedSeen,
+                onSlowCall: label => onToolEvent?.(`${label} · still working…`),
             })
             : [];
         const results = [...replays, ...extraResults, ...forgedResults, ...coreResults];
