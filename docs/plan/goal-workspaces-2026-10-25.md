@@ -244,6 +244,46 @@ index and the pre-read; one press reads back `aria-checked=false` and the next t
 carries neither; `remember` lands no row while off; pressing again restores the
 index, which also leaves the state as every later arm expects.
 
+## The strategies switch gated a label, not a prompt
+
+Found while fixing the line above it, and it is the same shape: a control that
+reads as a promise. `isStrategiesEnabled` was read by exactly one thing — its own
+"On — enabled books are used" caption — and `getEnabledStrategiesText()`, the
+function that turns uploaded books into prompt text, had **no caller at all**.
+The dock's prompt callback listed `[symbol, trades]` as its only deps, so even a
+mid-session flip could not have reached it. Meanwhile the per-book Enabled
+checkbox and the upload flow both worked, which is what made it read as wired.
+
+The owner was asked in product terms and chose to wire it rather than default it
+off. One function now composes BOTH strategy sources behind ONE opt-out gate
+(`activeStrategiesBlock`, `strategyStore.ts:226`): the ACTIVE plans from the
+notebook folder plus the enabled books, and an explicit `enabled: false` returns
+'' for the whole section. Both seat homes call it — the Chat surface through
+`surfacePromptWith` and the dock through `strategiesForPrompt`, whose deps now
+carry both switches. The default is ON at both sites that decide it (the loader
+and the hook's initial state), because a book the trader marked Enabled is a
+promise the app made; a stored `false` still means they said no.
+
+Proof, in the two layers the app has:
+
+- **The store gate and the seat hop, deterministic** — six arms in
+  `node-authoring` (21/21). Three of them call the real
+  `chatSurfaceSystemPrompt`, not the block builder, because a dropped hop reads
+  exactly like a working gate at the store level and a switch that does nothing
+  in the app. Proved red by unthreading only the flag: the arm reports
+  `off has books=true` while its siblings stay green, then 21/21 on restore.
+- **The whole hop, live** — five arms in `live-probe4` (82 passed, 0 failed, one
+  `BLOCKED` that is the unprompted-model-choice measurement): an enabled book
+  reaches the seat at the shipped default, Settings → **Playbooks** shows the
+  switch ON for a profile that never touched it, one press reads back off and
+  the next seat prompt carries neither section, and pressing again restores it.
+  The harness had to stop clearing `location.hash` to leave Settings — the scrim
+  stays mounted and intercepts the next composer click — so it now dismisses the
+  real overlay and asserts the scrim is gone before sending.
+- Gates on the same tree: anchors 445 (restated, 0 unattributed), contracts 130,
+  typecheck ×3, lint 0 errors at the 379-warning ratchet, build, boot-probe,
+  render-probe and skill-approval 25/25.
+
 ## Next slices
 
 1. **Goals UI** — landed. The Chat rail's third tab (`components/agents/GoalRailPanel.tsx`)
