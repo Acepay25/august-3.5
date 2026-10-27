@@ -44,11 +44,43 @@ live and because agents invent citations:
 
 ## Phase 1 — fix, in order of blast radius
 
+### Landed
+
+**F-1 — a failed notebook write no longer leaves a phantom row** (audit **M-1**).
+`services/learning/MemoryFilesService.ts:918-938` — `createMemoryFileUnlocked` pushed the new file
+into `memoryCache` and then awaited `persist()`, which rejects on a full origin quota. The bytes
+never reached storage, but the cache kept describing them for the rest of the session, and
+`approveSkillDraft`'s read-back asks the *library* whether a trigger is present. So the retry of a
+failed Save answered `{reason:'duplicate'}` → the toast read **"Already learned"** →
+`takeSkillDraft` deleted the trader's only copy of the proposal, with nothing on disk. The fix rolls
+the cache mutation back with the failure and re-measures, so the store can only assert what it holds.
+
+*Verified:* red and green in the same session, same page, **no reload** (a reload would wipe the
+cache and pass for the wrong reason). Before — `first: write-failed`, `retry: duplicate`,
+`drafts: 0`, `cached: true`, `durable: false`. After — `first: write-failed`, a second press **while
+storage is still full** also answers honestly and keeps the draft (`drafts: 1`, `cached: false`), and
+once storage frees the same draft lands (`created: true`, `durable: true`, `drafts: 0`). Zero page
+errors. `typecheck`, `typecheck:scripts`, `node --check` on the probe all 0; eslint reports 0
+problems on both changed files, so the warning ratchet did not move.
+*Regression added:* `scripts/probe-skill-approval.cjs` case 4 now retries after the injected failure
+and asserts the STORED notebook bytes, not the toast (3 new checks). **Not yet run** — a leftover
+`scripts/mock-provider.cjs` from another session holds this probe's hardcoded `:8787` with live
+connections, and the probe's own boot would then be served by that stale process, which is
+unattributable. It runs in the full gate pass once `:8787` is free; the browser proof above is what
+stands behind "done" for now.
+*Deferred:* the same class on the **delete** paths — `deleteMemoryFileUnlocked:996` and
+`deleteMemoryFolderUnlocked:867` remove rows before persisting, so a quota-rejected delete leaves the
+UI showing a note gone while disk keeps it (the inverse lie, and privacy-adjacent). Not swept into
+this commit: a rollback needs a per-mutation snapshot, and the create path is the one that destroys
+the user's work.
+
+### Pending
+
 Status legend: `pending` · `in-progress` · `done`.
 
 | # | item | audit id | status |
 |---|---|---|---|
-| **F-1** | A failed notebook write must not leave the bytes in the cache, so a retried approval cannot report "Already learned" and delete the trader's draft | M-1 | pending — PROVEN red |
+| **F-1** | A failed notebook write must not leave the bytes in the cache, so a retried approval cannot report "Already learned" and delete the trader's draft | M-1 | **done** — see the record below |
 | **F-2** | One 429 must not lock every Chat-surface send for the session; the reset must be keyed to the cooldown, not to a run registration the `finally` already deleted | L-1 | pending — CODE |
 | **F-3** | Forward `onToolPayload` into the desk loop so the transcript can persist and open a tool's real output | L-3 | pending — CODE |
 | **F-4** | Isolate a Monte Carlo worker crash to its own worker (`pending.worker` is already tagged; `ejectWorker` already exists) | T-3 | pending — PROVEN red |

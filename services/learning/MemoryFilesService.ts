@@ -917,8 +917,24 @@ export const createMemoryFileUnlocked = async (
     }
     const now = Date.now();
     const file: MemoryFile = { id: uid(), folderId, name: cleanName, content, enabled: true, autoManaged, createdAt: now, updatedAt: now };
-    memoryCache.files.push(file);
-    await persist(username);
+    // A cache is a promise about what is stored. `persist` rejects on a full
+    // origin quota while the array on line -3 already holds the new row, so the
+    // notebook goes on serving bytes that never reached disk — and the next
+    // reader of that cache reports them as fact. That is not hypothetical:
+    // `skillApproval` asks the library whether a trigger is present, so a
+    // phantom skill makes the RETRY of a failed approval answer "Already
+    // learned" and delete the trader's only copy of the draft (docs/AUDIT.md
+    // M-1, reproduced in the browser). Roll the mutation back with the failure
+    // so the store can only describe what it actually holds.
+    const filesBefore = memoryCache.files;
+    memoryCache.files = [...filesBefore, file];
+    try {
+        await persist(username);
+    } catch (e) {
+        memoryCache.files = filesBefore;
+        measureIntoCache();
+        throw e;
+    }
     return file;
 };
 

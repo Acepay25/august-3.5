@@ -441,6 +441,29 @@ async function readToast(page) {
             check('4-writefail: the draft SURVIVES the failed write',
                 r.draftsAfter.length === 1, r.draftsAfter.map(d => d.id));
             await page.evaluate(() => localStorage.removeItem('probe_block_notebook'));
+
+            // ── 4b. the retry, WITHOUT a reload ──────────────────────────────
+            // This is the half that mattered. `readSkillFiles` reads the STORED
+            // bytes, so a reload would wipe the in-memory cache and make the
+            // retry pass for the wrong reason: the defect only exists inside one
+            // session, because the failed create left its row in the cache and
+            // `approveSkillDraft` asks the CACHE whether the trigger is present.
+            // Before the rollback fix the second press answered "Already learned"
+            // (measured: first `write-failed` → retry `{reason:'duplicate'}`,
+            // drafts 0, cache true, storage false) and consumed the draft, so the
+            // skill the trader was told already existed was never written at all.
+            const retryToast = await (async () => {
+                await openCoachAndAllow(page, 'sk-writefail');
+                return readToast(page);
+            })();
+            const retryFiles = await readSkillFiles(page);
+            const retryDrafts = await readDrafts(page);
+            check('4b-retry: the retry reports Skill saved, not Already learned',
+                /Skill saved/.test(retryToast) && !/Already learned/.test(retryToast), retryToast);
+            check('4b-retry: the retried skill is in the STORED notebook bytes',
+                retryFiles.files.includes('funding-exhaustion-long.md'), retryFiles.files.length);
+            check('4b-retry: the draft is consumed only once the write landed',
+                retryDrafts.length === 0, retryDrafts.map(d => d.id));
         }
         // ── 5. A2: a rescope proposal applied by a human in the Coach thread ─
         // The unit suites prove the applier; this proves the panel reached it in
