@@ -567,6 +567,11 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                 <Suspense fallback={<TabFallback />}>
                                     <ActionsTab tab={{
                                         username: props.username,
+                                        // The Data tab's training export counts these rows to decide
+                                        // whether the button is live, so a mount that omits them
+                                        // renders "No trades logged yet" over a full journal
+                                        // (docs/AUDIT.md §8, item F-9).
+                                        loggedTrades: props.loggedTrades,
                                         onProfileRestored: props.onProfileRestored,
                                     }} />
                                 </Suspense>
