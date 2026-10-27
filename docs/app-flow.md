@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-25** (the anchor gate re-measured every citation here and in the stage ledger:
-**443 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**444 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 5 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -86,7 +86,7 @@ flowchart TD
         DC["ChatComposer.tsx:156 :226"] --> D2{"chatTurnRunner.send chatTurnRunner.ts:840 — branches on seats"}
         D2 -->|solo| SO["runSeatTurn called services/trade/chatTurnRunner.ts:1039, defined :616"]
         D2 -->|panel, 2+ seats| PN["per-seat services/trade/chatTurnRunner.ts:1228 + createDebateMailbox :1156 + planPanelTurn :1168"]
-        D2 -->|Full analysis button| FA["runFullAnalysis components/trade/TradeChatPanel.tsx:579 → the SAME App:1594 wrapper — it holds the session run slot and writes no row"]
+        D2 -->|Full analysis button| FA["runFullAnalysis components/trade/TradeChatPanel.tsx:586 → the SAME App:1594 wrapper — it holds the session run slot and writes no row"]
     end
     SO --> TT["runToolTurn — services/trade/toolTurn.ts:136"]
     PN --> TT
@@ -98,7 +98,7 @@ flowchart TD
     D3 -->|true| ENS["ensemble branch — section C (ENGINE DELETED; the branch answers with ONE tool turn and no longer refuses over seats)"]
     D3 -->|false: the desk else-arm hooks/useAnalysisPipeline.ts:1161| SPLIT{"a bot thread? :1083"}
     SPLIT -->|yes| TR
-    SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:300, tools from CHAT_SURFACE_TOOLS :61, prompt chatSurfaceSystemPrompt :167"]
+    SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:301, tools from CHAT_SURFACE_TOOLS :61, prompt chatSurfaceSystemPrompt :167"]
     CST --> TT
     TR --> LW["live writer — applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:28, peel per frame; flush BEFORE the settle write useAnalysisPipeline.ts"]
     CST --> LW
@@ -260,7 +260,7 @@ Stage 19 deleted the debate from this path. What one send actually does now:
 ```mermaid
 flowchart LR
     S1["1 preset packet only — options.presetHybridData hooks/useAnalysisPipeline.ts:870; a seat pulls the tape on demand through its desk tools"] --> S3["3 prompt assembly assemblePipelineMemoryContext hooks/useAnalysisPipeline.ts:939"]
-    S3 --> S4["4 one turn: runChatSurfaceTurn services/trade/chatSurfaceTurn.ts:300 → executeDeskTool"]
+    S3 --> S4["4 one turn: runChatSurfaceTurn services/trade/chatSurfaceTurn.ts:301 → executeDeskTool"]
     S4 -->|a seat calls| PT["present_trade → runPresentTrade → plan + gate stamp"]
     PT --> JR["journal row — logTradeWithFeedback useTradeLogging.ts"]
     S4 --> ANS["the answer is the prose beside the card"]
@@ -773,7 +773,7 @@ where the spec and the code disagreed):
   that mirrors the trader's own phrasing is out of reach of a vocabulary test —
   the gate catches content foreign to the conversation, not a clever echo.
 - **Listing-first recall, one budget** — the profile index and the notebook
-  topics index (`buildNotebookTopicsIndex`, `memoryTopics.ts:241`) ride the
+  topics index (`buildNotebookTopicsIndex`, `memoryTopics.ts:243`) ride the
   seat prompt beside the skills catalogue, and all three draw their line caps
   from ONE table, `indexBudgetFor` (`utils/promptIndexBudget.ts:35`), scaled
   to the seat's resolved context window (30/30/12 lines at ≥200k tokens down
@@ -1141,7 +1141,7 @@ overwriting a concurrent one.
 brings a snapshot back as a NEW revision, and exactly one goal is focused:
 `focusedGoal services/goals/GoalService.ts:72`
 The focused goal's `policy.allowedTools` is intersected with the seat's own list
-at the transport — `goalAllowedTools services/trade/chatSurfaceTurn.ts:355`
+at the transport — `goalAllowedTools services/trade/chatSurfaceTurn.ts:357`
 › `effectiveAllowed services/analysis/DeskToolsService.ts:5132`, and the rule
 itself is `intersectGoalPolicy utils/toolKinds.ts:187`
 so a goal can only NARROW what a seat may call, and no goal text can widen a
@@ -1262,15 +1262,15 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 11 | AgentsView.send → bot branch | the selected bot answered at `onSendBotTurn components/agents/AgentsView.tsx:812` |
 | 12 | bot branch → useBotMailbox | `runUserBotTurn hooks/useBotMailbox.ts:305` → `runBotTurn hooks/useBotMailbox.ts:130` |
 | 13 | AgentsView.send → analysis branch | `onAnalyze components/agents/AgentsView.tsx:802` → `handleRunAnalysisFromChat App.tsx:1594` — the dock's `onRunAnalysis` reaches the SAME wrapper |
-| 14 | dock Full analysis → the run slot | `runFullAnalysis components/trade/TradeChatPanel.tsx:579` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
+| 14 | dock Full analysis → the run slot | `runFullAnalysis components/trade/TradeChatPanel.tsx:586` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
 | 15 | ChatComposer → chatTurnRunner.send | key `Enter components/trade/panels/ChatComposer.tsx:156` / button `:226` → `services/trade/chatTurnRunner.ts:840` |
 | 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:1039` (definition `runSeatTurn services/trade/chatTurnRunner.ts:616`) |
 | 17 | runSeatTurn → the ONE turn executor | `runToolTurn toolTurn.ts:136` → `streamChatWithDeskTools :174` → `DeskToolsService` → `streamChatRequest` |
 | 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1228` · `createDebateMailbox :1156` · `planPanelTurn :1168` |
-| 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `systemPromptFor components/trade/TradeChatPanel.tsx:483` = the blocks below, assembled at `TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:505` |
+| 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `systemPromptFor components/trade/TradeChatPanel.tsx:483` = the blocks below, assembled at `TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:512` |
 | 20 | every dock turn → chatStore | `mutate services/trade/chatStore.ts:357` · `beginRun services/trade/chatStore.ts:501` |
 | 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useBotThread hooks/useAnalysisPipeline.ts:1098`, anything else runs the tool turn `:1174`; the ensemble flag and the roster it fed are gone (2026-10-19) |
-| 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1147` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:300` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
+| 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1147` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:301` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
 | 23 | casual frames → Message.text | `applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:28`; flush precedes the settle write useAnalysisPipeline.ts |
 | 24 | ensemble → the stages that survive | see C — five of the old eight are gone from the call path, and no stage is named in the code, so no line number is claimed |
 | 25 | desk tools → what a caller can reach | `executeDeskTool services/analysis/DeskToolsService.ts:2798` (its allow-list is enforced at execution, not only at offer time) |
@@ -1299,8 +1299,8 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 49 | ~~a schedule's failure → the row and the toast~~ | DELETED with the feature. The rule it carried still binds anything unattended: a run that called nothing must not settle as a clean answer |
 | 50 | a journal row gets its scalp/swing class | `withDetectedTradeType` (`services/analysis/ScalpDetectionService.ts`) is called at the two row-minting sites `withDetectedTradeType hooks/useTradeLogging.ts:369` and `withDetectedTradeType hooks/useTradeLogging.ts:777` — label-only, so no `validityDurationMinutes` appears and the autopilot expiry window never widens. The filter reads it at `components/journal/TradeLog.tsx:540` |
 | 51 | a run records its measured cost | `recordToolTurnUsage utils/sessionUsage.ts:63` is called by both turn owners — desk arm chatSurfaceTurn.ts, dock seats chatTurnRunner.ts — from the usage the wire reported per request. Knowledge → Session Usage reads that ledger; stage 19 left it with a reader and no writer. usageCalls distinguishes a zero-cost run from a provider that sent no usage frame |
-| 52 | a finished analysis says so | `notify()` (`services/infrastructure/notify.ts`) fires when a Full-analysis send settles un-stopped (`notify hooks/useAnalysisPipeline.ts:1275`). Before stage 19 this came from the verdict finalizer; the old channel name CompletionNotifications was a native-only copy of the same thing, and its FILE is gone with stage 19's tranche — the only surviving mention is a comment in `services/infrastructure/notify.ts` — so the app speaks through one notifier |
-| 53 | the chart gets its Entry/Stop/Target lines | `latestChartVerdict(messages)` `latestChartVerdict services/trade/chartData.ts:95` is what App hands `TradeView` as `verdict` — the newest row carrying `Message.proposal` (what `present_trade` stamps; `proposal services/trade/chatSurfaceTurn.ts:385`), with `Message.analysis` as the fallback for pre-debate history. Red-proved: the old selector keyed on `ensembleProgress` / >1 `modelsUsed` / `debateTurns` and returned null for every tool-turn row. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate |
+| 52 | a finished analysis says so | `notify()` (`services/infrastructure/notify.ts`) fires when a Full-analysis send settles un-stopped (`notify hooks/useAnalysisPipeline.ts:1276`). Before stage 19 this came from the verdict finalizer; the old channel name CompletionNotifications was a native-only copy of the same thing, and its FILE is gone with stage 19's tranche — the only surviving mention is a comment in `services/infrastructure/notify.ts` — so the app speaks through one notifier |
+| 53 | the chart gets its Entry/Stop/Target lines | `latestChartVerdict(messages)` `latestChartVerdict services/trade/chartData.ts:95` is what App hands `TradeView` as `verdict` — the newest row carrying `Message.proposal` (what `present_trade` stamps; `proposal services/trade/chatSurfaceTurn.ts:387`), with `Message.analysis` as the fallback for pre-debate history. Red-proved: the old selector keyed on `ensembleProgress` / >1 `modelsUsed` / `debateTurns` and returned null for every tool-turn row. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate |
 | 54 | request → context window | `resolveContextWindow utils/contextWindow.ts:136` resolves user → measured → model → assumed; `outputTokenBudget utils/contextWindow.ts:187` and `promptTokenCeiling utils/contextWindow.ts:169` size the two halves of one request |
 | 55 | array → compaction | `compactForWire services/providers/contextCompact.ts:343` → `compactMessages :217`; oldest payloads, then prose, then whole rounds; `tool_calls` stay paired and the last user turn is pinned |
 | 56 | tool round → bounded loop | `runDeskToolLoop services/analysis/DeskToolsService.ts:4354`; `MAX_DESK_TOOL_ROUNDS :199` · `DESK_ROUND_MAX_TOKENS :244` · `DESK_TURN_BUDGET_MS :211` |
@@ -1319,7 +1319,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 69 | run → prompt lane + corpus version | `beginPromptLane services/infrastructure/PromptOverrideService.ts:34` → `promptCorpusVersion :97` → `runStats.promptLane`/`promptVersion` |
 | 70 | Settings → tool catalogue | `DESK_TOOL_DEFINITIONS services/analysis/DeskToolsService.ts:1000` + `toolLabel :834` → `DeskToolCatalogue`, grouped by `toolKinds` |
 | 71 | skills index → skill_view → the body or one bundled file | `case 'skill_view' services/analysis/DeskToolsService.ts:2866` — L1 body + bundled list, L2 one flat-named file (`..` refused); `${SKILL_DIR}`/`${SESSION_ID}` substitute, Hermes aliases accepted |
-| 72 | message → focused goal → a narrower toolset | `focusedGoal services/goals/GoalService.ts:72` · `goalMatchesMessage :278` → `goalAllowedTools services/trade/chatSurfaceTurn.ts:355` → `intersectGoalPolicy utils/toolKinds.ts:187` › `effectiveAllowed services/analysis/DeskToolsService.ts:5132`, an intersection — a goal may only narrow the seat, and narrowing to nothing leaves it `NO_TOOLS_ALLOWED utils/toolKinds.ts:170` rather than the whole desk |
+| 72 | message → focused goal → a narrower toolset | `focusedGoal services/goals/GoalService.ts:72` · `goalMatchesMessage :278` → `goalAllowedTools services/trade/chatSurfaceTurn.ts:357` → `intersectGoalPolicy utils/toolKinds.ts:187` › `effectiveAllowed services/analysis/DeskToolsService.ts:5132`, an intersection — a goal may only narrow the seat, and narrowing to nothing leaves it `NO_TOOLS_ALLOWED utils/toolKinds.ts:170` rather than the whole desk |
 | 73 | seat → goal edit → snapshot → undo | `case 'update_goal' services/analysis/DeskToolsService.ts:3168` → `updateGoal services/goals/GoalService.ts:164` keeps the previous snapshot → `case 'restore_goal' services/analysis/DeskToolsService.ts:3212` → `restoreGoal services/goals/GoalService.ts:202` |
 | 74 | seat → self-change → ledger → outcomes | `case 'propose_self_change' services/analysis/DeskToolsService.ts:3254` → `proposeKnobChange services/selfMod/SelfModificationService.ts:259` / `proposePromptOverride services/selfMod/SelfModificationService.ts:305` → `writeSelfChange services/selfMod/SelfChangeLedger.ts:100` → `settleSelfChanges services/selfMod/SelfModificationService.ts:452`, run from `settleSelfChanges services/learning/SkillMemoryService.ts:3997` |
 | 75 | rail Goals tab → focus / undo → the header chip | `focusGoal services/goals/GoalService.ts:230` and `revertSelfChange services/selfMod/SelfModificationService.ts:378` pressed from `GoalRailPanel components/agents/GoalRailPanel.tsx:333` → `ActiveGoalChip components/agents/ActiveGoalChip.tsx:27` names it, and its own press releases it |
@@ -1355,10 +1355,10 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 443 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 444 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 443 anchors verified, and the gate
+   the gate's own output: these docs state 444 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -1407,7 +1407,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
    `services/trade/chatTurnRunner.ts:1156`, `planPanelTurn` at
    `services/trade/chatTurnRunner.ts:1168`, the dock's `send` at
    `services/trade/chatTurnRunner.ts:840`, `runFullAnalysis` at
-   `components/trade/TradeChatPanel.tsx:579`, and `MAX_PLANS_PER_RUN` at
+   `components/trade/TradeChatPanel.tsx:586`, and `MAX_PLANS_PER_RUN` at
    The pass also moved four surface anchors
    that pointed inside a prop list onto the guard that mounts the surface:
    `App.tsx:2409` trade, `App.tsx:2456` journal, `App.tsx:2478` learn,
