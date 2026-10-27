@@ -152,6 +152,11 @@ export const importSkillFiles = async (files: Array<SkillFileRead & { content: s
             ? meta.name
             : (slugifyName(parent) || uniqueName(parent).replace(/\.md$/, ''));
         const skillStored = uniqueName(`${slug}.md`);
+        // The support files must follow the name the skill ACTUALLY took: when
+        // uniqueName renamed a colliding skill to `<slug>-2.md`, its bundle kept
+        // `<slug>__…` and could never be found from the renamed skill
+        // (docs/AUDIT.md S-5).
+        const storedSlug = skillStored.replace(/\.md$/i, '');
         try {
             await createMemoryFile(folderId, skillStored, skillEntry.file.content, username, false);
             result.imported.push(skillEntry.file.relPath ?? skillEntry.file.name);
@@ -161,7 +166,7 @@ export const importSkillFiles = async (files: Array<SkillFileRead & { content: s
         }
         for (const g of group) {
             if (g === skillEntry) continue;
-            const name = bundledName(slug, g.relSegments);
+            const name = bundledName(storedSlug, g.relSegments);
             try {
                 await createMemoryFile(folderId, uniqueStoredName(name), g.file.content, username, false);
                 result.imported.push(g.file.relPath ?? g.file.name);

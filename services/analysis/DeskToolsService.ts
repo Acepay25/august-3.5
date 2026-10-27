@@ -3058,7 +3058,11 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     if (/[/\\]|^\.|\.\./.test(filePath) || !bundled.includes(filePath)) {
                         return rejectedResult(call, `skill_view rejected: "${filePath}" is not one of ${row.slug}'s bundled files (path separators and .. are refused)`);
                     }
-                    const bundledFile = getMemoryFiles().files.find(f => f.name === filePath);
+                    // Membership was folder-scoped and the READ was not: a
+                    // same-named file in another folder could be opened as this
+                    // skill's bundle member (docs/AUDIT.md S-5).
+                    const bundledFile = getMemoryFiles().files.find(f =>
+                        f.folderId === skill.file.folderId && f.name === filePath && f.name.startsWith(bundlePrefix));
                     if (!bundledFile) return rejectedResult(call, `skill_view rejected: "${filePath}" could not be read`);
                     content = `# ${filePath} — bundled file of ${row.slug}\n\n${substitute(bundledFile.content)}`;
                     break;
