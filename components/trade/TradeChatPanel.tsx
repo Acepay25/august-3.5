@@ -880,8 +880,26 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             return;
         }
         heldNoticeRef.current = null;
-        const texts = chatStore.takeHarnessSignals();
-        if (texts.length > 0) void runHarnessTurn(texts.join('\n\n'));
+        // HAND EACH WAKE TO ITS OWN THREAD. The queue records which session armed
+        // a watch or owns the plan; the panel takes the signals for the session on
+        // screen, and when the only queued ones belong to another CHAT session it
+        // switches there and lets this effect drain them. Before this, a wake for
+        // one chart was answered in whichever thread was on screen
+        // (docs/AUDIT.md L-7).
+        const forActive = chatStore.takeHarnessSignals(activeId);
+        if (forActive.length > 0) {
+            void runHarnessTurn(forActive.map(s => s.text).join('\n\n'));
+            return;
+        }
+        const owned = snap.signals.find(s => s.sid && sessions.some(x => x.id === s.sid && (x.kind === 'solo' || x.kind === 'panel')));
+        if (owned?.sid && owned.sid !== activeId) {
+            chatStore.setActiveId(owned.sid);
+            return; // this effect re-runs with the owning session active
+        }
+        // Unbound signals (a level hit from a conversation, or a watch armed before
+        // the field existed) still drain to the active session.
+        const unbound = chatStore.takeHarnessSignals('unbound');
+        if (unbound.length > 0) void runHarnessTurn(unbound.map(s => s.text).join('\n\n'));
     }, [busy, snap.signals, runHarnessTurn, activeId, sessions]);
 
     // ── Session management ──────────────────────────────────────────────────

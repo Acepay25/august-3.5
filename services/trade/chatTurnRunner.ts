@@ -389,6 +389,8 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 // the same coin AND the turn has not drifted off it (canvasNote).
                 // Otherwise the service decides from its own feed.
                 const markHint = !crossCanvas && canvasSymbol === watch.symbol ? drawnPrice : null;
+                // The wake belongs to the thread that armed it.
+                watch.sid = turn.sid;
                 if (watchService.arm(watch, markHint) === 'refused') {
                     // The refusal IS the answer: say what is already true instead
                     // of arming a trigger that would only announce history.
@@ -398,6 +400,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             }
             const { wake, error } = parseTimeWake(args, { symbol: turn.symbol, makeId, nowMs });
             if (error || !wake) return receipt(false, `wake_me rejected: ${error ?? 'invalid'}`);
+            wake.sid = turn.sid;
             watchService.arm(wake);
             return receipt(true, `Scheduled wake ${wake.id} at ${phtClock(wake.atMs)} PHT (in ${Math.round((wake.atMs - nowMs) / 60_000)}m). The harness will signal you then to re-check ${wake.symbol}: "${wake.note}".`);
         }

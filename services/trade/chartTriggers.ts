@@ -46,6 +46,11 @@ export interface PriceWatch {
     /** Epoch ms deadline; expired watches are dropped silently. */
     expiresAt: number;
     createdAt: number;
+    /** The dock session that armed it. The wake must reach THAT thread: the
+     *  queue used to hand every signal to whichever session was on screen, so a
+     *  watch armed for one chart could be answered in another
+     *  (docs/AUDIT.md L-7). Absent for a watch armed before this field. */
+    sid?: string;
 }
 
 /** A scheduled wake-up: the model asks to re-check the chart at a time. */
@@ -57,6 +62,8 @@ export interface TimeWake {
     atMs: number;
     note: string;
     createdAt: number;
+    /** See PriceWatch.sid. */
+    sid?: string;
 }
 
 export type WatchItem = PriceWatch | TimeWake;

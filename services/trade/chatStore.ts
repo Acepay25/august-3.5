@@ -73,7 +73,15 @@ export interface ChatSnapshot {
     running: Record<string, true>;
     /** Live Chat-surface runs, keyed by CONVERSATION id. */
     conversationRunning: Record<string, true>;
-    signals: string[];
+    signals: HarnessSignal[];
+}
+
+/** One queued `[HARNESS SIGNAL …]` and the session that should receive it. */
+export interface HarnessSignal {
+    text: string;
+    /** The session that owns the plan or armed the watch. Absent for a signal
+     *  with no owner (a level hit from a conversation, not the dock). */
+    sid?: string;
 }
 
 let sessions: LiveSession[] = [];
@@ -83,7 +91,7 @@ let loaded = false;
  *  anchor. Writing while this differs from getActiveUsername() would leak
  *  one user's chats into another's storage key. */
 let loadedFor = '';
-let pendingSignals: string[] = [];
+let pendingSignals: HarnessSignal[] = [];
 const controllers = new Map<string, AbortController>();
 /**
  * The CHAT SURFACE's live runs, keyed by CONVERSATION id.
@@ -517,16 +525,23 @@ export const findSessionByEntryId = (entryId: string): string | undefined => {
 
 /** Queue a `[HARNESS SIGNAL …]` text for the panel to run as a model turn.
  *  Capped so a runaway watch can't flood the transcript. */
-export const queueHarnessSignal = (text: string): void => {
-    pendingSignals = [...pendingSignals, text].slice(-8);
+export const queueHarnessSignal = (text: string, sid?: string): void => {
+    pendingSignals = [...pendingSignals, { text, ...(sid ? { sid } : {}) }].slice(-8);
     emit();
 };
 
-/** Drain the queued signals (the panel calls this when the session is idle). */
-export const takeHarnessSignals = (): string[] => {
+/** Drain the queued signals (the panel calls this when the session is idle).
+ *  `only` drains the signals for one session, leaving the rest queued — the
+ *  panel uses it to hand each wake to the thread that owns it instead of to
+ *  whichever session happens to be on screen (docs/AUDIT.md L-7). */
+export const takeHarnessSignals = (only?: string | 'unbound'): HarnessSignal[] => {
     if (pendingSignals.length === 0) return [];
-    const out = pendingSignals;
-    pendingSignals = [];
+    const matches = (s: HarnessSignal): boolean => (
+        only === undefined ? true : only === 'unbound' ? !s.sid : s.sid === only
+    );
+    const out = pendingSignals.filter(matches);
+    if (out.length === 0) return [];
+    pendingSignals = pendingSignals.filter(s => !matches(s));
     emit();
     return out;
 };

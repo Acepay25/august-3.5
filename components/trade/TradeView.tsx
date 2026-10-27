@@ -717,7 +717,9 @@ const TradeView: React.FC<TradeViewProps> = ({
     // same store-queued way, so the alert survives a busy run or a tab switch
     // — and reaches the OS so the user notices even with the app backgrounded.
     useEffect(() => watchService.subscribe((fired, remaining) => {
-        chatStore.queueHarnessSignal(formatWatchFiredForModel(fired, remaining.length));
+        // The wake goes to the thread that armed it (the store queues it);
+        // a watch from before this field drains to the active session as before.
+        chatStore.queueHarnessSignal(formatWatchFiredForModel(fired, remaining.length), fired.watch.sid);
         const w = fired.watch;
         const cond = w.kind === 'price'
             ? `${w.symbol} ${w.condition} ${w.price}${fired.price !== null ? ` (now ${fired.price})` : ''}`
