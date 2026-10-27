@@ -1050,6 +1050,36 @@ export function handleRecallTool(
 
     const sections: string[] = [];
 
+    // A NOTE NAMED EXACTLY IS SERVED WHOLE. The topics index promises the note
+    // and the only reader returned one 240-character line, so a seat told "read
+    // the funding note" could never see the second paragraph
+    // (docs/AUDIT.md §4). A name the trader can see in the index is an address;
+    // this is what makes it one. Bounded, and a cut says how much is missing.
+    try {
+        const key = raw.toLowerCase().replace(/\.md$/, '').replace(/[\s_-]+/g, ' ').trim();
+        const note = getMemoryFiles().files.find(f => {
+            if (f.enabled === false || isSkillFile(f)) return false;
+            if (!f.content.trim()) return false;
+            const name = f.name.toLowerCase().replace(/\.md$/, '').replace(/[\s_-]+/g, ' ').trim();
+            return !!key && (name === key || (key.length >= 4 && (name.includes(key) || key.includes(name))));
+        });
+        if (note) {
+            const body = note.content.trim();
+            const budget = 4_000;
+            const shown = body.length > budget
+                ? `${body.slice(0, budget)}
+${clipNote({
+                    source: `notebook note "${note.name}"`,
+                    kept: budget,
+                    total: body.length,
+                    guidance: 'ask for a narrower part of this note rather than assuming the rest',
+                })}`
+                : body;
+            sections.push(`NOTE ${note.name}:
+${shown}`);
+        }
+    } catch { /* a note lookup must never cost the recall */ }
+
     // Pull tier: #1 gets the full body; runners-up appear as one-line index
     // entries so the model knows they exist and can ask again specifically.
     const matches = rankedMatchedSkills(query).slice(0, 1 + VERDICT_EXTRA_SKILLS);
