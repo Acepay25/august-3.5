@@ -21,8 +21,11 @@ export function useAppSettings() {
     const [isGlobalMemoryEnabled, setIsGlobalMemoryEnabled] = useState<boolean>(true);
 
     // User-uploaded strategy summaries (Settings → Strategies): master switch
-    // that gates whether enabled docs are injected into analysis prompts.
-    const [isStrategiesEnabled, setIsStrategiesEnabled] = useState<boolean>(false);
+    // that gates whether enabled docs are injected into prompts. Default ON —
+    // the switch now gates the seat prompt for real (`activeStrategiesBlock`),
+    // and a book the trader marked Enabled is meant to be used, not held behind
+    // a control they never touched.
+    const [isStrategiesEnabled, setIsStrategiesEnabled] = useState<boolean>(true);
 
     // Custom AI Behavior
     const [customInstructions, setCustomInstructions] = useState<CustomInstructionsMap>({

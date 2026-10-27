@@ -116,7 +116,7 @@ export interface ChatSurfacePrompt {
  * trader their answer: the prompt simply carries less, the same way the dock's
  * `skillsIndexForPrompt` swallows and returns ''.
  */
-export const surfacePromptWith = (mandate: string, where: string, opts: { memoryEnabled?: boolean; windowTokens?: number; matchText?: string } = {}): ChatSurfacePrompt => {
+export const surfacePromptWith = (mandate: string, where: string, opts: { memoryEnabled?: boolean; strategiesEnabled?: boolean; windowTokens?: number; matchText?: string } = {}): ChatSurfacePrompt => {
     const memoryEnabled = opts.memoryEnabled !== false;
     const budget = indexBudgetFor(opts.windowTokens ?? 200_000);
     let skillsBlock: string;
@@ -145,7 +145,10 @@ export const surfacePromptWith = (mandate: string, where: string, opts: { memory
     }
     let strategiesBlock: string;
     try {
-        strategiesBlock = activeStrategiesBlock();
+        // Plans AND uploaded books, behind the trader's one switch — see
+        // `activeStrategiesBlock`. Opt-out, so a caller that never threads the
+        // flag keeps the section exactly as it does today.
+        strategiesBlock = activeStrategiesBlock(3, { enabled: opts.strategiesEnabled });
     } catch {
         strategiesBlock = '';
     }
@@ -197,7 +200,7 @@ export const surfacePromptWith = (mandate: string, where: string, opts: { memory
  * skills heading says "what the trader asks about", because there is no chart
  * here to match against, and the mandate forbids the tool calls the canvas owns.
  */
-export const chatSurfaceSystemPrompt = (opts: { memoryEnabled?: boolean; windowTokens?: number; matchText?: string } = {}): ChatSurfacePrompt =>
+export const chatSurfaceSystemPrompt = (opts: { memoryEnabled?: boolean; strategiesEnabled?: boolean; windowTokens?: number; matchText?: string } = {}): ChatSurfacePrompt =>
     surfacePromptWith(CHAT_SURFACE_SYSTEM_PROMPT, 'what the trader asks about', opts);
 
 /** The speaker key for this surface's live tool feed — `chatRowFrom` flattens
@@ -265,6 +268,11 @@ export interface ChatSurfaceTurnRequest {
      *  and topics blocks from the seat prompt (the write tools stay — the
      *  toggle is about what the seat READS, and the UI hides writes). */
     memoryEnabled?: boolean;
+    /** The Settings → Strategies master switch. Default true; false strips the
+     *  ACTIVE STRATEGIES and UPLOADED STRATEGY BOOKS blocks from the seat. It
+     *  was previously read by nothing — the label beside the switch said the
+     *  books were used while no seat had ever seen one. */
+    strategiesEnabled?: boolean;
     symbol?: string | null;
     interval?: string;
     trades: LoggedTrade[];
@@ -391,6 +399,7 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
         ? { text: req.systemPrompt, skills: [] as string[] }
         : chatSurfaceSystemPrompt({
             memoryEnabled: req.memoryEnabled !== false,
+            strategiesEnabled: req.strategiesEnabled !== false,
             windowTokens: req.config?.contextWindowTokens,
             // Only the trader's own line is matched — see the note in
             // `surfacePromptWith`. A caller that brought its own mandate gets

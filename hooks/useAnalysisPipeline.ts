@@ -1160,6 +1160,7 @@ ${enhancedPrompt}`;
                     history: currentMessages,
                     prompt: promptToSend,
                     memoryEnabled: isGlobalMemoryEnabled !== false,
+                    strategiesEnabled: isStrategiesEnabled !== false,
                     // An attached screenshot is SENT, not mentioned: before
                     // this the camera on this surface painted a bubble the
                     // model never received.

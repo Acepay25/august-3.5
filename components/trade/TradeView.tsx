@@ -56,6 +56,8 @@ import type { AgentBot } from '../../services/agents/agentRoster';
 interface TradeViewProps {
     /** The Settings memory toggle, forwarded to the dock's seat prompt. */
     memoryEnabled?: boolean;
+    /** The Settings → Strategies master switch, forwarded to the dock seat. */
+    strategiesEnabled?: boolean;
     providers: ProviderConfig[];
     selectedChatModel: string;
     onSelectChatModel: (modelId: string) => void;
@@ -370,7 +372,7 @@ export const useTickFlash = (price: number | undefined): { cls: string; seq: num
 
 
 const TradeView: React.FC<TradeViewProps> = ({
-    memoryEnabled, providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onAnalysisError, onStopRun, coachCount, botThreadRows, onBotTurnCommit, onSoloTurnCommit, onSyncConversation, conversationRows, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, onOpenChat, onToggleWatch, onOpenWatchList, watchOpenCount = 0, watchOpenR, pinnedMessageIds }) => {
+    memoryEnabled, strategiesEnabled, providers, selectedChatModel, onSelectChatModel, onRefreshModels, verdict, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onAnalysisError, onStopRun, coachCount, botThreadRows, onBotTurnCommit, onSoloTurnCommit, onSyncConversation, conversationRows, onOpenCoach, onNewGroup, getAnalysisMessage, onLogProposedTrade, renderGroupSurface, groups = [], registerScrollToMessage, sidebarOpen = true, onToggleSidebar, modeRequest, activeUsername, onTradeModeChange, onOpenChat, onToggleWatch, onOpenWatchList, watchOpenCount = 0, watchOpenR, pinnedMessageIds }) => {
     // The chart opens on the coin the SHARED chat session carries. Adopting only
     // from an effect is not enough: the dock mounts in the same commit, a child's
     // effect runs before its parent's, and the dock can re-bind the active session
@@ -1173,6 +1175,7 @@ const TradeView: React.FC<TradeViewProps> = ({
                     <TradeChatPanel
                         {...dockProps}
                         memoryEnabled={memoryEnabled}
+                        strategiesEnabled={strategiesEnabled}
                         onToggleCollapsed={isBelowLg ? undefined : collapseDock}
                         expanded={dockExpanded}
                         onToggleExpanded={toggleDockExpanded}

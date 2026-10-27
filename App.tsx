@@ -2405,6 +2405,7 @@ const App: React.FC = () => {
                             <React.Suspense fallback={<SurfaceSkeleton />}>
                                 <TradeView
                                     memoryEnabled={isGlobalMemoryEnabled}
+                                    strategiesEnabled={isStrategiesEnabled}
                                     providers={providerConfigs}
                                     selectedChatModel={selectedChatModel}
                                     onSelectChatModel={setSelectedChatModel}

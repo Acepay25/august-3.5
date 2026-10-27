@@ -175,7 +175,11 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
         // existing profile silently run without memory until the trader found the
         // switch, and a stored false still means the trader said no.
         setIsGlobalMemoryEnabled(profile.settings?.isGlobalMemoryEnabled ?? true);
-        setIsStrategiesEnabled(profile.settings?.isStrategiesEnabled ?? false);
+        // Same reasoning as the memory switch above: the flag now gates the seat
+        // prompt (`activeStrategiesBlock`), and the per-book `enabled` checkbox
+        // is the trader's opt-in — an absent master key must not read as
+        // "refuse every book I enabled". A stored false still means they said no.
+        setIsStrategiesEnabled(profile.settings?.isStrategiesEnabled ?? true);
 
         // Accuracy mode is gone: its two instruction lists fold into Standard on
         // load so typed rules survive instead of vanishing from the notebook.

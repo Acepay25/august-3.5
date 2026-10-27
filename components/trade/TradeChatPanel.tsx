@@ -94,6 +94,10 @@ interface TradeChatPanelProps {
     /** The Settings memory toggle — false strips the notebook-topics block
      *  from the dock seat prompt, the same promise the Chat surface keeps. */
     memoryEnabled?: boolean;
+    /** The Settings → Strategies master switch — false strips the active plans
+     *  and the uploaded books from this dock seat, the same promise the Chat
+     *  surface keeps. */
+    strategiesEnabled?: boolean;
     symbol: string;
     interval: string;
     providers: ProviderConfig[];
@@ -298,7 +302,7 @@ export const ChartAiDockRail: React.FC<{
 );
 
 const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
-    memoryEnabled, symbol, interval, providers, selectedChatModel, onSelectChatModel, live = false,
+    memoryEnabled, strategiesEnabled, symbol, interval, providers, selectedChatModel, onSelectChatModel, live = false,
     chartLevels, chartDrawings, modelDrawings, addModelDrawings, clearModelDrawings, clearAllDrawings,
     onCaptureChart, getChartSnapshot, bots = [], trades = [], botSessionRequest, groupSessionRequest, onRunAnalysis, onAnalysisError, onStopRun, getAnalysisMessage, onLogProposedTrade, onPlanPresented,
     onChatLevelsChange,
@@ -459,7 +463,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
      */
     const strategiesForPrompt = (): string => {
         try {
-            return activeStrategiesBlock();
+            return activeStrategiesBlock(3, { enabled: strategiesEnabled });
         } catch {
             return '';
         }
@@ -500,7 +504,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         // should meet its own notes under one name wherever it is asked.
         const base = `${TRADE_CHAT_SYSTEM_PROMPT}${skillsBlock ? `\n\n${skillsBlock}` : ''}${strategiesBlock ? `\n\n${strategiesBlock}` : ''}${memoryBlock ? `\n\n${memoryBlock}` : ''}${agent?.notes ? `\n\n## Your private notes\n${agent.notes}` : ''}`;
         return persona ? `${base}\n\n## Your role\n${persona}` : base;
-    }, [symbol, trades]);
+    }, [symbol, trades, memoryEnabled, strategiesEnabled]);
 
     /** What the model reads as "the drawings on the chart": the user's own
      *  shapes PLUS the model's marks from earlier turns — so it sees its own
