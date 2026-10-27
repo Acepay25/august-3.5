@@ -19,7 +19,7 @@
  * swallow-and-continue; surface it.
  */
 
-import { ingestCraftedSkill, ingestCraftedSkillFromDraft, listSkills, type SkillIngestResult } from './SkillMemoryService';
+import { activateSkillForTrigger, ingestCraftedSkill, ingestCraftedSkillFromDraft, isApprovedSkill, listSkills, type SkillIngestResult } from './SkillMemoryService';
 import { takeSkillDraft, type SkillDraft } from '../../utils/skillDrafts';
 import type { LoggedTrade } from '../../types';
 
@@ -37,11 +37,13 @@ export type SkillApprovalResult =
 /** Case-insensitive trigger match — the same comparison the ingest path uses
  *  to refuse a duplicate, so "already learned" means the same thing on both
  *  sides of the write. */
-const findByTrigger = (ifCondition: string): string | null => {
+const findSkill = (ifCondition: string): { name: string; meta: Parameters<typeof isApprovedSkill>[0] } | null => {
     const want = ifCondition.trim().toLowerCase();
     const hit = listSkills().find(s => (s.meta.ifCondition ?? '').trim().toLowerCase() === want);
-    return hit ? hit.file.name : null;
+    return hit ? { name: hit.file.name, meta: hit.meta } : null;
 };
+
+const findByTrigger = (ifCondition: string): string | null => findSkill(ifCondition)?.name ?? null;
 
 /**
  * Approve one draft. `trades` is the journal, used the way the old inline
@@ -82,17 +84,30 @@ export const approveSkillDraft = async (
         return { created: false, reason: 'write-failed', error: e instanceof Error ? e.message : String(e) };
     }
 
-    const nowThere = findByTrigger(trigger);
-    if (!nowThere) {
+    const after = findSkill(trigger);
+    if (!after) {
         // The write path declined, or declined to say so. Do not consume the
         // draft: the human's only copy of this proposal is the inbox row.
         return { created: false, reason: declined ?? 'not-written', ...(detail ? { error: detail } : {}) };
     }
-    takeSkillDraft(draft.id, username || undefined);
-    if (alreadyThere && alreadyThere === nowThere) {
-        return { created: false, reason: 'duplicate', slug: nowThere };
+    if (alreadyThere && alreadyThere === after.name) {
+        // The trigger was already in the library — but a duplicate is not an
+        // approval. If that row is not live, this press is the consent that makes
+        // it live: activate it, and report a real change. Refusing here (the old
+        // behaviour) consumed the draft and told the human a skill that never
+        // injected was "already learned" (docs/AUDIT.md S-1).
+        if (!isApprovedSkill(after.meta)) {
+            const activated = await activateSkillForTrigger(trigger, user);
+            if (activated) {
+                takeSkillDraft(draft.id, username || undefined);
+                return { created: true, slug: activated };
+            }
+        }
+        takeSkillDraft(draft.id, username || undefined);
+        return { created: false, reason: 'duplicate', slug: after.name };
     }
-    return { created: true, slug: nowThere };
+    takeSkillDraft(draft.id, username || undefined);
+    return { created: true, slug: after.name };
 };
 
 /** What an INGEST's named outcome means to the human who just pressed a button
