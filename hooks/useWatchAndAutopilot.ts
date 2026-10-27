@@ -130,21 +130,16 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
     const [autopilotResolutions, setAutopilotResolutions] = useState<Record<string, AutopilotResolution>>({});
 
     // Diff ids instead of re-registering every message on every stream
-    // chunk — register() re-arms the 60s detection loop, so the old effect
-    // perpetually reset the timers while a debate streamed.
+    // chunk — register() re-arms the 60s detection loop, so a re-register per
+    // chunk would perpetually reset the timers.
     const autopilotRegisteredRef = useRef<Set<string>>(new Set());
-    const autopilotLeverageRef = useRef<number>(defaultLeverage());
+    /** The leverage each registered plan was armed with, so a conversation whose
+     *  leverage changed re-arms only ITS plans. */
+    const autopilotLeverageById = useRef<Map<string, number>>(new Map());
 
     useEffect(() => {
-        const leverage = activeConversation?.leverage || defaultLeverage();
-        if (autopilotLeverageRef.current !== leverage) {
-            // Leverage changed — re-register everything with the new value.
-            autopilotRegisteredRef.current.clear();
-            autopilotLeverageRef.current = leverage;
-        }
-
         const trackableIds = new Set<string>();
-        messages.forEach(m => {
+        const register = (m: Message, leverage: number): void => {
             const trackable = m.outcome === TradeOutcome.PENDING
                 && !!m.analysis
                 && m.analysis.direction !== 'Neutral'
@@ -152,25 +147,44 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
                 && (m.analysis.direction === 'Long' || m.analysis.direction === 'Short')
                 && (m.analysis.entryPoints?.length ?? 0) > 0
                 && !!m.analysis.stopLoss;
-            if (trackable) {
-                trackableIds.add(m.id);
-                if (!autopilotRegisteredRef.current.has(m.id)) {
-                    OutcomeAutopilotService.register(m.id, m.analysis!, leverage);
-                    autopilotRegisteredRef.current.add(m.id);
+            if (!trackable) {
+                if (autopilotRegisteredRef.current.has(m.id)) {
+                    OutcomeAutopilotService.unregister(m.id);
+                    autopilotRegisteredRef.current.delete(m.id);
+                    autopilotLeverageById.current.delete(m.id);
                 }
-            } else if (autopilotRegisteredRef.current.has(m.id)) {
-                OutcomeAutopilotService.unregister(m.id);
-                autopilotRegisteredRef.current.delete(m.id);
+                return;
             }
-        });
-        // Messages removed from the conversation entirely.
+            trackableIds.add(m.id);
+            const armedWith = autopilotLeverageById.current.get(m.id);
+            if (!autopilotRegisteredRef.current.has(m.id) || armedWith !== leverage) {
+                OutcomeAutopilotService.register(m.id, m.analysis!, leverage);
+                autopilotRegisteredRef.current.add(m.id);
+                autopilotLeverageById.current.set(m.id, leverage);
+            }
+        };
+
+        // EVERY accepted plan, not only the open thread's. The registration used to
+        // read `messages` (the conversation on screen) and unregister everything
+        // else on a switch, so a plan made in one thread stopped being watched the
+        // moment the trader looked at another (docs/AUDIT.md §6). Plans live in
+        // conversations, and each conversation carries its own leverage.
+        for (const conv of conversationHistory) {
+            const leverage = conv.leverage || defaultLeverage();
+            // The ACTIVE thread is read from live `messages`: a streaming turn
+            // writes there first, and its own settle path decides the outcome.
+            const rows = conv.id === activeConversationId ? messages : (conv.messages ?? []);
+            for (const m of rows) register(m, leverage);
+        }
+        // Plans from a thread that is no longer in history at all.
         for (const id of [...autopilotRegisteredRef.current]) {
             if (!trackableIds.has(id)) {
                 OutcomeAutopilotService.unregister(id);
                 autopilotRegisteredRef.current.delete(id);
+                autopilotLeverageById.current.delete(id);
             }
         }
-    }, [messages, activeConversation?.leverage]);
+    }, [messages, conversationHistory, activeConversationId]);
 
     // Startup catch-up: once messages load, verify pending trades once
     // (covers outcomes that resolved while the app was closed).
