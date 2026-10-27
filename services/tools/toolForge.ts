@@ -360,9 +360,21 @@ const load = (): ForgedTool[] => {
     } catch { return []; }
 };
 
-const save = (items: ForgedTool[]): void => {
-    if (typeof window === 'undefined' || !window.localStorage) return;
-    try { window.localStorage.setItem(KEY, JSON.stringify(items)); } catch { /* quota — ignore */ }
+/**
+ * Persist the list, and SAY whether it landed.
+ *
+ * It used to return `void` and swallow a quota error, so the caller reported the
+ * intent: `forge_tool` answered `{proposed:true}` to a model while
+ * `localStorage.getItem('desk_tools_forged_v1')` was null (reproduced in the
+ * browser, docs/AUDIT.md T-5), and a human's Approve rendered as done after
+ * writing nothing. Every writer here now has to look at the answer.
+ */
+const save = (items: ForgedTool[]): boolean => {
+    if (typeof window === 'undefined' || !window.localStorage) return false;
+    try {
+        window.localStorage.setItem(KEY, JSON.stringify(items));
+        return true;
+    } catch { return false; }
 };
 
 export const loadForgedTools = (): ForgedTool[] => load();
@@ -400,7 +412,12 @@ export const proposeForgedTool = (proposal: ToolForgeProposal, proposedBy?: stri
         updatedAt: nowIso(),
         proposedBy,
     };
-    save([...items, tool]);
+    if (!save([...items, tool])) {
+        // Nothing was stored, so nothing may be reported as stored. The caller's
+        // catch turns this into a real failure the model can act on, instead of a
+        // receipt for a tool that does not exist.
+        throw new Error('the proposal could not be stored (storage is full or unavailable), so nothing was saved');
+    }
     try {
         window.dispatchEvent(new CustomEvent(FORGED_PROPOSAL_EVENT, { detail: { id: tool.id, name: proposal.name } }));
     } catch { /* non-DOM envs — ignore */ }
@@ -414,8 +431,9 @@ export const approveForgedTool = (id: string): ForgedTool | undefined => {
     if (!t) return undefined;
     t.status = 'confirmed';
     t.updatedAt = nowIso();
-    save(items);
-    return t;
+    // Undefined means the write did not land, so the caller must not report a
+    // state change it cannot see after a reload.
+    return save(items) ? t : undefined;
 };
 
 export const retireForgedTool = (id: string): ForgedTool | undefined => {
@@ -424,11 +442,12 @@ export const retireForgedTool = (id: string): ForgedTool | undefined => {
     if (!t) return undefined;
     t.status = 'retired';
     t.updatedAt = nowIso();
-    save(items);
-    return t;
+    return save(items) ? t : undefined;
 };
 
-export const deleteForgedTool = (id: string): void => save(load().filter(t => t.id !== id));
+/** True when the deletion reached storage. A caller that ignores this reports a
+ *  removal that a reload will undo. */
+export const deleteForgedTool = (id: string): boolean => save(load().filter(t => t.id !== id));
 
 export const recordForgedUse = (id: string, ok: boolean): void => {
     const items = load();
@@ -437,6 +456,9 @@ export const recordForgedUse = (id: string, ok: boolean): void => {
     t.uses += 1;
     if (ok) t.successes += 1;
     t.updatedAt = nowIso();
+    // Deliberately ignored: this runs AFTER the tool's real network call, and
+    // turning a telemetry write into a thrown error would report a successful
+    // request as a failed one. The count is best-effort; the action is not.
     save(items);
 };
 

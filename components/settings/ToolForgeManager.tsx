@@ -34,6 +34,7 @@ const sameTools = (a: ForgedTool[], b: ForgedTool[]): boolean =>
 
 export const ToolForgeManager: React.FC = () => {
     const [tools, setTools] = React.useState<ForgedTool[]>([]);
+    const [saveError, setSaveError] = React.useState<string | null>(null);
 
     React.useEffect(() => {
         // Initial load, then re-read only when the forge ANNOUNCES a change
@@ -50,8 +51,19 @@ export const ToolForgeManager: React.FC = () => {
         return () => window.removeEventListener(FORGED_PROPOSAL_EVENT, sync);
     }, []);
 
-    const act = (fn: () => void): void => {
-        fn();
+    /** Every writer here now reports whether its bytes landed, so a refused write
+     *  cannot render as a state change that a reload silently undoes. */
+    const act = (fn: () => unknown): void => {
+        let result: unknown;
+        try {
+            result = fn();
+        } catch (e) {
+            setSaveError(e instanceof Error ? e.message : 'That change could not be saved.');
+            return;
+        }
+        setSaveError(result === undefined || result === false
+            ? 'That change could not be saved — storage is full or unavailable, so nothing was changed.'
+            : null);
         const next = loadForgedTools();
         setTools(prev => (sameTools(prev, next) ? prev : next));
     };
@@ -62,6 +74,12 @@ export const ToolForgeManager: React.FC = () => {
                 Tools proposed by the models during a tool turn (via <code className="text-zinc-400">forge_tool</code>).
                 A candidate is an inert HTTP recipe — it cannot run until you approve it.
             </p>
+            {saveError && (
+                <p role="alert" data-testid="forge-save-error"
+                    className="rounded-control border border-rose-900/50 bg-rose-950/20 px-3 py-2 text-ui-dense leading-snug text-rose-300">
+                    {saveError}
+                </p>
+            )}
             {tools.length === 0 && (
                 <p className="rounded-control border border-white/5 bg-zinc-900/50 px-3 py-4 text-center text-ui-sm text-zinc-600">
                     No forged tools yet. Models propose one by calling <code className="text-zinc-400">forge_tool</code> when the desk lacks a lookup they need.
