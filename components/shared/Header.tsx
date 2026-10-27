@@ -11,9 +11,7 @@ interface HeaderProps {
     saveStatus: 'SAVED' | 'SAVING' | 'ERROR';
     isAnalysisInProgress: boolean;
     currentVisionData: string[];
-    /** The current surface, named in the header. Navigation itself moved to
-     *  the persistent NavRail (D2) — this is the label that tells you where
-     *  you are, not a control that moves you somewhere. */
+    /** The current surface — the tab strip marks it. */
     surface: AppSurface;
     // Network status
     isOnline?: boolean;
@@ -32,7 +30,7 @@ interface HeaderProps {
     onOpenActivity?: () => void;
     /** Session-popover footer links. The rail's "Live Market" and "View Vision
      *  Data" rows landed here (stage 3): the popover is already the market-
-     *  context home, so the full-screen market view is one hop from it. */
+     * context home, so the full-screen market view is one hop from it. */
     onOpenLiveMarket?: () => void;
     onOpenVisionData?: () => void;
     hasVisionData?: boolean;
@@ -41,17 +39,17 @@ interface HeaderProps {
      *  the hidden sidebar's expand button also carries the update-status dot,
      *  so the one quiet status carrier stays visible in the resting view. */
     onExpandNavRail?: () => void;
-    /** The screen switch, built once by the App and handed to whichever title
-     *  bar this surface actually renders — the band here, the Chat surface's own
-     *  row. A second wiring is how one of them drifts. */
+    /** The screen switch — the v2 tab strip — built once by the App and
+     *  rendered here. The topbar is the ONE navigation on every surface, which
+     *  is what keeps the switch in the same place across a hop. */
     surfaceSwitch?: React.ReactNode;
-    /** Settings, for the same reason: the account row that owned the gear only
-     *  exists on the Chat surface now. */
+    /** The signed-in user's name: the avatar shows its initial. */
+    username?: string;
+    /** Settings. The v2 topbar carries the gear and the account chip on every
+     *  surface, so the Chat surface's account row no longer has to. */
     onOpenSettings?: () => void;
     /** The band's own status cluster, overridable so the App can build it ONCE
-     *  and hand the same node to the Chat surface's own title bar — that surface
-     *  renders no band, and a second wiring of the same callbacks is how one of
-     *  them drifts. Absent, the band wires its own. */
+     *  and hand the same node around. Absent, the band wires its own. */
     status?: React.ReactNode;
 }
 
@@ -69,6 +67,7 @@ export const Header: React.FC<HeaderProps> = memo(({
     hasVisionData = false,
     onExpandNavRail,
     surfaceSwitch,
+    username,
     onOpenSettings,
     status,
 }) => {
@@ -161,180 +160,200 @@ export const Header: React.FC<HeaderProps> = memo(({
     };
 
     return (
-        <header className="sticky top-0 z-20 flex-shrink-0 border-b border-white/[0.06] bg-zinc-900/85 backdrop-blur px-4 py-1.5 sm:px-6 sm:py-2 pt-[calc(env(safe-area-inset-top,0px)+0.375rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+0.5rem)]">
-            <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0 flex items-center gap-3 sm:gap-4 relative">
-                    {/* The rail is hidden — this is the hamburger's honest
-                        successor: one quiet button that gives the left column
-                        back, riding the update dot while it is the only nav
-                        surface on screen. */}
-                    {onExpandNavRail && <NavExpandButton onExpand={onExpandNavRail} />}
-                    {/* The screen switch, not a label naming the screen. The
-                        destination rows used to sit in the sidebar and the band
-                        then spelled out the same place a second time; the rows
-                        are gone (that was the brief) and this control is now the
-                        one answer to "where am I, and where do I go". */}
+        <header className="sticky top-0 z-20 flex-shrink-0 border-b border-white/[0.06] bg-zinc-950/90 backdrop-blur px-3 sm:px-5 pt-[calc(env(safe-area-inset-top,0px)+0px)]">
+            <div className="flex h-14 items-stretch justify-between gap-3">
+                <div className="flex min-w-0 items-stretch gap-2 sm:gap-4">
+                    {onExpandNavRail && (
+                        <div className="flex items-center">
+                            <NavExpandButton onExpand={onExpandNavRail} />
+                        </div>
+                    )}
+                    {/* The brand, v2 style: the A-mark and the plain-ink word.
+                        The gradient is reserved for the active-tab underline;
+                        the word itself stays quiet ink. */}
+                    <div className="flex select-none items-center gap-2 self-center" aria-label="August">
+                        <svg className="h-6 w-6" viewBox="0 0 24 24" aria-hidden="true">
+                            <defs>
+                                <linearGradient id="topbar-brand-grad" x1="0" y1="0" x2="1" y2="1">
+                                    <stop offset="0" stopColor="var(--color-brand-start)" />
+                                    <stop offset=".52" stopColor="var(--color-brand-mid)" />
+                                    <stop offset="1" stopColor="var(--color-brand-end)" />
+                                </linearGradient>
+                            </defs>
+                            <path d="M12 2 21.5 21h-5.1L12 11.4 7.6 21H2.5L12 2Z" fill="url(#topbar-brand-grad)" />
+                            <rect x="9.1" y="15.7" width="5.8" height="1.5" rx=".75" fill="#0b0b0a" />
+                        </svg>
+                        <span className="text-ui-lede font-semibold tracking-[-0.02em] text-zinc-100">August</span>
+                    </div>
+                    {/* The screen switch — the v2 tab strip. The destination
+                        rows used to sit in the sidebar and the band then spelled
+                        out the same place a second time; the rows are gone and
+                        this strip is the one answer to "where am I, and where
+                        do I go", on every surface alike. */}
                     {surfaceSwitch ?? (
                         <span
                             data-testid="header-surface-label"
-                            className="shrink-0 select-none text-ui-dense font-semibold uppercase tracking-wider text-zinc-300"
+                            className="flex select-none items-center text-ui-sm font-medium text-zinc-300"
                         >
                             {surfaceLabel(surface)}
                         </span>
                     )}
+                </div>
+                {/* Right side, v2 order: the live session state, the shell's
+                    status cluster, settings, account. */}
+                <div className="flex shrink-0 items-center gap-1.5 self-center">
+                    {/* Session Display — the design's live-feed pill, carrying
+                        REAL session state; the popover keeps the market
+                        conditions and the session table. */}
+                    {sessionContext && (
+                        <div className="static sm:relative" ref={sessionModalRef}>
+                            <button
+                                onClick={() => setIsSessionModalOpen(!isSessionModalOpen)}
+                                className="flex items-center gap-1.5 hit-target rounded-full border border-transparent px-2 py-1 text-ui-xs font-medium text-zinc-400 whitespace-nowrap transition-colors duration-[150ms] ease-[var(--ease-snappy)] hover:border-white/[0.08] hover:bg-white/[0.04] hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-zinc-500"
+                                aria-expanded={isSessionModalOpen}
+                                aria-controls="session-details-popover"
+                                aria-haspopup="dialog"
+                            >
+                                <span className={`h-1.5 w-1.5 rounded-full ${sessionContext.isKillZone ? 'bg-rose-500 animate-pulse' :
+                                    sessionContext.currentSession === 'off_hours' ? 'bg-zinc-500' : 'bg-emerald-500 shadow-[0_0_0_3px_rgba(7,181,106,0.12)]'
+                                    }`} />
+                                <span className={sessionContext.isKillZone ? 'text-rose-400' : ''}>
+                                    {sessionContext.currentSession === 'overlap' ? 'Ldn/NY' :
+                                        sessionContext.currentSession === 'new_york' ? 'NY' :
+                                            sessionContext.currentSession === 'london' ? 'London' :
+                                                sessionContext.currentSession === 'asian' ? 'Asia' : 'Off'}
+                                </span>
+                            </button>
 
-                    <div className="flex flex-col justify-center">
-                        <div className="flex items-center gap-3">
-                            {/* The serif wordmark left the band with the
-                                destination rows: the reference's title bar names
-                                the conversation, not the product, and once the
-                                switch marks the screen the brand was the third
-                                thing in a row saying where you are. */}
-                            {/* Session Display */}
-                            {sessionContext && (
-                                <div className="static sm:relative" ref={sessionModalRef}>
-                                    <button
-                                        onClick={() => setIsSessionModalOpen(!isSessionModalOpen)}
-                                        className="flex items-center gap-1.5 hit-target px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded-full border border-white/5 hover:border-white/10 text-ui-xs font-medium text-zinc-400 whitespace-nowrap transition-colors duration-[150ms] ease-[var(--ease-snappy)] focus-visible:ring-2 focus-visible:ring-zinc-500"
-                                        aria-expanded={isSessionModalOpen}
-                                        aria-controls="session-details-popover"
-                                        aria-haspopup="dialog"
-                                    >
-                                        <span className={`w-1.5 h-1.5 rounded-full ${sessionContext.isKillZone ? 'bg-rose-500 animate-pulse' :
-                                            sessionContext.currentSession === 'off_hours' ? 'bg-zinc-500' : 'bg-emerald-500'
-                                            }`} />
-                                        <span className={sessionContext.isKillZone ? 'text-rose-400' : ''}>
-                                            {sessionContext.currentSession === 'overlap' ? 'Ldn/NY' :
-                                                sessionContext.currentSession === 'new_york' ? 'NY' :
-                                                    sessionContext.currentSession === 'london' ? 'London' :
-                                                        sessionContext.currentSession === 'asian' ? 'Asia' : 'Off'}
-                                        </span>
-                                    </button>
-
-                                    {/* Session Details Modal — a disclosure, not
-                                        a modal: see the no-trap note above. */}
-                                    {isSessionModalOpen && (
-                                             <div id="session-details-popover" role="dialog" aria-label="Session details" className="absolute top-full left-0 sm:left-auto sm:right-0 mt-4 sm:mt-2 w-80 bg-zinc-900 border border-white/10 rounded-bubble shadow-2xl overflow-hidden z-drawer animate-fade-in">
-                                            <div className="p-3 bg-zinc-900">
-                                                {/* Live Market Conditions Section */}
-                                                {liveMarketConditions && (
-                                                    <div className="mb-3 p-2 bg-zinc-800 rounded-control border border-white/5">
-                                                        <div className="flex items-center justify-between mb-1.5">
-                                                            <div className="text-ui-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1">
-                                                                <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 animate-pulse" />
-                                                                LIVE MARKET{liveMarketSymbol ? ` (${baseOf(liveMarketSymbol)})` : ''}
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`text-ui-xs px-2 py-0.5 rounded-full border font-medium ${liveMarketConditions.volatility === 'High' ? 'border-rose-500/40 text-rose-400 bg-rose-500/15' :
-                                                                liveMarketConditions.volatility === 'Medium' ? 'border-amber-500/40 text-amber-400 bg-amber-500/15' :
-                                                                    'border-emerald-500/40 text-emerald-400 bg-emerald-500/15'
-                                                                }`}>
-                                                                 {liveMarketConditions.volatility} Volatility
-                                                            </span>
-                                                            <span className={`text-ui-xs px-2 py-0.5 rounded-full border font-medium ${liveMarketConditions.liquidation === 'High' ? 'border-zinc-300/40 text-zinc-200 bg-zinc-300/15' :
-                                                                liveMarketConditions.liquidation === 'Medium' ? 'border-zinc-500/40 text-zinc-400 bg-zinc-500/15' :
-                                                                    'border-zinc-700/40 text-zinc-500 bg-zinc-700/15'
-                                                                }`}>
-                                                                 {liveMarketConditions.liquidation} Liq
-                                                            </span>
-                                                        </div>
+                            {/* Session Details Modal — a disclosure, not
+                                a modal: see the no-trap note above. */}
+                            {isSessionModalOpen && (
+                                     <div id="session-details-popover" role="dialog" aria-label="Session details" className="absolute top-full left-0 sm:left-auto sm:right-0 mt-4 sm:mt-2 w-80 bg-zinc-900 border border-white/10 rounded-bubble shadow-2xl overflow-hidden z-drawer animate-fade-in">
+                                    <div className="p-3 bg-zinc-900">
+                                        {/* Live Market Conditions Section */}
+                                        {liveMarketConditions && (
+                                            <div className="mb-3 p-2 bg-zinc-800 rounded-control border border-white/5">
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <div className="text-ui-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 animate-pulse" />
+                                                        LIVE MARKET{liveMarketSymbol ? ` (${baseOf(liveMarketSymbol)})` : ''}
                                                     </div>
-                                                )}
-                                                <div className="text-ui-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Sessions</div>
-                                                <div className="space-y-2">
-                                                    {allSessions.map(session => (
-                                                        <div key={session.id} className="flex items-center justify-between text-ui-sm py-0.5">
-                                                            <div className="flex items-center gap-2 min-w-0">
-                                                                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${session.isOpen ? 'bg-emerald-500 shadow-[0_0_8px_rgba(7,181,106,0.6)]' : 'bg-zinc-700'}`} />
-                                                                <span className={session.isOpen ? 'text-white font-medium truncate' : 'text-zinc-500 truncate'} title={session.name.replace(' Session', '')}>{session.name.replace(' Session', '')}</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-1.5 flex-shrink-0">
-                                                                <span className={`text-ui-2xs px-1.5 py-0 rounded-full border whitespace-nowrap ${session.volatility === 'High' ? 'border-rose-500/30 text-rose-400 bg-rose-500/10' :
-                                                                    session.volatility === 'Medium' ? 'border-amber-500/30 text-amber-400 bg-amber-500/10' :
-                                                                        'border-emerald-500/30 text-emerald-400 bg-emerald-500/10'
-                                                                    }`}>
-                                                                     {session.volatility}
-                                                                </span>
-                                                                <div className="text-right w-20 whitespace-nowrap relative">
-                                                                    {session.isOpen ? (
-                                                                        <span className="text-ui-xs text-emerald-400 font-mono">
-                                                                            Closes in {formatDuration(session.closesInMinutes)}
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-ui-xs text-zinc-500 font-mono">
-                                                                            Opens in {formatDuration(session.opensInMinutes)}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    ))}
                                                 </div>
-                                                {sessionContext.warnings.length > 0 && (
-                                                    <div className="mt-3 pt-2 border-t border-white/5">
-                                                        <div className="flex items-center gap-1.5 text-amber-400 mb-1">
-                                                            <ActivityIcon className="w-3 h-3" aria-hidden="true" />
-                                                            <span className="text-ui-xs font-bold">Market Condition</span>
-                                                        </div>
-                                                        <div className="text-ui-xs text-zinc-400 leading-tight">
-                                                            {sessionContext.warnings[0]}
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`text-ui-xs px-2 py-0.5 rounded-full border font-medium ${liveMarketConditions.volatility === 'High' ? 'border-rose-500/40 text-rose-400 bg-rose-500/15' :
+                                                        liveMarketConditions.volatility === 'Medium' ? 'border-amber-500/40 text-amber-400 bg-amber-500/15' :
+                                                            'border-emerald-500/40 text-emerald-400 bg-emerald-500/15'
+                                                        }`}>
+                                                         {liveMarketConditions.volatility} Volatility
+                                                    </span>
+                                                    <span className={`text-ui-xs px-2 py-0.5 rounded-full border font-medium ${liveMarketConditions.liquidation === 'High' ? 'border-zinc-300/40 text-zinc-200 bg-zinc-300/15' :
+                                                        liveMarketConditions.liquidation === 'Medium' ? 'border-zinc-500/40 text-zinc-400 bg-zinc-500/15' :
+                                                            'border-zinc-700/40 text-zinc-500 bg-zinc-700/15'
+                                                        }`}>
+                                                         {liveMarketConditions.liquidation} Liq
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+                                        <div className="text-ui-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Sessions</div>
+                                        <div className="space-y-2">
+                                            {allSessions.map(session => (
+                                                <div key={session.id} className="flex items-center justify-between text-ui-sm py-0.5">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${session.isOpen ? 'bg-emerald-500 shadow-[0_0_8px_rgba(7,181,106,0.6)]' : 'bg-zinc-700'}`} />
+                                                        <span className={session.isOpen ? 'text-white font-medium truncate' : 'text-zinc-500 truncate'} title={session.name.replace(' Session', '')}>{session.name.replace(' Session', '')}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                        <span className={`text-ui-2xs px-1.5 py-0 rounded-full border whitespace-nowrap ${session.volatility === 'High' ? 'border-rose-500/30 text-rose-400 bg-rose-500/10' :
+                                                            session.volatility === 'Medium' ? 'border-amber-500/30 text-amber-400 bg-amber-500/10' :
+                                                                'border-emerald-500/30 text-emerald-400 bg-emerald-500/10'
+                                                            }`}>
+                                                             {session.volatility}
+                                                        </span>
+                                                        <div className="text-right w-20 whitespace-nowrap relative">
+                                                            {session.isOpen ? (
+                                                                <span className="text-ui-xs text-emerald-400 font-mono">
+                                                                    Closes in {formatDuration(session.closesInMinutes)}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-ui-xs text-zinc-500 font-mono">
+                                                                    Opens in {formatDuration(session.opensInMinutes)}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {sessionContext.warnings.length > 0 && (
+                                            <div className="mt-3 pt-2 border-t border-white/5">
+                                                <div className="flex items-center gap-1.5 text-amber-400 mb-1">
+                                                    <ActivityIcon className="w-3 h-3" aria-hidden="true" />
+                                                    <span className="text-ui-xs font-bold">Market Condition</span>
+                                                </div>
+                                                <div className="text-ui-xs text-zinc-400 leading-tight">
+                                                    {sessionContext.warnings[0]}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {(onOpenLiveMarket || (onOpenVisionData && hasVisionData)) && (
+                                            <div className="mt-3 flex items-center gap-3 border-t border-white/5 pt-2">
+                                                {onOpenLiveMarket && (
+                                                    <button type="button" data-testid="session-open-live-market"
+                                                        onClick={() => { setIsSessionModalOpen(false); onOpenLiveMarket(); }}
+                                                        className="text-ui-xs text-zinc-400 underline-offset-2 transition-colors hover:text-zinc-200 hover:underline">
+                                                        Live market view
+                                                    </button>
                                                 )}
-                                                {(onOpenLiveMarket || (onOpenVisionData && hasVisionData)) && (
-                                                    <div className="mt-3 flex items-center gap-3 border-t border-white/5 pt-2">
-                                                        {onOpenLiveMarket && (
-                                                            <button type="button" data-testid="session-open-live-market"
-                                                                onClick={() => { setIsSessionModalOpen(false); onOpenLiveMarket(); }}
-                                                                className="text-ui-xs text-zinc-400 underline-offset-2 transition-colors hover:text-zinc-200 hover:underline">
-                                                                Live market view
-                                                            </button>
-                                                        )}
-                                                        {onOpenVisionData && hasVisionData && (
-                                                            <button type="button" data-testid="session-open-vision-data"
-                                                                onClick={() => { setIsSessionModalOpen(false); onOpenVisionData(); }}
-                                                                className="text-ui-xs text-zinc-400 underline-offset-2 transition-colors hover:text-zinc-200 hover:underline">
-                                                                Vision data
-                                                            </button>
-                                                        )}
-                                                    </div>
+                                                {onOpenVisionData && hasVisionData && (
+                                                    <button type="button" data-testid="session-open-vision-data"
+                                                        onClick={() => { setIsSessionModalOpen(false); onOpenVisionData(); }}
+                                                        className="text-ui-xs text-zinc-400 underline-offset-2 transition-colors hover:text-zinc-200 hover:underline">
+                                                        Vision data
+                                                    </button>
                                                 )}
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
                                 </div>
                             )}
                         </div>
-                    </div>
+                    )}
+                    {status ?? (
+                        <StatusCluster
+                            saveStatus={saveStatus}
+                            isOnline={isOnline}
+                            onOpenActivity={onOpenActivity}
+                        />
+                    )}
+                    {onOpenSettings && (
+                        <button
+                            type="button"
+                            data-testid="header-settings"
+                            onClick={onOpenSettings}
+                            aria-label="Settings"
+                            title="Settings · Ctrl+,"
+                            className="flex h-8 w-8 items-center justify-center rounded-control text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
+                        >
+                            <SettingsIcon className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                    )}
+                    {/* Account chip, v2 style: the initial on a hairline disc,
+                        opening settings — the same destination the Chat
+                        surface's account row used to own alone. */}
+                    {onOpenSettings && (
+                        <button
+                            type="button"
+                            data-testid="header-account"
+                            onClick={onOpenSettings}
+                            aria-label={username ? `Account — ${username}` : 'Account settings'}
+                            title={username ? `${username} — account & settings` : 'Account settings'}
+                            className="flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.12] bg-zinc-800 font-mono text-ui-2xs font-semibold text-zinc-300 transition-colors hover:border-white/[0.28] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
+                        >
+                            {(username?.trim()?.[0] ?? 'A').toUpperCase()}
+                        </button>
+                    )}
                 </div>
-                {/* Right Side: the shell's status cluster, shared with the Chat
-                    surface's own title bar so there is one owner of these four
-                    signals and one opener for the Activity drawer. */}
-                {onOpenSettings && (
-                    /* Settings lived in the rail's account row, which only the
-                       Chat surface has now. A control that vanishes because its
-                       host moved is a feature removed by accident — so it rides
-                       in the title bar wherever there is no account row. */
-                    <button
-                        type="button"
-                        data-testid="header-settings"
-                        onClick={onOpenSettings}
-                        aria-label="Settings"
-                        title="Settings · Ctrl+,"
-                        className="flex h-8 w-8 items-center justify-center rounded-control text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-400"
-                    >
-                        <SettingsIcon className="h-4 w-4" aria-hidden="true" />
-                    </button>
-                )}
-                {status ?? (
-                    <StatusCluster
-                        saveStatus={saveStatus}
-                        isOnline={isOnline}
-                        onOpenActivity={onOpenActivity}
-                    />
-                )}
-
             </div>
         </header >
     );

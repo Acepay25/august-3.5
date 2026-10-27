@@ -75,7 +75,7 @@ const TABS: TabConfig[] = [
  *  here — the duplicated copy is how the overlay version lost its aria-labels. */
 const ExportTray: React.FC<{ trades: LoggedTrade[] }> = ({ trades }) => {
     const empty = trades.length === 0;
-    const cls = 'inline-flex items-center gap-1.5 rounded-control border border-white/[0.07] bg-zinc-800/80 px-2.5 py-1.5 text-ui-xs font-bold uppercase tracking-wide text-zinc-400 transition-colors hover:border-white/20 hover:bg-zinc-700/70 hover:text-zinc-100 disabled:opacity-40';
+    const cls = 'inline-flex items-center gap-1.5 rounded-control border border-white/[0.07] bg-zinc-800/80 px-3 py-1.5 text-ui-xs font-semibold text-zinc-400 transition-colors hover:border-white/20 hover:bg-zinc-700/70 hover:text-zinc-100 disabled:opacity-40';
     return (
         <>
             <button
@@ -208,11 +208,12 @@ const JournalInner: React.FC<JournalProps> = ({
     // could never mount. This branch carries the export tray and tab strip.
     return (
         <div className="flex flex-col h-full bg-surface-page overflow-hidden animate-fade-in" data-testid="journal-view">
-            <div className="shrink-0 px-8 pt-10 pb-2 flex items-start justify-between gap-4">
+            <div className="shrink-0 px-5 pt-7 pb-2 sm:px-8 flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                    <h2 className="font-serif text-3xl tracking-tight text-zinc-100">Journal</h2>
+                    <p className="mb-1.5 text-ui-2xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Performance ledger</p>
+                    <h2 className="font-serif text-ui-display font-medium tracking-[-0.025em] text-zinc-100">Journal</h2>
                     {!documentOpen && (
-                        <p className="text-ui-base text-zinc-500 mt-3">{trades.length} {trades.length === 1 ? 'trade' : 'trades'}</p>
+                        <p className="text-ui-caption text-zinc-500 mt-2">{trades.length} {trades.length === 1 ? 'trade' : 'trades'} · decisions, outcomes, and evidence</p>
                     )}
                 </div>
                 {/* CSV / printable-report export — these buttons used to
@@ -225,7 +226,7 @@ const JournalInner: React.FC<JournalProps> = ({
                 )}
             </div>
             {!documentOpen && (
-            <div ref={tabListRef} role="tablist" aria-label="Journal sections" onKeyDown={handleTabsKeyDown} className="shrink-0 px-8 pt-4 pb-6 flex items-center gap-2 overflow-x-auto custom-scrollbar">
+            <div ref={tabListRef} role="tablist" aria-label="Journal sections" onKeyDown={handleTabsKeyDown} className="shrink-0 px-5 sm:px-8 pt-4 pb-5 flex items-center gap-2 overflow-x-auto border-b border-white/[0.04] custom-scrollbar">
                 {TABS.map((tab) => {
                     const isActive = activeTab === tab.id;
                     return (
@@ -240,7 +241,7 @@ const JournalInner: React.FC<JournalProps> = ({
                             onClick={() => setActiveTab(tab.id)}
                             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-ui-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 ${
                                 isActive
-                                    ? 'bg-zinc-800 text-zinc-100 shadow-sm'
+                                    ? 'bg-zinc-800 text-zinc-100 shadow-sm ring-1 ring-white/[0.06]'
                                     : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900'
                             }`}
                         >

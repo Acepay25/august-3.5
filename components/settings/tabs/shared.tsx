@@ -16,11 +16,11 @@ const SettingsGroup: React.FC<{
     <section className="space-y-1.5">
         {title && (
             <div className="px-1">
-                <h4 className="text-ui-dense font-semibold uppercase tracking-[0.08em] text-zinc-500">{title}</h4>
+                <h4 className="text-ui-dense font-medium text-zinc-400">{title}</h4>
                 {description && <p className="mt-0.5 text-ui-dense leading-relaxed text-zinc-600">{description}</p>}
             </div>
         )}
-        <div className="divide-y divide-white/[0.05] overflow-hidden rounded-bubble border border-white/[0.07] bg-zinc-900/50">
+        <div className="divide-y divide-white/[0.05] overflow-hidden rounded-bubble border border-white/[0.07] bg-zinc-900/70 shadow-sm">
             {children}
         </div>
     </section>
@@ -56,9 +56,10 @@ const SettingsRow: React.FC<{
 );
 
 const SettingsPageHeader: React.FC<{ title: string; description?: string }> = ({ title, description }) => (
-    <header className="border-b border-white/[0.06] pb-3.5">
-        <h3 className="text-lg font-semibold tracking-tight text-zinc-100">{title}</h3>
-        {description && <p className="mt-1 text-ui-sm leading-relaxed text-zinc-500">{description}</p>}
+    <header className="border-b border-white/[0.06] pb-5">
+        <p className="mb-1.5 text-ui-2xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Workspace settings</p>
+        <h3 className="text-ui-display font-medium tracking-[-0.025em] text-zinc-100">{title}</h3>
+        {description && <p className="mt-2 max-w-2xl text-ui-caption leading-relaxed text-zinc-500">{description}</p>}
     </header>
 );
 

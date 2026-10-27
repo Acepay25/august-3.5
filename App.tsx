@@ -2367,14 +2367,11 @@ const App: React.FC = () => {
                     roster threads; the Coach inbox is a Learn tab; the other
                     tabs embed existing components. */}
                 <main className="flex-1 flex flex-col min-h-0 min-w-0 relative bg-zinc-950">
-                    {/* The band, now the content column's own title bar. NOT
-                        mounted on the Chat surface: that surface has a title bar
-                        of its own (the mode pill and the conversation's name),
-                        and stacking a second one above it is the two-bars shape
-                        the reference never has. Its controls arrive there as
-                        `statusCluster` / `navExpand` — the same nodes, built once
-                        above. */}
-                    {surface !== 'agents' && (
+                    {/* The v2 topbar is the ONE shell bar on EVERY surface —
+                        brand, surface tabs, status, settings, account. The Chat
+                        surface keeps its conversation column but no longer its
+                        own navigation: the tabs above own it, which is also
+                        what keeps the switch in the same place on every hop. */}
                     <Header
                         saveStatus={saveStatus}
                         isAnalysisInProgress={isAnalysisInProgress}
@@ -2390,10 +2387,10 @@ const App: React.FC = () => {
                         hasVisionData={currentVisionData.length > 0}
                         status={shellStatus}
                         surfaceSwitch={shellNavSwitch}
+                        username={activeUsername ?? undefined}
                         onOpenSettings={() => setIsSettingsMenuVisible(true)}
                         onExpandNavRail={isNavRailOpen ? undefined : toggleNavRail}
                     />
-                    )}
 
                     {/* The first-run onboarding card used to sit here as a
                         centered banner, but it ate ~50% of the Trade surface
@@ -2579,7 +2576,12 @@ const App: React.FC = () => {
                                             hideSurfaces
                                         />
                                     )}
-                                    surfaceSwitch={shellNavSwitch}
+                                    /* surfaceSwitch and statusCluster are
+                                       deliberately NOT passed: the v2 topbar
+                                       owns navigation and status on every
+                                       surface, and a second switch in the rail
+                                       would be a second answer to the same
+                                       question. */
                                     accountRow={(
                                         <AccountRow
                                             expanded
@@ -2587,7 +2589,6 @@ const App: React.FC = () => {
                                             onOpenSettings={() => setIsSettingsMenuVisible(true)}
                                         />
                                     )}
-                                    statusCluster={shellStatus}
                                     conversations={conversationHistory}
                                     activeConversationId={activeConversationId}
                                     onLoadConversation={(id) => {

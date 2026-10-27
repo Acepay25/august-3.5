@@ -2,8 +2,8 @@
 @plugin "@tailwindcss/typography";
 
 /* ===== MINARA-DERIVED THEME — warm near-black, true semantics =====
-   Arrangement and palette copied from Minara's app tokens: screen #0b0b0a,
-   panels #141412, raised surfaces #1a1a18, hairlines #232320/#2f2f2f, warm
+   Arrangement and palette copied from Minara's app tokens: screen #0c0f13,
+   panels #13171c, raised surfaces #1a1a18, hairlines #232320/#303640, warm
    ink ramp #edede8→#6e6e68, up-green #07b56a, down-red #f75d5f, Minara blue
    accent, and a magenta→pink→orange brand gradient reserved for the wordmark,
    the active nav pill, and hero moments. The neutral utility names (zinc-*)
@@ -13,22 +13,22 @@
   /* Neutrals — warm near-black surfaces + warm ink. Class-name mapping kept
      stable: 950 page, 900 panels/rail, 800 raised surfaces, 700 hairline &
      active fills, 500/600 dim/faint text, 100/200/300 ink. */
-  --color-zinc-50: #f6f6f1;
-  --color-zinc-100: #edede8;
-  --color-zinc-200: #d6d6d0;
-  --color-zinc-300: #b7b7b1;
-  --color-zinc-400: #a3a39d;
-  --color-zinc-500: #8c8c86;
+  --color-zinc-50: #f5f7fa;
+  --color-zinc-100: #e8ecf1;
+  --color-zinc-200: #d3d9e1;
+  --color-zinc-300: #b6bfcb;
+  --color-zinc-400: #9aa6b5;
+  --color-zinc-500: #8591a1;
   /* zinc-600 is bumped one warm step above Minara's ramp end (#6e6e68,
      3.84:1) so the ~250 text-zinc-600 micro-labels at 9-11px clear WCAG AA:
-     4.82:1 on page #0b0b0a, 4.52:1 on panels #141412. Side effects audited:
+     4.82:1 on page #0c0f13, 4.52:1 on panels #13171c. Side effects audited:
      bg/border/ring/placeholder consumers are text-free fills, affordances,
      or hover states — all improve from being slightly brighter. */
-  --color-zinc-600: #7e7e78;
-  --color-zinc-700: #2f2f2f;
-  --color-zinc-800: #1f1f1c;
-  --color-zinc-900: #141412;
-  --color-zinc-950: #0b0b0a;
+  --color-zinc-600: #7f8a99;
+  --color-zinc-700: #303640;
+  --color-zinc-800: #1c2128;
+  --color-zinc-900: #13171c;
+  --color-zinc-950: #0c0f13;
 
   /* Accent / primary — Minara blue */
   --color-cyan-100: #e3f1fe;
@@ -122,9 +122,9 @@
 
   /* Brand gradient (Minara: magenta → pink → orange). Reserved: wordmark,
      active-nav indicator, hero display type — never body copy or tables. */
-  --color-brand-start: #eb53ff;
-  --color-brand-mid: #ff538e;
-  --color-brand-end: #ff9a32;
+  --color-brand-start: #8b7cff;
+  --color-brand-mid: #c084fc;
+  --color-brand-end: #f0a6c0;
 
   /* ── Semantic aliases ─────────────────────────────────────────────────────
      The names the design spec actually talks in. Every value here is an alias
@@ -137,21 +137,21 @@
      Declared in the --color-* namespace on purpose: that is what makes them
      Tailwind utilities (`bg-surface-page`, `text-ink-tertiary`) as well as
      readable custom properties, which is what lets a component migrate off a
-     `bg-[#0b0b0a]` literal without inventing a parallel CSS rule.
+     `bg-[#0c0f13]` literal without inventing a parallel CSS rule.
 
      These are the BASE step of each family. The full ramps (emerald-100…950,
      rose-100…950) stay above and remain the way to ask for a lighter or
      darker shade; these four name the meaning, not a shade list. */
-  --color-surface-page: #0b0b0a;    /* = zinc-950, the app's ground */
-  --color-surface-panel: #141412;   /* = zinc-900, panels and the rail */
-  --color-surface-raised: #1f1f1c;  /* = zinc-800, raised surfaces */
-  --color-hairline: #2f2f2f;         /* = zinc-700 — borders/dividers. The spec
+  --color-surface-page: #0c0f13;    /* = zinc-950, the app's ground */
+  --color-surface-panel: #13171c;   /* = zinc-900, panels and the rail */
+  --color-surface-raised: #1c2128;  /* = zinc-800, raised surfaces */
+  --color-hairline: #303640;         /* = zinc-700 — borders/dividers. The spec
                                    names this --stroke-hairline; it lives in
                                    the --color-* namespace here so it also
                                    yields a `border-hairline` utility. */
-  --color-ink-primary: #f6f6f1;     /* = zinc-50 */
-  --color-ink-secondary: #a3a39d;   /* = zinc-400 (see note below) */
-  --color-ink-tertiary: #7e7e78;    /* = zinc-600, the AA-tuned faint step */
+  --color-ink-primary: #f5f7fa;     /* = zinc-50 */
+  --color-ink-secondary: #9aa6b5;   /* = zinc-400 (see note below) */
+  --color-ink-tertiary: #7f8a99;    /* = zinc-600, the AA-tuned faint step */
   --color-trade-up: #07b56a;         /* = emerald-500 — gains, up, Long, WIN */
   --color-trade-down: #f75d5f;       /* = rose-500 — losses, down, Short, LOSS */
   --color-warn: #f08800;             /* = amber-500 — warnings, watch */
@@ -383,7 +383,7 @@
   align-items: center;
   justify-content: center;
   gap: 18px;
-  background: #0b0b0a;
+  background: #0c0f13;
   transition: opacity 0.22s var(--ease-snappy), transform 0.22s var(--ease-snappy);
 }
 
@@ -482,7 +482,7 @@
   height: 2px;
   border-radius: 1px;
   overflow: hidden;
-  background: #2f2f2f;
+  background: #303640;
 }
 
 .splash-bar {
@@ -552,7 +552,7 @@
   height: 3px;
   border-radius: 2px;
   overflow: hidden;
-  background: #2f2f2f;
+  background: #303640;
 }
 
 .update-bar {
@@ -633,8 +633,9 @@ body {
 .ui-panel {
   overflow: hidden;
   border-radius: var(--radius-bubble);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(20, 20, 18, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--color-surface-panel);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.025);
 }
 @keyframes stream-fade {
   from { opacity: 0.35; }
@@ -926,7 +927,7 @@ body {
    failed call's response is identified before a byte is read. */
 .tool-row-failed-chip {
   color: var(--color-rose-300);
-  border-color: var(--color-rose-400/40);
+  border-color: color-mix(in srgb, var(--color-rose-400) 40%, transparent);
 }
 /* The honest refusal, matching the `imageOmitted` row's precedent: a tool row
    whose bytes were not kept SAYS so instead of opening onto a blank box that
@@ -1182,11 +1183,29 @@ body.motion-reduced {
 /* Shared column for messages + composer so they share one width. */
 .chat-column {
   width: 100%;
-  /* Minara's chat measure (--chat-v2-measure): 880px reading column shared
-     by messages and composer. */
-  max-width: 880px;
+  /* A little more air than the old 880px measure: long analyses remain a
+     reading column while tool output and decision tables stop feeling cramped. */
+  max-width: 920px;
   margin-left: auto;
   margin-right: auto;
+}
+
+/* Quiet identity and depth for the conversation's empty state. The gradients
+   are static, low-chroma and brand-owned; they never sit behind market data. */
+.chat-hero-grid {
+  background:
+    radial-gradient(42rem 24rem at 50% 38%, color-mix(in srgb, var(--color-brand-start) 7%, transparent), transparent 68%),
+    linear-gradient(color-mix(in srgb, var(--color-zinc-700) 16%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-zinc-700) 16%, transparent) 1px, transparent 1px);
+  background-size: auto, 48px 48px, 48px 48px;
+  background-position: center;
+}
+
+.august-wordmark {
+  background: linear-gradient(105deg, var(--color-zinc-100) 12%, var(--color-brand-start) 58%, var(--color-brand-mid) 82%, var(--color-brand-end));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* ===== SAFE AREA INSETS (notched / punch-hole devices) =====
@@ -1216,7 +1235,7 @@ code,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2f2f2f;
+  background: #303640;
   /* zinc-700 */
   border-radius: 999px;
 }
@@ -1469,21 +1488,21 @@ code,
 /* Solid charcoal surfaces — glassmorphism (translucency + blur) is
    intentionally removed; cards render on opaque zinc fills. */
 .glass {
-  background: #141412; /* zinc-900 */
+  background: #13171c; /* zinc-900 */
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* Reduce blur on mobile to save GPU */
 @media (max-width: 640px) {
   .glass {
-    background: #141412;
+    background: #13171c;
     /* zinc-900 fallback */
-    border-bottom: 1px solid #1f1f1c;
+    border-bottom: 1px solid #1c2128;
   }
 
   .glass-panel {
-    background: #141412 !important;
-    border: 1px solid #1f1f1c !important;
+    background: #13171c !important;
+    border: 1px solid #1c2128 !important;
   }
 
   /* Disable heavy box-shadows on mobile */
@@ -1491,12 +1510,12 @@ code,
   .shadow-xl,
   .shadow-lg {
     box-shadow: none !important;
-    border: 1px solid #1f1f1c;
+    border: 1px solid #1c2128;
   }
 }
 
 .glass-panel {
-  background: #1f1f1c; /* zinc-800 */
+  background: #1c2128; /* zinc-800 */
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -1508,7 +1527,7 @@ body,
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background-color: #0b0b0a;
+  background-color: #0c0f13;
   /* zinc-950 matches app theme to prevent white flashes */
 }
 
@@ -1670,7 +1689,7 @@ select[class*="focus-visible:ring"]:focus-visible,
 /* Custom thin scrollbar for content areas */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #2f2f2f transparent;
+  scrollbar-color: #303640 transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -1683,7 +1702,7 @@ select[class*="focus-visible:ring"]:focus-visible,
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #2f2f2f;
+  background: #303640;
   border-radius: 4px;
 }
 
@@ -1742,5 +1761,3 @@ select {
     cursor: not-allowed;
   }
 }
-
-

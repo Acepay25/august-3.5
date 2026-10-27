@@ -946,9 +946,14 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     and not the position of the control that changed it. The
                     put-away toggle keeps the right edge — the SAME toggle the
                     rail renders, so the two columns cannot disagree about
-                    whether one is open. */}
+                    whether one is open. A wordmark above this row was tried and
+                    removed: it pushed the switch down ~67px and the hop check
+                    (which pins the switch across the hop) went red. */}
                 {(switchInRail || onToggleRailExpanded) && (
-                    <div className="flex shrink-0 items-center justify-between gap-2 px-2 pb-1 pt-2.5">
+                    <div className="flex shrink-0 items-center justify-between gap-2 px-2 pb-1 pt-2">
+                        {/* pt-2, not pt-2.5: the header band's effective top
+                            padding is 8px, and the hop check pins this switch's
+                            y to the header's across the Chat ⇄ Trade hop. */}
                         {switchInRail ? surfaceSwitch : <span aria-hidden />}
                         {onToggleRailExpanded && (
                             <button type="button" onClick={onToggleRailExpanded} data-testid="rail-collapse"
@@ -981,8 +986,8 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             selectThread({ kind: 'team' });
                             composerRef.current?.focus();
                         }}
-                        className="group flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-ui-caption text-zinc-400 transition-colors duration-[120ms] ease-[var(--ease-snappy)] hover:bg-white/[0.06] hover:text-zinc-100">
-                        <Plus className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden="true" />
+                        className="group flex w-full items-center gap-2.5 rounded-control border border-white/[0.08] bg-zinc-800/60 px-2.5 py-2 text-left text-ui-caption font-medium text-zinc-200 shadow-sm transition-colors duration-[120ms] ease-[var(--ease-snappy)] hover:border-white/[0.14] hover:bg-zinc-800 hover:text-zinc-100">
+                        <Plus className="h-4 w-4 shrink-0 text-zinc-400" aria-hidden="true" />
                         <span className="flex-1 truncate" title="New chat">New chat</span>
                     </button>
                     {onOpenCoach && (
@@ -1283,7 +1288,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             message, so they live in the composer now. */}
                         <div
                             data-testid="chat-header"
-                            className="flex shrink-0 items-center gap-3 border-b border-white/[0.06] px-4 py-2"
+                            className="flex shrink-0 items-center gap-3 border-b border-white/[0.06] bg-zinc-900/25 px-4 py-2"
                         >
                             {/* The shell's collapsed-rail button, rendered from
                                 the SAME state the column hides under. This
@@ -1316,7 +1321,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     control, and it now reaches this column too.
                                     A second one made the same action live in
                                     two places with two different states. */}
-                                <span className="min-w-0 truncate text-ui-sm font-semibold text-zinc-200" title={activeBot
+                                <span className="min-w-0 truncate text-ui-caption font-medium tracking-[-0.01em] text-zinc-200" title={activeBot
                                         ? `@${activeBot.name}`
                                         /* The desk pane IS the active chat session —
                                             loaded App conversations included — so the
@@ -1365,7 +1370,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             removed, which is what used to render here and made
                             the two states impossible to tell apart. */}
                         <div data-testid="agents-thread-column"
-                            className={`flex min-h-0 flex-1 flex-col ${thread.length === 0 ? 'justify-center' : ''}`}>
+                            className={`flex min-h-0 flex-1 flex-col ${thread.length === 0 ? 'chat-hero-grid justify-center' : ''}`}>
                         <div className={`${thread.length === 0 ? 'shrink-0' : 'relative min-h-0 flex-1'}`}>
                         {/* `h-full` is load-bearing, not decoration: an
                             overflow-y-auto box with auto height grows to its
@@ -1373,19 +1378,41 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             the horizontal pad made the whole thread unscrollable. */}
                         <div ref={scroller} onScroll={onScrollerScroll} className="h-full overflow-y-auto custom-scrollbar px-4">
                             {thread.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center px-6 py-2 text-center">
-                                    <Bot className="mb-3 h-8 w-8 text-zinc-500" aria-hidden="true" />
-                                    <h2 className="font-serif text-3xl font-normal tracking-tight text-zinc-100">{greeting(username || 'trader')}</h2>
-                                    <p className="mt-2 max-w-md text-ui-sm leading-relaxed text-zinc-500">
+                                <div className="chat-column flex flex-col items-center justify-center px-6 py-4 text-center">
+                                    <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-bubble border border-white/[0.08] bg-zinc-900/80 text-zinc-300 shadow-lg">
+                                        <Bot className="h-5 w-5" aria-hidden="true" />
+                                    </div>
+                                    <p className="mb-2 text-ui-2xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Your market research desk</p>
+                                    <h2 className="font-serif text-ui-display font-medium tracking-[-0.035em] text-zinc-100">{greeting(username || 'trader')}</h2>
+                                    <p className="mt-3 max-w-xl text-ui-caption leading-relaxed text-zinc-500">
                                         {activeBot
                                             ? botIsolated
                                                 ? `@${activeBot.name} thinks from its own notes only — it is isolated from the shared notebook.`
                                                 : `@${activeBot.name} reads its own notes and the shared notebook on every turn.`
-                                            : 'Pick an agent on the left and it answers in its own voice — or ask the desk, which can check the tape and present a trade.'}
+                                            : 'Ask a question, inspect the evidence, and decide for yourself. August can read the tape, your plans, and your journal — it never places a trade.'}
                                     </p>
+                                    {!activeBot && (
+                                        <div className="mt-6 grid w-full max-w-2xl gap-2 sm:grid-cols-3">
+                                            {[
+                                                { label: 'Read the market', detail: `${sessionSymbol} · ${sessionInterval}`, prompt: `Read ${sessionSymbol} on ${sessionInterval}. Summarize the observed structure, liquidity, and invalidation conditions without making a recommendation.` },
+                                                { label: 'Stress-test a plan', detail: 'Costs, risk, and scenarios', prompt: 'Help me stress-test a trade plan. Ask for the entry, stop, target, size, and fees, then show the risk arithmetic and scenario sensitivity.' },
+                                                { label: 'Review my journal', detail: 'Patterns with sample sizes', prompt: 'Review my recent journal for repeatable patterns. Separate observations from small-sample noise and cite the trades behind each observation.' },
+                                            ].map(item => (
+                                                <button
+                                                    key={item.label}
+                                                    type="button"
+                                                    onClick={() => { setText(item.prompt); composerRef.current?.focus(); }}
+                                                    className="rounded-bubble border border-white/[0.07] bg-zinc-900/75 px-3.5 py-3 text-left shadow-sm transition-colors hover:border-white/[0.14] hover:bg-zinc-800/80"
+                                                >
+                                                    <span className="block text-ui-caption font-medium text-zinc-200">{item.label}</span>
+                                                    <span className="mt-1 block text-ui-dense text-zinc-500">{item.detail}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
-                                <div className="chat-column space-y-4 py-6" data-testid="agent-thread"
+                                <div className="chat-column space-y-7 py-8" data-testid="agent-thread"
                                     // A transcript is a log: rows are appended and the
                                     // older ones scroll away, which is what `role="log"`
                                     // means to assistive tech. `aria-busy` is the part
@@ -1507,7 +1534,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             {!activeBot && modelFallback && (
                                 <ModelFallbackBanner modelIssue={modelFallback.issue} provider={modelFallback.provider} />
                             )}
-                            <div data-testid="chat-composer" className="chat-column rounded-bubble border border-white/[0.08] bg-zinc-900/90 shadow-xl backdrop-blur-md p-2.5 transition-colors focus-within:border-zinc-500">
+                            <div data-testid="chat-composer" className="chat-column rounded-bubble border border-white/[0.09] bg-zinc-900 p-3 shadow-xl transition-colors focus-within:border-cyan-500/40">
                                 <input type="file" multiple accept="image/*" className="hidden"
                                     ref={fileInputRef} data-testid="composer-file"
                                     onChange={e => { attachFiles(e.target.files); e.target.value = ''; }} />
