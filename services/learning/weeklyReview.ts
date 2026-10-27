@@ -48,6 +48,10 @@ export interface WeeklyReviewDigest {
         wins: number;
         losses: number;
         netPnlUsd: number;
+        /** How many of `closed` actually carry a dollar figure. A journal of
+         *  percentage-only trades sums to `$0`, and a `$0` week is a fabrication
+         *  the coach prompt is then told to be "grounded in" (docs/AUDIT.md A-5). */
+        dollarRows: number;
         avgR: number | null;
         adherenceFollowedPct: number | null;
         topMistake: string | null;
@@ -77,11 +81,13 @@ export const buildWeekStats = (trades: LoggedTrade[], nowMs: number): WeeklyRevi
     const followedN = analytics.adherence.followed.n;
     const brokenN = analytics.adherence.broken.n;
     const topCost = analytics.mistakeCost[0];
+    const withDollars = closed.filter(t => typeof t.pnlAmount === 'number');
     return {
         closed: closed.length,
         wins: wins.length,
         losses: losses.length,
-        netPnlUsd: closed.reduce((s, t) => s + (typeof t.pnlAmount === 'number' ? t.pnlAmount : 0), 0),
+        netPnlUsd: withDollars.reduce((s, t) => s + (t.pnlAmount as number), 0),
+        dollarRows: withDollars.length,
         avgR: rs.length > 0 ? rs.reduce((s, r) => s + r, 0) / rs.length : null,
         adherenceFollowedPct: followedN + brokenN > 0
             ? Math.round((followedN / (followedN + brokenN)) * 100)
@@ -91,9 +97,23 @@ export const buildWeekStats = (trades: LoggedTrade[], nowMs: number): WeeklyRevi
     };
 };
 
+/** Does this week actually have dollar figures? One predicate, so the prompt the
+ *  coach is grounded in and the card the trader reads cannot disagree about it. */
+export const weekPnlCaptured = (s: WeeklyReviewDigest['stats']): boolean =>
+    (s.dollarRows ?? s.closed) > 0;
+
+/** The money, or the honest absence of it. A digest stored before `dollarRows`
+ *  existed has no way to say which rows carried dollars, so it is read as the
+ *  figure it printed — and it is regenerated weekly regardless. */
+export const weekPnlText = (s: WeeklyReviewDigest['stats']): string => {
+    if (!weekPnlCaptured(s)) return 'not captured';
+    const partial = s.dollarRows < s.closed ? ` (${s.dollarRows}/${s.closed} rows)` : '';
+    return `$${Math.round(s.netPnlUsd)}${partial}`;
+};
+
 const statsLines = (s: WeeklyReviewDigest['stats']): string =>
     `Closed trades (7d): ${s.closed} (${s.wins}W/${s.losses}L)\n` +
-    `Net P&L: $${Math.round(s.netPnlUsd)}${s.avgR !== null ? ` · avg R: ${s.avgR.toFixed(2)}` : ''}\n` +
+    `Net P&L: ${weekPnlText(s)}${s.avgR !== null ? ` · avg R: ${s.avgR.toFixed(2)}` : ''}\n` +
     `Plan adherence: ${s.adherenceFollowedPct !== null ? `${s.adherenceFollowedPct}% followed` : 'not tagged'}\n` +
     (s.topMistake ? `Most expensive mistake: ${s.topMistake}\n` : '') +
     (s.givebackDays > 0 ? `Giveback days (green turned red): ${s.givebackDays}\n` : '');

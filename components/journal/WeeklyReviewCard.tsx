@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { loadWeeklyReview, WeeklyReviewDigest } from '../../services/learning/weeklyReview';
+import { loadWeeklyReview, weekPnlCaptured, weekPnlText, WeeklyReviewDigest } from '../../services/learning/weeklyReview';
 import { fmtRMultiple } from '../../utils/riskReward';
 
 const pctOrDash = (v: number | null | undefined): string =>
@@ -30,7 +30,9 @@ export const WeeklyReviewCard: React.FC<{ username: string }> = ({ username }) =
             <p className="mt-2 text-ui-base leading-relaxed text-zinc-200">{digest.impulse}</p>
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-ui-dense text-zinc-500 tabular-nums">
                 <span>{s.closed} closed ({s.wins}W/{s.losses}L)</span>
-                <span>Net ${Math.round(s.netPnlUsd)}</span>
+                {/* The same derivation the coach prompt was grounded in: a week of
+                    percentage-only trades reads "P&L not captured", never "Net $0". */}
+                <span>{weekPnlCaptured(s) ? `Net ${weekPnlText(s)}` : 'P&L not captured'}</span>
                 {s.avgR !== null && <span>avg R {fmtRMultiple(s.avgR)}</span>}
                 {s.adherenceFollowedPct !== null && <span>adherence {s.adherenceFollowedPct}%</span>}
                 {s.topMistake && <span>costliest: {s.topMistake}</span>}
