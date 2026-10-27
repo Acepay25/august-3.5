@@ -367,7 +367,15 @@ export const proposedTicketSize = (
  *  row this receipt becomes. Restating them here printed the same four numbers
  *  twice in one turn — once in prose, once under a card that labels them — so
  *  the text names the plan (direction, symbol, plan id) and stops there. */
-export const buildProposedTradeMessage = (p: TradeProposal, id: string): Message => ({
+export const buildProposedTradeMessage = (
+    p: TradeProposal,
+    id: string,
+    /** The message that PRESENTED the plan. Its provenance is copied, because
+     *  settlement reads `modelsUsed`/`runStats` off the accepted row: without it
+     *  the journal row for an accepted plan could not name the model that made
+     *  the call (docs/AUDIT.md A-6). */
+    source?: Pick<Message, 'modelsUsed' | 'runStats'>,
+): Message => ({
     id,
     role: MessageRole.AI,
     text: `Logged from Chart AI — ${p.direction} ${p.symbol}${p.planId ? ` · plan ${p.planId}` : ''}`,
@@ -377,4 +385,6 @@ export const buildProposedTradeMessage = (p: TradeProposal, id: string): Message
     // The headline carries the plan id for the reader; the FIELD carries it for
     // the journal row and the dedupe, so neither has to re-parse prose.
     ...(p.planId ? { planId: p.planId } : {}),
+    ...(source?.modelsUsed ? { modelsUsed: source.modelsUsed } : {}),
+    ...(source?.runStats ? { runStats: source.runStats } : {}),
 });

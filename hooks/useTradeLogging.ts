@@ -778,6 +778,12 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             outcome: TradeOutcome.ENTRY_NOT_HIT,
             timestamp: new Date().toISOString(),
             decidedAt: candidate.message.analysis.createdAt || candidate.message.createdAt || new Date().toISOString(),
+            // Both fields the WIN/LOSS path already writes: an expired entry is a
+            // settled row too, and dropping them made "which plan never triggered"
+            // unanswerable for exactly the rows that never triggered
+            // (docs/AUDIT.md A-6).
+            outcomeResolvedAt: new Date().toISOString(),
+            ...(candidate.message.planId ? { planId: candidate.message.planId } : {}),
             resolutionSource,
             leverage: activeConversationLeverage || defaultLeverage(),
             correctedEntry: candidate.correctedEntry,

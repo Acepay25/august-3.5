@@ -1549,7 +1549,10 @@ const App: React.FC = () => {
                     || prev.some(m => m.planId === stamped.planId))) {
                 return prev;
             }
-            return [...prev, buildProposedTradeMessage(stamped, `proposed-${Date.now()}`)];
+            // The plan's own answer row carries the model and run identity, so the
+            // accepted receipt copies them instead of arriving bare.
+            const presenting = [...prev].reverse().find(m => m.role === MessageRole.AI && m.modelsUsed);
+            return [...prev, buildProposedTradeMessage(stamped, `proposed-${Date.now()}`, presenting)];
         });
         return true;
     }, [updateMessages, loggedTrades, confirmDialog, messages]);
