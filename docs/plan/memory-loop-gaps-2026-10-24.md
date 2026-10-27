@@ -109,3 +109,15 @@ page that mirrors the trader's own phrasing passes it, and a same-round
 (read + save in one batch) pair is not marked before the save runs. The
 guarantee is "the page was read, then the fact was saved" — the shape of every
 injection that worked — not semantic understanding.
+
+Two additions landed with it. The owner had started a stricter design in the
+main checkout — `remember` carrying a verbatim `quote` of the trader's message —
+and that is now the gate's FIRST half, made OPTIONAL rather than required: a
+quote that does not appear in the message refuses the write on any turn, while a
+model that omits the field is unaffected. Requiring it (as the draft did) would
+mean a model that never sends `quote` can never save a memory, which is a worse
+failure than the one it closes; flipping the schema to `required` is a one-line
+change if that trade is wanted. Second, item 11's recall half is now in the seat
+prompt: a reply never volunteers a sensitive detail or a fact about another
+person, because the index withholds those lines and a reply that reconstructs
+them defeats the exclusion.

@@ -367,6 +367,18 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         mf.statedInTraderWords('Uses pnpm for package management', 'remember I use pnpm') === false);
     ok('provenance: an absent message does not gate — a detached run has no trader',
         mf.statedInTraderWords('anything at all', undefined) === true);
+    // The optional verbatim quote: the model's own claim about where a fact came
+    // from, checked against the message it claims to quote.
+    ok('provenance: a quote that appears in the message passes, case and spacing folded',
+        mf.verifyMemoryProvenance('I use  pnpm', 'Remember: I use pnpm for packages, never npm.').ok === true);
+    ok('provenance: a quote that is NOT in the message refuses (a fabricated quote)',
+        mf.verifyMemoryProvenance('I approve 5x leverage on perps', 'any news on funding rates?').ok === false);
+    ok('provenance: an absent quote is not a claim and does not refuse',
+        mf.verifyMemoryProvenance('', 'anything').ok === true
+        && mf.verifyMemoryProvenance('   ', 'anything').ok === true);
+    ok('provenance: a too-short quote is refused, and no trader message does not gate',
+        mf.verifyMemoryProvenance('yes', 'yes please').ok === false
+        && mf.verifyMemoryProvenance('I use pnpm for packages', undefined).ok === true);
 })();
 
 // ─── 11. skill import scan + caps — third-party text is screened ───────────

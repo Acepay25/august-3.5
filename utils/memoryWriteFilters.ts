@@ -146,3 +146,38 @@ export const statedInTraderWords = (factText: string, traderText: string | undef
     const need = Math.min(3, Math.max(1, Math.ceil(factTokens.length / 2)));
     return hits >= need && hits >= Math.min(2, factTokens.length);
 };
+
+/**
+ * The model's own claim about where a fact came from, checked against the text
+ * it claims to quote.
+ *
+ * `remember` may carry a `quote`: a short verbatim snippet of the trader's
+ * message the fact came from. A quote that does not appear in that message is a
+ * fabricated provenance claim — the model is asserting the trader said
+ * something they did not — and the write refuses on that basis alone, whatever
+ * else the turn read. Tool output, fetched pages and third-party skill text do
+ * not travel in `lastUserMessage`, so text taken from them cannot be quoted
+ * back; this is the strongest check the executor can make without asking a
+ * model to judge another model.
+ *
+ * `traderText === undefined` (a detached run, a caller that never plumbed the
+ * message) does not gate: there is nothing to check against, and
+ * `statedInTraderWords` still guards turns that read untrusted content. An
+ * empty quote is not a claim — the field is optional, and its absence must not
+ * refuse a write the other rule allows.
+ */
+export const verifyMemoryProvenance = (quote: string, traderText: string | undefined): { ok: boolean; reason?: string } => {
+    const q = (quote || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!q) return { ok: true };
+    if (typeof traderText !== 'string') return { ok: true };
+    if (q.length < 8) {
+        return { ok: false, reason: 'the quote is too short — pass a verbatim snippet (≥8 chars) of the trader\'s own words the fact came from' };
+    }
+    if (q.length > 400) {
+        return { ok: false, reason: 'the quote is too long (≤400 chars) — quote just the clause that states the fact' };
+    }
+    if (!traderText.toLowerCase().replace(/\s+/g, ' ').includes(q)) {
+        return { ok: false, reason: 'the quote does not appear in the trader\'s own message — a fact that appears only in tool output, a fetched page, or a third-party skill cannot be quoted back, and a fabricated quote is not provenance' };
+    }
+    return { ok: true };
+};
