@@ -25,6 +25,10 @@ is a compile failure** — every one is a behaviour or wiring defect the gates c
 (wired, reachable, produces nothing or a claim with no bytes behind it) · Dead (no caller) ·
 Missing (not implemented).
 
+**Every finding below describes HEAD `8f2565e4` as audited.** What has since been fixed, with its
+red/green measurement, is in [docs/STATUS.md](STATUS.md) — this file is the diagnosis, not the
+changelog.
+
 ---
 
 ## 0. Verdict

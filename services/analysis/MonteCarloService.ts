@@ -792,17 +792,6 @@ const pendingRequests = new Map<string, {
     worker?: Worker;
 }>();
 
-const dropPool = (): void => {
-    for (const w of workerPool) {
-        try {
-            w.terminate();
-        } catch (err) {
-            console.warn('[MonteCarlo] Worker terminate failed:', err);
-        }
-    }
-    workerPool.length = 0;
-};
-
 const spawnWorker = (): Worker => {
     const w = new Worker(
         new URL('./monteCarlo.worker.ts', import.meta.url),
@@ -820,16 +809,23 @@ const spawnWorker = (): Worker => {
         }
     };
     w.onerror = (e) => {
-        // Reject all pending requests on worker crash, then DROP THE WHOLE
-        // POOL — pending ids are not tagged per worker, so a sibling's
-        // in-flight request cannot be told apart. Without this the next
-        // postMessage went to a dead worker and its promise never settled
-        // (pending requests leaked forever). The next call spawns fresh.
+        // ONE worker crashing must not cancel everyone else's simulation.
+        // The comment here used to claim "pending ids are not tagged per worker,
+        // so a sibling's in-flight request cannot be told apart" and therefore
+        // rejected the whole map and dropped the whole pool. That stopped being
+        // true when `pending.worker` was added for the timeout path (:790) and
+        // `ejectWorker` (:851) became the surgical version — this handler just
+        // never moved. Measured with two workers: crashing worker 0 rejected a
+        // request worker 1 had ALREADY ANSWERED, and terminated both workers
+        // (docs/AUDIT.md T-3). The next call still spawned fresh, so nothing was
+        // left unsettled — the cost was another seat's finished work.
+        const message = e.message || 'Worker crashed';
         for (const [id, pending] of pendingRequests) {
-            pending.reject(new Error(e.message || 'Worker crashed'));
+            if (pending.worker !== w) continue;
+            pending.reject(new Error(message));
             pendingRequests.delete(id);
         }
-        dropPool();
+        ejectWorker(w);
     };
     return w;
 };

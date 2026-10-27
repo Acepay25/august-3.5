@@ -134,6 +134,23 @@ stale process, which is unattributable (see the project probe-hygiene note). The
 consolidated gate pass; the scratch driver at
 `%TEMP%/august-payload-probe.cjs` is what stands behind "done" for now.
 
+**F-4 — one crashed Monte Carlo worker no longer cancels everyone's simulation** (audit **T-3**).
+`services/analysis/MonteCarloService.ts:810-829` — `onerror` rejected **every** entry in
+`pendingRequests` and called `dropPool()`, justified by a comment claiming "pending ids are not tagged
+per worker". They have been tagged since `:787-793` (`pending.worker`), and `ejectWorker` (`:851`)
+already implemented the surgical version for the timeout path; this handler simply never moved. Now it
+rejects only the entries belonging to the worker that died and ejects that worker. `dropPool` was left
+with no caller by the change, so it is deleted in the same commit rather than shipped as a new warning
+against a ratchet that is exactly full.
+
+*Verified:* red measured at HEAD (`outcomes: ["audit worker crash","audit worker crash"],
+terminated: [true,true]` — a request the healthy worker had already answered was rejected, and a live
+worker was terminated), green after (`["audit worker crash","fulfilled"], [true,false]`), same mock-
+Worker driver, zero page errors. `typecheck` 0; eslint unchanged (1 pre-existing `any` warning at
+`:788`, same at HEAD and in the tree).
+*Deferred:* the synchronous fallback on a timed-out worker still runs on the main thread; its stall
+cost was never measured, so it is recorded as unmeasured in the audit rather than "fixed".
+
 ### Pending
 Status legend: `pending` · `in-progress` · `done`.
 
@@ -143,7 +160,7 @@ Status legend: `pending` · `in-progress` · `done`.
 | **F-2a** | A streaming provider failure must carry its HTTP status, or a real 429 is filed as a generic error and no backoff ever arms | L-1b | **done** — PROVEN |
 | **F-2b** | One armed 429 must not lock every Chat-surface send for the session; the reset is keyed to a cooldown epoch, not to a run registration the `finally` already deleted | L-1 | **done** — CODE-certain, live lock not reproducible (see record) |
 | **F-3** | Forward `onToolPayload` into the desk loop so the transcript can persist and open a tool's real output | L-3 | **done** — PROVEN red and green |
-| **F-4** | Isolate a Monte Carlo worker crash to its own worker (`pending.worker` is already tagged; `ejectWorker` already exists) | T-3 | pending — PROVEN red |
+| **F-4** | Isolate a Monte Carlo worker crash to its own worker (`pending.worker` is already tagged; `ejectWorker` already exists) | T-3 | **done** — PROVEN red and green |
 | **F-5** | Profile switch must pause every save path and adopt identity + data atomically, so profile B is never written into profile A's store | L-2 | pending — CODE |
 | **F-6** | Give `withinToolDeadline` a child `AbortController` and propagate it through every call site; forward `context.signal` to the screener | T-1 | pending — PROVEN red |
 | **F-7** | A forged-tool proposal must report what storage actually did, and the manager UI must surface the failure without turning a telemetry-write error into a false "the request failed" | T-5 | pending — PROVEN red |
