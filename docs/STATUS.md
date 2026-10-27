@@ -296,6 +296,41 @@ the unreachable update/download action.
    it to provider+model, and honouring a `Retry-After` the provider sends, are both trader-visible
    changes.
 
+## Session 7 — chart drawings: the timeframe warp, file-backed session stores, delete-with-session
+
+Backlog item 9. The audit premise ("drawings disappear on timeframe change") was measured
+before it was believed, and the truth was narrower and sneakier: anchors are already stored
+in data space ({unix-second, price}) and the chart instance already survives a timeframe
+switch, so IN-WINDOW anchors came through every switch byte-identical (driver-proven:
+15m→1h→4h→15m→5m→15m). What broke was the window itself — the overlay's converter clamped
+out-of-window times onto the loaded window's first/last bar, and `logicalToCoordinate`
+declined the clamped logical, so a drawing anchored a week back painted NOTHING on the
+shorter timeframe (zero pixels of its colour, measured) and a crossing trendline painted
+with a warped slope from the window edge.
+
+| change | proof |
+|---|---|
+| `toScreen` converts through a measured in-window reference pair (px-per-bar from two neighbouring bars) so ANY anchor lands at its true time position; `toData` extrapolates margin clicks | A/B on the same seeded anchors (one 8 days back, one 1 hour): clamp crossed x=300 at y≈302, the true position crosses at y≈296; the out-of-window trendline that painted ZERO pixels at HEAD now renders its on-screen segment (1466 px) |
+| Session drawing stores move to `storeBackend` — one JSON file per session (user + model buckets) on desktop through the store's atomic temp→rename write, localStorage on web; 400 ms debounced autosave, flush on session/coin switch and app close/hidden; a never-loaded bucket still merges read-merge-write at flush | driver: draw → anchors persist through every switch, reload restores; the store shape is the existing coin map |
+| Deleting a chat session deletes BOTH of its drawing stores (`deleteSessionDrawings` from the panel's one delete path) | driver: the drawings key AND the model bucket are gone after the palette's delete; at HEAD both survived forever |
+| Corrupt/missing store loads empty | driver: garbage JSON in the store → app boots, canvas empty, zero page errors |
+
+Kept as designed: the (sessionId, symbol) keying (a session's two coins hold separate
+sets; two sessions on one coin never share), nothing deleted on switch, undo as the
+state-pop it already is (resets with the bucket on coin/session switch, survives a
+timeframe switch — same session+coin), hline/ray already spanning the visible range.
+Not added, per the item's own rule 8: per-timeframe visibility, templates, cloud sync,
+a redo stack.
+
+**Not verified live:** the desktop FILE path itself (the browser driver exercises the
+localStorage fallback; the file write rides session 5's storeFs, whose atomic temp→rename
+is its own session's verified work) — recorded, not claimed. The legacy per-symbol
+`trade_drawings_v1_<user>_<symbol>` bucket (no-session fallback) stays on localStorage.
+
+Gates: `tsc` ×3 · `lint` 0 errors / 377 warnings · `build` ✓ · flow-doc anchors **457, 0
+unattributed** · contracts 138 · boot/render/skill-approval probes green · driver zero page
+errors (`033369b6`).
+
 ## Session 6 — the §8 residue: the fixes the defect list never carried a number for
 
 The 23 numbered defects were closed by session 4; what remained was the audit's §8 feature
