@@ -224,16 +224,16 @@ Status legend: `pending` · `in-progress` · `done`.
 | **F-2b** | One armed 429 must not lock every Chat-surface send for the session; the reset is keyed to a cooldown epoch, not to a run registration the `finally` already deleted | L-1 | **done** — CODE-certain, live lock not reproducible (see record) |
 | **F-3** | Forward `onToolPayload` into the desk loop so the transcript can persist and open a tool's real output | L-3 | **done** — PROVEN red and green |
 | **F-4** | Isolate a Monte Carlo worker crash to its own worker (`pending.worker` is already tagged; `ejectWorker` already exists) | T-3 | **done** — PROVEN red and green |
-| **F-5** | Profile switch must pause every save path and adopt identity + data atomically, so profile B is never written into profile A's store | L-2 | pending — CODE |
-| **F-6** | Give `withinToolDeadline` a child `AbortController` and propagate it through every call site; forward `context.signal` to the screener | T-1 | pending — PROVEN red |
-| **F-7** | A forged-tool proposal must report what storage actually did, and the manager UI must surface the failure without turning a telemetry-write error into a false "the request failed" | T-5 | pending — PROVEN red |
+| **F-5** | Profile switch must pause every save path and adopt identity + data atomically, so profile B is never written into profile A's store | L-2 | **done** |
+| **F-6** | Give `withinToolDeadline` a child `AbortController` and propagate it through every call site; forward `context.signal` to the screener | T-1 | **done — PROVEN red and green** |
+| **F-7** | A forged-tool proposal must report what storage actually did, and the manager UI must surface the failure without turning a telemetry-write error into a false "the request failed" | T-5 | **done — PROVEN red and green** |
 | **F-8** | `digestToolResult` must distinguish *unavailable* from *empty* (a real zero keeps printing zero) | T-2 | **done** — PROVEN red and green, with controls |
 | **F-9** | Pass `loggedTrades` into Settings → Data so training export is reachable, and prove the button enabled with a row present | §8 | **done** |
 | **F-10** | The screener must not call a successful empty scan a universe failure | T-9 | **done** |
 | **F-11** | Fix the double halving: the engine's blended exit is the single source, `buildWinResolution` drops its second `scaleOut` | A-4 | **done** — PROVEN red and green |
 | **F-12** | The weekly digest must print "dollars not captured", not `$0` | A-5 | **done** — PROVEN red and green, with control |
 | **F-13** | Import validation must reject `analysis: null`, and the export must not deref it | A-7 | **done** — PROVEN red and green |
-| **F-14** | `get_trade_log`: honour the logged time it advertises, and add a bounded record mode | T-4 | pending — PROVEN red (semantics) |
+| **F-14** | `get_trade_log`: honour the logged time it advertises, and add a bounded record mode | T-4 | **done — PROVEN red and green** |
 
 **Second wave (same phase, after the sixteen above):** L-4 cancelled-row settlement · L-5 desktop SSE
 errors and the raw/visible slice · L-6 durable interruption recovery · L-7 the three global run owners
@@ -258,10 +258,10 @@ S-6 receipts without read-back · A-6 settlement provenance · A-8 one clock.
 
 | # | item | audit id | status |
 |---|---|---|---|
-| **N-1** | `ask_user_input`: 1–3 inline tappable questions, suspend/resume, timeout, real cancel. Nothing to repair — no tool, no schema, no lifecycle exists | L-11 | pending |
+| **N-1** | `ask_user_input`: 1–3 inline tappable questions, suspend/resume, timeout, real cancel. Nothing to repair — no tool, no schema, no lifecycle exists | L-11 | **done — PROVEN end to end** |
 | **N-2** | OKX trade-history import (CSV carries stop moves and order modifications; UTC+8; screenshot/PDF are vision/text paths, not structured ingestion) | §9 | pending |
 | **N-3** | Durable trader profile: promote the fields the trader must own into profile memory instead of adding a fourth store; the boot `profile/memory.md` is regenerated, so it cannot be the authority | §2, §9 | pending |
-| **N-4** | Track every accepted plan, not only the active conversation's pending messages | §6 | pending |
+| **N-4** | Track every accepted plan, not only the active conversation's pending messages | §6 | **done** |
 
 Deliberately **not** added, because the audit shows they already exist: plan→approve→track-to-outcome,
 proposals + weekly digest, training JSONL (once F-9 lands), `get_trade_log` with a last-20 view (once
@@ -342,3 +342,65 @@ Everything marked CODE is a source-and-call-chain proof, not a runtime one. Veri
 hosts blocked. Not verified live: real providers, the other three API formats, the packaged Electron
 shell and `installer-smoke`, native key storage, Capacitor, live exchange responses, real token
 counts, and whether `web_search` is reachable from this network.
+
+---
+
+## Session 2 — the rest of Phase 1 through the first Phase-3 item
+
+Landed since the pass above, each with the proof that stands behind it.
+
+| item | change | measurement |
+|---|---|---|
+| **F-5** L-2 | readiness is lowered before a profile swap and raised only when data and identity agree; all four writers (data debounce, settings debounce, run heartbeat, unload flush) consult one predicate, at effect-body time **and** inside every timed write | CODE — the guard that only ever rose is now symmetric; no live switch-race reproduction (a delayed-migration harness is the follow-up) |
+| **F-6** T-1 | every tool call gets a child `AbortController`; the signal reaches the executor; the screener finally receives `context.signal` | **PROVEN**: `signalProvided true, aborted true, lateEffect false` (was `false / false / true`) |
+| **F-7** T-5 | `save()` returns whether the bytes landed; a refused proposal throws into the executor's failure path; approve/retire return undefined and delete false on refusal; the manager shows an error | **PROVEN**: `ok:true, proposed:true` with an empty store → `ok:false, "the proposal could not be stored … nothing was saved"` |
+| **F-14** T-4 | the tool reads the clock it promises (`by:'logged'`), the window header states that clock, and `records:true` returns the review payload bounded to 5 by default | **PROVEN**: row prints `2026-10-27` (was the 25th's decision date) and `since:2026-10-26` returns the row (was 0); a record carries `planId`, `outcomeResolvedAt`, `netR`, excursions |
+| **L-8** | the discarded `enhancedPrompt` block now rides the turn's system prompt under its own heading, capped at 6k with a visible truncation notice | CODE — same parts, one destination instead of none |
+| **M-3** | the dock gates the profile index on the memory switch and uses the scaled budget; the topics index skips `enabled:false` notes | CODE — both homes now read one flag and one budget |
+| **M-2** | the trader learner runs `filterMemoryWrite` and the sensitive setting before writing | CODE — same gate as `remember`, on the path nobody presses |
+| **M-4** | one applier (`applyAmendmentContent`); the inbox writes then approves; the supervisor applies before approving; the queue is per profile | CODE — three ways to "approve" now share one write |
+| **S-1** | a human Save on a trigger that already exists but is not live ACTIVATES that skill instead of reporting "already learned" and consuming the draft | CODE — one writer, under the notebook lock |
+| **S-2** | the version snapshot carries `predicate` and `description`, and a revert restores them (clearing a predicate the old version did not have) | CODE — undo no longer restores prose under newer logic |
+| **S-6** | both draft receipts read storage back: an unqueued draft reports a skip with the reason, a draft whose removal failed is not reported taken | CODE |
+| **L-10** | `readyProviderModels` filters with `isProviderReady` and falls back to the first model | CODE — a keyless local provider is no longer "configured but not ready" |
+| **N-4** | every conversation's accepted plans are armed with their own thread's leverage; the active thread reads live messages; a row leaving PENDING unregisters | CODE — a plan made in one thread is no longer forgotten on a switch |
+| **N-1** L-11 | `ask_user_input`, the suspend/resume channel: 1–3 questions with tappable options, a card above the composer in both homes, 4-minute window, real cancel, and a `DATA_UNAVAILABLE` receipt on every non-answer so a cancelled question cannot become a fabricated premise | **PROVEN end to end**: card rendered with its labels, an option answered `q1: Long` and removed the card, Cancel → `cancelled`, 250 ms window → `timeout`, nothing left pending; tool inventory 41 → 42 |
+
+### Gate state
+
+`typecheck`, `typecheck:scripts`, `typecheck:electron` 0 · `check:contracts` 138 passed ·
+`npm run lint` exit 0, 0 errors / **379** warnings (its cap, spent by nothing new — one orphaned
+binding my own change created was deleted to keep it there) · `build` 31.24s ·
+live driver zero page errors, all probes above as recorded.
+
+**`check-flow-doc-anchors` is RED and is the one gate this pass did not leave green:** 52 citations
+land on a comment line (ceiling 0), 13 miss the symbol their own line names, 11 are stale. Cause: this
+much line-shifting work invalidates `file:line` citations by construction. Two re-anchorer attempts
+(nearest-match, then symbol-search) were run and **reverted**: the first improved the comment count
+but added symbol misses, the second did the same, and a citation that jumps to an unrelated identical
+line is worse than a stale one. The repair needs per-citation judgement — read the doc's named symbol,
+move to its declaration — not a batch heuristic.
+
+### Still open
+
+**Phase 1 second wave:** L-4 (cancelled/failed rows stay live), L-5 (desktop SSE error frames, the
+raw/visible slice), L-6 (durable interruption recovery), L-7 (three global run owners), L-9 (the 180s
+budget is still advisory), S-3 (shadow promotion claims a comparison it does not make), S-4 (skill
+eligibility differs between retrieval and warning paths), S-5 (bundle import collision), M-5 (rules
+store with no reader), M-6 (citation attribution disconnected), T-6 (stale artifact-store comments),
+T-7 (dead debate vocabulary in the mandate, `forge_tool`'s schema and route), A-6 (settlement
+provenance), A-8 (one clock).
+
+**Phase 2:** R-3 (orphan compare/reanalysis/simulator overlays), R-4 (`NavRail` after rehoming the
+update download), R-5 (rules store — reader or removal, owner call), R-6 (rename the live-but-stale
+debate vocabulary).
+
+**Phase 3:** N-3 (durable trader profile — the privacy half landed with M-2; an editable profile with
+its own fields is still a design question), N-2 (OKX import — deliberately excluded from this pass).
+
+**Phases 4 and 5:** not started. Phase 4 is memory/tools/skills made *good* (one system of record with
+one write and one recall path, a topics→detail UI that edits and deletes, conflict and duplicate
+handling, a token-budgeted injection, one tool naming/description/result/error convention with
+progress over ~2s, a lazy skill catalogue with real triggers, self-reviewing evolution with one-step
+undo, and compaction that keeps the active plan, open trades and user rules). Phase 5 is minimalist UI
+polish — less text, no unneeded data, smooth streaming, progress on every tool call, no hangs.
