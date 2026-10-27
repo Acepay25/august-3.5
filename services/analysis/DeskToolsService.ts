@@ -838,10 +838,49 @@ export const toolLabel = (name: string): string => TOOL_LABELS[name] ?? name.rep
  *  When the call targeted a symbol OTHER than the chart's, the coin is
  *  inserted ("order book · ETHUSDT · buy wall …") so a mixed BTC/ETH turn
  *  stays unambiguous. */
+/** Words for the store's machine code. A transcript row must never print an
+ *  identifier as its label, and the service's own reason tokens are exactly that. */
+const UNAVAILABLE_WORD: Record<string, string> = {
+    source_retired: 'the exchange retired this endpoint',
+    fetch_failed: 'the feed did not answer',
+};
+
+/**
+ * Was this result actually READ?
+ *
+ * `ok` is the wrong question. A market service that could not reach the exchange
+ * returns a SHAPE with `available:false` and `ok:true` — deliberately not a
+ * failure, because "the desk is broken" is the belief that makes a seat retry a
+ * retired endpoint for the rest of the run — and `web_search` returns a
+ * `DATA_UNAVAILABLE:` sentinel inside an `ok:true` result. Both then fell through
+ * to the numeric digest and printed what an empty read looks like:
+ * `liquidations · 0 recent events · $0k`, `order book · buy wall — · sell wall —`,
+ * `web search · ok` (all three reproduced in the browser, docs/AUDIT.md T-2). The
+ * seat re-reads that line every later round and argued from a tape that was never
+ * fetched.
+ *
+ * A real zero must still print a zero, which is why this reads the store's own
+ * `available` flag rather than inferring unavailability from emptiness.
+ */
+const unavailableDigest = (content: string): string | null => {
+    if (isDataUnavailable(content)) return 'not read';
+    if (!content.trim().startsWith('{')) return null;
+    try {
+        const parsed = JSON.parse(content) as Record<string, unknown>;
+        if (parsed?.available !== false) return null;
+        const reason = typeof parsed.unavailableReason === 'string' ? parsed.unavailableReason : '';
+        return UNAVAILABLE_WORD[reason] ?? 'not read';
+    } catch {
+        return null;
+    }
+};
+
 export const digestToolResult = (name: string, ok: boolean, content: string, foreignSymbol?: string | null): string => {
     const label = toolLabel(name);
     const coin = foreignSymbol ? ` · ${foreignSymbol}` : '';
     if (!ok) return `${label}${coin} · failed`;
+    const unavailable = unavailableDigest(content);
+    if (unavailable) return `${label}${coin} · unavailable — ${unavailable}`;
     // Tell the operator what the seat was actually shown. A debate that reaches
     // a verdict from 4 of 118 characters of order book is a different result
     // from one that read the whole book, and the transcript used to look

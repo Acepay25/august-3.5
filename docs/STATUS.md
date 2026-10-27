@@ -151,6 +151,26 @@ Worker driver, zero page errors. `typecheck` 0; eslint unchanged (1 pre-existing
 *Deferred:* the synchronous fallback on a timed-out worker still runs on the main thread; its stall
 cost was never measured, so it is recorded as unmeasured in the audit rather than "fixed".
 
+**F-8 — the transcript line now says when nothing was read** (audit **T-2**).
+`services/analysis/DeskToolsService.ts:836-882` — `digestToolResult` branched on `ok` only. A market
+service that cannot reach the exchange returns a *shape* with `available:false` and `ok:true`
+(deliberately — "the desk is broken" is the belief that makes a seat retry a retired endpoint for the
+rest of a run), and `web_search` returns a `DATA_UNAVAILABLE:` sentinel inside an `ok:true` result. Both
+fell through to the numeric digest and printed what an empty read looks like. Now an explicit
+unavailability check runs before any number is derived, with the store's machine reason tokens mapped
+to words (`source_retired` → "the exchange retired this endpoint") because a transcript row must never
+print an identifier as its label.
+
+*Verified:* red at HEAD — `liquidations · 0 recent events · $0k`, `order book · buy wall — · sell wall
+—`, `web search · ok`. Green — `liquidations · unavailable — the exchange retired this endpoint`,
+`order book · unavailable — not read`, `web search · unavailable — not read`. **Controls in the same
+run**, because a fix that only ever says "unavailable" has moved the lie rather than removed it:
+`available:true` with no events still prints `0 recent events · $0k`, and a real wall still prints
+`buy wall $1200k @ 94,800`. Zero page errors. `typecheck` 0, `check:contracts` 138 passed, eslint
+unchanged.
+*Deferred:* the row's *colour*. A `· failed` line renders rose; an unavailable line renders neutral
+with the words, which is the honest minimum. Adding a fourth visual state is a UI decision, not a fix.
+
 ### Pending
 Status legend: `pending` · `in-progress` · `done`.
 
@@ -164,7 +184,7 @@ Status legend: `pending` · `in-progress` · `done`.
 | **F-5** | Profile switch must pause every save path and adopt identity + data atomically, so profile B is never written into profile A's store | L-2 | pending — CODE |
 | **F-6** | Give `withinToolDeadline` a child `AbortController` and propagate it through every call site; forward `context.signal` to the screener | T-1 | pending — PROVEN red |
 | **F-7** | A forged-tool proposal must report what storage actually did, and the manager UI must surface the failure without turning a telemetry-write error into a false "the request failed" | T-5 | pending — PROVEN red |
-| **F-8** | `digestToolResult` must distinguish *unavailable* from *empty* (a real zero keeps printing zero) | T-2 | pending — PROVEN red |
+| **F-8** | `digestToolResult` must distinguish *unavailable* from *empty* (a real zero keeps printing zero) | T-2 | **done** — PROVEN red and green, with controls |
 | **F-9** | Pass `loggedTrades` into Settings → Data so training export is reachable, and prove the button enabled with a row present | §8 | pending — CODE |
 | **F-10** | The screener must not call a successful empty scan a universe failure | T-9 | pending — CODE |
 | **F-11** | Fix the double halving: the engine's blended exit is the single source, `buildWinResolution` drops its second `scaleOut` | A-4 | pending — PROVEN red |
