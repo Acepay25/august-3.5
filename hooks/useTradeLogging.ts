@@ -121,7 +121,6 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     const [finalTradeSummary, setFinalTradeSummary] = useState<string | null>(null);
     const [skipCandidate, setSkipCandidate] = useState<Message | null>(null);
     const [updateCandidate, setUpdateCandidate] = useState<Message | null>(null);
-    const [simulatorCandidate, setSimulatorCandidate] = useState<Message | null>(null);
     const [skipReason, setSkipReason] = useState<TradeOutcome.ENTRY_NOT_HIT | TradeOutcome.SKIPPED | null>(null);
     const [correctedEntry, setCorrectedEntry] = useState<string>('');
     const [dataCaptureCandidate, setDataCaptureCandidate] = useState<CaptureCandidate | null>(null);
@@ -982,15 +981,6 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         }
     }, [messagesRef]);
 
-    // ─── Scenario Simulator Logic ─────────────────────────────────────────
-
-    const handleInitiateSimulator = useCallback((messageId: string) => {
-        const msg = messagesRef.current.find(m => m.id === messageId);
-        if (msg && msg.analysis) {
-            setSimulatorCandidate(msg);
-        }
-    }, [messagesRef]);
-
     const handleConfirmUpdateTrade = useCallback((text: string, images: ImageMetadata[]) => {
         if (!updateCandidate || !updateCandidate.analysis) return;
 
@@ -1117,7 +1107,6 @@ ${result.comparisonBlock}
         tradeSummaries, setTradeSummaries,
         finalTradeSummary, setFinalTradeSummary,
         updateCandidate, setUpdateCandidate,
-        simulatorCandidate, setSimulatorCandidate,
         dataCaptureCandidate, setDataCaptureCandidate,
         entryNotHitCandidate, setEntryNotHitCandidate,
         newlyAddedInsightIds, setNewlyAddedInsightIds,

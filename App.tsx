@@ -33,7 +33,6 @@ import { useProviderConfigs } from './hooks/useProviderConfigs';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useJournalUI } from './hooks/useJournalUI';
 import type { JournalUIState } from './hooks/useJournalUI';
-import { useCompareRuns } from './hooks/useCompareRuns';
 import { ChevronDownIcon, CloseIcon } from './components/shared/Icons';
 
 // Lazy-load heavy, conditionally-rendered components so the initial
@@ -55,9 +54,7 @@ const EntryNotHitCaptureModal = React.lazy(() => import('./components/modals/Ent
 const UpdateTradeModal = React.lazy(() => import('./components/journal/UpdateTradeModal').then(m => ({ default: m.UpdateTradeModal })));
 const VisionDataViewer = React.lazy(() => import('./components/analysis/VisionDataViewer'));
 const LiveMarket = React.lazy(() => import('./components/market/LiveMarket'));
-const ScenarioSimulator = React.lazy(() => import('./components/modals/ScenarioSimulator'));
 const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay'));
-const CompareModal = React.lazy(() => import('./components/analysis/CompareModal'));
 const StrategyStudio = React.lazy(() => import('./components/dashboards/StrategyStudio'));
 const TradeView = React.lazy(() => import('./components/trade/TradeView'));
 const NewBotDialog = React.lazy(() => import('./components/chat/NewBotDialog'));
@@ -589,7 +586,6 @@ const App: React.FC = () => {
         tradeSummaries, setTradeSummaries,
         finalTradeSummary, setFinalTradeSummary,
         updateCandidate, setUpdateCandidate,
-        simulatorCandidate, setSimulatorCandidate,
         dataCaptureCandidate, setDataCaptureCandidate,
         entryNotHitCandidate, setEntryNotHitCandidate,
         newlyAddedInsightIds, setNewlyAddedInsightIds,
@@ -1218,14 +1214,6 @@ const App: React.FC = () => {
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
     }, [isAnalysisInProgress, handleCancelAnalysis, toast, isSettingsMenuVisible, isLiveMarketVisible, isUserModalOpen, isVisionDataVisible, isStrategySearchVisible, isWatchListVisible]);
-
-    const {
-        comparePrimary,
-        compareSecondary,
-
-        handlePickSecondary,
-        closeCompare,
-    } = useCompareRuns(messages);
 
     // ─── View model reasoning (Think tab deep link) ────────────────────────
     // Opens the Trading Journal's Think tab focused on the reasoning records
@@ -2259,14 +2247,6 @@ const App: React.FC = () => {
                 />
             )}
             {updateCandidate && <UpdateTradeModal message={updateCandidate} onClose={() => setUpdateCandidate(null)} onConfirm={handleConfirmUpdateTrade} onAutoCapture={handleUpdateAutoCapture} isCapturing={isUpdateCaptureBusy} visionConfig={visionConfig} onQuotaExceeded={handleQuotaExceeded} />}
-            {simulatorCandidate && (
-                <ScenarioSimulator
-                    message={simulatorCandidate}
-                    loggedTrades={loggedTrades}
-                    leverage={activeConversation?.leverage || defaultLeverage()}
-                    onClose={() => setSimulatorCandidate(null)}
-                />
-            )}
             {/* Per-component Suspense: isolates a suspending lazy overlay from
                 the rest of the app. fallback={null} — these overlays mount at
                 boot, so their chunks preload during startup; a visible
@@ -2670,19 +2650,6 @@ const App: React.FC = () => {
                 the sidebar's Customize row or Alt+3. No overlay state to manage
                 either way. */}
 
-            {/* Side-by-side compare */}
-            {comparePrimary && (
-                <React.Suspense fallback={null}>
-                    <CompareModal
-                        primary={comparePrimary}
-                        secondary={compareSecondary}
-                        analysisMessages={messages.filter(m => m.analysis)}
-                        modelIdToName={modelIdToName}
-                        onPickSecondary={handlePickSecondary}
-                        onClose={closeCompare}
-                    />
-                </React.Suspense>
-            )}
         </div>
         </React.Suspense>
     );
