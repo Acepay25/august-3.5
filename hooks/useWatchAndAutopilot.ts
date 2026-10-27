@@ -62,7 +62,7 @@ export interface UseWatchAndAutopilotResult {
 export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAndAutopilotResult => {
     const {
         messages, conversationHistory, loggedTrades,
-        activeConversationId, activeConversation, updateMessages, messagesRef,
+        activeConversationId, updateMessages, messagesRef,
         stableHandleSendMessage, handleLoadConversation,
         setIsWatchListVisible,
         confirmAutopilotOutcome, confirmAutopilotEntryNotHit, handleInitiateLogTrade,
