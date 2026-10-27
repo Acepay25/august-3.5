@@ -1302,6 +1302,12 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // A pending replacement wait is void — a late click on the banner
             // must never resolve into a dead debate.
             replacementChoiceRef.current = null;
+            // FLUSH BEFORE SETTLING, for the same reason the success path does:
+            // a chunk that arrived between the last animation frame and here is
+            // still pending, and a settle followed by that flush re-applies the
+            // live text WITH `isStreaming: true` — a permanently "thinking" row
+            // on a failed or stopped turn (docs/AUDIT.md L-4).
+            throttledCasualStream.flush();
             // Settle a live-streaming casual bubble; every other row survives.
             updateRequestMessages(prev => mapRunFailureMessages(prev, { casualMessageId }));
 

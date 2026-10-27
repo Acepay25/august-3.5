@@ -1242,20 +1242,24 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                         })),
                     });
                 } catch (e) {
-                    // Seat failed — a visible line beats a silent gap, and
-                    // the line carries the REAL reason (the provider's
-                    // friendly error), not just "failed to answer". An
-                    // explicit Stop is not a failure: keep whatever streamed.
+                    // SETTLE THE ROW IN BOTH DIRECTIONS. A seat that threw after
+                    // partial text used to keep streaming:true forever — and a
+                    // STOPPED seat was skipped entirely by the `!aborted` guard,
+                    // so one Stop left a bubble spinning for the rest of the
+                    // session and blocked the store from persisting (docs/AUDIT.md
+                    // L-4). A stop is not a failure: it keeps what streamed and
+                    // says why the bubble is short.
                     seatFailed = true;
-                    if (!controller.signal.aborted) {
-                        const msg = e instanceof Error ? e.message : String(e);
-                        // Always settle the flag — a seat that threw AFTER partial
-                        // text used to keep streaming:true forever, which then
-                        // blocked the whole store from persisting.
-                        mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id
-                            ? { ...en, streaming: false, workedMs: workedMsFor(seatStartedAt), ...(en.text ? {} : { text: `(this seat failed to answer: ${msg})` }) }
-                            : en)) }));
-                    }
+                    const msg = e instanceof Error ? e.message : String(e);
+                    const aborted = controller.signal.aborted;
+                    mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id
+                        ? {
+                            ...en,
+                            streaming: false,
+                            workedMs: workedMsFor(seatStartedAt),
+                            ...(en.text ? {} : { text: aborted ? '(stopped)' : `(this seat failed to answer: ${msg})` }),
+                        }
+                        : en)) }));
                 }
                 spoken.push(seat.id);
                 if (!seatFailed && isPassReply(full)) {

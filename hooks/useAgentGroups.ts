@@ -244,7 +244,23 @@ export const useAgentGroups = ({
                                 }
                             },
                         );
-                        if (runNonce.current !== nonce) return;
+                        if (runNonce.current !== nonce) {
+                            // A CANCELLED run still owns the row it painted.
+                            // `cancelRun` bumps the nonce and then aborts, so this
+                            // early return used to skip the settle below and leave
+                            // the bubble streaming for the rest of the session —
+                            // a row no later write ever finishes (docs/AUDIT.md L-4).
+                            if (abort.signal.aborted) {
+                                patchMessage(replyId, {
+                                    text: visible ? `${visible}
+
+(cancelled)` : '',
+                                    isStreaming: false,
+                                    hidden: !visible,
+                                });
+                            }
+                            return;
+                        }
                         const rawReply = responseText || visible;
                         // The room protocol forbids [[dm:@…]] markers (that is
                         // the 1:1 mailbox's channel), but a model can still
@@ -301,7 +317,10 @@ export const useAgentGroups = ({
                             }
                         }
                     } catch (error) {
-                        if (runNonce.current === nonce) {
+                        // `|| abort.signal.aborted`: the same reason as above — a
+                        // stop must settle ITS OWN row, even after a newer run took
+                        // the room.
+                        if (runNonce.current === nonce || abort.signal.aborted) {
                             const aborted = abort.signal.aborted;
                             // The transport already mapped the raw failure to a
                             // user-safe message (toFriendlyProviderError) — show
