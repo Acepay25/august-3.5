@@ -296,7 +296,45 @@ the unreachable update/download action.
    it to provider+model, and honouring a `Retry-After` the provider sends, are both trader-visible
    changes.
 
-## Gate state at the end of this pass — one gate is RED, and it is mine
+## Session 3 — the rest of the second wave, Phase 2, and the anchor gate
+
+| item | change | proof |
+|---|---|---|
+| **L-4** | group rooms bumped the run nonce before aborting, so cancelling skipped its own row settlement; panel seats settled only when not aborted; the pipeline's failure path settled without flushing its pending RAF chunk | CODE, three sites, one shape — a stopped row now settles in every owner |
+| **L-5** | the desktop SSE parser recognises `{error:…}`, `{type:'error'}` and `{type:'response.failed'}` in all three formats; main throws with the provider's words and status; the Electron tail is appended only when the painted text is a real prefix of the raw text | **PROVEN** by a Node probe: one synthetic frame per format, all three yield an error event and end the stream |
+| **L-6** | hiding/unloading the tab writes the in-flight turn's partial text as an interrupted row; the loader settles any stored `isStreaming:true` row | CODE — the two halves of "a killed turn reloads into nothing" |
+| **L-7** | the truncation tally moved from a process-wide slot to a per-run frame carried to the transport as a callback; the paint throttle coalesces per conversation+row instead of one global pending slot | CODE — no reset to race, no overwrite between threads |
+| **L-9** | past the 180s budget no new lookup runs (forged or built-in): each pending call gets a receipt, the seat is told, and the round loop ends | CODE |
+| **S-3 / S-4 / S-5 / S-6** | shadow evidence states whose record it is; suppression and conflict share ranked retrieval's approval gate; a renamed import keeps its bundle and a bundle read stays in its folder; both draft receipts read storage back | CODE |
+| **M-5** | the journal's learned rules finally reach a seat, in BOTH homes, budgeted and behind the memory switch | CODE |
+| **M-6** | the never-called verdict annotator and its orphans are deleted; attribution runs through `Message.injectedSkills` → settlement reflection | CODE |
+| **T-7** | mandate and `forge_tool` stop describing a debate desk and a schema they cannot honour; the forged-tool route matches the app's real one | CODE |
+| **A-6 / A-8** | plan provenance and `planId` survive both settlement paths; discipline buckets and report dates use the Philippines day key | CODE |
+| **R-3** | the compare modal and the scenario simulator are deleted with their exclusive files — both proven unreachable by grep, not by appearance | CODE |
+| **N-3** | profile memory rows are editable through the store's optimistic lock, stamped `stated` | CODE |
+| **Anchor gate** | 70 comment-landing citations, 26 symbol misses and 7 stale anchors repaired from the gate's own findings; genuinely wrong numbers (restore_goal, LearnView, settleSelfChanges) corrected; self-quota restated last | **GATE GREEN**: 462 anchors verified, 0 unattributed, 0 comment, 0 symbol miss, 0 stale |
+
+### Gate state — all green
+
+`typecheck` 0 · `typecheck:scripts` 0 · `typecheck:electron` 0 · `check:contracts` 138 passed ·
+`npm run lint` exit 0, 0 errors / **376** warnings (three BELOW the 379 cap, because removals took
+warnings with them) · `build` 24.62s · `check-flow-doc-anchors` **OK, 462 anchors** · final live audit
+run: every probe green, zero page errors.
+
+### Still open
+
+**Phase 1:** L-10's remaining routing hole is closed but the harness-event routing in L-7 (a watch
+that fires after a thread switch runs in the active session) is still as before — the watch carries no
+session binding. L-5's Electron path is proven in Node, not in a packaged app.
+**Phase 2:** R-4 (`NavRail` after rehoming the update download — a UI move, not a delete), R-5 (the
+rules store now HAS a reader, so it is a keep rather than a removal), R-6 (the `DebateMailbox` name on
+live panel/group code — rename, no behaviour change), and the update-trade overlay whose openers are
+equally dead but whose modal is wired into settlement helpers (a judgement, not a file delete).
+**Phase 3:** N-2 (OKX import) — excluded on request.
+**Phases 4–5:** not started. Phase 4 is memory/tools/skills made *good*; Phase 5 is minimalist UI
+polish.
+
+## (Historical) Gate state at the end of session 2 — one gate was RED, and it was mine
 
 | gate | result |
 |---|---|
