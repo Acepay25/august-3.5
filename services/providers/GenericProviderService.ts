@@ -1863,7 +1863,14 @@ async function* streamViaElectronBridge(
         reportUsageDirect(config, result.usage, options, messages);
         reportFinishReason(config, normalizeFinishReason(result.finishReason), options);
         // Buffered fallback / lost tail: paint whatever the stream missed.
-        if (result.text && result.text.length > yielded.length) {
+        // Only append a tail that is ACTUALLY a continuation. `result.text` is
+        // the provider's raw accumulated text and `yielded` is the VISIBLE output
+        // after the think-gate stripped inline reasoning — so slicing by a
+        // character count re-emits stripped markup or duplicates text whenever the
+        // two differ (docs/AUDIT.md L-5). A prefix test is the property that
+        // matters: if the painted text is not a prefix of the raw text, the gate
+        // removed something and what was painted is the answer.
+        if (result.text && result.text.startsWith(yielded) && result.text.length > yielded.length) {
             yield result.text.slice(yielded.length);
         }
     } finally {

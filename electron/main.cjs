@@ -650,8 +650,19 @@ async function consumeProviderStream(response, request, sender) {
     let reasoning = '';
     let raw = '';
     let terminal = false;
+    // A mid-stream error event ends the body: the provider said it failed, so the
+    // caller must not read the empty text as a complete answer (AUDIT L-5). The
+    // old `else reasoning += ev.delta` also appended every unknown event to the
+    // reasoning channel, including this one.
+    let streamError = null;
     const emit = (ev) => {
-        if (ev.type === 'text') text += ev.delta; else reasoning += ev.delta;
+        if (ev.type === 'error') {
+            streamError = { message: ev.message || 'the provider reported an error mid-stream', status: ev.status };
+            return;
+        }
+        if (ev.type === 'text') text += ev.delta;
+        else if (ev.type === 'reasoning') reasoning += ev.delta;
+        else return;
         try {
             if (sender && !sender.isDestroyed()) {
                 sender.send('provider:chunk', { requestId: request.requestId, type: ev.type, delta: ev.delta });
@@ -688,7 +699,15 @@ async function consumeProviderStream(response, request, sender) {
     }
     const fin = parser.finish();
     fin.events.forEach(emit);
-    return { text, reasoning, toolCalls: fin.toolCalls, usage: fin.usage, sawData: terminal || fin.sawData, raw, stopReason: extractStopReasonFromSse(raw) };
+    return {
+        text, reasoning,
+        toolCalls: fin.toolCalls,
+        usage: fin.usage,
+        sawData: terminal || fin.sawData,
+        raw,
+        stopReason: extractStopReasonFromSse(raw),
+        ...(streamError ? { error: streamError } : {}),
+    };
 }
 
 async function sendProviderRequest(request, sender) {
@@ -766,6 +785,13 @@ async function sendProviderRequest(request, sender) {
         if (streamActive && response.ok && response.body && request.requestId && sender) {
             armBodyPhase();
             const streamOut = await consumeProviderStream(response, request, sender);
+            if (streamOut.error) {
+                // Surface it as a real failure with the provider's own words; the
+                // renderer's classifier already knows how to read `status`.
+                throw Object.assign(new Error(streamOut.error.message), {
+                    ...(streamOut.error.status !== undefined ? { status: streamOut.error.status } : {}),
+                });
+            }
             if (streamOut.sawData) {
                 // NORMALIZE, and never substitute `{}`.
                 //

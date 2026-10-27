@@ -40,10 +40,34 @@ function createSseParser(apiFormat) {
         return slot;
     };
 
+
+    /**
+     * A provider that fails MID-STREAM says so in the event data, not in an HTTP
+     * status: OpenAI-compatible `{error:{message}}`, Anthropic `{type:'error',
+     * error:{message}}`, Responses `{type:'response.failed', response:{error}}`.
+     * All three used to fall through the format handlers as "not a delta", so the
+     * stream ended looking COMPLETE with no text — the renderer showed an empty
+     * answer for a rate limit (docs/AUDIT.md L-5). This is the one place that
+     * recognises the shape, so no handler can forget it.
+     */
+    const errorFrom = (data, json) => {
+        if (!json || typeof json !== 'object') return null;
+        const nested = json.error && typeof json.error === 'object' ? json.error : null;
+        const isErrorEvent = json.type === 'error' || json.type === 'response.failed';
+        if (!nested && !isErrorEvent) return null;
+        const message = (nested && (nested.message || nested.type))
+            || (json.response && json.response.error && json.response.error.message)
+            || (typeof json.error === 'string' ? json.error : '')
+            || 'the provider reported an error mid-stream';
+        const status = (nested && (nested.status || nested.code)) || json.status;
+        return { type: 'error', message: String(message).slice(0, 400), ...(typeof status === 'number' ? { status } : {}) };
+    };
     const handleChatCompletions = (data) => {
         const events = [];
         if (data === '[DONE]') return { events, done: true };
         let json; try { json = JSON.parse(data); } catch { return { events, done: false }; }
+        const failed = errorFrom(data, json);
+        if (failed) return { events: [failed], done: true };
         if (json.usage) usage = json.usage;
         const choice = Array.isArray(json.choices) ? json.choices[0] : null;
         if (!choice) return { events, done: false };
@@ -72,6 +96,8 @@ function createSseParser(apiFormat) {
     const handleMessages = (data) => {
         const events = [];
         let json; try { json = JSON.parse(data); } catch { return { events, done: false }; }
+        const failed = errorFrom(data, json);
+        if (failed) return { events: [failed], done: true };
         if (json.type === 'content_block_start' && json.content_block?.type === 'tool_use') {
             slotFor(json.index ?? 0, { id: json.content_block.id || '', name: json.content_block.name || '', args: '' });
         } else if (json.type === 'content_block_delta') {
@@ -94,6 +120,8 @@ function createSseParser(apiFormat) {
     const handleResponses = (data) => {
         const events = [];
         let json; try { json = JSON.parse(data); } catch { return { events, done: false }; }
+        const failed = errorFrom(data, json);
+        if (failed) return { events: [failed], done: true };
         switch (json.type) {
             case 'response.output_text.delta':
                 if (typeof json.delta === 'string' && json.delta.length > 0) events.push({ type: 'text', delta: json.delta });
