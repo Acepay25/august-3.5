@@ -78,7 +78,6 @@ export interface UseTradeLoggingParams {
     setIsAutoCaptureBusy: (v: boolean) => void;
     setIsHybridLoading: (v: boolean) => void;
     setIsEntryNotHitCaptureBusy: (v: boolean) => void;
-    setIsUpdateCaptureBusy: (v: boolean) => void;
     /** "Prompt when entry price is not hit" setting — gates whether the
      *  capture modal interrupts, or the ENTRY_NOT_HIT is logged silently. */
     isEntryNotHitCapturing: boolean;
@@ -99,13 +98,16 @@ export interface UseTradeLoggingParams {
 
 export const useTradeLogging = (params: UseTradeLoggingParams) => {
     const {
-        messages, messagesRef, updateMessages, activeConversationLeverage,
+        // `messages` and `handleSendMessage` left with the update-trade flow (their
+        // only readers); the params stay on the interface so App's call shape is
+        // unchanged.
+        messagesRef, updateMessages, activeConversationLeverage,
         moderatorProviderId, moderatorModel,
         memoryModel, memoryConfig, useAlgorithmicInsights,
         onJournalAutoRefresh,
         setIsAutoCaptureBusy, setIsHybridLoading, setIsEntryNotHitCaptureBusy,
-        setIsUpdateCaptureBusy, isEntryNotHitCapturing, isAutoCapturing, setIsInsightGenerating,
-        setCurrentHybridData, handleSendMessage,
+        isEntryNotHitCapturing, isAutoCapturing, setIsInsightGenerating,
+        setCurrentHybridData,
         toast,
     } = params;
 
@@ -120,7 +122,6 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     const [tradeSummaries, setTradeSummaries] = useState<TradeSummary[]>([]);
     const [finalTradeSummary, setFinalTradeSummary] = useState<string | null>(null);
     const [skipCandidate, setSkipCandidate] = useState<Message | null>(null);
-    const [updateCandidate, setUpdateCandidate] = useState<Message | null>(null);
     const [skipReason, setSkipReason] = useState<TradeOutcome.ENTRY_NOT_HIT | TradeOutcome.SKIPPED | null>(null);
     const [correctedEntry, setCorrectedEntry] = useState<string>('');
     const [dataCaptureCandidate, setDataCaptureCandidate] = useState<CaptureCandidate | null>(null);
@@ -972,127 +973,6 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         }
     }, [entryNotHitCandidate, logEntryNotHitTrade]);
 
-    // ─── Update Trade Logic ───────────────────────────────────────────────
-
-    const handleInitiateUpdateTrade = useCallback((messageId: string) => {
-        const msg = messagesRef.current.find(m => m.id === messageId);
-        if (msg && msg.analysis) {
-            setUpdateCandidate(msg);
-        }
-    }, [messagesRef]);
-
-    const handleConfirmUpdateTrade = useCallback((text: string, images: ImageMetadata[]) => {
-        if (!updateCandidate || !updateCandidate.analysis) return;
-
-        const originalAnalysis = updateCandidate.analysis;
-        const originalCreatedAt = originalAnalysis.createdAt || updateCandidate.createdAt;
-
-        // Calculate time interval
-        let updateIntervalString = '';
-        if (originalCreatedAt) {
-            updateIntervalString = calculateTimeDifference(originalCreatedAt);
-        }
-
-        // We use the full ImageMetadata objects passed from the modal, which contain the real File objects
-        const metaImages = images;
-
-        // Construct Hidden Context to guide the AI
-        const context = `**SYSTEM NOTICE: TRADE UPDATE EVENT**
-**PREVIOUS SETUP (CONTEXT):**
-${JSON.stringify(originalAnalysis, null, 2)}
-
-**INSTRUCTIONS:**
-1. Compare the NEW chart data/text against the ORIGINAL plan.
-2. Decide: Maintain, Modify (tighten SL, move TP), or Abort.
-3. Output the *Updated* JSON Plan.`;
-
-        setUpdateCandidate(null);
-
-        // Trigger analysis with User Text + Hidden Context AND Update Flag with interval
-        // (plus the prior plan — the amendment gets a version stamp + diff, Batch 7)
-        handleSendMessage(text, metaImages, context, {
-            isUpdate: true,
-            updateInterval: updateIntervalString,
-            priorAnalysis: originalAnalysis,
-            priorMessageId: updateCandidate.id,
-        });
-
-    }, [updateCandidate, handleSendMessage]);
-
-    // Auto-capture handler for trade updates
-    const handleUpdateAutoCapture = useCallback(async () => {
-        if (!updateCandidate || !updateCandidate.analysis) {
-            return;
-        }
-
-        setIsUpdateCaptureBusy(true);
-        setIsHybridLoading(true); // Show loading animation on HybridDataPanel
-
-        try {
-            const originalAnalysis = updateCandidate.analysis;
-            const originalCreatedAt = originalAnalysis.createdAt || updateCandidate.createdAt;
-
-            // Capture current market data
-            const result = await captureOutcomeComparison(
-                originalAnalysis,
-                originalCreatedAt // Pass original analysis timestamp
-            );
-
-            // DEBUG: Log full result status
-            console.log('[UpdateAutoCapture] Result check:', {
-                success: result.success,
-                hasComparisonBlock: !!result.comparisonBlock,
-                hasData: !!result.data,
-                dataSymbol: result.data?.symbol,
-                error: result.error
-            });
-
-            if (result.success && result.comparisonBlock) {
-                console.log('[UpdateAutoCapture] Successfully captured market data:', {
-                    symbol: result.data?.symbol,
-                    price: result.data?.marketData?.currentPrice
-                });
-
-                // Calculate time interval
-                let updateIntervalString = '';
-                if (originalCreatedAt) {
-                    updateIntervalString = calculateTimeDifference(originalCreatedAt);
-                }
-
-                // Construct context with captured data
-                const context = `**SYSTEM NOTICE: TRADE UPDATE EVENT (AUTO-CAPTURE)**
-**PREVIOUS SETUP (CONTEXT):**
-${JSON.stringify(originalAnalysis, null, 2)}
-
-**LIVE MARKET DATA (AUTO-CAPTURED):**
-${result.comparisonBlock}
-
-**INSTRUCTIONS:**
-1. Compare the LIVE MARKET DATA against the ORIGINAL plan.
-2. Decide: Maintain, Modify (tighten SL, move TP), or Abort.
-3. Output the *Updated* JSON Plan.`;
-
-                setUpdateCandidate(null);
-
-                // Trigger analysis with auto-captured data - pass hybrid data directly to avoid state timing issues
-                handleSendMessage('Update trade with current market data', [], context, {
-                    isUpdate: true,
-                    updateInterval: updateIntervalString,
-                    presetHybridData: result.data // Pass directly to handleSendMessage 
-                });
-            } else {
-                console.error('[UpdateAutoCapture] Failed:', result.error);
-                toast.error("Auto-Capture Failed", `${result.error || 'Unknown error'}. Please try uploading a screenshot instead.`);
-            }
-        } catch (error) {
-            console.error('[UpdateAutoCapture] Error:', error);
-            toast.error("Auto-Capture Failed", "Please try uploading a screenshot instead.");
-        } finally {
-            setIsUpdateCaptureBusy(false);
-            setIsHybridLoading(false); // Stop loading animation
-        }
-    }, [updateCandidate, handleSendMessage]);
-
     // ─── Return ───────────────────────────────────────────────────────────
 
     // The surface below is EXACTLY what App.tsx consumes. It used to be 42
@@ -1106,7 +986,6 @@ ${result.comparisonBlock}
         loggedTrades, setLoggedTrades,
         tradeSummaries, setTradeSummaries,
         finalTradeSummary, setFinalTradeSummary,
-        updateCandidate, setUpdateCandidate,
         dataCaptureCandidate, setDataCaptureCandidate,
         entryNotHitCandidate, setEntryNotHitCandidate,
         newlyAddedInsightIds, setNewlyAddedInsightIds,
@@ -1125,8 +1004,6 @@ ${result.comparisonBlock}
         handleInitiateLogTrade,
         handleEntryNotHitAutoCapture,
         handleEntryNotHitSkip,
-        handleConfirmUpdateTrade,
-        handleUpdateAutoCapture,
         // Outcome-resolution harness visibility: drops the trade from the
         // chat session's openTrades ledger and pushes a close-message into
         // the dock. Surfaced for the autopilot resolution site and any future

@@ -51,7 +51,6 @@ const SettingsMenu = React.lazy(() => import('./components/settings/SettingsMenu
 // (LogTradeModal was removed — the capture flow uses DataCaptureModal.)
 const DataCaptureModal = React.lazy(() => import('./components/modals/DataCaptureModal').then(m => ({ default: m.DataCaptureModal })));
 const EntryNotHitCaptureModal = React.lazy(() => import('./components/modals/EntryNotHitCaptureModal').then(m => ({ default: m.EntryNotHitCaptureModal })));
-const UpdateTradeModal = React.lazy(() => import('./components/journal/UpdateTradeModal').then(m => ({ default: m.UpdateTradeModal })));
 const VisionDataViewer = React.lazy(() => import('./components/analysis/VisionDataViewer'));
 const LiveMarket = React.lazy(() => import('./components/market/LiveMarket'));
 const UpdateOverlay = React.lazy(() => import('./components/shared/UpdateOverlay'));
@@ -231,7 +230,6 @@ const App: React.FC = () => {
         isAutoCapturing, setIsAutoCapturing,
         isEntryNotHitCapturing, setIsEntryNotHitCapturing,
         isAutoCaptureBusy, setIsAutoCaptureBusy,
-        isUpdateCaptureBusy, setIsUpdateCaptureBusy,
         isEntryNotHitCaptureBusy, setIsEntryNotHitCaptureBusy,
         isRateLimited, setIsRateLimited,
     } = useUIState();
@@ -585,7 +583,6 @@ const App: React.FC = () => {
         loggedTrades, setLoggedTrades,
         tradeSummaries, setTradeSummaries,
         finalTradeSummary, setFinalTradeSummary,
-        updateCandidate, setUpdateCandidate,
         dataCaptureCandidate, setDataCaptureCandidate,
         entryNotHitCandidate, setEntryNotHitCandidate,
         newlyAddedInsightIds, setNewlyAddedInsightIds,
@@ -596,8 +593,6 @@ const App: React.FC = () => {
         handleInitiateLogTrade,
         handleEntryNotHitAutoCapture,
         handleEntryNotHitSkip,
-        handleConfirmUpdateTrade,
-        handleUpdateAutoCapture,
     } = useTradeLogging({
         messages,
         messagesRef,
@@ -611,7 +606,6 @@ const App: React.FC = () => {
         setIsAutoCaptureBusy,
         setIsHybridLoading,
         setIsEntryNotHitCaptureBusy,
-        setIsUpdateCaptureBusy,
         isEntryNotHitCapturing,
         setIsInsightGenerating,
         setCurrentHybridData,
@@ -2246,7 +2240,6 @@ const App: React.FC = () => {
                     isCapturing={isEntryNotHitCaptureBusy}
                 />
             )}
-            {updateCandidate && <UpdateTradeModal message={updateCandidate} onClose={() => setUpdateCandidate(null)} onConfirm={handleConfirmUpdateTrade} onAutoCapture={handleUpdateAutoCapture} isCapturing={isUpdateCaptureBusy} visionConfig={visionConfig} onQuotaExceeded={handleQuotaExceeded} />}
             {/* Per-component Suspense: isolates a suspending lazy overlay from
                 the rest of the app. fallback={null} — these overlays mount at
                 boot, so their chunks preload during startup; a visible
