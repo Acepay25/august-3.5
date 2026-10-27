@@ -431,6 +431,13 @@ export interface SkillMeta {
         ifCondition?: string;
         thenAction?: string;
         body?: string;
+        /** The EXECUTABLE half of the version being replaced. Without these a
+         *  revert restored old prose under the newer trigger logic — the row read
+         *  as the old rule while `skillPredicateGate` still evaluated the new
+         *  predicate (docs/AUDIT.md S-2). */
+        predicate?: string;
+        /** The retrieval activation key at that version. */
+        description?: string;
         approvedBy?: SkillMeta['approvedBy'];
         approvedAt?: string;
     };
@@ -696,11 +703,13 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
     const prevRaw = pick('previousVersion');
     if (prevRaw) {
         try {
-            const parsed = JSON.parse(prevRaw) as { kind?: string; ifCondition?: string; thenAction?: string; body?: string; approvedBy?: string; approvedAt?: string };
+            const parsed = JSON.parse(prevRaw) as { kind?: string; ifCondition?: string; thenAction?: string; body?: string; predicate?: string; description?: string; approvedBy?: string; approvedAt?: string };
             previousVersion = {
                 kind: parsed.kind === 'repeat' ? 'repeat' : 'avoid',
                 ifCondition: typeof parsed.ifCondition === 'string' ? parsed.ifCondition : undefined,
                 thenAction: typeof parsed.thenAction === 'string' ? parsed.thenAction : undefined,
+                ...(typeof parsed.predicate === 'string' ? { predicate: parsed.predicate } : {}),
+                ...(typeof parsed.description === 'string' ? { description: parsed.description } : {}),
                 body: typeof parsed.body === 'string' ? parsed.body : undefined,
                 approvedBy: parsed.approvedBy === 'human' || parsed.approvedBy === 'grandfathered' || parsed.approvedBy === 'supervisor'
                     ? parsed.approvedBy : undefined,
@@ -1057,6 +1066,34 @@ export const isApprovedSkill = (meta: Pick<SkillMeta, 'approvedBy' | 'prior'>): 
     return false;
 };
 
+/**
+ * Activate the skill the library already holds under this trigger.
+ *
+ * A duplicate is not an approval. The ingest path refuses a second skill with the
+ * same IF clause regardless of whether the existing row is approved, enabled or
+ * retired — so a human pressing Save on a draft whose trigger was already present
+ * was told "already learned" while the skill stayed inert, and the draft was
+ * consumed (docs/AUDIT.md S-1). This is the one writer that turns such a row into a
+ * live skill; it returns the file name, or null when the trigger is not there.
+ */
+export const activateSkillForTrigger = async (ifCondition: string, username: string): Promise<string | null> => {
+    const want = (ifCondition ?? '').trim().toLowerCase();
+    if (!want) return null;
+    const hit = getMemoryFiles().files.filter(isSkillFile)
+        .map(f => ({ f, meta: parseSkillMarkdown(f.content) }))
+        .find(({ meta }) => (meta?.ifCondition ?? '').trim().toLowerCase() === want);
+    if (!hit?.meta) return null;
+    // The approval fact only — the prose, predicate and evidence stay exactly as
+    // the row carried them, because this is consent for existing content, not a
+    // rewrite of it.
+    const next: SkillMeta = { ...hit.meta, approvedBy: 'human', prior: 'gated' };
+    const body = serializeSkill(next, titleFromMeta(next));
+    // The notebook's own lock: this is a second writer of the same file the ingest
+    // path writes, and two writers of one file must share one queue.
+    await withNotebookWriteLock(() => updateMemoryFileUnlocked(hit.f.id, { content: body, enabled: true }, username));
+    return hit.f.name;
+};
+
 /** The ONE projection from the library to the skills-index row shape.
  *
  *  Both surfaces that build the index (the Chat surface and the dock) call this
@@ -1148,6 +1185,8 @@ export const requestRewriteApproval = (
         ifCondition: meta.ifCondition,
         thenAction: meta.thenAction,
         body: meta.body,
+        predicate: meta.predicate,
+        description: meta.description,
         approvedBy: meta.approvedBy,
         approvedAt: meta.approvedAt,
     };
@@ -1214,6 +1253,11 @@ export const revertPendingRewrite = async (slug: string, username: string): Prom
         meta.kind = prev.kind;
         meta.ifCondition = prev.ifCondition;
         meta.thenAction = prev.thenAction;
+        // The executable half is restored with the prose, and CLEARED when the
+        // old version had none: leaving the newer predicate in place would keep
+        // gating the restored rule on logic its text no longer describes.
+        meta.predicate = prev.predicate;
+        if (prev.description) meta.description = prev.description;
         if (prev.body) meta.body = prev.body;
         meta.previousVersion = undefined;
         // Re-stamp the PRIOR approval, not a fresh human one: the trader never said
