@@ -1762,7 +1762,7 @@ started here rather than left half-deleted.
 Measured before deleting anything, because "the ensemble branch" no longer names what it did
 when it was ruled on.
 
-**The panel is reachable and working.** `components/trade/TradeChatPanel.tsx:982` renders a
+**The panel is reachable and working.** `components/trade/TradeChatPanel.tsx:911` renders a
 **"New panel · up to 5 models"** control, and a local `addSession(kind)` creates the session;
 `chatTurnRunner.ts:1162` builds the seats, refuses below two usable seats (`:1140`), opens a
 `createDebateMailbox` (`:1023`), plans each turn with `planPanelTurn` (`:1035`), gives every

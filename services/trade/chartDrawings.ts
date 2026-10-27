@@ -3,9 +3,11 @@
  * TradingView-style drawings on the trade chart (trendlines, horizontal
  * lines, rays, rectangles, brush paths). Shapes are anchored in DATA space
  * (unix-second time + price), never screen pixels, so a drawing survives
- * reloads, interval changes, zoom and pan. Storage is per active user and
- * per symbol (a BTC trendline must not appear on ETH) with hard caps so the
- * blob can't grow forever. Pure module — no canvas, no React — so the
+ * reloads, interval changes, zoom and pan. Session-scoped storage is per
+ * active user, per session, per symbol (a BTC trendline must not appear on
+ * ETH, nor in another session) through storeBackend — a JSON file per
+ * session on desktop, localStorage on web — with hard caps so the blob
+ * can't grow forever. Pure module — no canvas, no React — so the
  * validation and the "what the model reads" formatter are unit-testable.
  */
 
@@ -13,6 +15,7 @@ import { getActiveUsername } from '../../utils/activeUser';
 import { phtStamp } from '../../utils/timezone';
 import { fmtRiskReward, plannedRiskReward } from '../../utils/riskReward';
 import { priceArgError, usablePrice } from './tradePlanLevels';
+import { readStore, writeStore, removeStore } from '../infrastructure/storeBackend';
 import type { PatternAnchor } from '../../utils/patternDetection';
 import { snapPriceToStructure } from '../../utils/patternDetection';
 
@@ -145,70 +148,121 @@ const sanitizeDrawings = (parsed: unknown): ChartDrawing[] => {
 
 /**
  * SESSION+COIN-scoped drawings — each Chart AI session owns a MAP of
- * symbol → shapes under one key (`trade_session_drawings_v1_<user>_<sid>`).
- * Switching coins inside a session blanks the canvas; coming BACK to a
- * previous coin restores that coin's shapes; a fresh session starts EMPTY.
+ * symbol → shapes under one store key (`trade_session_drawings_v1_<user>_<sid>`
+ * for the user's shapes, `trade_session_model_v1_<user>_<sid>` for the
+ * model's). The bytes go through `storeBackend`, so on DESKTOP each key is a
+ * plain JSON file under the store directory (written atomically by the main
+ * process, outside the shared ~5 MiB origin budget that session 5 moved every
+ * other store off), and on WEB it falls back to localStorage. Switching coins
+ * inside a session blanks the canvas; coming BACK to a previous coin restores
+ * that coin's shapes; a fresh session starts EMPTY.
+ *
+ * The write path is DEBOUNCED (DRAWINGS_FLUSH_MS) because a file write per
+ * pointer commit is real I/O, and it is read-through-MIRROR: the mirror is
+ * the authority from the moment a load resolves or a write happens, so a
+ * slow disk read can never clobber shapes the trader just drew, and a rapid
+ * coin/session switch always reads a consistent map.
  */
-const readCoinMap = (storeKey: string, symbol: string): ChartDrawing[] => {
-    const wanted = symbol.toUpperCase();
+const DRAWINGS_FLUSH_MS = 400;
+const coinMapMirror = new Map<string, Record<string, ChartDrawing[]>>();
+const pendingFlushes = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Keys whose mirror came from a completed store read. A key that was never
+ *  read can still be WRITTEN (a model shape arriving for a bucket the chart
+ *  has not opened) — its flush must merge with the disk's current content,
+ *  the same read-merge-write the synchronous writer used to do, or the file's
+ *  other coins are lost to a map the session never saw. */
+const mirrorLoaded = new Set<string>();
+
+const flushCoinMap = (storeKey: string): Promise<void> => {
+    const timer = pendingFlushes.get(storeKey);
+    if (timer !== undefined) { clearTimeout(timer); pendingFlushes.delete(storeKey); }
+    const mirror = coinMapMirror.get(storeKey);
+    if (!mirror) return Promise.resolve();
+    if (mirrorLoaded.has(storeKey)) return writeStore(storeKey, JSON.stringify(mirror)).then(() => undefined);
+    return readStore(storeKey).then(res => {
+        const merged = { ...parseCoinMap(res.ok ? res.value : null), ...mirror };
+        mirrorLoaded.add(storeKey);
+        coinMapMirror.set(storeKey, merged);
+        return writeStore(storeKey, JSON.stringify(merged)).then(() => undefined);
+    });
+};
+
+/** Push every pending drawing write to the store NOW — on session switches
+ *  and app close (a debounced write that never fires is a lost drawing). */
+export const flushDrawings = (): Promise<unknown> =>
+    Promise.all([...pendingFlushes.keys()].map(flushCoinMap));
+
+if (typeof window !== 'undefined') {
+    const flush = (): void => { void flushDrawings(); };
+    window.addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
+}
+
+const parseCoinMap = (raw: string | null): Record<string, ChartDrawing[]> => {
+    if (raw === null) return {};
     try {
-        const raw = localStorage.getItem(storeKey);
-        if (raw === null) return []; // fresh session — nothing to inherit
-        const parsed = JSON.parse(raw) as { symbol?: unknown; drawings?: unknown } | Record<string, unknown> | null;
-        // New map format ({ BTCUSDT: [...], ETHUSDT: [...] })…
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Array.isArray((parsed as Record<string, unknown>)[wanted])) {
-            return sanitizeDrawings((parsed as Record<string, unknown>)[wanted]);
+        const parsed = JSON.parse(raw) as unknown;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+        const obj = parsed as Record<string, unknown>;
+        const store: Record<string, ChartDrawing[]> = {};
+        if (typeof obj.symbol === 'string' && Array.isArray(obj.drawings)) {
+            // Earlier single-symbol shape → migrate that one coin.
+            store[(obj.symbol as string).toUpperCase()] = sanitizeDrawings(obj.drawings);
+        } else {
+            for (const [coin, list] of Object.entries(obj)) {
+                if (Array.isArray(list)) store[coin] = sanitizeDrawings(list);
+            }
         }
-        // …one-shot read of the earlier single-symbol shape ({symbol, drawings}):
-        // a session drawn on ONE coin keeps working, other coins start empty.
-        if (parsed && typeof parsed === 'object' && (parsed as { symbol?: unknown }).symbol === wanted && Array.isArray((parsed as { drawings?: unknown }).drawings)) {
-            return sanitizeDrawings((parsed as { drawings: unknown }).drawings);
-        }
-        return [];
+        return store;
     } catch {
-        return []; // corrupt store — start clean rather than guess
+        return {}; // corrupt store — start clean rather than guess
     }
 };
 
-const writeCoinMap = (storeKey: string, symbol: string, drawings: ChartDrawing[]): void => {
-    const wanted = symbol.toUpperCase();
-    try {
-        // Merge into the coin map (older single-symbol shape migrates in place).
-        const store: Record<string, ChartDrawing[]> = {};
-        const raw = localStorage.getItem(storeKey);
-        if (raw) {
-            const parsed = JSON.parse(raw) as unknown;
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                const obj = parsed as Record<string, unknown>;
-                if (typeof obj.symbol === 'string' && Array.isArray(obj.drawings)) {
-                    // Earlier single-symbol shape → migrate that one coin.
-                    store[(obj.symbol as string).toUpperCase()] = sanitizeDrawings(obj.drawings);
-                } else {
-                    // Coin map: keep EVERY coin, not just the one being saved.
-                    for (const [coin, list] of Object.entries(obj)) {
-                        if (Array.isArray(list)) store[coin] = sanitizeDrawings(list);
-                    }
-                }
-            }
-        }
-        store[wanted] = drawings.slice(-MAX_DRAWINGS_PER_SYMBOL)
-            .map(d => ({ ...d, points: d.points.slice(0, MAX_POINTS_PER_DRAWING) }));
-        localStorage.setItem(storeKey, JSON.stringify(store));
-    } catch {
-        /* quota / private mode — drawings stay in memory this session */
+/** The session's coin map. First touch reads the store (async — the file on
+ *  desktop, localStorage on web, with the store's own one-time migration of
+ *  pre-file localStorage bytes); every later read — and every read that
+ *  overlaps a write — is served from the mirror. */
+const loadCoinMap = async (storeKey: string): Promise<Record<string, ChartDrawing[]>> => {
+    if (coinMapMirror.has(storeKey)) return coinMapMirror.get(storeKey)!;
+    const res = await readStore(storeKey);
+    const map = res.ok ? parseCoinMap(res.value) : {};
+    // A write that happened while the read was in flight wins.
+    if (!coinMapMirror.has(storeKey)) {
+        coinMapMirror.set(storeKey, map);
+        mirrorLoaded.add(storeKey);
     }
+    return coinMapMirror.get(storeKey)!;
 };
+
+const saveCoinMap = (storeKey: string, symbol: string, drawings: ChartDrawing[]): void => {
+    const wanted = symbol.toUpperCase();
+    const store = coinMapMirror.get(storeKey) ?? {};
+    store[wanted] = drawings.slice(-MAX_DRAWINGS_PER_SYMBOL)
+        .map(d => ({ ...d, points: d.points.slice(0, MAX_POINTS_PER_DRAWING) }));
+    coinMapMirror.set(storeKey, store);
+    if (pendingFlushes.has(storeKey)) clearTimeout(pendingFlushes.get(storeKey)!);
+    pendingFlushes.set(storeKey, setTimeout(() => { pendingFlushes.delete(storeKey); void flushCoinMap(storeKey); }, DRAWINGS_FLUSH_MS));
+};
+
+/** The mirror's answer for one coin, without touching the store — the sync
+ *  merge base `drawingsControl` mutates against once the initial async load
+ *  has resolved. Empty until then, and a write before the load still lands:
+ *  the mirror is authoritative from its first touch. */
+export const readSessionDrawingsSync = (sessionId: string, symbol: string, username = getActiveUsername()): ChartDrawing[] =>
+    coinMapMirror.get(sessionStorageKey(username, sessionId))?.[symbol.toUpperCase()] ?? [];
 
 /**
  * SESSION+COIN-scoped USER drawings — each Chart AI session owns a map of
  * symbol → shapes. Switching coins blanks the canvas; coming BACK restores
  * that coin's shapes; a fresh session starts EMPTY.
  */
-export const loadSessionDrawings = (sessionId: string, symbol: string, username = getActiveUsername()): ChartDrawing[] =>
-    readCoinMap(sessionStorageKey(username, sessionId), symbol);
+export const loadSessionDrawings = async (sessionId: string, symbol: string, username = getActiveUsername()): Promise<ChartDrawing[]> =>
+    (await loadCoinMap(sessionStorageKey(username, sessionId)))[symbol.toUpperCase()] ?? [];
 
 export const saveSessionDrawings = (sessionId: string, symbol: string, drawings: ChartDrawing[], username = getActiveUsername()): void =>
-    writeCoinMap(sessionStorageKey(username, sessionId), symbol, drawings);
+    saveCoinMap(sessionStorageKey(username, sessionId), symbol, drawings);
 
 /**
  * The MODEL's drawn shapes — the SAME per-session-per-coin machinery, its OWN
@@ -216,11 +270,24 @@ export const saveSessionDrawings = (sessionId: string, symbol: string, drawings:
  * `clear_chart_drawings(scope:"model")` never clobber each other — and BOTH
  * survive a coin switch instead of the model's lines vanishing.
  */
-export const loadSessionModelDrawings = (sessionId: string, symbol: string, username = getActiveUsername()): ChartDrawing[] =>
-    readCoinMap(sessionModelStorageKey(username, sessionId), symbol);
+export const loadSessionModelDrawings = async (sessionId: string, symbol: string, username = getActiveUsername()): Promise<ChartDrawing[]> =>
+    (await loadCoinMap(sessionModelStorageKey(username, sessionId)))[symbol.toUpperCase()] ?? [];
 
 export const saveSessionModelDrawings = (sessionId: string, symbol: string, drawings: ChartDrawing[], username = getActiveUsername()): void =>
-    writeCoinMap(sessionModelStorageKey(username, sessionId), symbol, drawings);
+    saveCoinMap(sessionModelStorageKey(username, sessionId), symbol, drawings);
+
+/** Deleting a session deletes its drawings — BOTH buckets, the pending
+ *  debounce, and the mirror, or a deleted session's shapes come back on a
+ *  same-id session or linger in the store forever. */
+export const deleteSessionDrawings = async (sessionId: string, username = getActiveUsername()): Promise<void> => {
+    for (const storeKey of [sessionStorageKey(username, sessionId), sessionModelStorageKey(username, sessionId)]) {
+        const timer = pendingFlushes.get(storeKey);
+        if (timer !== undefined) { clearTimeout(timer); pendingFlushes.delete(storeKey); }
+        coinMapMirror.delete(storeKey);
+        mirrorLoaded.delete(storeKey);
+        await removeStore(storeKey);
+    }
+};
 
 export const createDrawingId = (): string =>
     `d-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

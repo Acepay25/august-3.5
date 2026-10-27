@@ -286,12 +286,21 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
 
     // Load the persisted shapes whenever the chart (session + symbol)
     // changes: session-scoped when the active session is known, legacy
-    // per-symbol otherwise.
+    // per-symbol otherwise. The session load is async (a file read on
+    // desktop), so the cancelled guard is what makes a rapid session/coin
+    // switch settle on the LAST switch's shapes — a slower stale read must
+    // never land after a newer one and paint the wrong session's shapes.
     useEffect(() => {
-        setDrawings(sessionId ? loadSessionDrawings(sessionId, symbol) : loadDrawings(symbol));
+        let cancelled = false;
         setDraft(null);
         setTool('cursor');
         setTextEdit(null);
+        const load = async (): Promise<void> => {
+            const list = sessionId ? await loadSessionDrawings(sessionId, symbol) : loadDrawings(symbol);
+            if (!cancelled) setDrawings(list);
+        };
+        void load();
+        return () => { cancelled = true; };
     }, [symbol, sessionId]);
 
     // Esc cancels an in-progress shape (TradingView behaviour) — the draft
@@ -653,24 +662,28 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
     // and silently killed every tool: clicks drew a preview that never
     // committed, existing shapes vanished on pan).
 
-    /** Nearest bar index for a stored unix time (drawings are quantized to
-     *  bar times on write, so an exact hit is the norm; binary search). */
-    const barIndexForTime = useCallback((t: number): number | null => {
+    /** Continuous bar-space position of a stored unix time: 0 = the first
+     *  loaded bar, fractional between bars, NEGATIVE left of the window and
+     *  > length-1 right of it. This is the drawings' data-space ruler, and the
+     *  reason a timeframe switch keeps shapes in place: the stored time maps
+     *  through the LOADED candles' own spacing (a perp's grid is uniform), so
+     *  a bar-grid change re-scales positions instead of dropping the anchors.
+     *  The previous conversion binary-searched the nearest bar and CLAMPED
+     *  times outside the loaded window onto its first/last bar — a drawing
+     *  anchored a week back collapsed onto the left edge the moment a shorter
+     *  timeframe shrank the loaded window. Extrapolation keeps the anchor at
+     *  its true time: logicalToCoordinate maps out-of-data logicals linearly,
+     *  so a trendline to an off-window anchor still paints the segment that
+     *  crosses the viewport, and panning to it finds it where the time says. */
+    const logicalForTime = useCallback((t: number): number | null => {
         const cs = candlesRef.current;
         const data = (cs?.data?.() ?? []) as readonly { time: number }[];
         if (data.length === 0) return null;
-        let lo = 0;
-        let hi = data.length - 1;
-        while (lo < hi) {
-            const mid = (lo + hi) >> 1;
-            if (data[mid].time < t) lo = mid + 1;
-            else hi = mid;
-        }
-        if (data[lo].time === t) return lo;
-        const prev = data[lo - 1];
-        if (!prev) return lo;
-        return Math.abs(prev.time - t) <= Math.abs(data[lo].time - t) ? lo - 1 : lo;
-    }, []);
+        const step = data.length > 1
+            ? (data[data.length - 1].time - data[0].time) / (data.length - 1)
+            : intervalSeconds(interval);
+        return (t - data[0].time) / step;
+    }, [interval]);
 
     const toScreen = useCallback((p: DrawPoint): { x: number; y: number } | null => {
         const chart = chartRef.current;
@@ -680,13 +693,28 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
         // Test mocks (and mid-teardown windows) may lack the logical API —
         // conversion is impossible there; callers skip those shapes.
         if (typeof ts.logicalToCoordinate !== 'function' || typeof cs.priceToCoordinate !== 'function') return null;
-        const idx = barIndexForTime(p.t);
+        const idx = logicalForTime(p.t);
         if (idx === null) return null;
-        const x = ts.logicalToCoordinate(idx as never);
+        // x converts through an in-window REFERENCE PAIR rather than asking
+        // logicalToCoordinate for the anchor's own logical: the API declines
+        // logicals outside the loaded window (an out-of-window anchor read as
+        // null and the shape silently painted NOTHING — the audit's
+        // vanishing), while the scale itself is linear, so two neighbouring
+        // in-window bars measure its px-per-bar and ANY logical — negative,
+        // fractional, beyond the data — maps exactly.
+        const data = (cs.data?.() ?? []) as readonly { time: number }[];
+        if (data.length < 2) return null;
+        const l1 = Math.floor((data.length - 1) / 2);
+        const x1 = ts.logicalToCoordinate(l1 as never);
+        const x2 = ts.logicalToCoordinate((l1 + 1) as never);
+        if (x1 === null || x1 === undefined || x2 === null || x2 === undefined) return null;
+        const pxPerBar = Number(x2) - Number(x1);
+        if (!Number.isFinite(pxPerBar) || pxPerBar === 0) return null;
+        const x = Number(x1) + (idx - l1) * pxPerBar;
         const y = cs.priceToCoordinate(p.p as never);
-        if (x === null || x === undefined || y === null || y === undefined) return null;
+        if (y === null || y === undefined) return null;
         return { x, y };
-    }, [barIndexForTime]);
+    }, [logicalForTime]);
 
     const toData = useCallback((x: number, y: number): DrawPoint | null => {
         const chart = chartRef.current;
@@ -699,11 +727,14 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
         if (logical === null || logical === undefined || p === null || p === undefined) return null;
         const data = (cs.data?.() ?? []) as readonly { time: number }[];
         if (data.length === 0) return null;
-        // Fractional logical position → floor bar + fraction of one bar
-        // length, so a click BETWEEN bars lands between their times.
-        const base = Math.min(Math.max(Math.floor(logical), 0), data.length - 1);
-        const frac = Math.min(Math.max(logical - Math.floor(logical), 0), 1);
-        const t = Math.round(data[base].time + frac * intervalSeconds(interval));
+        // Continuous inverse of logicalForTime: a click BETWEEN bars lands
+        // between their times, and a click in the padding BEYOND the loaded
+        // window anchors at the extrapolated time instead of clamping onto
+        // the edge bar (the same warp the read side had).
+        const step = data.length > 1
+            ? (data[data.length - 1].time - data[0].time) / (data.length - 1)
+            : intervalSeconds(interval);
+        const t = Math.round(data[0].time + logical * step);
         return { t, p: Number(p) };
     }, [interval]);
 

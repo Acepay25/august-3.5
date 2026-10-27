@@ -17,10 +17,11 @@
  * the merge/cap/persist rules stay unit-testable.
  */
 import {
-    loadSessionDrawings,
+    loadDrawings,
+    saveDrawings,
     saveSessionDrawings,
-    loadSessionModelDrawings,
     saveSessionModelDrawings,
+    readSessionDrawingsSync,
     MAX_DRAWINGS_PER_SYMBOL,
     MAX_POINTS_PER_DRAWING,
     type ChartDrawing,
@@ -30,13 +31,17 @@ import { getActiveUsername } from '../../utils/activeUser';
 export type DrawingBucket = 'user' | 'model';
 
 interface BucketIo {
+    /** The SYNC merge base: the in-memory mirror the initial async load has
+     *  already resolved. Mutations mutate what is loaded and re-persist, so a
+     *  store read per call is gone — it was both a latency cost and a race
+     *  against the debounced writer. */
     load: (sessionId: string, symbol: string, username?: string) => ChartDrawing[];
     save: (sessionId: string, symbol: string, drawings: ChartDrawing[], username?: string) => void;
 }
 
 const BUCKETS: Record<DrawingBucket, BucketIo> = {
-    user: { load: loadSessionDrawings, save: saveSessionDrawings },
-    model: { load: loadSessionModelDrawings, save: saveSessionModelDrawings },
+    user: { load: readSessionDrawingsSync, save: saveSessionDrawings },
+    model: { load: readSessionDrawingsSync, save: saveSessionModelDrawings },
 };
 
 /** Trim to the storage contract: newest N drawings, newest N points each. */

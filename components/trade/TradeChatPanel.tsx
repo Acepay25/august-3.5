@@ -47,7 +47,7 @@ import {
     buildSkillsIndexForPrompt, TRADE_CHAT_SYSTEM_PROMPT,
 } from '../../services/trade/tradeChatContext';
 import { activeStrategiesBlock } from '../../services/learning/strategyStore';
-import type { ChartDrawing } from '../../services/trade/chartDrawings';
+import { deleteSessionDrawings, type ChartDrawing } from '../../services/trade/chartDrawings';
 import type { MessageLevelLines } from '../../services/trade/keyLevels';
 import type { TradeProposal } from '../../services/trade/proposedTrade';
 import type { WatchPlan } from '../../services/trade/tradePlanLevels';
@@ -924,6 +924,10 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     }, [symbol, interval, effort, selectedChatModel]);
 
     const removeSession = useCallback((id: string): void => {
+        // The session's drawings die WITH it — user's and the model's alike.
+        // Without this, every deleted chat left a drawings store orphaned in
+        // the store directory forever (the audit's session-delete finding).
+        void deleteSessionDrawings(id);
         chatStore.removeSession(id);
     }, []);
 

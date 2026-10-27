@@ -24,7 +24,7 @@ import { ProviderConfig } from '../../types/provider';
 import { TradeAnalysis, LoggedTrade, Message, Kline } from '../../types';
 import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData } from '../../services/analysis/MarketDataService';
 import { latestChartVerdict, verdictLevels } from '../../services/trade/chartData';
-import type { ChartDrawing } from '../../services/trade/chartDrawings';
+import { loadSessionModelDrawings, flushDrawings, type ChartDrawing } from '../../services/trade/chartDrawings';
 import { drawingsControl, capDrawings } from '../../services/trade/drawingsControl';
 import type { TradeProposal } from '../../services/trade/proposedTrade';
 import { getActiveUsername } from '../../utils/activeUser';
@@ -614,18 +614,32 @@ const TradeView: React.FC<TradeViewProps> = ({
     useEffect(() => {
         if (prevSymbolRef.current !== symbol) levelWatch.disarmSymbol(prevSymbolRef.current);
         prevSymbolRef.current = symbol;
+        // Anything the previous bucket still owes the store goes out NOW,
+        // before the switch — a debounced write that outlives its session
+        // would land the old coin's shapes under the new session's key.
+        void flushDrawings();
         // Reload THIS coin's model-drawn shapes (persisted per session+coin),
         // so the model's lines survive a coin switch — instead of the old
         // blanket wipe that made "what the AI drew" vanish on the next coin.
+        // The load is async (a file read on desktop); the cancelled guard is
+        // what makes a rapid session/coin switch settle on the LAST switch.
         loadedBucketRef.current = `${chatSnap.activeId}:${symbol}`;
-        setModelDrawings(drawingsControl('model', chatSnap.activeId, symbol).list());
-        // The persist effect below keys on modelDrawings alone, so it could
-        // re-save the PREVIOUS coin's array under the NEW coin's key whenever
-        // the new list was reference-equal (both empty is the common case) and
-        // some unrelated state change re-ran the effect first. Claim the bucket
-        // in the same commit that loads it, so a save can only ever target the
-        // bucket the visible list came from.
-        drawingsClaimedRef.current = `${chatSnap.activeId}:${symbol}`;
+        let cancelled = false;
+        const load = async (): Promise<void> => {
+            const list = await loadSessionModelDrawings(chatSnap.activeId, symbol);
+            if (!cancelled) {
+                setModelDrawings(list);
+                // The persist effect below keys on modelDrawings alone, so it could
+                // re-save the PREVIOUS coin's array under the NEW coin's key whenever
+                // the new list was reference-equal (both empty is the common case) and
+                // some unrelated state change re-ran the effect first. Claim the bucket
+                // in the same commit that loads it, so a save can only ever target the
+                // bucket the visible list came from.
+                drawingsClaimedRef.current = `${chatSnap.activeId}:${symbol}`;
+            }
+        };
+        void load();
+        return () => { cancelled = true; };
     }, [symbol, chatSnap.activeId]);
 
     // Level-accuracy scoring needs THIS coin's bars at THIS timeframe. The
