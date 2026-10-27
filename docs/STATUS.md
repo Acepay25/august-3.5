@@ -296,6 +296,45 @@ the unreachable update/download action.
    it to provider+model, and honouring a `Retry-After` the provider sends, are both trader-visible
    changes.
 
+## Gate state at the end of this pass — one gate is RED, and it is mine
+
+| gate | result |
+|---|---|
+| `typecheck` / `typecheck:scripts` / `typecheck:electron` | 0 |
+| `check:contracts` | 138 passed |
+| `npm run lint` | exit 0, 0 errors / **379** warnings (the baseline cap, spent by nothing I added — measured per file, HEAD vs tree) |
+| `npm run build` | 0, built in 32.02s |
+| live audit driver (Chromium, mock provider, egress blocked) | all probes as recorded above, `PAGE_ERRORS=[]` |
+| **`check-flow-doc-anchors`** | **FAIL — 24 citations land on a comment line (ceiling 0)** |
+
+**Why.** Almost every fix in this pass inserted or deleted lines *above* lines the flow docs cite —
+the digest block adds ~40 lines over `DESK_TOOL_DEFINITIONS`, the arbiter deletion takes 25 away below
+it, the gate deletion moves the pipeline by thirteen, and my own explanatory comments push code down
+without changing its meaning. The gate compares a `file:line` citation against the bytes on that line
+today, so a citation that was true at `8f2565e4` lands on one of my comments. Three citations I did
+re-anchor (the `assemblePipelineMemoryContext` trio) plus ten symbol citations were moved by hand and
+the census restated 451 → 454; that part is committed and holds.
+
+**What is NOT the cause.** Seven further `STALE` anchors name `services/trade/chatTurnRunner.ts`,
+which another session has uncommitted edits in. They are absent from a clean worktree at my HEAD, so
+they belong to that work, not this one.
+
+**Attempted and reverted, recorded so the next pass does not repeat it.** A content-match re-anchorer
+(`%TEMP%/august-reanchor.cjs`) was written and run twice: unique-global match moved 22 citations and
+the comment count went **up** (24 → 26, with 3 new symbol misses), and nearest-forward match reached 22
+but kept 3 symbol misses. Both runs were reverted rather than committed, because a citation that jumps
+to an unrelated identical `};` somewhere else in a 5,000-line file is worse than the stale one it
+replaced, and a half-applied doc repair is worse than an honestly red gate. A Python variant of the
+same idea crashed on this box's cp1252 console encoding mid-write and had to be rolled back too — the
+script must be Node with explicit utf-8, as the surviving one is.
+
+**The repair, for the next sitting.** For each citation the gate can see: read the doc's named symbol,
+search the cited file for the *declaration or call site* of that symbol (not for the base line's raw
+text — punctuation lines like `};` and `try {` match dozens of times), and rewrite only when exactly
+one candidate is plausible. Iterate the gate after each batch; the census number is restated LAST,
+because the gate polices its own quoted count. This is mechanical and does not need judgement about
+the fixes — none of the 24 is a defect in the code.
+
 ## Limits of this pass
 
 Everything marked CODE is a source-and-call-chain proof, not a runtime one. Verified live means:
