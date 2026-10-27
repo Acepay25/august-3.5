@@ -28,11 +28,9 @@ import { splitThinkingFromOutput } from '../utils/thinkingSplit';
 import { chatModelIdOf, resolveChatModelSelection } from '../utils/providerUtils';
 import { buildDecisionReflectionContext } from '../services/learning/DecisionReflectionService';
 import { getEnabledStrategiesText } from '../services/infrastructure/StrategyService';
-import { assemblePipelineMemoryContext } from './analysisPipeline/memoryContext';
 import { useStreamThrottlers } from './analysisPipeline/streamThrottlers';
 import { isNotebookQuickSaveRequest, runNotebookQuickSave } from './analysisPipeline/notebookQuickSave';
 import { classifyRunFailure, mapRunFailureMessages, resolveQuotaFlaggedModel, sanitizeFallbackErrorMessage } from './analysisPipeline/runOutcome';
-import { runChatSurfaceTurn } from '../services/trade/chatSurfaceTurn';
 import {
     beginConversationRun,
     endConversationRunOwned,
@@ -916,6 +914,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // journal-driven accuracy blocks can join it.
             // TRADER NOTEBOOK stage (extracted): notebook slices, bot
             // memory, similar-setups record, regime weighting, loss priming.
+            const { assemblePipelineMemoryContext } = await import('./analysisPipeline/memoryContext');
             const {
                                 detectedLearningCoin,
                 pendingDirection,
@@ -1158,6 +1157,7 @@ ${enhancedPrompt}`;
                 // a dock entry. Ordinary conversation on this surface used
                 // to be answered from the model's training data while the
                 // dock looked the same question up.
+                const { runChatSurfaceTurn } = await import('../services/trade/chatSurfaceTurn');
                 toolTurn = await runChatSurfaceTurn({
                     config: provider.config,
                     history: currentMessages,

@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-25** (the anchor gate re-measured every citation here and in the stage ledger:
-**449 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**447 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 5 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -96,7 +96,7 @@ flowchart TD
     FA --> HSM
     HSM --> D3{"the debate branch is GONE (19): a send answers through the tool turn hooks/useAnalysisPipeline.ts:1161. the ensemble mode and the seat roster it fed were deleted by owner ruling (2026-10-19); the scheduler's own arm was deleted on 2026-10-24"}
     D3 -->|true| ENS["ensemble branch — section C (ENGINE DELETED; the branch answers with ONE tool turn and no longer refuses over seats)"]
-    D3 -->|false: the desk else-arm hooks/useAnalysisPipeline.ts:1155| SPLIT{"a bot thread? :1083"}
+    D3 -->|false: the desk else-arm hooks/useAnalysisPipeline.ts:1161| SPLIT{"a bot thread? :1083"}
     SPLIT -->|yes| TR
     SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:300, tools from CHAT_SURFACE_TOOLS :61, prompt chatSurfaceSystemPrompt :167"]
     CST --> TT
@@ -1263,7 +1263,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1209` · `createDebateMailbox :1137` · `planPanelTurn :1149` |
 | 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `systemPromptFor components/trade/TradeChatPanel.tsx:483` = the blocks below, assembled at `TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:47` |
 | 20 | every dock turn → chatStore | `mutate services/trade/chatStore.ts:361` · `beginRun services/trade/chatStore.ts:508` |
-| 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useBotThread hooks/useAnalysisPipeline.ts:1086`, anything else runs the tool turn `:1161`; the ensemble flag and the roster it fed are gone (2026-10-19) |
+| 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useBotThread hooks/useAnalysisPipeline.ts:1085`, anything else runs the tool turn `:1161`; the ensemble flag and the roster it fed are gone (2026-10-19) |
 | 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1135` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:300` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
 | 23 | casual frames → Message.text | `applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:28`; flush precedes the settle write useAnalysisPipeline.ts |
 | 24 | ensemble → the stages that survive | see C — five of the old eight are gone from the call path, and no stage is named in the code, so no line number is claimed |
@@ -1349,10 +1349,10 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 449 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 447 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 449 anchors verified, and the gate
+   the gate's own output: these docs state 447 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -1436,7 +1436,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 
 10. **The arrow table is 74 rows, and every citation in it resolves — and 69 of the 74 rows pair their citation with the symbol that must live on that line (65 of 70 before the goal, self-modification and rail rows landed; the figure has only ever moved up, and the run prints it with a floor, so a row rewritten without its symbol stops being coverage silently), so those rows are checked for content, not just for a line that exists. One row names no file at all — the ensemble row, whose stages the code never names — so a wrong figure inside it stays outside this gate's reach, which is why the sentence says 69/74 rather than 74/74.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
-    resolves all 449 unique anchors on every run, so coverage of the table is no
+    resolves all 447 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
 11. **"One service replacing nine" is falsifiable, and it is right — counted, not
     asserted.** `git log --diff-filter=D` over `services/providers/` names exactly nine

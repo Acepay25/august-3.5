@@ -88,12 +88,15 @@ jobs:
       - name: Startup chunk stays under the ratchet
         run: |
           set -euo pipefail
-          # 1400 kB raw. Measured 1,377.98 kB on 2026-10-20 after the plan's
-          # lazy-loading pass — the old 2600 kB ceiling let a 363 kB eager
-          # import through unnoticed. Headroom is deliberately small (the
-          # ratchet must bind), so lower this number whenever the build
-          # shrinks by more than 10% (the stale-ceiling check below).
-          CEILING_KB=1400
+          # 1200 kB raw. Measured 1,145 kB on 2026-10-27 after the desk-turn
+          # stack became a dynamic import at its two call sites (it had grown to
+          # 1,434 kB and breached the old 1400 ceiling — the goals/self-mod/
+          # memory services are turn-time code, not startup code). The old
+          # 2600 kB ceiling let a 363 kB eager import through unnoticed.
+          # Headroom is deliberately small (the ratchet must bind), so lower
+          # this number whenever the build shrinks by more than 10% (the
+          # stale-ceiling check below).
+          CEILING_KB=1200
           STALE_FLOOR_KB=$(( CEILING_KB * 90 / 100 ))
           entry=$(ls -S dist/assets/index-*.js | head -1)
           if [ -z "$entry" ]; then

@@ -284,6 +284,25 @@ Proof, in the two layers the app has:
   typecheck ×3, lint 0 errors at the 379-warning ratchet, build, boot-probe,
   render-probe and skill-approval 25/25.
 
+## The startup graph paid for the pass, and the guard caught it
+
+`Guards` went red the first time it ran on the merged tree: the entry chunk was
+1,434 kB against a 1,400 kB ratchet (1,377.98 kB measured on 2026-10-20). It was
+not a library and not the shell pass — shell v2 alone measured 1,389 kB; the
+goals, self-modification and memory work added the rest, and all of it is
+turn-time code rather than startup code. The desk-turn stack (`DeskToolsService`
+and the goal, strategy and profile-memory services behind it) and the
+deep-analysis memory assembly are needed when a message is SENT. Both are now
+`await import(...)` at their two call sites in `useAnalysisPipeline`, and the
+entry measures **1,145 kB** (-289 kB). The first send pays one extra chunk fetch,
+which the browser then caches. `CEILING_KB` drops 1400 → 1200 so the ratchet
+keeps binding — the guard's own stale-ceiling rule refuses a build more than 10%
+under the ceiling, which is why the number moves down with the build.
+
+Proof: build entry 1,145 kB; boot and render probes green (render-probe drives
+real exchanges through the deferred stack); live probe 87 passed / 0 failed /
+1 blocked *after* the change, so the deferral is measured on the path it moved.
+
 ## Next slices
 
 1. **Goals UI** — landed. The Chat rail's third tab (`components/agents/GoalRailPanel.tsx`)

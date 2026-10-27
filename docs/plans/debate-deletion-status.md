@@ -1008,7 +1008,7 @@ the store stays. `CalibrationLedgerService` (117 lines) feeds TWO live surfaces:
 not a mechanical one — it removes reporting the trader can currently open.
 
 **2. `ensembleProgress` has no rendering reader but IS load-bearing on the failure path.**
-Census over all `.ts`/`.tsx`: minted at the block now at `useAnalysisPipeline.ts:940` (the placeholder row itself was deleted with the engine), patched at
+Census over all `.ts`/`.tsx`: minted at the block that held it until the ensemble engine was deleted (2026-10-19) — no line in the file mints it now, which is the point of this row, patched at
 `runOutcome.ts`'s debating branch, stripped at the SQLite boundary, and
 after `1bd501e` no component reads it (`App.tsx:1170` was the last, and that memo is
 gone). But the `runOutcome` branch keyed on it writes the row's TEXT —
@@ -1742,7 +1742,7 @@ bytes on legacy rows — accepted over keeping a stripper for a key no writer ca
 
 Nine doc citations moved when these lines went. Each was re-measured by matching the HEAD
 line's content, and two were re-pointed at a real symbol instead of the bare `};` they used
-to land on (`useAnalysisPipeline.ts:788` for the coin tip; the automation guard this row named was deleted with the feature on 2026-10-24).
+to land on (`useAnalysisPipeline.ts:786` for the coin tip; the automation guard this row named was deleted with the feature on 2026-10-24).
 One failure mode the gate cannot see, recorded because it happened here: a citation that
 drifts onto a DIFFERENT non-blank line passes. The run-failure guard's own number did
 exactly that, so the two ledger sentences citing it were rewritten rather than renumbered.
