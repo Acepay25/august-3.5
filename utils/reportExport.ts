@@ -35,22 +35,30 @@ export const exportTradesCSV = (trades: LoggedTrade[]): void => {
         'Date', 'Coin', 'Direction', 'Outcome', 'Entry', 'Stop Loss', 'Take Profits',
         'Leverage', 'PnL (USD)', 'PnL (%)', 'Family', 'Strategy', 'Confidence', 'Post-Mortem',
     ];
-    const rows = trades.map(t => [
-        t.timestamp,
-        t.analysis.coinName || '',
-        t.analysis.direction || '',
-        t.outcome,
-        t.analysis.entryPoints?.[0]?.price || '',
-        t.analysis.stopLoss || '',
-        (t.analysis.takeProfit || []).map(tp => tp.price).join(' / '),
-        t.leverage ?? '',
-        t.pnlAmount ?? '',
-        t.pnlPercent ?? '',
-        t.analysis.detectedPatternFamily || '',
-        t.analysis.strategy || '',
-        t.analysis.confidence || '',
-        (t.postMortem || '').slice(0, 300),
-    ]);
+    /** A journal row written before import validation rejected `analysis: null`
+     *  still belongs in the trader's export. Empty plan cells, not a throw and not a
+     *  silently missing row — a CSV that drops a trade is the same class of lie as a
+     *  tally that invents one. */
+    const MISSING_PLAN = {} as LoggedTrade['analysis'];
+    const rows = trades.map(t => {
+        const a = t.analysis ?? MISSING_PLAN;
+        return [
+            t.timestamp,
+            a.coinName || '',
+            a.direction || '',
+            t.outcome,
+            a.entryPoints?.[0]?.price || '',
+            a.stopLoss || '',
+            (a.takeProfit || []).map(tp => tp.price).join(' / '),
+            t.leverage ?? '',
+            t.pnlAmount ?? '',
+            t.pnlPercent ?? '',
+            a.detectedPatternFamily || '',
+            a.strategy || '',
+            a.confidence || '',
+            (t.postMortem || '').slice(0, 300),
+        ];
+    });
     const csv = [header, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
     downloadBlob(csv, `august-trades-${dateStamp()}.csv`, 'text/csv;charset=utf-8;');
 };

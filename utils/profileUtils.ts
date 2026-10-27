@@ -22,9 +22,14 @@ export const isValidUserProfile = (obj: any): obj is UserProfile => {
     }
 
     if (obj.tradeLog.length > 0) {
-        const firstTrade = obj.tradeLog[0];
-        if (!firstTrade || typeof firstTrade.id !== 'string' || typeof firstTrade.outcome !== 'string' || typeof firstTrade.analysis !== 'object') {
-            return false;
+        // Every row, not just the first: one poisoned row is enough to break the
+        // CSV export, and a validator that samples cannot promise the shape the
+        // readers depend on. And `typeof x === 'object'` is TRUE for `null`, which
+        // is how an imported profile with `analysis: null` passed and then threw at
+        // `t.analysis.coinName` in reportExport (docs/AUDIT.md A-7).
+        for (const trade of obj.tradeLog) {
+            if (!trade || typeof trade.id !== 'string' || typeof trade.outcome !== 'string') return false;
+            if (!trade.analysis || typeof trade.analysis !== 'object') return false;
         }
     }
 
