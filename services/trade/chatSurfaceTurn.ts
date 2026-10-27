@@ -273,6 +273,8 @@ export interface ChatSurfaceTurnRequest {
      *  was previously read by nothing — the label beside the switch said the
      *  books were used while no seat had ever seen one. */
     strategiesEnabled?: boolean;
+    /** See the note beside `contextBlock` in the executor. */
+    extraContext?: string;
     symbol?: string | null;
     interval?: string;
     trades: LoggedTrade[];
@@ -411,9 +413,20 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
     // A FULL ANALYSIS (stage 20f) is an instruction, not a keyword: the trader
     // pressed the button, so the seat is told to check the tape, and the turn is
     // checked afterwards for whether it actually did.
+    // Retrieved context the caller assembled for THIS run (the trader's closed
+    // trade lessons, skill-veto prose, notebook bodies, the predicate note). It
+    // rides the SYSTEM prompt because a seat reads the user role as the trader
+    // speaking, and because it is guidance rather than a request. Capped here so
+    // a runaway retrieval cannot crowd out the chart.
+    const extraContext = (req.extraContext ?? '').trim();
+    const contextBlock = extraContext
+        ? `\n\n## What you already know about this trader\n${extraContext.slice(0, 6000)}${
+            extraContext.length > 6000 ? '\n… (retrieved context truncated)' : ''
+        }`
+        : '';
     const systemText = req.requireTools
-        ? `${prompt.text}\n\nFULL ANALYSIS REQUESTED: this turn is not a conversation, it is a reading. Call the market tools (price, book, derivatives, indicators, the trader's own log) before you state a number, and finish with present_trade if you have a plan. If you call nothing, say plainly that you did not look anything up.`
-        : prompt.text;
+        ? `${prompt.text}${contextBlock}\n\nFULL ANALYSIS REQUESTED: this turn is not a conversation, it is a reading. Call the market tools (price, book, derivatives, indicators, the trader's own log) before you state a number, and finish with present_trade if you have a plan. If you call nothing, say plainly that you did not look anything up.`
+        : `${prompt.text}${contextBlock}`;
     let sawMarketTool = false;
     const tracked: ToolTurnEvents = {
         ...events,

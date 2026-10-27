@@ -1041,16 +1041,17 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 devLog('[Recent Insights] Generated from tradeSummaries array, length:', recentInsightsString.length);
             }
 
-            // Enhance prompt with memory files, similar setups, hybrid data AND learning context
-            let enhancedPrompt = promptToSend;
-            if (memoryFilesContext || similarSetupsContext || learningInjection || predicateGate?.note) {
-                const contextParts: string[] = [];
-                if (memoryFilesContext) contextParts.push(memoryFilesContext);
-                if (similarSetupsContext) contextParts.push(similarSetupsContext);
-                if (learningInjection) contextParts.push(learningInjection);
-                if (predicateGate?.note) contextParts.push(predicateGate.note);
-                enhancedPrompt = `${contextParts.join('\n\n')}\n\n${promptToSend}`;
-            }
+            // Every retrieved block that used to be assembled into a local
+            // `enhancedPrompt` and then THROWN AWAY — the sends below pass
+            // `promptToSend` — is collected here and handed to the turn, which
+            // puts it where a model reads guidance (the system prompt). The
+            // trader's own closed-trade lessons, skill-veto prose and notebook
+            // bodies were computed, logged, and never sent (docs/AUDIT.md L-8).
+            const contextParts: string[] = [];
+            if (memoryFilesContext) contextParts.push(memoryFilesContext);
+            if (similarSetupsContext) contextParts.push(similarSetupsContext);
+            if (learningInjection) contextParts.push(learningInjection);
+            if (predicateGate?.note) contextParts.push(predicateGate.note);
 
             // ========== GATE KEEPER: Two-Stage Gate Scan ==========
             // The authoritative symbol is the one detected at the top of the
@@ -1071,14 +1072,13 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             try {
                 const reflectionBlock = buildDecisionReflectionContext(loggedTrades, finalSymbol);
                 if (reflectionBlock) {
-                    enhancedPrompt = `${reflectionBlock}
-
-${enhancedPrompt}`;
+                    contextParts.unshift(reflectionBlock);
                 }
             } catch { /* reflection is best-effort */ }
             // ========== END GATE KEEPER ==========
 
-            devLog('[Hybrid Intelligence] Enhanced prompt length:', enhancedPrompt.length);
+            const extraContext = contextParts.filter(Boolean).join('\n\n');
+            devLog('[Hybrid Intelligence] Retrieved context length:', extraContext.length);
             devLog('[AI Learning] Has learning injection:', learningInjection.length > 0);
             devLog('[Hybrid Intelligence] ======= END =======');
 
@@ -1177,6 +1177,7 @@ ${enhancedPrompt}`;
                     prompt: promptToSend,
                     memoryEnabled: isGlobalMemoryEnabled !== false,
                     strategiesEnabled: isStrategiesEnabled !== false,
+                    extraContext,
                     // An attached screenshot is SENT, not mentioned: before
                     // this the camera on this surface painted a bubble the
                     // model never received.
