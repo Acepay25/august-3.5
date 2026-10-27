@@ -9,11 +9,11 @@ import React from 'react';
 import { Check, X } from '../shared/Icons';
 import {
     MemoryAmendment,
+    applyAmendmentContent,
     listAmendments,
     approveAmendment,
     rejectAmendment,
 } from '../../services/learning/memoryAmendments';
-import { getMemoryFiles, updateMemoryFile } from '../../services/learning/MemoryFilesService';
 import { getActiveUsername } from '../../utils/activeUser';
 import { phtStamp } from '../../utils/timezone';
 
@@ -43,18 +43,19 @@ export const AmendmentsInbox: React.FC = () => {
         setSaveError(null);
         try {
             if (apply) {
-                const resolved = approveAmendment(a.id);
-                if (resolved) {
-                    const file = getMemoryFiles().files.find(f => f.id === a.fileId);
-                    if (file) {
-                        // Edits replace the whole body; supersede corrections
-                        // ride the file tail with a provenance header.
-                        const next = a.kind === 'supersede'
-                            ? `${file.content}\n\n## Correction (${resolved.resolvedAt})\n\n${a.proposedContent}`
-                            : a.proposedContent;
-                        await updateMemoryFile(a.fileId, { content: next }, getActiveUsername());
-                    }
+                // WRITE FIRST, MARK SECOND. This used to flip the queue row to
+                // approved and only then apply the content, so a deleted target
+                // was "approved" with nothing written, and a refused notebook
+                // write left the row approved while the message said it was still
+                // pending (docs/AUDIT.md M-4). The applier lives in the service
+                // because the supervisor's override needs the same one.
+                const applied = await applyAmendmentContent(a, getActiveUsername());
+                if (!applied.ok) {
+                    setSaveError(applied.error ?? 'That correction could not be applied, so it is still pending.');
+                    refresh();
+                    return;
                 }
+                approveAmendment(a.id);
             } else {
                 rejectAmendment(a.id);
             }

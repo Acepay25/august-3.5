@@ -35,7 +35,17 @@ export interface MemoryAmendment {
     resolvedBy?: 'user';
 }
 
-const KEY = 'memory_amendments_v1';
+const KEY_PREFIX = 'memory_amendments_v1';
+
+/** Per profile, like every other queue in the app. The key was global, so a
+ *  second profile saw the first's pending corrections and could approve them
+ *  against its own notebook (docs/AUDIT.md M-4). The unscoped key is still read
+ *  as a legacy fallback so a queue written before this is not lost. */
+const keyFor = (): string => {
+    const user = (typeof localStorage !== 'undefined' && localStorage.getItem('last_active_user')) || 'default';
+    return `${KEY_PREFIX}:${user}`;
+};
+const LEGACY_KEY = KEY_PREFIX;
 
 const uid = (): string => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 const nowIso = (): string => new Date().toISOString();
@@ -46,7 +56,7 @@ export const AMENDMENT_EVENT = 'august:memory-amendment';
 const load = (): MemoryAmendment[] => {
     if (typeof window === 'undefined' || !window.localStorage) return [];
     try {
-        const raw = window.localStorage.getItem(KEY);
+        const raw = window.localStorage.getItem(keyFor()) ?? window.localStorage.getItem(LEGACY_KEY);
         const parsed = raw ? JSON.parse(raw) : [];
         return Array.isArray(parsed) ? (parsed as MemoryAmendment[]) : [];
     } catch { return []; }
@@ -72,7 +82,7 @@ const save = (items: MemoryAmendment[]): void => {
     if (typeof window === 'undefined' || !window.localStorage) return;
     const payload = JSON.stringify(items);
     try {
-        window.localStorage.setItem(KEY, payload);
+        window.localStorage.setItem(keyFor(), payload);
     } catch (e) {
         recordMemoryWriteFailure(e, 'amendments', bytesOf(payload));
         throw e;
@@ -141,7 +151,40 @@ export const listAmendments = (status?: MemoryAmendment['status']): MemoryAmendm
     return status ? items.filter(a => a.status === status) : items;
 };
 
-/** APPROVE: the caller applies the content change itself (write-lock path). */
+/**
+ * Apply an approved correction to the notebook, and say whether the bytes landed.
+ *
+ * This lives here, not in the inbox, because there are TWO approvers — the inbox
+ * button and the supervisor's override — and the supervisor used to call the
+ * status-only helper, so an override marked a correction approved while the note
+ * kept its old text (docs/AUDIT.md M-4). One applier, one answer.
+ *
+ * A missing target is a refusal, not a silent approval: the note a model wanted
+ * to correct was deleted, so there is nothing to apply and the human must be told.
+ */
+export const applyAmendmentContent = async (
+    a: MemoryAmendment,
+    username: string,
+): Promise<{ ok: boolean; error?: string }> => {
+    const { getMemoryFiles, updateMemoryFile } = await import('./MemoryFilesService');
+    const file = getMemoryFiles().files.find(f => f.id === a.fileId);
+    if (!file) return { ok: false, error: 'The note this correction targeted no longer exists, so nothing was changed.' };
+    const next = a.kind === 'supersede'
+        ? `${file.content}
+
+## Correction (${nowIso()})
+
+${a.proposedContent}`
+        : a.proposedContent;
+    try {
+        await updateMemoryFile(a.fileId, { content: next }, username);
+        return { ok: true };
+    } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+};
+
+/** APPROVE: call only AFTER `applyAmendmentContent` reported ok. */
 export const approveAmendment = (id: string): MemoryAmendment | undefined => {
     const items = load();
     const a = items.find(x => x.id === id);

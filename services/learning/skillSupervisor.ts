@@ -35,7 +35,7 @@ import {
 } from '../../utils/skillDrafts';
 import { listLearningProposals, dismissLearningProposal, queueLearningProposal, type LearningProposal } from '../../utils/learningQueue';
 import { loadForgedTools, approveForgedTool, retireForgedTool } from '../tools/toolForge';
-import { listAmendments, approveAmendment, rejectAmendment } from './memoryAmendments';
+import { applyAmendmentContent, listAmendments, approveAmendment, rejectAmendment } from './memoryAmendments';
 import { getMemoryFiles, updateMemoryFile, deleteMemoryFile } from './MemoryFilesService';
 import {
     listSkills, parseSkillMarkdown,
@@ -671,8 +671,18 @@ export const overrideVerdict = async (
         // itself as a successful one, and `false` is already what the panel
         // renders as "nothing changed".
         try {
-            if (accepted) rejectAmendment(ev.itemId);
-            else approveAmendment(ev.itemId);
+            if (accepted) {
+                rejectAmendment(ev.itemId);
+            } else {
+                // An override that un-rejects a correction must also APPLY it, or
+                // the panel reports a change the note never received: this used to
+                // call the status-only helper (docs/AUDIT.md M-4).
+                const amendment = listAmendments().find(a => a.id === ev.itemId);
+                if (!amendment) return false;
+                const applied = await applyAmendmentContent(amendment, username);
+                if (!applied.ok) return false;
+                approveAmendment(ev.itemId);
+            }
         } catch {
             return false;
         }
