@@ -2620,8 +2620,8 @@ export interface DeskToolContext {
      *  the feed on demand passes these; the rest keep the frozen value. */
     getLiveMarkPrice?: () => number | null;
     getFormingCandle?: () => FormingCandle | null;
-    /** The seat's tool allow-list (chat-panel TRADE_TOOLS, arbiter
-     *  ARBITER_ALLOWED_TOOLS, bot presets…). When non-empty it is enforced
+    /** The seat's tool allow-list (chat-panel TRADE_TOOLS, bot presets…).
+     *  When non-empty it is enforced
      *  HERE, in the executor — not just in what gets OFFERED: on
      *  text-protocol transports (chat_completions-responses without native
      *  tools) the model can emit a tag for ANY tool, and only the executor
@@ -4069,31 +4069,6 @@ export async function executeDeskTools(
         context.signal,
     )));
 }
-
-/**
- * Arbiter tool policy: the moderator's binding verdict is an
- * argument-quality decision, so its DEFAULT desk is memory + context only.
- * Order-book/derivatives data can outweigh argument quality and are opt-in
- * per call site; the clarification rounds inherit the same policy (W6).
- * Analysts keep their bot-role presets — this constrains the arbiter only.
- */
-export const ARBITER_ALLOWED_TOOLS = [
-    'recall',
-    'recall_chat',
-    'get_setup_history_stats',
-    // The arbiter judges claims about the trader's own record. Aggregate-only
-    // access left it unable to check "my last five losses were all revenge
-    // trades" against the rows the trader can see.
-    'get_trade_log',
-    'get_session_context',
-    'web_search',
-    // The arbiter is the seat most likely to be handed a clipped evidence pack
-    // or book, and it is the one whose verdict depends on what the clip hid —
-    // without this it would receive a receipt it cannot redeem.
-    'read_tool_output',
-    'forge_tool',
-    'amend_memory',
-] as const;
 
 /** Parse OpenAI-style tool_calls from a chat message. */
 export function parseOpenAIToolCalls(message: unknown): DeskToolCall[] {
