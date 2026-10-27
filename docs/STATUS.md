@@ -192,6 +192,28 @@ the TP candle as `exitCandleIndex`, which truncates the MAE/MFE window. Both nee
 decision (decision 2) before a change is defensible. The monthly report has its own `$0` sum and was
 left alone rather than swept into F-12's commit.
 
+**F-10 / R-1 / R-2 — one false message and two deletions.**
+
+- **F-10** `services/trade/screener.ts:147-155` — the digest for an empty row list
+  claimed "universe fetch failed; treat as UNKNOWN". The tool path already checks
+  `scan.universeFailed` and says UNKNOWN before this formatter is ever reached, and
+  `screenerToMarkdown` has exactly one caller (the desk tool, verified by grep), so an
+  empty array here can only mean a healthy scan that filtered to nothing. Measured:
+  `SCREENER — 0 rows: the scan completed and nothing met this filter…`.
+- **R-1** `services/analysis/DeskToolsService.ts` — `ARBITER_ALLOWED_TOOLS` deleted
+  (re-grepped at delete time: the definition and one comment, no importer; the arbiter
+  it configured went with the debate engine). The comment that named it as an allow-list
+  source now names only the lists that still exist, because a stale name in a doc comment
+  reads as a live caller.
+- **R-2** `hooks/useAnalysisPipeline.ts:1080-1087` — `const gateInjection = ''` and the
+  `if (gateInjection)` branch it fed deleted: a literal the compiler can prove empty,
+  standing beside a `devLog` line claiming constraints were injected.
+
+*Gates:* `typecheck` 0, `npm run lint` exit 0 with 0 errors / **379** warnings (its real
+exit taken unpiped — a piped exit code would have been tail's, not lint's), live audit
+re-run with zero page errors and the tool inventory unchanged at 41 desk + 9 chart + 2
+mailbox, which is the control that says R-1 removed nothing the desk offers.
+
 ### Pending
 Status legend: `pending` · `in-progress` · `done`.
 
@@ -207,7 +229,7 @@ Status legend: `pending` · `in-progress` · `done`.
 | **F-7** | A forged-tool proposal must report what storage actually did, and the manager UI must surface the failure without turning a telemetry-write error into a false "the request failed" | T-5 | pending — PROVEN red |
 | **F-8** | `digestToolResult` must distinguish *unavailable* from *empty* (a real zero keeps printing zero) | T-2 | **done** — PROVEN red and green, with controls |
 | **F-9** | Pass `loggedTrades` into Settings → Data so training export is reachable, and prove the button enabled with a row present | §8 | **done** |
-| **F-10** | The screener must not call a successful empty scan a universe failure | T-9 | pending — CODE |
+| **F-10** | The screener must not call a successful empty scan a universe failure | T-9 | **done** |
 | **F-11** | Fix the double halving: the engine's blended exit is the single source, `buildWinResolution` drops its second `scaleOut` | A-4 | **done** — PROVEN red and green |
 | **F-12** | The weekly digest must print "dollars not captured", not `$0` | A-5 | **done** — PROVEN red and green, with control |
 | **F-13** | Import validation must reject `analysis: null`, and the export must not deref it | A-7 | **done** — PROVEN red and green |
@@ -225,8 +247,8 @@ S-6 receipts without read-back · A-6 settlement provenance · A-8 one clock.
 
 | # | item | audit id | status |
 |---|---|---|---|
-| **R-1** | `ARBITER_ALLOWED_TOOLS` — zero importers | T-8 | pending |
-| **R-2** | `gateInjection` empty literal + the `if` it feeds | L-8 | pending |
+| **R-1** | `ARBITER_ALLOWED_TOOLS` — zero importers | T-8 | **done** |
+| **R-2** | `gateInjection` empty literal + the `if` it feeds | L-8 | **done** |
 | **R-3** | Compare / reanalysis / simulator overlays — orphan openers; keep the Monte Carlo service | §8 | pending |
 | **R-4** | Default `NavRail` — **after** rehoming the update download (a container is not a delete list) | §8 | pending |
 | **R-5** | `learning_rules_v2_<user>`: written and backed up, read by no prompt — needs the reader or the removal, not a third state | M-5 | pending (owner call) |
