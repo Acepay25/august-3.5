@@ -1542,8 +1542,11 @@ async function main() {
             });
             await sleep(600);
             const backAgain = await away();
+            // The rail COMPONENT was deleted 2026-10-28; the width it defined is
+            // still the sidebar's, and lives in the module that kept the live
+            // pieces (components/shell/shellChrome.tsx).
             const navRailSrc = require('fs').readFileSync(
-                path.join(ROOT, 'components', 'shell', 'NavRail.tsx'), 'utf8');
+                path.join(ROOT, 'components', 'shell', 'shellChrome.tsx'), 'utf8');
             const navRailExpandedPx = Number((navRailSrc.match(/NAV_RAIL_EXPANDED_PX = (\d+)/) || [])[1]) || 240;
             const colWidth = await page.evaluate(() => {
                 const el = document.querySelector('[data-testid="agents-rail"]');

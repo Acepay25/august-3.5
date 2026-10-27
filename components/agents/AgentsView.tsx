@@ -72,7 +72,7 @@ import StatusPill from '../ui/StatusPill';
 // The shell's own column width, imported rather than repeated: this surface's
 // sidebar and the rail are ONE shell, and two numbers is how the hop started
 // jumping between them.
-import { NAV_RAIL_EXPANDED_PX } from '../shell/NavRail';
+import { NAV_RAIL_EXPANDED_PX } from '../shell/shellChrome';
 import NavExpandButton from '../shell/NavExpandButton';
 import InlineVerdict from '../analysis/InlineVerdict';
 import TradeProposalCard, { TradeProposalLoggedRow } from '../trade/panels/TradeProposalCard';

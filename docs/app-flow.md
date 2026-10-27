@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-25** (the anchor gate re-measured every citation here and in the stage ledger:
-**462 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**458 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 5 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -85,7 +85,7 @@ flowchart TD
     subgraph DOCK["Chart AI dock — inside Trade, TradeView.tsx:1140"]
         DC["ChatComposer.tsx:156 :226"] --> D2{"chatTurnRunner.send chatTurnRunner.ts:860 — branches on seats"}
         D2 -->|solo| SO["runSeatTurn called services/trade/chatTurnRunner.ts:1039, defined :616"]
-        D2 -->|panel, 2+ seats| PN["per-seat services/trade/chatTurnRunner.ts:1228 + createDebateMailbox :1156 + planPanelTurn :1168"]
+        D2 -->|panel, 2+ seats| PN["per-seat services/trade/chatTurnRunner.ts:1229 + createDebateMailbox :1156 + planPanelTurn :1167"]
         D2 -->|Full analysis button| FA["runFullAnalysis components/trade/TradeChatPanel.tsx:586 → the SAME App:1586 wrapper — it holds the session run slot and writes no row"]
     end
     SO --> TT["runToolTurn — services/trade/toolTurn.ts:136"]
@@ -170,7 +170,7 @@ duplicate or hide it.
   while the trader reads the other, and a rAF writer fires zero times there —
   the same defect `FadingText` records.
 - The thread exists before the first write. A solo dock turn resolves its
-  conversation at send (`turnConversationId`, `services/trade/chatTurnRunner.ts:886`)
+  conversation at send (`turnConversationId`, `services/trade/chatTurnRunner.ts:889`)
   through `ensureDockTurnConversation` (`App.tsx:1740`), handed to the runner as
   `onSyncConversation`, which adopts the unused blank conversation or mints one
   and makes it active — a session that never had a thread used to keep its
@@ -1264,11 +1264,11 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 13 | AgentsView.send → analysis branch | `onAnalyze components/agents/AgentsView.tsx:802` → `handleRunAnalysisFromChat App.tsx:2427` — the dock's `onRunAnalysis` reaches the SAME wrapper |
 | 14 | dock Full analysis → the run slot | `runFullAnalysis components/trade/TradeChatPanel.tsx:586` → `beginRun`/`endRunOwned`; it writes **no row**, the pipeline's own messages are projected into the session |
 | 15 | ChatComposer → chatTurnRunner.send | key `Enter components/trade/panels/ChatComposer.tsx:156` / button `:226` → `services/trade/chatTurnRunner.ts:860` |
-| 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:1039` (definition `runSeatTurn services/trade/chatTurnRunner.ts:616`) |
+| 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:1039` (definition `runSeatTurn services/trade/chatTurnRunner.ts:619`) |
 | 17 | runSeatTurn → the ONE turn executor | `runToolTurn toolTurn.ts:136` → `streamChatWithDeskTools :174` → `DeskToolsService` → `streamChatRequest` |
-| 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1229` · `createDebateMailbox :1156` · `planPanelTurn :1168` |
+| 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1232` · `createDebateMailbox :1156` · `planPanelTurn :1167` |
 | 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `systemPromptFor components/trade/TradeChatPanel.tsx:520` = the blocks below, assembled at `TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:520` |
-| 20 | every dock turn → chatStore | `mutate services/trade/chatStore.ts:330` · `beginRun services/trade/chatStore.ts:536` |
+| 20 | every dock turn → chatStore | `mutate services/trade/chatStore.ts:400` · `beginRun services/trade/chatStore.ts:551` |
 | 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useBotThread hooks/useAnalysisPipeline.ts:1098`, anything else runs the tool turn `:1174`; the ensemble flag and the roster it fed are gone (2026-10-19) |
 | 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1147` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:321` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
 | 23 | casual frames → Message.text | `applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:28`; flush precedes the settle write useAnalysisPipeline.ts |
@@ -1335,30 +1335,20 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 4. Approvals is a **tab** of the Knowledge surface, not a fifth destination. The live
    destination set is exactly `trade | journal | agents (labelled Chat) | learn
    (labelled Knowledge)`.
-5. **`NavRail` is imported and NOT rendered — it is a dead node.** Verified three
-   ways (re-anchored 2026-10-23): `grep -c NavRail App.tsx` = 18 occurrences and
-   **none is a JSX element**; `grep '<NavRail'` repo-wide matches only
-   `components/shell/NavRail.tsx:140` (its own definition) — the second match the
-   grep used to find was a test that mounted it directly, removed with the suite; and
-   the code says so out loud — `App.tsx:2361` is the comment reading "The
-   NavRail is GONE: its five destination rows were the tab strip this redesign was
-   asked to remove". Only the `AccountRow` export is rendered, at `App.tsx:2584`;
-   `NAV_RAIL_AUTO_COLLAPSE_PX` (`App.tsx:119`, used `:659`/`:662`) and
-   `NAV_RAIL_EXPANDED_PX` (`components/agents/AgentsView.tsx:75`, used `:931`) are
-   the other two live exports, so the file cannot be deleted whole.
-   (The fourth way used to be an ESLint finding on an unused `NavRail` default
-   import. It no longer exists: `App.tsx:119` now imports only the two used symbols,
-   so that import is gone; the proof stands on the three ways above.)
-   **An earlier pass of this doc asserted the opposite** ("rendered at App.tsx line 2766") and
-   the mechanism is worth keeping: `App.tsx:2397` passes `onExpandNavRail={…}` and
-   the rail's expand state is very much alive at `App.tsx:658`, so a grep for `NavRail`
-   looks like a mounted component. An `on…` prop is not a render. Withdrawn.
+5. **`NavRail` is DELETED (2026-10-28).** The component had no rendered caller; the only
+   thing it alone hosted was the update download, which had no other entry point anywhere in
+   the app. The download moved to the header (`components/shared/Header.tsx` mounts
+   `UpdateButton`), and the two live pieces of the file moved with it: the layout constants
+   (`NAV_RAIL_COLLAPSED_PX`, `NAV_RAIL_EXPANDED_PX`, `NAV_RAIL_AUTO_COLLAPSE_PX`) and
+   `AccountRow` now live in `components/shell/shellChrome.tsx`, which is what App, the Chat
+   surface and the render probe import. `NAV_RAIL_EXPANDED_PX` is still the sidebar width the
+   probe measures, so the probe reads it from that module.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 462 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 458 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 462 anchors verified, and the gate
+   the gate's own output: these docs state 458 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -1403,10 +1393,10 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
    Qualifying the citations that had no symbol
    of their own is what found
    five numbers that were right-shaped and wrong: `runSeatTurn` is defined at
-   `services/trade/chatTurnRunner.ts:616`, `createDebateMailbox` at
-   `services/trade/chatTurnRunner.ts:1157`, `planPanelTurn` at
-   `services/trade/chatTurnRunner.ts:1169`, the dock's `send` at
-   `services/trade/chatTurnRunner.ts:1295`, `runFullAnalysis` at
+   `services/trade/chatTurnRunner.ts:619`, `createDebateMailbox` at
+   `services/trade/chatTurnRunner.ts:1160`, `planPanelTurn` at
+   `services/trade/chatTurnRunner.ts:1172`, the dock's `send` at
+   `services/trade/chatTurnRunner.ts:1298`, `runFullAnalysis` at
    `components/trade/TradeChatPanel.tsx:594`, and `MAX_PLANS_PER_RUN` at
    The pass also moved four surface anchors
    that pointed inside a prop list onto the guard that mounts the surface:

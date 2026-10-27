@@ -114,7 +114,7 @@ import SurfaceMenuList, { type NavBadge } from './components/shell/SurfaceMenuLi
 // threshold, so the dead node stops being imported here; the component's own
 // removal is a separate pass because a geometry test and one audit row still
 // read its source. (O-92)
-import { AccountRow, NAV_RAIL_AUTO_COLLAPSE_PX } from './components/shell/NavRail';
+import { AccountRow, NAV_RAIL_AUTO_COLLAPSE_PX } from './components/shell/shellChrome';
 import StatusCluster from './components/shell/StatusCluster';
 import SurfaceSwitch from './components/shell/SurfaceSwitch';
 // The Journal pulls recharts + react-virtuoso into its chunk — statically

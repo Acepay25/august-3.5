@@ -1,4 +1,5 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
+import { UpdateButton } from './UpdateButton';
 import { ActivityIcon, SettingsIcon } from './Icons';
 import NavExpandButton from '../shell/NavExpandButton';
 import StatusCluster from '../shell/StatusCluster';
@@ -320,6 +321,13 @@ export const Header: React.FC<HeaderProps> = memo(({
                             onOpenActivity={onOpenActivity}
                         />
                     )}
+                    {/* The update control's ONLY reachable home. It used to live in
+                        the NavRail, which nothing rendered, so an available update
+                        had no action anywhere in the app and the overlay's
+                        'available' state was excluded on purpose
+                        (docs/AUDIT.md §8). The button renders nothing unless
+                        Electron has something to say. */}
+                    <UpdateButton />
                     {onOpenSettings && (
                         <button
                             type="button"
