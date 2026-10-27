@@ -646,6 +646,10 @@ const uncoveredMistakeLine = (query?: MemoryRetrievalQuery): string => {
         if (!f.enabled || !isSkillFile(f)) return false;
         const meta = parseSkillMarkdown(f.content);
         if (!meta || meta.status === 'retired') return false;
+        // Only a LIVE skill may suppress the raw warning: an unapproved twin used
+        // to silence the trader's own recorded mistake without replacing it with
+        // anything they had agreed to (docs/AUDIT.md S-4).
+        if (!isApprovedSkill(meta)) return false;
         if ((meta.coin ?? '').toLowerCase() !== setup.coin.toLowerCase()) return false;
         if (setup.direction && meta.direction && meta.direction !== setup.direction) return false;
         return true;
@@ -679,6 +683,10 @@ const conflictNote = (query?: MemoryRetrievalQuery): string => {
         if (!file.enabled || !isSkillFile(file)) continue;
         const meta = parseSkillMarkdown(file.content);
         if (!meta || meta.status === 'retired') continue;
+        // SAME eligibility as ranked retrieval: an unapproved skill must not
+        // silence a warning or raise a conflict the seat is told to resolve
+        // (docs/AUDIT.md S-4).
+        if (!isApprovedSkill(meta)) continue;
         if (!skillMatchesSetup(meta, setup)) continue;
         if (meta.kind === 'avoid') avoid = true; else repeat = true;
         if (avoid && repeat) break;
