@@ -296,6 +296,42 @@ the unreachable update/download action.
    it to provider+model, and honouring a `Retry-After` the provider sends, are both trader-visible
    changes.
 
+## Session 5 — desktop storage: chats and the notebook leave the 5 MiB budget
+
+Approved by the owner after the audit's quota finding. The rule it resolves: **"store
+everything, no cap" cannot be true inside a shared ~5 MiB origin budget**, and on desktop
+that was the only store there was (PreferencesService's native branch is Capacitor, and
+Electron is not that).
+
+| piece | what it is |
+|---|---|
+| `electron/storeFs.cjs` | one JSON file per store key under `<userData>/store`; atomic (temp → backup → rename), a key/path guard that refuses traversal and separators, a 32 MB per-value ceiling, and a missing file reported as `null` (first run) while an unreadable one is an ERROR |
+| `electron/main.cjs` + `preload.cjs` | one IPC pair (`read`/`write`/`remove`/`location`) behind the existing trusted-sender guard; every call RESOLVES to `{ok,…}` so a failure is data, never an unhandled rejection |
+| `services/infrastructure/storeBackend.ts` | the single seam: files on desktop, `localStorage` on web, a failed file write falls back to `localStorage` AND records the failure, a legacy key is copied once and read back before it is trusted, and a failed READ blocks writes so an unreadable store cannot be overwritten by an empty seed |
+| `PreferencesService` | routed through the backend — same async API, so the notebook and every preference moved with no caller change; a refused write still throws, which is the contract `MemoryFilesService.persist` records and rethrows |
+| `chatSessions` | a boot prime (`index.tsx` awaits it before mounting, one round trip), a write-behind save that keeps the screenshot-drop retry, and a **desktop budget of 24 MB instead of 3.5 MB** because the 5 MiB neighbour is gone |
+| Settings → Data | names the backend, prints the file location, and reports any write that did not land — the visible surface the chat store never had |
+
+**Proofs.** The file store ran under plain Node: 15/15 on round-trip, first-run null, `.bak`
+kept, no leftover `.tmp`, traversal refused, oversize refused, remove idempotent, unreadable
+file reported as an error. The renderer adapter ran in the real app through a fake bridge:
+desktop backend detected, file key written, legacy `localStorage` value migrated and verified
+by read-back, a refused write fell back and was recorded, a failed read blocked the next write,
+and removing the bridge returned the app to browser storage — zero page errors, and the live
+mock turn still answered and survived a reload on the new path.
+
+**Gates, measured on the COMMITTED tree in a clean worktree** (the shared checkout holds
+another session's in-flight edits, which skew line numbers and typecheck): `typecheck` 0,
+`typecheck:scripts` 0, `typecheck:electron` 0, `check:contracts` 138, `lint` 0 errors /
+**375** warnings (cap 379), `check-flow-doc-anchors` **OK at 457**.
+
+**Not done in this slice:** the remaining raw-`localStorage` stores (tool payloads, skill
+drafts, amendments, forged tools, chart drawings, checklist, learned rules, profile memory)
+still live in the browser store on desktop. They are bounded and small, so they are next rather
+than urgent; the two that grow with use — chats and the notebook — are the ones that moved.
+The packaged installer was not exercised: the IPC path is proved by the module test and the
+adapter test, not by a launched exe.
+
 ## Session 4 — the last Phase-1 hole, Phase 2 removals, and the first Phase-4 items
 
 | item | change | proof |
