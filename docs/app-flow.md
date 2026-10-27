@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-25** (the anchor gate re-measured every citation here and in the stage ledger:
-**458 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**457 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 5 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -50,7 +50,7 @@ new detailed inventory of memory, skills, tools and the learning loop; the stage
 flowchart TD
     H["index.html"] --> I["index.tsx — error handlers first :28 :48"]
     I --> S["StrictMode › ErrorBoundary › ToastProvider › App :73-79"]
-    S --> SP["splash leaves #root index.tsx:91-96 — boot-probe.cjs:119 waits for it gone"]
+    S --> SP["splash leaves #root index.tsx:98-103 — boot-probe.cjs:119 waits for it gone"]
     SP --> APP["App.tsx:2361 — surfaces render from App.tsx:2397 down"]
     APP --> US["useSurface hooks/useSurface.ts:15 key, :16 valid set"]
     US --> UR["useSurfaceRouter hooks/useSurfaceRouter.ts:75 openJournal, :101 hash read, :159 serialize"]
@@ -103,7 +103,7 @@ flowchart TD
     TR --> LW["live writer — applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:28, peel per frame; flush BEFORE the settle write useAnalysisPipeline.ts"]
     CST --> LW
     ENS --> MERGE
-    LW --> MERGE["entriesForSession — chatSessions.ts:593, parameter literally named canonical :595"]
+    LW --> MERGE["entriesForSession — chatSessions.ts:595, parameter literally named canonical :595"]
     SCDT --> PT["present_trade → runPresentTrade presentTradeTool.ts:78 → the row's card, in EITHER home"]
 ```
 
@@ -157,7 +157,7 @@ keyed by the row id `entriesForSession` already shares.
 visibly running on the other, and switching mid-answer does not restart,
 duplicate or hide it.
 
-- Chat → dock: `liveEntryFromMessage` (`services/trade/chatSessions.ts:498`)
+- Chat → dock: `liveEntryFromMessage` (`services/trade/chatSessions.ts:538`)
   carries `Message.isStreaming` onto the projected row, so a Chat-surface run
   keeps its activity line, its open work card and its live text after the trader
   hops to the chart. Without that one field the dock showed a FINISHED answer
@@ -539,7 +539,7 @@ editor prints the source that won (user, measured, model-reported or assumed).
 
 ```mermaid
 flowchart TD
-    MSG["App messages — canonical, useConversations, no cap (owner ruling 2026-10-27)"] --> MER["entriesForSession chatSessions.ts:593 — App rows, dock entries overwrite by id"]
+    MSG["App messages — canonical, useConversations, no cap (owner ruling 2026-10-27)"] --> MER["entriesForSession chatSessions.ts:595 — App rows, dock entries overwrite by id"]
     CS["chatStore singleton — survives unmount, owns AbortControllers"] --> MER
     MER --> PANE["agentThreads.ts read at AgentsView — drops room rows, keeps non-AI, drops only a POSITIVE botId claim"]
     CS --> LS["localStorage trade_chat_sessions_v1_&lt;user&gt; — debounced, streaming stripped"]
@@ -1250,7 +1250,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | # | from → to | what crosses |
 |---|---|---|
 | 1 | index.html → index.tsx | mount, error handlers first `unhandledrejection index.tsx:28` › `error index.tsx:48` |
-| 2 | index.tsx → App | `StrictMode index.tsx:78` › `ErrorBoundary index.tsx:79` › `ToastProvider index.tsx:80` |
+| 2 | index.tsx → App | `StrictMode index.tsx:86` › `ErrorBoundary index.tsx:86` › `ToastProvider index.tsx:86` |
 | 3 | App → useSurfaceRouter | surface + journalTab + journalOpenNonce, `useSurfaceRouter hooks/useSurfaceRouter.ts:54` |
 | 4 | useSurfaceRouter → useSurface | persisted value, key `august_surface_v1 hooks/useSurface.ts:15`, valid set `:16` |
 | 5 | useSurfaceRouter → appHash | `#/journal\|market\|settings\|watch` ⇄ state `parseAppHash hooks/useSurfaceRouter.ts:101`, serialize `serializeAppHash hooks/useSurfaceRouter.ts:159` |
@@ -1280,7 +1280,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 30 | review passes / propose_skill → draft → approval → skill | `draftGates.ts` → `approveSkillDraft services/learning/skillApproval.ts:55` — the post-mortem leg is starved, not deleted (see D) |
 | 31 | approved skill → next prompt | `resolveInvokedSkills services/learning/SkillMemoryService.ts:629` — closes into 24's stage 3 |
 | 32 | logged trade → memory + autopilot | `useTradeLogging hooks/useTradeLogging.ts:100` writes the journal row and the memory note → MemoryService; proposedTrade leaves outcome PENDING so the autopilot watches it |
-| 33 | App messages + dock entries → one thread | `entriesForSession services/trade/chatSessions.ts:593` |
+| 33 | App messages + dock entries → one thread | `entriesForSession services/trade/chatSessions.ts:595` |
 | 34 | chatStore → localStorage | `saveSessions services/trade/chatSessions.ts:456` → debounced key |
 | 35 | App → profile persistence → engine | `useProfilePersistence hooks/useProfilePersistence.ts:82` → `dbService` or `SqliteService` |
 | 36 | providers → Preferences, keys encrypted | `saveProviderConfigs services/infrastructure/ProviderConfigService.ts:202` writes the whole roster and encrypts each key at rest on desktop |
@@ -1345,10 +1345,10 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
    probe measures, so the probe reads it from that module.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 458 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 457 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 458 anchors verified, and the gate
+   the gate's own output: these docs state 457 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the

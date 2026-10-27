@@ -1216,7 +1216,7 @@ Two operational notes, because both cost a run:
   mechanics: `scripts/boot-probe.cjs:119` blocks on
   `waitForFunction(() => !document.querySelector('#splash'))`, while the e2e
   specs assert ABSENCE with a count-0 expectation (`e2e/smoke.spec.ts:55` in the
-  shared seed path, `:141` in the first-run spec). `index.tsx:91-96` is
+  shared seed path, `:141` in the first-run spec). `index.tsx:98-103` is
   `dismissSplash` plus its double `requestAnimationFrame`. Both flow docs now
   say which gate does which, and cite the lines.
 - **"One service replacing nine" (called unfalsifiable).** That phrasing no
@@ -1787,7 +1787,7 @@ feature, not a leftover of the debate. Recorded here rather than executed silent
 described the size of the job, not what the job costs the trader.
 
 **What deleting it would actually take, now measured:** `SessionKind` loses `'panel'`
-(`services/trade/chatSessions.ts:106`) plus `panelModels`/`PanelSeatRef` and their load-time
+(`services/trade/chatSessions.ts:133`) plus `panelModels`/`PanelSeatRef` and their load-time
 sanitiser (`:258`); `services/trade/chatPanel.ts` dies whole (its only consumer is the seat
 loop); the seat arm of `chatTurnRunner.send` (`:989`–`:1140`) and both `kind === 'panel'`
 supervisor/seat-model reads (`:820`, `:1179`); `TradeChatPanel`'s `isPanel`, the picker overlay
@@ -2045,7 +2045,7 @@ deleted file.** `collect()` resolves each qualified path and `continue`s when no
 i.e. never. Implemented the detection and ran it (parked as a clean-applying patch,
 `.probe-artifacts/deleted-file-citations.patch`, 72 lines): **3 hits in this ledger and 12 in the
 flow html — and all 12 html hits are a scanner defect, not a doc defect.** `strip()` deletes html
-tags without leaving a separator, so a `<b>App</b>` running into `<i>index.tsx:78-84` becomes the
+tags without leaving a separator, so a `<b>App</b>` running into `<i>index.tsx:81-84` becomes the
 token three such glued tokens were produced across the flow html — none of them names a real file, and each one silenced a citation that should have been checked The consequence is worse than the false positives: those 12 citations fail
 `resolve()` today, so they have never been checked for resolution, non-blank or comment-line at all.
 Work order: make `strip()` emit a space per tag and confirm the anchor population does not move;
@@ -2276,7 +2276,7 @@ open tag and two unrelated lines. Those five are now cited with the symbol besid
 instead of implying the table is checked.
 
 **Then 5 became 14.** Nine more rows were rewritten into the bindable shape, each only after its symbol was
-found on the line it cites: the `index.tsx` mount chain (StrictMode :78, ErrorBoundary :79, ToastProvider :80 —
+found on the line it cites: the `index.tsx` mount chain (StrictMode :81, ErrorBoundary :81, ToastProvider :81 —
 the old `73-79` range proved nothing), `august_surface_v1`, `onSendBotTurn`, `onAnalyze`, `handleRunAnalysisFromChat`,
 `runFullAnalysis`, `runSeatTurn` at both :593 and :1082, `applyCasualStreamUpdate`, `notify`. Binding found another real
 defect: row 13 cited AgentsView.tsx:802 for `onAnalyze` while the await sat ten lines above it; the await is at
@@ -2290,7 +2290,7 @@ file — a ternary arm — while the stamp was in hooks/useAnalysisPipeline.ts (
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44, the Enter branch at
 components/trade/panels/ChatComposer.tsx:155, systemPromptFor components/trade/TradeChatPanel.tsx:438 with
 TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:512, useBotThread hooks/useAnalysisPipeline.ts:1098,
-entriesForSession services/trade/chatSessions.ts:593, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:140
+entriesForSession services/trade/chatSessions.ts:595, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:140
 with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
 services/trade/automationTurn.ts:81, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices
 services/trade/automationTurn.ts:156, latestChartVerdict services/trade/chartData.ts:95. The gate prints
