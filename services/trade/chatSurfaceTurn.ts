@@ -39,6 +39,8 @@ import { buildSkillsIndexForPrompt, rankSkillIndexRows } from './tradeChatContex
 import { skillIndexRows } from '../learning/SkillMemoryService';
 import { getMemoryFiles } from '../learning/MemoryFilesService';
 import { buildNotebookTopicsIndex } from '../learning/memoryTopics';
+import { buildLearningRulesIndex } from '../../utils/learningRulesIndex';
+import { storageService } from '../infrastructure/StorageService';
 import { indexBudgetFor } from '../../utils/promptIndexBudget';
 import { activeStrategiesBlock } from '../learning/strategyStore';
 import { buildProfileMemoryIndex } from '../learning/profileMemory';
@@ -155,6 +157,21 @@ export const surfacePromptWith = (mandate: string, where: string, opts: { memory
     } catch {
         strategiesBlock = '';
     }
+    let rulesBlock: string;
+    try {
+        // The learned rules finally have a reader: they were written at boot,
+        // mirrored into the profile and swept by backups while no prompt ever
+        // saw them (docs/AUDIT.md M-5). Memory content, so the toggle gates it.
+        if (memoryEnabled) {
+            // Synchronous read: this prompt builder is sync, and the store is
+            // localStorage-backed.
+            rulesBlock = buildLearningRulesIndex(storageService.loadLearningRules().rules, Math.min(6, budget.skills));
+        } else {
+            rulesBlock = '';
+        }
+    } catch {
+        rulesBlock = '';
+    }
     let memoryBlock: string;
     try {
         // The Settings toggle is a PROMISE: memory off means no memory block —
@@ -192,7 +209,7 @@ export const surfacePromptWith = (mandate: string, where: string, opts: { memory
         }
     }
     return {
-        text: [mandate, goalsBlock, skillsBlock, topicsBlock, strategiesBlock, memoryBlock].filter(Boolean).join('\n\n'),
+        text: [mandate, goalsBlock, skillsBlock, rulesBlock, topicsBlock, strategiesBlock, memoryBlock].filter(Boolean).join('\n\n'),
         skills,
     };
 };

@@ -66,6 +66,8 @@ import { skillIndexRows } from '../../services/learning/SkillMemoryService';
 import { getMemoryFiles } from '../../services/learning/MemoryFilesService';
 import { buildNotebookTopicsIndex } from '../../services/learning/memoryTopics';
 import { indexBudgetFor } from '../../utils/promptIndexBudget';
+import { buildLearningRulesIndex } from '../../utils/learningRulesIndex';
+import { storageService } from '../../services/infrastructure/StorageService';
 import { buildProfileMemoryIndex } from '../../services/learning/profileMemory';
 import { buildGoalsIndex } from '../../services/goals/GoalService';
 import {
@@ -448,7 +450,13 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
             const store = getMemoryFiles();
             const topics = memoryEnabled !== false ? buildNotebookTopicsIndex(store.files, store.folders, budget.topics) : '';
             const goals = buildGoalsIndex(budget.goals);
-            return [goals, buildSkillsIndexForPrompt(skillIndexRows(), budget.skills), topics].filter(Boolean).join('\n\n');
+            // The learned rules ride the same block as the Chat surface: they had
+            // no reader at all before (docs/AUDIT.md M-5), and a rule only one of
+            // the two homes can see is the drift this file keeps fixing.
+            const rules = memoryEnabled !== false
+                ? buildLearningRulesIndex(storageService.loadLearningRules().rules, Math.min(6, budget.skills))
+                : '';
+            return [goals, buildSkillsIndexForPrompt(skillIndexRows(), budget.skills), rules, topics].filter(Boolean).join('\n\n');
         } catch {
             return '';
         }
