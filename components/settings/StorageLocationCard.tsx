@@ -15,6 +15,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { getStorageInfo } from '../../services/infrastructure/dbService';
+import { getStoreFailure, storeBackendKind, storeLocation, type StoreFailure } from '../../services/infrastructure/storeBackend';
 
 interface StorageInfo {
     platform: string;
@@ -30,6 +31,13 @@ const evictable = (info: StorageInfo): boolean => info.storageType === 'indexedd
 export const StorageLocationCard: React.FC = () => {
     const [info, setInfo] = useState<StorageInfo | null>(null);
     const [failed, setFailed] = useState(false);
+    // The big stores' own backend: chat transcripts and the notebook live in
+    // files on desktop and in localStorage on web. This card is where the trader
+    // finds out which — and where a write that did NOT land is reported, because
+    // the alternative is a console line nobody reads.
+    const [filesLocation, setFilesLocation] = useState<string | null>(null);
+    const [storeFailure, setStoreFailure] = useState<StoreFailure | null>(null);
+    const backend = storeBackendKind();
 
     useEffect(() => {
         let alive = true;
@@ -40,6 +48,11 @@ export const StorageLocationCard: React.FC = () => {
             } catch (err) {
                 console.warn('[StorageLocationCard] Storage probe failed:', err);
                 if (alive) setFailed(true);
+            }
+            const loc = await storeLocation();
+            if (alive) {
+                setFilesLocation(loc);
+                setStoreFailure(getStoreFailure());
             }
         })();
         return () => { alive = false; };
@@ -75,6 +88,27 @@ export const StorageLocationCard: React.FC = () => {
                 {where}
                 <span className="text-zinc-500"> · {info.platform} · {info.userCount} {info.userCount === 1 ? 'profile' : 'profiles'}</span>
             </p>
+            {/* The stores that hold the most: files on desktop, localStorage on web. */}
+            <p className="text-ui-dense text-zinc-400 mt-2" data-testid="store-backend">
+                Chats &amp; notebook:{' '}
+                <span className="text-zinc-200">
+                    {backend === 'desktop-files'
+                        ? `dedicated files${filesLocation ? ` — ${filesLocation}` : ''}`
+                        : 'browser storage (shared ~5 MB budget)'}
+                </span>
+            </p>
+            {backend === 'browser-storage' && (
+                <p className="text-ui-xs text-amber-400/90 mt-1">
+                    This build keeps chats and the notebook in the browser's storage, which is capped and can be
+                    cleared. The desktop build writes them to app files instead.
+                </p>
+            )}
+            {storeFailure && (
+                <p role="alert" className="text-ui-xs text-rose-300 mt-1" data-testid="store-write-failure">
+                    A write did not reach its store: “{storeFailure.key}” — {storeFailure.error}
+                    {storeFailure.fellBack ? ' (kept in browser storage for now)' : ' (nothing was lost silently: export a backup)'}.
+                </p>
+            )}
             {evictable(info) && (
                 <p className="text-ui-xs text-amber-400/90 mt-1" data-testid="storage-location-warning">
                     Browser and WebView storage can be cleared by the system under disk pressure. Keep an exported backup.

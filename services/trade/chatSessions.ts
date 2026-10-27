@@ -13,6 +13,7 @@
  * side-effect rows (memory/skill/tool proposals) the transcript renders.
  */
 
+import { readStore, writeStore, storeBackendKind } from '../infrastructure/storeBackend';
 import { getActiveUsername } from '../../utils/activeUser';
 import type { Message, ToolAction } from '../../types/message';
 import { MessageRole } from '../../types/enums';
@@ -272,10 +273,31 @@ const VALID_EFFORTS = new Set<ReasoningEffort>(['off', 'low', 'medium', 'high', 
 const isEffort = (v: unknown): v is ReasoningEffort =>
     typeof v === 'string' && VALID_EFFORTS.has(v as ReasoningEffort);
 
+/**
+ * The bytes a sync reader sees, primed once at boot.
+ *
+ * The dock's readers are synchronous (it hydrates from a snapshot) and the
+ * desktop store is a file behind IPC, which is not. So index.tsx awaits
+ * `primeChatSessions()` before mounting: one round trip, then every read below is
+ * local. `undefined` means "not primed" and falls back to localStorage, which is
+ * also the whole story on web.
+ */
+let primedRaw: string | null | undefined;
+
+export const primeChatSessions = async (): Promise<void> => {
+    try {
+        const res = await readStore(storageKey());
+        if (res.ok) primedRaw = res.value;
+    } catch {
+        // Leave it unprimed: the localStorage path below still serves, and a boot
+        // that cannot reach the file store must not fail to render.
+    }
+};
+
 /** Read + validate + bound the stored list; any corruption yields []. */
 export const loadSessions = (): ChatSession[] => {
     try {
-        const raw = localStorage.getItem(storageKey());
+        const raw = primedRaw !== undefined ? primedRaw : localStorage.getItem(storageKey());
         if (!raw) return [];
         const parsed: unknown = JSON.parse(raw);
         if (!Array.isArray(parsed)) return [];
@@ -365,6 +387,15 @@ const fitToMaxSessions = (
  */
 export const MAX_STORED_CHARS = 3_500_000;
 
+/**
+ * The budget that actually applies. 3.5 MB is a BROWSER number — it exists so a
+ * shared ~5 MiB origin quota is never spent on one store. A desktop file has no
+ * such neighbour, so the same rule buys ~7x the history before it trims, and the
+ * per-file ceiling in electron/storeFs.cjs is still far above it.
+ */
+export const storedCharsBudget = (): number =>
+    storeBackendKind() === 'desktop-files' ? 24_000_000 : MAX_STORED_CHARS;
+
 const serialized = (sessions: ChatSession[]): string => {
     try {
         return JSON.stringify(sessions);
@@ -381,7 +412,7 @@ const fitToByteBudget = (
     pinned: ReadonlySet<string>,
 ): { sessions: ChatSession[]; pinnedTrimmed: string[] } => {
     let size = serialized(sessions).length;
-    if (size <= MAX_STORED_CHARS) return { sessions, pinnedTrimmed: [] };
+    if (size <= storedCharsBudget()) return { sessions, pinnedTrimmed: [] };
     // Work on copies; sessions and entries are ordered oldest first, which is
     // the order both passes sacrifice in.
     const work: ChatSession[] = sessions.map(s => ({ ...s, entries: s.entries.map(e => ({ ...e })) }));
@@ -397,7 +428,7 @@ const fitToByteBudget = (
     // blob once per image is what made this loop unusable.
     for (const s of work) {
         for (const e of s.entries) {
-            if (size <= MAX_STORED_CHARS) return { sessions: work, pinnedTrimmed: [] };
+            if (size <= storedCharsBudget()) return { sessions: work, pinnedTrimmed: [] };
             if (!e.image) continue;
             size -= e.image.length + '"image":'.length + 2;
             e.image = undefined;
@@ -407,7 +438,7 @@ const fitToByteBudget = (
     // Pass 2 — shave the oldest transcripts, newest entries first, down to ten.
     // A pinned session is never the one shaved here.
     for (const s of work) {
-        if (size <= MAX_STORED_CHARS) break;
+        if (size <= storedCharsBudget()) break;
         if (pinned.has(s.id)) continue;
         if (s.entries.length <= 10) continue;
         const removed = s.entries.slice(0, s.entries.length - 10);
@@ -431,7 +462,7 @@ const fitToByteBudget = (
     const pinnedTrimmed: string[] = [];
     if (size > MAX_STORED_CHARS) {
         for (const s of work) {
-            if (size <= MAX_STORED_CHARS) break;
+            if (size <= storedCharsBudget()) break;
             if (s.entries.length <= 10) continue;
             const removed = s.entries.slice(0, s.entries.length - 10);
             s.entries = s.entries.slice(-10);
@@ -460,22 +491,31 @@ export const saveSessions = (sessions: ChatSession[], pinnedIds: readonly string
     const { sessions: trimmed, pinnedTrimmed } = fitToByteBudget(capped, pinned);
     const notice = (): SessionSaveNotice | null =>
         pinsDropped.length > 0 || pinnedTrimmed.length > 0 ? { pinsDropped, pinnedTrimmed } : null;
-    try {
-        localStorage.setItem(key, serialized(trimmed));
-        return notice();
-    } catch {
-        // Quota or private mode. Retry with the screenshots gone rather than
-        // reporting silence: losing the transcript is worse than losing the
-        // images, and a swallowed throw meant BOTH stores failed quietly.
-        try {
-            localStorage.setItem(key, serialized(withoutAnyImages(trimmed)));
-            console.warn('[chatSessions] saved without screenshots after a quota failure');
-            return notice();
-        } catch {
-            console.error('[chatSessions] transcript NOT persisted (quota or private mode)');
-            return notice();
+    // ONE write path, whichever store is behind it. `writeStore` writes the file
+    // on desktop (recording a failure and keeping a localStorage copy when the
+    // file write is refused) and is localStorage-only on web; it RESOLVES, so this
+    // stays the fire-and-forget call the callers already had. The payload is also
+    // primed, so a later sync read inside this session sees what was just saved.
+    const payload = serialized(trimmed);
+    primedRaw = payload;
+    void writeStore(key, payload).then(async res => {
+        if (res.ok) return;
+        // The transcript is worth more than its screenshots: retry without them
+        // before accepting a loss, and say which of the two happened.
+        const smaller = serialized(withoutAnyImages(trimmed));
+        if (smaller === payload) {
+            console.error('[chatSessions] transcript NOT persisted:', res.error);
+            return;
         }
-    }
+        const retry = await writeStore(key, smaller);
+        if (retry.ok) {
+            primedRaw = smaller;
+            console.warn('[chatSessions] saved without screenshots after a failed write');
+        } else {
+            console.error('[chatSessions] transcript NOT persisted:', retry.error);
+        }
+    }).catch(() => { /* writeStore resolves; belt and braces */ });
+    return notice();
 };
 
 /**

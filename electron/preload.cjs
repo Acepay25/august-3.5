@@ -9,6 +9,15 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
     // App info
     getVersion: () => ipcRenderer.invoke('app:get-version'),
+
+    // Desktop file store — the big stores' destination (electron/storeFs.cjs).
+    // Every call RESOLVES to {ok,...}; a failure is data, not a rejection.
+    store: {
+        read: (key) => ipcRenderer.invoke('store:read', key),
+        write: (key, value) => ipcRenderer.invoke('store:write', key, value),
+        remove: (key) => ipcRenderer.invoke('store:remove', key),
+        location: () => ipcRenderer.invoke('store:location'),
+    },
     isElectron: true,
     platform: process.platform,
 

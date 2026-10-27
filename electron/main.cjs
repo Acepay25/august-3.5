@@ -194,6 +194,32 @@ const trustedHandle = (channel, handler, refuse) => {
 };
 
 // =============================================================================
+// DESKTOP STORE — the file backend for stores that outgrew a browser budget
+// =============================================================================
+
+/**
+ * On desktop every big store was renderer `localStorage`: Preferences only takes
+ * its native branch on Capacitor, and Electron is not that. So chats, the
+ * notebook, payloads, drafts and amendments shared one ~5 MiB origin budget while
+ * the product ruling is "store everything, no cap". These three channels are the
+ * destination: plain JSON files under `<userData>/store`, written atomically by
+ * electron/storeFs.cjs (which owns the key/path safety, the backup and the size
+ * ceiling — this file only transports).
+ *
+ * Every call returns `{ok, value?|error}` and NOTHING throws across the bridge: a
+ * failed write must reach the renderer as a failure it can report, never as a
+ * rejected promise a caller forgets to catch.
+ */
+const { createStore } = require('./storeFs');
+let desktopStore = null;
+const getDesktopStore = () => (desktopStore ??= createStore(path.join(app.getPath('userData'), 'store')));
+const untrusted = { ok: false, error: 'untrusted sender' };
+trustedHandle('store:read', (_event, key) => getDesktopStore().read(key), untrusted);
+trustedHandle('store:write', (_event, key, value) => getDesktopStore().write(key, value), untrusted);
+trustedHandle('store:remove', (_event, key) => getDesktopStore().remove(key), untrusted);
+trustedHandle('store:location', () => getDesktopStore().location(), null);
+
+// =============================================================================
 // PROVIDER TRANSPORT — main-process requests avoid renderer CORS restrictions
 // =============================================================================
 

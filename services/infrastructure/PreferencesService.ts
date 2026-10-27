@@ -13,6 +13,7 @@
  */
 
 import { Capacitor } from '@capacitor/core';
+import { readStore, writeStore, removeStore } from './storeBackend';
 import { Preferences } from '@capacitor/preferences';
 
 // Storage keys
@@ -57,14 +58,26 @@ export const PREF_KEYS = {
 const isNative = (): boolean => Capacitor.isNativePlatform();
 
 /**
+ * Desktop is NOT Capacitor — `isNative()` is false in Electron — so this used to
+ * fall through to `localStorage` for every store, sharing one ~5 MiB origin
+ * budget with the chats and the notebook. Electron now has a file backend
+ * (`electron/storeFs.cjs` behind `window.electronAPI.store`), and this module is
+ * the seam: same async API, so no caller changes. Web keeps localStorage.
+ */
+
+/**
  * Set a value in preferences
  */
 export const setPreference = async (key: string, value: string): Promise<void> => {
     if (isNative()) {
         await Preferences.set({ key, value });
-    } else {
-        localStorage.setItem(key, value);
+        return;
     }
+    const res = await writeStore(key, value);
+    // Throwing is the contract every writer already relies on: the notebook's
+    // `persist` records the failure, rethrows, and the Health card says the bytes
+    // did not land. A silent success here is the bug that surface exists for.
+    if (!res.ok) throw new Error(res.error ?? 'preference write failed');
 };
 
 /**
@@ -74,9 +87,15 @@ export const getPreference = async (key: string): Promise<string | null> => {
     if (isNative()) {
         const result = await Preferences.get({ key });
         return result.value;
-    } else {
-        return localStorage.getItem(key);
     }
+    const res = await readStore(key);
+    // A failed read reports null WHILE the backend refuses writes (storeBackend's
+    // readFailed), so an unreadable store is never overwritten by an empty seed.
+    if (!res.ok) {
+        console.warn(`[Preferences] read failed for "${key}": ${res.error}`);
+        return null;
+    }
+    return res.value;
 };
 
 /**
@@ -85,9 +104,9 @@ export const getPreference = async (key: string): Promise<string | null> => {
 export const removePreference = async (key: string): Promise<void> => {
     if (isNative()) {
         await Preferences.remove({ key });
-    } else {
-        localStorage.removeItem(key);
+        return;
     }
+    await removeStore(key);
 };
 
 /**

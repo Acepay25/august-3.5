@@ -5,6 +5,7 @@ import App from './App';
 import { ToastProvider } from './components/shared/Toast';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import { installNavModalityTracking } from './utils/navModality';
+import { primeChatSessions } from './services/trade/chatSessions';
 
 // Self-hosted fonts (offline-capable, no external CDN dependency)
 // Geist for UI, JetBrains Mono for data. NO serif ships: the owner ruled
@@ -72,16 +73,23 @@ if (!rootElement) {
 // keydown from bubbling still cannot hide that the mouse was used.
 installNavModalityTracking();
 
-const root = ReactDOM.createRoot(rootElement);
-root.render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <ToastProvider>
-        <App />
-      </ToastProvider>
-    </ErrorBoundary>
-  </React.StrictMode>
-);
+// PRIME BEFORE THE FIRST PAINT. The dock's readers are synchronous and the desktop
+// store is a JSON file behind IPC, so the bytes are fetched once here: one round
+// trip on launch, and no flash of an empty transcript while a file read lands.
+// On web this resolves immediately from localStorage, which is why it is awaited
+// rather than branched on.
+void primeChatSessions().finally(() => {
+  const root = ReactDOM.createRoot(rootElement);
+  root.render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <ToastProvider>
+          <App />
+        </ToastProvider>
+      </ErrorBoundary>
+    </React.StrictMode>
+  );
+});
 
 // Splash fade-out. The splash lives outside #root (index.html), so React's
 // mount-clear leaves it alone and this owns its exit. The node must end up
