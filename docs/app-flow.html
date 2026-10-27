@@ -73,17 +73,17 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <div class="tier">
  <div class="n"><b>&lt;Header&gt; band</b><i>App.tsx:2383 band, guard surface !== 'agents' App.tsx:2382</i></div>
  <div class="n run"><b>SurfaceSwitch — 4 destinations</b><i>App:2059 · list SurfaceMenuList.tsx:44</i></div>
- <div class="n dead"><b>NavRail + its destination rows</b><i>imported App:118, never rendered · "NavRail is GONE" App:2361 · rows SurfaceMenuList.tsx:135 (only mount passes hideSurfaces, App:2585)</i></div>
- <div class="n dead"><b>onExpandNavRail is a prop, not a render</b><i>App:2397 · rail state App:658-680 · only the AccountRow export is mounted, App:2584</i></div>
+ <div class="n dead"><b>NavRail + its destination rows</b><i>imported App:121, never rendered · "NavRail is GONE" App:2361 · rows SurfaceMenuList.tsx:135 (only mount passes hideSurfaces, App:2585)</i></div>
+ <div class="n dead"><b>onExpandNavRail is a prop, not a render</b><i>App:2441 · rail state App:670-692 · only the AccountRow export is mounted, App:2584</i></div>
 </div>
 <div class="down">↓ lazy + Suspense(SurfaceSkeleton) ↓</div>
 <div class="tier">
- <div class="n run"><b>Trade · trade-view</b><i>App:2536</i></div>
+ <div class="n run"><b>Trade · trade-view</b><i>App:2580</i></div>
  <div class="n run"><b>Journal · journal-view</b><i>App:2363</i></div>
  <div class="n run"><b>Knowledge · learn-view</b><i>App:2466 · Approvals is a TAB of it, LearnView.tsx:64</i></div>
- <div class="n run"><b>Chat · agents-view</b><i>App:2430</i></div>
+ <div class="n run"><b>Chat · agents-view</b><i>App:2543</i></div>
 </div>
-<p class="note">AgentsView receives the same shell nodes as props (App:2521-2614): the switch, the status cluster, <code>AccountRow</code>, and <code>SurfaceMenuList</code> with <code>hideSurfaces</code>. There is no fifth destination — Approvals lives inside Knowledge.</p>
+<p class="note">AgentsView receives the same shell nodes as props (App:2565-2658): the switch, the status cluster, <code>AccountRow</code>, and <code>SurfaceMenuList</code> with <code>hideSurfaces</code>. There is no fifth destination — Approvals lives inside Knowledge.</p>
 </div>
 
 <h2>B · One message — two chat homes, ONE turn executor</h2>
@@ -94,8 +94,8 @@ body{padding:24px;max-width:1180px;margin:0 auto}
    <div class="down">↓</div>
    <div class="d">send() components/agents/AgentsView.tsx:777 — branches on what is SELECTED</div>
    <div class="down">↓</div>
-   <div class="n run"><b>a bot is selected → onSendBotTurn</b><i>components/agents/AgentsView.tsx:812 → App.tsx:2535 → useBotMailbox → runBotTurn</i></div>
-   <div class="n run"><b>no bot → onAnalyze(prompt, images)</b><i>components/agents/AgentsView.tsx:802 → App.tsx:1589 handleRunAnalysisFromChat</i></div>
+   <div class="n run"><b>a bot is selected → onSendBotTurn</b><i>components/agents/AgentsView.tsx:812 → App.tsx:2579 → useBotMailbox → runBotTurn</i></div>
+   <div class="n run"><b>no bot → onAnalyze(prompt, images)</b><i>components/agents/AgentsView.tsx:802 → App.tsx:1632 handleRunAnalysisFromChat</i></div>
    <div class="lbl">bots stay chat-only by the owner's ruling — their transport is reused, not rebuilt</div>
   </div>
  </div>
@@ -107,7 +107,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
    <div class="down">↓</div>
    <div class="n run"><b>solo → runSeatTurn</b><i>services/trade/chatTurnRunner.ts:1229 called · :616 defined</i></div>
    <div class="n run"><b>panel, 2+ seats → per-seat + mailbox</b><i>services/trade/chatTurnRunner.ts:1229 per-seat · createPanelMailbox :1162 · planPanelTurn :1149</i></div>
-   <div class="n run"><b>Full analysis → the SAME App.tsx:1589 wrapper</b><i>runFullAnalysis TradeChatPanel.tsx:577 — holds the run slot, writes no row</i></div>
+   <div class="n run"><b>Full analysis → the SAME App.tsx:1632 wrapper</b><i>runFullAnalysis TradeChatPanel.tsx:577 — holds the run slot, writes no row</i></div>
    <div class="down">↓ every dock turn ↓</div>
    <div class="n store"><b>chatStore.mutate / beginRun</b><i>survives unmount, owns the AbortControllers</i></div>
    <div class="down">↓ while it streams ↓</div>
@@ -222,7 +222,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
  <div class="n run"><b>injected into the next prompt</b><i>resolveInvokedSkills, useAnalysisPipeline.ts — closes into stage 3</i></div>
  <div class="n"><b>idle suspension</b><i>skillIdleLifecycle.ts ← memoryHygiene.ts · rides <code>enabled</code>, not a 4th status</i></div>
  <div class="n"><b>heartbeat 15 min + visibilitychange</b><i>useLearningHeartbeat, mounted App:2063</i></div>
- <div class="n store"><b>one number</b><i>collectApprovalItems App:1813 → approvalsWaiting :1914 → the Knowledge tab that holds the queues</i></div>
+ <div class="n store"><b>one number</b><i>collectApprovalItems App:1856 → approvalsWaiting :1957 → the Knowledge tab that holds the queues</i></div>
 </div>
 <div class="back">↺ the injected skill feeds stage 3 (prompt assembly) — and since E-57 §1 a settled position feeds it again, through the reflection's IF/THEN draft</div>
 </div></div>
@@ -377,13 +377,13 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>3</td><td>App → useSurfaceRouter</td><td>surface + journalTab + journalOpenNonce, <code>useSurfaceRouter hooks/useSurfaceRouter.ts:54</code></td></tr>
 <tr><td>4</td><td>useSurfaceRouter → useSurface</td><td>persisted value, key <code>hooks/useSurface.ts:15 august_surface_v1</code>, valid set <code>:16</code></td></tr>
 <tr><td>5</td><td>useSurfaceRouter → appHash</td><td><code>#/journal|market|settings|watch</code> ⇄ state <code>hooks/useSurfaceRouter.ts:101</code>, serialize <code>:159</code></td></tr>
-<tr><td>6</td><td>App → Header</td><td>band <code>App.tsx:2361</code>, guard <code>surface !== 'agents'</code> <code>App.tsx:2384</code></td></tr>
-<tr><td>7</td><td>App → 4 lazy surfaces</td><td>each wrapped in <code>SurfaceSkeleton App.tsx:148</code> TradeView, <code>SurfaceSkeleton App.tsx:148</code> Journal, <code>SurfaceSkeleton App.tsx:148</code> LearnView, <code>SurfaceSkeleton App.tsx:148</code> StrategyStudio</td></tr>
+<tr><td>6</td><td>App → Header</td><td>band <code>App.tsx:2405</code>, guard <code>surface</code> <code>App.tsx:2409</code> (the header's own switch)</td></tr>
+<tr><td>7</td><td>App → 4 lazy surfaces</td><td>each wrapped in <code>SurfaceSkeleton App.tsx:151</code> TradeView, <code>SurfaceSkeleton App.tsx:151</code> Journal, <code>SurfaceSkeleton App.tsx:151</code> LearnView, <code>SurfaceSkeleton App.tsx:151</code> StrategyStudio</td></tr>
 <tr><td>8</td><td>Header → SurfaceSwitch</td><td>the destination set <code>App.tsx:2161</code>, list <code>SurfaceMenuList.tsx:44</code></td></tr>
-<tr><td>9</td><td>App → AgentsView props</td><td>same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) <code>App.tsx:2522-2614</code></td></tr>
+<tr><td>9</td><td>App → AgentsView props</td><td>same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) <code>App.tsx:2566-2658</code></td></tr>
 <tr><td>10</td><td>TradeView → TradeChatPanel</td><td>the dock, inside Trade <code>components/trade/TradeView.tsx:1140</code></td></tr>
 <tr><td>11</td><td>AgentsView.send → bot branch</td><td>the selected bot answered at <code>components/agents/AgentsView.tsx:812</code></td></tr>
-<tr><td>12</td><td>bot branch → useBotMailbox</td><td><code>runUserBotTurn hooks/useBotMailbox.ts:305</code> → <code>runBotTurn hooks/useBotMailbox.ts:130</code></td></tr>
+<tr><td>12</td><td>bot branch → useBotMailbox</td><td><code>runUserBotTurn hooks/useBotMailbox.ts:336</code> → <code>runBotTurn hooks/useBotMailbox.ts:144</code></td></tr>
 <tr><td>13</td><td>AgentsView.send → analysis branch</td><td><code>onAnalyze</code> <code>components/agents/AgentsView.tsx:802</code> → <code>App.tsx:2227</code> — the dock's <code>onRunAnalysis</code> reaches the SAME wrapper</td></tr>
 <tr><td>14</td><td>dock Full analysis → the run slot</td><td><code>runFullAnalysis components/trade/TradeChatPanel.tsx:586</code> → <code>beginRun</code>/<code>endRunOwned</code>; it writes <b>no row</b>, the pipeline's own messages are projected into the session</td></tr>
 <tr><td>15</td><td>ChatComposer → chatTurnRunner.send</td><td>Enter <code>components/trade/panels/ChatComposer.tsx:156</code>, button <code>ChatComposer.tsx:226</code> → <code>services/trade/chatTurnRunner.ts:860</code></td></tr>
@@ -450,7 +450,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 2. There is no <code>utils/deskThread.ts</code> — <code>deskThread</code> is <code>utils/agentThreads.ts</code>.
 3. The provider layer speaks <b>four</b> wire formats; "three" describes only <code>electron/sseParser.cjs</code>, which has no <code>google</code> dialect.
 4. Approvals is a <b>tab</b> of Knowledge, not a fifth destination.
-5. <b><code>NavRail</code> is imported and NOT rendered.</b> An <code>on…</code> prop is not a render: <code>onExpandNavRail</code> (App:2397) and the rail's expand state (App:658-680) are alive, and that is how an earlier pass of this doc came to claim the rail was mounted. Withdrawn.
+5. <b><code>NavRail</code> is imported and NOT rendered.</b> An <code>on…</code> prop is not a render: <code>onExpandNavRail</code> (App:2441) and the rail's expand state (App:670-692) are alive, and that is how an earlier pass of this doc came to claim the rail was mounted. Withdrawn.
 6. <b>A doc line number is a claim, not a citation — and <code>npm run check-flow-doc-anchors</code> now refuses it.</b> Every number here and in <code>AGENTS.md</code> names its file on the same line, so CI can check them: 457 anchors verified, 0 unattributed, ceiling 0. The gate also reads its own quoted figure: this sentence states a number, and CI refuses the merge if it stops matching the scan. <b>Two rules were added on 2026-10-19 after the gate failed itself:</b> a stripped html tag now leaves a space, because deleting it spliced the label onto the neighbouring citation, and a spliced token matches no file — 12 of this page’s citations were being skipped rather than checked, while the run reported green. And a citation to a file that is not in the tree is now reported instead of swallowed: measured 0 in these flow docs, 21 in the dated stage ledger, where naming a deleted file is history but its line number is not a live claim. <b>A third rule polices the numbers this page quotes from a RECIPE</b> rather than from the gate’s own output: the two grep censuses in section D, the size of the table in section C and the provider-directory deletion list are re-measured by running the recipe the sentence names, so a stale figure is contradicted by the figure its own recipe can no longer produce — and the deletion list is checked name by name against git, which is the answer to the review that called “one service replacing nine” unfalsifiable. <b>Section H is bounded too:</b> of its 70 arrow rows, 66 cite a file and every one of those 66 names the symbol it cites, so no cited row is content-unchecked; the run prints <code>arrow coverage: 65/70</code> with a floor of 52, and the remaining 5 rows are line-resolved only. Scope and two caveats: flow docs only (the ledger is dated history), the provider sentences bind only their FIRST match each, and the history-dependent half prints SKIPPED instead of reporting zero findings on a shallow clone, because CI’s checkout is depth 1. <b>A fourth rule measured <code>AGENTS.md</code>'s hand-typed counts</b> — its smoke-test figure, its vitest census and its <code>git ls-files tests</code> file count. <b>Those three arms are gone as of 2026-10-23, with the suite they counted.</b> What still binds is the paragraph that follows: every step the <code>comm -13</code> asymmetry names (<code>check-flow-doc-anchors</code>, <code>skill-approval-probe</code>, <code>typecheck</code>, and <code>installer-smoke</code> on the other side) must appear as a WHOLE token in the 15 lines that print that recipe — the “test” inside “tests” is not a step name. Two control arms plant those two defects in the real file and require a report; the arm count is itself floored, so deleting an arm fails the build instead of passing silently. An absent recipe paragraph is itself a finding. <b>Coverage asymmetry, measured rather than trusted from prose:</b> that step runs in <code>ci.yml</code>, and <code>release.yml</code> does NOT run it — nor the skill-approval probe or the bare typecheck — while <code>installer-smoke</code> is the only gate release has and CI lacks. A <code>comm -13</code> over the two workflow files' npm-run lines prints that difference, and <code>AGENTS.md</code> now states it instead of claiming "the same static + probe chain". A tag can still publish with a dead line number in these docs while CI would reject the same commit; adding the step to <code>release.yml</code> would close that, and that half changes the publish path, so it is recorded rather than done. Qualifying the last 98 is what found five that were right-shaped and wrong (<code>chatTurnRunner.ts:1039</code> rather than line 919, line 1006 rather than line 996, line 1018 rather than line 1008, line 784 rather than line 774, <code>TradeChatPanel.tsx:577</code> rather than line 1130 ). Counts are taken with <code>grep -c</code>, not a truncated <code>head</code>.
 7. "The Chat surface has no tools wired" was true, and stopped being true on 2026-10-18.<br>
 8. "Automations always run the ensemble pipeline" was a code comment, and on 2026-10-24 the automations themselves were deleted by owner request — surface, scheduler, ration, breaker, private run mode. The sentence cannot come back; the pattern it described (an unattended caller holding the whole tool surface) must not either, and the one detached caller that remains declares its narrowed set in <code>services/trade/unattendedTools.ts</code>.
