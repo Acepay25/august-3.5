@@ -24,6 +24,7 @@ import {
     PROFILE_MEMORY_MAX_BODY_CHARS, PROFILE_MEMORY_MAX_ENTRIES,
     type ProfileMemoryEntry, type ProfileMemoryKind, type RememberResult,
 } from './profileMemory';
+import { filterMemoryWrite } from '../../utils/memoryWriteFilters';
 
 const MAX_CANDIDATES = 5;
 const COMPRESS_TARGET = PROFILE_MEMORY_MAX_BODY_CHARS - 100;
@@ -165,6 +166,15 @@ export const rememberWithConsolidation = async (
         const mergedDesc = typeof answer?.description === 'string' ? answer.description.trim() : '';
         if (!answer || !mergedBody || !mergedDesc || mergedBody.length > PROFILE_MEMORY_MAX_BODY_CHARS) {
             return { ok: false, error: 'the consolidation model did not return a usable merged fact' };
+        }
+        // The merge is the one write that does not pass the tool's filters: its
+        // text comes from a model reading stored rows, not from the trader. A
+        // merge that would put a secret (or an honesty-suppressing line) into
+        // the survivor is refused before anything is deleted, so a full store
+        // stays full rather than silently gaining text no `remember` could write.
+        const mergedVerdict = filterMemoryWrite(`${mergedDesc}\n${mergedBody}`);
+        if (mergedVerdict.refused) {
+            return { ok: false, error: `the merged fact cannot be stored: ${mergedVerdict.refused}` };
         }
         const keeper = candidates[0];
         const mergeResult = rememberProfileMemory({

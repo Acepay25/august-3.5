@@ -934,6 +934,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
                 // window decides, and windowBudgetTokens' floor keeps a tiny
                 // window from zeroing memory out entirely.
                 memoryConfig?.contextWindowTokens,
+                // The same switch the seat prompts obey. Full analysis used to
+                // read the profile index whatever the trader had chosen.
+                isGlobalMemoryEnabled !== false,
             );
 
             // ── CODE-CHECKED SKILL TRIGGERS ──

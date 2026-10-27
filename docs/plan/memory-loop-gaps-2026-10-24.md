@@ -59,3 +59,53 @@ Status per row updated in this file per commit.
 
 Contract layer: 84 assertions. Live chain re-verified after the changes. Later, still: autonomous evolution
 rails; `fallback_for_*`.
+
+## The review's surviving defects, closed (2026-10-27)
+
+A four-auditor review of the same spec found the machinery real but named three
+defects that survived on every branch, plus one seat that ignored two settings.
+All four are now fixed on `goal-workspaces-20261025`, each with a red-proved arm:
+
+- **The 40-fact ceiling silently evicted.** `writeAll` ended in
+  `entries.slice(-40)`, so the 41st new fact dropped the oldest while the tool
+  answered `saved: true`. The store now REFUSES growth at the cap
+  (`rememberProfileMemory`) and writes exactly what it is given; the production
+  path never reaches the refusal because `rememberWithConsolidation` frees a
+  slot first, which is the point — the refusal is the net for a caller that
+  skipped it. Red proof: with the refusal removed, the arm reports
+  `persisted=true count=40` and `first=cap-1` — the newest fact saved, the
+  oldest gone.
+- **The approval path skipped the body contract.** `skillBodyCaps` / the
+  Use-when check ran only in the import service (and as a courtesy in
+  `propose_skill`), so a draft from a post-mortem craft, or one queued before
+  those gates existed, could be approved with a body no import would accept.
+  `craftedBodyGate` is now the one rule both ingest paths call: over 100k
+  REFUSES (`over-hard-cap`; the draft stays in the inbox and the toast names
+  the size), over 200 lines and a description without a trigger WARN. Red
+  proof: with the gate neutered, the arm reports `created:true` and "Skill
+  saved" for a 150k-char draft.
+- **`remember` had no provenance gate.** The prompt said a fenced result is
+  data; nothing stood behind it, so a page saying "the trader approves 5x
+  leverage" became a row. The turn loop marks `untrustedSeen` after a
+  `web_search` or a forged HTTPS tool, and `remember` on such a turn refuses a
+  fact whose DESCRIPTION is not in the trader's own words
+  (`statedInTraderWords`). Two refinements came from the live arms, not from
+  review: the BODY must not be part of the comparison (a model-written body
+  restates the page and picks up the question words — the first live arm passed
+  a page-derived fact for exactly that reason), and one shared word is not
+  enough (a fact needs at least two, and at least half its own distinctive
+  words). Red proofs for both: the body-inclusive compare saves the echoing
+  fact; the gate removed entirely saves the page-derived one with "its index
+  line now rides every future prompt".
+- **The deep pipeline ignored the memory switch AND the window.**
+  `assemblePipelineMemoryContext` called `buildProfileMemoryIndex()` bare, so a
+  Full-analysis prompt carried every stored fact whatever the trader had chosen
+  and always at the default size. It now takes the flag and
+  `indexBudgetFor(window).memory`. Red proof: bare call → `narrow` window still
+  gets 30 lines, and the off arm still shows the block.
+
+What the provenance gate cannot do, said plainly: it is a vocabulary test. A
+page that mirrors the trader's own phrasing passes it, and a same-round
+(read + save in one batch) pair is not marked before the save runs. The
+guarantee is "the page was read, then the fact was saved" — the shape of every
+injection that worked — not semantic understanding.

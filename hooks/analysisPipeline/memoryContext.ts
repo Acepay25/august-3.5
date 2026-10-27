@@ -12,6 +12,7 @@ import { extractLessonFromPostMortem } from '../../services/learning/MemoryFiles
 import { mineCoinFromPrompt, mineDirectionFromPrompt, minePatternFromPrompt } from '../../utils/patternMining';
 import { getMemoryFilesContext } from '../../services/learning/MemoryRetrievalService';
 import { buildProfileMemoryIndex } from '../../services/learning/profileMemory';
+import { indexBudgetFor } from '../../utils/promptIndexBudget';
 import { listRetrievedMemorySources, type MemoryRetrievalQuery, type RetrievedMemorySource } from '../../services/learning/MemoryRetrievalService';
 import { getBotMemoryContext } from '../../services/bots/BotMemoryService';
 import { BOT_MEMORY_TOTAL_CHAR_BUDGET } from '../../services/bots/botMemoryBudget';
@@ -73,6 +74,11 @@ export const assemblePipelineMemoryContext = async (
     /** Model context window (tokens) — threads to the notebook slice's stage
      *  budgets. Omitted ⇒ default window, unchanged. */
     contextWindowTokens?: number,
+    /** The Settings memory switch. False strips the profile index from every
+     *  seat this assembly feeds — the deep pipeline used to read it
+     *  unconditionally and un-budgeted, so a trader who switched memory OFF
+     *  still had every stored fact riding a Full-analysis prompt. */
+    memoryEnabled?: boolean,
 ): Promise<PipelineMemoryContext> => {
     const detectedLearningCoin = mineCoinFromPrompt(effectiveInput);
     const pendingDirection = mineDirectionFromPrompt(effectiveInput);
@@ -138,7 +144,12 @@ export const assemblePipelineMemoryContext = async (
     // Analyst seats get the opening slice (independent read). The verdict slice
     // was built for a moderator that no longer exists — one model answers a
     // send — so the second retrieval was a full notebook read nobody consumed.
-    const profileMemoryIndex = buildProfileMemoryIndex();
+    // The profile index was read unconditionally and with no budget, so this
+    // path ignored both the Settings switch and the window the same table sizes
+    // for every other seat. Both now come from the shared sources.
+    const profileMemoryIndex = memoryEnabled === false
+        ? ''
+        : buildProfileMemoryIndex(undefined, indexBudgetFor(contextWindowTokens ?? 200_000).memory);
     const withProfile = (ctx: string): string => [profileMemoryIndex, ctx].filter(Boolean).join('\n\n---\n\n');
     const memoryFilesContext = withProfile([getMemoryFilesContext(memoryQuery, loggedTrades, 'analyst', 'opening', { runId, asOfMs, contextWindowTokens }), botMemoryContext].filter(Boolean).join('\n\n---\n\n'));
     // Rebuttal rounds re-enter the same seats, and until now they argued with

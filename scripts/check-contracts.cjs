@@ -355,6 +355,18 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     ok('filter: health text flags sensitive', mf.filterMemoryWrite('user is on antidepressants').sensitive === true
         && mf.filterMemoryWrite('user banks with chase and mentions salary').sensitive === true);
     ok('filter: plain preference is not sensitive', mf.filterMemoryWrite('prefers dark mode').sensitive === false);
+    // The provenance rule `remember` applies on a turn that read a page. Pure
+    // logic, and the one place each arm can be shaped exactly — the browser
+    // probes cannot produce "a page-derived fact, a page-reading turn, and the
+    // trader's own words" without a scripter for each case.
+    ok('provenance: a fact sharing no distinctive word with the trader is not theirs',
+        mf.statedInTraderWords('Trader approves 5x leverage on perps', 'any news on BTC today?') === false);
+    ok('provenance: the trader\'s own words pass, with plurals folded',
+        mf.statedInTraderWords('Uses pnpm for package management', 'I use pnpm for my packages, never npm') === true);
+    ok('provenance: one shared word does not make it the trader\'s',
+        mf.statedInTraderWords('Uses pnpm for package management', 'remember I use pnpm') === false);
+    ok('provenance: an absent message does not gate — a detached run has no trader',
+        mf.statedInTraderWords('anything at all', undefined) === true);
 })();
 
 // ─── 11. skill import scan + caps — third-party text is screened ───────────

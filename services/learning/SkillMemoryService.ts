@@ -30,7 +30,7 @@ import type { SkillIndexRow } from '../trade/tradeChatContext';
 import { netRiskReward, stopDistancePercent } from '../../utils/netRiskReward';
 import { parsePrice } from '../../utils/analysisUtils';
 import { formatCraftedSkillBody, refineSkillFromLosses } from './SkillCraftService';
-import { captureUnknownFrontmatter, declaredCompatibility, skillRunsHere, type SkillRuntime } from '../../utils/skillFrontmatter';
+import { captureUnknownFrontmatter, declaredCompatibility, hasUseWhenTrigger, skillBodyCaps, skillRunsHere, type SkillRuntime } from '../../utils/skillFrontmatter';
 import { DESK_TOOL_NAMES } from '../../utils/toolKinds';
 import {
     recordWorthGateApproval,
@@ -2890,6 +2890,35 @@ export const maybeUpsertSkill = (
 ): Promise<MemoryFile | null> =>
     withNotebookWriteLock(() => maybeUpsertSkillUnlocked(trade, allTrades, username, preferredClause));
 
+/**
+ * The body contract an IMPORTED file must meet, applied to a DRAFTED skill.
+ *
+ * `skillBodyCaps` and the Use-when check ran only inside `SkillImportService`,
+ * so a model-authored proposal — or a post-mortem craft — could be approved
+ * with a body and a description no import would have accepted. Both ingest
+ * paths below write the same format, so the rule lives here, once, and both
+ * call it: over the hard cap REFUSES (nothing written, draft kept), over the
+ * soft cap and a description with no trigger WARN, exactly as an import does.
+ */
+const craftedBodyGate = (crafted: CraftedSkill, where: string): { overHard: boolean; body: string; message?: string } => {
+    const body = formatCraftedSkillBody(crafted);
+    const caps = skillBodyCaps(body);
+    if (caps.overHard) {
+        return {
+            overHard: true, body,
+            message: `body is ${caps.chars.toLocaleString()} chars — over the 100k hard cap; move material into references/ and try again`,
+        };
+    }
+    if (caps.overSoft) {
+        console.warn(`[Skills] ${where}: ${caps.lines} lines is over the ~200-line soft cap — long material belongs in a bundled references/ file`);
+    }
+    const description = (crafted.description || defaultDescription(crafted) || '').trim();
+    if (!hasUseWhenTrigger(description)) {
+        console.warn(`[Skills] ${where}: the description has no "Use when" trigger — it is the activation key, and a vague one rarely activates`);
+    }
+    return { overHard: false, body };
+};
+
 const ingestCraftedSkillUnlocked = async (
     trade: LoggedTrade,
     crafted: CraftedSkill,
@@ -2902,6 +2931,15 @@ const ingestCraftedSkillUnlocked = async (
 ): Promise<void> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
     if (!tradeAdmitsTechnicalStrategyRule(trade)) return;
+    // Before anything is read, queued or written: a body over the hard cap is
+    // refused here too, so the two ingests cannot disagree about what a skill
+    // is allowed to be. The caller's read-back reports the miss and keeps the
+    // draft; the log line says which rule refused it.
+    const gate = craftedBodyGate(crafted, `craft "${crafted.name || crafted.kind}"`);
+    if (gate.overHard) {
+        console.warn(`[Skills] craft refused: ${gate.message}`);
+        return;
+    }
     await ensureHarnessFoldersUnlocked(username);
     const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
     if (!folder) return;
@@ -2973,7 +3011,7 @@ const ingestCraftedSkillUnlocked = async (
                 regime: trade.marketRegime,
             });
         }
-        meta.body = formatCraftedSkillBody(crafted);
+        meta.body = gate.body;
         meta.status = deriveStatus(meta);
         await updateMemoryFileUnlocked(existing.id, {
             content: serializeSkill(meta, crafted.name || titleFromMeta(meta)),
@@ -3012,7 +3050,7 @@ const ingestCraftedSkillUnlocked = async (
             family: trade.analysis?.detectedPatternFamily,
             regime: trade.marketRegime,
         }),
-        body: formatCraftedSkillBody(crafted),
+        body: gate.body,
     };
     meta.status = deriveStatus(meta);
     const slug = slugifyName(crafted.name) || slugifyName([trade.analysis?.coinName, kind].filter(Boolean).join(' ')) || 'skill';
@@ -3045,7 +3083,10 @@ export const ingestCraftedSkill = (
 export type SkillIngestResult =
     | { created: true; slug: string }
     | { created: false; reason: 'duplicate'; slug: string }
-    | { created: false; reason: 'no-skills-folder' };
+    | { created: false; reason: 'no-skills-folder' }
+    /** The body is over the 100k hard cap every import must meet. Nothing was
+     *  written; `detail` names the size so the human can act on it. */
+    | { created: false; reason: 'over-hard-cap'; detail: string };
 
 const ingestCraftedSkillFromDraftUnlocked = async (
     crafted: CraftedSkill,
@@ -3065,6 +3106,13 @@ const ingestCraftedSkillFromDraftUnlocked = async (
     // notebook that has none of them — an import with its own folder names —
     // gets no skills folder and nothing here can create one.
     if (!folder) return { created: false, reason: 'no-skills-folder' };
+    // The same contract the import path enforces, on the path a human's Save
+    // and the supervisor's verdict take. A refusal here writes nothing and
+    // leaves the draft in the inbox — the message names the ceiling, because
+    // "not saved" without a reason is how the old unconditional success toast
+    // came to be written.
+    const gate = craftedBodyGate(crafted, `draft "${crafted.name || crafted.kind}"`);
+    if (gate.overHard) return { created: false, reason: 'over-hard-cap', detail: gate.message ?? 'body over the hard cap' };
     const existing = getMemoryFiles().files.filter(isSkillFile).find(f => {
         const meta = parseSkillMarkdown(f.content);
         return meta?.ifCondition?.toLowerCase() === crafted.ifCondition.toLowerCase();
@@ -3099,7 +3147,7 @@ const ingestCraftedSkillFromDraftUnlocked = async (
         thenAction: crafted.thenAction,
         predicate: sanitizePredicate(crafted.predicate),
         prediction: crafted.prediction ?? defaultPrediction({ coin }),
-        body: formatCraftedSkillBody(crafted),
+        body: gate.body,
     };
     const slug = slugifyName(crafted.name) || slugifyName([coin, crafted.kind].filter(Boolean).join(' ')) || 'skill';
     // A proposal that keeps an existing skill's NAME but changes its IF clause is

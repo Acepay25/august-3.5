@@ -32,7 +32,7 @@ export type SkillApprovalResult =
     /** The write path declined for a named reason, or threw. The draft is LEFT
      *  IN THE INBOX so the human can fix and retry it, rather than being
      *  destroyed on an assumption. */
-    | { created: false; reason: 'not-written' | 'write-failed' | 'no-skills-folder'; error?: string };
+    | { created: false; reason: 'not-written' | 'write-failed' | 'no-skills-folder' | 'over-hard-cap'; error?: string };
 
 /** Case-insensitive trigger match — the same comparison the ingest path uses
  *  to refuse a duplicate, so "already learned" means the same thing on both
@@ -60,7 +60,8 @@ export const approveSkillDraft = async (
     const alreadyThere = findByTrigger(trigger);
 
     const trade = trades.find(t => t.id === draft.tradeId);
-    let declined: 'no-skills-folder' | null = null;
+    let declined: 'no-skills-folder' | 'over-hard-cap' | null = null;
+    let detail: string | undefined;
     try {
         // P0-1: a human pressing Save IS the approval fact, regardless of
         // which ingest path carries the evidence. The trade-backed writer
@@ -75,6 +76,7 @@ export const approveSkillDraft = async (
             // still the authority on success, but a named cause beats a generic
             // one in the message the human reads.
             if (r && !r.created && r.reason === 'no-skills-folder') declined = r.reason;
+            if (r && !r.created && r.reason === 'over-hard-cap') { declined = r.reason; detail = r.detail; }
         }
     } catch (e) {
         return { created: false, reason: 'write-failed', error: e instanceof Error ? e.message : String(e) };
@@ -84,7 +86,7 @@ export const approveSkillDraft = async (
     if (!nowThere) {
         // The write path declined, or declined to say so. Do not consume the
         // draft: the human's only copy of this proposal is the inbox row.
-        return { created: false, reason: declined ?? 'not-written' };
+        return { created: false, reason: declined ?? 'not-written', ...(detail ? { error: detail } : {}) };
     }
     takeSkillDraft(draft.id, username || undefined);
     if (alreadyThere && alreadyThere === nowThere) {
@@ -106,6 +108,8 @@ export const skillIngestOverrideNote = (
             return { kind: 'info', body: `Already a live skill (${result.slug}) — the trigger was there before you pressed.` };
         case 'no-skills-folder':
             return { kind: 'error', body: 'Not approved — this notebook has no skills folder to write into, so nothing was created.' };
+        case 'over-hard-cap':
+            return { kind: 'error', body: `Not approved — ${result.detail}. The draft is still in your inbox.` };
     }
 };
 

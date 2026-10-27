@@ -2,7 +2,7 @@
 
 Every node names the file and line that implements it. Verified against the tree on
 **2026-10-25** (the anchor gate re-measured every citation here and in the stage ledger:
-**445 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
+**450 unique anchors verified, 0 unattributed** — plus two quality ceilings, both now
 ZERO: 0 citations that land on a comment line (and 5 more cite a comment because the
 comment IS the claim, which the gate lists rather than hides) and 0 whose named symbol is not on the cited line (the check’s stated target, now the ceiling) (16 before the arrow list's symbols were paired with the citation on the next line), which
 count only what the rule can *see* and therefore under-report: both rules exempt a line
@@ -94,9 +94,9 @@ flowchart TD
     BOT --> TR["streamQuickResponse — GenericAnalysisService.ts (bots stay chat-only)"]
     AN --> HSM["handleSendMessage — useAnalysisPipeline.ts:507"]
     FA --> HSM
-    HSM --> D3{"the debate branch is GONE (19): a send answers through the tool turn hooks/useAnalysisPipeline.ts:1158. the ensemble mode and the seat roster it fed were deleted by owner ruling (2026-10-19); the scheduler's own arm was deleted on 2026-10-24"}
+    HSM --> D3{"the debate branch is GONE (19): a send answers through the tool turn hooks/useAnalysisPipeline.ts:1161. the ensemble mode and the seat roster it fed were deleted by owner ruling (2026-10-19); the scheduler's own arm was deleted on 2026-10-24"}
     D3 -->|true| ENS["ensemble branch — section C (ENGINE DELETED; the branch answers with ONE tool turn and no longer refuses over seats)"]
-    D3 -->|false: the desk else-arm hooks/useAnalysisPipeline.ts:1152| SPLIT{"a bot thread? :1083"}
+    D3 -->|false: the desk else-arm hooks/useAnalysisPipeline.ts:1155| SPLIT{"a bot thread? :1083"}
     SPLIT -->|yes| TR
     SPLIT -->|no — the desk, with its tools| CST["runChatSurfaceTurn — chatSurfaceTurn.ts:300, tools from CHAT_SURFACE_TOOLS :61, prompt chatSurfaceSystemPrompt :167"]
     CST --> TT
@@ -282,7 +282,7 @@ history and the current line. Before it goes on the wire:
    `tool_calls` block always stays with its replies, and the last user turn is
    pinned by `compactMessages`. The notice says what was cut, including
    `CONTEXT FULL` when nothing could be cut.
-3. `runDeskToolLoop` (`services/analysis/DeskToolsService.ts:4223`) bounds the
+3. `runDeskToolLoop` (`services/analysis/DeskToolsService.ts:4256`) bounds the
    turn: at most `MAX_DESK_TOOL_ROUNDS`, each round at
    `DESK_ROUND_MAX_TOKENS` and under `DESK_TURN_BUDGET_MS`;
    `budgetToolContent` clips one result, and `clearDeskToolCache`
@@ -414,7 +414,7 @@ boundary is load-bearing.** Counting the TOKEN, `grep -rE "postMortem" --include
 `grep -rE "\.postMortem\b" …` and measures **36 lines in 22 files**. Drop the `\b` and the
 second figure silently becomes **40**, because four of those lines are a DIFFERENT field:
 `postMortemCreatedAt`, the timestamp twin (read at
-`hooks/analysisPipeline/memoryContext.ts:175` and
+`hooks/analysisPipeline/memoryContext.ts:186` and
 `services/learning/DecisionReflectionService.ts:24`, and gated at
 `services/ui/AlgorithmicSummaryService.ts:57` on `postMortemCreatedAt`), and the new `postMortemModel`, the
 provenance twin. A census without the boundary sweeps a live
@@ -466,7 +466,7 @@ person pressing send, a bot mailbox delivery, or a room round.
 
 What survives is the one unattended caller that is not a conversation — the
 detached skill evaluator, reached from the trade-sync path
-(`runDueSkillEvalWithDefaultRunner services/learning/SkillMemoryService.ts:3942`)
+(`runDueSkillEvalWithDefaultRunner services/learning/SkillMemoryService.ts:3990`)
 and from the skill detail's own run. Because nobody is watching it, it runs on
 `DETACHED_EVAL_TOOLS` (`services/trade/unattendedTools.ts:27`): the Chat surface's
 set minus every notebook-writer and minus `present_trade` / `decline_trade`, so a detached
@@ -563,7 +563,7 @@ and `strategies`. The folder is the write scope, not the model's choice:
 
 | folder | owner / writer | what the next prompt may see |
 |---|---|---|
-| `profile` | `syncProfileMemoryUnlocked` (`MemoryFilesService.ts:1107`) from the saved profile | the profile memory index (`buildProfileMemoryIndex`, `profileMemory.ts:346`) |
+| `profile` | `syncProfileMemoryUnlocked` (`MemoryFilesService.ts:1107`) from the saved profile | the profile memory index (`buildProfileMemoryIndex`, `profileMemory.ts:361`) |
 | `trader-diary` | the trader and diary appends | free prose; not a generated index |
 | `rules` | the seed `risk-rules.md` plus trader edits | `riskRulesBlock`; the model treats each line as binding |
 | `skills` | approved skill files | the skills index / recall tool (G.3) |
@@ -602,7 +602,7 @@ Health tab reads it. Backup/export carries the notebook with the profile
 Three derived memories sit beside the notebook:
 
 - **Profile memory** — `syncProfileMemory` copies the saved profile into the
-  `profile` folder, and `buildProfileMemoryIndex` (`profileMemory.ts:346`) renders
+  `profile` folder, and `buildProfileMemoryIndex` (`profileMemory.ts:361`) renders
   the index injected into a turn.
 - **Global memory** — `buildGlobalMemoryIndex` (`utils/memoryUtils.ts:19`) renders
   `familyPerformance`, `userPreferences`, `globalCorrections` and the frozen
@@ -634,7 +634,7 @@ zero.
 where the spec and the code disagreed):
 
 - **Forget deletes the line and anything derived SOLELY from it** —
-  `forgetProfileMemory services/learning/profileMemory.ts:276` returns
+  `forgetProfileMemory services/learning/profileMemory.ts:291` returns
   `{ gone, removed, carried }`, not a boolean, because the honest answer can be
   "more than the one you named". A row goes with the forgotten slug only when its
   `derivedFrom` list resolves entirely to slugs this delete already dooms, and the
@@ -642,9 +642,9 @@ where the spec and the code disagreed):
   fall. A merge survivor keeps its facts (it was built from more than one line)
   and keeps its absorbed history, because that list is provenance, not a live
   dependency. What makes `derivedFrom` exist is the consolidation merge
-  (`profileMemoryConsolidation.ts:204`), which records the inputs it absorbed
+  (`profileMemoryConsolidation.ts:214`), which records the inputs it absorbed
   before retiring them — and retires them through
-  `retireMergedMemory services/learning/profileMemory.ts:314`, NOT through the
+  `retireMergedMemory services/learning/profileMemory.ts:329`, NOT through the
   trader-facing forget: the survivor's list names those very slugs, so cascading
   there would delete the merged row moments after writing it. The desk tool's
   receipt prints `alsoRemoved` / `itAlsoCarried`, and the Settings memory list
@@ -667,7 +667,7 @@ where the spec and the code disagreed):
 
   `sourceSession` is the conversation the fact was heard in — a fact the trader
   cannot place is a fact they cannot audit.
-  `rememberProfileMemory services/learning/profileMemory.ts:173`
+  `rememberProfileMemory services/learning/profileMemory.ts:178`
   takes `if_version` and refuses a mismatched write by returning the row that IS
   stored, so the seat merges and retries in the same turn.
 - **Write filters** — `filterMemoryWrite` (`utils/memoryWriteFilters.ts:71`)
@@ -683,7 +683,7 @@ where the spec and the code disagreed):
   flagged so the pre-read and unattended seats never surface them.
 - **A bulk read is not an invitation** — `read_memory` with "all" (or no slugs)
   holds every `sensitive` row back for EVERY seat and answers with the count
-  instead (`case 'read_memory' services/analysis/DeskToolsService.ts:3001`). The
+  instead (`case 'read_memory' services/analysis/DeskToolsService.ts:3034`). The
   store's own index never advertises a sensitive slug, so a row that comes back
   was named by the trader; that is the distinction the bulk read cannot make on
   its own, and it is why the rule sits in the tool rather than in the prompt.
@@ -692,6 +692,12 @@ where the spec and the code disagreed):
   App → `runChatSurfaceTurn` (`chatSurfaceTurn.ts:160`) and App → TradeView →
   the dock, and off strips BOTH memory blocks (profile and notebook topics)
   from the seat prompt. Skills are procedures, not memory, and stay.
+  The DEEP pipeline honoured nothing: `assemblePipelineMemoryContext` called
+  `buildProfileMemoryIndex()` bare, so a Full-analysis prompt carried the
+  profile index whatever the switch said, sized by the default rather than the
+  seat's window. It now takes the flag and `indexBudgetFor`'s memory line
+  (`hooks/analysisPipeline/memoryContext.ts:152`) — the same table every other
+  seat reads.
   Its ONE writer is the `Global memory` toggle in the notebook manager
   (`MemoryFilesManager.tsx:366`), on the Learn surface — Settings → Memory shows
   the LIST, not the switch, which is why a probe that looks for it there finds
@@ -724,6 +730,42 @@ where the spec and the code disagreed):
   change could not have propagated even if something read it. Default ON
   (`useUserProfileLoader.ts:182`), a stored false still honoured; the seat cannot
   move it, because `openKnobNames()` never names it.
+- **The 40-fact ceiling refuses; it never evicts** — the store used to write
+  `entries.slice(-40)`, so the 41st NEW fact silently dropped the oldest one
+  while the tool answered `saved: true`: a fact the trader was told was kept,
+  gone with no receipt. `rememberProfileMemory`
+  (`services/learning/profileMemory.ts:178`) now refuses a new row at the cap
+  and `writeAll` writes exactly what it is given. The production path never
+  reaches that refusal — `rememberWithConsolidation` frees a slot first by
+  merging the two oldest non-sensitive rows, and refuses out loud when it
+  cannot — so the ceiling only fires for a caller that skipped consolidation,
+  which is exactly the hole it closes. An edit in place still lands at the cap.
+- **The approval path enforces the body contract** — `skillBodyCaps` and the
+  Use-when check ran only inside `SkillImportService` (and, as a courtesy
+  message, in `propose_skill`), so a draft queued by a post-mortem craft — or
+  one written before those gates existed — could be approved with a body no
+  import would accept. `craftedBodyGate services/learning/SkillMemoryService.ts:2903`
+  is the one rule both ingest paths call: over the 100k hard cap REFUSES
+  (`over-hard-cap`, the draft stays in the inbox and the toast names the size),
+  over the 200-line soft cap and a description with no trigger WARN, exactly as
+  an import does.
+- **A fact read off a page is not the trader's memory** — the seat prompt
+  already says a fenced result is data; the executor now stands behind that.
+  The turn loop marks a turn `untrustedSeen` (`DeskToolsService.ts:4681`) once
+  a `web_search` or a forged HTTPS tool returns, and `remember` on such a turn
+  refuses a fact whose DESCRIPTION is not in the trader's own message
+  (`statedInTraderWords utils/memoryWriteFilters.ts:140`) — at least two shared
+  distinctive words, at least half the description's, plurals folded; the body
+  is deliberately not the signal, because a model-written body restates the page
+  and picks the trader's question words up on the way (the first live arm passed
+  a page-derived fact for exactly that reason); an absent message does not gate,
+  because a detached run has no trader. Without it, a page saying "the trader
+  approves 5x leverage" became a stored row on the model's say-so, with one
+  prompt line in the way. A same-round pair (read + save in one batch) is not
+  marked before the save runs; the guarantee is "the page was read, then the
+  fact was saved", which is the shape of every injection that worked, and a page
+  that mirrors the trader's own phrasing is out of reach of a vocabulary test —
+  the gate catches content foreign to the conversation, not a clever echo.
 - **Listing-first recall, one budget** — the profile index and the notebook
   topics index (`buildNotebookTopicsIndex`, `memoryTopics.ts:241`) ride the
   seat prompt beside the skills catalogue, and all three draw their line caps
@@ -734,7 +776,7 @@ where the spec and the code disagreed):
   (`~bun, package manager`) when it has them, because a slug is the store's
   naming and the trader's word is the one that decides relevance; the
   description gives up exactly what the aliases take
-  (`INDEX_ALIAS_MAX services/learning/profileMemory.ts:333`), so the row count
+  (`INDEX_ALIAS_MAX services/learning/profileMemory.ts:348`), so the row count
   and the line cap keep their measured cost.
 - **The deterministic pre-read, on every model** — `buildMemoryHints`
   (`utils/memoryHints.ts:69`) string-matches the trader's message against the
@@ -795,7 +837,7 @@ never a fourth status.
   (`requires_toolsets`, `fallback_for_toolsets` — it names no toolsets) is
   announced at import by `inertDeclaredKeys` rather than ignored in silence.
 - **`skill_view` — progressive disclosure on the desk.** L0 is the skills index
-  every seat already carries; the tool (`DeskToolsService.ts:2838`) is L1 (the
+  every seat already carries; the tool (`DeskToolsService.ts:2852`) is L1 (the
   full body plus the bundled-file list) and L2 (one bundled file by flat name —
   path separators and `..` are refused). `${SKILL_DIR}` and `${SESSION_ID}`
   substitute inside bodies, with `${HERMES_SKILL_DIR}`/`${HERMES_SESSION_ID}`
@@ -905,7 +947,7 @@ mailbox tools. The surface decides what is offered:
 - a panel seat adds the chart-action definitions only when its own allow-list
   names them.
 
-`streamChatWithDeskTools` (`DeskToolsService.ts:4848`) composes the mandate from
+`streamChatWithDeskTools` (`DeskToolsService.ts:4893`) composes the mandate from
 the tools the turn can actually call (`deskToolsMandateFor`) filters
 the definitions, and then runs `runDeskToolLoop`. `executeDeskTool`
 re-checks the allow-list at execution, so a prompt that names a
@@ -1084,7 +1126,7 @@ brings a snapshot back as a NEW revision, and exactly one goal is focused:
 `focusedGoal services/goals/GoalService.ts:72`
 The focused goal's `policy.allowedTools` is intersected with the seat's own list
 at the transport — `goalAllowedTools services/trade/chatSurfaceTurn.ts:355`
-› `effectiveAllowed services/analysis/DeskToolsService.ts:4985`, and the rule
+› `effectiveAllowed services/analysis/DeskToolsService.ts:5030`, and the rule
 itself is `intersectGoalPolicy utils/toolKinds.ts:187`
 so a goal can only NARROW what a seat may call, and no goal text can widen a
 policy. The intersection has one hard case: a goal authored on the Chat surface
@@ -1136,7 +1178,7 @@ surfaces actually change how this app behaves:
   in `SHADOW_MIN_TRADES_PER_SIDE services/selfMod/SelfModificationService.ts:61`
   and in `maybePinWinningPromptLane utils/promptVersionStats.ts:45` — and
   promotes, leaves in shadow, or auto-reverts. It runs from the learning pass
-  beside `maybePinWinningPromptLane services/learning/SkillMemoryService.ts:3942`
+  beside `maybePinWinningPromptLane services/learning/SkillMemoryService.ts:3990`
   so a self-edit is judged by outcomes, not by the model's opinion of its own
   edit.
 
@@ -1153,7 +1195,7 @@ rules is refused by name in
 The seat is told about the capability only when the trader turned it on, in
 `deskToolsMandateFor services/analysis/DeskToolsService.ts:1980`
 a detached run reads the ledger and cannot write it, because the executor's own
-allow-list check refuses it: `seatAllows services/analysis/DeskToolsService.ts:2742`
+allow-list check refuses it: `seatAllows services/analysis/DeskToolsService.ts:2756`
 Pulling the switch off reverts every change the agent made, promoted ones
 included: `setSelfModMode services/selfMod/SelfModificationService.ts:166`
 and the toggle sits beside the knobs it governs, in the Harness block at
@@ -1211,11 +1253,11 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1209` · `createDebateMailbox :1137` · `planPanelTurn :1149` |
 | 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `systemPromptFor components/trade/TradeChatPanel.tsx:483` = the blocks below, assembled at `TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:47` |
 | 20 | every dock turn → chatStore | `mutate services/trade/chatStore.ts:361` · `beginRun services/trade/chatStore.ts:508` |
-| 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useBotThread hooks/useAnalysisPipeline.ts:1083`, anything else runs the tool turn `:1158`; the ensemble flag and the roster it fed are gone (2026-10-19) |
-| 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1132` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:300` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
+| 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useBotThread hooks/useAnalysisPipeline.ts:1086`, anything else runs the tool turn `:1161`; the ensemble flag and the roster it fed are gone (2026-10-19) |
+| 22 | the casual arms | a bot thread → `streamQuickResponse useAnalysisPipeline.ts:1135` (plain transport); the desk → `runChatSurfaceTurn chatSurfaceTurn.ts:300` → arrow 17. Tier on both via `resolveComposerEffort`; a Full-analysis send also sets `requireTools` |
 | 23 | casual frames → Message.text | `applyCasualStreamUpdate hooks/analysisPipeline/streamThrottlers.ts:28`; flush precedes the settle write useAnalysisPipeline.ts |
 | 24 | ensemble → the stages that survive | see C — five of the old eight are gone from the call path, and no stage is named in the code, so no line number is claimed |
-| 25 | desk tools → what a caller can reach | `executeDeskTool services/analysis/DeskToolsService.ts:2723` (its allow-list is enforced at execution, not only at offer time) |
+| 25 | desk tools → what a caller can reach | `executeDeskTool services/analysis/DeskToolsService.ts:2737` (its allow-list is enforced at execution, not only at offer time) |
 | 26 | panel tools → chart echo | `executePanelTool services/trade/chatTurnRunner.ts:331` is what echoes the result back into the panel |
 | 27 | ~~automation tick → runAutomation~~ | DELETED (2026-10-24, owner request): the surface, the scheduler, the ration, the breaker and the bot-scoped routine executor are gone — see E |
 | 29 | rooms → groupRounds | `useAgentGroups hooks/useAgentGroups.ts:75` → `streamQuickResponse services/providers/GenericAnalysisService.ts:605` |
@@ -1241,11 +1283,11 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 49 | ~~a schedule's failure → the row and the toast~~ | DELETED with the feature. The rule it carried still binds anything unattended: a run that called nothing must not settle as a clean answer |
 | 50 | a journal row gets its scalp/swing class | `withDetectedTradeType` (`services/analysis/ScalpDetectionService.ts`) is called at the two row-minting sites `withDetectedTradeType hooks/useTradeLogging.ts:369` and `withDetectedTradeType hooks/useTradeLogging.ts:777` — label-only, so no `validityDurationMinutes` appears and the autopilot expiry window never widens. The filter reads it at `components/journal/TradeLog.tsx:540` |
 | 51 | a run records its measured cost | `recordToolTurnUsage utils/sessionUsage.ts:63` is called by both turn owners — desk arm chatSurfaceTurn.ts, dock seats chatTurnRunner.ts — from the usage the wire reported per request. Knowledge → Session Usage reads that ledger; stage 19 left it with a reader and no writer. usageCalls distinguishes a zero-cost run from a provider that sent no usage frame |
-| 52 | a finished analysis says so | `notify()` (`services/infrastructure/notify.ts`) fires when a Full-analysis send settles un-stopped (`notify hooks/useAnalysisPipeline.ts:1258`). Before stage 19 this came from the verdict finalizer; the old channel name CompletionNotifications was a native-only copy of the same thing, and its FILE is gone with stage 19's tranche — the only surviving mention is a comment in `services/infrastructure/notify.ts` — so the app speaks through one notifier |
+| 52 | a finished analysis says so | `notify()` (`services/infrastructure/notify.ts`) fires when a Full-analysis send settles un-stopped (`notify hooks/useAnalysisPipeline.ts:1261`). Before stage 19 this came from the verdict finalizer; the old channel name CompletionNotifications was a native-only copy of the same thing, and its FILE is gone with stage 19's tranche — the only surviving mention is a comment in `services/infrastructure/notify.ts` — so the app speaks through one notifier |
 | 53 | the chart gets its Entry/Stop/Target lines | `latestChartVerdict(messages)` `latestChartVerdict services/trade/chartData.ts:95` is what App hands `TradeView` as `verdict` — the newest row carrying `Message.proposal` (what `present_trade` stamps; `proposal services/trade/chatSurfaceTurn.ts:385`), with `Message.analysis` as the fallback for pre-debate history. Red-proved: the old selector keyed on `ensembleProgress` / >1 `modelsUsed` / `debateTurns` and returned null for every tool-turn row. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate |
 | 54 | request → context window | `resolveContextWindow utils/contextWindow.ts:136` resolves user → measured → model → assumed; `outputTokenBudget utils/contextWindow.ts:187` and `promptTokenCeiling utils/contextWindow.ts:169` size the two halves of one request |
 | 55 | array → compaction | `compactForWire services/providers/contextCompact.ts:343` → `compactMessages :217`; oldest payloads, then prose, then whole rounds; `tool_calls` stay paired and the last user turn is pinned |
-| 56 | tool round → bounded loop | `runDeskToolLoop services/analysis/DeskToolsService.ts:4223`; `MAX_DESK_TOOL_ROUNDS :199` · `DESK_ROUND_MAX_TOKENS :244` · `DESK_TURN_BUDGET_MS :211` |
+| 56 | tool round → bounded loop | `runDeskToolLoop services/analysis/DeskToolsService.ts:4256`; `MAX_DESK_TOOL_ROUNDS :199` · `DESK_ROUND_MAX_TOKENS :244` · `DESK_TURN_BUDGET_MS :211` |
 | 57 | tool result → artifact + payload | `storeToolArtifact services/analysis/toolArtifactStore.ts:82` (owner-scoped; `readToolArtifact :138`) and `saveToolPayload services/trade/toolPayloadStore.ts:110` (`readToolPayload :174`) |
 | 58 | tool event → transcript trail | `digestToolResult services/analysis/DeskToolsService.ts:841` → `Message.toolEvents` + `toolIds` → `ToolActivityRow`/`ChatWorkTimeline` |
 | 59 | wire decision → audit row | `buildReasoningPatch services/providers/reasoningControls.ts:271` → `WireAuditEntry` → `WireAuditRow`; the route, tier, applied and reason are recorded per call |
@@ -1260,10 +1302,10 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 68 | model control → tier | `ModelChip`/`ModelMenu`; `nextEffortTier components/shared/effortScale.ts:50`; `effortDialUp components/shared/effortDial.ts:27` guards the chord |
 | 69 | run → prompt lane + corpus version | `beginPromptLane services/infrastructure/PromptOverrideService.ts:34` → `promptCorpusVersion :97` → `runStats.promptLane`/`promptVersion` |
 | 70 | Settings → tool catalogue | `DESK_TOOL_DEFINITIONS services/analysis/DeskToolsService.ts:948` + `toolLabel :812` → `DeskToolCatalogue`, grouped by `toolKinds` |
-| 71 | skills index → skill_view → the body or one bundled file | `case 'skill_view' services/analysis/DeskToolsService.ts:2838` — L1 body + bundled list, L2 one flat-named file (`..` refused); `${SKILL_DIR}`/`${SESSION_ID}` substitute, Hermes aliases accepted |
-| 72 | message → focused goal → a narrower toolset | `focusedGoal services/goals/GoalService.ts:72` · `goalMatchesMessage :278` → `goalAllowedTools services/trade/chatSurfaceTurn.ts:355` → `intersectGoalPolicy utils/toolKinds.ts:187` › `effectiveAllowed services/analysis/DeskToolsService.ts:4985`, an intersection — a goal may only narrow the seat, and narrowing to nothing leaves it `NO_TOOLS_ALLOWED utils/toolKinds.ts:170` rather than the whole desk |
-| 73 | seat → goal edit → snapshot → undo | `case 'update_goal' services/analysis/DeskToolsService.ts:3121` → `updateGoal services/goals/GoalService.ts:164` keeps the previous snapshot → `case 'restore_goal' services/analysis/DeskToolsService.ts:3165` → `restoreGoal services/goals/GoalService.ts:202` |
-| 74 | seat → self-change → ledger → outcomes | `case 'propose_self_change' services/analysis/DeskToolsService.ts:3207` → `proposeKnobChange services/selfMod/SelfModificationService.ts:259` / `proposePromptOverride services/selfMod/SelfModificationService.ts:305` → `writeSelfChange services/selfMod/SelfChangeLedger.ts:100` → `settleSelfChanges services/selfMod/SelfModificationService.ts:452`, run from `settleSelfChanges services/learning/SkillMemoryService.ts:3949` |
+| 71 | skills index → skill_view → the body or one bundled file | `case 'skill_view' services/analysis/DeskToolsService.ts:2852` — L1 body + bundled list, L2 one flat-named file (`..` refused); `${SKILL_DIR}`/`${SESSION_ID}` substitute, Hermes aliases accepted |
+| 72 | message → focused goal → a narrower toolset | `focusedGoal services/goals/GoalService.ts:72` · `goalMatchesMessage :278` → `goalAllowedTools services/trade/chatSurfaceTurn.ts:355` → `intersectGoalPolicy utils/toolKinds.ts:187` › `effectiveAllowed services/analysis/DeskToolsService.ts:5030`, an intersection — a goal may only narrow the seat, and narrowing to nothing leaves it `NO_TOOLS_ALLOWED utils/toolKinds.ts:170` rather than the whole desk |
+| 73 | seat → goal edit → snapshot → undo | `case 'update_goal' services/analysis/DeskToolsService.ts:3154` → `updateGoal services/goals/GoalService.ts:164` keeps the previous snapshot → `case 'restore_goal' services/analysis/DeskToolsService.ts:3198` → `restoreGoal services/goals/GoalService.ts:202` |
+| 74 | seat → self-change → ledger → outcomes | `case 'propose_self_change' services/analysis/DeskToolsService.ts:3240` → `proposeKnobChange services/selfMod/SelfModificationService.ts:259` / `proposePromptOverride services/selfMod/SelfModificationService.ts:305` → `writeSelfChange services/selfMod/SelfChangeLedger.ts:100` → `settleSelfChanges services/selfMod/SelfModificationService.ts:452`, run from `settleSelfChanges services/learning/SkillMemoryService.ts:3997` |
 | 75 | rail Goals tab → focus / undo → the header chip | `focusGoal services/goals/GoalService.ts:230` and `revertSelfChange services/selfMod/SelfModificationService.ts:378` pressed from `GoalRailPanel components/agents/GoalRailPanel.tsx:333` → `ActiveGoalChip components/agents/ActiveGoalChip.tsx:27` names it, and its own press releases it |
 
 ---
@@ -1297,10 +1339,10 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
    looks like a mounted component. An `on…` prop is not a render. Withdrawn.
 6. **A doc line number is a claim, not a citation — and `npm run
    check-flow-doc-anchors` now refuses it.** Every number in the two flow docs and in
-   `AGENTS.md` names its file on the same line, so the gate can check all three: 445 anchors verified, 0
+   `AGENTS.md` names its file on the same line, so the gate can check all three: 450 anchors verified, 0
    unattributed, ceiling 0, wired into CI as "Flow docs cite real lines". A bare
    `:NNN` no longer survives a push, and neither does a stale figure quoted from
-   the gate's own output: these docs state 445 anchors verified, and the gate
+   the gate's own output: these docs state 450 anchors verified, and the gate
    refuses the merge if that sentence stops matching the scan.
    Two more rules exist as of 2026-10-19, and both were born from a defect in the gate itself
    rather than from a stale doc: a stripped html tag now leaves a SPACE (deleting it spliced the
@@ -1384,7 +1426,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 
 10. **The arrow table is 74 rows, and every citation in it resolves — and 69 of the 74 rows pair their citation with the symbol that must live on that line (65 of 70 before the goal, self-modification and rail rows landed; the figure has only ever moved up, and the run prints it with a floor, so a row rewritten without its symbol stops being coverage silently), so those rows are checked for content, not just for a line that exists. One row names no file at all — the ensemble row, whose stages the code never names — so a wrong figure inside it stays outside this gate's reach, which is why the sentence says 69/74 rather than 74/74.** An
     outside review probed 66 anchors and could not speak to the rest; the gate now
-    resolves all 445 unique anchors on every run, so coverage of the table is no
+    resolves all 450 unique anchors on every run, so coverage of the table is no
     longer a matter of which subset a reviewer happened to sample.
 11. **"One service replacing nine" is falsifiable, and it is right — counted, not
     asserted.** `git log --diff-filter=D` over `services/providers/` names exactly nine
@@ -1466,7 +1508,7 @@ a table deletion must re-scan its rows' imports, because dead text kept alive by
 the same defect one layer down. Both removals were proven by `tsc` and `vite build`, not by the
 name grep that had already misled me once on this pass.
 
-The engine files are gone, and most of the branch with them. What was removed this pass: the seat-completeness refusals ("Your analyst team is incomplete", "Analysts must use different models", "Two debate seats share a model") and the `TEAM_MAX_SEATS` ceiling — only ONE model answers a send (`provider`, `hooks/useAnalysisPipeline.ts:1094` falls back to `enabledProviders[0]`), so those blocked a run over a roster the run never uses, and the ceiling guarded a fan-out that no longer exists. The moderator readiness check went with the schedule it protected (2026-10-24) — a human send answers from the composer's own pick, so refusing a click over an unused moderator config was a block with nothing behind it. The flag itself, the seat builder it fed and the roster behind it were deleted on 2026-10-19; the "include a coin" tip survives as a plain nudge. `isDebating` and `activeDebateSpeakers` are deleted outright — every writer set a literal `false`, so the one branch that read them could not run.
+The engine files are gone, and most of the branch with them. What was removed this pass: the seat-completeness refusals ("Your analyst team is incomplete", "Analysts must use different models", "Two debate seats share a model") and the `TEAM_MAX_SEATS` ceiling — only ONE model answers a send (`provider`, `hooks/useAnalysisPipeline.ts:1097` falls back to `enabledProviders[0]`), so those blocked a run over a roster the run never uses, and the ceiling guarded a fan-out that no longer exists. The moderator readiness check went with the schedule it protected (2026-10-24) — a human send answers from the composer's own pick, so refusing a click over an unused moderator config was a block with nothing behind it. The flag itself, the seat builder it fed and the roster behind it were deleted on 2026-10-19; the "include a coin" tip survives as a plain nudge. `isDebating` and `activeDebateSpeakers` are deleted outright — every writer set a literal `false`, so the one branch that read them could not run.
 
 
 The user-visible consequence, now FIXED: the chart used to pick its verdict row by the DEBATE shapes (`ensembleProgress`, >1 `modelsUsed`, `debateTurns`) and passed `verdict={verdictMessage?.analysis}` — while nothing writes `Message.analysis` for a new run any more. `verdictFinalizer` was the writer; a tool turn answers with a `TradeProposal` in the tool payload (`services/trade/presentTradeTool.ts`, `proposedTrade.ts`, `tradeShapedProse.ts`). Reader without a writer, the third time in this stage (session usage, the completion notice). Fixed by `latestChartVerdict` in `services/trade/chartData.ts` (`App.tsx:1182`, passed to the chart at `:2429`): it keys on the settled proposal through the existing `buildProposedTradeAnalysis` and keeps `analysis` as the fallback for old rows; The proposal path, the fallback, the preference when a row carries both, the symbol match through `verdictLevels` and the App wiring were pinned by a test that went with the suite on 2026-10-23, so render-probe — which asserts every row renders — is the only gate over this path now. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate

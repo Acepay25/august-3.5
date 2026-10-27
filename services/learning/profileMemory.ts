@@ -137,7 +137,12 @@ const readAll = (user: string): ProfileMemoryEntry[] => {
 
 const writeAll = (user: string, entries: ProfileMemoryEntry[]): void => {
     try {
-        localStorage.setItem(storageKey(user), JSON.stringify(entries.slice(-MAX_ENTRIES)));
+        // Written AS GIVEN. This used to end `entries.slice(-MAX_ENTRIES)`, so a
+        // store at the cap silently dropped its oldest fact on the next write
+        // while the tool answered `saved: true` — a fact the trader was told was
+        // kept, gone with no receipt. The cap refuses growth in
+        // `rememberProfileMemory` instead; a delete still shrinks normally.
+        localStorage.setItem(storageKey(user), JSON.stringify(entries));
     } catch (err) {
         // The cache is not a store here: readAll() re-reads localStorage, so a
         // swallowed throw means the tool says "saved" and the next turn knows
@@ -232,6 +237,16 @@ export const rememberProfileMemory = (input: {
             : {}),
     };
     const created = idx < 0;
+    if (created && all.length >= MAX_ENTRIES) {
+        // The ceiling refuses instead of evicting. `rememberWithConsolidation`
+        // frees room first (merge the two oldest non-sensitive rows) and is the
+        // path the `remember` tool takes; a caller that skips it gets this
+        // refusal rather than a silent drop of the trader's oldest fact.
+        return {
+            entry, created: true, persisted: false,
+            error: `the memory is full (${all.length} facts, cap ${MAX_ENTRIES}) and nothing was written — forget a fact, or let consolidation merge two`,
+        };
+    }
     if (created) {
         all.push(entry);
     } else {

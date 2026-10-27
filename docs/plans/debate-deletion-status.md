@@ -88,7 +88,7 @@ The goal is one tool-capable turn in **both** chat homes. Facts, so the next
 session does not re-derive them:
 
 - `streamChatWithDeskTools` is an **async generator** returning text deltas
-  (`services/analysis/DeskToolsService.ts:4848`), and **every option is optional**
+  (`services/analysis/DeskToolsService.ts:4893`), and **every option is optional**
   (`StreamWithDeskToolsOptions`). It self-gates on
   `getHarnessSettings().deskToolsEnabled`, and `withDeskToolsSystemPrompt` will not
   double-inject the DESK TOOLS block if the system message already carries it.
@@ -123,11 +123,11 @@ focus on tool calling, skills, and memory."*
 So the target is NOT "keep the branch and shrink it to one seat". It is:
 
 - **No keyword routing at all.** `isChartAnalysisRequested`
-  (`useAnalysisPipeline.ts:1263 (comment)`) tests the prompt text for ANALYZE / CHART /
+  (`useAnalysisPipeline.ts:1266 (comment)`) tests the prompt text for ANALYZE / CHART /
   SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
-  `streamChatWithDeskTools` (`DeskToolsService.ts:4848`), which the dock's solo
+  `streamChatWithDeskTools` (`DeskToolsService.ts:4893`), which the dock's solo
   seat already runs at `chatTurnRunner.ts:630`.
 - **The verdict and the journal row become tools the model chooses to call**, not
   a pipeline stage it has to earn. What already exists: `present_trade`
@@ -341,7 +341,7 @@ Stage 20c made `runEnsembleEnabled` the only guard, so a scheduled run with the
 toggle on was still entering the debate. 20r does not delete that dependency in
 stage 19 — it gives the schedule a route of its own first, so one config has one
 behaviour at every revision. The arm sits in the pipeline at
-`useAnalysisPipeline.ts:1297`. The mode fork it used to precede went with stage
+`useAnalysisPipeline.ts:1300`. The mode fork it used to precede went with stage
 19, so the pair's order is no longer a testable property;
 `tests/automationRouteCharacterization.test.tsx` pins the route the arm takes.
 
@@ -749,7 +749,7 @@ watching the suite stay green:
    now stripped before matching, so a consumer must use the name in its body. That second
    hole briefly accused `harnessNoteLegend` of being orphaned — a false red from my own
    stripper closing an import run on a line ending in a backtick; the real call is
-   `DeskToolsService.ts:4121`. The control that caught it is the new
+   `DeskToolsService.ts:4154`. The control that caught it is the new
    `the reachability walk separates live from dead` test.
 
 Proof of load-bearing: producer reverted → `withDetectedTradeType` FAILS; restored →
@@ -810,7 +810,7 @@ three turn owners, fed by `usage`/`usageCalls` that `runToolTurn` folds out of t
 per-request `onUsage`. Pinned in `tests/toolTurn.test.ts` ("the measured usage fold") and
 guarded by a new `featuresAreWired` row; stubbing the fold turns those pins red.
 
-`notify()` now fires on the settled Full-analysis path (`useAnalysisPipeline.ts:1316`),
+`notify()` now fires on the settled Full-analysis path (`useAnalysisPipeline.ts:1319`),
 scoped to `options?.fullAnalysis === true` and excluded on a stopped turn, so an ordinary
 chat line stays quiet and a schedule (which already reports in its own row) is not doubled.
 `CompletionNotifications` therefore has no caller left and dies with the engine.
@@ -1008,7 +1008,7 @@ the store stays. `CalibrationLedgerService` (117 lines) feeds TWO live surfaces:
 not a mechanical one — it removes reporting the trader can currently open.
 
 **2. `ensembleProgress` has no rendering reader but IS load-bearing on the failure path.**
-Census over all `.ts`/`.tsx`: minted at the block now at `useAnalysisPipeline.ts:937` (the placeholder row itself was deleted with the engine), patched at
+Census over all `.ts`/`.tsx`: minted at the block now at `useAnalysisPipeline.ts:940` (the placeholder row itself was deleted with the engine), patched at
 `runOutcome.ts`'s debating branch, stripped at the SQLite boundary, and
 after `1bd501e` no component reads it (`App.tsx:1170` was the last, and that memo is
 gone). But the `runOutcome` branch keyed on it writes the row's TEXT —
@@ -1130,7 +1130,7 @@ than assumed — worth keeping as the record of what this phase actually needs:
    Fixed with a route click.
 3. a control send (plain text, same point in the run) failed IDENTICALLY, which
    exonerated the tool path — the hang was never an app defect, and the mock's
-   `Unknown tool` branch at DeskToolsService.ts:3843 settles fine.
+   `Unknown tool` branch at DeskToolsService.ts:3876 settles fine.
 4. the phase, moved next to the dock sends, called `navTo` before its `const`
    initialization (`ReferenceError`, probe line 636) → replaced with the same DOM
    click inline; `surface-switch-${id}` is real (SurfaceSwitch.tsx:54).
@@ -1301,7 +1301,7 @@ toggle itself is persisted (`hooks/useProfilePersistence.ts`, `hooks/useUserProf
 (`tests/analysisPipelineSendIdentity.test.ts`, `tests/automationRouteCharacterization.test.tsx`,
 `tests/useProfilePersistence.test.tsx`). Deleting the hybrid pull also changes which coin the
 learning step receives, because the packet still feeds `assemblePipelineMemoryContext` at
-`hooks/useAnalysisPipeline.ts:1079` (the call; the import sits at :33).
+`hooks/useAnalysisPipeline.ts:1082` (the call; the import sits at :33).
 
 **Correction to what this doc and the flow doc currently assert about the A/B lane.** It is not
 "starved with no caller" in the product sense: `beginPromptLane` has no caller, so
@@ -1437,7 +1437,7 @@ What the attempt measured, which is the value it leaves behind:
 - `services/providers/GenericAnalysisService.ts:361` is a three-way prompt chain;
   deleting the two mode branches means lifting the standard branch out of its
   `else` and dedenting it, which needs a brace-walking flattener, not a regex.
-- `hooks/useProfilePersistence.ts:185` and `hooks/useAnalysisPipeline.ts:1416` list
+- `hooks/useProfilePersistence.ts:185` and `hooks/useAnalysisPipeline.ts:1419` list
   the five fields inside one-line object literals and one very long dependency
   array, so whole-line filtering cannot reach them — they need token strips.
 - The one unsolved blocker is `components/settings/CustomInstructionsEditor.tsx:164`:
@@ -2158,7 +2158,7 @@ revokes it.
 **Do not re-derive these** (each cost a turn this session and is already proven): the
 review's six defects are all closed in the current files; **and the item it filed as
 "Not verified" — section C's ordering — turned out to carry nine wrong line numbers.** The
-fetch gate is `hooks/useAnalysisPipeline.ts:996` (the docs said line 880 in one file and line 880
+fetch gate is `hooks/useAnalysisPipeline.ts:999` (the docs said line 880 in one file and line 880
 in the other, and `:890` is the automation mute flag, not a gate); the injection string is
 built at `:953` (preset path `:994`, not `:988`); it is read only by `devLog` at `:978`, `:979`
 and `:1166` (not `:973`/`:1160`); `assemblePipelineMemoryContext` is called at `:1021` with the
@@ -2192,7 +2192,7 @@ All 11 mentions of `postMortemCreatedAt`, enumerated rather than sampled: two ar
 declarations at `types/message.ts:165` and `types/trade.ts:78`; four are
 `tests/pointInTime.test.ts:30` and its neighbours, which are the **only writers anywhere in
 the repository**; the remaining five are production reads at
-`hooks/analysisPipeline/memoryContext.ts:182`,
+`hooks/analysisPipeline/memoryContext.ts:193`,
 `services/learning/DecisionReflectionService.ts:24`, and
 `services/ui/AlgorithmicSummaryService.ts:57`. No quoted-key or shorthand write exists, so
 nothing has set this field since the post-mortem writer went.
@@ -2200,7 +2200,7 @@ nothing has set this field since the post-mortem writer went.
 Two consequences, and they are different in kind:
 
 1. The two fallback readers still work but measure the wrong thing.
-   `memoryContext.ts:183` and `DecisionReflectionService.ts:24` both read
+   `memoryContext.ts:194` and `DecisionReflectionService.ts:24` both read
    `x ?? t.timestamp`, so lesson age and the point-in-time memory slice are now computed
    from the trade's own time rather than from when the reflection was written. Nothing
    errors; the meaning is gone and the number keeps coming out.
@@ -2286,10 +2286,10 @@ line-resolved only.
 **Coverage 14 became 23, and it cost the docs three more wrong numbers.** Binding a row to its symbol means reading the line, so ten more rows
 went through the source: `runAutomation` is hooks/useAutomations.ts:429 (the table said :389), the `config.botId` fork is
 :423 (it said :431), and the row that attributes `Message.proposal` to the pipeline cited line 1293 of that
-file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1407. All three fixed in both flow docs. Newly bound and verified true:
+file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1410. All three fixed in both flow docs. Newly bound and verified true:
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44, the Enter branch at
 components/trade/panels/ChatComposer.tsx:146, systemPromptFor components/trade/TradeChatPanel.tsx:436 with
-TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:505, useBotThread hooks/useAnalysisPipeline.ts:1316,
+TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:505, useBotThread hooks/useAnalysisPipeline.ts:1319,
 entriesForSession services/trade/chatSessions.ts:586, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:140
 with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
 services/trade/automationTurn.ts:81, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices
@@ -2350,7 +2350,7 @@ where relevant), not re-read:
 | claim | recipe | measured |
 |---|---|---|
 | `beginPromptLane` has zero callers | `grep -rn beginPromptLane hooks services components App.tsx utils constants` | 2 hits: the import line and its own `export const` — no call site |
-| the prompt lane still settles | `grep -rn endPromptLane …` | 3: import, the settle call `settleOpenSteps useAnalysisPipeline.ts:1264` inside the finally, the definition |
+| the prompt lane still settles | `grep -rn endPromptLane …` | 3: import, the settle call `settleOpenSteps useAnalysisPipeline.ts:1267` inside the finally, the definition |
 | `savedAnalyses` was deleted outright (stage 21) | `grep -rl savedAnalyses --include=*.ts --include=*.tsx . \| wc -l` | **0 files** — field, state, SQLite read/write, backup validation all gone; the surviving mentions are in the untracked `docs/analysis/` census, where every count is already 0 |
 | `NavRail` is imported and never rendered | `grep -rn "<NavRail" …` | 1 hit, and it is the generic `<NavRailProps>` on its own definition line — no JSX use anywhere in production |
 | post-mortems are gone | `grep -rn usePostMortem conductPostMortem …` | 1, a comment in `services/learning/SkillMemoryService.ts`; 0 for `conductPostMortem` |
