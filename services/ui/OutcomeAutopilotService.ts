@@ -483,15 +483,13 @@ class OutcomeAutopilotServiceClass {
      */
     private computePnLFromPrice(
         reg: Registration,
-        exitPrice: number,
-        scaleOutFactor: number
+        exitPrice: number
     ): number | undefined {
         const entry = parsePrice(reg.analysis.entryPoints?.[0]?.price || '');
         if (isNaN(entry) || entry <= 0 || isNaN(exitPrice) || exitPrice <= 0) return undefined;
         const pct = leveragedMovePercent(reg.analysis.entryPoints?.[0]?.price, String(exitPrice), reg.leverage, 'gain');
         if (!pct) return undefined;
-        const leveraged = Math.abs(parseFloat(pct)) * scaleOutFactor;
-        return Math.round(leveraged * 10) / 10;
+        return Math.round(Math.abs(parseFloat(pct)) * 10) / 10;
     }
 
     /**
@@ -521,22 +519,19 @@ class OutcomeAutopilotServiceClass {
         // REGISTERED leverage (the analysis-time percentage may carry a
         // stale leverage and ignores scale-outs).
         const scaleOutDetected = this.isBreakevenScaleOut(reg, result);
-        const scaleOut = scaleOutDetected ? 0.5 : 1;
-        let hitPrice = result.priceAtHit ?? NaN;
-        // Multi-TP scale-out: TP1 is a partial exit (stop→breakeven), so a
-        // run to TP2/TP3 did NOT capture the full entry→last-TP move — it
-        // captured ~half at TP1 and the remainder at the last TP. PnL is
-        // linear in price, so the blended exit = midpoint of TP1 and the
-        // last TP. (Without this, the win PnL fed to calibration and the
-        // SL-optimizer was overstated for every TP1→TP2/TP3 run.)
-        if (!scaleOutDetected && result.tpHits && result.tpHits.length > 1) {
-            const firstTp = result.tpHits[0].price;
-            const lastTp = result.tpHits[result.tpHits.length - 1].price;
-            if (isFinite(firstTp) && isFinite(lastTp)) {
-                hitPrice = (firstTp + lastTp) / 2;
-            }
-        }
-        const recomputed = this.computePnLFromPrice(reg, hitPrice, scaleOut);
+        // `result.priceAtHit` IS the engine's `resolution.exitPrice`, and the engine
+        // already blends the scale-out: a TP1→breakeven exit is (TP1 + entry)/2 and a
+        // TP1→TP3 run is (TP1 + TP3)/2 (services/backtesting/outcomeEngine.ts:319-344,
+        // whose header says the blend exists because without it "a half-out trade …
+        // ~2× inflates realizedR"). Two copies of that arithmetic sat here — a second
+        // `0.5` factor AND a re-midpoint of the same tpHits — and the factor measured
+        // 25 % on a trade whose own canonical `realizedR` was 0.5R, i.e. 50 % at the
+        // same leverage: one exit, two money figures on the same row
+        // (docs/AUDIT.md A-4). The engine is the single source; `scaleOutDetected`
+        // still earns its keep below, where it stops a breakeven scale-out from being
+        // reported as an SL touch.
+        const hitPrice = result.priceAtHit ?? NaN;
+        const recomputed = this.computePnLFromPrice(reg, hitPrice);
         let pnlPercent = recomputed;
         if (pnlPercent === undefined) {
             // Fallback: analysis-time percentage.
@@ -553,7 +548,7 @@ class OutcomeAutopilotServiceClass {
             // than a clean run to the TP — but a breakeven scale-out (TP1
             // then entry-priced stop) is NOT an SL touch; exclude it.
             recoveredAfterSlTouch: !!result.slHit && !scaleOutDetected,
-            detail: `${hitTarget} hit${result.priceAtHit !== undefined ? ` @ ${result.priceAtHit}` : ''}${result.slHit ? ' · recovered after SL touch' : ' · clean'}${scaleOut < 1 ? ' · TP1 scale-out to breakeven' : ''}${!scaleOutDetected && result.tpHits && result.tpHits.length > 1 ? ' · TP1 partial scale-out, remainder to last TP' : ''}${result.timeToOutcome ? ` · ${result.timeToOutcome} after analysis` : ''}`,
+            detail: `${hitTarget} hit${result.priceAtHit !== undefined ? ` @ ${result.priceAtHit}` : ''}${result.slHit ? ' · recovered after SL touch' : ' · clean'}${scaleOutDetected ? ' · TP1 scale-out to breakeven' : ''}${!scaleOutDetected && result.tpHits && result.tpHits.length > 1 ? ' · TP1 partial scale-out, remainder to last TP' : ''}${result.timeToOutcome ? ` · ${result.timeToOutcome} after analysis` : ''}`,
             detectedAt: new Date().toISOString(),
             timeToOutcome: result.timeToOutcome,
             slOptimizationData: this.computeSLOptimization(reg, result),
@@ -572,7 +567,7 @@ class OutcomeAutopilotServiceClass {
         const slPrice = result.slHit?.price !== undefined
             ? result.slHit.price
             : parsePrice(analysis.stopLoss || '');
-        const recomputed = this.computePnLFromPrice(reg, slPrice, 1);
+        const recomputed = this.computePnLFromPrice(reg, slPrice);
         const pnlPercent = recomputed !== undefined
             ? -Math.abs(recomputed)
             : this.parsePercent(analysis.stopLossPercentage || '');
