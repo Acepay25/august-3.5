@@ -69,6 +69,8 @@ export interface StreamThrottlers {
 export function useStreamThrottlers(deps: StreamThrottlersDeps): StreamThrottlers {
     const { updateMessages } = deps;
 
+    // Keyed by conversation + row: two live streams in two threads each keep
+    // their own pending paint (docs/AUDIT.md L-7).
     const throttledCasualStream = useRafThrottle(useCallback((
         conversationId: string | null,
         messageId: string,
@@ -78,7 +80,7 @@ export function useStreamThrottlers(deps: StreamThrottlersDeps): StreamThrottler
         streaming: boolean,
     ) => {
         updateMessages(prev => applyCasualStreamUpdate(prev, messageId, text, thinking, providerId, streaming), conversationId);
-    }, [updateMessages]));
+    }, [updateMessages]), (conversationId, messageId) => `${conversationId ?? ''}|${messageId}`);
 
     return { throttledCasualStream };
 }

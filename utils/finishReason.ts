@@ -186,18 +186,35 @@ export const peekTruncations = (): TruncationSummary => (
  * of its own.
  */
 export const withTruncationWindow = async <T>(
-    fn: () => Promise<T>,
+    fn: (record: FinishReasonSink) => Promise<T>,
 ): Promise<{ value: T; summary: TruncationSummary }> => {
-    beginTruncationWindow();
-    try {
-        const value = await fn();
-        return { value, summary: consumeTruncations() };
-    } finally {
-        // Close the window even when the turn threw: a leaked open window
-        // would let the next run's finish reasons land in this one's tally.
-        if (windowOpen) consumeTruncations();
-    }
+    // ONE frame per bracket, owned by its caller. The tally used to be one global
+    // slot, so a second turn starting anywhere in the app reset the first one's
+    // counters and both runs read the wrong number (docs/AUDIT.md L-7). The frame
+    // travels to the transport as a callback, so a run can only ever count ITS OWN
+    // requests — no async-context magic, and no reset to race.
+    const frame = { callsObserved: 0, truncatedCalls: 0 };
+    const record: FinishReasonSink = (reason) => {
+        if (reason === undefined) return;
+        frame.callsObserved += 1;
+        if (truncatesOutput(reason)) frame.truncatedCalls += 1;
+    };
+    const value = await fn(record);
+    const summary: TruncationSummary = {
+        truncated: frame.truncatedCalls > 0,
+        truncatedCalls: frame.truncatedCalls,
+        callsObserved: frame.callsObserved,
+    };
+    // The closed reading stays available to a verdict finalizer that runs after
+    // the bracket returned; nothing later can be counted into it.
+    closedSummary = summary;
+    windowOpen = false;
+    return { value, summary };
 };
+
+/** A per-run recorder. `recordFinishReason` remains the fallback for a transport
+ *  called outside any bracket. */
+export type FinishReasonSink = (reason: FinishReason | undefined) => void;
 
 /**
  * The one sentence a run shows when the provider stopped early.

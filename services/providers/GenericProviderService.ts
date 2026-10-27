@@ -193,7 +193,11 @@ export interface ChatTurnResult {
  *  and a third (a subscriber list nothing ever subscribed to) is how this file
  *  grew write-only code once before. */
 function reportFinishReason(config: ProviderConfig, reason: FinishReason, options?: ChatRequestOptions): void {
-    recordFinishReason(reason);
+    // The per-run sink wins: a run must only ever count its OWN requests. The
+    // global tally stays as the fallback for a transport nobody bracketed
+    // (docs/AUDIT.md L-7).
+    if (options?.onFinishReason) options.onFinishReason(reason);
+    else recordFinishReason(reason);
     options?.onFinishReason?.(reason);
 }
 

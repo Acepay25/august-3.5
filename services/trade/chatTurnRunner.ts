@@ -732,14 +732,15 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             : Array.isArray(lastUser?.content)
                 ? lastUser.content.map(p => (typeof p === 'string' ? p : (p as { text?: string }).text ?? '')).join('\n')
                 : undefined;
-        const { value: outcome, summary } = await withTruncationWindow(async () => await runToolTurn({
+        // Per-run recorder: see chatSurfaceTurn's note and docs/AUDIT.md L-7.
+        const { value: outcome, summary } = await withTruncationWindow(async (recordFinishReason) => await runToolTurn({
             config,
             messages,
             signal: controller.signal,
             startedAt: turnStartedAt,
             effort: turnEffort,
             keepTextHidden: hidePass ? panelCouldStillBePass : undefined,
-            transport,
+            transport: { ...transport, onFinishReason: recordFinishReason },
             events,
             memoryEnabled: deps.memoryEnabled !== false,
             lastUserMessage,

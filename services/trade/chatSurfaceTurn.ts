@@ -446,13 +446,16 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
     // truncated body is a SUCCESS-shaped response, so nothing else in the
     // transport reports it. Bracket the turn so the notice below is a
     // measured fact, not a guess from a missing sentence.
-    const { value: out, summary } = await withTruncationWindow(async () => await runToolTurn({
+    // The bracket hands this run ITS OWN recorder, and the transport prefers it
+    // over the process-wide tally — so a second turn elsewhere can no longer
+    // reset this one's counters (docs/AUDIT.md L-7).
+    const { value: out, summary } = await withTruncationWindow(async (recordFinishReason) => await runToolTurn({
         config: req.config,
         messages: chatSurfaceTurnMessages(req.history, req.prompt, req.image, req.config.selectedModel, systemText),
         signal: req.signal,
         startedAt: req.startedAt,
         effort: resolveComposerEffort(req.effort, 'tradingDecision'),
-        transport,
+        transport: { ...transport, onFinishReason: recordFinishReason },
         events: tracked,
         memoryEnabled: req.memoryEnabled !== false,
         lastUserMessage: typeof req.prompt === 'string' ? req.prompt : undefined,

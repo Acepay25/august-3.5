@@ -1,26 +1,24 @@
-/**
- * useRafThrottle — coalesce high-frequency calls into one per animation frame.
- *
- * Returns a stable function that, when called rapidly, schedules a single
- * invocation on the next `requestAnimationFrame`. The latest arguments win.
- *
- * Use case: streaming AI responses arrive token-by-token. Calling setState
- * on every token causes hundreds of full re-renders per response. Wrapping the
- * state update in a RAF throttle collapses them to ~60/sec (one per frame),
- * which is the fastest the browser can paint anyway.
- *
- * On unmount the pending frame is cancelled. The `flush` method runs any
- * pending update immediately and synchronously — call it at the end of a
- * stream so the final state is committed without waiting for the next frame.
- */
 import { useRef, useCallback, useEffect } from 'react';
 
-export function useRafThrottle<T extends (...args: any[]) => void>(fn: T): T & { flush: () => void } {
+/**
+ * `keyOf` coalesces PER KEY instead of per throttle.
+ *
+ * One pending slot for the whole app meant two conversations streaming at once
+ * overwrote each other's paint: only the last call's arguments survived to the
+ * next frame, so the other row skipped a frame of text (and could miss its final
+ * one) — the global-writer defect in docs/AUDIT.md L-7. Each key now keeps its
+ * own latest arguments and one frame flushes them all.
+ */
+export function useRafThrottle<T extends (...args: any[]) => void>(
+    fn: T,
+    keyOf?: (...args: Parameters<T>) => string,
+): T & { flush: () => void } {
     const fnRef = useRef(fn);
     fnRef.current = fn; // always call the latest closure
 
     const frameRef = useRef<number | null>(null);
-    const pendingArgsRef = useRef<any[] | null>(null);
+    const pendingRef = useRef<Map<string, any[]>>(new Map());
+    const DEFAULTS = '';
 
     // Cancel any pending frame on unmount.
     useEffect(() => {
@@ -29,34 +27,33 @@ export function useRafThrottle<T extends (...args: any[]) => void>(fn: T): T & {
                 cancelAnimationFrame(frameRef.current);
                 frameRef.current = null;
             }
+            pendingRef.current.clear();
         };
     }, []);
 
+    const drain = useCallback(() => {
+        const batch = [...pendingRef.current.values()];
+        pendingRef.current.clear();
+        for (const args of batch) fnRef.current(...args);
+    }, []);
+
     const throttled = useCallback((...args: any[]) => {
-        pendingArgsRef.current = args;
+        pendingRef.current.set(keyOf ? keyOf(...(args as Parameters<T>)) : DEFAULTS, args);
         if (frameRef.current !== null) return; // already scheduled
 
         frameRef.current = requestAnimationFrame(() => {
             frameRef.current = null;
-            const pending = pendingArgsRef.current;
-            pendingArgsRef.current = null;
-            if (pending !== null) {
-                fnRef.current(...pending);
-            }
+            drain();
         });
-    }, []) as T & { flush: () => void };
+    }, [keyOf, drain]) as T & { flush: () => void };
 
     throttled.flush = useCallback(() => {
         if (frameRef.current !== null) {
             cancelAnimationFrame(frameRef.current);
             frameRef.current = null;
         }
-        const pending = pendingArgsRef.current;
-        pendingArgsRef.current = null;
-        if (pending !== null) {
-            fnRef.current(...pending);
-        }
-    }, []);
+        drain();
+    }, [drain]);
 
     return throttled;
 }
