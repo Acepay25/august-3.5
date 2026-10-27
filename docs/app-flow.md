@@ -259,7 +259,7 @@ Stage 19 deleted the debate from this path. What one send actually does now:
 
 ```mermaid
 flowchart LR
-    S1["1 preset packet only — options.presetHybridData hooks/useAnalysisPipeline.ts:850; a seat pulls the tape on demand through its desk tools"] --> S3["3 prompt assembly assemblePipelineMemoryContext hooks/useAnalysisPipeline.ts:926"]
+    S1["1 preset packet only — options.presetHybridData hooks/useAnalysisPipeline.ts:850; a seat pulls the tape on demand through its desk tools"] --> S3["3 prompt assembly assemblePipelineMemoryContext hooks/useAnalysisPipeline.ts:939"]
     S3 --> S4["4 one turn: runChatSurfaceTurn services/trade/chatSurfaceTurn.ts:300 → executeDeskTool"]
     S4 -->|a seat calls| PT["present_trade → runPresentTrade → plan + gate stamp"]
     PT --> JR["journal row — logTradeWithFeedback useTradeLogging.ts"]
@@ -340,12 +340,12 @@ does not fetch real-time data — the seat calls `get_market_packet` when it nee
 the tape. The only packet this path still accepts is one an upstream capture already
 fetched (`presetHybridData hooks/useAnalysisPipeline.ts:850`), and it reaches the
 prompt through `freshHybridData` into
-`assemblePipelineMemoryContext hooks/useAnalysisPipeline.ts:926`. The dead
+`assemblePipelineMemoryContext hooks/useAnalysisPipeline.ts:939`. The dead
 `hybridDataInjection` string — built, then read only by a `devLog` — went with the
 scheduled run that was its only producer. It is
 never handed to the turn, because the analyst and moderator prompts it used to ride
 are the files stage 19 deleted. The packet object does still have one consumer:
-`hooks/useAnalysisPipeline.ts:926` passes it into
+`hooks/useAnalysisPipeline.ts:939` passes it into
 `assemblePipelineMemoryContext` (the packet argument `freshHybridData` at `hooks/useAnalysisPipeline.ts:929`),
 which is where the learning coin and the notebook
 slice come from, so dropping the fetch is NOT a byte-preserving cleanup — that is
