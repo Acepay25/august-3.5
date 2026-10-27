@@ -397,11 +397,16 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
 
                 const correctedConvs = (profile.conversations || []).map(conv => {
                     const leverage = conv.leverage || LEGACY_LEVERAGE;
-                    const correctedMessages = (conv.messages || []).map(msg =>
-                        msg.analysis
+                    const correctedMessages = (conv.messages || []).map(msg => {
+                        const next = msg.analysis
                             ? { ...msg, analysis: recalculateAnalysisMetrics(msg.analysis, leverage) }
-                            : msg
-                    );
+                            : msg;
+                        // A row stored mid-stream belongs to a run that is not
+                        // running any more. Restoring `isStreaming: true` made a
+                        // killed turn come back looking alive, with a spinner no
+                        // writer would ever clear (docs/AUDIT.md L-6).
+                        return next.isStreaming ? { ...next, isStreaming: false } : next;
+                    });
                     return { ...conv, leverage, messages: correctedMessages };
                 });
 

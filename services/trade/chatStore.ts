@@ -208,10 +208,45 @@ const rehydrate = (): void => {
     for (const l of listeners) l();
 };
 
+/**
+ * Persist what a LIVE turn has produced so far, as interrupted rows.
+ *
+ * The debounce deliberately drops `streaming` entries — a half-finished answer
+ * must never land as if it were complete. But a tab closed, a renderer killed or
+ * a machine slept mid-turn then lost the ENTIRE run: the trader watched two
+ * minutes of analysis and reloaded into nothing (docs/AUDIT.md L-6). On a
+ * hide/unload the partial text IS the last thing the trader saw, so it is written
+ * WITHOUT the streaming flag — which is exactly what an interruption is.
+ */
+export const persistInterrupted = (): void => {
+    try {
+        if (!loaded || getActiveUsername() !== loadedFor) return;
+        const stored: ChatSession[] = sessions.map(s => ({
+            ...s,
+            entries: s.entries.map(({ streaming: _streaming, proposal: _proposal, ...rest }) => rest),
+            openTrades: undefined,
+            loggedTradeIds: undefined,
+        }));
+        saveSessions(stored);
+        try { localStorage.setItem(activeKey(loadedFor), activeId); } catch { /* private mode */ }
+    } catch { /* an unload path must never throw */ }
+};
+
+let unloadHooked = false;
+const hookUnload = (): void => {
+    if (unloadHooked || typeof window === 'undefined') return;
+    unloadHooked = true;
+    window.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') persistInterrupted();
+    });
+    window.addEventListener('beforeunload', () => persistInterrupted());
+};
+
 const ensureLoaded = (): void => {
     if (loaded) return;
     loaded = true;
     rehydrate();
+    hookUnload();
     if (!storageWatched && typeof window !== 'undefined') {
         storageWatched = true;
         window.addEventListener('storage', ev => {
