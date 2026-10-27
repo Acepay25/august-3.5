@@ -68,7 +68,7 @@ import { startEntryMirror, type SoloTurnRow } from './chatTurnMirror';
 import {
     panelSeats, planPanelTurn, formatRoomTranscript, parsePanelMentions, panelCouldStillBePass,
 } from './chatPanel';
-import { createDebateMailbox, formatDmEventLine } from '../analysis/DebateMailbox';
+import { createPanelMailbox, formatDmEventLine } from '../analysis/PanelMailbox';
 import type { ChartSnapshot } from '../../components/trade/TradingChart';
 import { intervalSeconds } from '../../components/trade/TradingChart';
 import type { AgentBot } from '../agents/agentRoster';
@@ -622,7 +622,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         config: ProviderConfig;
         messages: ChatMessage[];
         mailboxSeat: string;
-        mailbox?: ReturnType<typeof createDebateMailbox>;
+        mailbox?: ReturnType<typeof createPanelMailbox>;
         onMailSent?: (info: { from: string; to: string; text: string; round: number }) => void;
         /** Mirrors every side-effect (proposal/write) out to the caller so
          *  the panel loop can carry it into the shared room transcript. */
@@ -1157,7 +1157,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             endRunOwned(sid, controller);
             return;
         }
-        const mailbox = createDebateMailbox(seats.map(s => s.name));
+        const mailbox = createPanelMailbox(seats.map(s => s.name));
         const spoken: string[] = [];
         const unavailableNotified = new Set<string>();
         // Seats a prior speaker @mentioned but hasn't talked yet — they jump

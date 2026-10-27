@@ -85,7 +85,7 @@ flowchart TD
     subgraph DOCK["Chart AI dock — inside Trade, TradeView.tsx:1140"]
         DC["ChatComposer.tsx:156 :226"] --> D2{"chatTurnRunner.send chatTurnRunner.ts:860 — branches on seats"}
         D2 -->|solo| SO["runSeatTurn called services/trade/chatTurnRunner.ts:1039, defined :616"]
-        D2 -->|panel, 2+ seats| PN["per-seat services/trade/chatTurnRunner.ts:1229 + createDebateMailbox :1156 + planPanelTurn :1167"]
+        D2 -->|panel, 2+ seats| PN["per-seat services/trade/chatTurnRunner.ts:1229 + createPanelMailbox :1156 + planPanelTurn :1167"]
         D2 -->|Full analysis button| FA["runFullAnalysis components/trade/TradeChatPanel.tsx:586 → the SAME App:1586 wrapper — it holds the session run slot and writes no row"]
     end
     SO --> TT["runToolTurn — services/trade/toolTurn.ts:136"]
@@ -1266,7 +1266,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 15 | ChatComposer → chatTurnRunner.send | key `Enter components/trade/panels/ChatComposer.tsx:156` / button `:226` → `services/trade/chatTurnRunner.ts:860` |
 | 16 | solo → runSeatTurn | `services/trade/chatTurnRunner.ts:1039` (definition `runSeatTurn services/trade/chatTurnRunner.ts:619`) |
 | 17 | runSeatTurn → the ONE turn executor | `runToolTurn toolTurn.ts:136` → `streamChatWithDeskTools :174` → `DeskToolsService` → `streamChatRequest` |
-| 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1232` · `createDebateMailbox :1156` · `planPanelTurn :1167` |
+| 18 | panel → per-seat + mailbox | `runSeatTurn services/trade/chatTurnRunner.ts:1232` · `createPanelMailbox :1156` · `planPanelTurn :1167` |
 | 19 | systemPromptFor → prompt | `TRADE_CHAT_SYSTEM_PROMPT` + skills + strategies + profile + persona `systemPromptFor components/trade/TradeChatPanel.tsx:520` = the blocks below, assembled at `TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:520` |
 | 20 | every dock turn → chatStore | `mutate services/trade/chatStore.ts:400` · `beginRun services/trade/chatStore.ts:551` |
 | 21 | handleSendMessage → what answers | the fork is gone (19): a bot thread streams `useBotThread hooks/useAnalysisPipeline.ts:1098`, anything else runs the tool turn `:1174`; the ensemble flag and the roster it fed are gone (2026-10-19) |
@@ -1393,7 +1393,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
    Qualifying the citations that had no symbol
    of their own is what found
    five numbers that were right-shaped and wrong: `runSeatTurn` is defined at
-   `services/trade/chatTurnRunner.ts:619`, `createDebateMailbox` at
+   `services/trade/chatTurnRunner.ts:619`, `createPanelMailbox` at
    `services/trade/chatTurnRunner.ts:1160`, `planPanelTurn` at
    `services/trade/chatTurnRunner.ts:1172`, the dock's `send` at
    `services/trade/chatTurnRunner.ts:1298`, `runFullAnalysis` at

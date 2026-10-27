@@ -1,7 +1,11 @@
 import { DeskToolDefinition } from './DeskToolsService';
 
 /**
- * Debate mailbox: inter-seat DIRECT MESSAGING over real tool
+ * Panel mailbox — inter-seat DIRECT MESSAGING over real tool
+ *
+ * (Renamed 2026-10-28 from `DebateMailbox`: the debate engine is deleted, but the
+ * mailbox is live — panel cross-talk and group rounds use it. A name is not a
+ * feature, and the old one implied a caller that no longer exists.)
  * calls. A seat ends (or accompanies) its turn by calling `send_message`
  * with the target seat and the note; the note lands in exactly that seat's
  * inbox. The recipient learns about unread mail deterministically — the
@@ -27,7 +31,7 @@ export interface DebateMessage {
     round: number;
 }
 
-export interface DebateMailbox {
+export interface PanelMailbox {
     /** Deliver a message. Returns a model-visible receipt (error text on a
      *  bad call — unknown recipient or empty message). */
     send: (from: string, round: number, args: { to?: unknown; message?: unknown }) => string;
@@ -45,7 +49,7 @@ export interface DebateMailbox {
     all: () => DebateMessage[];
 }
 
-export const createDebateMailbox = (rosterNames: string[]): DebateMailbox => {
+export const createPanelMailbox = (rosterNames: string[]): PanelMailbox => {
     const aliases = rosterNames.map(n => ({ label: n, key: n.trim().toLowerCase() })).filter(a => a.key);
     // Inbox keyed by recipient lowercased name.
     const inbox = new Map<string, DebateMessage[]>();
@@ -112,7 +116,7 @@ export const createDebateMailbox = (rosterNames: string[]): DebateMailbox => {
 };
 
 /** The two floor-messaging tool definitions (OpenAI function schema). */
-export const DEBATE_MAIL_TOOLS: DeskToolDefinition[] = [
+export const PANEL_MAIL_TOOLS: DeskToolDefinition[] = [
     {
         type: 'function',
         function: {

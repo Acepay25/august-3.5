@@ -58,7 +58,7 @@ import {
 import type { LoggedTrade } from '../../types';
 import type { ToolAction } from '../../types/message';
 import type { ChartDrawing } from '../trade/chartDrawings';
-import { DEBATE_MAIL_TOOLS, type DebateMailbox } from './DebateMailbox';
+import { PANEL_MAIL_TOOLS, type PanelMailbox } from './PanelMailbox';
 import { intersectGoalPolicy } from '../../utils/toolKinds';
 import { PREDICATE_GRAMMAR_HINT } from './skillPredicate';
 
@@ -5075,7 +5075,7 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     /** Debate mailbox: when present, the seat can send_message /
      *  read_message to other seats. The loop injects an inbox notice and
      *  reports deliveries back through `onMailSent`. */
-    mailbox?: DebateMailbox;
+    mailbox?: PanelMailbox;
     /** Display name of the seat whose turn this is (mailbox addressing). */
     mailboxSeat?: string;
     /** Current debate round (stamped on sent messages). */
@@ -5235,7 +5235,7 @@ export async function* streamChatWithDeskTools(
         : [];
     const extraDefs = [
         ...chartDefs,
-        ...(mailActive ? DEBATE_MAIL_TOOLS : []),
+        ...(mailActive ? PANEL_MAIL_TOOLS : []),
     ];
     // A RESTRICTED seat is widened by the extra defs; an unrestricted one is
     // left unrestricted, because adding a name to an empty list would silently
