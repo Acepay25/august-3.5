@@ -74,6 +74,11 @@ export interface WatchFired {
     price: number | null;
     /** Epoch ms. */
     at: number;
+    /** True when this event is the watch's DEADLINE passing without the
+     *  condition ever holding — a lapse the trader was promised a report
+     *  on, not a trigger. The subscriber records it in the thread that
+     *  armed the watch; it does not ping the OS. */
+    expired?: boolean;
 }
 
 /** Does this watch's condition hold RIGHT NOW? */
@@ -154,10 +159,28 @@ export const describeWatchesForModel = (watches: WatchItem[], nowMs = Date.now()
     ].join('\n');
 };
 
-/** The trigger-fired signal text handed to the model when a watch completes. */
+/** The trigger-fired signal text handed to the model when a watch completes —
+ *  either because the condition held or because its deadline passed first.
+ *  An EXPIRED watch closes the promise the note made ("check back in 30
+ *  minutes"): before this it was deleted in silence and the seat never
+ *  learned the wait was over with nothing to report. */
 export const formatWatchFiredForModel = (fired: WatchFired, armedCount: number): string => {
     const { watch, price } = fired;
     const when = phtClock(fired.at);
+    if (fired.expired) {
+        // Only a price watch can lapse (watchExpired is price-only); describe
+        // any other kind from its own fields rather than assume.
+        const cond = watch.kind === 'price'
+            ? `${watch.symbol} ${watch.condition} ${watch.price}`
+            : describeWatch(watch, fired.at);
+        const event = [
+            `[HARNESS TRIGGER — a watch lapsed, not the user] Watch ${watch.id}: ${cond} never printed before its ${when} PHT deadline.`,
+            `The note you attached when arming it: "${watch.note}".`,
+            armedCount > 0 ? `Still armed after this: ${armedCount} watch(es).` : 'No other watches are armed.',
+        ].join(' ');
+        return `${event}
+Close the loop in one short line: tell the user the watch lapsed without the level being met. Do not run a fresh analysis for this, and do not re-arm the same watch on your own.`;
+    }
     const cond = watch.kind === 'price'
         ? `${watch.symbol} printed ${price ?? '—'}, ${watch.condition} the watched ${watch.price}`
         : `the scheduled ${watch.symbol} re-check time arrived (${phtClock(watch.atMs)} PHT)${price !== null ? ` with mark ${price}` : ''}`;

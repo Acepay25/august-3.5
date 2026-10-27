@@ -32,7 +32,6 @@ import { fmtPercent, fmtPrice, fmtUsd } from '../../utils/formatters';
 import * as levelWatch from '../../services/trade/levelWatchService';
 import { formatLevelHitForModel, type WatchPlan } from '../../services/trade/tradePlanLevels';
 import * as watchService from '../../services/trade/watchService';
-import { formatWatchFiredForModel } from '../../services/trade/chartTriggers';
 import { notify, ensureNotifyPermission } from '../../services/infrastructure/notify';
 import * as chatStore from '../../services/trade/chatStore';
 import { useFuturesLiveFeed } from '../../hooks/useFuturesLiveFeed';
@@ -713,19 +712,10 @@ const TradeView: React.FC<TradeViewProps> = ({
         chatStore.queueHarnessSignal(formatLevelHitForModel(plan, hit, levelWatch.firedLevelsFor(plan.planId)));
         void notify(`${plan.symbol} ${hit.label} hit`, `${hit.label} @ ${hit.price} reached (mark ${hit.hitPrice}). Chart AI is reviewing the plan.`, { tag: hit.levelId });
     }), []);
-    // A fired watch (price trigger or scheduled wake) wakes the model the
-    // same store-queued way, so the alert survives a busy run or a tab switch
-    // — and reaches the OS so the user notices even with the app backgrounded.
-    useEffect(() => watchService.subscribe((fired, remaining) => {
-        // The wake goes to the thread that armed it (the store queues it);
-        // a watch from before this field drains to the active session as before.
-        chatStore.queueHarnessSignal(formatWatchFiredForModel(fired, remaining.length), fired.watch.sid);
-        const w = fired.watch;
-        const cond = w.kind === 'price'
-            ? `${w.symbol} ${w.condition} ${w.price}${fired.price !== null ? ` (now ${fired.price})` : ''}`
-            : `${w.symbol} scheduled re-check is due`;
-        void notify('Chart AI watch fired', `${cond} — ${w.note}`, { tag: w.id });
-    }), []);
+    // The model's price watches and time wakes no longer subscribe HERE: a
+    // subscription on a surface the trader can navigate away from dropped
+    // every fire that happened while it was unmounted. App.tsx (always
+    // mounted) owns that subscription now — including a watch's lapse.
 
     // The design's change pill: tinted ground, tone text — the price figure
     // itself stays plain ink (the tone lives in the pill, not the print).

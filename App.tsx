@@ -18,6 +18,9 @@ import { useWatchAndAutopilot } from './hooks/useWatchAndAutopilot';
 import { buildProposedTradeMessage, type TradeProposal } from './services/trade/proposedTrade';
 import { ensureStamp } from './services/trade/proposalGate';
 import * as chatStore from './services/trade/chatStore';
+import * as watchService from './services/trade/watchService';
+import { formatWatchFiredForModel } from './services/trade/chartTriggers';
+import { notify } from './services/infrastructure/notify';
 import { latestChartVerdict } from './services/trade/chartData';
 
 
@@ -1243,6 +1246,24 @@ const App: React.FC = () => {
         const busyBotId = mailboxRef.current?.dmBusyBotIds[0] ?? null;
         if (busyBotId) mailboxRef.current?.cancelDmTurn(busyBotId);
     }, [isAnalysisInProgress, handleCancelAnalysis]);
+
+    // The model's watches subscribe HERE, not on the Trade surface: a
+    // subscription on a mountable surface dropped every fire (and every
+    // lapse) that happened while the trader was on another tab — the watch
+    // was already deleted and the signal had no listener. App never
+    // unmounts, so a trigger reaches the thread that armed it wherever the
+    // trader is. The wake goes to the thread that armed it (the store
+    // queues it); a watch from before that field drains to the active
+    // session as before.
+    useEffect(() => watchService.subscribe((fired, remaining) => {
+        chatStore.queueHarnessSignal(formatWatchFiredForModel(fired, remaining.length), fired.watch.sid);
+        if (fired.expired) return; // the lapse is recorded in the thread; an OS banner for it is noise
+        const w = fired.watch;
+        const cond = w.kind === 'price'
+            ? `${w.symbol} ${w.condition} ${w.price}${fired.price !== null ? ` (now ${fired.price})` : ''}`
+            : `${w.symbol} scheduled re-check is due`;
+        void notify('Chart AI watch fired', `${cond} — ${w.note}`, { tag: w.id });
+    }), []);
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {

@@ -1,16 +1,20 @@
 /**
  * watchService — the "watch or schedule" harness the MODEL drives: it arms
  * price watches and time wakes through the watch_price / wake_me desk tools,
- * and when a condition holds it emits to subscribers (TradeView queues the
- * signal into chatStore, the dock runs it as a model turn → the model alerts
- * the user). Same singleton shape as levelWatchService/PriceAlertService.
+ * and when a condition holds (or the deadline lapses) it emits to subscribers
+ * — App.tsx queues the signal into chatStore (the thread that armed the watch
+ * runs it as a model turn → the model alerts the user). Same singleton shape
+ * as levelWatchService/PriceAlertService.
  *
  * CONTRACT: advisory only — it never trades, resolves or logs anything. It
  * wakes the model; the model decides what the alert says.
  *
  * Fire-once + lapse: a watch fires exactly once and is then removed (its
- * note may not survive contact with a re-ping). Price watches also expire
- * silently at their deadline. Armed watches persist per user in localStorage
+ * note may not survive contact with a re-ping). A price watch whose deadline
+ * passes first LAPSES — it is removed, persisted, and one `expired` event goes
+ * to the same subscribers a fire uses, so the thread that armed it learns the
+ * wait ended with nothing to report. Armed watches persist per user in
+ * localStorage
  * (`trade_watches_v1_${user}`, capped), so "check back in 30 minutes" survives
  * a reload — and firing needs a live clock: the service runs its own 1s
  * interval while ANY watch is armed. Price watches ride the visible chart
@@ -180,7 +184,16 @@ const evaluateWatches = (nowMs: number): void => {
     loadWatches();
     if (watches.size === 0) return;
     for (const w of [...watches.values()]) {
-        if (watchExpired(w, nowMs)) { watches.delete(w.id); continue; }
+        if (watchExpired(w, nowMs)) {
+            watches.delete(w.id);
+            persist();
+            // A lapse is a fact the trader was promised a report on — the note
+            // said "check back in N minutes". Record it through the same
+            // channel a fire uses so the arming thread learns the wait is
+            // over, instead of the watch vanishing.
+            emit({ watch: w, price: null, at: nowMs, expired: true }, [...watches.values()]);
+            continue;
+        }
         // The price only rides the signal when it's THIS symbol's mark —
         // a cross-symbol number is worse than none.
         const price = priceFor(w.symbol, nowMs);
