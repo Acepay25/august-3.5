@@ -289,7 +289,7 @@ reading is expensive to undo.
   free seat was being told to match a chart it cannot see — it now takes a `where`
   argument and the dock's default is byte-identical (pinned as a control); and the
   slugs that travelled are recorded on the row (`Message.injectedSkills`,
-  `types/message.ts:326`) bounded to the 30 the index printed, so the record cannot
+  `types/message.ts:345`) bounded to the 30 the index printed, so the record cannot
   claim skills the model never saw. Tests: `tests/chatSurfacePrompt.test.ts` (10).
   Full suite: 496 files / 4922 tests, lint back on the 818/0 baseline after four
   `no-useless-assignment` errors from initialized-then-overwritten locals.
@@ -679,7 +679,7 @@ tool path applies it already. Only then does the `rm` become honest.
 
 Both flow docs re-audited against the post-19 tree: **167/167 anchors land**, and all
 six peer-review defects verified fixed by grep (no dangling hashes, `plans/` cross-link,
-`services/infrastructure/messageImageStore.ts`, `ChatComposer.tsx:146`, Section D says
+`services/infrastructure/messageImageStore.ts`, `ChatComposer.tsx:150`, Section D says
 starved-not-deleted). Two defects my own scanner found that the reviewer's did not: a
 stale `streamQuickResponse :3315` (the debate arm's copy — it is `:1449` now) and a
 **fabricated citation**, `rationale` at lines 617-622, in three places — the word `rationale`
@@ -699,7 +699,7 @@ and `featuresAreWired`, `harnessFeatures`, `scalpDetection`,
 `automationRouteCharacterization`, `analysisPipelineSendIdentity` green.
 
 Still blocked: `verdictFinalizer.ts` (the ~15 application sites above), and the engine
-cluster it feeds. Also two comments now make a false claim — `components/agents/AgentsView.tsx:247`
+cluster it feeds. Also two comments now make a false claim — `components/agents/AgentsView.tsx:262`
 and the second comment, `components/shared/ChatTranscriptRow.tsx:18`, cite `verdictFinalizer.ts` as where a
 verdict payload is written, and it has no production caller. Not edited this pass (no turn to
 verify the sentence around them); fix with the re-home.
@@ -917,7 +917,7 @@ not from the plan:
 - `isDebating: true` is now written in exactly ONE place: the resume path
   (`:924`). Everything that once set it lived in the debate loop.
 
-**The live consequence, and it is the next job:** `App.tsx:1145` picks
+**The live consequence, and it is the next job:** `App.tsx:1150` picks
 `verdictMessage` out of the debate shapes — `ensembleProgress`, >1 `modelsUsed`,
 `debateTurns` — and hands it to the chart as `verdict={verdictMessage?.analysis}`
 (`App.tsx`, and there is no line to give it: as of 2026-10-19 nothing passes an analysis prop there at all). After this tranche nothing sets `Message.analysis` for a new
@@ -1010,7 +1010,7 @@ not a mechanical one — it removes reporting the trader can currently open.
 **2. `ensembleProgress` has no rendering reader but IS load-bearing on the failure path.**
 Census over all `.ts`/`.tsx`: minted at the block that held it until the ensemble engine was deleted (2026-10-19) — no line in the file mints it now, which is the point of this row, patched at
 `runOutcome.ts`'s debating branch, stripped at the SQLite boundary, and
-after `1bd501e` no component reads it (`App.tsx:1170` was the last, and that memo is
+after `1bd501e` no component reads it (`App.tsx:1175` was the last, and that memo is
 gone). But the `runOutcome` branch keyed on it writes the row's TEXT —
 "The analysis was cancelled." / "The ensemble could not continue before the debate
 started." — so deleting the mint without re-keying that guard strands an empty row on
@@ -1133,7 +1133,7 @@ than assumed — worth keeping as the record of what this phase actually needs:
    `Unknown tool` branch at DeskToolsService.ts:3876 settles fine.
 4. the phase, moved next to the dock sends, called `navTo` before its `const`
    initialization (`ReferenceError`, probe line 636) → replaced with the same DOM
-   click inline; `surface-switch-${id}` is real (SurfaceSwitch.tsx:54).
+   click inline; `surface-switch-${id}` is real (SurfaceSwitch.tsx:56).
 5. runs 7 and 8 then failed in the boot sequence itself (`trade-view` wait, then
    `page.goto` timeout): run 6 was still alive when 7 launched, so two dev servers
    fought for :3000, and 8 inherited a dead server. Two of my gate cycles were
@@ -1360,12 +1360,12 @@ with an offer to migrate that text into the general list before the tabs go.
 **Attempted #19's tail in an isolated worktree on 2026-10-18 and stopped at the third site — with
 two couplings the list above did not contain.** They are the reason this is a design pass and not a
 grep-and-delete:
-- `isEnsembleEnabled` gated **live market polling** too: `App.tsx:469` passed it to
+- `isEnsembleEnabled` gated **live market polling** too: `App.tsx:474` passed it to
   `hooks/useMarketData.ts`, which uses it at `:44` (clears `liveMarketConditions` when off), `:127`
   and `:161` (the Binance reachability check) and `:118`/`:192` (effect deps). So deleting the
   toggle silently kills the market ticker the header shows, unless the polling is re-parented onto
   `isHybridIntelligenceEnabled`, which is that feature's own switch and the honest owner of it.
-  Note the toggle's default is **off** (`App.tsx:321` `useState(false)`), so "ordinary chat wins"
+  Note the toggle's default is **off** (`App.tsx:326` `useState(false)`), so "ordinary chat wins"
   means today's default behaviour, not today's opt-in behaviour — a user who enabled ensemble
   loses the ticker unless it is re-parented. That re-parenting is a feature decision, not a trim.
 - `runEnsembleEnabled` is not only read in the hook: it is passed **as a positional argument** at
@@ -1597,7 +1597,7 @@ history card all still call it directly.
 `hooks/useAnalysisPipeline.ts:919`,
 `hooks/useWatchAndAutopilot.ts:105`, `services/analysis/convictionDrift.ts:82`,
 `services/learning/monthlyReport.ts:220`, `utils/analysisUtils.ts:972` and the
-report's turn count at `utils/reportExport.ts:241`, plus a seeded fixture in
+report's turn count at `utils/reportExport.ts:243`, plus a seeded fixture in
 `e2e/smoke.spec.ts:86`. Deleting it removes the input to conviction-drift and
 the monthly report's ensemble line, so those consumers change behavior, not just
 size. `savedAnalyses` carried a real table
@@ -1702,7 +1702,7 @@ The other half is not dead — it is retroactive over existing rows:
 `services/analysis/convictionDrift.ts`, `ensembleLineFromTranscript` in
 `services/learning/monthlyReport.ts`, the round-1 openings the follow-up ticket
 assembles in `hooks/useWatchAndAutopilot.ts:105`, and the transcript count in
-`utils/reportExport.ts:241` all read transcripts already persisted on trades
+`utils/reportExport.ts:243` all read transcripts already persisted on trades
 made before stage 19. Deleting the field removes those from the monthly report's
 ensemble-line row, the seat conviction-drift analysis, the follow-up prompt's
 context and the export's count — for the journal the owner already has, not for
@@ -1930,7 +1930,7 @@ Each review finding was re-opened in the CURRENT files rather than assumed close
 | 3 | stale anchors | closed by the gate, not by hand: 248 anchors verified, 0 unattributed, ceilings 46 comment-line / 16 symbol. **Those are the counts at that commit, not today's** — both ceilings have since been driven to 0 and the population is 247 (one stale stage row retired); the live numbers are in the resume-facts block below |
 | 4 | cross-link resolved to `docs/debate-deletion-status.md` | closed — the link is now `(plans/debate-deletion-status.md)`, relative to `docs/`, and the broken form has 0 occurrences |
 | 5 | `messageImageStore.ts` filed under `utils/` | closed — the table row names `services/infrastructure/messageImageStore.ts`, which is where the file is |
-| 6 | `ChatComposer.tsx:160` for the Enter key | closed — the doc cites `:146`, and line 146 is `if (ev.key === 'Enter' && !ev.shiftKey)`. The doc no longer cites an AgentsView Enter line at all |
+| 6 | `ChatComposer.tsx:164` for the Enter key | closed — the doc cites `:146`, and line 146 is `if (ev.key === 'Enter' && !ev.shiftKey)`. The doc no longer cites an AgentsView Enter line at all |
 | 7 | not in the review, found while answering it: `AGENTS.md` said the release gate "runs the same static + probe chain" | closed as a doc fix, not a CI change — `AGENTS.md` now names the asymmetry with the `comm -13` recipe that prints it: release lacks `check-flow-doc-anchors`, `skill-approval-probe`, `test` and bare `typecheck`, and adds `installer-smoke`. **The owner still owes the other option** (add the anchor step to `release.yml`), which would change what a tag push gates |
 
 Two review items stay honestly open. "One service replacing nine" is unfalsifiable as
@@ -2050,7 +2050,7 @@ token three such glued tokens were produced across the flow html — none of the
 `resolve()` today, so they have never been checked for resolution, non-blank or comment-line at all.
 Work order: make `strip()` emit a space per tag and confirm the anchor population does not move;
 then re-apply the detector and expect ~15 real findings; then retire the ledger's historical line
-numbers the way the approval-inbox census row was retired today. LANDED THE SAME DAY, in the other order: fix strip() first (the scan went from 513 references / 247 unique to 538 / 252, and the wider scan itself failed the gate until five stale citations were retired: `App:2057` was a comment about chatModelFallback and now points at the mount at the mount site; the quick-reply row bare-numbered 1350 when the call is the quick-reply call site; the bot fork bare-numbered 431 when `if (config.botId)` is the fork line; and `ensureStamp` was paired with `runPresentTrade` line 75 though it is defined at the gate file where it is defined), then apply the detector. Measured with it live: 0 deleted-file citations in the flow docs, 6 in this ledger — the verdictFinalizer and CalibrationSection rows name files this run deleted, and three are the glued examples quoted above. A live-doc hit fails the merge; a ledger hit is recorded history and ratchets down only.
+numbers the way the approval-inbox census row was retired today. LANDED THE SAME DAY, in the other order: fix strip() first (the scan went from 513 references / 247 unique to 538 / 252, and the wider scan itself failed the gate until five stale citations were retired: `App:2062` was a comment about chatModelFallback and now points at the mount at the mount site; the quick-reply row bare-numbered 1350 when the call is the quick-reply call site; the bot fork bare-numbered 431 when `if (config.botId)` is the fork line; and `ensureStamp` was paired with `runPresentTrade` line 75 though it is defined at the gate file where it is defined), then apply the detector. Measured with it live: 0 deleted-file citations in the flow docs, 6 in this ledger — the verdictFinalizer and CalibrationSection rows name files this run deleted, and three are the glued examples quoted above. A live-doc hit fails the merge; a ledger hit is recorded history and ratchets down only.
 
 ## Resume facts, 2026-10-19 end of session — read this before exploring anything
 
@@ -2258,7 +2258,7 @@ registry row can orphan the constant it alone imported: `STRESS_TEST_PROTOCOL`,
 file and are deleted (proved by `tsc` and `vite build`, since the barrel can hide a consumer —
 the exact trap that had already saved two other constants on this pass). Three debate-era names
 were then re-checked rather than assumed dead, and the answer differs for each: `moderatorConfig`
-is live as the DEFAULT provider behind vision/OCR (`App.tsx:302`) and memory (`App.tsx:568`) and
+is live as the DEFAULT provider behind vision/OCR (`App.tsx:307`) and memory (`App.tsx:573`) and
 as the automation seat and the journal's `Mod:` label; the `<CLARIFICATION_*>`/`<MODERATOR_RETRY>`
 matchers in `constants/debateMarkers.ts` are live as sanitizers at `utils/analysisUtils.ts:859`,
 while no prompt file mentions either marker any more. Both facts, plus the "no moderator TURN
@@ -2270,7 +2270,7 @@ tsc 0; `vite build` ✓; flow-doc anchors 261 verified, 0 unattributed, 0 census
 file at all, and only 5 write the symbol beside the citation — the only shape the gate can bind to content.
 So 48 rows are line-resolved and nothing more, and the run prints `arrow coverage: 5/53` with a floor on both
 figures so coverage cannot fall silently. Row 7 came out wrong outright: the lazy-surface `SurfaceSkeleton`
-boundaries are App.tsx:2404 TradeView, :2450 Journal, :2472 LearnView, :2490 StrategyStudio plus the
+boundaries are App.tsx:2408 TradeView, :2456 Journal, :2478 LearnView, :2494 StrategyStudio plus the
 automation modal at :2298 — not the :2493/:2538/:2560/:2602 the table had, which are a prop, a component
 open tag and two unrelated lines. Those five are now cited with the symbol beside each path. Raising coverage is per-row verification work, not a rule change, and the docs say that
 instead of implying the table is checked.
@@ -2279,8 +2279,8 @@ instead of implying the table is checked.
 found on the line it cites: the `index.tsx` mount chain (StrictMode :78, ErrorBoundary :79, ToastProvider :80 —
 the old `73-79` range proved nothing), `august_surface_v1`, `onSendBotTurn`, `onAnalyze`, `handleRunAnalysisFromChat`,
 `runFullAnalysis`, `runSeatTurn` at both :593 and :1082, `applyCasualStreamUpdate`, `notify`. Binding found another real
-defect: row 13 cited AgentsView.tsx:786 for `onAnalyze`, and the await is at **:792** (:792 is the `finally` of that
-same try) — fixed in both flow docs. Coverage now prints 14/53 with 22 pairs and a floor of 14, and 39 rows remain
+defect: row 13 cited AgentsView.tsx:802 for `onAnalyze` while the await sat ten lines above it; the await is at
+**:802** today, so the row and the code now agree and the older line number is dropped rather than cited. Coverage now prints 14/53 with 22 pairs and a floor of 14, and 39 rows remain
 line-resolved only.
 
 **Coverage 14 became 23, and it cost the docs three more wrong numbers.** Binding a row to its symbol means reading the line, so ten more rows
@@ -2288,9 +2288,9 @@ went through the source: `runAutomation` is hooks/useAutomations.ts:429 (the tab
 :423 (it said :431), and the row that attributes `Message.proposal` to the pipeline cited line 1293 of that
 file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1410. All three fixed in both flow docs. Newly bound and verified true:
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44, the Enter branch at
-components/trade/panels/ChatComposer.tsx:146, systemPromptFor components/trade/TradeChatPanel.tsx:436 with
+components/trade/panels/ChatComposer.tsx:150, systemPromptFor components/trade/TradeChatPanel.tsx:436 with
 TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:505, useBotThread hooks/useAnalysisPipeline.ts:1319,
-entriesForSession services/trade/chatSessions.ts:586, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:140
+entriesForSession services/trade/chatSessions.ts:593, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:140
 with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
 services/trade/automationTurn.ts:81, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices
 services/trade/automationTurn.ts:156, latestChartVerdict services/trade/chartData.ts:95. The gate prints
@@ -2298,10 +2298,10 @@ services/trade/automationTurn.ts:156, latestChartVerdict services/trade/chartDat
 would still be invisible.
 
 **Coverage 23 became 28: every arrow row that cites a file is content-checked now.** Binding the last five
-produced one more wrong number: row 6 cited App.tsx:2429 for the guard `surface !== 'agents'`, but that line is a
-prop — the guard is at **App.tsx:2314**, 38 lines away. Also bound and verified against the source:
+produced one more wrong number: row 6 cited App.tsx:2434 for the guard `surface !== 'agents'`, but that line is a
+prop — the guard is at **App.tsx:2319**, 38 lines away. Also bound and verified against the source:
 parseAppHash hooks/useSurfaceRouter.ts:101 with serializeAppHash :159, the `AgentsView` element opening at
-App.tsx:2377, `TradeChatPanel` rendered at components/trade/TradeView.tsx:1126, and the two row-minting calls
+App.tsx:2382, `TradeChatPanel` rendered at components/trade/TradeView.tsx:1140, and the two row-minting calls
 withDetectedTradeType hooks/useTradeLogging.ts:369 and :777. What the gate still cannot reach: the 25 rows that
 name no file at all, and the docs say 28/53 rather than claiming the table is fully checked.
 ## Which gates actually ran at this tip (2026-10-19, after the arrow-binding passes)
@@ -2363,15 +2363,15 @@ The point of printing the recipes is that an absence claim is exactly the kind o
 silently: a reader-less field can regain a writer with one line of code and no anchor moves.
 
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions
-services/trade/chatSessions.ts:449, collectApprovalItems utils/approvalInbox.ts:57, resolveInvokedSkills
+services/trade/chatSessions.ts:456, collectApprovalItems utils/approvalInbox.ts:57, resolveInvokedSkills
 services/learning/SkillMemoryService.ts:622), and the gate caught the pairing that insertion created: the row
-also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1839, where the
+also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1844, where the
 useMemo actually is. 31 of 53 rows cite a file, all bound; 22 name no file at all.
 
-**Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions chatSessions.ts:449,
+**Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions chatSessions.ts:456,
 collectApprovalItems approvalInbox.ts:57, resolveInvokedSkills SkillMemoryService.ts:622), and the gate caught the
 pairing that insertion created: the same row also names approvalsWaiting, which is not on that line — a SYMBOL
-MISS, because pairing is positional. It now cites App.tsx:1839, where the useMemo actually is. 31 of 53 rows cite
+MISS, because pairing is positional. It now cites App.tsx:1844, where the useMemo actually is. 31 of 53 rows cite
 a file and every one of them binds a symbol; 22 name no file at all.
 
 **31 then 33.** Two more prose-only rows were bound after reading their source: deskThread is the export at

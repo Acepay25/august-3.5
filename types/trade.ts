@@ -328,6 +328,14 @@ export interface Conversation {
   timestamp: number;
   title?: string;
   messages: Message[];
+  /** Turns taken off the live thread by a revert, oldest tail first, each one
+   *  tagged with the message it was cut AFTER so it can go back where it came
+   *  from. This is why a revert is not a delete: the trader's own earlier turns
+   *  survive the operation and can be brought back. (2026-10-27 owner ruling.)
+   *
+   *  Persisted with the conversation like every other field — the profile save
+   *  writes `conversations` verbatim, and only image bytes leave the blob. */
+  parked?: import('../utils/messageVersions').ParkedTail<Message>[];
   threadSummary?: string; // Layer 2: Compressed Conversation Summary
   ocrModel: string;              // Vision/OCR model id (from the vision provider's models)
   moderatorProviderId: string;   // ProviderConfig id of the debate moderator

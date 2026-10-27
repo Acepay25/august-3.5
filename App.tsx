@@ -286,6 +286,11 @@ const App: React.FC = () => {
         moderatorProviderId, moderatorModel,
 
         handleSetSelectedOcrModel,
+        // Revert and versions (2026-10-27). The RULE lives in the conversation
+        // store, not in a surface, because one conversation has two readers —
+        // this surface and the Chart AI dock — and a revert applied inside only
+        // one of them would be undone by the other's next merge.
+        revertToMessage, restoreParkedTurns, editMessageText, stepMessageGeneration,
     } = useConversations();
 
 
@@ -2567,6 +2572,11 @@ const App: React.FC = () => {
                                     modelFallback={chatModelFallback.notice}
                                     railExpanded={isNavRailOpen}
                                     onToggleRailExpanded={toggleNavRail}
+                                    onRevertTo={revertToMessage}
+                                    onEditPromptMessage={editMessageText}
+                                    onStepVersion={stepMessageGeneration}
+                                    parkedCount={(activeConversation?.parked ?? []).reduce((n, p) => n + p.rows.length, 0)}
+                                    onRestoreParked={restoreParkedTurns}
                                     destinationMenu={(
                                         <SurfaceMenuList
                                             surface={surface}

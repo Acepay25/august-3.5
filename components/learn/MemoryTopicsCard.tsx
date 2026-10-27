@@ -209,7 +209,7 @@ const MemoryTopicsCard: React.FC<MemoryTopicsCardProps> = ({ onOpenTopic }) => {
                         >
                             {t.summary}
                         </span>
-                        <span className="w-28 shrink-0 text-right text-ui-dense text-zinc-500">
+                        <span className="w-28 shrink-0 text-right text-ui-dense text-zinc-500 tabular-nums">
                             {memoryUpdatedLabel(t.file.updatedAt)}
                         </span>
                     </button>

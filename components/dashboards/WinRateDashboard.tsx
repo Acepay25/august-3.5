@@ -47,17 +47,22 @@ interface WinRateDashboardProps {
 // exactly as they were and still resolve at render time.
 const COLORS = {
     get cyan() { return chartColor('--color-teal-500', '#42d0ff'); },
-    get emerald() { return chartColor('--color-emerald-400', '#2fc97f'); },
-    get rose() { return chartColor('--color-rose-500', '#f75d5f'); },
+    get emerald() { return chartColor('--color-emerald-400', '#23cf8b'); },
+    get rose() { return chartColor('--color-rose-500', '#f6465d'); },
     get amber() { return chartColor('--color-amber-500', '#f08800'); },
-    get orange() { return chartColor('--color-brand-end', '#ff9a32'); },
+    // Was `orange` reading `--color-brand-end` — a CHROME token doing data duty,
+    // and it drew pink, not orange. The 2026-10-27 ruling flattened the brand
+    // stops to ink, so a borrowed chrome token here would have silently turned
+    // the Low tier's marker white and invisible against the ink ramp. Named for
+    // the hue it actually draws now, off the pink ramp.
+    get pink() { return chartColor('--color-pink-500', '#ff538e'); },
     get purple() { return chartColor('--color-purple-500', '#a142ff'); },
     // The one value in this palette that is not a step of any ramp, and so is
     // the one entry that cannot be token-driven without changing what it
     // draws. Left literal on purpose; C9 settles the categorical palette in
     // Phase 4 rather than inventing a ramp step here.
     get blue() { return '#42a1ff'; },
-    get zinc() { return chartColor('--color-zinc-500', '#8c8c86'); }
+    get zinc() { return chartColor('--color-zinc-500', '#9a9a9a'); }
 };
 
 // Lazy for the same reason as COLORS: these are read at render time from the
@@ -72,7 +77,7 @@ const FAMILY_COLORS: Record<string, string> = {
 const CONFIDENCE_COLORS: Record<string, string> = {
     get 'High'() { return COLORS.emerald; },
     get 'Medium'() { return COLORS.amber; },
-    get 'Low'() { return COLORS.orange; },
+    get 'Low'() { return COLORS.pink; },
     get 'Avoid'() { return COLORS.rose; }
 };
 
@@ -184,7 +189,7 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             <div className="flex flex-col gap-2 sm:gap-3 border-b border-white/5 pb-3 sm:pb-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 sm:gap-3">
-                        <div className="w-1 h-6 sm:h-8 bg-cyan-500 rounded-full shadow-[0_0_10px_#399ef7]"></div>
+                        <div className="w-1 h-6 sm:h-8 bg-cyan-500 rounded-full shadow-[0_0_10px_#4d9fff]"></div>
                         <h2 className="text-ui-lg sm:text-xl font-black text-white uppercase tracking-wide">Analytics</h2>
                     </div>
                     <span className="text-ui-xs text-zinc-500 font-mono tabular-nums">
@@ -422,8 +427,8 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                                         <stop offset="95%" stopColor={COLORS.cyan} stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
-                                <XAxis dataKey="date" tick={{ fontSize: 9, fill: chartColor('--color-zinc-600', '#7e7e78') }} axisLine={false} tickLine={false} />
-                                <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: chartColor('--color-zinc-600', '#7e7e78') }} axisLine={false} tickLine={false} width={25} />
+                                <XAxis dataKey="date" tick={{ fontSize: 9, fill: chartColor('--color-zinc-600', '#858585') }} axisLine={false} tickLine={false} />
+                                <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: chartColor('--color-zinc-600', '#858585') }} axisLine={false} tickLine={false} width={25} />
                                 <Tooltip content={<CustomTooltip />} />
                                 <Area
                                     type="monotone"
@@ -449,8 +454,8 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                     <div className="h-40">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={confidenceChartData} layout="vertical">
-                                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 9, fill: chartColor('--color-zinc-600', '#7e7e78') }} axisLine={false} tickLine={false} />
-                                <YAxis type="category" dataKey="level" tick={{ fontSize: 11, fill: chartColor('--color-zinc-500', '#8c8c86'), fontWeight: 'bold' }} axisLine={false} tickLine={false} width={60} />
+                                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 9, fill: chartColor('--color-zinc-600', '#858585') }} axisLine={false} tickLine={false} />
+                                <YAxis type="category" dataKey="level" tick={{ fontSize: 11, fill: chartColor('--color-zinc-500', '#9a9a9a'), fontWeight: 'bold' }} axisLine={false} tickLine={false} width={60} />
                                 <Tooltip content={<CustomTooltip />} />
                                 <Bar dataKey="winRate" radius={[0, 6, 6, 0]} barSize={20}>
                                     {confidenceChartData.map((entry, index) => (
@@ -570,11 +575,11 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                         {/* Best/Worst */}
                         <div className="grid grid-cols-2 gap-3">
                             <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-control text-center">
-                                <span className="text-ui-2xs text-emerald-600 uppercase tracking-wider block mb-1">Best Win Streak</span>
+                                <span className="text-ui-2xs text-emerald-500 uppercase tracking-wider block mb-1">Best Win Streak</span>
                                 <span className="text-2xl font-black text-emerald-400">{streakData.bestWinStreak}</span>
                             </div>
                             <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-control text-center">
-                                <span className="text-ui-2xs text-rose-600 uppercase tracking-wider block mb-1">Worst Loss Streak</span>
+                                <span className="text-ui-2xs text-rose-500 uppercase tracking-wider block mb-1">Worst Loss Streak</span>
                                 <span className="text-2xl font-black text-rose-400">{streakData.worstLossStreak}</span>
                             </div>
                         </div>
@@ -585,13 +590,13 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
             {/* Avg Win/Loss */}
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 <div className="glass-panel p-3 sm:p-4 rounded-bubble border border-emerald-500/20 bg-emerald-500/5 text-center">
-                    <div className="text-ui-2xs sm:text-ui-xs text-emerald-600 uppercase font-bold tracking-widest mb-1">Avg Win</div>
+                    <div className="text-ui-2xs sm:text-ui-xs text-emerald-500 uppercase font-bold tracking-widest mb-1">Avg Win</div>
                     <div className="text-ui-lg sm:text-xl font-mono font-bold text-emerald-400">
                         +{overallStats.avgWinSize.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
                     </div>
                 </div>
                 <div className="glass-panel p-3 sm:p-4 rounded-bubble border border-rose-500/20 bg-rose-500/5 text-center">
-                    <div className="text-ui-2xs sm:text-ui-xs text-rose-600 uppercase font-bold tracking-widest mb-1">Avg Loss</div>
+                    <div className="text-ui-2xs sm:text-ui-xs text-rose-500 uppercase font-bold tracking-widest mb-1">Avg Loss</div>
                     <div className="text-ui-lg sm:text-xl font-mono font-bold text-rose-400">
                         -{overallStats.avgLossSize.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
                     </div>

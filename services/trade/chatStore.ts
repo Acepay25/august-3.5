@@ -24,7 +24,7 @@
 
 import {
     ChatSession, StoredChatEntry, createSession, loadSessions, saveSessions, storageKey,
-    MAX_SESSIONS, MAX_ENTRIES,
+    MAX_SESSIONS,
 } from './chatSessions';
 import { getActiveUsername, LAST_ACTIVE_USER_KEY } from '../../utils/activeUser';
 import type { TradeProposal } from './proposedTrade';
@@ -118,18 +118,13 @@ const rebuild = (): void => {
     snapshot = { sessions, activeId, running, conversationRunning, signals: pendingSignals };
 };
 
-// ── Memory caps (mirror trimForStorage) ─────────────────────────────────────
-// chatSessions persists only the last MAX_SESSIONS sessions × MAX_ENTRIES
-// entries (trimForStorage), but the LIVE store used to be uncapped — a
-// long-lived terminal grew its in-memory transcript without bound while disk
-// stayed flat, so memory and disk silently diverged. These two helpers apply
-// the SAME caps to the live state; the transcript therefore never shows rows
-// a reload could not restore.
-
-/** Keep the most-recent MAX_ENTRIES entries — exactly what
- *  trimForStorage would persist. */
-const capEntries = (entries: LiveEntry[]): LiveEntry[] =>
-    entries.length > MAX_ENTRIES ? entries.slice(-MAX_ENTRIES) : entries;
+// ── Session cap (mirrors trimForStorage) ───────────────────────────────────
+// chatSessions persists the last MAX_SESSIONS chats (trimForStorage), so the
+// LIVE store applies the SAME bound — memory and disk must not diverge, or the
+// transcript shows rows a reload cannot restore. There is deliberately NO entry
+// cap here any more: per-chat entry count and the reasoning-text cut were
+// removed under the owner's 2026-10-27 "store everything" ruling, so the only
+// bound left on this path is the blob's byte budget in chatSessions.
 
 /** Keep at most MAX_SESSIONS sessions, evicting oldest-first. A session
  *  with a LIVE RUN is never chosen while idle candidates exist: dropping it
@@ -326,7 +321,7 @@ export const addSession = (partial: Partial<LiveSession> = {}, activate = true):
         ...createSession(),
         ...(from ? { effort: from.effort, soloModel: from.soloModel } : {}),
         ...partial,
-        entries: capEntries(partial.entries ?? []),
+        entries: partial.entries ?? [],
     };
     sessions = capSessions([...sessions, fresh]);
     if (activate) activeId = fresh.id;
@@ -354,20 +349,18 @@ export const removeSession = (id: string): string => {
     return activeId;
 };
 
-/** Immutably update one session (entries, title, panel seats…). Entry
- *  appends ride the MAX_ENTRIES cap here, so EVERY append path (the turn
- *  runner, addChatSystemEntry, panel seat rounds) stays bounded in memory
- *  the same way trimForStorage bounds the persisted blob. */
+/** Immutably update one session (entries, title, panel seats…). Entry appends
+ *  used to ride a MAX_ENTRIES cap through here so every append path stayed
+ *  bounded; the cap is gone (see the note above), which also means a
+ *  title-or-seat-only update now keeps the SAME entries array reference for
+ *  the reason the cap used to claim: nothing is rewritten at all. */
 export const mutate = (id: string, fn: (s: LiveSession) => LiveSession): void => {
     ensureLoaded();
     let matched = false;
     sessions = sessions.map(s => {
         if (s.id !== id) return s;
         matched = true;
-        const next = fn(s);
-        // capEntries is identity-preserving under the cap, so a title/seat-only
-        // update keeps the same entries array reference.
-        return { ...next, entries: capEntries(next.entries) };
+        return fn(s);
     });
     // A miss used to be silent, and silence is the worst shape this can take: a
     // send that writes into an id the store no longer holds appends no row,

@@ -21,14 +21,15 @@
  *    the capped, newline-joined LIVE feed: it is what a filling bubble shows,
  *    and it is the fallback for rows written before the trail existed.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { InterruptedRunNotice } from './InterruptedRunNotice';
 import ChatWorkTimeline, { type ChatWorkView } from '../trade/panels/ChatWorkTimeline';
-import { CopyChip, FadingText, PinChip, RetryChip, SpeakChip, ThinkingTierChip } from './chatChips';
+import { CopyChip, EditChip, FadingText, PinChip, RevertChip, RetryChip, SpeakChip, ThinkingTierChip, VersionStepper } from './chatChips';
 import AnswerBody from './AnswerBody';
 import ChatFailureRow from './ChatFailureRow';
 import KeyLevelsCard from '../trade/KeyLevelsCard';
 import { parseKeyLevels, type ModelKeyLevel } from '../../services/trade/keyLevels';
+import type { PromptEdit } from '../../utils/messageVersions';
 import type { TradeAnalysis } from '../../types';
 import type { ToolAction } from '../../types/message';
 import type { ReasoningEffort, WireAuditEntry } from '../../types/provider';
@@ -97,14 +98,41 @@ export interface ChatTranscriptRowProps {
     onTogglePin?: () => void;
     onLogTrade?: (analysis: TradeAnalysis) => void;
     canLogTrade?: boolean;
+    /** ── Revert and versions (2026-10-27) ──
+     *  All optional: a host that has not wired the conversation store simply
+     *  draws no controls, rather than drawing ones that do nothing. */
+    /** Save a new wording for this PROMPT and re-ask it. The host keeps the
+     *  words being replaced as a version of this row. */
+    onEditPromptMessage?: (messageId: string, newText: string) => void;
+    /** Park every turn after this one, so the thread ends here. */
+    onRevertTo?: (messageId: string) => void;
+    /** How many turns live after this row. 0 hides the restore control — a
+     *  button that parks nothing is a button that lies. */
+    turnsAfter?: number;
+    /** The answer's versions, when it has more than one. */
+    versions?: { index: number; total: number; onStep: (delta: number) => void };
+    /** Wordings this prompt carried before the current one. */
+    priorPrompts?: PromptEdit[];
     /** Extra chrome the caller renders under the bubble (the verdict card). */
     children?: React.ReactNode;
 }
 
 const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
-    row, symbol, getMark, onChatLevels, onRetry, onEditPrompt, pinned, onTogglePin, onLogTrade, canLogTrade, children,
+    row, symbol, getMark, onChatLevels, onRetry, onEditPrompt, pinned, onTogglePin, onLogTrade, canLogTrade,
+    onEditPromptMessage, onRevertTo, turnsAfter = 0, versions, priorPrompts, children,
 }) => {
     const isUser = row.role === 'user';
+    const canEdit = isUser && !!onEditPromptMessage && !row.streaming && !row.error;
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState(row.text);
+    const startEdit = (): void => { setDraft(row.text); setEditing(true); };
+    const cancelEdit = (): void => { setEditing(false); setDraft(row.text); };
+    const saveEdit = (): void => {
+        const next = draft.trim();
+        setEditing(false);
+        if (!next || next === row.text) return;
+        onEditPromptMessage?.(row.id, next);
+    };
     // Only a CLOSED key-levels fence yields levels; an open one is stripped
     // from `clean` so the protocol never flashes mid-stream.
     const levels: ModelKeyLevel[] | null =
@@ -156,14 +184,46 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                 </div>
             )}
 
-            {isUser ? (
+            {isUser && editing ? (
+                /* The edit is IN the thread, not in the composer: the trader is
+                   changing the words that produced the answer below them, and
+                   sending them through the composer would ask a NEW question
+                   while leaving this one's wording on screen. */
+                <div className="w-full max-w-[68%] rounded-bubble border border-white/[0.09] bg-surface-raised p-2.5 shadow-lg">
+                    <textarea
+                        autoFocus
+                        rows={3}
+                        value={draft}
+                        onChange={e => setDraft(e.target.value)}
+                        onKeyDown={e => {
+                            if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(); }
+                        }}
+                        aria-label="Edit your message"
+                        data-testid="edit-message-input"
+                        className="w-full resize-none bg-transparent text-ui-base leading-relaxed text-zinc-100 outline-none"
+                    />
+                    <div className="mt-1.5 flex items-center justify-end gap-1.5">
+                        <button type="button" onClick={cancelEdit}
+                            className="rounded-control px-2 py-1 text-ui-xs text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
+                            Cancel
+                        </button>
+                        <button type="button" onClick={saveEdit}
+                            disabled={!draft.trim() || draft.trim() === row.text}
+                            data-testid="edit-message-save"
+                            className="rounded-full bg-zinc-100 px-2.5 py-1 text-ui-xs font-semibold text-zinc-900 transition-opacity hover:opacity-90 disabled:opacity-40">
+                            Save &amp; re-ask
+                        </button>
+                    </div>
+                </div>
+            ) : isUser ? (
                 /* The reference's own bubble caps at roughly 60% of the thread
                    column, so a long question wraps instead of running edge to
                    edge. At 85% the bubble read as a full-width band and the
                    right-hand alignment — the thing that says "this is mine" —
                    disappeared. The trader's own words are INTERFACE, not prose:
                    they stay in the UI sans. */
-                <div className="max-w-[68%] rounded-bubble border border-white/[0.06] bg-zinc-800 px-4 py-2.5 text-ui-base leading-relaxed text-zinc-100 shadow-sm">
+                <div className="max-w-[68%] rounded-bubble bg-zinc-800 px-4 py-2.5 text-ui-base leading-relaxed text-zinc-100">
                     <FadingText text={body} streaming={!!row.streaming} />
                 </div>
             ) : row.error ? (
@@ -176,7 +236,13 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                 <div className="w-full max-w-full text-zinc-200 text-ui-lede leading-[1.75]">
                     <ChatWorkTimeline entry={work} />
                     {body.trim()
-                        ? <AnswerBody text={body} streaming={!!row.streaming} />
+                        /* The answer takes the prose measure (`.chat-prose`,
+                           42rem) and nothing else in this row does: the work
+                           timeline above it and the verdict or key-level card
+                           below it keep the full 920px column, because a table
+                           at reading width is a table that wraps its own
+                           numbers. One row, two widths, on purpose. */
+                        ? <div className="chat-prose"><AnswerBody text={body} streaming={!!row.streaming} /></div>
                         : <span className="text-zinc-500">{row.analysis ? 'Analysis' : '…'}</span>}
                     {children}
                 </div>
@@ -223,6 +289,9 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
 
             <div className="mt-1 flex items-center gap-1">
                 {isUser && onRetry && <RetryChip onRetry={onRetry} />}
+                {canEdit && (
+                    <EditChip edited={(priorPrompts?.length ?? 0) > 0} onEdit={startEdit} />
+                )}
                 {/* The tier this answer was produced under. It leads the row
                     because it is a fact about the ANSWER, not an action on it —
                     the actions below are the ones that change something. */}
@@ -231,6 +300,15 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                 {!isUser && <SpeakChip text={row.text} />}
                 {!isUser && onTogglePin && (
                     <PinChip pinned={!!pinned} onToggle={onTogglePin} />
+                )}
+                {/* Which answer you are looking at, when this row has been
+                    re-run. Placed with the actions because stepping one is a
+                    choice the trader makes, not a property of the turn. */}
+                {!isUser && versions && (
+                    <VersionStepper index={versions.index} total={versions.total} onStep={versions.onStep} />
+                )}
+                {!editing && onRevertTo && (
+                    <RevertChip onRevert={() => onRevertTo(row.id)} after={turnsAfter} />
                 )}
                 {!isUser && canLogTrade && onLogTrade && row.analysis && (
                     <button type="button" onClick={() => onLogTrade(row.analysis!)}

@@ -169,19 +169,13 @@ export const Header: React.FC<HeaderProps> = memo(({
                         </div>
                     )}
                     {/* The brand, v2 style: the A-mark and the plain-ink word.
-                        The gradient is reserved for the active-tab underline;
-                        the word itself stays quiet ink. */}
+                        The mark was the wordmark's one gradient; the 2026-10-27
+                        ruling retired the gradient outright, so this is one ink
+                        shape and the `<defs>` it needed went with it. */}
                     <div className="flex select-none items-center gap-2 self-center" aria-label="August">
                         <svg className="h-6 w-6" viewBox="0 0 24 24" aria-hidden="true">
-                            <defs>
-                                <linearGradient id="topbar-brand-grad" x1="0" y1="0" x2="1" y2="1">
-                                    <stop offset="0" stopColor="var(--color-brand-start)" />
-                                    <stop offset=".52" stopColor="var(--color-brand-mid)" />
-                                    <stop offset="1" stopColor="var(--color-brand-end)" />
-                                </linearGradient>
-                            </defs>
-                            <path d="M12 2 21.5 21h-5.1L12 11.4 7.6 21H2.5L12 2Z" fill="url(#topbar-brand-grad)" />
-                            <rect x="9.1" y="15.7" width="5.8" height="1.5" rx=".75" fill="#0b0b0a" />
+                            <path d="M12 2 21.5 21h-5.1L12 11.4 7.6 21H2.5L12 2Z" fill="var(--color-zinc-100)" />
+                            <rect x="9.1" y="15.7" width="5.8" height="1.5" rx=".75" fill="var(--color-zinc-950)" />
                         </svg>
                         <span className="text-ui-lede font-semibold tracking-[-0.02em] text-zinc-100">August</span>
                     </div>

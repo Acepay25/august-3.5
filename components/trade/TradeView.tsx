@@ -731,6 +731,18 @@ const TradeView: React.FC<TradeViewProps> = ({
         const v = changePct ?? 0;
         return v > 0 ? 'bg-emerald-500/10 text-emerald-400' : v < 0 ? 'bg-rose-500/10 text-rose-400' : 'bg-zinc-500/10 text-zinc-300';
     }, [changePct]);
+    /** The hero figure's own colour, on the same sign as the 24h change — the
+     *  exchange convention (OKX, Binance) where the price itself reads green or
+     *  red rather than sitting in ink while a pill beside it carries the direction.
+     *  Text colour only: the tick flash animates the BACKGROUND, so the two never
+     *  fight, and a flat session keeps plain ink instead of inventing a green.
+     *  emerald-400 is 9.78:1 on the page and rose-400 8.00:1, so this is the one
+     *  place the semantic hues are allowed on chrome-scale text without a contrast
+     *  question. */
+    const priceTone = useMemo(() => {
+        const v = changePct ?? 0;
+        return v > 0 ? 'text-emerald-400' : v < 0 ? 'text-rose-400' : 'text-zinc-100';
+    }, [changePct]);
     const tickFlash = useTickFlash(markPrice);
 
     // ── Dock drag-resize ────────────────────────────────────────────
@@ -887,14 +899,16 @@ const TradeView: React.FC<TradeViewProps> = ({
                         </button>
                     )}
                     <SymbolPicker symbols={symbols} value={symbol} onChange={changeSymbol} />
-                    {/* The design's price-block: the figure in plain ink, the
-                        24h change in a tinted pill beside it. The tick flash
-                        still rides the figure — a print you can see land. */}
+                    {/* The design's price-block: the figure carries the session's
+                        own colour (green up / red down, the exchange convention),
+                        the 24h change rides beside it in a tinted pill, and the
+                        tick flash still pulses the background — a print you can
+                        see land, on a figure you can read at a glance. */}
                     <div className="ml-1 flex shrink-0 items-baseline gap-2">
                         <div
                             key={tickFlash.seq}
                             data-testid="hero-price"
-                            className={`-mx-1 rounded-control px-1 font-mono text-ui-display font-medium tracking-[-0.035em] tabular-nums text-zinc-100 ${tickFlash.cls}`.trim()}
+                            className={`-mx-1 rounded-control px-1 font-mono text-ui-display font-medium tracking-[-0.035em] tabular-nums ${priceTone} ${tickFlash.cls}`.trim()}
                         >
                             {Number.isFinite(markPrice) ? fmtPrice(markPrice!) : '—'}
                         </div>

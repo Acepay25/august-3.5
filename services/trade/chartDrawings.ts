@@ -62,8 +62,16 @@ export const FIB_RATIOS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const;
 
 /** TradingView-style palette for the user's drawing tools (theme-aligned:
  *  emerald/rose/amber/sky/violet). Lives here (not in the chart component)
- *  so the tool rail and the chart share it without a cyclic import. */
-export const DRAW_COLORS = ['#07b56a', '#f75d5f', '#f08800', '#399ef7', '#c084fc'] as const;
+ *  so the tool rail and the chart share it without a cyclic import.
+ *
+ *  These are LITERALS rather than `chartColor()` calls on purpose — this module
+ *  is read outside the DOM by the tool rail — but they are the theme's steps by
+ *  value, so the 2026-10-27 neutral re-style moved them with the ramps. The
+ *  first two MUST keep matching the candles: a drawn trend line in the OLD
+ *  up-green next to a live candle in the NEW one reads as two different
+ *  meanings for the same colour, which is the one rule the semantic tokens
+ *  exist to hold. */
+export const DRAW_COLORS = ['#0bc67a', '#f6465d', '#f08800', '#4d9fff', '#c084fc'] as const;
 
 /** What the tool rail's pointer flow puts on the overlay: 'cursor' is the
  *  chart's native pan/zoom, 'erase' deletes a user shape, the rest are the
@@ -218,8 +226,9 @@ export const createDrawingId = (): string =>
     `d-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 /** Palette names the model may use in draw_on_chart (mapped to the chart's
- *  TradingView-style DRAW_COLORS). */
-export const MODEL_COLOR_NAMES = { emerald: '#07b56a', rose: '#f75d5f', amber: '#f08800', sky: '#399ef7', violet: '#c084fc' } as const;
+ *  TradingView-style DRAW_COLORS). Same values as the tool palette above, so a
+ *  line the model draws and a line the trader draws are the same green. */
+export const MODEL_COLOR_NAMES = { emerald: '#0bc67a', rose: '#f6465d', amber: '#f08800', sky: '#4d9fff', violet: '#c084fc' } as const;
 export type ModelColorName = keyof typeof MODEL_COLOR_NAMES;
 
 /** Default anchors: a line spans the last 40 bars → now. */

@@ -53,8 +53,8 @@ export const EquityCurveDashboard: React.FC<EquityCurveDashboardProps> = ({ trad
 
     const pnlPositive = totalPnl >= 0;
     const accent = pnlPositive
-        ? chartColor('--color-emerald-400', '#2fc97f')
-        : chartColor('--color-rose-400', '#f97d80');
+        ? chartColor('--color-emerald-400', '#23cf8b')
+        : chartColor('--color-rose-400', '#f9808a');
 
     return (
         <div className=" glass-panel p-3 sm:p-4 rounded-bubble border border-white/5 bg-zinc-800 mb-3 sm:mb-5">
@@ -76,11 +76,11 @@ export const EquityCurveDashboard: React.FC<EquityCurveDashboardProps> = ({ trad
                             </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                        <XAxis dataKey="label" tick={{ fill: chartColor('--color-zinc-500', '#8c8c86'), fontSize: 9 }} tickLine={false} axisLine={false} minTickGap={40} />
-                        <YAxis tick={{ fill: chartColor('--color-zinc-500', '#8c8c86'), fontSize: 9 }} tickLine={false} axisLine={false} />
+                        <XAxis dataKey="label" tick={{ fill: chartColor('--color-zinc-500', '#9a9a9a'), fontSize: 9 }} tickLine={false} axisLine={false} minTickGap={40} />
+                        <YAxis tick={{ fill: chartColor('--color-zinc-500', '#9a9a9a'), fontSize: 9 }} tickLine={false} axisLine={false} />
                         <Tooltip
-                            contentStyle={{ background: chartColor('--color-zinc-900', '#141412'), border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, fontSize: 11 }}
-                            labelStyle={{ color: chartColor('--color-zinc-400', '#a3a39d') }}
+                            contentStyle={{ background: chartColor('--color-zinc-900', '#141414'), border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, fontSize: 11 }}
+                            labelStyle={{ color: chartColor('--color-zinc-400', '#b6b6b6') }}
                         />
                         <ReferenceLine y={0} stroke="rgba(255,255,255,0.12)" />
                         <Area type="monotone" dataKey="equity" stroke={accent} strokeWidth={1.8} fill="url(#equityFill)" dot={false} name="Equity" />

@@ -9,8 +9,10 @@ When a change violates two rules, the theme wins over the component.
 
 ## Color
 
-- [ ] Page is `#0b0b0a`, panels `zinc-900`, raised surfaces `zinc-800`,
-      hairlines `zinc-700`/`zinc-800`.
+- [ ] Page is `#0a0a0a`, panels `zinc-900`, raised surfaces `zinc-800`,
+      hairlines `zinc-700`/`zinc-800`. The neutrals carry NO hue (2026-10-27):
+      a tinted black — blue-shifted or warm — is a second palette waiting to
+      disagree with the first.
 - [ ] Semantic hues come from `index.css @theme` and mean one thing everywhere:
       **emerald** = gain/up, **rose/red** = loss/down, **amber/yellow** =
       warning, **cyan** = info. Never introduce a new hue for a new state.
@@ -20,19 +22,23 @@ When a change violates two rules, the theme wins over the component.
       UI chrome.
 - [ ] Exactly **one cyan accent per view**. If you're adding a second cyan,
       something else in that view should stop being cyan.
-- [ ] The brand gradient (`--color-brand-start → mid → end`) is on the wordmark
-      and the active-nav indicator. Nowhere else — not hero text, not tables,
-      not chart fills, not a tab underline.
+- [ ] There is **no brand gradient**. `--color-brand-start/mid/end` were deleted
+      on 2026-10-27 along with the rule that reserved them for the wordmark, the
+      active-nav bar and the update dot; those three now draw ink. A hero moment
+      earns size or weight, not a hue. Do not re-add one, and do not read a
+      chrome token as a chart colour or a chart colour as chrome — that pair of
+      mistakes is what turned a dashboard series white when the stops went flat.
 - [ ] No gray remappings for a color family. Neutral utility names (`zinc-*`)
       are kept deliberately so the whole app recolors from the token block.
 - [ ] Micro-labels at ≥10px stay on `text-zinc-600`. Contrast is already tuned;
-      darkening it to "make it readable" breaks AA.
-- [ ] `.status-surface` / `.analysis-card` are deleted, not re-added. They match
-      no rule in `index.css` since the theme went semantic globally.
+      darkening it to "make it readable" breaks AA. `zinc-600` is `#858585` since
+      the neutral re-style — 5.37:1 on the page, 4.99:1 on a panel — and the
+      quieter `#6f6f6f` you reach for first is 3.94:1, which is a fill, not text.
+      Any new faint text step ships with the three ratios measured, not eyeballed.
 
 ## Shape and borders
 
-- [ ] `rounded-control` (8px) for inputs and buttons; `rounded-bubble` (12px)
+- [ ] `rounded-control` (10px) for inputs and buttons; `rounded-bubble` (20px)
       for chat bubbles. Nothing else invents a radius.
 - [ ] Borders are hairlines: `border-zinc-800/80`. No double borders — a panel
       inside a panel does not get a second frame.
@@ -49,7 +55,7 @@ When a change violates two rules, the theme wins over the component.
 | a dropdown | `SelectMenu` |
 | a destructive confirm | `ConfirmDialog` / `useConfirmDialog` |
 | a segmented control | the pressed-state button pattern; **not** `.seg-thumb` on a container |
-| a chat measure | `.chat-column` (880px) |
+| a chat measure | `.chat-column` (920px) for the thread, `.chat-prose` (42rem) for the answer's prose inside it — tables and evidence keep the wide column, only the writing is capped |
 | an empty-state backdrop | `.chat-hero-grid` |
 | a keyboard focus indicator | nothing at all — `index.css` outlines every focusable element on `:focus-visible`. Two things switch an editable field's outline off, and both are correct: the field declares its own ring (`focus-visible:ring-*` in its own class list), or focus did **not** arrive from the keyboard (`utils/navModality.ts` sets `html[data-nav-modality]`, because a browser matches `:focus-visible` on a text field after a mouse click too — a clicked composer must show no box) |
 

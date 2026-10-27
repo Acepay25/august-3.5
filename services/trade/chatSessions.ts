@@ -1,7 +1,7 @@
 /**
  * chatSessions — persistence for the Trade panel's Chart AI chats. Storage is
- * per active user in localStorage with hard caps (MAX_SESSIONS most-recent
- * sessions, MAX_ENTRIES most-recent entries each) so a long-lived terminal
+ * per active user in localStorage with a cap on HOW MANY chats (MAX_SESSIONS) so a
+ * long-lived terminal
  * can't grow the blob forever. Pure module (no React, no network) so the
  * title/trim/validation rules are unit-testable.
  *
@@ -173,8 +173,13 @@ export interface ChatSession {
     loggedTradeIds?: string[];
 }
 
+/** How many chats the dock keeps. This one STAYS (see MAX_STORED_CHARS for why
+ *  the byte ceiling cannot go too): it is a structural bound on the blob, not a
+ *  bound on what a turn stores. The per-chat ENTRY cap and the REASONING-TEXT
+ *  cut that used to sit next to it were removed on 2026-10-27 under the owner's
+ *  "store everything" ruling — a chat now holds every turn it was given, and
+ *  every character of the trace that produced each one. */
 export const MAX_SESSIONS = 12;
-export const MAX_ENTRIES = 60;
 /**
  * The pinned-set cap. Derivation, not a magic number: MAX_SESSIONS (12) minus
  * 2, so the newest two UNPINNED sessions always survive a pin spree — the
@@ -197,8 +202,6 @@ export interface SessionSaveNotice {
 }
 /** The user asked for "max 5 models that talk to each other". */
 export const PANEL_MAX_MODELS = 5;
-/** Bound stored reasoning so 60 long-thinking turns can't sink the blob. */
-const MAX_REASONING_CHARS = 4000;
 const MAX_IMAGE_CHARS = 1_200_000;
 const TITLE_MAX = 36;
 
@@ -241,7 +244,11 @@ const validEntry = (e: unknown): e is StoredChatEntry => {
 
 const sanitizeEntry = (e: StoredChatEntry): StoredChatEntry => ({
     ...e,
-    reasoning: typeof e.reasoning === 'string' && e.reasoning.trim() ? e.reasoning.slice(0, MAX_REASONING_CHARS) : undefined,
+    // Every character of the trace is kept. This used to cut at 4000 chars
+    // "so 60 long-thinking turns can't sink the blob" — which traded the one
+    // thing the trader opens the row to read for a bound the byte budget below
+    // already enforces honestly, at the blob level, and REPORTS (pinnedTrimmed).
+    reasoning: typeof e.reasoning === 'string' && e.reasoning.trim() ? e.reasoning : undefined,
     actions: Array.isArray(e.actions) ? e.actions.filter(validToolAction).slice(0, 50) : undefined,
     image: typeof e.image === 'string' && e.image.startsWith('data:image/') && e.image.length <= MAX_IMAGE_CHARS ? e.image : undefined,
     notice: e.notice === true ? true : undefined,
@@ -293,7 +300,7 @@ export const loadSessions = (): ChatSession[] => {
                 interval: typeof s.interval === 'string' && s.interval.trim() ? s.interval : undefined,
                 effort: isEffort(s.effort) ? s.effort : undefined,
                 soloModel: typeof s.soloModel === 'string' && s.soloModel ? s.soloModel : undefined,
-                entries: s.entries.filter(validEntry).slice(-MAX_ENTRIES).map(sanitizeEntry),
+                entries: s.entries.filter(validEntry).map(sanitizeEntry),
             }));
     } catch {
         return [];
@@ -317,7 +324,7 @@ const fitToMaxSessions = (
     sessions: ChatSession[],
     pinned: ReadonlySet<string>,
 ): { sessions: ChatSession[]; pinsDropped: string[] } => {
-    const sanitized = sessions.map(s => ({ ...s, entries: s.entries.filter(validEntry).slice(-MAX_ENTRIES).map(sanitizeEntry) }));
+    const sanitized = sessions.map(s => ({ ...s, entries: s.entries.filter(validEntry).map(sanitizeEntry) }));
     let keptPins = sanitized.filter(s => pinned.has(s.id));
     let pinsDropped: string[] = [];
     if (keptPins.length > MAX_PINNED_SESSIONS) {

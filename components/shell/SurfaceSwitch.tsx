@@ -1,7 +1,9 @@
 /**
  * The surface switch — the v2 design's tab strip: text tabs riding the
- * topbar's full height, the active one marked by the brand-gradient underline
- * on the bar's bottom hairline (the one place the gradient is allowed).
+ * topbar's full height, the active one marked by an ink underline on the bar's
+ * bottom hairline. The brand gradient that used to be that marker was retired
+ * (owner ruling, 2026-10-27), so the strip is monochrome and the active tab is
+ * named by weight and by `aria-current`, not by colour.
  *
  * It replaces the destination ROWS that used to stand in the sidebar. Those rows
  * were the thing the redesign was asked to remove, and the earlier passes only
@@ -70,13 +72,13 @@ const SurfaceSwitch: React.FC<SurfaceSwitchProps> = ({ surface, onSelect, badges
                         </span>
                     ) : null}
                     {current && (
-                        /* The brand-gradient underline: the design reserves the
-                           gradient for the wordmark and the active-nav marker —
-                           this is that marker, sitting ON the bar's hairline. */
+                        /* The active marker. It was the brand gradient — the one
+                           place besides the wordmark the design reserved it for —
+                           and the gradient was retired on 2026-10-27, so the
+                           marker is ink now: same position, same job, no hue. */
                         <span
                             aria-hidden="true"
-                            className="absolute inset-x-3 bottom-0 h-0.5 rounded-t-full"
-                            style={{ background: 'linear-gradient(90deg, var(--color-brand-start), var(--color-brand-mid), var(--color-brand-end))' }}
+                            className="absolute inset-x-3 bottom-0 h-0.5 rounded-t-full bg-zinc-100"
                         />
                     )}
                 </button>

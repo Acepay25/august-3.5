@@ -10,7 +10,7 @@
  * not need a group class to make them appear.
  */
 import React, { useEffect, useState } from 'react';
-import { Brain, Check, Copy, Pin, RotateCcw, Square, Volume2 } from './Icons';
+import { Brain, Check, ChevronLeftIcon, ChevronRight, Copy, Pencil, Pin, RotateCcw, Square, Undo2, Volume2 } from './Icons';
 import { copyText } from '../../utils/clipboard';
 import MarkdownContent from './MarkdownContent';
 import { effortChoiceOf } from './effortScale';
@@ -28,6 +28,91 @@ export const RetryChip: React.FC<{ onRetry: () => void; className?: string }> = 
         <RotateCcw className="h-3 w-3" aria-hidden="true" />
     </button>
 );
+
+/** Edit a prompt the trader already sent.
+ *
+ *  Not a cosmetic rewrite: the host keeps the words being replaced as a version
+ *  of that row, parks the answer that grew from them, and re-runs the question.
+ *  The title says so because "Edit" alone does not tell you that the earlier
+ *  exchange survives the click — which is the whole point of the design. */
+export const EditChip: React.FC<{
+    onEdit: () => void;
+    /** This row has been edited before, so the control is a re-edit rather than
+     *  a first one. Changes the label, not the behaviour. */
+    edited?: boolean;
+    className?: string;
+}> = ({ onEdit, edited = false, className = '' }) => (
+    <button type="button"
+        onClick={onEdit}
+        aria-label={edited ? 'Edit this message again' : 'Edit this message'}
+        title={edited ? 'Edit again — your earlier wording is kept as a version' : 'Edit — keeps your wording as a version and re-answers'}
+        className={`flex items-center gap-1 hit-target rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500 ${className}`.trim()}>
+        <Pencil className="h-3 w-3" aria-hidden="true" />
+        <span>Edit</span>
+    </button>
+);
+
+/** Take the thread back to this message.
+ *
+ *  The turns after it are PARKED, not deleted, and the row under the thread
+ *  offers to bring them back — so this is reversible in both directions and the
+ *  label says "restore" rather than "delete", which is the thing it is not.
+ *  It changes the transcript only: memory, skills, logged trades and watches a
+ *  parked turn produced stay exactly as they were. */
+export const RevertChip: React.FC<{
+    onRevert: () => void;
+    /** How many turns would be parked. Zero means this is already the last
+     *  turn, and a control that restores nothing is not drawn at all. */
+    after: number;
+    className?: string;
+}> = ({ onRevert, after, className = '' }) => {
+    if (after <= 0) return null;
+    return (
+        <button type="button"
+            onClick={onRevert}
+            aria-label={`Restore the thread to this message`}
+            title={`Restore to here — parks the ${after} newer turn${after === 1 ? '' : 's'} so you can bring them back`}
+            className={`flex items-center gap-1 hit-target rounded-control px-1.5 py-0.5 text-ui-xs text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500 ${className}`.trim()}>
+            <Undo2 className="h-3 w-3" aria-hidden="true" />
+            <span>Restore to here</span>
+        </button>
+    );
+};
+
+/** Step the answer shown between the versions this row holds.
+ *
+ *  Only drawn when the row actually has more than one version — a "1 of 1"
+ *  stepper advertises a choice the app does not have. Pressing either end
+ *  WRAPS, so one key walks the whole set. */
+export const VersionStepper: React.FC<{
+    index: number;
+    total: number;
+    onStep: (delta: number) => void;
+    className?: string;
+}> = ({ index, total, onStep, className = '' }) => {
+    if (total <= 1) return null;
+    return (
+        <span className={`flex items-center gap-0.5 ${className}`.trim()} data-testid="version-stepper">
+            <button type="button"
+                onClick={() => onStep(-1)}
+                aria-label="Previous version of this answer"
+                title="Previous version"
+                className="flex h-5 w-5 items-center justify-center rounded-control text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
+                <ChevronLeftIcon className="h-3 w-3" aria-hidden="true" />
+            </button>
+            <span className="text-ui-xs tabular-nums text-zinc-500" aria-live="polite">
+                {index + 1} / {total}
+            </span>
+            <button type="button"
+                onClick={() => onStep(1)}
+                aria-label="Next version of this answer"
+                title="Next version"
+                className="flex h-5 w-5 items-center justify-center rounded-control text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500">
+                <ChevronRight className="h-3 w-3" aria-hidden="true" />
+            </button>
+        </span>
+    );
+};
 
 export const CopyChip: React.FC<{ text: string; className?: string }> = ({ text, className = '' }) => {
     const [copied, setCopied] = useState(false);

@@ -173,15 +173,15 @@ export const VersionHistoryDashboard: React.FC = () => {
                                         <AreaChart data={signals}>
                                             <defs>
                                                 <linearGradient id="colorReward" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor={chartColor('--color-emerald-400', '#2fc97f')} stopOpacity={0.3} />
-                                                    <stop offset="95%" stopColor={chartColor('--color-emerald-400', '#2fc97f')} stopOpacity={0} />
+                                                    <stop offset="5%" stopColor={chartColor('--color-emerald-400', '#23cf8b')} stopOpacity={0.3} />
+                                                    <stop offset="95%" stopColor={chartColor('--color-emerald-400', '#23cf8b')} stopOpacity={0} />
                                                 </linearGradient>
                                             </defs>
                                             <Tooltip
-                                                contentStyle={{ backgroundColor: chartColor('--color-zinc-900', '#141412'), border: `1px solid ${chartColor('--color-zinc-700', '#2f2f2f')}`, borderRadius: '12px' }}
-                                                itemStyle={{ color: chartColor('--color-zinc-300', '#b7b7b1') }}
+                                                contentStyle={{ backgroundColor: chartColor('--color-zinc-900', '#141414'), border: `1px solid ${chartColor('--color-zinc-700', '#262626')}`, borderRadius: '12px' }}
+                                                itemStyle={{ color: chartColor('--color-zinc-300', '#c9c9c9') }}
                                             />
-                                            <Area type="monotone" dataKey="rewardScore" stroke={chartColor('--color-emerald-400', '#2fc97f')} strokeWidth={2} fillOpacity={1} fill="url(#colorReward)" />
+                                            <Area type="monotone" dataKey="rewardScore" stroke={chartColor('--color-emerald-400', '#23cf8b')} strokeWidth={2} fillOpacity={1} fill="url(#colorReward)" />
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </div>

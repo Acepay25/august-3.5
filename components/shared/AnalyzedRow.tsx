@@ -31,15 +31,22 @@ export interface AnalyzedRowProps {
 }
 
 /**
- * "Analyzed for 14s" — the ZCode `Worked for 7m 15s` wrapper. The WHOLE
- * work timeline (interleaved Thought rows + tool rounds) folds into this
- * ONE collapsible: it stays open while the work streams and collapses to a
- * single summary row the moment the answer lands (re-openable). The clock
- * covers the pre-answer work phase only — it starts at turn start and
+ * "Analyzed for 14s" — the work line over the step list. The header says what
+ * the turn did ("Ran 4 commands, read a file"); the body lists the steps, and
+ * EACH STEP is its own disclosure (a Thought row, a tool round).
+ *
+ * The list stays visible once the answer lands. It used to fold itself shut at
+ * settle, which hid every step behind one click and made a settled turn read as
+ * a sentence rather than the work it was — the reference keeps the step rows on
+ * screen and collapses only what is inside a row. The chevron still folds the
+ * whole list for anyone who wants the transcript short, and a starting run
+ * opens it again so the live steps are where the eye already is.
+ *
+ * The clock covers the pre-answer work phase only — it starts at turn start and
  * freezes when the answer text begins.
  */
 const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = '', summary, persistedMs, title, activity, children }) => {
-    const [open, setOpen] = useState(running);
+    const [open, setOpen] = useState(true);
     const wasRunningRef = useRef(running);
     const startedAtRef = useRef<number | null>(running ? Date.now() : null);
     const [liveSeconds, setLiveSeconds] = useState<number | null>(running ? 0 : null);
@@ -54,8 +61,9 @@ const AnalyzedRow: React.FC<AnalyzedRowProps> = ({ running = false, className = 
             const start = startedAtRef.current;
             setSettledSeconds(start !== null ? Math.max(0, Math.round((Date.now() - start) / 1000)) : null);
             startedAtRef.current = null;
-            // The answer arrived — fold the work into the single row.
-            setOpen(false);
+            // Settling freezes the CLOCK; it no longer folds the list. The steps
+            // are the record of what the turn did, and hiding the record behind
+            // a click is what this component used to do.
         }
         wasRunningRef.current = running;
     }, [running]);

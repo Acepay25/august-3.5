@@ -50,9 +50,13 @@ export const useUpdateStatusDot = (): React.ReactNode => {
         case 'checking':
             return dot('Checking for updates…', 'bg-cyan-400', true);
         case 'available':
-            // Brand gradient is reserved for the wordmark, the active-nav bar
-            // and this: an available update is a brand moment, not a status hue.
-            return dot(`Version ${version} is available`, 'bg-gradient-to-b from-brand-start to-brand-end');
+            // This was the last chrome consumer of the brand gradient — one of
+            // the three "brand moments" the design reserved it for, alongside the
+            // wordmark and the active-nav bar. The gradient was retired on
+            // 2026-10-27 and all three went to ink, so an available update is a
+            // white dot: brighter than the cyan in-progress states beside it,
+            // which is the whole signal it ever carried.
+            return dot(`Version ${version} is available`, 'bg-zinc-100');
         case 'downloading':
             return dot(
                 Number.isFinite(progress) && progress > 0 ? `Downloading — ${progress}%` : 'Downloading…',

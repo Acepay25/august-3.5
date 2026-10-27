@@ -1,72 +1,94 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-/* ===== MINARA-DERIVED THEME — warm near-black, true semantics =====
-   Arrangement and palette copied from Minara's app tokens: screen #0c0f13,
-   panels #13171c, raised surfaces #1a1a18, hairlines #232320/#303640, warm
-   ink ramp #edede8→#6e6e68, up-green #07b56a, down-red #f75d5f, Minara blue
-   accent, and a magenta→pink→orange brand gradient reserved for the wordmark,
-   the active nav pill, and hero moments. The neutral utility names (zinc-*)
-   are deliberately kept so every existing component re-colors through this
-   one block. AGENTS.md documents the doctrine. */
+/* ===== NEUTRAL DARK — hue-free graphite, true semantics =====
+   2026-10-27 re-style (owner ruling): the screen and its ink carry NO hue.
+   The Minara-derived ramp before this was cool-tinted (page #0c0f13, panels
+   #13171c, hairline #303640 — all blue-shifted) and the brand gradient was
+   retired in the same ruling, so nothing in the chrome is coloured any more.
+   Ground #0a0a0a, panels #141414, raised #1d1d1d, hairline #262626, ink
+   #f4f4f4→#858585, and colour is reserved for DATA only: up-green #0bc67a,
+   down-red #f6465d, warning amber, info blue. The neutral utility names
+   (zinc-*) are deliberately kept so every existing component re-colors
+   through this one block — 881 chrome usages across 119 files, none of which
+   needed an edit to move. AGENTS.md documents the doctrine. */
 @theme {
-  /* Neutrals — warm near-black surfaces + warm ink. Class-name mapping kept
-     stable: 950 page, 900 panels/rail, 800 raised surfaces, 700 hairline &
-     active fills, 500/600 dim/faint text, 100/200/300 ink. */
-  --color-zinc-50: #f5f7fa;
-  --color-zinc-100: #e8ecf1;
-  --color-zinc-200: #d3d9e1;
-  --color-zinc-300: #b6bfcb;
-  --color-zinc-400: #9aa6b5;
-  --color-zinc-500: #8591a1;
-  /* zinc-600 is bumped one warm step above Minara's ramp end (#6e6e68,
-     3.84:1) so the ~250 text-zinc-600 micro-labels at 9-11px clear WCAG AA:
-     4.82:1 on page #0c0f13, 4.52:1 on panels #13171c. Side effects audited:
-     bg/border/ring/placeholder consumers are text-free fills, affordances,
-     or hover states — all improve from being slightly brighter. */
-  --color-zinc-600: #7f8a99;
-  --color-zinc-700: #303640;
-  --color-zinc-800: #1c2128;
-  --color-zinc-900: #13171c;
-  --color-zinc-950: #0c0f13;
+  /* Neutrals — hue-free graphite surfaces + hue-free ink. Class-name mapping
+     kept stable: 950 page, 900 panels/rail, 800 raised surfaces, 700 hairline
+     & active fills, 500/600 dim/faint text, 100/200/300 ink.
+     The faint steps are MEASURED, not eyeballed, because the smallest running
+     text in this app is 10–12px (`--text-ui-2xs`/`xs`/`micro` off a 16px base)
+     and AA does not care what a ramp is called:
+       #858585 = 5.37:1 on page, 4.99:1 on panel, 4.57:1 on raised
+       #9a9a9a = 7.04:1 / 6.55:1 / 5.99:1
+       #b6b6b6 = 9.76:1 / 9.08:1 / 8.31:1
+     A #6f6f6f faint step — the obvious "quiet gray" — measures 3.94:1 on the
+     page and is NOT allowed for text; it survives only as a fill. This is the
+     same discipline that had zinc-600 bumped off Minara's ramp end (#6e6e68,
+     3.84:1) so ~250 micro-labels cleared AA. */
+  --color-zinc-50: #fafafa;
+  --color-zinc-100: #f4f4f4;
+  --color-zinc-200: #e6e6e6;
+  --color-zinc-300: #c9c9c9;
+  --color-zinc-400: #b6b6b6;
+  --color-zinc-500: #9a9a9a;
+  --color-zinc-600: #858585;
+  --color-zinc-700: #262626;
+  --color-zinc-800: #1d1d1d;
+  --color-zinc-900: #141414;
+  --color-zinc-950: #0a0a0a;
 
-  /* Accent / primary — Minara blue */
-  --color-cyan-100: #e3f1fe;
-  --color-cyan-200: #c3e3fd;
-  --color-cyan-300: #93cdfb;
-  --color-cyan-400: #5fb0f9;
-  --color-cyan-500: #399ef7;
-  --color-cyan-600: #2280d8;
-  --color-cyan-700: #1d64a8;
-  --color-cyan-800: #1d5186;
-  --color-cyan-900: #1b4468;
-  --color-cyan-950: #122b45;
+  /* Accent / primary — info blue. 500 is the TEXT step (7.28:1 on page,
+     6.77:1 on panel); 600 and up are fills and hover states, never running
+     type. Re-pointed off Minara's cyan at the 2026-10-27 ruling so the app has
+     one blue, and the name `cyan-*` stays as the historical alias for it. */
+  --color-cyan-100: #e4f0ff;
+  --color-cyan-200: #c6e0ff;
+  --color-cyan-300: #9ccaff;
+  --color-cyan-400: #6cb6ff;
+  --color-cyan-500: #4d9fff;
+  --color-cyan-600: #2f86e8;
+  --color-cyan-700: #2069c0;
+  --color-cyan-800: #1c5599;
+  --color-cyan-900: #1b487d;
+  --color-cyan-950: #12294a;
 
-  /* Positive / gains — Minara green */
-  --color-emerald-100: #d9f7e7;
-  --color-emerald-200: #b1efcf;
-  --color-emerald-300: #6fdeb0;
-  --color-emerald-400: #2fc97f;
-  --color-emerald-500: #07b56a;
-  --color-emerald-600: #059a59;
-  --color-emerald-700: #067947;
-  --color-emerald-800: #075f39;
-  --color-emerald-900: #064a2e;
-  --color-emerald-950: #022c1c;
+  /* Positive / gains — the brighter exchange green. Measured: 500 is 8.84:1 on
+     page (the old #07b56a was 7.38:1), 400 is 9.78:1. 600/700 are fill steps. */
+  --color-emerald-100: #d6f5e6;
+  --color-emerald-200: #a8ebd0;
+  --color-emerald-300: #5fd9a5;
+  --color-emerald-400: #23cf8b;
+  --color-emerald-500: #0bc67a;
+  --color-emerald-600: #08a466;
+  --color-emerald-700: #078153;
+  --color-emerald-800: #066543;
+  --color-emerald-900: #054e35;
+  --color-emerald-950: #022c1f;
 
-  /* Negative / losses — Minara red */
-  --color-rose-100: #fee3e4;
-  --color-rose-200: #fcc7c8;
-  --color-rose-300: #fb9fa1;
-  --color-rose-400: #f97d80;
-  --color-rose-500: #f75d5f;
-  --color-rose-600: #e04447;
-  --color-rose-700: #bd3538;
-  --color-rose-800: #9c2d30;
-  --color-rose-900: #7c292b;
-  --color-rose-950: #411a1b;
+  /* Negative / losses — the brighter exchange red. This is the ONE place the
+     re-style costs contrast, and it is measured: 500 goes 6.30:1 → 5.61:1 on
+     the page, still AA. 600 (#dd2f47) is a FILL step — 4.59:1 against white
+     ink for the destructive button's hover — and it is not 4.5:1 as text, so
+     the two dashboard labels that were drawing `text-rose-600` moved to
+     `text-rose-500` in the same change. The old ramp had the same defect
+     (#e04447 measured 4.36:1 on the old panel, under AA); the re-style is what
+     made it show up. */
+  --color-rose-100: #fee2e4;
+  --color-rose-200: #fcc9cd;
+  --color-rose-300: #fba1a8;
+  --color-rose-400: #f9808a;
+  --color-rose-500: #f6465d;
+  --color-rose-600: #dd2f47;
+  --color-rose-700: #b92639;
+  --color-rose-800: #992231;
+  --color-rose-900: #7c2029;
+  --color-rose-950: #420b12;
 
-  /* Warnings — Minara yellow */
+  /* Warnings — amber. NOT re-hued by the 2026-10-27 ruling: both references
+     keep amber for warning, 7.76:1 clears AA as text and dark ink on the badge
+     fill measures 7.76:1 the other way, so moving it would repaint every
+     pending and attention state for no measured gain. */
   --color-yellow-100: #fdeccf;
   --color-yellow-200: #fbd9a0;
   --color-yellow-300: #f9c26b;
@@ -85,20 +107,21 @@
   --color-amber-900: #5f310b;
   --color-amber-950: #331905;
 
-  /* Destructive — Minara red (mirrors rose) */
-  --color-red-200: #fcc7c8;
-  --color-red-300: #fb9fa1;
-  --color-red-400: #f97d80;
-  --color-red-500: #f75d5f;
-  --color-red-600: #e04447;
-  --color-red-700: #bd3538;
-  --color-red-950: #411a1b;
+  /* Destructive — red (mirrors rose, step for step) */
+  --color-red-200: #fcc9cd;
+  --color-red-300: #fba1a8;
+  --color-red-400: #f9808a;
+  --color-red-500: #f6465d;
+  --color-red-600: #dd2f47;
+  --color-red-700: #b92639;
+  --color-red-950: #420b12;
 
-  /* Secondary families — Minara's brand/chart hues (sparse use; formerly
-     grayed out by the monochrome remap, now intentionally colored). */
-  --color-blue-100: #e3f1fe;   --color-blue-200: #c3e3fd;   --color-blue-300: #93cdfb;
-  --color-blue-400: #5fb0f9;   --color-blue-500: #399ef7;   --color-blue-600: #2280d8;
-  --color-blue-700: #1d64a8;   --color-blue-900: #1b4468;   --color-blue-950: #122b45;
+  /* Secondary families — chart and identity hues (sparse use; intentionally
+     coloured). blue-* mirrors the info ramp step for step, so a component that
+     asks for blue-500 and one that asks for cyan-500 cannot draw two blues. */
+  --color-blue-100: #e4f0ff;   --color-blue-200: #c6e0ff;   --color-blue-300: #9ccaff;
+  --color-blue-400: #6cb6ff;   --color-blue-500: #4d9fff;   --color-blue-600: #2f86e8;
+  --color-blue-700: #2069c0;   --color-blue-900: #1b487d;   --color-blue-950: #12294a;
   --color-purple-100: #f3e7ff; --color-purple-200: #e7cdff; --color-purple-300: #d3a1ff;
   --color-purple-400: #c26bff; --color-purple-500: #a142ff; --color-purple-600: #862ee0;
   --color-purple-900: #3a1a63; --color-purple-950: #2e0f52;
@@ -118,13 +141,18 @@
   --color-sky-100: #e2f8fd;    --color-sky-300: #9fe9f6;    --color-sky-400: #7fe1f2;    --color-sky-500: #5fd5ec;
   --color-sky-950: #123842;
   --color-fuchsia-300: #f5a6ff; --color-fuchsia-400: #f077ff; --color-fuchsia-500: #eb53ff;
-  --color-green-400: #2fc97f;  --color-green-500: #07b56a;
+  --color-green-400: #23cf8b;  --color-green-500: #0bc67a;
 
-  /* Brand gradient (Minara: magenta → pink → orange). Reserved: wordmark,
-     active-nav indicator, hero display type — never body copy or tables. */
-  --color-brand-start: #8b7cff;
-  --color-brand-mid: #c084fc;
-  --color-brand-end: #f0a6c0;
+  /* Brand gradient — DELETED (owner ruling, 2026-10-27). `--color-brand-start`,
+     `--color-brand-mid` and `--color-brand-end` used to sit here and paint the
+     wordmark, the active-nav marker and the update dot magenta→pink→orange.
+     Nothing in this app is tinted any more, so the tokens went rather than being
+     pointed at white: three aliases that all resolve to `#f4f4f4` would be a
+     second name for ink, and the rule they encoded — "colour is reserved for
+     these three moments" — is the rule the re-style removed. The rule that
+     replaced it is the one in the header of this file: CHROME IS NEUTRAL, COLOUR
+     MEANS DATA. Do not re-add a brand ramp; if a hero moment wants emphasis it
+     earns size or weight, not a hue. */
 
   /* ── Semantic aliases ─────────────────────────────────────────────────────
      The names the design spec actually talks in. Every value here is an alias
@@ -142,28 +170,33 @@
      These are the BASE step of each family. The full ramps (emerald-100…950,
      rose-100…950) stay above and remain the way to ask for a lighter or
      darker shade; these four name the meaning, not a shade list. */
-  --color-surface-page: #0c0f13;    /* = zinc-950, the app's ground */
-  --color-surface-panel: #13171c;   /* = zinc-900, panels and the rail */
-  --color-surface-raised: #1c2128;  /* = zinc-800, raised surfaces */
-  --color-hairline: #303640;         /* = zinc-700 — borders/dividers. The spec
+  --color-surface-page: #0a0a0a;    /* = zinc-950, the app's ground */
+  --color-surface-panel: #141414;   /* = zinc-900, panels and the rail */
+  --color-surface-raised: #1d1d1d;  /* = zinc-800, raised surfaces */
+  --color-hairline: #262626;         /* = zinc-700 — borders/dividers. The spec
                                    names this --stroke-hairline; it lives in
                                    the --color-* namespace here so it also
-                                   yields a `border-hairline` utility. */
-  --color-ink-primary: #f5f7fa;     /* = zinc-50 */
-  --color-ink-secondary: #9aa6b5;   /* = zinc-400 (see note below) */
-  --color-ink-tertiary: #7f8a99;    /* = zinc-600, the AA-tuned faint step */
-  --color-trade-up: #07b56a;         /* = emerald-500 — gains, up, Long, WIN */
-  --color-trade-down: #f75d5f;       /* = rose-500 — losses, down, Short, LOSS */
+                                   yields a `border-hairline` utility. Opaque
+                                   rather than white-at-9% on purpose: a hex is
+                                   what lets `${COLORS.x}15` string-alpha keep
+                                   working in the dashboards. */
+  --color-ink-primary: #f4f4f4;     /* = zinc-100 */
+  --color-ink-secondary: #b6b6b6;   /* = zinc-400 (see note below) */
+  --color-ink-tertiary: #858585;    /* = zinc-600, the AA-tuned faint step */
+  --color-trade-up: #0bc67a;         /* = emerald-500 — gains, up, Long, WIN */
+  --color-trade-down: #f6465d;       /* = rose-500 — losses, down, Short, LOSS */
   --color-warn: #f08800;             /* = amber-500 — warnings, watch */
-  --color-info: #399ef7;             /* = cyan-500 — info / in-progress */
+  --color-info: #4d9fff;             /* = cyan-500 — info / in-progress */
 
   /* Note on --color-ink-secondary: the design spec's C1 table names #a1a19b,
      which is not a step of this ramp — writing it here would have introduced
-     a color the app has never rendered. zinc-400 (#a3a39d) is the existing
-     step that role occupies, so that is what the alias points at. */
+     a color the app has never rendered. zinc-400 is the step that role
+     occupies, so that is what the alias points at (it is #b6b6b6 as of the
+     2026-10-27 neutral re-style; before it, #9aa6b5). */
 
-  /* Type + motion + radii — Minara's chat-v2 numbers: 14px sans over a
-     system stack (Geist), 12px bubbles / 8px controls / .12s snaps.
+  /* Type + motion + radii — 14px base sans over the self-hosted stack (Geist),
+     20px bubbles / 10px controls after the 2026-10-27 re-style (they were
+     Minara's chat-v2 12px / 8px), .12s snaps.
 
      `--font-serif` and `--font-reading` are ROLES, not faces: the owner ruled
      (2026-10-22) that no serif ships anywhere in this app, so both resolve to
@@ -259,8 +292,8 @@
   --text-ui-2xs: calc(var(--ui-font-size) - 5px);
   --text-ui-2xs--line-height: 1.5;
 
-  --radius-bubble: 12px;
-  --radius-control: 8px;
+  --radius-bubble: 20px;
+  --radius-control: 10px;
   --ease-snappy: cubic-bezier(0.2, 0, 0, 1);
   /* The curve a bare `transition-*` utility falls back to. Tailwind ships
      cubic-bezier(.4,0,.2,1) here, so every class that names a property but not
@@ -383,7 +416,7 @@
   align-items: center;
   justify-content: center;
   gap: 18px;
-  background: #0c0f13;
+  background: var(--color-zinc-950);
   transition: opacity 0.22s var(--ease-snappy), transform 0.22s var(--ease-snappy);
 }
 
@@ -403,8 +436,8 @@
   max-height: 100vw;
   transform: translate(-50%, -50%);
   background:
-    radial-gradient(closest-side, rgba(235, 83, 255, 0.06), transparent 70%),
-    radial-gradient(closest-side at 62% 55%, rgba(255, 154, 50, 0.05), transparent 70%);
+    radial-gradient(closest-side, rgba(255, 255, 255, 0.05), transparent 70%),
+    radial-gradient(closest-side at 62% 55%, rgba(255, 255, 255, 0.03), transparent 70%);
   pointer-events: none;
 }
 
@@ -414,13 +447,16 @@
      back even with the @theme tokens pointed at sans. */
   font-size: 1.75rem;
   letter-spacing: -0.025em;
+  /* Neutral shimmer: the sweep is a graphite pass over ink, not a hue. The
+     wordmark was the one place the brand gradient survived, and the 2026-10-27
+     ruling retired it there too. */
   background: linear-gradient(
     110deg,
-    #edede8 38%,
-    #eb53ff 46%,
-    #ff538e 50%,
-    #ff9a32 54%,
-    #edede8 62%
+    var(--color-zinc-100) 38%,
+    var(--color-zinc-500) 46%,
+    var(--color-zinc-400) 50%,
+    var(--color-zinc-500) 54%,
+    var(--color-zinc-100) 62%
   );
   background-size: 240% 100%;
   -webkit-background-clip: text;
@@ -445,7 +481,7 @@
   position: relative;
   width: 7px;
   border-radius: 1.5px;
-  background: #3f3f3a;
+  background: var(--color-zinc-700);
   transform-origin: center;
   animation: splash-candle 1.5s var(--ease-snappy) infinite;
 }
@@ -464,9 +500,9 @@
 }
 
 .splash-candles i:nth-child(1) { height: 10px; animation-delay: 0s; }
-.splash-candles i:nth-child(2) { height: 16px; animation-delay: 0.12s; background: #07b56a; }
+.splash-candles i:nth-child(2) { height: 16px; animation-delay: 0.12s; background: var(--color-trade-up); }
 .splash-candles i:nth-child(3) { height: 12px; animation-delay: 0.24s; }
-.splash-candles i:nth-child(4) { height: 22px; animation-delay: 0.36s; background: #f75d5f; }
+.splash-candles i:nth-child(4) { height: 22px; animation-delay: 0.36s; background: var(--color-trade-down); }
 .splash-candles i:nth-child(5) { height: 15px; animation-delay: 0.48s; }
 .splash-candles i:nth-child(6) { height: 18px; animation-delay: 0.6s; }
 .splash-candles i:nth-child(7) { height: 9px; animation-delay: 0.72s; }
@@ -482,7 +518,7 @@
   height: 2px;
   border-radius: 1px;
   overflow: hidden;
-  background: #303640;
+  background: var(--color-zinc-700);
 }
 
 .splash-bar {
@@ -492,7 +528,7 @@
   width: 42%;
   height: 100%;
   border-radius: 1px;
-  background: #edede8;
+  background: var(--color-zinc-100);
   animation: splash-slide 1.4s var(--ease-snappy) infinite;
 }
 
@@ -509,7 +545,7 @@
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   letter-spacing: 0.02em;
-  color: #8a8a82;
+  color: var(--color-zinc-600);
   text-align: center;
 }
 
@@ -552,7 +588,7 @@
   height: 3px;
   border-radius: 2px;
   overflow: hidden;
-  background: #303640;
+  background: var(--color-zinc-700);
 }
 
 .update-bar {
@@ -561,7 +597,7 @@
   left: 0;
   height: 100%;
   border-radius: 2px;
-  background: linear-gradient(90deg, #edede8, #a1a1aa);
+  background: linear-gradient(90deg, var(--color-zinc-100), var(--color-zinc-400));
   transition: width 0.35s var(--ease-snappy);
 }
 
@@ -582,7 +618,7 @@
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   letter-spacing: 0.02em;
-  color: #8a8a82;
+  color: var(--color-zinc-600);
   text-align: center;
 }
 
@@ -803,9 +839,12 @@ body {
   margin-bottom: 0.35rem;
 }
 .reasoning-row-body li { margin-block-start: 0.15em; margin-block-end: 0.15em; }
-/* The Analyzed wrapper nests the whole work timeline — give it more room
-   than a single thought trace. */
-.analyzed-row .reasoning-row-body { max-height: 22rem; }
+/* The Analyzed wrapper nests the whole work timeline. It does NOT get its own
+   scroll box: the step list is long by nature and now stays on screen, so a
+   capped body produced a scrollbar inside a scrollable transcript — two nested
+   pans for one list. Each STEP keeps its own 16rem trace scroll above; the
+   group just grows. */
+.analyzed-row .reasoning-row-body { max-height: none; overflow: visible; }
 
 /* ── THE WORK CARD ──────────────────────────────────────────────────────────
    The reference draws the work as a BARE LINE with the card BELOW it: the
@@ -1190,11 +1229,25 @@ body.motion-reduced {
   margin-right: auto;
 }
 
+/* The PROSE measure inside that column — the model's answer only.
+   920px was chosen for the thing this column also carries: order-book dumps,
+   key-level tables and the verdict card need the width, and they got it. But
+   the same 920px is what makes a written analysis run ~100 characters per line
+   at 15px, which is past the point where a reader's eye tracks back. Both
+   references settle near 66–72 characters; 42rem at the 16px base is 672px and
+   lands there. In rem rather than px on purpose, so the accessibility dial
+   moves the measure with the type instead of holding the line length fixed.
+   Data keeps the wide column: this caps the answer, never the evidence. */
+.chat-prose {
+  max-width: 42rem;
+}
+
 /* Quiet identity and depth for the conversation's empty state. The gradients
-   are static, low-chroma and brand-owned; they never sit behind market data. */
+   are static and low-chroma; since the brand gradient was retired the bloom is
+   ink rather than hue, and none of it sits behind market data. */
 .chat-hero-grid {
   background:
-    radial-gradient(42rem 24rem at 50% 38%, color-mix(in srgb, var(--color-brand-start) 7%, transparent), transparent 68%),
+    radial-gradient(42rem 24rem at 50% 38%, color-mix(in srgb, var(--color-ink-secondary) 7%, transparent), transparent 68%),
     linear-gradient(color-mix(in srgb, var(--color-zinc-700) 16%, transparent) 1px, transparent 1px),
     linear-gradient(90deg, color-mix(in srgb, var(--color-zinc-700) 16%, transparent) 1px, transparent 1px);
   background-size: auto, 48px 48px, 48px 48px;
@@ -1202,10 +1255,10 @@ body.motion-reduced {
 }
 
 .august-wordmark {
-  background: linear-gradient(105deg, var(--color-zinc-100) 12%, var(--color-brand-start) 58%, var(--color-brand-mid) 82%, var(--color-brand-end));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  /* Solid ink since the 2026-10-27 ruling retired the brand gradient — the
+     clip-to-text machinery went with it, because there is no sweep left to
+     clip. The wordmark is now the same colour as the UI's brightest ink. */
+  color: var(--color-ink-primary);
 }
 
 /* ===== SAFE AREA INSETS (notched / punch-hole devices) =====
@@ -1235,13 +1288,13 @@ code,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #303640;
+  background: var(--color-zinc-700);
   /* zinc-700 */
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #56564f;
+  background: #3a3a3a;
   /* warm ink, deliberately dimmer than the AA-minimum --color-zinc-600 */
 }
 
@@ -1334,7 +1387,7 @@ code,
   background:
     radial-gradient(140% 140% at 15% 0%, color-mix(in srgb, var(--member-tint) 15%, transparent) 0%, transparent 55%),
     radial-gradient(130% 130% at 95% 115%, color-mix(in srgb, var(--member-tint) 10%, transparent) 0%, transparent 50%),
-    #18181b;
+    var(--color-zinc-900);
 }
 
 .animate-slide-in-right {
@@ -1488,21 +1541,21 @@ code,
 /* Solid charcoal surfaces — glassmorphism (translucency + blur) is
    intentionally removed; cards render on opaque zinc fills. */
 .glass {
-  background: #13171c; /* zinc-900 */
+  background: var(--color-zinc-900); /* zinc-900 */
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* Reduce blur on mobile to save GPU */
 @media (max-width: 640px) {
   .glass {
-    background: #13171c;
+    background: var(--color-zinc-900);
     /* zinc-900 fallback */
-    border-bottom: 1px solid #1c2128;
+    border-bottom: 1px solid var(--color-zinc-800);
   }
 
   .glass-panel {
-    background: #13171c !important;
-    border: 1px solid #1c2128 !important;
+    background: var(--color-zinc-900) !important;
+    border: 1px solid var(--color-zinc-800) !important;
   }
 
   /* Disable heavy box-shadows on mobile */
@@ -1510,12 +1563,12 @@ code,
   .shadow-xl,
   .shadow-lg {
     box-shadow: none !important;
-    border: 1px solid #1c2128;
+    border: 1px solid var(--color-zinc-800);
   }
 }
 
 .glass-panel {
-  background: #1c2128; /* zinc-800 */
+  background: var(--color-zinc-800); /* zinc-800 */
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -1527,7 +1580,7 @@ body,
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background-color: #0c0f13;
+  background-color: var(--color-zinc-950);
   /* zinc-950 matches app theme to prevent white flashes */
 }
 
@@ -1689,7 +1742,7 @@ select[class*="focus-visible:ring"]:focus-visible,
 /* Custom thin scrollbar for content areas */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #303640 transparent;
+  scrollbar-color: var(--color-zinc-700) transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -1702,7 +1755,7 @@ select[class*="focus-visible:ring"]:focus-visible,
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #303640;
+  background: var(--color-zinc-700);
   border-radius: 4px;
 }
 

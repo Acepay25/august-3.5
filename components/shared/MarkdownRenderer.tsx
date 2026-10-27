@@ -69,7 +69,7 @@ const prepareMath = (source: string): string => {
  *  KaTeX's default is to THROW, and a throw inside `messages.map()` takes the
  *  whole bubble (or every later row) down with it. AI text is untrusted input
  *  for KaTeX too. */
-const KATEX_OPTIONS = { throwOnError: false, errorColor: '#f75d5f' };
+const KATEX_OPTIONS = { throwOnError: false, errorColor: '#f6465d' };
 
 interface MarkdownRendererProps {
   /** Markdown text to render. */

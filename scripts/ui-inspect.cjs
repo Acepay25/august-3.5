@@ -354,8 +354,8 @@ async function main() {
         note('body background', t.bodyBackground);
         note('color-scheme', t.colorScheme);
         check('the shell is still dark (near-black page, not light)', t.colorScheme !== 'light', t.colorScheme);
-        check('page ground is the warm near-black #0b0b0a',
-            t.bodyBackground === 'rgb(11, 11, 10)', t.bodyBackground);
+        check('page ground is the hue-free near-black #0a0a0a',
+            t.bodyBackground === 'rgb(10, 10, 10)', t.bodyBackground);
 
         check('no pageerror across the whole tour', pageErrors.length === 0,
             pageErrors.slice(0, 2).join(' | ').slice(0, 180));

@@ -1,10 +1,12 @@
 /**
  * Report export utilities — turn the trade log into a CSV download or a
- * print-ready HTML report (open → Ctrl/Cmd+P → save as PDF).
+ * print-ready HTML report (open → Ctrl/Cmd+P → save as PDF), and turn a
+ * profile's conversations into a CSV or Markdown transcript.
  */
 
 import { LoggedTrade } from '../types';
 import { TradeOutcome } from '../types';
+import { Conversation, Message } from '../types';
 import { phtDayKey } from './timezone';
 
 const dateStamp = (): string => phtDayKey();
@@ -252,4 +254,247 @@ export const trainingRecordFor = (t: LoggedTrade): Record<string, unknown> => {
 export const exportTrainingDataJSONL = (trades: LoggedTrade[]): void => {
     const body = trades.map(t => JSON.stringify(trainingRecordFor(t))).join('\n');
     downloadBlob(`${body}${body ? '\n' : ''}`, `august-training-data-${dateStamp()}.jsonl`, 'application/x-ndjson');
+};
+
+/* ════════════════════════════ MESSAGE TRANSCRIPTS ═══════════════════════════
+   The conversation is the other record this app keeps, and until now it only
+   ever left the machine as a whole-profile JSON backup — a format nothing else
+   reads. These two exporters cover the same data in the two shapes a trader
+   actually asks for: Markdown to read, CSV to sort.
+
+   ONE flattener, two writers. That is the whole design: a CSV and a Markdown
+   file of the same chat that disagree about whether the reasoning was included
+   would be two records of one conversation, which is the drift this repo keeps
+   hitting everywhere else. `messageRecord` decides what a message IS; both
+   formats render from it and neither gets to add or drop a field on its own. */
+
+/** One message, flattened to the fields BOTH transcript formats carry. */
+interface MessageRecord {
+    chat: string;
+    chatId: string;
+    at: string;
+    role: string;
+    speaker: string;
+    model: string;
+    effort: string;
+    text: string;
+    reasoning: string;
+    tools: string;
+    toolPayloads: string;
+    actions: string;
+    entry: string;
+    stop: string;
+    targets: string;
+    probability: string;
+    promptTokens: string;
+    completionTokens: string;
+    costUsd: string;
+    skills: string;
+    images: number;
+    planId: string;
+    error: string;
+    wireAudit: string;
+}
+
+const stampOf = (iso: string | undefined, fallback: number): string => {
+    const t = iso ? Date.parse(iso) : NaN;
+    return Number.isFinite(t) ? new Date(t).toISOString().replace('T', ' ').slice(0, 16) : new Date(fallback).toISOString();
+};
+
+/** A number that exports as text, and an absent one exports as nothing — a `0`
+ *  cost and a not-recorded cost are different facts and must not print alike. */
+const num = (v: number | undefined): string => (typeof v === 'number' ? String(v) : '');
+
+/** The single definition of "what a message contains".
+ *
+ *  There is deliberately no "interrupted" column: `interrupted` is a DOCK ENTRY
+ *  field, not a `Message` one, and the two homes of one conversation do not
+ *  carry the same set of flags. Inventing one here would export a column that is
+ *  empty for every row and reads as "no turn was ever stopped". */
+const messageRecord = (m: Message, chatTitle: string, chatId: string, at: number): MessageRecord => {
+    const a = m.analysis;
+    return {
+        chat: chatTitle,
+        chatId,
+        at: stampOf(m.createdAt, at),
+        role: String(m.role ?? ''),
+        // A bot's row names the bot; a desk row is the desk. Nothing is invented
+        // here — an unattributed row exports empty rather than guessing a seat.
+        speaker: m.botId ?? m.dmEnvelope?.fromName ?? '',
+        model: Object.values(m.modelsUsed ?? {}).filter(Boolean).join(' / '),
+        effort: m.runStats?.effort ?? '',
+        text: m.text ?? '',
+        // providerId → trace. Joined with a blank line and prefixed per provider,
+        // because a multi-model run holds one trace each and losing which seat
+        // thought what would make the export unreadable rather than incomplete.
+        reasoning: Object.entries(m.thoughtProcesses ?? {})
+            .filter(([, t]) => !!t && t.trim())
+            .map(([p, t]) => (Object.keys(m.thoughtProcesses ?? {}).length > 1 ? `[${p}]\n${t}` : t))
+            .join('\n\n'),
+        tools: (m.toolEvents ?? []).join('\n'),
+        toolPayloads: (m.toolIds ?? []).filter(Boolean).join(' / '),
+        actions: (m.toolActions ?? []).map(x => `${x.tool}${x.ok ? '' : ' (FAILED)'}`).join('\n'),
+        entry: a?.entryPoints?.[0]?.price ?? '',
+        stop: a?.stopLoss ?? '',
+        targets: (a?.takeProfit ?? []).map(tp => tp.price).filter(Boolean).join(' / '),
+        probability: typeof a?.probability === 'number' ? `${a.probability}%` : '',
+        promptTokens: num(m.runStats?.promptTokens),
+        completionTokens: num(m.runStats?.completionTokens),
+        costUsd: num(m.runStats?.costUsd),
+        skills: (m.injectedSkills ?? []).join(', '),
+        images: m.images?.length ?? 0,
+        planId: m.planId ?? '',
+        error: m.error ?? '',
+        // Verbatim rather than parsed: the transport decides its own shape, and a
+        // reader that guesses at the fields silently drops them.
+        wireAudit: m.wireAudit?.length ? JSON.stringify(m.wireAudit) : '',
+    };
+}
+
+/** Every message of every conversation, oldest chat first — then the dock
+ *  sessions that have no canonical thread and would otherwise never be exported.
+ *  The caller passes ONLY those (a dock session that does have a `conversationId`
+ *  is the same conversation, and listing it twice would double-count the file). */
+const flattenChats = (conversations: Conversation[], dock: DockChatInput[] = []): MessageRecord[] => {
+    const ordered = [...(conversations ?? [])].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+    const out: MessageRecord[] = [];
+    for (const c of ordered) {
+        const title = c.title?.trim() || 'Untitled chat';
+        for (const m of c.messages ?? []) out.push(messageRecord(m, title, c.id, c.timestamp ?? Date.now()));
+    }
+    for (const c of [...(dock ?? [])].sort((a, b) => a.at - b.at)) {
+        for (const e of c.entries ?? []) out.push(dockRecord(e, c));
+    }
+    return out;
+};
+
+export interface TranscriptExportSummary { chats: number; messages: number }
+
+/** A chat that lives ONLY in the Chart AI dock.
+ *
+ *  One conversation has two homes, and `entriesForSession` merges them — but a
+ *  dock session with no `conversationId` has NO counterpart: it is a chart-side
+ *  session of its own, with its own tool rounds and key levels. Exporting only
+ *  the profile's conversations would therefore drop real messages while the
+ *  button said "every stored message", so the caller passes these too.
+ *
+ *  A structural input rather than an import of `chatSessions`, on purpose: this
+ *  module is a util and must not start depending on a service to render a file. */
+export interface DockEntryInput {
+    at?: number;
+    role: string;
+    speaker?: string;
+    text: string;
+    reasoning?: string;
+    tools?: string[];
+    toolIds?: string[];
+    error?: string;
+    image?: string;
+    notice?: boolean;
+    effort?: string;
+    workedMs?: number;
+    actions?: Array<{ tool: string; ok: boolean }>;
+}
+
+export interface DockChatInput {
+    id: string;
+    title: string;
+    at: number;
+    model?: string;
+    entries: DockEntryInput[];
+}
+
+const dockRecord = (e: DockEntryInput, c: DockChatInput): MessageRecord => ({
+    chat: c.title?.trim() || 'Untitled chat',
+    chatId: c.id,
+    at: c.at ? new Date(c.at).toISOString().replace('T', ' ').slice(0, 16) : '',
+    role: e.notice ? 'notice' : e.role,
+    speaker: e.speaker ?? '',
+    // The session's model, not a per-message one: a dock entry does not record
+    // which model answered it, and inventing a column that is really the chat's
+    // setting would read as per-turn provenance.
+    model: c.model ?? '',
+    effort: e.effort ?? '',
+    text: e.text ?? '',
+    reasoning: e.reasoning ?? '',
+    tools: (e.tools ?? []).join('\n'),
+    toolPayloads: (e.toolIds ?? []).filter(Boolean).join(' / '),
+    actions: (e.actions ?? []).map(x => `${x.tool}${x.ok ? '' : ' (FAILED)'}`).join('\n'),
+    entry: '', stop: '', targets: '', probability: '',
+    promptTokens: '', completionTokens: '',
+    costUsd: '',
+    skills: '',
+    images: e.image ? 1 : 0,
+    planId: '',
+    error: e.error ?? '',
+    wireAudit: '',
+});
+
+const TRANSCRIPT_COLUMNS: Array<keyof MessageRecord> = [
+    'chat', 'chatId', 'at', 'role', 'speaker', 'model', 'effort', 'text', 'reasoning',
+    'tools', 'toolPayloads', 'actions', 'entry', 'stop', 'targets', 'probability',
+    'promptTokens', 'completionTokens', 'costUsd', 'skills', 'images', 'planId',
+    'error', 'wireAudit',
+];
+
+/**
+ * Export every stored message as CSV — one row per message, one column per
+ * stored field, so a spreadsheet can filter by model, tier or chat the way the
+ * journal export lets you filter by outcome.
+ */
+export const exportMessagesCSV = (conversations: Conversation[], dock: DockChatInput[] = []): TranscriptExportSummary => {
+    const rows = flattenChats(conversations, dock);
+    const header = TRANSCRIPT_COLUMNS.map(c => c.replace(/^([a-z])/, (_s, ch) => ch.toUpperCase()));
+    const csv = [header, ...rows.map(r => TRANSCRIPT_COLUMNS.map(c => r[c]))]
+        .map(line => line.map(csvCell).join(','))
+        .join('\r\n');
+    downloadBlob(csv, `august-messages-${dateStamp()}.csv`, 'text/csv;charset=utf-8;');
+    return { chats: new Set(rows.map(r => r.chatId)).size, messages: rows.length };
+};
+
+/** A Markdown block quote, so a trace containing `#`, `-` or ``` cannot rewrite
+ *  the document it is exported into. */
+const quoted = (text: string): string =>
+    text.split('\n').map(l => `> ${l}`).join('\n');
+
+/**
+ * Export every stored message as a Markdown transcript — readable in any editor,
+ * diffable, and the format the reasoning actually survives in (a CSV cell of
+ * 4,000 characters of thinking is technically present and practically dead).
+ */
+export const exportMessagesMarkdown = (conversations: Conversation[], dock: DockChatInput[] = []): TranscriptExportSummary => {
+    const rows = flattenChats(conversations, dock);
+    const byChat = new Map<string, MessageRecord[]>();
+    for (const r of rows) {
+        const list = byChat.get(r.chatId) ?? [];
+        list.push(r);
+        byChat.set(r.chatId, list);
+    }
+    const parts: string[] = [`# August — conversation export`, ``, `_${rows.length} messages across ${byChat.size} chats · exported ${new Date().toISOString()}_`, ``];
+    for (const [chatId, list] of byChat) {
+        parts.push(`## ${list[0].chat}`, ``, `_${list[0].at} · \`${chatId}\`_`, ``);
+        for (const r of list) {
+            const who = r.role === 'user' ? 'You' : (r.speaker || 'desk');
+            const meta = [r.model, r.effort && `tier ${r.effort}`, r.error && 'FAILED']
+                .filter(Boolean).join(' · ');
+            parts.push(`### ${who}${meta ? ` — ${meta}` : ''}`, ``);
+            if (r.text) parts.push(r.text, ``);
+            if (r.images) parts.push(`_${r.images} image(s) attached — not included in this export; they live in the profile backup._`, ``);
+            if (r.entry || r.stop || r.targets || r.probability) {
+                parts.push(`**Plan** — entry ${r.entry || '—'} · stop ${r.stop || '—'} · targets ${r.targets || '—'} · probability ${r.probability || '—'}`, ``);
+            }
+            if (r.actions) parts.push(`**Side effects**`, ...r.actions.split('\n').map(l => `- ${l}`), ``);
+            if (r.tools) {
+                parts.push(`**Tool trail** (${r.tools.split('\n').length} lines)`, ...r.tools.split('\n').map(l => `- ${l}`), ``);
+            }
+            if (r.reasoning) parts.push(`<details><summary>Reasoning (${r.reasoning.length} chars)</summary>`, ``, quoted(r.reasoning), ``, `</details>`, ``);
+            if (r.wireAudit) parts.push(`<details><summary>Wire audit</summary>`, ``, quoted(r.wireAudit), ``, `</details>`, ``);
+            if (r.skills) parts.push(`_Skills shown to the model: ${r.skills}_`, ``);
+            if (r.promptTokens || r.costUsd) {
+                parts.push(`_${[r.promptTokens && `prompt ${r.promptTokens}`, r.completionTokens && `completion ${r.completionTokens}`, r.costUsd && `cost $${r.costUsd}`].filter(Boolean).join(' · ')}_`, ``);
+            }
+        }
+    }
+    downloadBlob(parts.join('\n'), `august-messages-${dateStamp()}.md`, 'text/markdown;charset=utf-8;');
+    return { chats: byChat.size, messages: rows.length };
 };

@@ -160,7 +160,7 @@ const UpdateOverlay: React.FC = () => {
                 <div
                     aria-hidden="true"
                     className="pointer-events-none absolute -top-24 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full"
-                    style={{ background: 'radial-gradient(closest-side, rgba(235, 83, 255, 0.07), transparent 70%)' }}
+                    style={{ background: 'radial-gradient(closest-side, rgba(255, 255, 255, 0.06), transparent 70%)' }}
                 />
                 {/* key=phase re-mounts the content, so the fade-in plays on every transition */}
                 <div key={status} className="update-phase animate-fade-in">

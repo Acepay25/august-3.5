@@ -7,7 +7,7 @@ import { formatChars } from '../../utils/runUsage';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { SelectMenu } from '../shared/SelectMenu';
 
-const SLICE_COLORS = ['#42a1ff', '#b7b7b1', '#399ef7', '#6e6e68', '#d6d6d0', '#1d64a8', '#8c8c86'];
+const SLICE_COLORS = ['#42a1ff', '#c9c9c9', '#4d9fff', '#858585', '#e6e6e6', '#2069c0', '#9a9a9a'];
 
 const startOfToday = (): number => {
     const d = new Date();
@@ -82,7 +82,7 @@ const SessionUsagePanel: React.FC = () => {
                                 acc.offset += sweep;
                                 return acc;
                             }, { offset: 0, nodes: [] }).nodes}
-                            <circle cx="40" cy="40" r="18" fill="#141412" />
+                            <circle cx="40" cy="40" r="18" fill="#141414" />
                         </svg>
                         <div className="min-w-0 flex-1">
                             <p className="text-ui-base text-zinc-100">{today.tokensExact ? '' : '~'}{formatChars(todayTokens)} tok today</p>

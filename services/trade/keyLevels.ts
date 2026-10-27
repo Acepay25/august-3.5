@@ -53,8 +53,8 @@ export interface MessageLevelLines {
 /** Theme colors (index.css semantics): rose = overhead, emerald = floor,
  *  violet = VWAP, amber = unlabeled structure. */
 export const KEY_LEVEL_COLORS: Record<KeyLevelKind, string> = {
-    resistance: '#f75d5f',
-    support: '#07b56a',
+    resistance: '#f6465d',
+    support: '#0bc67a',
     vwap: '#c084fc',
     level: '#f08800',
 };

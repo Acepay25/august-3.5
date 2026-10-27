@@ -579,7 +579,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                         >
                                             {file.content.trim() ? topicSummaryOf(file.content) : 'Empty file'}
                                         </span>
-                                        <span className="w-28 shrink-0 text-right text-ui-dense text-zinc-500">
+                                        <span className="w-28 shrink-0 text-right text-ui-dense text-zinc-500 tabular-nums">
                                             {memoryUpdatedLabel(file.updatedAt)}
                                         </span>
                                         <ChevronRightIcon className="w-4 h-4 text-zinc-700 shrink-0" aria-hidden="true" />
@@ -620,7 +620,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                             >
                                 Memory model review — tap to open
                             </span>
-                            <span className="w-28 shrink-0 text-right text-ui-dense text-zinc-500">
+                            <span className="w-28 shrink-0 text-right text-ui-dense text-zinc-500 tabular-nums">
                                 {suggestionsFile ? memoryUpdatedLabel(suggestionsFile.updatedAt) : '—'}
                             </span>
                             <ChevronRightIcon className="w-4 h-4 text-zinc-700 shrink-0" aria-hidden="true" />
@@ -671,7 +671,7 @@ const MemoryFilesManager: React.FC<MemoryFilesManagerProps> = ({
                                         <span className="min-w-0 flex-1 truncate text-ui-dense text-zinc-500" title={`${count} ${count === 1 ? 'file' : 'files'}`}>
                                             {count} {count === 1 ? 'file' : 'files'}
                                         </span>
-                                        <span className="w-28 shrink-0 text-right text-ui-dense text-zinc-500">
+                                        <span className="w-28 shrink-0 text-right text-ui-dense text-zinc-500 tabular-nums">
                                             {latestFileUpdatedAt(folder.id) === null
                                                 ? '—'
                                                 : memoryUpdatedLabel(latestFileUpdatedAt(folder.id))}

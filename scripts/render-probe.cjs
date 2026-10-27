@@ -2516,22 +2516,29 @@ async function main() {
                 check('the Chat surface carries an instrument picker', false, `${landedChat}/${onChat}`);
             } else {
                 const opened = await page.evaluate(() => {
-                    // The picker belongs to the COMPOSER now — the header is a
-                    // title and the switch, the reference's shape. Asserting both
-                    // halves means quietly moving it back would not pass.
+                    // 2026-10-27: the picker left the CARD and took its own row
+                    // beneath it, inside the composer's area. Three claims, so the
+                    // arrangement cannot quietly drift back through any of the
+                    // three doors: it must be in the area, it must NOT be inside
+                    // the card (that was the old shape), and it must NOT be in the
+                    // header (the shape before that).
+                    const area = document.querySelector('[data-testid="chat-composer-area"]');
                     const card = document.querySelector('[data-testid="chat-composer"]');
                     const header = document.querySelector('[data-testid="chat-header"]');
-                    if (!card || !header) return 'no composer or header';
+                    if (!area || !card || !header) return 'no composer area, card or header';
                     if (header.querySelector('[data-testid="symbol-picker-trigger"]')) {
                         return 'picker is back in the header';
                     }
-                    const trig = card.querySelector('[data-testid="symbol-picker-trigger"]');
-                    if (!trig) return 'no trigger';
+                    if (card.querySelector('[data-testid="symbol-picker-trigger"]')) {
+                        return 'picker is still inside the composer card';
+                    }
+                    const trig = area.querySelector('[data-testid="symbol-picker-trigger"]');
+                    if (!trig) return 'no trigger in the composer area';
                     trig.click();
                     return 'opened';
                 });
                 if (opened !== 'opened') {
-                    check('the Chat surface carries an instrument picker', false, opened);
+                    check('the Chat surface carries an instrument picker outside the composer card', false, opened);
                 } else {
                     await sleep(400);
                     picked = await page.evaluate(() => {
@@ -2542,7 +2549,8 @@ async function main() {
                         other.click();
                         return id.replace('symbol-row-', '') || null;
                     });
-                    check('the Chat surface carries an instrument picker', picked !== null, `picked ${picked}`);
+                    check('the Chat surface carries an instrument picker outside the composer card',
+                        picked !== null, `picked ${picked}`);
                 }
                 // The popover portals to <body> and covers the nav trigger.
                 await page.keyboard.press('Escape');

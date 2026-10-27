@@ -1,5 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { getBackups, createBackup, deleteBackup, exportBackupToFile, importBackupFromText, restoreBackup, BackupMetadata } from '../../services/infrastructure/BackupService';
+import { getUserProfile } from '../../services/infrastructure/dbService';
+import { loadSessions } from '../../services/trade/chatSessions';
+import { exportMessagesCSV, exportMessagesMarkdown } from '../../utils/reportExport';
 import { ExportIcon, TrashIcon, RefreshIcon, LoadingIcon, PlusIcon } from '../shared/Icons';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 
@@ -166,6 +169,58 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
     }
   };
 
+  /** Which transcript export is running, so both buttons disable together —
+   *  two downloads racing each other produce two files and no idea which won. */
+  const [exportingAs, setExportingAs] = useState<'md' | 'csv' | null>(null);
+
+  /**
+   * Export the conversation record. This reads the profile from STORAGE rather
+   * than the conversations in memory: a trader asking "give me all my messages"
+   * means every chat they ever had, including the ones this session never
+   * opened. An empty profile says so out loud instead of downloading a file with
+   * only a header in it, which is the shape a silent no-op takes in a browser.
+   */
+  const handleExportMessages = useCallback(async (format: 'md' | 'csv') => {
+    setExportingAs(format);
+    setStatus(null);
+    try {
+      const profile = await getUserProfile(username);
+      const conversations = profile?.conversations ?? [];
+      // One conversation, two homes. A dock session that HAS a `conversationId`
+      // is the same thread the profile already holds, so writing both would put
+      // every shared message in the file twice. Only the chart-side sessions that
+      // never got a counterpart are extra history — and without them the button
+      // would lie about "every stored message".
+      const dockOnly = loadSessions()
+        .filter(s => !s.conversationId && (s.entries?.length ?? 0) > 0)
+        .map(s => ({
+          id: s.id,
+          title: s.title,
+          at: s.createdAt,
+          model: s.soloModel,
+          entries: s.entries ?? [],
+        }));
+      const total = conversations.reduce((n, c) => n + (c.messages?.length ?? 0), 0)
+        + dockOnly.reduce((n, s) => n + s.entries.length, 0);
+      if (!total) {
+        setStatus({ kind: 'warn', text: 'No stored messages to export for this profile.' });
+        return;
+      }
+      const made = format === 'md'
+        ? exportMessagesMarkdown(conversations, dockOnly)
+        : exportMessagesCSV(conversations, dockOnly);
+      setStatus({
+        kind: 'success',
+        text: `Exported ${made.messages} message${made.messages === 1 ? '' : 's'} across ${made.chats} chat${made.chats === 1 ? '' : 's'} as ${format === 'md' ? 'Markdown' : 'CSV'}.`,
+      });
+    } catch (err) {
+      console.error('[BackupManager] Message export failed:', err);
+      setStatus({ kind: 'error', text: 'Export failed — nothing was written.' });
+    } finally {
+      setExportingAs(null);
+    }
+  }, [username]);
+
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -209,6 +264,36 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ username, onProfil
           >
             {isCreating ? <LoadingIcon className="w-4 h-4" aria-hidden="true" /> : <PlusIcon className="w-4 h-4" aria-hidden="true" />}
             {isCreating ? 'Backing up…' : 'Back up now'}
+          </button>
+        </div>
+      </div>
+
+      {/* The conversation is the other record this app keeps, and until now the
+          only way it left the machine was a whole-profile JSON backup — a format
+          nothing else reads. Markdown to re-read a thread, CSV to sort one. */}
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h4 className="text-ui-base font-bold text-white">Export conversations</h4>
+          <p className="text-ui-sm text-zinc-500 mt-0.5">
+            Every stored message, with its reasoning, tool trail, plan and cost.
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            onClick={() => void handleExportMessages('md')}
+            disabled={!!exportingAs}
+            data-testid="export-messages-md"
+            className="px-3 py-2 rounded-control border border-white/10 text-zinc-200 hover:bg-zinc-800 text-ui-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exportingAs === 'md' ? 'Writing…' : 'Markdown'}
+          </button>
+          <button
+            onClick={() => void handleExportMessages('csv')}
+            disabled={!!exportingAs}
+            data-testid="export-messages-csv"
+            className="px-3 py-2 rounded-control border border-white/10 text-zinc-200 hover:bg-zinc-800 text-ui-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exportingAs === 'csv' ? 'Writing…' : 'CSV'}
           </button>
         </div>
       </div>

@@ -307,6 +307,27 @@ is how the numbers drift apart:
   caller's handling changes, and clears on the next success. Never add a
   swallow-and-continue around a notebook write; surface it, like `memoryHealth`
   does.
+- `utils/messageVersions.ts` — the ONE arithmetic of reverting and versioning a
+  transcript. A conversation has two homes (the dock's `StoredChatEntry` and the
+  pipeline's `Message`) that do not share field names, so no function can read
+  both — but they MUST agree on which generation is live, how a step moves, and
+  where a parked tail goes. This module owns the counting and the list surgery
+  and knows nothing about either row's shape; each host adapts its own fields to
+  `TurnSnapshot`. `splitAt` RETURNS the tail it cuts — a caller that ignores the
+  second half of that pair is deleting the trader's turns, which is the defect
+  the module exists to make awkward. A revert changes the transcript and NOTHING
+  else: memory, skills, logged trades and price watches a parked turn produced
+  stay exactly as they were (owner ruling, 2026-10-27), and there is no undo for
+  those writes — say how many side effects a parked tail made rather than
+  pretending to reverse them.
+- **A conversation keeps every turn** (owner ruling, 2026-10-27: "store
+  everything, no cap"). The 200-message-per-conversation trim, the dock's
+  60-entries-per-chat cap and the **4000-character cut on stored reasoning** are
+  all gone — that last one silently truncated the thing the trader opens a row to
+  read. What remains by design: `MAX_SESSIONS` (a bound on how many chats, not on
+  what a turn stores) and `MAX_STORED_CHARS`, because this store IS
+  `localStorage` on web against a shared ~5 MB quota, and a throwing write there
+  loses more than a trim does. Do not re-add a content cap to "fix" save latency.
 - `ExportService.RAW_LOCAL_STORAGE_PREFIXES` — the key namespaces whose owners
   talk to `localStorage` directly (`profile_memory_v1_*`, `learning_rules_v2_*`,
   the `agents_*_v1_*` rosters, the calibration/performance/confluence stats).
@@ -445,19 +466,33 @@ Optional build-time variables:
 
 ## Development Notes
 
-- Vite 7 + Tailwind v4. Theme is **Minara-derived DARK** (user decision,
-  2026-09-10; a light-theme experiment was tried the same day and REVERTED —
-  the user wants black, matching Minara's actual trade screen. Do not
-  re-flip to light). Warm near-black chrome
-  (page `#0b0b0a`, panels `zinc-900 #141412`, raised surfaces `zinc-800 #1f1f1c`,
-  hairlines `zinc-700 #2f2f2f`), warm ink ramp, and REAL semantic colors defined
-  once in `index.css` `@theme` — emerald = gains/up (`#07b56a` family),
-  rose/red = losses/down (`#f75d5f` family), yellow/amber = warnings (`#f08800`).
-  Neutral utility names (`zinc-*`, `cyan-*`) were intentionally kept so components
-  recolor through the token block; do not re-add gray remappings for color families.
-- **Brand gradient**: `--color-brand-start #eb53ff → --color-brand-mid #ff538e →
-  --color-brand-end #ff9a32` is reserved for the wordmark and the active-nav
-  indicator only — never hero/body text, tables, or chart fills.
+- Vite 7 + Tailwind v4. Theme is **hue-free neutral DARK** (dark is still the
+  2026-09-10 decision — a light-theme experiment was tried that day and REVERTED,
+  and `[data-theme='light']` in `index.css` stays deliberately dormant. Do not
+  re-flip to light). The 2026-10-27 re-style took the tint OUT of the neutrals:
+  page `#0a0a0a`, panels `zinc-900 #141414`, raised surfaces `zinc-800 #1d1d1d`,
+  hairline `zinc-700 #262626`, ink ramp `#f4f4f4 → #858585`. Semantic colors are
+  still defined once in `index.css` `@theme` — emerald = gains/up (`#0bc67a`
+  family), rose/red = losses/down (`#f6465d` family), yellow/amber = warnings
+  (`#f08800`, deliberately NOT re-hued). Neutral utility names (`zinc-*`,
+  `cyan-*`) were intentionally kept so components recolor through the token
+  block — that is why this re-style was a token edit and not 881 class edits —
+  and do not re-add gray remappings for color families.
+  The faint steps are MEASURED, not eyeballed: `#858585` is 5.37:1 on the page /
+  4.99:1 on a panel / 4.57:1 on a raised surface, and the obvious quieter gray
+  (`#6f6f6f`) is 3.94:1 — under AA for the 10–12px micro-labels this app runs.
+  Any new faint text step has to be measured the same way before it ships.
+- **Brand gradient: DELETED** (owner ruling, 2026-10-27). Nothing in the chrome is
+  magenta/pink/orange any more. `--color-brand-start/mid/end` are gone from
+  `@theme` rather than re-pointed at white — three aliases resolving to one ink
+  step would just be a second name for `zinc-100`. Their six former readers each
+  moved on their own: the A-mark's SVG lost its `<defs>` and fills with ink, the
+  active tab marker is an `h-0.5 bg-zinc-100` hairline, the sidebar's active bar
+  dropped its gradient *and* its hardcoded magenta glow, the update dot is
+  `bg-zinc-100`, the splash wordmark shimmers graphite, and one dashboard series
+  that had been borrowing `--color-brand-end` (and therefore would have turned
+  white) now reads `--color-pink-500`. Do not re-add a brand ramp: **colour means
+  data** (green/red/amber/blue on a number or a series) and chrome stays neutral.
 - `.status-surface` / `.analysis-card` were deleted from the JSX (2026-09-19).
   They matched no rule in `index.css` once the global theme became semantic, so
   they were dead tokens that made two component comments claim a behavior that
@@ -469,8 +504,10 @@ Optional build-time variables:
   the splash wordmark inherits it. Do not re-add a serif, and do not delete the
   two tokens either: Tailwind's own `font-serif` default would then silently put
   Georgia back on any screen that names the role.
-- Radius/motion tokens: `rounded-bubble` (12px, chat bubbles), `rounded-control`
-  (8px, inputs/buttons), `--ease-snappy` + `.12s` transitions (Minara's numbers).
+- Radius/motion tokens: `rounded-bubble` (20px, chat bubbles), `rounded-control`
+  (10px, inputs/buttons), `--ease-snappy` + `.12s` transitions. Both radii are
+  `@theme` steps (12px/8px before the 2026-10-27 re-style), so 694 `rounded-*`
+  class sites moved with the two values and no component was edited.
 - **An AI row is claimed by identity, never by provider+model.** `Message.botId`
   is stamped by the writers that answer *as* a bot (`useBotMailbox`,
   `botRoutine`), and `deskThread` drops only rows a bot positively owns.

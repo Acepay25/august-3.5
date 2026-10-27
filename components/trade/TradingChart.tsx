@@ -89,8 +89,8 @@ export { chartColor };
 /** Chart-internal palette: the semantic ramp, resolved from the theme at
  *  call time (never at module-eval time — in dev the style tag is injected
  *  by JS, so an import-time read could fall back forever). */
-const CANDLE_UP = (): string => chartColor('--color-emerald-500', '#07b56a');
-const CANDLE_DOWN = (): string => chartColor('--color-rose-500', '#f75d5f');
+const CANDLE_UP = (): string => chartColor('--color-emerald-500', '#0bc67a');
+const CANDLE_DOWN = (): string => chartColor('--color-rose-500', '#f6465d');
 
 // ── The user's chosen timeframe bar (persisted per user, like dock width) ──
 const TF_BAR_KEY = 'trade_tf_bar_v1';
@@ -324,7 +324,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
             autoSize: true,
             layout: {
                 background: { color: 'transparent' },
-                textColor: chartColor('--color-zinc-500', '#8c8c86'),
+                textColor: chartColor('--color-zinc-500', '#9a9a9a'),
                 attributionLogo: false,
             },
             grid: {
@@ -556,7 +556,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
         }
         try {
             markLineRef.current = cs.createPriceLine({
-                price, color: chartColor('--color-cyan-500', '#399ef7'), lineWidth: 1, lineStyle: 2,
+                price, color: chartColor('--color-cyan-500', '#4d9fff'), lineWidth: 1, lineStyle: 2,
                 axisLabelVisible: true, title: 'mark',
             }) ?? null;
         } catch { /* series without price-line support (test mock) */ }
@@ -1044,7 +1044,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
                     out.height = base.height;
                     const ctx = out.getContext('2d');
                     if (!ctx) return null;
-                    ctx.fillStyle = chartColor('--color-zinc-950', '#0b0b0a');
+                    ctx.fillStyle = chartColor('--color-zinc-950', '#0a0a0a');
                     ctx.fillRect(0, 0, out.width, out.height);
                     ctx.drawImage(base, 0, 0);
                     // The drawing overlay is a CSS-pixel canvas over the chart

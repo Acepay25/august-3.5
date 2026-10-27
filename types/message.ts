@@ -324,6 +324,25 @@ export interface Message {
    *  and "the model was shown these five" are different questions, and only the
    *  second one can be audited after the fact. */
   injectedSkills?: string[];
+
+  /* ── Revert and versions (owner ruling, 2026-10-27) ──────────────────────
+     A revert here changes the TRANSCRIPT and nothing else: memory, skills,
+     logged trades and armed watches a reverted turn produced stay exactly as
+     they were. The turns a revert takes off the thread are PARKED, not deleted
+     (see `Conversation.parked`), so the operation runs backwards as well as
+     forwards. */
+  /** Prompt texts this row carried BEFORE the trader edited it, oldest first.
+   *  The live `text` is the newest version, so an unedited message has no key
+   *  at all rather than an empty one. */
+  edits?: import('../utils/messageVersions').PromptEdit[];
+  /** Superseded generations of this ANSWER, oldest first. Written when a
+   *  message is edited and re-run: the answer that was there before is a
+   *  generation, not a deletion. */
+  gens?: import('../utils/messageVersions').TurnSnapshot[];
+  /** Which generation is being shown; absent means the newest. Read through
+   *  `utils/messageVersions.ts` so the dock and the Chat surface cannot
+   *  disagree about which answer is on screen. */
+  gen?: number;
 }
 
 /** A committed pre-read call. `confidencePct` is the user's own

@@ -67,6 +67,7 @@ import {
 import { MessageRole } from '../../types/enums';
 import type { Message } from '../../types/message';
 import { messageTraceText } from '../../utils/traceText';
+import { activeIndex, versionCount } from '../../utils/messageVersions';
 import StatusPill from '../ui/StatusPill';
 // The shell's own column width, imported rather than repeated: this surface's
 // sidebar and the rail are ONE shell, and two numbers is how the hop started
@@ -179,6 +180,20 @@ interface AgentsViewProps {
      *  between its chat and code modes. */
     railExpanded?: boolean;
     onToggleRailExpanded?: () => void;
+    /* ── Revert and versions (2026-10-27) ──
+       All optional, and all owned by App's conversation store rather than by
+       this surface: one conversation has two readers, so the rule that decides
+       what a revert does lives in `useConversations` and both homes call it. */
+    /** Park every turn after this one. Returns how many moved. */
+    onRevertTo?: (messageId: string) => number;
+    /** Save a new wording for a sent prompt and re-ask it. */
+    onEditPromptMessage?: (messageId: string, newText: string) => void;
+    /** Step which generation of an answer is showing. */
+    onStepVersion?: (messageId: string, delta: number) => void;
+    /** Turns taken off this thread by past reverts, newest tail last. */
+    parkedCount?: number;
+    /** Bring the most recently parked tail back. */
+    onRestoreParked?: () => number;
     onHydratePins?: (pins: string[]) => void;
     /** The App-side conversations (useConversations). Stage 3 made this rail
      *  the ONE conversation home: these render as their own section here
@@ -454,6 +469,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     onSendBotTurn, onAnalyze, onLogProposedTrade, onAnalysisError, onStopRun, analysisRunning = false, renderGroup, coachCount, workingBotId,
     lastOpenedMap = {}, modelPicker, modelFallback = null, destinationMenu, accountRow,
     railExpanded = true, onToggleRailExpanded, statusCluster, surfaceSwitch,
+    onRevertTo, onEditPromptMessage, onStepVersion, parkedCount = 0, onRestoreParked,
     attentionMap, onDeleteBot, onDeleteGroup, onEditGroup,
     botStats,
     providerReady = false,
@@ -1423,13 +1439,37 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     // is read once, in full. (O-65)
                                     role="log" aria-live="polite" aria-busy={running}
                                     aria-label="Conversation">
-                                    {thread.map(m => {
+                                    {thread.map((m, i) => {
                                         const isUser = m.role === MessageRole.USER;
                                         const row = chatRowFrom(m, username, activeBot?.name ?? 'desk');
+                                        const vCount = versionCount(m);
                                         return (
                                             <ChatTranscriptRow
                                                 key={m.id}
                                                 row={row}
+                                                /* How many turns sit below this one — the
+                                                   restore control is only drawn where
+                                                   restoring would actually take something
+                                                   away, so the LAST row never offers it. */
+                                                turnsAfter={thread.length - 1 - i}
+                                                onRevertTo={onRevertTo}
+                                                onEditPromptMessage={onEditPromptMessage ? (id, text) => {
+                                                    onEditPromptMessage(id, text);
+                                                    /* The edited wording goes into the
+                                                       composer rather than straight into
+                                                       a run: saving an edit and spending
+                                                       a model call are two decisions, and
+                                                       the row's version history is already
+                                                       written by the time this returns. */
+                                                    setText(text);
+                                                    composerRef.current?.focus();
+                                                } : undefined}
+                                                priorPrompts={m.edits}
+                                                versions={vCount > 1 && onStepVersion ? {
+                                                    index: activeIndex(m),
+                                                    total: vCount,
+                                                    onStep: (delta) => onStepVersion(m.id, delta),
+                                                } : undefined}
                                             >
                                                 {/* The decision card is fed from the ROW MODEL, never from the
                                                     raw message: a "Logged from Chart AI" receipt carries a copy
@@ -1530,11 +1570,38 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                         </div>
 
                         {/* ── Composer pill ── */}
+                        {parkedCount > 0 && onRestoreParked && (
+                            /* Where the turns went. A restore parks them rather
+                               than deleting them, and this is the only way back
+                               — so it is a permanent line, not a hover control.
+                               It says what it holds instead of showing an icon
+                               the trader has to decode. */
+                            <div className="chat-column flex items-center justify-between gap-3 px-5 pb-1 pt-2" data-testid="parked-notice">
+                                <span className="min-w-0 truncate text-ui-xs text-zinc-500">
+                                    {parkedCount} turn{parkedCount === 1 ? '' : 's'} parked by a restore
+                                </span>
+                                <button type="button"
+                                    onClick={() => { onRestoreParked(); }}
+                                    aria-label="Bring the parked turns back"
+                                    className="shrink-0 rounded-full border border-white/10 px-2.5 py-1 text-ui-xs text-zinc-300 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
+                                    Bring them back
+                                </button>
+                            </div>
+                        )}
                         <div className="shrink-0 px-4 pb-4">
                             {!activeBot && modelFallback && (
                                 <ModelFallbackBanner modelIssue={modelFallback.issue} provider={modelFallback.provider} />
                             )}
-                            <div data-testid="chat-composer" className="chat-column rounded-bubble border border-white/[0.09] bg-zinc-900 p-3 shadow-xl transition-colors focus-within:border-cyan-500/40">
+                            {/* The composer keeps its card; the market context
+                                does not. The box is the thing you type into, so
+                                the coin and the timeframe — which say what the
+                                next message is ABOUT — sit on their own row under
+                                it, outside the frame, with the context note and
+                                the disclaimer. The wrapper carries the shared
+                                measure so the box, the instrument row and the two
+                                notes stay on one left edge at every width. */}
+                            <div data-testid="chat-composer-area" className="chat-column">
+                            <div data-testid="chat-composer" className="rounded-bubble border border-white/[0.09] bg-surface-raised p-3 shadow-xl transition-colors focus-within:border-cyan-500/40">
                                 <input type="file" multiple accept="image/*" className="hidden"
                                     ref={fileInputRef} data-testid="composer-file"
                                     onChange={e => { attachFiles(e.target.files); e.target.value = ''; }} />
@@ -1571,23 +1638,11 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                         className="rounded-control border border-zinc-800/80 p-1 text-zinc-400 transition-colors hover:bg-white/[0.05] hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-zinc-400">
                                         <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
                                     </button>
-                                    {/* The instrument this chat is about, moved out
-                                        of the header: it is context for the next
-                                        message, which is exactly where the
-                                        reference puts context. */}
-                                    <SymbolPicker
-                                        symbols={symbols}
-                                        value={sessionSymbol}
-                                        onChange={setSessionSymbol}
-                                    />
-                                    <div className="hidden sm:flex items-center">
-                                        <TimeframeBar
-                                            interval={sessionInterval}
-                                            onIntervalChange={setSessionInterval}
-                                            compact
-                                            className="border-b-0 px-0 py-0"
-                                        />
-                                    </div>
+                                    {/* The coin and the timeframe used to sit in
+                                        this row. They are not part of the field
+                                        you type into, so they now have their own
+                                        line BELOW the card — see the instrument
+                                        row after the composer closes. */}
                                     {/* E-51 D-A: the merged model control sits IN
                                         the toolbar row, immediately left of send,
                                         and the pair is what right-aligns. The
@@ -1611,6 +1666,25 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     </div>
                                 </div>
                             </div>
+                            {/* The instrument this chat is about, on its own row
+                                outside the card and on the same measure as the
+                                notes under it — so the left edge of everything
+                                below the field is one edge, not three. */}
+                            <div className="mx-auto mt-2 flex w-full max-w-[55rem] items-center gap-2 px-2.5">
+                                <SymbolPicker
+                                    symbols={symbols}
+                                    value={sessionSymbol}
+                                    onChange={setSessionSymbol}
+                                />
+                                <div className="hidden sm:flex items-center">
+                                    <TimeframeBar
+                                        interval={sessionInterval}
+                                        onIntervalChange={setSessionInterval}
+                                        compact
+                                        className="border-b-0 px-0 py-0"
+                                    />
+                                </div>
+                            </div>
                             {/* The context note keeps its own line, left-aligned on
                                 the card's measure; the two chips it shared the row
                                 with are now one control up in the toolbar.
@@ -1623,6 +1697,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                             </div>
                             <div className="mx-auto mt-1 w-full max-w-[55rem] px-2.5 text-ui-xs text-zinc-600">
                                 <span className="hidden sm:inline">{DISCLAIMER_SHORT}</span>
+                            </div>
                             </div>
                         </div>
                         </div>

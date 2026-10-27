@@ -135,6 +135,10 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                 onRemove={removeAttachment}
             />
         )}
+        {/* The card IS the field: what you type, what rides the message
+            (attachments), and the controls that send it. Market context — the
+            coin and the timeframe — does not live in here; on the Chat surface
+            they sit on their own row outside the card (see AgentsView). */}
         <div className="rounded-bubble border border-white/[0.09] bg-surface-raised px-3 py-3 shadow-lg transition-colors focus-within:border-cyan-500/40">
             <textarea
                 ref={composerRef}
