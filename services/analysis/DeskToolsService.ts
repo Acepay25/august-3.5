@@ -87,7 +87,7 @@ export const toolActionFromResult = (name: string, ok: boolean, content: string,
         const parsed = JSON.parse(content) as Record<string, unknown>;
         if (name === 'forge_tool') {
             label = String(parsed.id ?? parsed.name ?? 'tool');
-            review = 'Settings → AI Models';
+            review = 'Settings → Skills → Forged tools';
             verb = 'proposed';
         } else if (name === 'amend_memory') {
             label = `notebook/${parsed.id ?? 'amendment'}`;
@@ -1024,11 +1024,13 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'forge_tool',
             description:
-                'Propose a NEW desk tool for future debates when the tools you need do not exist. ' +
-                'Declarative HTTP recipe only — never code. Provide: name (snake_case), description, ' +
-                'parameters (name -> string|number|boolean), urlTemplate (https://, {param} slots), ' +
-                'method (GET/POST), extractPath (dot path into the JSON response), ttlMs. ' +
-                'The proposal lands as a CANDIDATE — a human must approve it before it can ever run.',
+                'Propose a NEW desk tool for later turns when the tools you need do not exist. ' +
+                'Declarative HTTPS GET recipe only — never code. The OFFERED schema is the whole contract: ' +
+                'name (snake_case), description, parameters_json (a JSON object of name -> string|number|boolean), ' +
+                'urlTemplate (https://, {param} slots) and extractPath (dot path into the JSON response). ' +
+                'Anything else you add is ignored, so do not promise the trader a method, cache TTL or ' +
+                'request mapping this tool cannot set. The proposal lands as a CANDIDATE — a human must ' +
+                'approve it in Settings before it can ever run.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -2077,13 +2079,12 @@ export const deskToolsMandateFor = (offered?: readonly string[]): string => {
 
     return `
 **DESK TOOLS (available anytime on this turn)**
-You can call live tools before you speak — opening analysis, rebuttal, clarification, or moderator verdict.
+You can call live tools before you speak, on any question where a fresh fact would change the answer.
 Use them for: news/macro catalysts, funding/OI crowding, order-book walls, liquidations, BTC context on alts, session timing, or a fresh price print.
-The chart symbol is only the DEFAULT: every market tool accepts a \`symbol\` argument, so when the user asks about another coin ("what about eth, can we trade there?") pull that coin directly — get_market_packet or get_all_timeframes with symbol ETHUSDT gives the full multi-timeframe read without anyone switching charts.
+The chart symbol is only the DEFAULT: the per-symbol market tools accept a \`symbol\` argument, so when the user asks about another coin ("what about eth, can we trade there?") pull that coin directly — get_market_packet or get_all_timeframes with symbol ETHUSDT gives the full multi-timeframe read without anyone switching charts. run_screener is the exception: it scans the whole futures universe and takes no symbol.
 Your own trading memory is one of these tools: the recall tool searches your notebook (doctrine, rules, similar past trades) - call it when prior experience with this setup could change your stance.
 ${shapeRule} The market packet you are shown carries code-calculated summaries, and its printed candle rows depend on the surface you were opened in: the full packet prints EIGHT rows per timeframe, the compact one (used by surfaces that ask for brevity) prints NONE and keeps only the summaries. Either way — eight printed rows are not a chart, and a shape described from them is invented, not read. If the rows are not in front of you, call ${groundingTool ?? 'nothing'}; if you have not, either call it or say "inferred from the rows shown" and give it no confidence. ${drawingRule}${levelRule}
-run_monte_carlo simulates a concrete plan: pass direction (long/short), entry, stop_loss, and take_profits (1–3 absolute prices). Optional atr is in price units; without it volatility is assumed from twice the stop distance, NOT fetched from the market. Optional timeframe is a label, num_simulations (100–5000) and max_steps (10–1000) control the run. For account drawdown estimates pass account_balance, position_size (margin in account currency), and leverage together. Report the simulation assumptions and timeout rate, not guaranteed or historical performance.
-${selfModRule}Do not call tools you do not need. Prefer 0–2 calls. After tool results arrive, write your Floor reply from the findings — no JSON, no restated tool schemas.
+${has('run_monte_carlo') ? 'run_monte_carlo simulates a concrete plan: pass direction (long/short), entry, stop_loss, and take_profits (1–3 absolute prices). Optional atr is in price units; without it volatility is assumed from twice the stop distance, NOT fetched from the market. Optional timeframe is a label, num_simulations (100–5000) and max_steps (10–1000) control the run. For account drawdown estimates pass account_balance, position_size (margin in account currency), and leverage together. Report the simulation assumptions and timeout rate, not guaranteed or historical performance.' : ''}${selfModRule}Do not call tools you do not need. Prefer 0–2 calls. After tool results arrive, write your reply from the findings — no JSON, no restated tool schemas.
 `;
 };
 
@@ -2980,7 +2981,7 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                         ),
                         extractPath: call.arguments.extractPath ? String(call.arguments.extractPath) : undefined,
                     }, 'model:desk');
-                    content = JSON.stringify({ proposed: true, id: tool.id, status: tool.status, note: 'Candidate stored. A human must approve it in Settings → AI Models before it can run.' });
+                    content = JSON.stringify({ proposed: true, id: tool.id, status: tool.status, note: 'Candidate stored. A human must approve it in Settings → Skills → Forged tools before it can run.' });
                 } catch (err) {
                     return rejectedResult(call, `forge_tool rejected: ${err instanceof Error ? err.message : String(err)}`);
                 }
@@ -4831,10 +4832,30 @@ export async function runDeskToolLoop(params: {
         // and custom_* routed around it).
         const forgedResults: DeskToolResult[] = [];
         const builtInCalls: DeskToolCall[] = [];
+        // THE BUDGET IS ENFORCED FROM HERE DOWN, not merely announced: past
+        // DESK_TURN_BUDGET_MS no NEW lookup runs — forged or built-in — each
+        // pending call is answered with a receipt (an assistant turn must be
+        // answered by a tool result or the provider rejects the transcript), and
+        // the round loop ends so the caller streams the one worded reply the
+        // wrap-up notice asked for (docs/AUDIT.md L-9).
+        const overBudget = Date.now() - turnStartedAt >= DESK_TURN_BUDGET_MS;
         for (const call of coreCalls) {
             if (!call.name.startsWith('custom_')) { builtInCalls.push(call); continue; }
             if (!seatAllows(allowedTools, call.name)) {
                 forgedResults.push(rejectedResult(call, `${call.name} rejected: this tool is not available on this seat.`));
+                continue;
+            }
+            if (overBudget) {
+                forgedResults.push({
+                    toolCallId: call.id,
+                    name: call.name,
+                    ok: false,
+                    content: dataUnavailable(
+                        toolLabel(call.name),
+                        `the turn used its ${Math.round(DESK_TURN_BUDGET_MS / 1000)}s budget before this lookup could run`,
+                        'Answer from what you already have and name what you did not get to.',
+                    ),
+                });
                 continue;
             }
             // A forged recipe is an HTTPS call the MODEL wrote, so it gets the
@@ -4849,7 +4870,18 @@ export async function runDeskToolLoop(params: {
             );
             if (forged.content !== FORGED_MISS) forgedResults.push(forged);
         }
-        const coreResults = builtInCalls.length > 0
+        const coreResults = overBudget
+            ? builtInCalls.map((call): DeskToolResult => ({
+                toolCallId: call.id,
+                name: call.name,
+                ok: false,
+                content: dataUnavailable(
+                    toolLabel(call.name),
+                    `the turn used its ${Math.round(DESK_TURN_BUDGET_MS / 1000)}s budget before this lookup could run`,
+                    'Answer from what you already have and name what you did not get to.',
+                ),
+            }))
+            : builtInCalls.length > 0
             ? await executeDeskTools(builtInCalls, {
                 defaultSymbol,
                 signal: options?.signal,
@@ -4953,6 +4985,12 @@ export async function runDeskToolLoop(params: {
                 role: 'user',
                 content: harnessTurn(`${formatToolResultsForModel(results)}\n\nContinue. If you have enough, write the public Floor reply now.`),
             });
+        }
+
+        if (overBudget) {
+            appendTurnNotice(messages, `TIME IS UP — this turn spent its ${Math.round(DESK_TURN_BUDGET_MS / 1000)}s budget, so no further lookups will run. Answer now from what is above, and name what you did not get to.`);
+            onToolEvent?.('desk guard · time budget spent — asking for a reply now');
+            break;
         }
 
         // Signature must carry the ARGUMENTS as text: String({...}) is
