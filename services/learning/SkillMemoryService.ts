@@ -2278,7 +2278,11 @@ const applySkillEvidenceUnlocked = async (
                         slug: file.name.replace(/\.md$/i, ''),
                         username,
                         source: 'shadow refinement',
-                        evidence: `${meta.shadow.seen} matched trades, ${meta.shadow.wins}W/${meta.shadow.losses}L beat the live version's record`,
+                        // What the counter actually measured: the LIVE rule's record
+                        // over the shadow window. The shadow never ran, so this is
+                        // not a head-to-head and must not be presented as one
+                        // (docs/AUDIT.md S-3).
+                        evidence: `the live rule went ${meta.shadow.wins}W/${meta.shadow.losses}L over ${meta.shadow.seen} matched trades while this refinement was shadowed`,
                     });
                     meta.kind = meta.shadow.kind;
                     meta.ifCondition = meta.shadow.ifCondition;
