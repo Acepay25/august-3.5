@@ -1076,15 +1076,6 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
 ${enhancedPrompt}`;
                 }
             } catch { /* reflection is best-effort */ }
-
-            const gateInjection = '';
-            // Local variable to avoid state closure issue
-
-            // Prepend Gate injection to enhanced prompt if available
-            if (gateInjection) {
-                enhancedPrompt = `${gateInjection}${enhancedPrompt}`;
-                devLog('[GateKeeper] Gate constraints injected into prompt');
-            }
             // ========== END GATE KEEPER ==========
 
             devLog('[Hybrid Intelligence] Enhanced prompt length:', enhancedPrompt.length);
