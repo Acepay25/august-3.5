@@ -171,6 +171,27 @@ unchanged.
 *Deferred:* the row's *colour*. A `· failed` line renders rose; an unavailable line renders neutral
 with the words, which is the honest minimum. Adding a fourth visual state is a UI decision, not a fix.
 
+**F-9 / F-11 / F-12 / F-13 — four small, measured fixes** (audits §8, **A-4**, **A-5**, **A-7**),
+landed as four commits so each reverts alone.
+
+| item | change | measurement |
+|---|---|---|
+| **F-9** | `components/settings/SettingsMenu.tsx:568-575` now passes `loggedTrades`, which is what `ActionsTab` uses to decide the button is live | the audit's delegated claim "permanently disabled" was wrong as stated: the label, the `disabled` binding and the export call are correct, only the prop was missing at this mount |
+| **F-11** | `services/ui/OutcomeAutopilotService.ts:484-495,521-534` — the second `0.5` factor and the duplicated TP-midpoint blend are deleted; `resolution.exitPrice` is the engine's blend and stays the only one | entry 100 / SL 90 / TP1 110 at 10×: **25 % → 50 %**, `realizedR` still 0.5, so the row no longer books two money figures for one exit |
+| **F-12** | `services/learning/weeklyReview.ts:50-53,84-108` records `dollarRows` and exports one derivation (`weekPnlCaptured`/`weekPnlText`) used by both the coach prompt and `WeeklyReviewCard` | percent-only closes: `captured:false`, text `not captured` (was `Net $0`); control with `pnlAmount:42` → `$42` |
+| **F-13** | `utils/profileUtils.ts:24-33` checks every row and requires a non-null `analysis`; `utils/reportExport.ts:38-60` falls back to empty plan cells instead of deref'ing | `nullAnalysisRejected:true` where HEAD answered `nullAnalysisAccepted:true`; a legacy row still exports rather than throwing |
+
+*Gates for the batch:* `typecheck` 0, `check:contracts` 138 passed, `npm run lint` 0 errors /
+**379** warnings — exactly the baseline cap, so nothing was spent. Zero page errors in the live run
+that produced the numbers above.
+
+*Deferred:* F-11's neighbours stay open and are **not** silently fixed here — the verifier still passes
+`startIndex` and so bypasses the engine's same-candle entry-ambiguity guard
+(`AutoCaptureService.ts:387` vs `outcomeEngine.ts:179-197`), and a TP1→breakeven result still reports
+the TP candle as `exitCandleIndex`, which truncates the MAE/MFE window. Both need the fill-policy
+decision (decision 2) before a change is defensible. The monthly report has its own `$0` sum and was
+left alone rather than swept into F-12's commit.
+
 ### Pending
 Status legend: `pending` · `in-progress` · `done`.
 
@@ -185,11 +206,11 @@ Status legend: `pending` · `in-progress` · `done`.
 | **F-6** | Give `withinToolDeadline` a child `AbortController` and propagate it through every call site; forward `context.signal` to the screener | T-1 | pending — PROVEN red |
 | **F-7** | A forged-tool proposal must report what storage actually did, and the manager UI must surface the failure without turning a telemetry-write error into a false "the request failed" | T-5 | pending — PROVEN red |
 | **F-8** | `digestToolResult` must distinguish *unavailable* from *empty* (a real zero keeps printing zero) | T-2 | **done** — PROVEN red and green, with controls |
-| **F-9** | Pass `loggedTrades` into Settings → Data so training export is reachable, and prove the button enabled with a row present | §8 | pending — CODE |
+| **F-9** | Pass `loggedTrades` into Settings → Data so training export is reachable, and prove the button enabled with a row present | §8 | **done** |
 | **F-10** | The screener must not call a successful empty scan a universe failure | T-9 | pending — CODE |
-| **F-11** | Fix the double halving: the engine's blended exit is the single source, `buildWinResolution` drops its second `scaleOut` | A-4 | pending — PROVEN red |
-| **F-12** | The weekly digest must print "dollars not captured", not `$0` | A-5 | pending — PROVEN red |
-| **F-13** | Import validation must reject `analysis: null`, and the export must not deref it | A-7 | pending — PROVEN red |
+| **F-11** | Fix the double halving: the engine's blended exit is the single source, `buildWinResolution` drops its second `scaleOut` | A-4 | **done** — PROVEN red and green |
+| **F-12** | The weekly digest must print "dollars not captured", not `$0` | A-5 | **done** — PROVEN red and green, with control |
+| **F-13** | Import validation must reject `analysis: null`, and the export must not deref it | A-7 | **done** — PROVEN red and green |
 | **F-14** | `get_trade_log`: honour the logged time it advertises, and add a bounded record mode | T-4 | pending — PROVEN red (semantics) |
 
 **Second wave (same phase, after the sixteen above):** L-4 cancelled-row settlement · L-5 desktop SSE
