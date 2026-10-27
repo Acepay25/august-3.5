@@ -58,7 +58,7 @@ The two row types do **not** share the tool transcript's fields, measured 2026-1
 
 - dock row = `LiveEntry` (`services/trade/chatStore.ts:48`, `StoredChatEntry & {…}`):
   carries `tools: string[]`, `toolIds: string[]`, `actions`
-  (`chatTurnRunner.ts:698` appends the digest line and its id **in the same patch**,
+  (`chatTurnRunner.ts:641` appends the digest line and its id **in the same patch**,
   because the desk loop's `results` order does not match the rendered lines — pairing
   by index silently attaches the wrong payload).
 - canonical row = `Message` (`types/message.ts`): has `thoughtProcesses` `:257`,
@@ -71,8 +71,8 @@ Chat surface. The extraction therefore takes an **event sink** — the executor 
 each home maps them onto its own fields. That is what 20a builds.
 
 Second blocker for the cheaper "just lift the runner" route: the deps are captured
-**at construction** (`chatTurnRunner.ts:172-307`, `useMemo` over 35 fields at
-`TradeChatPanel.tsx:477-571`), including composer state (`draft`, `attachments`,
+**at construction** (`chatTurnRunner.ts:173-295`, `useMemo` over 35 fields at
+`TradeChatPanel.tsx:483-507`), including composer state (`draft`, `attachments`,
 `setDraft`, `clearAttachments`, `setContextAt`) and `systemPromptFor`. Two surfaces
 cannot share one instance built per-mount, so 20a converts turn-scoped context into
 parameters and leaves the composer/state hooks with the caller.
@@ -88,11 +88,11 @@ The goal is one tool-capable turn in **both** chat homes. Facts, so the next
 session does not re-derive them:
 
 - `streamChatWithDeskTools` is an **async generator** returning text deltas
-  (`services/analysis/DeskToolsService.ts:4331`), and **every option is optional**
+  (`services/analysis/DeskToolsService.ts:4848`), and **every option is optional**
   (`StreamWithDeskToolsOptions`). It self-gates on
   `getHarnessSettings().deskToolsEnabled`, and `withDeskToolsSystemPrompt` will not
   double-inject the DESK TOOLS block if the system message already carries it.
-- The dock consumes it at `chatTurnRunner.ts:634` with `allowedTools: TRADE_TOOLS`
+- The dock consumes it at `chatTurnRunner.ts:638` with `allowedTools: TRADE_TOOLS`
   (`:96`, ~20 names, chart-aware: `get_chart_view`, `mark_trade_levels`,
   `draw_on_chart`) plus a frozen `PanelTurnContext` so a background turn still
   writes into its own transcript.
@@ -108,7 +108,7 @@ numbering; the file is shorter now) — eight positional
   have no target there; (3) whether the Chat surface renders a tool chip (the dock's
   transcript rows already do).
 - Lifting `createChatTurnRunner` into App is **not** the cheap route: its deps
-  object (`chatTurnRunner.ts:172-307`) is 35 fields, most of them chart state
+  object (`chatTurnRunner.ts:173-295`) is 35 fields, most of them chart state
   owned by TradeView (`allDrawings`, `getChartSnapshot`, `addModelDrawings`,
   `onPlanPresented`). Do the transport swap, not the lift.
 
@@ -127,8 +127,8 @@ So the target is NOT "keep the branch and shrink it to one seat". It is:
   SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
-  `streamChatWithDeskTools` (`DeskToolsService.ts:4331`), which the dock's solo
-  seat already runs at `chatTurnRunner.ts:625`.
+  `streamChatWithDeskTools` (`DeskToolsService.ts:4848`), which the dock's solo
+  seat already runs at `chatTurnRunner.ts:597`.
 - **The verdict and the journal row become tools the model chooses to call**, not
   a pipeline stage it has to earn. What already exists: `present_trade`
   (proposal → `TradeAnalysis` with outcome PENDING, so the autopilot watches it),
@@ -278,7 +278,7 @@ reading is expensive to undo.
   (`if (runEnsembleEnabled) {` also appears at the data pull, so a bare match would
   stay green with the fork deleted) and to forbid the call shape `Prompt.includes(`.
 - **20s (#25)** — the Chat surface finally has a prompt of its own.
-  `chatSurfaceSystemPrompt` (`chatSurfaceTurn.ts:167`) leads with
+  `chatSurfaceSystemPrompt` (`chatSurfaceTurn.ts:203`) leads with
   `CHAT_SURFACE_SYSTEM_PROMPT` (`chatPrompts.ts:40`), which is
   `CASUAL_CHAT_SYSTEM_PROMPT` **plus** a calling mandate and an explicit
   "NO CHART HERE" — so the output discipline that fixed the
@@ -341,7 +341,7 @@ Stage 20c made `runEnsembleEnabled` the only guard, so a scheduled run with the
 toggle on was still entering the debate. 20r does not delete that dependency in
 stage 19 — it gives the schedule a route of its own first, so one config has one
 behaviour at every revision. The arm sits in the pipeline at
-`useAnalysisPipeline.ts:1296`. The mode fork it used to precede went with stage
+`useAnalysisPipeline.ts:1162`. The mode fork it used to precede went with stage
 19, so the pair's order is no longer a testable property;
 `tests/automationRouteCharacterization.test.tsx` pins the route the arm takes.
 
@@ -679,7 +679,7 @@ tool path applies it already. Only then does the `rm` become honest.
 
 Both flow docs re-audited against the post-19 tree: **167/167 anchors land**, and all
 six peer-review defects verified fixed by grep (no dangling hashes, `plans/` cross-link,
-`services/infrastructure/messageImageStore.ts`, `ChatComposer.tsx:146`, Section D says
+`services/infrastructure/messageImageStore.ts`, `ChatComposer.tsx:147`, Section D says
 starved-not-deleted). Two defects my own scanner found that the reviewer's did not: a
 stale `streamQuickResponse :3315` (the debate arm's copy — it is `:1449` now) and a
 **fabricated citation**, `rationale` at lines 617-622, in three places — the word `rationale`
@@ -810,7 +810,7 @@ three turn owners, fed by `usage`/`usageCalls` that `runToolTurn` folds out of t
 per-request `onUsage`. Pinned in `tests/toolTurn.test.ts` ("the measured usage fold") and
 guarded by a new `featuresAreWired` row; stubbing the fold turns those pins red.
 
-`notify()` now fires on the settled Full-analysis path (`useAnalysisPipeline.ts:1315`),
+`notify()` now fires on the settled Full-analysis path (`useAnalysisPipeline.ts:1259`),
 scoped to `options?.fullAnalysis === true` and excluded on a stopped turn, so an ordinary
 chat line stays quiet and a schedule (which already reports in its own row) is not doubled.
 `CompletionNotifications` therefore has no caller left and dies with the engine.
@@ -1761,7 +1761,7 @@ started here rather than left half-deleted.
 Measured before deleting anything, because "the ensemble branch" no longer names what it did
 when it was ruled on.
 
-**The panel is reachable and working.** `components/trade/TradeChatPanel.tsx:969` renders a
+**The panel is reachable and working.** `components/trade/TradeChatPanel.tsx:1056` renders a
 **"New panel · up to 5 models"** control, and a local `addSession(kind)` creates the session;
 `chatTurnRunner.ts:1137` builds the seats, refuses below two usable seats (`:1138`), opens a
 `createDebateMailbox` (`:1023`), plans each turn with `planPanelTurn` (`:1035`), gives every
@@ -2279,17 +2279,17 @@ instead of implying the table is checked.
 found on the line it cites: the `index.tsx` mount chain (StrictMode :78, ErrorBoundary :79, ToastProvider :80 —
 the old `73-79` range proved nothing), `august_surface_v1`, `onSendBotTurn`, `onAnalyze`, `handleRunAnalysisFromChat`,
 `runFullAnalysis`, `runSeatTurn` at both :593 and :1082, `applyCasualStreamUpdate`, `notify`. Binding found another real
-defect: row 13 cited AgentsView.tsx:784 for `onAnalyze`, and the await is at **:792** (:792 is the `finally` of that
+defect: row 13 cited AgentsView.tsx:786 for `onAnalyze`, and the await is at **:792** (:792 is the `finally` of that
 same try) — fixed in both flow docs. Coverage now prints 14/53 with 22 pairs and a floor of 14, and 39 rows remain
 line-resolved only.
 
 **Coverage 14 became 23, and it cost the docs three more wrong numbers.** Binding a row to its symbol means reading the line, so ten more rows
 went through the source: `runAutomation` is hooks/useAutomations.ts:429 (the table said :389), the `config.botId` fork is
 :423 (it said :431), and the row that attributes `Message.proposal` to the pipeline cited line 1293 of that
-file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1406. All three fixed in both flow docs. Newly bound and verified true:
+file — a ternary arm — while the stamp now lives in the chat surface's setProposal (services/trade/chatSurfaceTurn.ts:384). All three fixed in both flow docs. Newly bound and verified true:
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44, the Enter branch at
-components/trade/panels/ChatComposer.tsx:146, systemPromptFor components/trade/TradeChatPanel.tsx:431 with
-TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:499, useBotThread hooks/useAnalysisPipeline.ts:1315,
+components/trade/panels/ChatComposer.tsx:147, systemPromptFor components/trade/TradeChatPanel.tsx:483 with
+TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:505, useBotThread hooks/useAnalysisPipeline.ts:1259,
 entriesForSession services/trade/chatSessions.ts:586, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:133
 with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
 services/trade/automationTurn.ts:81, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices
