@@ -121,6 +121,14 @@ const BY_LABEL: Record<string, ToolKindInfo> = {
     'forget': { kind: 'write', activity: 'Forgetting a memory' },
     'memory note': { kind: 'write', activity: 'Writing a memory note' },
     'remember': { kind: 'write', activity: 'Remembering something' },
+    'goal list': { kind: 'read', activity: 'Reading the goals' },
+    'goal reader': { kind: 'read', activity: 'Opening a goal' },
+    'goal creation': { kind: 'write', activity: 'Creating a goal' },
+    'goal update': { kind: 'write', activity: 'Updating a goal' },
+    'goal restore': { kind: 'write', activity: 'Restoring a goal version' },
+    'change ledger': { kind: 'read', activity: 'Reading the change ledger' },
+    'self-change': { kind: 'write', activity: 'Changing its own harness' },
+    'self-change undo': { kind: 'write', activity: 'Reverting a self-change' },
     'skill proposal': { kind: 'write', activity: 'Proposing a skill' },
     'skill revision': { kind: 'write', activity: 'Revising a skill' },
     'watch price': { kind: 'write', activity: 'Setting a price watch' },
@@ -149,6 +157,42 @@ export const toolKindOf = (label: string): ToolKindInfo => {
  * call, and both readers must agree on the spelling, so the list lives here
  * in the vocabulary module where neither imports the other.
  */
+/**
+ * The allow-list that means "this seat is offered NOTHING".
+ *
+ * An empty array cannot mean that: every gate here reads a missing or empty
+ * allow-list as "unrestricted", so a narrowed-to-nothing seat passed as `[]`
+ * gets the whole desk back. The one name no tool can ever carry is the value
+ * that does mean nothing — the definition filter matches no tool against it
+ * and the executor refuses every call. Transport-only: never written into a
+ * goal, never shown to the trader.
+ */
+export const NO_TOOLS_ALLOWED: string[] = [''];
+
+/**
+ * The ONE rule for how a goal's tool policy meets a seat's allow-list.
+ *
+ * A goal may only NARROW, so the answer is the intersection with what this
+ * seat can actually call — and only with names that have a definition, so a
+ * goal cannot resurrect a tool this build does not ship.
+ *
+ * The interesting case is the empty one. A goal authored on a wider seat (the
+ * Chat surface's list is not the trade seat's `TRADE_TOOLS`) can name tools
+ * this seat never had; returning `[]` there would NOT mean "nothing", because
+ * `[]` reads as unrestricted. So an empty intersection returns
+ * `NO_TOOLS_ALLOWED`. Pure and exported because the never-widen invariant
+ * fires only for a mis-shaped goal, which no render probe can produce —
+ * `check:contracts` pins it.
+ */
+export const intersectGoalPolicy = (
+    seat: readonly string[] | undefined,
+    policy: readonly string[],
+    realToolNames: readonly string[],
+): string[] => {
+    const keep = policy.filter(t => (!seat || seat.includes(t)) && realToolNames.includes(t));
+    return keep.length > 0 ? keep : [...NO_TOOLS_ALLOWED];
+};
+
 export const DESK_TOOL_NAMES: readonly string[] = [
     'get_price_snapshot', 'get_order_book', 'get_derivatives',
     'get_liquidations', 'get_session_context', 'get_market_packet', 'get_all_timeframes', 'get_chart_view',
@@ -162,4 +206,12 @@ export const DESK_TOOL_NAMES: readonly string[] = [
     'write_memory_note', 'get_notebook_map', 'propose_skill', 'revise_skill', 'propose_strategy',
     'amend_memory', 'forge_tool', 'scan_chart_skills',
     'skill_view',
+    // The collaboration-memory trio the dock's own mandate already asks for.
+    // They were refused at the executor because this list did not name them;
+    // the chart copilot can now save/recall/forget like the Chat surface.
+    'remember', 'read_memory', 'forget',
+    // Goal environments: durable work state, edited mid-task.
+    'list_goals', 'open_goal', 'create_goal', 'update_goal', 'restore_goal',
+    // The harness change ledger: reading and moving its own self-modifications.
+    'list_self_changes', 'propose_self_change', 'revert_self_change',
 ];

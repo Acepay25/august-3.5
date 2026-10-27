@@ -30,7 +30,7 @@ import type { SkillIndexRow } from '../trade/tradeChatContext';
 import { netRiskReward, stopDistancePercent } from '../../utils/netRiskReward';
 import { parsePrice } from '../../utils/analysisUtils';
 import { formatCraftedSkillBody, refineSkillFromLosses } from './SkillCraftService';
-import { captureUnknownFrontmatter, skillRunsHere, type SkillRuntime } from '../../utils/skillFrontmatter';
+import { captureUnknownFrontmatter, declaredCompatibility, skillRunsHere, type SkillRuntime } from '../../utils/skillFrontmatter';
 import { DESK_TOOL_NAMES } from '../../utils/toolKinds';
 import {
     recordWorthGateApproval,
@@ -101,6 +101,13 @@ export const SKILL_FILE_VERSION = '1';
 export interface SkillCompatibility {
     /** Tool names the skill needs (e.g. 'run_screener'). */
     requiresTools?: string[];
+    /** Tool names the skill COVERS: it is injected only while none of them is
+     *  available, because it exists to do by procedure what the tool does by
+     *  call. Once the tool is here the procedure stops being needed. */
+    fallbackForTools?: string[];
+    /** Toolset names the skill covers. Tolerated and inert until August names
+     *  toolsets — `skillRunsHere` never guesses at a set it cannot resolve. */
+    fallbackForToolsets?: string[];
     /** Environment variable names the skill needs. */
     requiresEnv?: string[];
     /** Platforms the skill supports (e.g. 'web', 'native'). */
@@ -715,30 +722,54 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         unknownFrontmatter: captureUnknownFrontmatter(fm),
         version: pick('version'),
         compatibility: (() => {
-            const raw = pick('compatibility');
-            if (!raw) return undefined;
-            try {
-                const parsed: unknown = JSON.parse(raw);
-                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
-                const shape = parsed as Record<string, unknown>;
-                const list = (key: string): string[] | undefined => {
-                    const value = shape[key];
-                    if (!Array.isArray(value)) return undefined;
-                    const items = value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
-                    return items.length ? items : undefined;
-                };
-                const compat: SkillCompatibility = {
-                    ...(list('requiresTools') ? { requiresTools: list('requiresTools') } : {}),
-                    ...(list('requiresEnv') ? { requiresEnv: list('requiresEnv') } : {}),
-                    ...(list('platforms') ? { platforms: list('platforms') } : {}),
-                };
-                // An empty object means "no constraint" — which is what an
-                // absent key means, so it is stored as absent.
-                return Object.keys(compat).length ? compat : undefined;
-            } catch {
-                // A hand-edited or corrupt value must not poison the file.
-                return undefined;
-            }
+            // Two vocabularies state the same constraint: August's own
+            // `compatibility:` blob, and the SKILL.md keys an imported file
+            // arrives with (`requires_tools`, `platforms`, flat or under
+            // `metadata: hermes:`). The blob wins a key it declares — it is the
+            // shape this app writes and the one the desk's own tooling updates —
+            // and the declaration fills the keys the blob leaves silent, so an
+            // imported skill is never carrying a constraint nobody enforces.
+            const fromBlob = (): Partial<SkillCompatibility> => {
+                const raw = pick('compatibility');
+                if (!raw) return {};
+                try {
+                    const parsed: unknown = JSON.parse(raw);
+                    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+                    const shape = parsed as Record<string, unknown>;
+                    const list = (key: string): string[] | undefined => {
+                        const value = shape[key];
+                        if (!Array.isArray(value)) return undefined;
+                        const items = value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+                        return items.length ? items : undefined;
+                    };
+                    return {
+                        ...(list('requiresTools') ? { requiresTools: list('requiresTools') } : {}),
+                        ...(list('fallbackForTools') ? { fallbackForTools: list('fallbackForTools') } : {}),
+                        ...(list('fallbackForToolsets') ? { fallbackForToolsets: list('fallbackForToolsets') } : {}),
+                        ...(list('requiresEnv') ? { requiresEnv: list('requiresEnv') } : {}),
+                        ...(list('platforms') ? { platforms: list('platforms') } : {}),
+                    };
+                } catch {
+                    // A hand-edited or corrupt value must not poison the file.
+                    return {};
+                }
+            };
+            const blob = fromBlob();
+            const declared = declaredCompatibility(fm);
+            const compat: SkillCompatibility = {
+                ...(blob.requiresTools ? { requiresTools: blob.requiresTools } : {}),
+                ...(!blob.requiresTools && declared.requiresTools?.length ? { requiresTools: declared.requiresTools } : {}),
+                ...(blob.fallbackForTools ? { fallbackForTools: blob.fallbackForTools } : {}),
+                ...(!blob.fallbackForTools && declared.fallbackForTools?.length ? { fallbackForTools: declared.fallbackForTools } : {}),
+                ...(blob.fallbackForToolsets ? { fallbackForToolsets: blob.fallbackForToolsets } : {}),
+                ...(!blob.fallbackForToolsets && declared.fallbackForToolsets?.length ? { fallbackForToolsets: declared.fallbackForToolsets } : {}),
+                ...(blob.requiresEnv ? { requiresEnv: blob.requiresEnv } : {}),
+                ...(blob.platforms ? { platforms: blob.platforms } : {}),
+                ...(!blob.platforms && declared.platforms?.length ? { platforms: declared.platforms } : {}),
+            };
+            // An empty object means "no constraint" — which is what an
+            // absent key means, so it is stored as absent.
+            return Object.keys(compat).length ? compat : undefined;
         })(),
         coin: pick('coin'),
         timeframe: pick('timeframe'),
@@ -3909,6 +3940,21 @@ export const syncClosedTradeToNotebook = async (
     }
     await consolidateSkills(username);
     maybePinWinningPromptLane(allTrades);
+    // The self-modification rails, on the same evidence beat the prompt A/B
+    // already uses: a config window that has closed reverts the knob it moved,
+    // and a shadow prompt is judged by the trades that actually ran under it.
+    try {
+        const { expireSelfChanges, settleSelfChanges } = await import('../selfMod/SelfModificationService');
+        const expired = await expireSelfChanges(Date.now(), { username });
+        const settled = await settleSelfChanges(allTrades, { username });
+        for (const row of expired) console.log(`[SelfMod] window closed — "${row.target}" reverted`);
+        for (const row of settled) console.log(`[SelfMod] shadow settled — "${row.target}" ${row.status}`);
+    } catch (e) {
+        // Best-effort, like the doctrine pass beside it: a failed settle leaves
+        // every row exactly as it was, so a shadow edit cannot quietly promote
+        // itself because the pass threw.
+        console.warn('[SelfMod] settle pass failed — the ledger is unchanged:', e);
+    }
     // Doctrine consolidation: every N newly-closed trades an LLM pass
     // rewrites profile/doctrine.md into settled first-person beliefs.
     // Best-effort + gated on evidence count; never blocks the sync.

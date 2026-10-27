@@ -22,9 +22,10 @@ import {
     clipNote, clipReceipt, dataUnavailable, findArtifactIdIn, findClipIn, harnessNoteLegend, harnessTurn,
     isDataUnavailable, MINIMAL_CLIP_NOTE, neutralizeHarnessNotes,
 } from '../../utils/harnessMarks';
-import { buildMemoryHints, isLikelySmallModel } from '../../utils/memoryHints';
+import { buildMemoryHints } from '../../utils/memoryHints';
 export { DATA_UNAVAILABLE_PREFIX, isDataUnavailable } from '../../utils/harnessMarks';
 import { HARNESS_CONTRACT_PROMPT } from '../../constants/prompts';
+import type { GoalPatch, GoalRef, GoalTrigger } from '../../schemas/goal';
 import { executeForgedTool, confirmedForgedToolDefinitions } from '../tools/toolForge';
 import type { ChatMessage, ChatRequestOptions } from '../providers/GenericProviderService';
 import { sendChatTurn, streamChatRequest } from '../providers/GenericProviderService';
@@ -58,6 +59,7 @@ import type { LoggedTrade } from '../../types';
 import type { ToolAction } from '../../types/message';
 import type { ChartDrawing } from '../trade/chartDrawings';
 import { DEBATE_MAIL_TOOLS, type DebateMailbox } from './DebateMailbox';
+import { intersectGoalPolicy } from '../../utils/toolKinds';
 import { PREDICATE_GRAMMAR_HINT } from './skillPredicate';
 
 /**
@@ -528,6 +530,13 @@ const TOOL_BUDGETS: Record<string, number> = {
     // 2400 default would have cut to 17 rows SILENTLY to the seat — the exact
     // failure the get_chart_view budget exists to prevent.
     get_trade_log: 4000,
+    // The self-change audit reads as rows, and a row the seat never saw is a
+    // change it cannot revert. Measured on a ledger with a config row, a
+    // promoted prompt row and a reverted row: 8 rows = 1,733 chars, widest row
+    // 259 (`- <id> [<status> · <actor>] <target>: now <50> (was <50>; asked:
+    // <80>) · <evidence>`), so the all-widest payload is ~2.3k — which the 2,400
+    // default would cut, silently dropping the oldest change off the list.
+    list_self_changes: 2600,
     // The publishable block rides INSIDE this result: a clip that cut it in
     // half would leave the model copying a malformed fence, which the card
     // parser drops. Sized for the whole level list + block with headroom.
@@ -812,6 +821,14 @@ const TOOL_LABELS: Record<string, string> = {
     project_future_price: 'price projection',
     send_message: 'direct message',
     read_message: 'read inbox',
+    list_goals: 'goal list',
+    open_goal: 'goal reader',
+    create_goal: 'goal creation',
+    update_goal: 'goal update',
+    restore_goal: 'goal restore',
+    list_self_changes: 'change ledger',
+    propose_self_change: 'self-change',
+    revert_self_change: 'self-change undo',
 };
 
 export const toolLabel = (name: string): string => TOOL_LABELS[name] ?? name.replace(/_/g, ' ');
@@ -1048,6 +1065,7 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     aliases: { type: 'array', items: { type: 'string' }, description: 'Optional extra match words for recall (e.g. ["bun"]). Max 8.' },
                     name: { type: 'string', description: 'Short name for a new entry, e.g. "User runs 15m scalps".' },
                     kind: { type: 'string', enum: ['user', 'feedback', 'project', 'reference'], description: 'Memory kind.' },
+                    subject: { type: 'string', enum: ['profile', 'preference', 'topic', 'area', 'person'], description: 'What the fact is ABOUT — the person or thing the claim concerns (optional; derived from kind when omitted). "person" for a fact about someone other than the trader.' },
                     description: { type: 'string', description: 'One line (≤140 chars) stating WHEN this memory matters — it decides future relevance.' },
                     body: { type: 'string', description: 'The fact itself. feedback/project bodies end with **Why:** and **How to apply:** lines.' },
                 },
@@ -1086,6 +1104,142 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     slug: { type: 'string', description: 'The entry slug to delete.' },
                 },
                 required: ['slug'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'list_goals',
+            description:
+                'List the trader\'s goal environments. A goal is durable work state — objective, next step, inputs, outputs, triggers and a tool policy — stored as JSON in the notebook goals folder. Call this when the trader asks what you are working on, before creating a new goal, or when a message may belong to one.',
+            parameters: { type: 'object', properties: {}, additionalProperties: false },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'open_goal',
+            description:
+                'Read ONE goal environment in full: objective, next step, inputs, outputs, triggers, tool policy and the recent revision history. Use it before acting inside a goal or before editing it.',
+            parameters: {
+                type: 'object',
+                properties: { slug: { type: 'string', description: 'The goal slug exactly as list_goals prints it.' } },
+                required: ['slug'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'create_goal',
+            description:
+                'Create a new goal environment. It is written immediately as a JSON file in the notebook goals folder and is versioned; the trader can see and restore it. A goal\'s allowed_tools may only narrow the tools this seat already has. Pass focused:true only when this goal should become the active work environment now (it applies from the NEXT turn).',
+            parameters: {
+                type: 'object',
+                properties: {
+                    title: { type: 'string', description: 'Short goal name, e.g. "Q4 journal review"' },
+                    objective: { type: 'string', description: 'What done looks like; the durable aim, not the next step' },
+                    status: { type: 'string', enum: ['active', 'paused', 'done'], description: 'Default active' },
+                    next: { type: 'string', description: 'The next concrete step' },
+                    inputs: { type: 'string', description: 'JSON array of {kind, ref, note?}; kind is notebook|skill|strategy|memory|watch|symbol|bot|url' },
+                    outputs: { type: 'string', description: 'JSON array of {kind, ref, note?} — what this goal produces' },
+                    triggers: { type: 'string', description: 'JSON array of {kind:"message",match:[phrases]} | {kind:"price",watchId} | {kind:"session",when:"start"}' },
+                    allowed_tools: { type: 'array', items: { type: 'string' }, description: 'Tool names this goal may use; omit for the seat\'s normal list. Can only narrow.' },
+                    focused: { type: 'boolean', description: 'Make this the active goal environment now' },
+                    bot_id: { type: 'string', description: 'Optional agent/bot that owns this goal' },
+                    strategy: { type: 'string', description: 'Optional strategy slug this goal follows' },
+                },
+                required: ['title', 'objective'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'update_goal',
+            description:
+                'Change the goal you are working inside — objective, next step, status, inputs, outputs, triggers, tool policy or focus. The edit is DIRECT and versioned; the previous snapshot is kept in history and can be restored. The goal can only narrow this seat\'s tools, never add one. Pass if_version to avoid overwriting a concurrent edit; a mismatch returns the current goal so you merge and retry in the same turn.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    slug: { type: 'string', description: 'The goal to edit' },
+                    if_version: { type: 'number', description: 'The version open_goal/list_goals last showed you' },
+                    title: { type: 'string' },
+                    objective: { type: 'string' },
+                    status: { type: 'string', enum: ['active', 'paused', 'done'] },
+                    next: { type: 'string' },
+                    inputs: { type: 'string', description: 'JSON array of {kind, ref, note?}' },
+                    outputs: { type: 'string', description: 'JSON array of {kind, ref, note?}' },
+                    triggers: { type: 'string', description: 'JSON array of message/price/session triggers' },
+                    allowed_tools: { type: 'array', items: { type: 'string' }, description: 'Replace the goal tool policy; may only narrow this seat\'s list' },
+                    focused: { type: 'boolean', description: 'Make this the active goal environment (or release focus)' },
+                },
+                required: ['slug'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'restore_goal',
+            description:
+                'Restore a previous goal version as a NEW revision. Use it when a goal edit went wrong; the restore itself is recorded in history and the current state is kept as its previous snapshot.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    slug: { type: 'string' },
+                    version: { type: 'number', description: 'The `version` shown in the history entry you want' },
+                },
+                required: ['slug', 'version'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'list_self_changes',
+            description:
+                'Read the harness change ledger: every change to the agent\'s own behavior knobs and prompt text, with its previous value, status and evidence. Call it before proposing a change (a target already in force must be reverted first) and whenever the trader asks what you have changed about yourself.',
+            parameters: { type: 'object', properties: {}, additionalProperties: false },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'propose_self_change',
+            description:
+                'Change the harness you are running in, now. Only works when the trader enabled self-modification. kind:"knob" moves an open behavior knob (thinking effort, confirmed-skill library cap); it applies immediately and AUTO-REVERTS after 24h. kind:"prompt" rewrites one registered prompt; it is refused unless the trader turned on shadow mode AND the prompt A/B is armed, and it is judged by the closed trades that ran under it. Risk settings, privacy switches, the memory off-switch, the A/B settings and self-modification itself are blocked. Say why in one sentence.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    kind: { type: 'string', enum: ['knob', 'prompt'], description: 'Which surface you are changing' },
+                    target: { type: 'string', description: 'Knob name (e.g. "responseEffort") or prompt id (e.g. "analysis.master")' },
+                    value: { type: 'string', description: 'For a knob, the value in JSON form: "fast" for an effort tier, 60 for a number. For a prompt, the replacement text itself.' },
+                    reason: { type: 'string', description: 'Why this change makes the work better — verbatim in the audit ledger' },
+                },
+                required: ['kind', 'target', 'value', 'reason'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'revert_self_change',
+            description:
+                'Undo one change from the ledger, restoring the exact previous value it recorded. You may revert a change you made; a change the trader made is theirs to revert.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    id: { type: 'string', description: 'The ledger id exactly as list_self_changes prints it' },
+                },
+                required: ['id'],
                 additionalProperties: false,
             },
         },
@@ -1819,6 +1973,13 @@ export const deskToolsMandateFor = (offered?: readonly string[]): string => {
     const levelRule = has('get_key_levels')
         ? ' When the user asks for KEY LEVELS (or asks where the levels are), call `get_key_levels` BEFORE you answer: it computes support/resistance, pivots, Fibonacci, round numbers and VWAP for the asked symbol/timeframe and returns a `key-levels` fence. Copy that fence VERBATIM at the end of your answer — it is what puts the Key Levels card on the chart. Never retype its prices.'
         : '';
+    // The self-modification line rides ONLY when the trader turned the
+    // capability on. An off switch that still advertised the tool would send the
+    // seat to an executor that refuses it — the same mistake the chart rule
+    // above exists to stop.
+    const selfModRule = has('propose_self_change') && getHarnessSettings().selfModificationMode !== 'off'
+        ? 'You run inside a harness you may adjust: `propose_self_change` moves a behavior knob (thinking effort, the confirmed-skill library cap — it reverts itself within 24h) or, in shadow mode, rewrites one prompt and lets the trades that run under it judge it. Call `list_self_changes` first: a target already in force must be reverted before it changes again, and a change you did not need is a change you should revert. Risk limits, privacy, memory, the prompt A/B settings and self-modification itself are blocked — asking for them is not a failure, it is a question for the trader.\n'
+        : '';
 
     return `
 **DESK TOOLS (available anytime on this turn)**
@@ -1828,7 +1989,7 @@ The chart symbol is only the DEFAULT: every market tool accepts a \`symbol\` arg
 Your own trading memory is one of these tools: the recall tool searches your notebook (doctrine, rules, similar past trades) - call it when prior experience with this setup could change your stance.
 ${shapeRule} The market packet you are shown carries code-calculated summaries, and its printed candle rows depend on the surface you were opened in: the full packet prints EIGHT rows per timeframe, the compact one (used by surfaces that ask for brevity) prints NONE and keeps only the summaries. Either way — eight printed rows are not a chart, and a shape described from them is invented, not read. If the rows are not in front of you, call ${groundingTool ?? 'nothing'}; if you have not, either call it or say "inferred from the rows shown" and give it no confidence. ${drawingRule}${levelRule}
 run_monte_carlo simulates a concrete plan: pass direction (long/short), entry, stop_loss, and take_profits (1–3 absolute prices). Optional atr is in price units; without it volatility is assumed from twice the stop distance, NOT fetched from the market. Optional timeframe is a label, num_simulations (100–5000) and max_steps (10–1000) control the run. For account drawdown estimates pass account_balance, position_size (margin in account currency), and leverage together. Report the simulation assumptions and timeout rate, not guaranteed or historical performance.
-Do not call tools you do not need. Prefer 0–2 calls. After tool results arrive, write your Floor reply from the findings — no JSON, no restated tool schemas.
+${selfModRule}Do not call tools you do not need. Prefer 0–2 calls. After tool results arrive, write your Floor reply from the findings — no JSON, no restated tool schemas.
 `;
 };
 
@@ -2431,6 +2592,13 @@ export interface DeskToolContext {
      *  turn that produced them, and clearing this turn cannot delete another
      *  turn's live payloads. */
     artifactOwner?: string;
+    /** The Settings memory switch for THIS turn. False means the memory tools
+     *  refuse (no read, no write) and the pre-read hint pass does not run.
+     *  Undefined preserves legacy callers that never had a memory flag. */
+    memoryEnabled?: boolean;
+    /** The trader's latest message, when the caller has it. `forget` is only
+     *  allowed when that message asks to forget/delete/remove something. */
+    lastUserMessage?: string;
 }
 
 /** Market-data tools whose result may need the coin named in the transcript —
@@ -2490,6 +2658,42 @@ const rejectedResult = (call: DeskToolCall, reason: string): DeskToolResult => (
     content: reason,
 });
 
+/** A goal's list argument may arrive as an array or a JSON string (the tool
+ *  schema asks for a string); anything else is a malformed call, not an empty
+ *  list. */
+const goalArrayArg = (value: unknown): unknown[] | undefined | null => {
+    if (value === undefined) return undefined;
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+        try {
+            const parsed: unknown = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : null;
+        } catch {
+            return null;
+        }
+    }
+    return null;
+};
+
+/** Goal policy tools are a SUBSET of this seat's tools and of the built-in
+ *  catalog. The executor also intersects them at turn time; this check makes
+ *  the refusal explicit instead of letting a goal silently lose a tool. */
+const goalToolPolicyArg = (value: unknown, seat: readonly string[] | undefined):
+    | { ok: true; tools?: string[] }
+    | { ok: false; error: string } => {
+    if (value === undefined) return { ok: true };
+    if (!Array.isArray(value)) return { ok: false, error: 'allowed_tools must be an array of tool names' };
+    const catalog = new Set(DESK_TOOL_DEFINITIONS.map(d => d.function.name));
+    const tools = [...new Set(value.map(String).map(s => s.trim()).filter(Boolean))];
+    for (const tool of tools) {
+        if (!catalog.has(tool)) return { ok: false, error: `"${tool}" is not a desk tool` };
+        if (seat && !seat.includes(tool)) {
+            return { ok: false, error: `"${tool}" is not available on this seat; a goal can only narrow the tools it already has` };
+        }
+    }
+    return { ok: true, tools };
+};
+
 /** Fresh read when the surface offers one, frozen turn-start value otherwise.
  *  Falls back instead of failing: a surface with no getter keeps behaving
  *  exactly as it did before these existed. */
@@ -2537,6 +2741,20 @@ export async function executeDeskTool(
     // HERE, before the cache and before the switch.
     if (!seatAllows(context.allowedTools, call.name)) {
         return rejectedResult(call, `${call.name} rejected: this tool is not available on this seat.`);
+    }
+    // The Settings switch is a PROMISE at the tool layer too, not just in the
+    // prompt: with memory off, a seat that still has these tools offered must
+    // not be able to read or write the trader's notebook.
+    if (context.memoryEnabled === false
+        && (call.name === 'remember' || call.name === 'read_memory' || call.name === 'forget')) {
+        return rejectedResult(call, `${call.name} rejected: memory is OFF for this turn — nothing is read or saved.`);
+    }
+    if (call.name === 'forget' && typeof context.lastUserMessage === 'string') {
+        const asked = /\b(?:forget|delete|remove|drop|erase|wipe|stop\s+(?:remembering|saving)|don['’]?t\s+remember)\b/i
+            .test(context.lastUserMessage);
+        if (!asked) {
+            return rejectedResult(call, "forget rejected: the trader's latest message did not ask to forget anything; ask before deleting a memory.");
+        }
     }
     // Repeat calls within the TTL (every seat asks the same desk) are served
     // from cache — identical market data, zero extra network round-trips.
@@ -2671,8 +2889,10 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     .map(f => f.name);
                 const skillDir = `notebook:skills/${row.slug}`;
                 const substitute = (text: string): string => text
-                    .replace(/\$\{(?:AUGUST|HERMES)_SKILL_DIR\}/g, skillDir)
-                    .replace(/\$\{(?:AUGUST|HERMES)_SESSION_ID\}/g, context.sessionId || DESK_BOOT_SESSION_ID);
+                    // Bare ${SKILL_DIR}/${SESSION_ID} are the spec's names; the
+                    // AUGUST_/HERMES_ prefixes are the portability aliases.
+                    .replace(/\$\{(?:AUGUST_|HERMES_)?SKILL_DIR\}/g, skillDir)
+                    .replace(/\$\{(?:AUGUST_|HERMES_)?SESSION_ID\}/g, context.sessionId || DESK_BOOT_SESSION_ID);
                 if (filePath) {
                     if (/[/\\]|^\.|\.\./.test(filePath) || !bundled.includes(filePath)) {
                         return rejectedResult(call, `skill_view rejected: "${filePath}" is not one of ${row.slug}'s bundled files (path separators and .. are refused)`);
@@ -2692,7 +2912,7 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                 // duplicates. The index rides every system prompt, so the model
                 // already sees what exists before choosing slug vs new.
                 try {
-                    const { rememberProfileMemory, normalizeKind, slugify } = await import('../learning/profileMemory');
+                    const { normalizeKind, normalizeSubject, slugify } = await import('../learning/profileMemory');
                     const { getActiveUsername } = await import('../../utils/activeUser');
                     const kind = normalizeKind(call.arguments.kind);
                     if (!kind) {
@@ -2702,6 +2922,14 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                     const body = asString(call.arguments.body);
                     if (!description || !body) {
                         return rejectedResult(call, 'remember rejected: description and body are both required');
+                    }
+                    // The chat agent may write only facts the trader STATED.
+                    // observed/inferred are stamped by system paths; refusing
+                    // here is what makes the provenance claim true instead of
+                    // silently overwriting the caller's tag.
+                    const requestedTag = asString(call.arguments.tag).toLowerCase();
+                    if (requestedTag && requestedTag !== 'stated') {
+                        return rejectedResult(call, `remember rejected: the chat agent may only write tag "stated", not "${requestedTag}" — observed/inferred facts belong to system paths`);
                     }
                     const slug = asString(call.arguments.slug) || slugify(asString(call.arguments.name) || description);
                     // Tag the writer: profileMemory's convention is that MODEL
@@ -2725,10 +2953,23 @@ ${body}`);
                         : undefined;
                     const ifVersionRaw = call.arguments.if_version;
                     const ifVersion = typeof ifVersionRaw === 'number' ? ifVersionRaw : undefined;
-                    const result = rememberProfileMemory(
-                        { slug, description, kind, body, source: 'model', ifVersion, tag: 'stated', sensitive: verdict.sensitive || undefined, aliases: aliasesRaw },
-                        getActiveUsername(),
+                    const { rememberWithConsolidation } = await import('../learning/profileMemoryConsolidation');
+                    const consolidated = await rememberWithConsolidation(
+                        {
+                            slug, description, kind, body, source: 'model', ifVersion,
+                            tag: 'stated', sensitive: verdict.sensitive || undefined,
+                            aliases: aliasesRaw,
+                            subject: normalizeSubject(call.arguments.subject) ?? undefined,
+                            // The conversation the fact was heard in. A fact the
+                            // trader cannot place is a fact they cannot audit.
+                            sourceSession: context.sessionId ?? undefined,
+                        },
+                        { username: getActiveUsername() },
                     );
+                    if (!consolidated.ok) {
+                        return rejectedResult(call, `remember rejected: ${consolidated.error}`);
+                    }
+                    const result = consolidated.result;
                     if (result.conflict) {
                         // Optimistic-lock miss: hand the caller the row that IS
                         // stored, so it merges and retries in the same turn
@@ -2742,11 +2983,15 @@ ${body}`);
                         });
                         break;
                     }
+                    if (result.persisted === false) {
+                        return rejectedResult(call, `remember rejected: the fact did not reach storage${result.error ? ` (${result.error})` : ''}. Nothing was saved.`);
+                    }
                     const { entry, created } = result;
                     content = JSON.stringify({
                         saved: true, slug: entry.slug, kind: entry.kind, created,
                         version: entry.version ?? 1,
                         note: created ? 'New memory saved — its index line now rides every future prompt.' : `Existing memory "${entry.slug}" UPDATED in place (no duplicate created).`,
+                        ...(consolidated.consolidation ? { consolidation: consolidated.consolidation } : {}),
                     });
                 } catch (err) {
                     return rejectedResult(call, `remember rejected: ${err instanceof Error ? err.message : String(err)}`);
@@ -2754,26 +2999,266 @@ ${body}`);
                 break;
             }
             case 'read_memory': {
-                const { listProfileMemories, getProfileMemory } = await import('../learning/profileMemory');
+                const { listProfileMemories, getProfileMemory, subjectOf } = await import('../learning/profileMemory');
                 const raw = call.arguments.slugs;
                 const slugs: string[] = Array.isArray(raw) ? raw.map(String) : (raw ? [String(raw)] : []);
                 const all = listProfileMemories();
-                const picked = slugs.includes('all') || slugs.length === 0
-                    ? all
-                    : slugs.map(s => getProfileMemory(s)).filter((e): e is NonNullable<typeof e> => !!e);
+                // A restricted seat with no write tools is an unattended reader
+                // (the skill evaluator). Sensitive rows are not a pre-read there:
+                // the feature's "excluded from unattended contexts" claim has to
+                // include the explicit "all" read, not just the hint pass.
+                const unattended = seatIsRestricted(context.allowedTools) && !seatAllows(context.allowedTools, 'remember');
+                const askedByName = !slugs.includes('all') && slugs.length > 0;
+                // "all" is a bulk read the SEAT chose, not the trader. A health
+                // or finance line rides it into the prompt exactly as it would
+                // ride the index, so it is held out of the bulk read for every
+                // seat and named back as a count. A slug asked for by name is a
+                // different act: the store's own index never advertises a
+                // sensitive slug, so naming one means the trader raised it.
+                const held = all.filter(e => e.sensitive).length;
+                const picked = askedByName
+                    ? slugs.map(s => getProfileMemory(s)).filter((e): e is NonNullable<typeof e> => !!e && (!unattended || !e.sensitive))
+                    : all.filter(e => !e.sensitive);
                 content = picked.length === 0
                     ? 'No matching memories. The index lists what exists; "all" returns every entry.'
-                    : picked.map(e => `### [${e.kind}] ${e.slug}\n_${e.description}_\n\n${e.body}`).join('\n\n');
+                    : [
+                        picked.map(e => [
+                            `### [${e.kind}] ${e.slug}`,
+                            `_${e.description}_`,
+                            `subject: ${subjectOf(e)} · tag: ${e.tag ?? 'stated'}${e.sourceSession ? ` · written in session ${e.sourceSession}` : ''}`,
+                            '',
+                            e.body,
+                        ].join('\n')).join('\n\n'),
+                        !askedByName && held > 0
+                            ? `${held} sensitive entr${held === 1 ? 'y is' : 'ies are'} not included in a bulk read. Read one by slug only when the trader raises it.`
+                            : '',
+                    ].filter(Boolean).join('\n\n');
                 break;
             }
             case 'forget': {
                 const { forgetProfileMemory } = await import('../learning/profileMemory');
                 const slug = asString(call.arguments.slug);
-                const gone = slug ? forgetProfileMemory(slug) : false;
-                if (!gone) {
+                const gone = slug ? forgetProfileMemory(slug) : { gone: false, removed: [], carried: [] };
+                if (!gone.gone) {
                     return rejectedResult(call, `forget rejected: no memory with slug "${slug}". Check the index for the exact slug.`);
                 }
-                content = JSON.stringify({ removed: true, slug, note: 'The memory is deleted and gone from every future index.' });
+                // Say what actually left the store. A line that was the ONLY
+                // source of another line goes with it, and a survivor that
+                // absorbed other facts took those records down too — either
+                // case is more than the trader named, and a receipt that said
+                // only "removed: true" would under-report a delete.
+                content = JSON.stringify({
+                    removed: true,
+                    slug,
+                    ...(gone.removed.length > 1 ? { alsoRemoved: gone.removed.slice(1) } : {}),
+                    ...(gone.carried.length > 0 ? { itAlsoCarried: gone.carried } : {}),
+                    note: 'The memory is deleted and gone from every future index.',
+                });
+                break;
+            }
+            case 'list_goals': {
+                try {
+                    const { listGoals } = await import('../goals/GoalService');
+                    const goals = listGoals();
+                    content = goals.length === 0
+                        ? 'No goals yet. create_goal makes one; a goal is a durable work environment, not a chat title.'
+                        : goals.map(g => `- ${g.slug} [${g.status}]${g.focused ? ' · FOCUSED' : ''} — ${g.title}: ${g.objective}${g.next ? ` · next: ${g.next}` : ''}`).join('\n');
+                } catch (err) {
+                    return rejectedResult(call, `list_goals rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case 'open_goal': {
+                try {
+                    const { getGoal } = await import('../goals/GoalService');
+                    const slug = asString(call.arguments.slug).trim();
+                    if (!slug) return rejectedResult(call, 'open_goal rejected: slug is required');
+                    const goal = getGoal(slug);
+                    if (!goal) return rejectedResult(call, `open_goal rejected: no goal "${slug}". list_goals names every goal.`);
+                    content = JSON.stringify({ ...goal, history: goal.history.slice(-5) }, null, 2);
+                } catch (err) {
+                    return rejectedResult(call, `open_goal rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case 'create_goal': {
+                try {
+                    const { createGoal } = await import('../goals/GoalService');
+                    const title = asString(call.arguments.title).trim();
+                    const objective = asString(call.arguments.objective).trim();
+                    if (!title || !objective) return rejectedResult(call, 'create_goal rejected: title and objective are required');
+                    const inputs = goalArrayArg(call.arguments.inputs);
+                    const outputs = goalArrayArg(call.arguments.outputs);
+                    const triggers = goalArrayArg(call.arguments.triggers);
+                    if (inputs === null || outputs === null || triggers === null) {
+                        return rejectedResult(call, 'create_goal rejected: inputs, outputs and triggers must be JSON arrays');
+                    }
+                    const allowed = goalToolPolicyArg(call.arguments.allowed_tools, context.allowedTools);
+                    if (!allowed.ok) return rejectedResult(call, `create_goal rejected: ${allowed.error}`);
+                    const goal = await createGoal({
+                        title,
+                        objective,
+                        status: (asString(call.arguments.status) || 'active') as 'active' | 'paused' | 'done',
+                        ...(asString(call.arguments.next) ? { next: asString(call.arguments.next) } : {}),
+                        inputs: (inputs ?? []) as GoalRef[],
+                        outputs: (outputs ?? []) as GoalRef[],
+                        triggers: (triggers ?? []) as GoalTrigger[],
+                        policy: allowed.tools ? { allowedTools: allowed.tools } : {},
+                        focused: call.arguments.focused === true,
+                        ...(asString(call.arguments.bot_id) ? { botId: asString(call.arguments.bot_id) } : {}),
+                        ...(asString(call.arguments.strategy) ? { strategy: asString(call.arguments.strategy) } : {}),
+                    }, { source: 'model', by: 'model', summary: 'created' });
+                    content = JSON.stringify({
+                        saved: true, slug: goal.slug, version: goal.version, focused: goal.focused,
+                        note: 'Goal environment created in the notebook goals folder. Its previous state is versioned; restore_goal can undo later edits.',
+                        ...(goal.focused ? { focus: 'applies from the NEXT turn' } : {}),
+                    });
+                } catch (err) {
+                    return rejectedResult(call, `create_goal rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case 'update_goal': {
+                try {
+                    const { updateGoal } = await import('../goals/GoalService');
+                    const slug = asString(call.arguments.slug).trim();
+                    if (!slug) return rejectedResult(call, 'update_goal rejected: slug is required');
+                    const patch: Record<string, unknown> = {};
+                    for (const key of ['title', 'objective', 'status', 'next'] as const) {
+                        if (call.arguments[key] !== undefined) patch[key] = asString(call.arguments[key]);
+                    }
+                    for (const key of ['inputs', 'outputs', 'triggers'] as const) {
+                        const parsed = goalArrayArg(call.arguments[key]);
+                        if (parsed === null) return rejectedResult(call, `update_goal rejected: ${key} must be a JSON array`);
+                        if (parsed !== undefined) patch[key] = parsed;
+                    }
+                    const allowed = goalToolPolicyArg(call.arguments.allowed_tools, context.allowedTools);
+                    if (!allowed.ok) return rejectedResult(call, `update_goal rejected: ${allowed.error}`);
+                    if (allowed.tools !== undefined) patch.policy = { allowedTools: allowed.tools };
+                    if (call.arguments.focused !== undefined) patch.focused = call.arguments.focused === true;
+                    if (Object.keys(patch).length === 0) return rejectedResult(call, 'update_goal rejected: nothing to update');
+                    const ifVersion = typeof call.arguments.if_version === 'number' ? call.arguments.if_version : undefined;
+                    const result = await updateGoal(slug, patch as GoalPatch, {
+                        ifVersion, by: 'model', summary: Object.keys(patch).join(', '),
+                    });
+                    if ('conflict' in result) {
+                        content = JSON.stringify({
+                            saved: false, conflict: true, slug,
+                            if_version: result.current.version,
+                            current_objective: result.current.objective,
+                            current_next: result.current.next,
+                            current_status: result.current.status,
+                            current_focused: result.current.focused,
+                            note: 'Version conflict — merge your change into the current goal and call update_goal again with if_version set to the number above.',
+                        });
+                        break;
+                    }
+                    content = JSON.stringify({
+                        saved: true, slug, version: result.goal.version, focused: result.goal.focused,
+                        note: 'Goal updated; the previous snapshot is in history. restore_goal undoes it. A focus/policy change applies from the NEXT turn.',
+                    });
+                } catch (err) {
+                    return rejectedResult(call, `update_goal rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case 'restore_goal': {
+                try {
+                    const { restoreGoal } = await import('../goals/GoalService');
+                    const slug = asString(call.arguments.slug).trim();
+                    const version = typeof call.arguments.version === 'number' ? call.arguments.version : NaN;
+                    if (!slug || !Number.isFinite(version)) return rejectedResult(call, 'restore_goal rejected: slug and a numeric version are required');
+                    const result = await restoreGoal(slug, version, { by: 'model' });
+                    if ('conflict' in result) return rejectedResult(call, 'restore_goal rejected: the goal changed while restoring; open_goal and retry');
+                    content = JSON.stringify({ restored: true, slug, version: result.goal.version, note: 'Restored as a new revision; the prior state is still in history.' });
+                } catch (err) {
+                    return rejectedResult(call, `restore_goal rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case 'list_self_changes': {
+                try {
+                    const { listSelfChanges } = await import('../selfMod/SelfChangeLedger');
+                    const { getSelfModMode } = await import('../selfMod/SelfModificationService');
+                    const rows = listSelfChanges();
+                    const shown = rows.slice(0, 8);
+                    const line = (r: typeof shown[number]): string => {
+                        const window = r.status === 'shadow'
+                            ? ' · in shadow, being measured'
+                            : r.status === 'active' && r.expiresAt
+                                ? ` · reverts ${r.expiresAt.slice(0, 16)}Z` : '';
+                        const was = r.before ? `was ${r.before.slice(0, 50)}; ` : '';
+                        const ev = r.evidence ? ` · ${r.evidence.slice(0, 80)}` : '';
+                        return `- ${r.id} [${r.status} · ${r.actor}] ${r.target.slice(0, 40)}: now ${r.after.slice(0, 50)} (${was}asked: ${r.reason.slice(0, 80)})${window}${ev}`;
+                    };
+                    content = [
+                        `Self-modification is "${getSelfModMode()}". ${rows.length} ledger row(s)`
+                        + `${rows.length > shown.length ? `, the ${shown.length} newest:` : ':'}`,
+                        ...shown.map(line),
+                        rows.length === 0
+                            ? 'Nothing has been changed about the harness yet.'
+                            : 'revert_self_change restores the exact value a row recorded. A config row reverts itself when its window closes; a shadow row is settled by the trades that ran under it.',
+                    ].join('\n');
+                } catch (err) {
+                    return rejectedResult(call, `list_self_changes rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case 'propose_self_change': {
+                try {
+                    const svc = await import('../selfMod/SelfModificationService');
+                    const kind = asString(call.arguments.kind).trim();
+                    const target = asString(call.arguments.target).trim();
+                    const reason = asString(call.arguments.reason).trim();
+                    if (!target || !reason) return rejectedResult(call, 'propose_self_change rejected: target and reason are both required');
+                    // A knob value may arrive as a JSON scalar or a string; the
+                    // service decodes JSON either way, so normalize here rather
+                    // than refuse a call that meant well.
+                    const raw = call.arguments.value;
+                    const value = typeof raw === 'string' ? raw : JSON.stringify(raw);
+                    // A detached/restricted seat that was not given the write
+                    // tool is read-only for its own harness, exactly as an
+                    // unattended run is read-only for memory.
+                    const readOnly = seatIsRestricted(context.allowedTools)
+                        && !seatAllows(context.allowedTools, 'propose_self_change');
+                    const opts = { actor: 'agent' as const, readOnly };
+                    const res = kind === 'prompt'
+                        ? await svc.proposePromptOverride(target, value, reason, opts)
+                        : kind === 'knob'
+                            ? await svc.proposeKnobChange(target, value, reason, opts)
+                            : null;
+                    if (!res) return rejectedResult(call, 'propose_self_change rejected: kind must be "knob" or "prompt"');
+                    if (!res.ok) return rejectedResult(call, `propose_self_change rejected: ${res.error}`);
+                    content = JSON.stringify({
+                        changed: true,
+                        id: res.change.id,
+                        target: res.change.target,
+                        status: res.change.status,
+                        ...(res.change.expiresAt ? { revertsAt: res.change.expiresAt } : {}),
+                        note: res.note ?? 'The previous value is in the ledger; revert_self_change restores it.',
+                    });
+                } catch (err) {
+                    return rejectedResult(call, `propose_self_change rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
+                break;
+            }
+            case 'revert_self_change': {
+                try {
+                    const svc = await import('../selfMod/SelfModificationService');
+                    const id = asString(call.arguments.id).trim();
+                    if (!id) return rejectedResult(call, 'revert_self_change rejected: id is required');
+                    const readOnly = seatIsRestricted(context.allowedTools)
+                        && !seatAllows(context.allowedTools, 'revert_self_change');
+                    if (readOnly) return rejectedResult(call, 'revert_self_change rejected: this seat is read-only for the harness');
+                    const res = await svc.revertSelfChange(id, 'agent');
+                    if (!res.ok) return rejectedResult(call, `revert_self_change rejected: ${res.error}`);
+                    content = JSON.stringify({
+                        reverted: true, id: res.change.id, target: res.change.target,
+                        note: 'The exact previous value is restored; the row keeps its audit history.',
+                    });
+                } catch (err) {
+                    return rejectedResult(call, `revert_self_change rejected: ${err instanceof Error ? err.message : String(err)}`);
+                }
                 break;
             }
             case 'propose_skill': {
@@ -2818,6 +3303,21 @@ ${body}`);
                     });
                     if (!crafted) {
                         return rejectedResult(call, 'propose_skill rejected: the proposal is missing required fields (name, when, steps, if_condition, then_action).');
+                    }
+                    const { skillBodyCaps, hasUseWhenTrigger } = await import('../../utils/skillFrontmatter');
+                    const authoredBody = [
+                        crafted.when, ...crafted.steps, crafted.validate, crafted.output,
+                        crafted.ifCondition, crafted.thenAction,
+                    ].join('\n');
+                    const caps = skillBodyCaps(authoredBody);
+                    if (caps.overHard) {
+                        return rejectedResult(call, `propose_skill rejected: the authored body is ${caps.chars.toLocaleString()} chars — over the 100k hard cap; put long material in a bundled references/ file.`);
+                    }
+                    if (caps.overSoft) {
+                        console.warn(`[Skills] proposal "${crafted.name}": ${caps.lines} lines is over the ~200-line soft cap — long material belongs in a bundled references/ file`);
+                    }
+                    if (crafted.description && !hasUseWhenTrigger(crafted.description)) {
+                        console.warn(`[Skills] proposal "${crafted.name}": the description has no "Use when" trigger — it is the activation key, and a vague one rarely activates`);
                     }
                     // The same quality bar every other draft source passes:
                     // tombstone cooldown, duplicate skip, live-skill coverage
@@ -3776,6 +4276,10 @@ export async function runDeskToolLoop(params: {
     onToolPayload?: (payload: ToolPayload) => void;
     nativeTools?: boolean;
     allowedTools?: string[];
+    /** The Settings memory switch; see `DeskToolContext.memoryEnabled`. */
+    memoryEnabled?: boolean;
+    /** See `DeskToolContext.lastUserMessage` (the forget guard). */
+    lastUserMessage?: string;
     trades?: LoggedTrade[];
     /** Additional tool definitions merged into the desk set (e.g. debate mail). */
     extraToolDefs?: DeskToolDefinition[];
@@ -3820,6 +4324,8 @@ export async function runDeskToolLoop(params: {
         speaker = '',
         nativeTools = config.apiFormat === 'chat_completions',
         allowedTools,
+        memoryEnabled,
+        lastUserMessage,
         trades,
         extraToolDefs = [],
         executeExtraTool,
@@ -4124,6 +4630,8 @@ export async function runDeskToolLoop(params: {
                 // what's offered: text-protocol seats can emit a tag for any
                 // tool, and these calls bypass the offer-time filter.
                 allowedTools,
+                memoryEnabled,
+                lastUserMessage,
             })
             : [];
         const results = [...replays, ...extraResults, ...forgedResults, ...coreResults];
@@ -4250,6 +4758,15 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     getFormingCandle?: () => FormingCandle | null;
     /** Override harness setting. Default: follow Settings → Desk Tools. */
     enabled?: boolean;
+    /** The Settings memory switch for this turn. False disables the pre-read
+     *  hint pass and makes the memory tools refuse in the executor. */
+    memoryEnabled?: boolean;
+    /** The trader's latest message, for the forget guard. */
+    lastUserMessage?: string;
+    /** The focused goal's declared tool policy. The effective allow-list is
+     *  the intersection with the seat's own list, so a goal can only narrow —
+     *  never widen — what the seat may call. */
+    goalAllowedTools?: string[];
     /** Final-turn nudge after tools ran. */
     afterToolsNudge?: string;
     /** Live tool-call visibility (Floor chips) — fires before and after each
@@ -4348,15 +4865,19 @@ export async function* streamChatWithDeskTools(
     // a clear a future caller can forget.
     clearDeskToolCache();
 
-    // The deterministic safety net (utils/memoryHints): a weak or local model
-    // does not reliably decide to read memory or open a skill, so on a plain
-    // string match of the trader's own message the harness appends ONE marked
-    // hint naming what to read. Strong models never pay for it — the heuristic
-    // gates the whole block, and no match adds zero bytes. The hint rides the
-    // user role inside the harness's own marker, the same voice the tool
+    // The deterministic pre-read (utils/memoryHints), on EVERY model: a plain
+    // string match of the trader's own message against the memory index and the
+    // skill slugs, and on a hit the harness attaches the matched record's own
+    // body — at most two, never a sensitive one — so the answer is decided with
+    // the fact in front of it instead of relying on the seat to go fetch it.
+    // Forgetting is not a weakness only small models have, and the cost is
+    // bounded by the match: a message that names nothing adds zero bytes, and
+    // this runs before the first token, so no answer waits on it. A skill is
+    // only NAMED — a procedure body is never injected unasked. The block rides
+    // the user role inside the harness's own marker, the same voice the tool
     // nudges use, so the seat can tell the trader's words from the app's.
     let outbound = messages;
-    if (isLikelySmallModel(config)) {
+    if (options?.memoryEnabled !== false) {
         try {
             const { listProfileMemories } = await import('../learning/profileMemory');
             const { skillIndexRows } = await import('../learning/SkillMemoryService');
@@ -4364,7 +4885,10 @@ export async function* streamChatWithDeskTools(
             const lastText = typeof last?.content === 'string' ? last.content : '';
             const hints = buildMemoryHints(
                 lastText,
-                listProfileMemories().map(e => ({ slug: e.slug, description: e.description, aliases: e.aliases, sensitive: e.sensitive })),
+                listProfileMemories().map(e => ({
+                    slug: e.slug, description: e.description, aliases: e.aliases,
+                    sensitive: e.sensitive, body: e.body,
+                })),
                 skillIndexRows().map(r => r.slug),
             );
             if (hints.length > 0 && last) {
@@ -4381,6 +4905,8 @@ export async function* streamChatWithDeskTools(
     const nativeTools = config.apiFormat === 'chat_completions';
     const {
         defaultSymbol,
+        memoryEnabled,
+        lastUserMessage: optsLastUserMessage,
         afterToolsNudge,
         chartInterval,
         chartLevels,
@@ -4394,6 +4920,7 @@ export async function* streamChatWithDeskTools(
         onToolAction,
         onStreamReset,
         allowedTools,
+        goalAllowedTools,
         trades,
         mailbox,
         mailboxSeat,
@@ -4441,13 +4968,26 @@ export async function* streamChatWithDeskTools(
     // names the loop will honour (an allow-list filters the definitions; without
     // one, everything including the chart actions and the mailbox is offered),
     // so it is what the prose gets composed from — see `deskToolsMandateFor`.
-    const offeredToolNames = mergedAllowed && mergedAllowed.length > 0
-        ? mergedAllowed
-        : [
-            ...DESK_TOOL_DEFINITIONS.map(d => d.function.name),
-            ...confirmedForgedToolDefinitions().map(d => d.function.name),
-            ...extraDefs.map(d => d.function.name),
-        ];
+    // A focused goal narrows the seat. The intersection is computed HERE, at
+    // the one place both the prompt and the executor read, so the model is
+    // never told about a tool the goal removed and the executor never grants
+    // one. An empty goal policy means "the seat's list unchanged".
+    const allToolNames = [
+        ...DESK_TOOL_DEFINITIONS.map(d => d.function.name),
+        ...confirmedForgedToolDefinitions().map(d => d.function.name),
+        ...extraDefs.map(d => d.function.name),
+    ];
+    const goalList = goalAllowedTools && goalAllowedTools.length > 0 ? goalAllowedTools : null;
+    // A goal narrows; it never widens. `intersectGoalPolicy` owns that rule —
+    // including why an empty intersection must NOT travel on as `[]`, which
+    // every gate in this file reads as "unrestricted".
+    const narrowed = goalList ? intersectGoalPolicy(allowedTools, goalList, allToolNames) : [];
+    const effectiveAllowed = goalList ? narrowed : mergedAllowed;
+    const offeredToolNames = goalList
+        ? narrowed.filter(n => allToolNames.includes(n))
+        : effectiveAllowed && effectiveAllowed.length > 0
+            ? effectiveAllowed
+            : allToolNames;
     const enriched = withDeskToolsSystemPrompt(outbound, nativeTools, offeredToolNames);
     // Discoverability: the capability block rides EVERY seat turn so models
     // learn they can DM; the inbox notice (unread count + read first)
@@ -4517,7 +5057,9 @@ export async function* streamChatWithDeskTools(
         getLiveMarkPrice,
         getFormingCandle,
         nativeTools,
-        allowedTools: mergedAllowed,
+        allowedTools: effectiveAllowed,
+        memoryEnabled,
+        lastUserMessage: optsLastUserMessage,
         trades,
         requireFirstToolRound,
         extraToolDefs: extraDefs,

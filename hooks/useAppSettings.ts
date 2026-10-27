@@ -15,11 +15,17 @@ export function useAppSettings() {
     // Memory Provider Selection
     const [memoryConfig, setMemoryConfig] = useState<ProviderConfig | null>(null);
     const [memoryModel, setMemoryModel] = useState<string>('');
-    const [isGlobalMemoryEnabled, setIsGlobalMemoryEnabled] = useState<boolean>(false);
+    // The shipped default, so a turn that runs before the profile loader hydrates
+    // this is not a turn without memory. `useUserProfileLoader` overwrites it with
+    // the stored value (or the same default) the moment the profile arrives.
+    const [isGlobalMemoryEnabled, setIsGlobalMemoryEnabled] = useState<boolean>(true);
 
     // User-uploaded strategy summaries (Settings → Strategies): master switch
-    // that gates whether enabled docs are injected into analysis prompts.
-    const [isStrategiesEnabled, setIsStrategiesEnabled] = useState<boolean>(false);
+    // that gates whether enabled docs are injected into prompts. Default ON —
+    // the switch now gates the seat prompt for real (`activeStrategiesBlock`),
+    // and a book the trader marked Enabled is meant to be used, not held behind
+    // a control they never touched.
+    const [isStrategiesEnabled, setIsStrategiesEnabled] = useState<boolean>(true);
 
     // Custom AI Behavior
     const [customInstructions, setCustomInstructions] = useState<CustomInstructionsMap>({

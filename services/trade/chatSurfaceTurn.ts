@@ -42,6 +42,7 @@ import { buildNotebookTopicsIndex } from '../learning/memoryTopics';
 import { indexBudgetFor } from '../../utils/promptIndexBudget';
 import { activeStrategiesBlock } from '../learning/strategyStore';
 import { buildProfileMemoryIndex } from '../learning/profileMemory';
+import { buildGoalsIndex, focusedGoal, goalMatchesMessage, listGoals } from '../goals/GoalService';
 import { runToolTurn, type ToolTurnEvents, type ToolTurnOutcome, type ToolTurnRequest } from './toolTurn';
 import { isMarketReadTool } from '../analysis/DeskToolsService';
 import { runPresentTrade } from './presentTradeTool';
@@ -71,6 +72,12 @@ export const CHAT_SURFACE_TOOLS = [
     'write_memory_note', 'get_notebook_map', 'propose_skill', 'revise_skill', 'propose_strategy',
     'amend_memory', 'forge_tool',
     'remember', 'read_memory', 'forget',
+    // Goal environments — durable work state the agent can shape mid-task.
+    'list_goals', 'open_goal', 'create_goal', 'update_goal', 'restore_goal',
+    // The harness's own change ledger. Reading it is always available; the two
+    // writes are refused by the service unless the trader enabled
+    // self-modification, and by UNATTENDED_DENY for any detached run.
+    'list_self_changes', 'propose_self_change', 'revert_self_change',
     // The verdict IS a tool call in the post-debate app (stage 20's premise), so
     // the desk must be able to present a plan wherever the trader asks. The
     // shared executor draws nothing and arms no watch for this sink — and says
@@ -109,7 +116,7 @@ export interface ChatSurfacePrompt {
  * trader their answer: the prompt simply carries less, the same way the dock's
  * `skillsIndexForPrompt` swallows and returns ''.
  */
-export const surfacePromptWith = (mandate: string, where: string, opts: { memoryEnabled?: boolean; windowTokens?: number } = {}): ChatSurfacePrompt => {
+export const surfacePromptWith = (mandate: string, where: string, opts: { memoryEnabled?: boolean; strategiesEnabled?: boolean; windowTokens?: number; matchText?: string } = {}): ChatSurfacePrompt => {
     const memoryEnabled = opts.memoryEnabled !== false;
     const budget = indexBudgetFor(opts.windowTokens ?? 200_000);
     let skillsBlock: string;
@@ -138,7 +145,10 @@ export const surfacePromptWith = (mandate: string, where: string, opts: { memory
     }
     let strategiesBlock: string;
     try {
-        strategiesBlock = activeStrategiesBlock();
+        // Plans AND uploaded books, behind the trader's one switch — see
+        // `activeStrategiesBlock`. Opt-out, so a caller that never threads the
+        // flag keeps the section exactly as it does today.
+        strategiesBlock = activeStrategiesBlock(3, { enabled: opts.strategiesEnabled });
     } catch {
         strategiesBlock = '';
     }
@@ -151,8 +161,35 @@ export const surfacePromptWith = (mandate: string, where: string, opts: { memory
     } catch {
         memoryBlock = '';
     }
+    // The goal is the work environment, not memory; it rides even with memory
+    // off. One compact line per goal, the focused one first.
+    let goalsBlock: string;
+    try {
+        goalsBlock = buildGoalsIndex(budget.goals);
+    } catch {
+        goalsBlock = '';
+    }
+    // A goal's `message` trigger is something the seat RESPONDS TO, not a label
+    // it reads. Deterministic substring match against the trader's own line —
+    // no extra call, no model judgement — and it changes NOTHING by itself: it
+    // names the goal and stops there. An unattended run passes no `matchText`,
+    // because a web page or a tool output must never be what points the seat at
+    // an environment.
+    if (opts.matchText) {
+        try {
+            const hit = listGoals()
+                .filter(g => !g.focused && g.status === 'active' && goalMatchesMessage(g, opts.matchText as string))
+                .slice(0, 2);
+            if (hit.length > 0) {
+                goalsBlock = [goalsBlock, `A goal's trigger matches this message: ${hit.map(g => `"${g.title}" (${g.slug})`).join(', ')} — read it with open_goal, and make it the environment only if the trader asks.`]
+                    .filter(Boolean).join('\n\n');
+            }
+        } catch {
+            /* an unreadable goal store costs the hint, never the answer */
+        }
+    }
     return {
-        text: [mandate, skillsBlock, topicsBlock, strategiesBlock, memoryBlock].filter(Boolean).join('\n\n'),
+        text: [mandate, goalsBlock, skillsBlock, topicsBlock, strategiesBlock, memoryBlock].filter(Boolean).join('\n\n'),
         skills,
     };
 };
@@ -163,7 +200,7 @@ export const surfacePromptWith = (mandate: string, where: string, opts: { memory
  * skills heading says "what the trader asks about", because there is no chart
  * here to match against, and the mandate forbids the tool calls the canvas owns.
  */
-export const chatSurfaceSystemPrompt = (opts: { memoryEnabled?: boolean; windowTokens?: number } = {}): ChatSurfacePrompt =>
+export const chatSurfaceSystemPrompt = (opts: { memoryEnabled?: boolean; strategiesEnabled?: boolean; windowTokens?: number; matchText?: string } = {}): ChatSurfacePrompt =>
     surfacePromptWith(CHAT_SURFACE_SYSTEM_PROMPT, 'what the trader asks about', opts);
 
 /** The speaker key for this surface's live tool feed — `chatRowFrom` flattens
@@ -231,6 +268,11 @@ export interface ChatSurfaceTurnRequest {
      *  and topics blocks from the seat prompt (the write tools stay — the
      *  toggle is about what the seat READS, and the UI hides writes). */
     memoryEnabled?: boolean;
+    /** The Settings → Strategies master switch. Default true; false strips the
+     *  ACTIVE STRATEGIES and UPLOADED STRATEGY BOOKS blocks from the seat. It
+     *  was previously read by nothing — the label beside the switch said the
+     *  books were used while no seat had ever seen one. */
+    strategiesEnabled?: boolean;
     symbol?: string | null;
     interval?: string;
     trades: LoggedTrade[];
@@ -310,6 +352,7 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
     const transport: ToolTurnRequest['transport'] = {
         defaultSymbol: req.symbol ?? null,
         allowedTools: CHAT_SURFACE_TOOLS,
+        goalAllowedTools: focusedGoal()?.policy.allowedTools,
         maxTokens: TASK_BUDGETS.chat,
         temperature: 0.4,
         reasoningEffort: resolveComposerEffort(req.effort, 'tradingDecision'),
@@ -354,7 +397,15 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
     // for, and a row claiming skills it never saw is worse than a silent row.
     const prompt = req.systemPrompt
         ? { text: req.systemPrompt, skills: [] as string[] }
-        : chatSurfaceSystemPrompt({ memoryEnabled: req.memoryEnabled !== false, windowTokens: req.config?.contextWindowTokens });
+        : chatSurfaceSystemPrompt({
+            memoryEnabled: req.memoryEnabled !== false,
+            strategiesEnabled: req.strategiesEnabled !== false,
+            windowTokens: req.config?.contextWindowTokens,
+            // Only the trader's own line is matched — see the note in
+            // `surfacePromptWith`. A caller that brought its own mandate gets
+            // that mandate verbatim and no hint.
+            matchText: typeof req.prompt === 'string' ? req.prompt : undefined,
+        });
     if (prompt.skills.length > 0) req.patch(m => ({ ...m, injectedSkills: prompt.skills }));
 
     // A FULL ANALYSIS (stage 20f) is an instruction, not a keyword: the trader
@@ -387,6 +438,8 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
         effort: resolveComposerEffort(req.effort, 'tradingDecision'),
         transport,
         events: tracked,
+        memoryEnabled: req.memoryEnabled !== false,
+        lastUserMessage: typeof req.prompt === 'string' ? req.prompt : undefined,
     }));
     recordToolTurnUsage({
         startedAt: req.startedAt,

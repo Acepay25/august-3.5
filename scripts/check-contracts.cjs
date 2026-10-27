@@ -2,8 +2,9 @@
 /**
  * check-contracts — the minimal regression layer that survived the suite's
  * removal (owner ruling, 2026-10-23). The old tree held ~530 test files; this
- * is deliberately NOT that. It pins the six PURE-LOGIC contracts no browser
- * probe can reach by construction, because they live below the render:
+ * is deliberately NOT that. It pins the twelve PURE-LOGIC contracts no browser
+ * probe can reach by construction, because they live below the render. Each one
+ * added since the six had to answer why the six could not cover it:
  *
  *   1. utils/riskReward.ts            — the planned R:R the trader is graded on
  *   2. utils/apiErrorUtils.ts         — which failures deserve a retry
@@ -11,6 +12,13 @@
  *   4. utils/memoryBudget.ts          — the pressure tiers that REFUSE growth
  *   5. services/providers/contextCompact.ts — tool pairs live or die together
  *   6. schemas/tradeAnalysis.ts       — lenient coercion at the AI boundary
+ *   7. utils/skillFrontmatter.ts      — third-party keys survive a rewrite
+ *   8. utils/memoryHints.ts           — the deterministic alias pre-read
+ *   9. utils/memoryWriteFilters.ts    — what may never become a memory
+ *  10. skill import scan + body caps  — third-party text is screened
+ *  11. utils/promptIndexBudget.ts     — one shared table, scaled to the window
+ *  12. services/selfMod/* + utils/toolKinds.ts — the policy tables: what a
+ *      self-change cannot move, and what a goal can never grant
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -251,30 +259,76 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         && sf.skillRunsHere({ requiresTools: ['not_a_tool'] }, 'web', ['get_order_book']) === false);
     ok('fm: requiresEnv fails closed in a renderer',
         sf.skillRunsHere({ requiresEnv: ['FOO'] }, 'desktop', []) === false);
+    // The other vocabulary a SKILL.md arrives with. A declared key the reader
+    // cannot see is a constraint the app silently ignores, so the reader is
+    // pinned here in the three forms files actually use.
+    ok('fm: a nested declaration block is read',
+        JSON.stringify(sf.declaredCompatibility('metadata:\n  hermes:\n    requires_tools:\n      - web_search\n      - run_screener\n    platforms: [desktop]\n'))
+        === JSON.stringify({ requiresTools: ['web_search', 'run_screener'], platforms: ['desktop'] }),
+        JSON.stringify(sf.declaredCompatibility('metadata:\n  hermes:\n    requires_tools:\n      - web_search\n      - run_screener\n    platforms: [desktop]\n')));
+    ok('fm: the inline-JSON metadata form is read',
+        sf.declaredCompatibility('metadata: {"hermes": {"fallback_for_tools": ["recall"]}}').fallbackForTools?.[0] === 'recall');
+    ok('fm: a flat declaration with no metadata block is read',
+        sf.declaredCompatibility("requires_tools: ['web_search']\n").requiresTools?.length === 1);
+    ok('fm: a declared toolset is reported inert rather than honoured',
+        JSON.stringify(sf.inertDeclaredKeys(sf.declaredCompatibility('requires_toolsets: [browser]\nfallback_for_toolsets: [terminal]\n')))
+        === '["requires_toolsets","fallback_for_toolsets"]');
+    ok('fm: nothing declared asserts nothing',
+        Object.keys(sf.declaredCompatibility('author: someone\nlicense: MIT\n')).length === 0);
+    // The inverse gate: a procedure that covers a tool stops being needed the
+    // moment the tool is there, and must stop being injected then.
+    ok('fm: fallbackForTools hides the skill once the covered tool exists',
+        sf.skillRunsHere({ fallbackForTools: ['web_search'] }, 'web', []) === true
+        && sf.skillRunsHere({ fallbackForTools: ['web_search'] }, 'web', ['web_search']) === false);
+    ok('fm: fallbackForToolsets gates nothing (August names no toolsets)',
+        sf.skillRunsHere({ fallbackForToolsets: ['anything'] }, 'web', ['web_search']) === true);
 })();
 
-// ─── 8. memory hints — the deterministic pre-read for weak models ──────────
+// ─── 8. memory hints — the deterministic pre-read, on every model ──────────
 (() => {
     const mh = loadModule('utils/memoryHints.ts');
     const mem = [
-        { slug: 'user-runs-bun', description: 'Package manager preference: bun.' },
+        { slug: 'user-runs-bun', description: 'Package manager preference: bun.', body: 'The trader uses bun, not npm. Their scripts assume it.' },
         { slug: 'user-btc-scalps', description: 'Trades 15m BTC scalps in the London session.' },
     ];
-    ok('hint: a slug match names a read',
-        mh.buildMemoryHints('which package manager do I use with bun?', mem, []).some(l => l.includes('read_memory "user-runs-bun"')));
+    ok('hint: a slug match attaches the record itself, not a promise to fetch it',
+        mh.buildMemoryHints('which package manager do I use with bun?', mem, [])
+            .some(l => l.includes('"user-runs-bun"') && l.includes('uses bun, not npm')),
+        JSON.stringify(mh.buildMemoryHints('which package manager do I use with bun?', mem, [])));
+    ok('hint: a record with no body falls back to naming the read',
+        mh.buildMemoryHints('run the btc scalp routine in london', [], []).length === 0
+        && mh.buildMemoryHints('btc scalps london session', [mem[1]], [])
+            .some(l => l.includes('read_memory "user-btc-scalps"')));
     ok('hint: an unrelated message matches nothing (capital of France)',
         mh.buildMemoryHints('what is the capital of France?', mem, []).length === 0);
-    ok('hint: a skill slug match names a skill_view',
-        mh.buildMemoryHints('run the btc scalp routine', [], ['user-btc-scalps']).some(l => l.includes('skill_view')));
-    ok('hint: caps at two reads and two views',
-        mh.buildMemoryHints('bun btc scalps london package manager routine',
-            [{ slug: 'a-one' }, { slug: 'a-two' }, { slug: 'a-three' }].map(r => ({ ...r, description: 'bun btc scalps london routine' })),
-            ['s-one', 's-two', 's-three']).filter(l => l.includes('read_memory')).length <= 2);
-    ok('hint: local-server providers read as small',
-        mh.isLikelySmallModel({ baseUrl: 'http://localhost:11434/v1', modelId: 'llama3' }) === true
-        && mh.isLikelySmallModel({ baseUrl: 'http://127.0.0.1:1234/v1' }) === true);
-    ok('hint: cloud providers with big models do not',
-        mh.isLikelySmallModel({ baseUrl: 'https://api.example.com/v1', modelId: 'gpt-5' }) === false);
+    ok('hint: a skill slug match names a skill_view and never a body',
+        mh.buildMemoryHints('run the btc scalp routine', [], ['user-btc-scalps'])
+            .some(l => l.includes('skill_view') && !l.includes('procedure')));
+    ok('hint: a sensitive record is never pre-read, matched or not',
+        mh.buildMemoryHints('what medication do I take, antidepressant?',
+            [{ slug: 'health-medication', description: 'antidepressant', body: 'I take antidepressants daily.', sensitive: true }], [])
+            .length === 0);
+    // The reach control for the line above: the SAME row without the flag does
+    // match, so the zero is the exclusion working, not a message that hit nothing.
+    ok('hint: that same text without the sensitive flag IS pre-read',
+        mh.buildMemoryHints('what medication do I take, antidepressant?',
+            [{ slug: 'health-medication', description: 'antidepressant', body: 'I take antidepressants daily.' }], [])
+            .length === 1);
+    ok('hint: an alias alone triggers it — the trader never says the slug',
+        mh.buildMemoryHints('how do I install things here?',
+            [{ slug: 'user-pkg-mgr', description: 'prefers a package manager', aliases: ['install things'], body: 'Uses bun.' }], [])
+            .some(l => l.includes('user-pkg-mgr')));
+    ok('hint: caps at two records and two skill views',
+        (() => {
+            const hit = mh.buildMemoryHints('bun btc scalps london package manager routine',
+                ['a-one', 'a-two', 'a-three'].map(s => ({ slug: s, description: 'bun btc scalps london routine', body: 'fact text' })),
+                ['btc-london-routine', 'scalp-btc-routine', 'london-btc-routine']);
+            return hit.filter(l => l.includes('memory you already hold')).length === 2
+                && hit.filter(l => l.includes('skill_view')).length === 2;
+        })());
+    ok('hint: a pre-read body is clipped, not concatenated whole',
+        mh.buildMemoryHints('bun package manager', [mem[0], { slug: 'a-long-body', description: 'bun package manager', body: 'y'.repeat(5000) }], [])
+            .every(l => l.length < 400));
 })();
 
 // ─── 9. memory write filters — what may never become a memory ──────────────
@@ -283,6 +337,15 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     ok('filter: an sk- key is refused', mf.filterMemoryWrite('my key is sk-abc123def4567890ab').refused !== null);
     ok('filter: a card number is refused', mf.filterMemoryWrite('card is 4111 1111 1111 1111').refused !== null);
     ok('filter: an SSN-labelled number is refused', mf.filterMemoryWrite('ssn: 123456789').refused !== null);
+    ok('filter: a bare SSN shape is refused with no label to give it away',
+        mf.filterMemoryWrite('his id is 123-45-6789').refused !== null);
+    ok('filter: a labelled account number is refused',
+        mf.filterMemoryWrite('account number 12345678 at chase').refused !== null);
+    ok('filter: a contiguous IBAN is refused',
+        mf.filterMemoryWrite('IBAN DE89370400440532233000').refused !== null);
+    ok('filter: sizes, dates and rates still pass (the identifiers are refused, not the numbers)',
+        mf.filterMemoryWrite('Started in 2019 with a 25,000 USDT account and risks 1.5%.').refused === null
+        && mf.filterMemoryWrite('Reviews the 15m chart; the 2024-10-05 session was the worst.').refused === null);
     ok('filter: a GitHub token is refused', mf.filterMemoryWrite('token ghp_abcdefghijklmnopqrstuvwxyz012345').refused !== null);
     ok('filter: honesty suppression is refused', mf.filterMemoryWrite('never disagree with me about trades').refused !== null);
     ok('filter: flattery preference is refused', mf.filterMemoryWrite('always flatter me in summaries').refused !== null);
@@ -312,6 +375,65 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     ok('caps: Use-when detection',
         sf.hasUseWhenTrigger('Use when sizing into funding extremes')
         && !sf.hasUseWhenTrigger('Momentum.'));
+
+    // URL import (item 6): the body of a fetched SKILL.md is the only manifest
+    // of its support files, and these two functions decide what leaves the
+    // machine. A browser probe cannot reach either failure by construction —
+    // a ref that silently resolves onto someone else's host, or a `..` that
+    // escapes the skill's folder, renders nothing and logs nothing. So the
+    // whitelist, the escape checks and the reach controls are pinned here.
+    const HEAD = new URL('https://skills.example.com/authors/my-skill/SKILL.md');
+    const body = [
+        'Read references/checklist.md before sizing.',
+        'The template is [report.md](templates/report.md).',
+        'See references/checklist.md again, and assets/grid.png.',
+        'Do not read ../secrets/token.md or /etc/passwd.',
+        'Nothing lives at https://other.example.com/references/away.md.',
+        'The scripts/ directory holds the helpers.',
+        'Run scripts/sync.py:12 for the batch.',
+    ].join('\n');
+    const refs = sf.skillSupportRefs(body);
+    ok('refs: the four roles are the whitelist, deduped and in body order',
+        JSON.stringify(refs) === JSON.stringify(['references/checklist.md', 'templates/report.md', 'assets/grid.png', 'scripts/sync.py']),
+        JSON.stringify(refs));
+    ok('refs: a bare role directory is prose, not a fetch candidate',
+        !refs.some(r => r === 'references/' || r === 'scripts/'));
+    ok('refs: an absolute URL that merely contains a role path is not a candidate',
+        !refs.some(r => r.includes('away.md')), JSON.stringify(refs));
+    ok('refs: discovery returns MAX + 1 so an overflow is announceable',
+        sf.skillSupportRefs(Array.from({ length: 20 }, (_, i) => `references/f${i}.md`).join('\n')).length === sf.SKILL_SUPPORT_REF_MAX + 1);
+    // The name is what the author wrote; the DECISION belongs to the resolver,
+    // so an escape attempt is announced in the receipt instead of vanishing.
+    const escapeCandidate = sf.skillSupportRefs('Read references/../../env.md first.');
+    ok('refs: an escaping path is still a candidate, so it can be reported',
+        JSON.stringify(escapeCandidate) === JSON.stringify(['references/../../env.md']), JSON.stringify(escapeCandidate));
+    const resolve = (ref) => sf.resolveSiblingUrl(HEAD, ref);
+    const good = resolve('references/checklist.md');
+    ok('siblings: an ordinary sibling resolves under the head folder (the reach control)',
+        good.ok === true && good.url === 'https://skills.example.com/authors/my-skill/references/checklist.md', JSON.stringify(good));
+    const nested = resolve('references/deep/note.md');
+    ok('siblings: a nested subfolder of the skill folder still resolves',
+        nested.ok === true && nested.url.endsWith('/my-skill/references/deep/note.md'), JSON.stringify(nested));
+    for (const [label, ref, needle] of [
+        ['traversal', '../secrets/token.md', 'leave the skill folder'],
+        ['absolute path', '/etc/passwd', 'absolute path'],
+        ['own scheme', 'https://evil.example/a.md', 'own scheme'],
+        ['protocol relative', '//evil.example/a.md', 'protocol-relative'],
+        // NOT a hypothetical: the URL parser treats `\` as `/` for an https
+        // base, so a Windows-authored body's `\\host\path` ref carries no
+        // scheme and no leading slash — only the host lock stops it. Measured
+        // with .verify/url-ref-probe.cjs before this row was written.
+        ['unc host', '\\\\evil.example\\a.md', 'not skills.example.com'],
+        ['backslash parent hop', '..\\..\\env.md', 'outside the skill'],
+        ['parent escape', '../../env.md', 'leave the skill folder'],
+        ['encoded escape', 'references/%2e%2e/%2e%2e/env.md', 'outside the skill'],
+        ['empty segment', 'references//note.md', 'empty segment'],
+        ['javascript scheme', 'javascript:alert(1)', 'own scheme'],
+    ]) {
+        const r = resolve(ref);
+        ok(`siblings: ${label} refused before any request`,
+            r.ok === false && String(r.reason).includes(needle), JSON.stringify(r));
+    }
 })();
 
 // ─── 10. the shared index budget — one table, scaled to the window ─────────
@@ -329,6 +451,87 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         JSON.stringify(pb.indexBudgetFor(Number.NaN)) === JSON.stringify(big));
 })();
 
+// ─── 12. policy tables — what the agent may never move, what a goal may never grant
+// The "should this be a contract?" question, answered: the sections above pin
+// arithmetic, dialects and coercion. None of them pins a POLICY TABLE, and the
+// self-mod rails are one. A renamed setting key would silently open a knob no
+// trader ever allowed, and a browser probe cannot reach a refusal it never
+// triggers — so the table is pinned here, synchronously, with no storage.
+// The goal policy table joins it for the same reason: its dangerous shape is
+// reachable only cross-surface, which no probe in this repo can drive.
+(() => {
+    const hs = loadModule('utils/harnessSettings.ts');
+    const sm = loadModule('services/selfMod/SelfModificationService.ts');
+    const { SelfChangeSchema } = loadModule('schemas/selfChange.ts');
+
+    ok('selfmod: with nothing stored, the agent may change nothing about itself',
+        hs.getHarnessSettings().selfModificationMode === 'off');
+    const mem = new Map();
+    global.localStorage = {
+        getItem: k => (mem.has(k) ? mem.get(k) : null),
+        setItem: (k, v) => mem.set(k, String(v)),
+        removeItem: k => mem.delete(k),
+    };
+    mem.set('harness_settings_v1', JSON.stringify({ selfModificationMode: 'everything' }));
+    ok('selfmod: an unknown stored mode fails to off, not open',
+        hs.getHarnessSettings().selfModificationMode === 'off', hs.getHarnessSettings().selfModificationMode);
+    mem.set('harness_settings_v1', JSON.stringify({ selfModificationMode: 'shadow' }));
+    ok('selfmod: the two named modes are the whole vocabulary',
+        hs.getHarnessSettings().selfModificationMode === 'shadow');
+    delete global.localStorage;
+
+    const defaults = hs.getHarnessSettings();
+    const knobs = sm.openKnobNames();
+    ok('selfmod: every open knob names a real harness setting',
+        knobs.length > 0 && knobs.every(k => k in defaults), JSON.stringify(knobs));
+    ok('selfmod: the mode itself is not a knob the seat can turn',
+        !knobs.includes('selfModificationMode') && sm.isBlockedKnob('selfModificationMode') === true);
+    ok('selfmod: the risk-rules prompt is not a self-editable prompt',
+        sm.BLOCKED_PROMPT_IDS.includes('analysis.risk_rules'));
+
+    const row = {
+        schemaVersion: 1, id: 'config-a1', tier: 'config', target: 'knob:responseEffort',
+        before: '"quality"', after: '"fast"', reason: 'a long sweep needs a light touch',
+        status: 'active', actor: 'agent', version: 1,
+        createdAt: '2026-10-25T00:00:00.000Z', updatedAt: '2026-10-25T00:00:00.000Z',
+    };
+    ok('selfmod: a ledger row is only what the schema says it is',
+        SelfChangeSchema.safeParse(row).success === true);
+    ok('selfmod: a ledger row refuses a smuggled key',
+        SelfChangeSchema.safeParse({ ...row, smuggled: 1 }).success === false);
+    ok('selfmod: a ledger row refuses an unexplained or valueless change',
+        SelfChangeSchema.safeParse({ ...row, reason: '' }).success === false
+        && SelfChangeSchema.safeParse({ ...row, before: undefined }).success === false);
+
+    // The other policy table in this build: a goal's tool policy against a
+    // seat's allow-list. Same reason this section exists at all — a refusal no
+    // probe ever triggers. Measured, not assumed: `create_goal` validates a
+    // policy against the CURRENT seat, so the dangerous shape (a goal naming
+    // tools this seat lacks) only arrives cross-surface — the Chat surface's
+    // list is not the trade seat's TRADE_TOOLS — and there the old code
+    // returned an empty list, which every gate reads as "unrestricted". The
+    // live probe cannot reach it: the write gate blocks the same-surface case.
+    const tk = loadModule('utils/toolKinds.ts');
+    const REAL = ['get_order_book', 'get_trade_log', 'recall', 'skill_view', 'draw_on_chart'];
+    const SEAT = ['get_order_book', 'get_trade_log'];
+    const keep = tk.intersectGoalPolicy(SEAT, ['get_trade_log', 'recall'], REAL);
+    ok('goal policy: an in-seat policy narrows to exactly what it names (the reach control)',
+        JSON.stringify(keep) === JSON.stringify(['get_trade_log']), JSON.stringify(keep));
+    const stranded = tk.intersectGoalPolicy(SEAT, ['skill_view', 'draw_on_chart'], REAL);
+    ok('goal policy: naming only tools this seat lacks does NOT return an empty list',
+        stranded.length > 0, JSON.stringify(stranded));
+    ok('goal policy: …and what it returns matches no real tool, so the seat gets nothing',
+        stranded.length === 1 && stranded[0] === '' && !REAL.some(n => stranded.includes(n)),
+        JSON.stringify(stranded));
+    ok('goal policy: a mixed policy keeps the tool the seat has and drops the one it has not',
+        JSON.stringify(tk.intersectGoalPolicy(SEAT, ['get_order_book', 'skill_view'], REAL))
+        === JSON.stringify(['get_order_book']));
+    ok('goal policy: an unrestricted seat is still narrowed by the goal',
+        JSON.stringify(tk.intersectGoalPolicy(undefined, ['recall'], ['recall', 'web_search'])) === JSON.stringify(['recall']));
+    ok('goal policy: a name the build never shipped matches nothing, and fails closed',
+        JSON.stringify(tk.intersectGoalPolicy(SEAT, ['made_up_tool'], REAL)) === JSON.stringify(['']));
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
@@ -336,4 +539,4 @@ if (failures.length) {
     console.error('CONTRACT CHECK FAIL — a pinned contract broke; fix the module, not this file.');
     process.exit(1);
 }
-console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction and AI-boundary coercion all hold.');
+console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget and both policy tables (self-modification, goal tool narrowing) all hold.');

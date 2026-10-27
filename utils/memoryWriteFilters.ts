@@ -23,6 +23,16 @@ const SECRET_PATTERNS: Array<{ re: RegExp; what: string }> = [
     { re: /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/, what: 'a Slack token' },
     { re: /\beyJ[A-Za-z0-9_-]{20,}\./, what: 'a JWT' },
     { re: /\b(?:\d[ -]?){13,19}\b/, what: 'a card number' },
+    // A U.S. SSN has a shape no trading fact shares: 3-2-4. Refused bare, with
+    // no label to give it away, because the label is exactly what a careless
+    // writer omits ("his id is 123-45-6789").
+    { re: /\b\d{3}-\d{2}-\d{4}\b/, what: 'a Social Security number shape' },
+    // A long digit run next to a banking LABEL is an account, routing or
+    // reference number. The label is required because the same digits on their
+    // own are a position size, and this filter refuses identifiers — not
+    // numbers. "USDT account and risks 1.5%" must still pass.
+    { re: /\b(?:iban|swift(?:\s*code)?|bic|routing(?:\s*(?:no|number|#))?|sort\s*code|account\s*(?:no|number|#))\b[:\s-]{0,4}\d[\dA-Z -]{5,}/i, what: 'a bank account identifier' },
+    { re: /\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b/, what: 'an IBAN' },
     { re: /\b(?:ssn|social security|passport|government id|national id)\b[:\s]*\d{4,}/i, what: 'a government ID' },
 ];
 
@@ -33,8 +43,15 @@ const HONESTY_PATTERNS: RegExp[] = [
     /no\s+matter\s+what\s+i\s+say/i,
     /\bflatter\s+me\b/i,
     /(?:you\s+are|act\s+as|you\s+have)\s+(?:an\s+)?(?:admin|administrator|elevated|root|sudo)/i,
+    /\b(?:the\s+)?user\s+is\s+(?:an?\s+)?(?:admin|administrator|root|superuser|owner)\b/i,
+    /\balways\s+agree\s+with\s+(?:the\s+)?user\b/i,
     /override\s+your\s+(?:rules|instructions|guardrails)/i,
     /ignore\s+your\s+(?:rules|instructions|guardrails)/i,
+    /ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions/i,
+    // Second-person advice is the assistant's own suggestion, not a fact the
+    // trader stated. The seat prompt already forbids saving it; this is the
+    // backstop for a model that saves its own recommendation anyway.
+    /(?:^|\n)\s*(?:you\s+(?:should|must|ought|need\s+to)|i\s+(?:recommend|suggest)|my\s+advice)\b/i,
 ];
 
 const SENSITIVE_PATTERNS: RegExp[] = [

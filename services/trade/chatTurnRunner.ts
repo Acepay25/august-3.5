@@ -31,6 +31,7 @@ import type { ChatMessage, ContentPart } from '../providers/GenericProviderServi
 import type { DeskToolCall, DeskToolResult } from '../analysis/DeskToolsService';
 import { fetchHybridData, generateHybridPromptInjection } from '../analysis/HybridIntelligenceService';
 import { DESK_TOOL_NAMES } from '../../utils/toolKinds';
+import { focusedGoal } from '../goals/GoalService';
 import { buildTradeChatContext, describeChartSnapshotForModel } from './tradeChatContext';
 import {
     describeDrawingsForModel, drawingFromChartTool, drawingsFromDetectedPattern, drawingsFromLevelTool, type ChartDrawing,
@@ -174,6 +175,9 @@ export interface ChatTurnRunnerDeps {
      *  context and every session write. */
     symbol: string;
     interval: string;
+    /** The Settings memory switch: false makes the tool stream skip the
+     *  pre-read hints and the executor refuse memory reads/writes. */
+    memoryEnabled?: boolean;
     /** The composer's thinking-effort choice (per-session shell state). */
     effort: ReasoningEffort | 'auto';
     /** The solo model selection — stamped onto the session on send. */
@@ -632,6 +636,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         const transport: ToolTurnRequest['transport'] = {
             defaultSymbol: symbol,
             allowedTools: TRADE_TOOLS,
+            goalAllowedTools: focusedGoal()?.policy.allowedTools,
             maxTokens: TASK_BUDGETS.chat,
             temperature: 0.4,
             reasoningEffort: turnEffort,
@@ -702,6 +707,12 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         // truncated body is a SUCCESS-shaped response, so nothing else in the
         // transport reports it. Bracket the seat's turn so the line the trader
         // reads is a measured fact, not a guess from a missing sentence.
+        const lastUser = [...messages].reverse().find(m => m && m.role === 'user');
+        const lastUserMessage = typeof lastUser?.content === 'string'
+            ? lastUser.content
+            : Array.isArray(lastUser?.content)
+                ? lastUser.content.map(p => (typeof p === 'string' ? p : (p as { text?: string }).text ?? '')).join('\n')
+                : undefined;
         const { value: outcome, summary } = await withTruncationWindow(async () => await runToolTurn({
             config,
             messages,
@@ -711,6 +722,8 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             keepTextHidden: hidePass ? panelCouldStillBePass : undefined,
             transport,
             events,
+            memoryEnabled: deps.memoryEnabled !== false,
+            lastUserMessage,
         }));
         recordToolTurnUsage({
             startedAt: turnStartedAt,

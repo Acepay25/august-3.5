@@ -26,9 +26,10 @@ import { extractAndParseJson } from '../../utils/jsonUtils';
 import { z } from 'zod';
 import { getActiveUsername } from '../../utils/activeUser';
 import {
-    rememberProfileMemory, listProfileMemories, normalizeKind, slugify,
+    listProfileMemories, normalizeKind, slugify,
     buildProfileMemoryIndex, type ProfileMemoryKind,
 } from './profileMemory';
+import { rememberWithConsolidation } from './profileMemoryConsolidation';
 
 const COUNTER_KEY = 'trader_learner_counter_v1';
 const TOGGLE_KEY = 'trader_learning_v1';
@@ -116,15 +117,15 @@ export const runTraderLearner = async (
             if (!slug) continue;
             if (known.has(`${slug}|${fact.data.description.toLowerCase()}`)) continue; // no churn
             const kind: ProfileMemoryKind = normalizeKind(fact.data.kind) ?? 'user';
-            rememberProfileMemory({
+            const saved = await rememberWithConsolidation({
                 slug, name: fact.data.name,
                 description: fact.data.description,
                 kind,
                 body: fact.data.body,
                 source: 'auto',
                 tag: 'observed',
-            }, username);
-            written += 1;
+            }, { username });
+            if (saved.ok && !('conflict' in saved.result) && saved.result.persisted !== false) written += 1;
         }
         return written;
     } catch (e) {

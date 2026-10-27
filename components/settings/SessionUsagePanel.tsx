@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { clearSessionUsage, loadSessionUsage, SessionUsageEntry, summarizeModelUsage, summarizeUsagePeriod } from '../../utils/sessionUsage';
 import { getHarnessSettings, saveHarnessSettings } from '../../utils/harnessSettings';
+import type { SelfModMode } from '../../schemas/selfChange';
 import { loadChecklistConfig, saveChecklistConfig } from '../../utils/checklist';
 import { formatChars } from '../../utils/runUsage';
 import { formatModelDisplayName } from '../../utils/providerUtils';
@@ -141,6 +142,15 @@ export const HarnessControls: React.FC = () => {
     const persist = (next: Partial<ReturnType<typeof getHarnessSettings>>): void => {
         setSettings(saveHarnessSettings(next));
     };
+    // The one writer of this switch goes through the service, because turning
+    // self-modification OFF also undoes what the agent did with it — a value
+    // written straight to storage would leave those changes riding every run.
+    const persistSelfMod = (mode: SelfModMode): void => {
+        void import('../../services/selfMod/SelfModificationService')
+            .then(m => m.setSelfModMode(mode))
+            .then(() => setSettings(getHarnessSettings()))
+            .catch(err => console.warn('[SelfMod] the switch did not take effect:', err));
+    };
     return (
         <div className="space-y-3 rounded-bubble border border-zinc-800 bg-zinc-900 p-4">
             <p className="text-ui-dense font-semibold uppercase tracking-widest text-zinc-500">Harness</p>
@@ -265,6 +275,34 @@ export const HarnessControls: React.FC = () => {
                     <span className="text-ui-dense text-zinc-300">
                         {settings.autoDraftingEnabled === true ? 'On — the loop drafts unasked' : 'Off — only what you ask for'}
                     </span>
+                </span>
+            </label>
+            <label className="block text-ui-dense text-zinc-400">
+                Self-modification
+                <span className="mt-0.5 block text-ui-2xs leading-4 text-zinc-500">
+                    How far the agent may change the harness it is running in. Off (the
+                    default) refuses every self-change. Config lets it move a behavior
+                    knob you can see below — thinking effort, the skill library cap — and
+                    each change reverts itself within 24 hours. Shadow additionally lets it
+                    rewrite one prompt, which then has to win on the trades that ran under
+                    it; that needs the Prompt A/B rate above 0% with no lane pin, or the
+                    edit cannot be judged. Risk limits, privacy, memory and this switch
+                    itself are blocked. Every change is written to the notebook
+                    self-changes folder, with the value it replaced.
+                </span>
+                <span className="mt-1 block">
+                    <SelectMenu
+                        value={settings.selfModificationMode}
+                        onChange={v => persistSelfMod(v as SelfModMode)}
+                        options={[
+                            { value: 'off', label: 'Off — it changes nothing about itself' },
+                            { value: 'config', label: 'Config — reversible behavior knobs, 24h window' },
+                            { value: 'shadow', label: 'Shadow — plus prompt text, judged by outcomes' },
+                        ]}
+                        aria-label="Self-modification"
+                        className="w-full"
+                        triggerClassName="w-full rounded-control border border-zinc-700 bg-zinc-950 px-2 py-1 text-ui-sm hover:bg-zinc-800"
+                    />
                 </span>
             </label>
             <label className="block text-ui-dense text-zinc-400">

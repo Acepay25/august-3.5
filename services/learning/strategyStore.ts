@@ -28,6 +28,9 @@ import {
     withNotebookWriteLock,
 } from './MemoryFilesService';
 import { getActiveUsername } from '../../utils/activeUser';
+// One direction only: StrategyService reads Preferences, never this module, so
+// composing the seat's strategy section from both stores cannot cycle.
+import { getEnabledStrategiesText } from '../infrastructure/StrategyService';
 
 export const STRATEGY_FOLDER = 'strategies';
 
@@ -205,10 +208,29 @@ export const isStrategyFile = (file: { folderId: string; name: string }): boolea
 export const listActiveStrategies = (): StrategyMeta[] =>
     listStrategies().filter(s => s.status === 'active');
 
-/** The block a seat reads: the ACTIVE plans, or '' when there are none. */
-export const activeStrategiesBlock = (max = 3): string => {
+/**
+ * The strategy section a seat reads, from BOTH strategy sources, behind ONE
+ * gate: the ACTIVE plans (the notebook's `strategies/*.md`), plus the enabled
+ * uploaded BOOKS (Settings → Strategies, summarized PDFs).
+ *
+ * The books used to reach nothing. `StrategyService.getEnabledStrategiesText`
+ * had no caller, and the master switch `isStrategiesEnabled` was read by its own
+ * label and nothing else — so the tab could read "On — enabled books are used"
+ * while no seat had ever seen a book. One function now composes both, because
+ * two call sites gating one flag is how the two surfaces start disagreeing.
+ *
+ * `enabled` is opt-OUT: absent or true keeps the section, only an explicit false
+ * removes it. Every existing caller that does not pass the flag keeps behaving
+ * exactly as it does today.
+ */
+export const activeStrategiesBlock = (max = 3, opts: { enabled?: boolean } = {}): string => {
+    if (opts.enabled === false) return '';
+    const bookText = getEnabledStrategiesText();
+    const bookBlock = bookText
+        ? `**UPLOADED STRATEGY BOOKS** — the trader's own summarized books. Where a plan or a skill is silent, these decide.\n\n${bookText}`
+        : '';
     const active = listActiveStrategies();
-    if (active.length === 0) return '';
+    if (active.length === 0) return bookBlock;
     const shown = active.slice(0, max);
     const lines = [
         `**ACTIVE STRATEGIES** (${active.length}) — named trade plans the trader has activated. A skill may reference one; when a skill's rule matches an active strategy, follow the strategy's levels and sizing.`,
@@ -218,7 +240,7 @@ export const activeStrategiesBlock = (max = 3): string => {
     if (active.length > shown.length) {
         lines.push(`(+${active.length - shown.length} more)`);
     }
-    return lines.join('\n');
+    return [lines.join('\n'), bookBlock].filter(Boolean).join('\n\n');
 };
 
 const strategyFolder = (): { id: string } | undefined =>

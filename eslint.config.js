@@ -22,6 +22,12 @@ export default tseslint.config(
       // to reproduce locally (the tracked tree is 0 errors). Ignoring it changes
       // no verdict about shipped code; it removes a blind fold over the result.
       'docs/analysis/**',
+      // The verifier's scratch tree — node harnesses and Playwright probes run
+      // against a built bundle, in CommonJS, with their own globals. Untracked,
+      // so CI never sees it, yet `npm run lint` swept it and reported 568 errors
+      // from it on a tree whose tracked files hold 0 — the same blind fold as
+      // above, and the reason a red local lint was not a red CI lint.
+      '.verify/**',
     ],
   },
   {

@@ -57,14 +57,38 @@ export interface ProfileMemoryEntry {
     /** Extra match strings the deterministic pre-read may hit on, beyond the
      *  slug's own words ("bun" for user-runs-bun). */
     aliases?: string[];
+    /** What the fact is ABOUT. `kind` says where it came from (a user fact, a
+     *  piece of feedback, project context); this says whose or what the claim
+     *  concerns, which is what decides whether it applies to a new question.
+     *  Absent on legacy rows, where `subjectOf()` derives it from `kind` rather
+     *  than pretending the record has no subject. */
+    subject?: 'profile' | 'preference' | 'topic' | 'area' | 'person';
+    /** The conversation this was written in. Provenance the trader can act on:
+     *  "which session did it learn this in" has an answer, and a fact the model
+     *  cannot place is a fact the trader cannot audit. */
+    sourceSession?: string;
     /** The row as it read BEFORE this edit — "now X, previously Y". One
      *  generation deep; the history is provenance, not a version store. */
     previous?: { body: string; description: string; updatedAt: string };
+    /** Other lines whose content now lives inside this one — written by the
+     *  consolidation merge, which absorbs its inputs and deletes them. This is
+     *  a HISTORY, not a live dependency: the named slugs are already gone, and
+     *  forgetting the survivor must not pretend it never carried them.
+     *
+     *  It is also what makes "delete anything derived solely from it" decidable
+     *  — see `forgetProfileMemory`. A row whose ONLY source is the line being
+     *  forgotten goes with it; a merge survivor does not, because it was derived
+     *  from more than that one line. */
+    derivedFrom?: string[];
 }
 
 const KEY_PREFIX = 'profile_memory_v1';
-const MAX_ENTRIES = 40;
-const MAX_BODY_CHARS = 2_000;
+/** The store's hard limits. Exported so the consolidation pass and the UI use
+ *  the same numbers the write path enforces. */
+export const PROFILE_MEMORY_MAX_ENTRIES = 40;
+export const PROFILE_MEMORY_MAX_BODY_CHARS = 2_000;
+const MAX_ENTRIES = PROFILE_MEMORY_MAX_ENTRIES;
+const MAX_BODY_CHARS = PROFILE_MEMORY_MAX_BODY_CHARS;
 const MAX_DESC_CHARS = 160;
 
 const storageKey = (user: string): string => `${KEY_PREFIX}_${user}`;
@@ -73,6 +97,20 @@ const KINDS: readonly string[] = ['user', 'feedback', 'project', 'reference'];
 
 export const normalizeKind = (v: unknown): ProfileMemoryKind | null =>
     typeof v === 'string' && KINDS.includes(v) ? v as ProfileMemoryKind : null;
+
+const SUBJECTS: readonly ProfileMemoryEntry['subject'][] =
+    ['profile', 'preference', 'topic', 'area', 'person'];
+
+export const normalizeSubject = (v: unknown): ProfileMemoryEntry['subject'] | null =>
+    SUBJECTS.includes(v as ProfileMemoryEntry['subject']) ? v as ProfileMemoryEntry['subject'] : null;
+
+/** Every record has a subject, including the ones written before the field
+ *  existed — derived from the one thing they do carry. A reader that returned
+ *  undefined would make half the store look like it was about nothing. */
+export const subjectOf = (e: ProfileMemoryEntry): NonNullable<ProfileMemoryEntry['subject']> =>
+    e.subject ?? (e.kind === 'user' ? 'profile'
+        : e.kind === 'feedback' ? 'preference'
+            : e.kind === 'project' ? 'area' : 'topic');
 
 /** Kebab-case slug from a name (stable, collision-safe enough). */
 export const slugify = (name: string): string =>
@@ -89,7 +127,10 @@ const readAll = (user: string): ProfileMemoryEntry[] => {
                 && typeof v.slug === 'string' && typeof v.description === 'string'
                 && typeof v.body === 'string' && normalizeKind(v.kind) !== null;
         });
-    } catch {
+    } catch (err) {
+        // A read that cannot happen must not look like an empty notebook: the
+        // prompt would silently forget every fact the trader taught it.
+        console.error('[profileMemory] read FAILED — memory is unavailable this turn:', err);
         return [];
     }
 };
@@ -97,7 +138,13 @@ const readAll = (user: string): ProfileMemoryEntry[] => {
 const writeAll = (user: string, entries: ProfileMemoryEntry[]): void => {
     try {
         localStorage.setItem(storageKey(user), JSON.stringify(entries.slice(-MAX_ENTRIES)));
-    } catch { /* private mode — memory stays in-session */ }
+    } catch (err) {
+        // The cache is not a store here: readAll() re-reads localStorage, so a
+        // swallowed throw means the tool says "saved" and the next turn knows
+        // nothing. Log it and let the caller report the failure.
+        console.error('[profileMemory] write FAILED — the fact is NOT on disk:', err);
+        throw err;
+    }
     // Nudge any open Settings → Memory card to re-read.
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('august-profile-memory'));
 };
@@ -115,7 +162,9 @@ export const getProfileMemory = (slug: string, username?: string): ProfileMemory
  * Returns the entry + whether it was new.
  */
 export type RememberResult =
-    | { entry: ProfileMemoryEntry; created: boolean; conflict?: false }
+    /** `persisted:false` means the entry was built but storage refused it —
+     *  the caller must NOT report success. */
+    | { entry: ProfileMemoryEntry; created: boolean; conflict?: false; persisted?: boolean; error?: string }
     /** `if_version` did not match: nothing was written. `current` is the row
      *  that IS stored, so the caller can merge and retry in the same turn
      *  instead of overwriting a concurrent edit blind. */
@@ -132,6 +181,14 @@ export const rememberProfileMemory = (input: {
     sensitive?: boolean;
     /** Extra match strings for the deterministic pre-read. */
     aliases?: string[];
+    /** What the fact is about; derived from `kind` when omitted. */
+    subject?: ProfileMemoryEntry['subject'];
+    /** The conversation the write happened in, stamped by the caller that knows. */
+    sourceSession?: string;
+    /** Absorbed-line history, written by the consolidation merge. An ordinary
+     *  write leaves this untouched (see the entry build): an edit to the
+     *  survivor must not cost it the record of what it ate. */
+    derivedFrom?: string[];
     /** Optimistic lock: when given and a row with this slug already exists,
      *  the write only lands if the row's version is exactly this. */
     ifVersion?: number;
@@ -139,6 +196,7 @@ export const rememberProfileMemory = (input: {
     const user = username || getActiveUsername();
     const slug = input.slug?.trim() ? slugify(input.slug) : slugify(input.name || input.description);
     const now = new Date().toISOString();
+    const subjectField = normalizeSubject(input.subject);
     const all = readAll(user);
     const idx = all.findIndex(e => e.slug === (slug || ''));
     if (idx >= 0 && typeof input.ifVersion === 'number' && (all[idx].version ?? 1) !== input.ifVersion) {
@@ -154,6 +212,15 @@ export const rememberProfileMemory = (input: {
         ...(input.tag ? { tag: input.tag } : {}),
         ...(input.sensitive !== undefined ? { sensitive: input.sensitive } : {}),
         ...(input.aliases ? { aliases: input.aliases.map(a => a.trim()).filter(Boolean).slice(0, 8) } : {}),
+        ...(subjectField ? { subject: subjectField } : {}),
+        ...(input.sourceSession?.trim() ? { sourceSession: input.sourceSession.trim().slice(0, 80) } : {}),
+        // Absorbed history is the merge's, not the caller's: an explicit list
+        // wins, and an ordinary edit keeps what the row already carried. Without
+        // the fallback, the next `remember` on a survivor would silently erase
+        // the provenance that `forgetProfileMemory`'s cascade rule reads.
+        ...(input.derivedFrom?.length
+            ? { derivedFrom: [...new Set(input.derivedFrom.map(s => s.trim()).filter(Boolean))].slice(0, 12) }
+            : prior?.derivedFrom?.length ? { derivedFrom: prior.derivedFrom } : {}),
         createdAt: now,
         updatedAt: now,
         version: idx >= 0 ? (prior!.version ?? 1) + 1 : 1,
@@ -170,41 +237,133 @@ export const rememberProfileMemory = (input: {
     } else {
         all[idx] = { ...all[idx], ...entry, createdAt: all[idx].createdAt };
     }
-    writeAll(user, all);
-    return { entry, created };
+    try {
+        writeAll(user, all);
+        return { entry, created, persisted: true };
+    } catch (err) {
+        return { entry, created, persisted: false, error: err instanceof Error ? err.message : String(err) };
+    }
 };
 
-export const forgetProfileMemory = (slug: string, username?: string): boolean => {
+export interface ForgetResult {
+    /** False when no line had that slug — the caller said nothing was forgotten. */
+    gone: boolean;
+    /** Every slug this call removed, the named one first. Longer than one when
+     *  a line was the ONLY source of another line. */
+    removed: string[];
+    /** The named line's own absorbed history, when it had one — the slugs whose
+     *  content this row was carrying. Nothing else is deleted for them; they
+     *  were already merged away, and a forget that could not say so would be
+     *  silently erasing more of the trader's record than it names. */
+    carried: string[];
+}
+
+/**
+ * Forget a line — and, per the record's own provenance, anything derived
+ * SOLELY from it.
+ *
+ * The rule is transitive and it is narrow: a row goes with the named slug only
+ * when its `derivedFrom` list resolves entirely to slugs that are already
+ * doomed by this same delete. A merge survivor keeps its facts (it was built
+ * from more than one line, so "solely" does not apply) and nothing else is
+ * touched. Written as a loop rather than a single check because A derived from
+ * B derived from C must all fall, and a one-level check would strand C's copy.
+ *
+ * Every caller now reads `.gone` rather than the bare return: a truthy
+ * `ForgetResult` would otherwise report success on a forget that deleted
+ * nothing.
+ */
+export const forgetProfileMemory = (slug: string, username?: string): ForgetResult => {
+    const user = username || getActiveUsername();
+    const all = readAll(user);
+    const target = all.find(e => e.slug === slug);
+    if (!target) return { gone: false, removed: [], carried: [] };
+    const doomed = new Set<string>([slug]);
+    for (let grew = true; grew;) {
+        grew = false;
+        for (const e of all) {
+            if (doomed.has(e.slug)) continue;
+            const src = e.derivedFrom ?? [];
+            if (src.length > 0 && src.every(s => doomed.has(s))) { doomed.add(e.slug); grew = true; }
+        }
+    }
+    const next = all.filter(e => !doomed.has(e.slug));
+    try {
+        writeAll(user, next);
+    } catch {
+        return { gone: false, removed: [], carried: [] };
+    }
+    return {
+        gone: true,
+        removed: [slug, ...all.filter(e => doomed.has(e.slug) && e.slug !== slug).map(e => e.slug)],
+        carried: target.derivedFrom ?? [],
+    };
+};
+
+/**
+ * Delete one line by slug, with NO derivation cascade.
+ *
+ * This is what the consolidation pass retires: an input it has just absorbed
+ * into the survivor. It must not cascade, because the survivor's `derivedFrom`
+ * names exactly these slugs — running the trader-facing `forgetProfileMemory`
+ * here would delete the merged row moments after writing it, on a two-candidate
+ * merge whose whole provenance list is the one loser being retired. Same store,
+ * same write path, different operation: the trader forgetting a fact is not the
+ * consolidator consuming one.
+ */
+export const retireMergedMemory = (slug: string, username?: string): boolean => {
     const user = username || getActiveUsername();
     const all = readAll(user);
     const next = all.filter(e => e.slug !== slug);
     if (next.length === all.length) return false;
-    writeAll(user, next);
-    return true;
+    try {
+        writeAll(user, next);
+        return true;
+    } catch {
+        return false;
+    }
 };
 
 /** How many index lines a prompt gets (capped; older entries fall off — the
  *  newest remember more, like this environment trimming its index). */
 const INDEX_MAX_LINES = 30;
 const INDEX_LINE_MAX = 150;
+/** Two aliases, twenty characters each: enough to carry the trader's own word
+ *  for a fact, not enough to turn the index into a keyword dump. */
+const INDEX_ALIAS_MAX = 2;
+const INDEX_ALIAS_CHARS = 20;
 
 /**
  * The always-loaded memory index for prompts — one line per entry:
- * `- [kind] slug — description`. Empty string when nothing is stored, so it
- * composes cleanly into any prompt. The model reads bodies via read_memory.
+ * `- [kind] slug ~aliases — description`. Empty string when nothing is stored,
+ * so it composes cleanly into any prompt. The aliases ride the line because
+ * they are the words the trader actually uses: a slug is the store's naming,
+ * and a seat that cannot see "bun" on the row has to guess whether
+ * `user-pkg-mgr` matters before it spends a read. Bodies still come through
+ * read_memory; the line stays inside INDEX_LINE_MAX by shortening the
+ * description, not the aliases, so the added words never grow the block.
  */
 export const buildProfileMemoryIndex = (username?: string, maxLines = INDEX_MAX_LINES): string => {
-    const all = listProfileMemories(username);
-    if (all.length === 0) return '';
-    const newest = all.slice(-maxLines);
+    // A sensitive fact never rides the always-on index: this block is injected
+    // into every turn, including turns that have nothing to do with health,
+    // money or identity. It stays readable by explicit slug when the trader
+    // asks; it is not advertised to every future prompt.
+    const visible = listProfileMemories(username).filter(e => !e.sensitive);
+    if (visible.length === 0) return '';
+    const newest = visible.slice(-maxLines);
     const lines = newest.map(e => {
-        const desc = e.description.length > INDEX_LINE_MAX ? `${e.description.slice(0, INDEX_LINE_MAX - 1)}…` : e.description;
         const tagMark = e.tag === 'observed' ? ' ·observed' : e.tag === 'inferred' ? ' ·inferred' : '';
-        return `- [${e.kind}] ${e.slug}${tagMark} — ${desc}`;
+        const aliasSource = (e.aliases ?? []).map(a => a.trim()).filter(Boolean);
+        const aliasMark = aliasSource.length
+            ? ` ~${aliasSource.slice(0, INDEX_ALIAS_MAX).map(a => a.slice(0, INDEX_ALIAS_CHARS)).join(', ')}`
+            : '';
+        const descMax = Math.max(40, INDEX_LINE_MAX - aliasMark.length);
+        const desc = e.description.length > descMax ? `${e.description.slice(0, descMax - 1)}…` : e.description;
+        return `- [${e.kind}] ${e.slug}${tagMark}${aliasMark} — ${desc}`;
     });
-    const dropped = all.length - newest.length;
+    const dropped = visible.length - newest.length;
     return [
-        `## Your memory about this user — ${all.length} entr${all.length === 1 ? 'y' : 'ies'}. These are collaboration facts (who they are, how they want you to work, ongoing context), NOT trading lessons. When one matters, pull its full body with read_memory(slug). If this session teaches you something durable about the USER, save it with remember (update an existing slug rather than duplicating).`,
+        `## Your memory about this user — ${visible.length} entr${visible.length === 1 ? 'y' : 'ies'}. These are collaboration facts (who they are, how they want you to work, ongoing context), NOT trading lessons. When one matters, pull its full body with read_memory(slug). If this session teaches you something durable about the USER, save it with remember (update an existing slug rather than duplicating).`,
         ...lines,
         dropped > 0 ? `…${dropped} older entr${dropped === 1 ? 'y' : 'ies'} not listed — read_memory with slug "all" shows every entry.` : '',
     ].filter(Boolean).join('\n');

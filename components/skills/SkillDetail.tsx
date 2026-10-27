@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { setSkillStatus, skillExpectancyR, skillEnabledFlag, isApprovedSkill, EXPECTANCY_MIN_R_SAMPLE } from '../../services/learning/SkillMemoryService';
-import { deleteMemoryFile } from '../../services/learning/MemoryFilesService';
+import { getMemoryFiles, withNotebookWriteLock, deleteMemoryFileUnlocked } from '../../services/learning/MemoryFilesService';
 import type { SkillMeta } from '../../services/learning/SkillMemoryService';
 import type { SkillProofResult } from '../../services/learning/skillProof';
 import { parsePredicate } from '../../services/analysis/skillPredicate';
@@ -75,9 +75,29 @@ export const toggleSkillRetire = async (s: SkillCardData): Promise<void> => {
 
 /** Remove the skill file outright. Retiring is the soft move; WS-2.3's point is
  *  that the human keeps the hard one even though the supervisor now does the
- *  approving, so it has to be reachable where the skill is actually read. */
-export const deleteSkillFile = async (s: SkillCardData): Promise<void> => {
-    await deleteMemoryFile(s.fileId, getActiveUsername());
+ *  approving, so it has to be reachable where the skill is actually read.
+ *
+ *  A skill that arrived as a FOLDER — by picker or by URL — owns bundled files
+ *  named `<slug>__<role>__<leaf>` beside it. Deleting only the head would leave
+ *  those bytes in the library addressed by nothing: the L1 list is drawn from
+ *  the parent, so the trader sees one row vanish and four files stay. They go
+ *  with it, inside ONE write lock, so a delete is one notebook write rather
+ *  than a torn sequence. Returns how many files went, which is what lets the
+ *  UI say so instead of guessing. */
+export const deleteSkillFile = async (s: SkillCardData): Promise<number> => {
+    const username = getActiveUsername();
+    const notebook = getMemoryFiles();
+    const head = notebook.files.find(f => f.id === s.fileId);
+    const slug = head ? head.name.replace(/\.md$/i, '') : '';
+    const bundles = head && slug
+        ? notebook.files.filter(f => f.folderId === head.folderId && f.name.startsWith(`${slug}__`))
+        : [];
+    await withNotebookWriteLock(async () => {
+        for (const f of [...bundles, ...(head ? [head] : [])]) {
+            await deleteMemoryFileUnlocked(f.id, username);
+        }
+    });
+    return bundles.length + (head ? 1 : 0);
 };
 
 const MetaField: React.FC<{ label: string; value: string; wide?: boolean }> = ({ label, value, wide }) => (

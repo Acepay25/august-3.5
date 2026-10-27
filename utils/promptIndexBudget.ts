@@ -18,6 +18,8 @@ export interface IndexBudget {
     memory: number;
     /** Notebook topics index lines. */
     topics: number;
+    /** Goal environments (a goal is the seat's work context). */
+    goals: number;
 }
 
 const STEP = (
@@ -36,5 +38,7 @@ export const indexBudgetFor = (windowTokens: number): IndexBudget => {
         skills: STEP(w, 30, 20, 10, 4),
         memory: STEP(w, 30, 16, 8, 4),
         topics: STEP(w, 12, 8, 4, 2),
+        // Goals are the work environment; one line each, the focused one first.
+        goals: STEP(w, 6, 4, 3, 1),
     };
 };
