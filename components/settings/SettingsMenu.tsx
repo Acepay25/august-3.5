@@ -417,7 +417,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     </summary>
                                     <div className="mt-2 px-2 pb-1 text-ui-dense leading-5 text-zinc-500">
                                         Runtime errors and the thinking-leak bin moved
-                                        to <span className="text-zinc-300">Learn → System</span>.
+                                        to <span className="text-zinc-300">Learn → Health</span>.
                                     </div>
                                 </details>
                                 <p className="text-ui-xs text-zinc-600 text-center font-mono">

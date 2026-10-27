@@ -34,7 +34,11 @@ const SkillsLibrary: React.FC<{ studio?: React.ReactNode }> = ({ studio }) => {
             <div className="border-t border-zinc-800/80 pt-4">
                 <div className="flex items-center gap-2">
                     <h3 className="text-ui-sm text-zinc-500">Trade plans</h3>
-                    <StatusPill tone="neutral">Active only</StatusPill>
+                    {/* The pill names what the list HOLDS (the per-row chips carry
+                        each plan's state) — it read "Active only" while drafts and
+                        retired plans are listed here too, and only an ACTIVE one
+                        reaches the desk. */}
+                    <StatusPill tone="neutral">Draft · Active · Retired</StatusPill>
                 </div>
                 <p className="mt-1 text-ui-dense text-zinc-500">
                     Named strategies the model proposed. Only an ACTIVE plan is shown to the desk —
@@ -47,10 +51,11 @@ const SkillsLibrary: React.FC<{ studio?: React.ReactNode }> = ({ studio }) => {
             <div className="border-t border-zinc-800/80 pt-4">
                 <div className="flex items-center gap-2">
                     <h3 className="text-ui-sm text-zinc-500">Forged tools</h3>
-                    <StatusPill tone="neutral">Awaiting approval</StatusPill>
+                    <StatusPill tone="neutral">Candidates + confirmed</StatusPill>
                 </div>
                 <p className="mt-1 text-ui-dense text-zinc-500">
-                    Desk tools the model wrote, queued for your decision.
+                    Desk tools the model wrote. A candidate waits for your decision; a
+                    confirmed one stays listed with its usage.
                 </p>
                 <div className="mt-3">
                     <ToolForgeManager />
