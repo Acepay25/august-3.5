@@ -31,6 +31,7 @@ import type { ChatMessage, ContentPart } from '../providers/GenericProviderServi
 import type { DeskToolCall, DeskToolResult } from '../analysis/DeskToolsService';
 import { fetchHybridData, generateHybridPromptInjection } from '../analysis/HybridIntelligenceService';
 import { DESK_TOOL_NAMES } from '../../utils/toolKinds';
+import { CHART_ACTION_TOOL_DEFS } from '../analysis/DeskToolsService';
 import { focusedGoal } from '../goals/GoalService';
 import { buildTradeChatContext, describeChartSnapshotForModel } from './tradeChatContext';
 import {
@@ -99,7 +100,25 @@ export interface PanelTurnContext {
     interval: string;
 }
 
-const TRADE_TOOLS: string[] = [...DESK_TOOL_NAMES];
+/** The dock seat's tool allow-list — the desk set PLUS the seven chart actions.
+ *
+ *  Naming them here is not a widening, it is what makes the offer work at all.
+ *  `DeskToolsService` lists a chart-action definition only when the caller owns
+ *  a live canvas AND `seatAllows(allowedTools, name)` names it, and a NON-EMPTY
+ *  list is by definition a restricted one. So a list that omits them empties the
+ *  chart set at that filter, and the widening step two lines later — which adds
+ *  `extraDefs` back to the allow-list — has nothing left to add: the two rules
+ *  cancelled each other out. This is the dock, the one home whose executor
+ *  actually dispatches these calls (`executePanelTool` below, and the canvas it
+ *  draws on is on screen), so the omission was the whole reason a seat answering
+ *  over a live chart could tell the trader there was no canvas to draw on.
+ *
+ *  A focused goal still narrows this: `intersectGoalPolicy` runs against the full
+ *  name list, and a goal may remove tools but never add one. */
+const TRADE_TOOLS: string[] = [
+    ...DESK_TOOL_NAMES,
+    ...CHART_ACTION_TOOL_DEFS.map(d => d.function.name),
+];
 
 /** An image the composer attached to this turn, in the shape the runner needs. */
 type ScreenshotAttachment = { kind: string; payload: string };

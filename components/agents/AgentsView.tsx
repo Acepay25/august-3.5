@@ -1601,6 +1601,26 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                 measure so the box, the instrument row and the two
                                 notes stay on one left edge at every width. */}
                             <div data-testid="chat-composer-area" className="chat-column">
+                            {/* The instrument this chat is about, ABOVE the card and
+                                outside it — the reference's arrangement: what you are
+                                asking about, then the box you ask it in, then the note
+                                under the box. It is not part of the field, so it does
+                                not live inside the field's frame. */}
+                            <div className="mx-auto mb-2 flex w-full max-w-[55rem] items-center gap-2 px-2.5">
+                                <SymbolPicker
+                                    symbols={symbols}
+                                    value={sessionSymbol}
+                                    onChange={setSessionSymbol}
+                                />
+                                <div className="hidden sm:flex items-center">
+                                    <TimeframeBar
+                                        interval={sessionInterval}
+                                        onIntervalChange={setSessionInterval}
+                                        compact
+                                        className="border-b-0 px-0 py-0"
+                                    />
+                                </div>
+                            </div>
                             <div data-testid="chat-composer" className="rounded-bubble border border-white/[0.09] bg-surface-raised p-3 shadow-xl transition-colors focus-within:border-cyan-500/40">
                                 <input type="file" multiple accept="image/*" className="hidden"
                                     ref={fileInputRef} data-testid="composer-file"
@@ -1664,25 +1684,6 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                                 : <ArrowUp className="h-4 w-4" aria-hidden="true" />}
                                         </button>
                                     </div>
-                                </div>
-                            </div>
-                            {/* The instrument this chat is about, on its own row
-                                outside the card and on the same measure as the
-                                notes under it — so the left edge of everything
-                                below the field is one edge, not three. */}
-                            <div className="mx-auto mt-2 flex w-full max-w-[55rem] items-center gap-2 px-2.5">
-                                <SymbolPicker
-                                    symbols={symbols}
-                                    value={sessionSymbol}
-                                    onChange={setSessionSymbol}
-                                />
-                                <div className="hidden sm:flex items-center">
-                                    <TimeframeBar
-                                        interval={sessionInterval}
-                                        onIntervalChange={setSessionInterval}
-                                        compact
-                                        className="border-b-0 px-0 py-0"
-                                    />
                                 </div>
                             </div>
                             {/* The context note keeps its own line, left-aligned on

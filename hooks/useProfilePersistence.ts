@@ -128,9 +128,16 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
     // Both write to the same profile; dbService merges them. The net effect:
     // toggling a settings checkbox no longer triggers a multi-MB re-serialize.
 
+    /** True only while a profile that actually LOADED owns the live state.
+     *  Checked at effect-body time AND again inside every debounced/timed write,
+     *  because a timeout armed before a profile switch still fires after it — and
+     *  the state it would then serialize is the INCOMING profile's rows under the
+     *  OUTGOING username (docs/AUDIT.md L-2). */
+    const canPersist = (): boolean => !profileReadyRef || profileReadyRef.current === true;
+
     // (1) DATA save — heavy payload, only on real data changes.
     useEffect(() => {
-        if (!activeUsername) return;
+        if (!activeUsername || !canPersist()) return;
         // Only ever write for a profile that actually LOADED. The loader
         // already refuses to adopt a username whose load threw; this is the
         // second lock on the same door, because the failure mode is total and
@@ -146,6 +153,8 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
         setSaveStatus(prev => (prev === 'SAVING' ? prev : 'SAVING'));
 
         const handler = setTimeout(async () => {
+            // Re-checked: the switch may have begun after this timer was armed.
+            if (!canPersist()) return;
             try {
                 // buildProfileSnapshot deliberately stays OUT of this effect's
                 // deps (see dep list below): settings-only toggles would re-arm
@@ -177,7 +186,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
     // longer debounce (2500ms) since settings changes are low-risk and we
     // don't want every checkbox tick to trigger a save storm.
     useEffect(() => {
-        if (!activeUsername) return;
+        if (!activeUsername || !canPersist()) return;
 
         // Surface settings saves in the header status too — the old path
         // failed silently (console.error only), so a broken write looked
@@ -185,6 +194,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
         setSaveStatus(prev => (prev === 'SAVING' ? prev : 'SAVING'));
 
         const handler = setTimeout(async () => {
+            if (!canPersist()) return;
             try {
                 // Only the settings sub-object — no conversations, no trades,
                 // no base64 images. This is a cheap write.
@@ -220,8 +230,9 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
     const heartbeatSnapshotRef = useRef(buildProfileSnapshot);
     heartbeatSnapshotRef.current = buildProfileSnapshot;
     useEffect(() => {
-        if (!activeUsername || !isAnalysisInProgress) return;
+        if (!activeUsername || !isAnalysisInProgress || !canPersist()) return;
         const interval = setInterval(async () => {
+            if (!canPersist()) return;
             try {
                 const last = lastSavedSnapshotRef.current;
                 const snapshot = heartbeatSnapshotRef.current();
@@ -250,7 +261,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
     // ref to the freshest snapshot (updated every render via getSnapshot)
     // so the synchronous unload handler always persists the latest data.
     useSaveOnUnload({
-        enabled: !!activeUsername,
+        enabled: !!activeUsername && canPersist(),
         getSnapshot: buildProfileSnapshot,
         isDirty: () => {
             const last = lastSavedSnapshotRef.current;
@@ -276,7 +287,7 @@ export const useProfilePersistence = (args: UseProfilePersistenceArgs): UseProfi
             return false;
         },
         save: async (snapshot) => {
-            if (!activeUsername) return;
+            if (!activeUsername || !canPersist()) return;
             await dbService.saveUserProfile(activeUsername, snapshot);
             lastSavedSnapshotRef.current = snapshot;
         },

@@ -58,7 +58,7 @@ The two row types do **not** share the tool transcript's fields, measured 2026-1
 
 - dock row = `LiveEntry` (`services/trade/chatStore.ts:48`, `StoredChatEntry & {…}`):
   carries `tools: string[]`, `toolIds: string[]`, `actions`
-  (`chatTurnRunner.ts:701` appends the digest line and its id **in the same patch**,
+  (`chatTurnRunner.ts:720` appends the digest line and its id **in the same patch**,
   because the desk loop's `results` order does not match the rendered lines — pairing
   by index silently attaches the wrong payload).
 - canonical row = `Message` (`types/message.ts`): has `thoughtProcesses` `:257`,
@@ -71,7 +71,7 @@ Chat surface. The extraction therefore takes an **event sink** — the executor 
 each home maps them onto its own fields. That is what 20a builds.
 
 Second blocker for the cheaper "just lift the runner" route: the deps are captured
-**at construction** (`chatTurnRunner.ts:173-273`, `useMemo` over 35 fields at
+**at construction** (`chatTurnRunner.ts:192-292`, `useMemo` over 35 fields at
 `TradeChatPanel.tsx:483-571`), including composer state (`draft`, `attachments`,
 `setDraft`, `clearAttachments`, `setContextAt`) and `systemPromptFor`. Two surfaces
 cannot share one instance built per-mount, so 20a converts turn-scoped context into
@@ -88,11 +88,11 @@ The goal is one tool-capable turn in **both** chat homes. Facts, so the next
 session does not re-derive them:
 
 - `streamChatWithDeskTools` is an **async generator** returning text deltas
-  (`services/analysis/DeskToolsService.ts:4893`), and **every option is optional**
+  (`services/analysis/DeskToolsService.ts:4922`), and **every option is optional**
   (`StreamWithDeskToolsOptions`). It self-gates on
   `getHarnessSettings().deskToolsEnabled`, and `withDeskToolsSystemPrompt` will not
   double-inject the DESK TOOLS block if the system message already carries it.
-- The dock consumes it at `chatTurnRunner.ts:640` with `allowedTools: TRADE_TOOLS`
+- The dock consumes it at `chatTurnRunner.ts:659` with `allowedTools: TRADE_TOOLS`
   (`:96`, ~20 names, chart-aware: `get_chart_view`, `mark_trade_levels`,
   `draw_on_chart`) plus a frozen `PanelTurnContext` so a background turn still
   writes into its own transcript.
@@ -108,7 +108,7 @@ numbering; the file is shorter now) — eight positional
   have no target there; (3) whether the Chat surface renders a tool chip (the dock's
   transcript rows already do).
 - Lifting `createChatTurnRunner` into App is **not** the cheap route: its deps
-  object (`chatTurnRunner.ts:173-273`) is 35 fields, most of them chart state
+  object (`chatTurnRunner.ts:192-292`) is 35 fields, most of them chart state
   owned by TradeView (`allDrawings`, `getChartSnapshot`, `addModelDrawings`,
   `onPlanPresented`). Do the transport swap, not the lift.
 
@@ -128,7 +128,7 @@ So the target is NOT "keep the branch and shrink it to one seat". It is:
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
   `streamChatWithDeskTools` (`DeskToolsService.ts:4922`), which the dock's solo
-  seat already runs at `chatTurnRunner.ts:630`.
+  seat already runs at `chatTurnRunner.ts:649`.
 - **The verdict and the journal row become tools the model chooses to call**, not
   a pipeline stage it has to earn. What already exists: `present_trade`
   (proposal → `TradeAnalysis` with outcome PENDING, so the autopilot watches it),
@@ -679,7 +679,7 @@ tool path applies it already. Only then does the `rm` become honest.
 
 Both flow docs re-audited against the post-19 tree: **167/167 anchors land**, and all
 six peer-review defects verified fixed by grep (no dangling hashes, `plans/` cross-link,
-`services/infrastructure/messageImageStore.ts`, `ChatComposer.tsx:150`, Section D says
+`services/infrastructure/messageImageStore.ts`, `ChatComposer.tsx:155` Section D says
 starved-not-deleted). Two defects my own scanner found that the reviewer's did not: a
 stale `streamQuickResponse :3315` (the debate arm's copy — it is `:1449` now) and a
 **fabricated citation**, `rationale` at lines 617-622, in three places — the word `rationale`
@@ -749,7 +749,7 @@ watching the suite stay green:
    now stripped before matching, so a consumer must use the name in its body. That second
    hole briefly accused `harnessNoteLegend` of being orphaned — a false red from my own
    stripper closing an import run on a line ending in a backtick; the real call is
-   `DeskToolsService.ts:4169`. The control that caught it is the new
+   `DeskToolsService.ts:4183`. The control that caught it is the new
    `the reachability walk separates live from dead` test.
 
 Proof of load-bearing: producer reverted → `withDetectedTradeType` FAILS; restored →
@@ -810,7 +810,7 @@ three turn owners, fed by `usage`/`usageCalls` that `runToolTurn` folds out of t
 per-request `onUsage`. Pinned in `tests/toolTurn.test.ts` ("the measured usage fold") and
 guarded by a new `featuresAreWired` row; stubbing the fold turns those pins red.
 
-`notify()` now fires on the settled Full-analysis path (`useAnalysisPipeline.ts:1319`),
+`notify()` now fires on the settled Full-analysis path (`useAnalysisPipeline.ts:1275`),
 scoped to `options?.fullAnalysis === true` and excluded on a stopped turn, so an ordinary
 chat line stays quiet and a schedule (which already reports in its own row) is not doubled.
 `CompletionNotifications` therefore has no caller left and dies with the engine.
@@ -1437,7 +1437,7 @@ What the attempt measured, which is the value it leaves behind:
 - `services/providers/GenericAnalysisService.ts:361` is a three-way prompt chain;
   deleting the two mode branches means lifting the standard branch out of its
   `else` and dedenting it, which needs a brace-walking flattener, not a regex.
-- `hooks/useProfilePersistence.ts:185` and `hooks/useAnalysisPipeline.ts:1419` list
+- `hooks/useProfilePersistence.ts:185` and `hooks/useAnalysisPipeline.ts` (no line claimed — those fields left the file in the pass this row records) list
   the five fields inside one-line object literals and one very long dependency
   array, so whole-line filtering cannot reach them — they need token strips.
 - The one unsolved blocker is `components/settings/CustomInstructionsEditor.tsx:164`:
@@ -1763,7 +1763,7 @@ when it was ruled on.
 
 **The panel is reachable and working.** `components/trade/TradeChatPanel.tsx:975` renders a
 **"New panel · up to 5 models"** control, and a local `addSession(kind)` creates the session;
-`chatTurnRunner.ts:1143` builds the seats, refuses below two usable seats (`:1142`), opens a
+`chatTurnRunner.ts:1162` builds the seats, refuses below two usable seats (`:1140`), opens a
 `createDebateMailbox` (`:1023`), plans each turn with `planPanelTurn` (`:1035`), gives every
 seat its own mandate ("You are \"X\" on a 5-seat chart panel", `:1058`), streams each seat into
 its own bubble, and parses `@Name` mentions so a seat can pull another in mid-turn (`:1118`).
@@ -1930,7 +1930,7 @@ Each review finding was re-opened in the CURRENT files rather than assumed close
 | 3 | stale anchors | closed by the gate, not by hand: 248 anchors verified, 0 unattributed, ceilings 46 comment-line / 16 symbol. **Those are the counts at that commit, not today's** — both ceilings have since been driven to 0 and the population is 247 (one stale stage row retired); the live numbers are in the resume-facts block below |
 | 4 | cross-link resolved to `docs/debate-deletion-status.md` | closed — the link is now `(plans/debate-deletion-status.md)`, relative to `docs/`, and the broken form has 0 occurrences |
 | 5 | `messageImageStore.ts` filed under `utils/` | closed — the table row names `services/infrastructure/messageImageStore.ts`, which is where the file is |
-| 6 | `ChatComposer.tsx:164` for the Enter key | closed — the doc cites `:146`, and line 146 is `if (ev.key === 'Enter' && !ev.shiftKey)`. The doc no longer cites an AgentsView Enter line at all |
+| 6 | `ChatComposer.tsx:169` for the Enter key | closed — the doc cites `:146`, and line 146 is `if (ev.key === 'Enter' && !ev.shiftKey)`. The doc no longer cites an AgentsView Enter line at all |
 | 7 | not in the review, found while answering it: `AGENTS.md` said the release gate "runs the same static + probe chain" | closed as a doc fix, not a CI change — `AGENTS.md` now names the asymmetry with the `comm -13` recipe that prints it: release lacks `check-flow-doc-anchors`, `skill-approval-probe`, `test` and bare `typecheck`, and adds `installer-smoke`. **The owner still owes the other option** (add the anchor step to `release.yml`), which would change what a tag push gates |
 
 Two review items stay honestly open. "One service replacing nine" is unfalsifiable as
@@ -2158,7 +2158,7 @@ revokes it.
 **Do not re-derive these** (each cost a turn this session and is already proven): the
 review's six defects are all closed in the current files; **and the item it filed as
 "Not verified" — section C's ordering — turned out to carry nine wrong line numbers.** The
-fetch gate is `hooks/useAnalysisPipeline.ts:999` (the docs said line 880 in one file and line 880
+fetch gate is `hooks/useAnalysisPipeline.ts:863` (the docs said line 880 in one file and line 880
 in the other, and `:890` is the automation mute flag, not a gate); the injection string is
 built at `:953` (preset path `:994`, not `:988`); it is read only by `devLog` at `:978`, `:979`
 and `:1166` (not `:973`/`:1160`); `assemblePipelineMemoryContext` is called at `:1021` with the
@@ -2286,10 +2286,10 @@ line-resolved only.
 **Coverage 14 became 23, and it cost the docs three more wrong numbers.** Binding a row to its symbol means reading the line, so ten more rows
 went through the source: `runAutomation` is hooks/useAutomations.ts:429 (the table said :389), the `config.botId` fork is
 :423 (it said :431), and the row that attributes `Message.proposal` to the pipeline cited line 1293 of that
-file — a ternary arm — while the stamp is at hooks/useAnalysisPipeline.ts:1410. All three fixed in both flow docs. Newly bound and verified true:
+file — a ternary arm — while the stamp was in hooks/useAnalysisPipeline.ts (no line claimed; the pipeline no longer stamps that field). All three fixed in both flow docs. Newly bound and verified true:
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44, the Enter branch at
-components/trade/panels/ChatComposer.tsx:150, systemPromptFor components/trade/TradeChatPanel.tsx:436 with
-TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:505, useBotThread hooks/useAnalysisPipeline.ts:1319,
+components/trade/panels/ChatComposer.tsx:155, systemPromptFor components/trade/TradeChatPanel.tsx:436 with
+TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:505, useBotThread hooks/useAnalysisPipeline.ts:1098,
 entriesForSession services/trade/chatSessions.ts:593, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:140
 with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
 services/trade/automationTurn.ts:81, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices
@@ -2350,11 +2350,11 @@ where relevant), not re-read:
 | claim | recipe | measured |
 |---|---|---|
 | `beginPromptLane` has zero callers | `grep -rn beginPromptLane hooks services components App.tsx utils constants` | 2 hits: the import line and its own `export const` — no call site |
-| the prompt lane still settles | `grep -rn endPromptLane …` | 3: import, the settle call `settleOpenSteps useAnalysisPipeline.ts:1267` inside the finally, the definition |
+| the prompt lane still settles | `grep -rn endPromptLane …` | 3: import, the settle call `settleOpenSteps` inside the finally (no line claimed; that helper is gone), the definition |
 | `savedAnalyses` was deleted outright (stage 21) | `grep -rl savedAnalyses --include=*.ts --include=*.tsx . \| wc -l` | **0 files** — field, state, SQLite read/write, backup validation all gone; the surviving mentions are in the untracked `docs/analysis/` census, where every count is already 0 |
 | `NavRail` is imported and never rendered | `grep -rn "<NavRail" …` | 1 hit, and it is the generic `<NavRailProps>` on its own definition line — no JSX use anywhere in production |
 | post-mortems are gone | `grep -rn usePostMortem conductPostMortem …` | 1, a comment in `services/learning/SkillMemoryService.ts`; 0 for `conductPostMortem` |
-| all three turn owners record usage | `grep -rn recordToolTurnUsage …` | 3 call sites (`chatSurfaceTurn.ts:418`, `automationTurn.ts:265`, `chatTurnRunner.ts:728`) + the definition at `utils/sessionUsage.ts:63` |
+| all three turn owners record usage | `grep -rn recordToolTurnUsage …` | 3 call sites (`chatSurfaceTurn.ts:418`, `automationTurn.ts:265`, `chatTurnRunner.ts:747`) + the definition at `utils/sessionUsage.ts:63` |
 | one notifier | `grep -rn CompletionNotifications …` | 1, a comment in `services/infrastructure/notify.ts` — the module itself was deleted, which is stronger than "no caller" and is now what row 52 says |
 
 One sentence was tightened rather than corrected: row 52 said `CompletionNotifications` "has no caller",

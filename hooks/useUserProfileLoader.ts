@@ -291,6 +291,15 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
 
         handleCancelAnalysis();
         setIsLoading(true);
+        // CLOSE THE DOOR BEFORE SWAPPING THE ROOM. Every profile writer in
+        // useProfilePersistence keys its payload on the live state and its key on
+        // `activeUsername`, and this load applies the INCOMING rows before the
+        // username is adopted — so a debounce armed on either side of that seam
+        // serializes one profile's data under the other's name. The flag was only
+        // ever raised, never lowered, so during a switch it still said "ready" from
+        // the profile being replaced (docs/AUDIT.md L-2). It is raised again at the
+        // one adoption point below, after data AND identity agree.
+        profileReadyRef.current = false;
 
         // SWITCH PATH: drop the outgoing profile's live state before the
         // incoming one loads — the autopilot, the price-alert feed and the

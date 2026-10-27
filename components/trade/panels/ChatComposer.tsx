@@ -116,8 +116,13 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
     // the effort dial: the tier rides the trigger's label and is edited on the
     // slider in the same panel, so the Chat surface and this dock cannot end up
     // with a dial the other lacks — or a label that disagrees with the request.
+    // Flat by owner ruling (2026-10-27). This block used to sit on a translucent
+    // band (`bg-zinc-900/45`) closed off from the transcript by a hairline
+    // (`border-t`). Both are gone: the coin row, the card and the note under it
+    // now sit on the dock's own panel, and the card's frame is the only boundary
+    // in the area — which is the point of the card existing at all.
     return (
-    <div className="shrink-0 border-t border-white/[0.04] bg-zinc-900/45 px-3 pb-3 pt-2">
+    <div className="shrink-0 px-3 pb-3 pt-2">
         <ModelFallbackBanner modelIssue={modelIssue} provider={provider} />
         <ComposerWorkspaceRow
             symbol={symbol}
