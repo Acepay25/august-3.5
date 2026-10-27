@@ -80,8 +80,8 @@ Highest blast radius, in the order Phase 1 must take them:
 
 ### Broken
 
-**L-1 — a 429 locks the Chat surface permanently** — **CODE**, and it is the worst single defect in
-the app. `hooks/useAnalysisPipeline.ts:1303-1316` sets the global `isRateLimited` (state lives in
+**L-1 — a 429 locks the Chat surface permanently** — **CODE-CERTAIN, and its reach is narrowed by
+L-1b below.** `hooks/useAnalysisPipeline.ts` sets the global `isRateLimited` (state lives in
 `hooks/useUIState.ts:35,59`, shared through `App.tsx:238`) and schedules its only reset 60s later
 **behind a guard that can never be true**:
 
@@ -91,20 +91,47 @@ window.setTimeout(() => {
 }, 60_000);
 ```
 
-The `finally` at `:1367-1371` runs before that timer and does `runsRef.current.delete(requestRunKey)`
-(`:1370`), so at +60s the map entry is `undefined`; if a newer run took the key, its controller
-differs. Either way `setIsRateLimited(false)` never executes. The only other clear is `:708`, which
-sits **after** the guard at `:648` that the flag trips:
+The `finally` runs before that timer and does `runsRef.current.delete(requestRunKey)`, so at +60s the
+map entry is `undefined`; if a newer run took the key, its controller differs. Either way
+`setIsRateLimited(false)` never executes. The only other clear sits **after** the guard that the flag
+trips:
 
 ```ts
 if (loadingMessage || isSummarizing || (...) || isRateLimited) return { ok: false };
 ```
 
-So the lock is self-sealing: every later send in every conversation returns `{ok:false}` at `:648`
-without reaching `:708`. The comment at `:1306` claims "the old reset sat behind an early-return
-guard" was fixed; the new reset sits behind one too. Consequences: the trader cannot send until
-reload; the offline queue's replays return `ok:false` and die at `MAX_RETRIES`, so queued work is
-**lost**, not deferred.
+So the lock is self-sealing: every later send returns `{ok:false}` at the guard without reaching the
+clear. Consequences if it is ever armed: the trader cannot send until reload, and the offline queue's
+replies return `ok:false` and die at `MAX_RETRIES`, so queued work is **lost**, not deferred. The
+comment beside it claims "the old reset sat behind an early-return guard" was fixed; the new reset
+sits behind one too.
+
+**Measured, not assumed:** three live runs on the Chat surface could **not** arm it. A desk turn that
+received three 429s settled as a plain failure row, and the next two sends went straight to the
+provider ~2s later and got answers. The guard is in the deps array (`:1408`), so it is not a stale
+closure — the flag was simply never set, because of **L-1b**. L-1 is therefore a latent defect on the
+paths that *do* classify a rate limit (a body that carries `status`, or text containing "Too Many
+Requests"), not a demonstrated everyday one. It is still worth fixing: it is a lock with no key.
+
+**L-1b — a streaming failure loses its HTTP status, so a real 429 is never a rate limit** —
+**PROVEN**. `services/providers/GenericProviderService.ts:2101-2106` built the thrown error like
+this:
+
+```ts
+const message = result?.message || `Provider stream failed (${attempt.status}).`;
+const error = new Error(message);
+if (result?.status !== undefined) (error as any).status = result.status;
+```
+
+An OpenAI-compatible 429 body is `{error:{message,type,code}}` — no top-level `status` — so
+`error.status` stayed unset and the message became `Provider stream failed (429).`, which
+`classifyRunFailure` (`hooks/analysisPipeline/runOutcome.ts:48`) matches against neither
+`status === 429` nor the string "Too Many Requests". It returns `'generic'`. So the app's whole
+rate-limit response — the 60s backoff, and the queue's "transient, retry with backoff" contract —
+**cannot trigger on the streaming path**, which is the path every desk turn uses. Observed in the
+transcript: three consecutive turns each ending `REQUEST FAILED / Mock: Provider stream failed (429).`
+with no backoff between them. `withRetry` rethrows the original error untouched
+(`utils/apiErrorUtils.ts:222`), so the status was lost at the source, not in the wrapper.
 
 **L-2 — profile switch can persist incoming data under the outgoing username** — **CODE**.
 `hooks/useUserProfileLoader.ts:288-505` applies conversations, trades and settings, and awaits
@@ -452,7 +479,10 @@ the consequence is that the model cannot correct its own notes.
   to a second model; it trips L-1 and stops. Retries are per-request and uneven: localhost SSE retries
   opening failures but not midstream (`GenericProviderService.ts:1779-1874`), Electron streaming has no
   retry wrapper, buffered calls use bounded backoff (`:2077-2109`, `utils/apiErrorUtils.ts:195-235`).
-- **Rate limit** — **CODE, Broken**: L-1.
+- **Rate limit** — **Broken in two halves**: **L-1b** (PROVEN) means a streaming 429 is filed as a
+  generic failure, so the backoff never arms; **L-1** (CODE-certain) means when it does arm, the timer
+  that clears it can never fire. One without the other would be survivable; together they mean the app
+  has no working rate-limit response on the path every desk turn uses.
 - **Panel/group** — **CODE, Working**. Up to five deduplicated seats in serial, mentions reorder, last
   configured seat synthesises; groups run ≤3 rounds/12 turns with a real abort controller
   (`useAgentGroups.ts:117-231`). Both rebuild the room transcript per send, which is a policy choice

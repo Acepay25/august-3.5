@@ -56,6 +56,13 @@ const devLog = (...args: unknown[]) => { if ((import.meta as any).env?.DEV) cons
  *  a follow-up run got the previous tape labelled "real-time". */
 const HYBRID_REUSE_MAX_AGE_MS = 60_000;
 
+/** How long one 429 backs the desk off, for every conversation. Named because the
+ *  cooldown is a promise the trader can see (a send that does nothing), and the
+ *  timer that keeps it is the thing that used to never run — see
+ *  `rateLimitEpochRef`. Scope is deliberately global today, not per provider;
+ *  narrowing it is an owner call (docs/STATUS.md decision 8). */
+const RATE_LIMIT_COOLDOWN_MS = 60_000;
+
 // Learning services
 import { generateWeightedVotingContext } from '../services/backtesting/ModelPerformanceService';
 import { threadForProvider } from '../utils/agentThreads';
@@ -327,6 +334,21 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
     /** Journal mirror for zero-dep callbacks (desk-tool recall on solo runs). */
     const loggedTradesRef = useRef<LoggedTrade[]>(loggedTrades);
     useEffect(() => { loggedTradesRef.current = loggedTrades; }, [loggedTrades]);
+    /**
+     * The 429 backoff is owned by the FLAG, not by the run that tripped it.
+     *
+     * It used to be guarded on `runsRef.get(key)?.controller === theRunThatFailed`,
+     * written to stop "a stale timer from a previous run clearing the flag on a
+     * newer run". That guard can never pass: the `finally` deletes the run
+     * registration before a 60-second timer fires, and a run that did take the key
+     * has a different controller — so the reset never ran, and because the early
+     * guard at the top of the send returns on `isRateLimited` BEFORE the
+     * `setIsRateLimited(false)` further down, one 429 blocked every conversation in
+     * the app until reload (docs/AUDIT.md L-1). A monotonic epoch gives the
+     * protection the comment actually wanted: a newer 429 bumps it, so an older
+     * timer cannot clear a cooldown it did not arm.
+     */
+    const rateLimitEpochRef = useRef(0);
     /**
      * Parked sends, per CONVERSATION.
      *
@@ -1301,17 +1323,15 @@ ${enhancedPrompt}`;
             // Rate limits first — isQuotaError also claims status === 429, so
             // the dedicated rate-limit path below was previously unreachable.
             if (failureKind === 'rate-limit') {
+                // See `rateLimitEpochRef`: the cooldown belongs to the flag, so the
+                // timer that clears it must not be tied to a run the `finally` has
+                // already released.
+                const epoch = rateLimitEpochRef.current + 1;
+                rateLimitEpochRef.current = epoch;
                 setIsRateLimited(true);
-                // Auto-clear after a backoff so a later run isn't blocked
-                // forever (the old reset sat behind an early-return guard).
-                // Capture this run's controller so a stale timer from a
-                // previous run can never clear the flag on a newer run.
-                const rateLimitRunController = currentAbortController;
                 window.setTimeout(() => {
-                    if (runsRef.current.get(requestRunKey)?.controller === rateLimitRunController) {
-                        setIsRateLimited(false);
-                    }
-                }, 60_000);
+                    if (rateLimitEpochRef.current === epoch) setIsRateLimited(false);
+                }, RATE_LIMIT_COOLDOWN_MS);
                 // Transient — a queued replay must RETRY with backoff.
                 return { ok: false };
             }

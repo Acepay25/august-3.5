@@ -74,14 +74,53 @@ UI showing a note gone while disk keeps it (the inverse lie, and privacy-adjacen
 this commit: a rollback needs a per-mutation snapshot, and the create path is the one that destroys
 the user's work.
 
-### Pending
+**F-2a — a streaming provider failure keeps its HTTP status** (audit **L-1b**).
+`services/providers/GenericProviderService.ts:2101-2116` — the thrown error copied `status` only when
+the provider's JSON body had a top-level `status` field. An OpenAI-compatible 429 body is
+`{error:{message,type,code}}`, so `error.status` was never set and the message became
+`Provider stream failed (429).`, which `classifyRunFailure`
+(`hooks/analysisPipeline/runOutcome.ts:48`) matches against neither `status === 429` nor "Too Many
+Requests". Every streaming 429 was filed as a generic failure: the 60s backoff and the queue's
+"transient, retry with backoff" contract could not run on the path every desk turn uses.
+`withRetry` rethrows the original error untouched (`utils/apiErrorUtils.ts:222`), which is how the
+loss was isolated to the throw site rather than the wrapper.
 
+*Verified:* **PROVEN red before the fix** — three consecutive Chat-surface turns each ended
+`REQUEST FAILED / Mock: Provider stream failed (429).` and the next two sends went straight to the
+provider ~2s later and were answered, i.e. no backoff existed. A passing control (a plain send
+answered 0→1 reply rows) rules out the probe itself. Zero page errors.
+*Deferred:* the fix makes the classification correct; it does not add a `Retry-After` read, so the
+cooldown is still a flat 60s rather than the interval the provider asked for.
+
+**F-2b — the 429 cooldown belongs to the flag, not to the run that tripped it** (audit **L-1**).
+`hooks/useAnalysisPipeline.ts:330-345,1303-1316` — the reset timer's guard
+(`runsRef.get(key)?.controller === theRunThatFailed`) can never pass, because the run's own `finally`
+deletes the registration first, and a newer run holds a different controller. Since the send guard
+returns on `isRateLimited` **before** the `setIsRateLimited(false)` further down, an armed flag would
+block every conversation until reload. Replaced with a monotonic epoch, which preserves the protection
+the original comment wanted (a stale timer cannot clear a cooldown it did not arm) without depending on
+run lifetime. The 60s is now named `RATE_LIMIT_COOLDOWN_MS`.
+
+*Verified:* `npm run typecheck` 0; eslint unchanged per file (51 and 23 problems at HEAD and in the
+tree — the ratchet is at its 379 cap, so this was measured, not assumed).
+**Honest limit:** I could not reproduce the permanent lock live, because L-1b meant no streaming 429
+ever armed the flag; after F-2a the Chat-surface sends still went through (measured: the send ~2s
+after a triple-429 turn reached the provider and was answered), so this path does not arm it either.
+The defect is airtight by reading and the fix is small, but it ships **unproven in the browser** —
+recorded rather than claimed as verified. The follow-up that would close it is a probe that arms the
+flag on a path which classifies a rate limit at all (the buffered `sendChatRequest` route), which needs
+a mock that answers the buffered analysis call with a `status`-bearing 429 body.
+*Decision recorded:* the cooldown is global, not per provider/model — one 429 from one provider backs
+off every conversation. Narrowing it is an owner call (decision 8), so the behaviour is preserved.
+
+### Pending
 Status legend: `pending` · `in-progress` · `done`.
 
 | # | item | audit id | status |
 |---|---|---|---|
 | **F-1** | A failed notebook write must not leave the bytes in the cache, so a retried approval cannot report "Already learned" and delete the trader's draft | M-1 | **done** — see the record below |
-| **F-2** | One 429 must not lock every Chat-surface send for the session; the reset must be keyed to the cooldown, not to a run registration the `finally` already deleted | L-1 | pending — CODE |
+| **F-2a** | A streaming provider failure must carry its HTTP status, or a real 429 is filed as a generic error and no backoff ever arms | L-1b | **done** — PROVEN |
+| **F-2b** | One armed 429 must not lock every Chat-surface send for the session; the reset is keyed to a cooldown epoch, not to a run registration the `finally` already deleted | L-1 | **done** — CODE-certain, live lock not reproducible (see record) |
 | **F-3** | Forward `onToolPayload` into the desk loop so the transcript can persist and open a tool's real output | L-3 | pending — CODE |
 | **F-4** | Isolate a Monte Carlo worker crash to its own worker (`pending.worker` is already tagged; `ejectWorker` already exists) | T-3 | pending — PROVEN red |
 | **F-5** | Profile switch must pause every save path and adopt identity + data atomically, so profile B is never written into profile A's store | L-2 | pending — CODE |
@@ -151,6 +190,10 @@ the unreachable update/download action.
    `GallerySaver` alone (half-built, may be wanted).
 7. **Training JSONL schema** — default: export the superset (`decidedAt`, `netR`, `costR`, correction
    provenance) and move `followedPlan` under `review`.
+8. **Rate-limit scope** — the 60s cooldown is global, so one provider's 429 backs off every
+   conversation. Default: preserved (F-2b changed only when it releases, not what it covers). Narrowing
+   it to provider+model, and honouring a `Retry-After` the provider sends, are both trader-visible
+   changes.
 
 ## Limits of this pass
 

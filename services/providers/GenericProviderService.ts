@@ -2102,7 +2102,18 @@ async function* streamViaProxy(
             const result = await attempt.json().catch(() => null);
             const message = result?.message || `Provider stream failed (${attempt.status}).`;
             const error = new Error(message);
-            if (result?.status !== undefined) (error as any).status = result.status;
+            // The HTTP status is the ground truth and must survive the throw.
+            // It used to be copied ONLY when the provider's own JSON body carried
+            // a `status` field, and the OpenAI-compatible 429 body is
+            // `{error:{message,type,code}}` — no `status`. So a real rate limit on
+            // the streaming path reached the pipeline as a plain Error whose text
+            // is `Provider stream failed (429).`, which `classifyRunFailure`
+            // (hooks/analysisPipeline/runOutcome.ts:48) matches against neither
+            // `status === 429` nor "Too Many Requests": every streaming 429 was
+            // filed as a generic failure, so the backoff branch never ran
+            // (docs/AUDIT.md L-1b, reproduced in the browser). A body that states
+            // its own status still wins — some gateways are more specific.
+            (error as any).status = result?.status ?? attempt.status;
             throw error;
         }
         return attempt;
