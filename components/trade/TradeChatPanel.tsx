@@ -949,7 +949,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 + / history / ⋯ / × right, nothing else. Conversations are
                 reached through the Past Conversations palette, not a tab
                 strip. */}
-            <div className="@container flex shrink-0 items-center gap-2 border-b border-white/[0.06] px-4 py-2.5">
+            <div className="@container flex shrink-0 items-center gap-2 border-b border-white/[0.06] bg-zinc-900/30 px-4 py-3">
                 <span className={`h-2 w-2 shrink-0 rounded-full ${busy ? 'animate-pulse bg-cyan-400' : live ? 'bg-emerald-500' : 'bg-zinc-500'}`} aria-label={live ? 'live market feed connected' : 'market feed polling'} />
                 {/* The dock is narrow and user-dragged, so the brand never
                     yields: at 370px a squeezed "Chart AI" wrapped into two

@@ -1,14 +1,14 @@
 /**
- * The surface switch — Claude's title-bar chat / `</>` pair, widened to this
- * app's four screens.
+ * The surface switch — the v2 design's tab strip: text tabs riding the
+ * topbar's full height, the active one marked by the brand-gradient underline
+ * on the bar's bottom hairline (the one place the gradient is allowed).
  *
  * It replaces the destination ROWS that used to stand in the sidebar. Those rows
  * were the thing the redesign was asked to remove, and the earlier passes only
  * renamed them (Learn → Knowledge, Approvals and Skills demoted to tabs), so the
  * same list survived with better labels. In the reference there is no surface
  * list in the sidebar at all: the sidebar holds conversations and Customize, and
- * the mode switch lives in the title bar beside the back/forward chrome. This is
- * that control.
+ * navigation lives in the topbar. This is that control.
  *
  * It reads `SURFACE_ITEMS` rather than declaring its own list, so a surface added
  * for the keyboard chords (Alt+1..5) appears here automatically — the drift this
@@ -31,11 +31,7 @@ interface SurfaceSwitchProps {
 }
 
 const SurfaceSwitch: React.FC<SurfaceSwitchProps> = ({ surface, onSelect, badges }) => (
-    <div
-        role="group"
-        aria-label="Screens"
-        className="flex shrink-0 items-center gap-0.5 rounded-control border border-zinc-800 p-0.5"
-    >
+    <nav role="group" aria-label="Screens" className="flex min-w-0 items-stretch self-stretch overflow-x-auto">
         {SURFACE_ITEMS.map(({ id, label, shortcut, Icon }) => {
             const current = id === surface;
             const badge = badges?.[id];
@@ -52,30 +48,41 @@ const SurfaceSwitch: React.FC<SurfaceSwitchProps> = ({ surface, onSelect, badges
                         ? `${label} — ${badge.detail} · ${shortcut}`
                         : `${label} · ${shortcut}`}
                     data-testid={`surface-switch-${id}`}
-                    className={`hit-target relative rounded-control p-1 transition-colors ${
+                    className={`hit-target relative flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 text-ui-sm font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
                         current
-                            ? 'bg-zinc-800 text-zinc-100'
-                            : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
+                            ? 'text-zinc-100'
+                            : 'text-zinc-500 hover:text-zinc-300'
                     }`}
                 >
-                    <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Icon className={`h-3.5 w-3.5 ${current ? 'text-zinc-200' : 'text-zinc-500'}`} aria-hidden="true" />
+                    <span className="hidden md:inline">{label}</span>
                     {badge?.count ? (
                         /* The count has to survive the rows' removal — it is the
                            only signal that a screen is waiting on you. It rides
                            the glyph as a dot-plus-number rather than a wide pill,
-                           because this control sits in a title bar that also has
+                           because this control sits in a topbar that also has
                            to fit at 430px. */
                         <span
                             aria-hidden
-                            className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-500 px-0.5 font-mono text-ui-2xs font-bold leading-none text-zinc-950"
+                            className="absolute right-1 top-2.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-500 px-0.5 font-mono text-ui-2xs font-bold leading-none text-zinc-950"
                         >
                             {badge.count > 9 ? '9+' : badge.count}
                         </span>
                     ) : null}
+                    {current && (
+                        /* The brand-gradient underline: the design reserves the
+                           gradient for the wordmark and the active-nav marker —
+                           this is that marker, sitting ON the bar's hairline. */
+                        <span
+                            aria-hidden="true"
+                            className="absolute inset-x-3 bottom-0 h-0.5 rounded-t-full"
+                            style={{ background: 'linear-gradient(90deg, var(--color-brand-start), var(--color-brand-mid), var(--color-brand-end))' }}
+                        />
+                    )}
                 </button>
             );
         })}
-    </div>
+    </nav>
 );
 
 export default React.memo(SurfaceSwitch);

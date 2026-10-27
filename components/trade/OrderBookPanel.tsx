@@ -182,7 +182,7 @@ const OrderBookPanel: React.FC<OrderBookPanelProps> = ({ symbol, live = false, l
            no fill of its own. The old panel fill (zinc-900 at 40 %) was a
            second box down the middle of the surface. */
         <div className="flex h-full min-h-0 flex-col border-l border-white/[0.06]">
-            <div className="flex shrink-0 items-center justify-between px-2 py-1.5">
+            <div className="flex shrink-0 items-center justify-between border-b border-white/[0.04] px-3 py-2.5">
                 <h2 className="ui-kicker">Order Book</h2>
                 {/* The feed state is a WORD, not a figure, so it wears the
                     interface face — the monospace is for the numbers in the

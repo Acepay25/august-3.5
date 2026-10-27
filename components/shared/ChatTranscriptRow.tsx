@@ -128,7 +128,7 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
             data-message-id={row.id}
             data-role={row.role}
             data-testid={isUser ? 'agent-message' : 'agent-message'}
-            className={`group/msg flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
+            className={`group/msg flex flex-col ${isUser ? 'items-end pl-8' : 'items-start pr-2 sm:pr-8'}`}
         >
             {/* WHO said it, quietly. The reference stamps nothing above a
                 message — the turn is identified by the turn. August has to
@@ -138,7 +138,7 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                 moved to the action row under the answer, where the reference
                 puts it — it was printed twice, once in the stamp and once in
                 the row's own chips. */}
-            <span className="mb-1 flex items-center gap-1.5 text-ui-2xs text-zinc-500">
+            <span className="mb-1.5 flex items-center gap-1.5 text-ui-xs text-zinc-500">
                 {row.error ? null : (
                     <>
                         <span className="h-1 w-1 shrink-0 rounded-full bg-zinc-600" aria-hidden="true" />
@@ -163,7 +163,7 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                    right-hand alignment — the thing that says "this is mine" —
                    disappeared. The trader's own words are INTERFACE, not prose:
                    they stay in the UI sans. */
-                <div className="max-w-[62%] rounded-bubble bg-zinc-800 px-3 py-2 text-ui-base leading-relaxed text-zinc-100">
+                <div className="max-w-[68%] rounded-bubble border border-white/[0.06] bg-zinc-800 px-4 py-2.5 text-ui-base leading-relaxed text-zinc-100 shadow-sm">
                     <FadingText text={body} streaming={!!row.streaming} />
                 </div>
             ) : row.error ? (
@@ -173,7 +173,7 @@ const ChatTranscriptRow: React.FC<ChatTranscriptRowProps> = ({
                    mistakes the app's error for the seat's opinion. */
                 <ChatFailureRow error={row.error} />
             ) : (
-                <div className="w-full max-w-full text-zinc-200 text-ui-base leading-relaxed">
+                <div className="w-full max-w-full text-zinc-200 text-ui-lede leading-[1.75]">
                     <ChatWorkTimeline entry={work} />
                     {body.trim()
                         ? <AnswerBody text={body} streaming={!!row.streaming} />

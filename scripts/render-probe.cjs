@@ -1424,6 +1424,7 @@ async function main() {
                     sidebarRows: rail
                         ? rail.querySelectorAll('[data-testid="surface-menu"] button').length : -1,
                     railTop: rail ? Math.round(rail.getBoundingClientRect().top) : -1,
+                    topbarHeight: Math.round(document.querySelector('header')?.getBoundingClientRect().height ?? 0),
                     accountName: !!rail?.querySelector('[data-testid="nav-account-name"]'),
                     switchUserButton: !!rail?.querySelector('[data-testid="nav-switch-user"]'),
                 };
@@ -1438,7 +1439,12 @@ async function main() {
                 nav.accountName && !nav.switchUserButton,
                 `name=${nav.accountName} switchButton=${nav.switchUserButton}`);
             check('the sidebar runs the full height of the window — nothing is stacked above it',
-                nav.railTop === 0, `agents-rail top ${nav.railTop}px`);
+                // The v2 shell stacks ONE bar above every surface — the topbar
+                // (brand, tabs, status, account). "Nothing stacked above" now
+                // means: the rail starts exactly at the topbar's bottom edge,
+                // and the only thing above it IS that bar.
+                nav.railTop > 0 && nav.railTop <= 64 && nav.railTop >= nav.topbarHeight - 1,
+                `agents-rail top ${nav.railTop}px, topbar ${nav.topbarHeight}px`);
 
             // Ctrl+B belongs to the RAIL specifically, which the Chat surface no
             // longer mounts — so press it on a surface that has one.

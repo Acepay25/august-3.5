@@ -75,7 +75,7 @@ const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange,
     };
 
     return (
-        <div className={`relative flex shrink-0 flex-wrap items-center gap-0.5 ${className ?? 'border-b border-white/[0.06] px-2 py-1.5'}`}>
+        <div className={`relative flex shrink-0 flex-wrap items-center gap-1 ${className ?? 'border-b border-white/[0.06] px-3 py-2'}`}>
             {compact ? (
                 <>
                     <button type="button" data-testid="tf-compact" ref={chipRef}
@@ -120,8 +120,8 @@ const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange,
                     key={tf}
                     type="button"
                     onClick={() => onIntervalChange(tf)}
-                    className={`rounded-control px-2 py-1 text-ui-dense font-medium transition-colors ${
-                        interval === tf ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
+                    className={`rounded-control px-2.5 py-1 font-mono text-ui-dense font-medium tabular-nums transition-colors ${
+                        interval === tf ? 'bg-zinc-700 text-zinc-100 ring-1 ring-white/[0.07]' : 'text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200'
                     }`}
                 >
                     {tf}

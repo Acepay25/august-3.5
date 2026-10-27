@@ -117,7 +117,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
     // slider in the same panel, so the Chat surface and this dock cannot end up
     // with a dial the other lacks — or a label that disagrees with the request.
     return (
-    <div className="shrink-0 px-3 pb-3 pt-1">
+    <div className="shrink-0 border-t border-white/[0.04] bg-zinc-900/45 px-3 pb-3 pt-2">
         <ModelFallbackBanner modelIssue={modelIssue} provider={provider} />
         <ComposerWorkspaceRow
             symbol={symbol}
@@ -135,7 +135,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                 onRemove={removeAttachment}
             />
         )}
-        <div className="rounded-bubble border border-white/[0.08] bg-surface-raised px-3 py-2.5">
+        <div className="rounded-bubble border border-white/[0.09] bg-surface-raised px-3 py-3 shadow-lg transition-colors focus-within:border-cyan-500/40">
             <textarea
                 ref={composerRef}
                 data-testid="composer-input"
@@ -146,8 +146,8 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
                 onKeyDown={ev => {
                     if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); void send(draft); }
                 }}
-                placeholder={ready ? 'Ask anything…' : isPanel ? 'Add at least 2 panel models above' : 'Configure a provider in Settings first'}
-                className="max-h-28 min-h-[24px] w-full resize-none bg-transparent text-ui-caption leading-5 text-zinc-100 placeholder:text-zinc-600 disabled:opacity-50"
+                placeholder={ready ? 'Ask about the chart, a plan, or your journal…' : isPanel ? 'Add at least 2 panel models above' : 'Configure a provider in Settings first'}
+                className="max-h-32 min-h-[44px] w-full resize-none bg-transparent py-1 text-ui-caption leading-6 text-zinc-100 placeholder:text-zinc-600 disabled:opacity-50"
             />
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 {/* `flex-wrap` + nowrap chips: the toolbar was ALWAYS over-

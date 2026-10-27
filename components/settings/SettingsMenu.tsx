@@ -138,8 +138,8 @@ const NavTabButton: React.FC<{
         aria-current={active ? 'page' : undefined}
         className={`flex w-full items-center justify-between gap-2 rounded-control px-2.5 py-2 text-left text-ui-sm font-medium transition-colors ${
             active
-                ? 'bg-zinc-800 text-zinc-100 shadow-sm ring-1 ring-white/[0.07]'
-                : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100'
+                ? 'bg-zinc-800 text-zinc-100 shadow-sm ring-1 ring-white/[0.09]'
+                : 'text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-100'
         }`}
     >
         <span className="flex min-w-0 items-center gap-2.5">
@@ -346,7 +346,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="settings-title"
-                    className="relative flex h-[min(860px,94vh)] w-[min(1180px,97vw)] overflow-hidden rounded-bubble border border-white/10 bg-zinc-900 shadow-2xl animate-fade-in"
+                    className="relative flex h-[min(860px,94vh)] w-[min(1180px,97vw)] overflow-hidden rounded-bubble border border-white/10 bg-zinc-900 shadow-2xl ring-1 ring-white/[0.04] animate-fade-in"
                 >
                     <button
                         type="button"
@@ -358,9 +358,13 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                     </button>
                     <div className="flex-1 flex min-h-0 flex-col md:flex-row">
 
-                        <div className="w-full md:w-64 max-h-[32vh] overflow-y-auto md:max-h-none md:overflow-y-auto border-b md:border-b-0 md:border-r border-white/[0.06] bg-black/20 px-3 py-4 space-y-1 shrink-0 flex flex-col justify-between custom-scrollbar">
+                        <div className="w-full md:w-64 max-h-[32vh] overflow-y-auto md:max-h-none md:overflow-y-auto border-b md:border-b-0 md:border-r border-white/[0.06] bg-zinc-950/45 px-3 py-4 space-y-1 shrink-0 flex flex-col justify-between custom-scrollbar">
                             <div className="space-y-1">
                                 <div className="px-1 pb-4">
+                                    <div className="mb-4 px-1.5">
+                                        <h2 id="settings-title" className="august-wordmark text-ui-xl font-semibold tracking-[-0.03em]">August</h2>
+                                        <p className="mt-1 text-ui-2xs font-medium uppercase tracking-[0.14em] text-zinc-600">Settings &amp; controls</p>
+                                    </div>
                                     <div className="flex items-center gap-2 rounded-control border border-white/[0.07] bg-zinc-800/80 px-2.5 py-2 transition-colors focus-within:border-white/20">
                                         <SearchIcon className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
                                         <input
@@ -372,7 +376,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         />
                                     </div>
                                 </div>
-                                <h2 id="settings-title" className="sr-only">Settings</h2>
                                 {NAV_GROUPS.map(group => {
                                     const entries = group.entries.filter(navMatches);
                                     if (entries.length === 0) return null;

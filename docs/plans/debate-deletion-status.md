@@ -790,7 +790,7 @@ The reachability walk found the label was not the only orphaned write:
    20r removed for scheduled runs.
 2. **Completion notification for an analysis run is gone.** Its only caller is the
    finalizer. `services/infrastructure/notify.ts` is live (price alerts,
-   `TradeView.tsx:725`), and its own header calls the completion-notifier component (named in a comment in `services/infrastructure/notify.ts`, no component of that name remains) a
+   `TradeView.tsx:712`), and its own header calls the completion-notifier component (named in a comment in `services/infrastructure/notify.ts`, no component of that name remains) a
    "native-only copy" — so the fix is one `notify()` call on the settled Full-analysis
    path, and `CompletionNotifications` then dies with stage 19.
 
@@ -917,7 +917,7 @@ not from the plan:
 - `isDebating: true` is now written in exactly ONE place: the resume path
   (`:924`). Everything that once set it lived in the debate loop.
 
-**The live consequence, and it is the next job:** `App.tsx:1145` picks
+**The live consequence, and it is the next job:** `App.tsx:1182` picks
 `verdictMessage` out of the debate shapes — `ensembleProgress`, >1 `modelsUsed`,
 `debateTurns` — and hands it to the chart as `verdict={verdictMessage?.analysis}`
 (`App.tsx`, and there is no line to give it: as of 2026-10-19 nothing passes an analysis prop there at all). After this tranche nothing sets `Message.analysis` for a new
@@ -1360,7 +1360,7 @@ with an offer to migrate that text into the general list before the tabs go.
 **Attempted #19's tail in an isolated worktree on 2026-10-18 and stopped at the third site — with
 two couplings the list above did not contain.** They are the reason this is a design pass and not a
 grep-and-delete:
-- `isEnsembleEnabled` gated **live market polling** too: `App.tsx:469` passed it to
+- `isEnsembleEnabled` gated **live market polling** too: `App.tsx:1170` passed it to
   `hooks/useMarketData.ts`, which uses it at `:44` (clears `liveMarketConditions` when off), `:127`
   and `:161` (the Binance reachability check) and `:118`/`:192` (effect deps). So deleting the
   toggle silently kills the market ticker the header shows, unless the polling is re-parented onto
@@ -2258,7 +2258,7 @@ registry row can orphan the constant it alone imported: `STRESS_TEST_PROTOCOL`,
 file and are deleted (proved by `tsc` and `vite build`, since the barrel can hide a consumer —
 the exact trap that had already saved two other constants on this pass). Three debate-era names
 were then re-checked rather than assumed dead, and the answer differs for each: `moderatorConfig`
-is live as the DEFAULT provider behind vision/OCR (`App.tsx:302`) and memory (`App.tsx:568`) and
+is live as the DEFAULT provider behind vision/OCR (`App.tsx:341`) and memory (`App.tsx:607`) and
 as the automation seat and the journal's `Mod:` label; the `<CLARIFICATION_*>`/`<MODERATOR_RETRY>`
 matchers in `constants/debateMarkers.ts` are live as sanitizers at `utils/analysisUtils.ts:859`,
 while no prompt file mentions either marker any more. Both facts, plus the "no moderator TURN
@@ -2270,7 +2270,7 @@ tsc 0; `vite build` ✓; flow-doc anchors 261 verified, 0 unattributed, 0 census
 file at all, and only 5 write the symbol beside the citation — the only shape the gate can bind to content.
 So 48 rows are line-resolved and nothing more, and the run prints `arrow coverage: 5/53` with a floor on both
 figures so coverage cannot fall silently. Row 7 came out wrong outright: the lazy-surface `SurfaceSkeleton`
-boundaries are App.tsx:2404 TradeView, :2450 Journal, :2472 LearnView, :2490 StrategyStudio plus the
+boundaries are App.tsx:2401 TradeView, :2448 Journal, :2470 LearnView, :2512 StrategyStudio plus the
 automation modal at :2298 — not the :2493/:2538/:2560/:2602 the table had, which are a prop, a component
 open tag and two unrelated lines. Those five are now cited with the symbol beside each path. Raising coverage is per-row verification work, not a rule change, and the docs say that
 instead of implying the table is checked.
@@ -2301,7 +2301,7 @@ would still be invisible.
 produced one more wrong number: row 6 cited App.tsx:2428 for the guard `surface !== 'agents'`, but that line is a
 prop — the guard is at **App.tsx:2314**, 38 lines away. Also bound and verified against the source:
 parseAppHash hooks/useSurfaceRouter.ts:101 with serializeAppHash :159, the `AgentsView` element opening at
-App.tsx:2377, `TradeChatPanel` rendered at components/trade/TradeView.tsx:1124, and the two row-minting calls
+App.tsx:2375, `TradeChatPanel` rendered at components/trade/TradeView.tsx:1124, and the two row-minting calls
 withDetectedTradeType hooks/useTradeLogging.ts:369 and :777. What the gate still cannot reach: the 25 rows that
 name no file at all, and the docs say 28/53 rather than claiming the table is fully checked.
 ## Which gates actually ran at this tip (2026-10-19, after the arrow-binding passes)
@@ -2365,13 +2365,13 @@ silently: a reader-less field can regain a writer with one line of code and no a
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions
 services/trade/chatSessions.ts:449, collectApprovalItems utils/approvalInbox.ts:57, resolveInvokedSkills
 services/learning/SkillMemoryService.ts:615), and the gate caught the pairing that insertion created: the row
-also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1839, where the
+also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1875, where the
 useMemo actually is. 31 of 53 rows cite a file, all bound; 22 name no file at all.
 
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions chatSessions.ts:449,
 collectApprovalItems approvalInbox.ts:57, resolveInvokedSkills SkillMemoryService.ts:615), and the gate caught the
 pairing that insertion created: the same row also names approvalsWaiting, which is not on that line — a SYMBOL
-MISS, because pairing is positional. It now cites App.tsx:1839, where the useMemo actually is. 31 of 53 rows cite
+MISS, because pairing is positional. It now cites App.tsx:1875, where the useMemo actually is. 31 of 53 rows cite
 a file and every one of them binds a symbol; 22 name no file at all.
 
 **31 then 33.** Two more prose-only rows were bound after reading their source: deskThread is the export at

@@ -192,7 +192,8 @@ const LearnView: React.FC<LearnViewProps> = ({
 
     return (
         <div className="flex h-full min-h-0 flex-col bg-surface-page" data-testid="learn-view">
-            <nav className="flex shrink-0 items-center gap-1 border-b border-zinc-800/80 px-3" aria-label="Learn sections">
+            <nav className="flex shrink-0 items-center gap-1.5 border-b border-zinc-800/80 bg-zinc-900/30 px-4 py-2" aria-label="Learn sections">
+                <span className="mr-3 hidden text-ui-caption font-semibold tracking-[-0.01em] text-zinc-200 lg:inline">Knowledge</span>
                 {TABS.map(({ id, label, Icon }) => {
                     const active = tab === id;
                     return (
@@ -201,10 +202,10 @@ const LearnView: React.FC<LearnViewProps> = ({
                             aria-label={id === 'coach' && coachCount > 0
                                 ? `${label} — ${coachCount} awaiting your decision` : undefined}
                             title={id === 'coach' && coachCount > 0 ? `${coachCount} awaiting your decision` : undefined}
-                            className={`-mb-px flex items-center gap-1.5 border-b-2 px-2.5 py-2.5 text-ui-sm font-semibold transition-colors duration-[120ms] ease-[var(--ease-snappy)] ${
+                            className={`flex items-center gap-1.5 rounded-control px-3 py-1.5 text-ui-sm font-medium transition-colors duration-[120ms] ease-[var(--ease-snappy)] ${
                                 active
-                                    ? 'border-zinc-100 text-zinc-100'
-                                    : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                                    ? 'bg-zinc-800 text-zinc-100 ring-1 ring-white/[0.06]'
+                                    : 'text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300'
                             }`}>
                             <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                             {label}

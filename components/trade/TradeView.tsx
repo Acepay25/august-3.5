@@ -18,8 +18,8 @@
  * Presentation only — no order execution.
  */
 
-import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Grid3x3, PanelRight, PinIcon, TrendingDown, TrendingUp } from '../shared/Icons';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Grid3x3, PanelRight, PinIcon } from '../shared/Icons';
 import { ProviderConfig } from '../../types/provider';
 import { TradeAnalysis, LoggedTrade, Message, Kline } from '../../types';
 import { fetchMarkIndex, fetchFuturesTicker24h, fetchDerivativesData } from '../../services/analysis/MarketDataService';
@@ -38,7 +38,7 @@ import * as chatStore from '../../services/trade/chatStore';
 import { useFuturesLiveFeed } from '../../hooks/useFuturesLiveFeed';
 import { useSharedTicker } from '../../hooks/useSharedTicker';
 import { useSymbolUniverse } from '../../hooks/useSymbolUniverse';
-import TradingChart, { toKlineInterval, chartColor, type ChartInterval, type ChartHandle } from './TradingChart';
+import TradingChart, { toKlineInterval, type ChartInterval, type ChartHandle } from './TradingChart';
 import type { MessageLevelLines } from '../../services/trade/keyLevels';
 import { fetchKlines } from '../../services/analysis/KlineService';
 import { LevelAccuracyBadge } from './LevelAccuracyBadge';
@@ -166,6 +166,10 @@ interface StripData {
     changePercent24h: number;
     volume24h: number;
     oiValue: number;
+    /** The v2 instrument tape's 24h extremes — same perp ticker the change
+     *  and volume already came from (fetchFuturesTicker24h). */
+    high24h: number;
+    low24h: number;
 }
 
 // fmtPrice now comes from utils/formatters (audit 2026-09-16 dedupe — the
@@ -181,10 +185,13 @@ const DOCK_DEFAULT = 384;
 /** Registry id of the Chart AI dock inside the shared right-panel contract. */
 const DOCK_ID = 'chart-ai';
 
-const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-    <div className="flex min-w-0 flex-col px-3.5 first:pl-3">
-        <span className="text-ui-2xs uppercase tracking-wider text-zinc-500">{label}</span>
-        <span className="truncate font-mono text-ui-sm font-medium tabular-nums text-zinc-200" title={value}>{value}</span>
+/** The v2 instrument tape's reading: a 9px uppercase label over an 11px mono
+ *  figure, hairline-divided from its neighbours. The design's tape cell —
+ *  the quiet numbers a perp desk checks without leaving the chart. */
+const TapeItem: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+    <div className="flex min-w-0 flex-col justify-center gap-0.5 px-3.5 first:pl-1">
+        <span className="whitespace-nowrap text-[9px] font-medium uppercase leading-none tracking-[0.07em] text-zinc-500">{label}</span>
+        <span className="truncate whitespace-nowrap font-mono text-[11px] font-medium leading-[1.5] tabular-nums text-zinc-300" title={value}>{value}</span>
     </div>
 );
 
@@ -276,61 +283,6 @@ const readTradeMode = (): TradeMode => {
 };
 const writeTradeMode = (m: TradeMode): void => {
     try { localStorage.setItem(tradeModeKey(), m); } catch { /* private mode */ }
-};
-
-/** Prototype hero-row sparkline: the last ~48 closes of the chart's OWN
- *  timeframe, from one small fetch (KlineService's 30 s cache covers a coin
- *  round-trip). Null while loading/failed — the row never shows a fake line.
- *  The area under the curve carries a fading gradient and the newest close
- *  gets a dot, so the line reads as "where price is NOW" instead of a
- *  decoration; hovering it reports the window's real range. */
-const SPARK_W = 120;
-const SPARK_H = 30;
-const Sparkline: React.FC<{ symbol: string; interval: ChartInterval }> = ({ symbol, interval }) => {
-    const [closes, setCloses] = useState<number[] | null>(null);
-    // useId gives `:r3:`-style ids; colons are legal in an SVG IRI but this
-    // strips them so the reference stays unambiguous everywhere.
-    const gradientId = `hero-spark-fill-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
-    useEffect(() => {
-        let cancelled = false;
-        setCloses(null);
-        void fetchKlines(symbol, toKlineInterval(interval), 60)
-            .then(kl => { if (!cancelled) setCloses(kl.slice(-48).map(k => k.close)); })
-            .catch(() => { /* no spark is fine — the number carries the read */ });
-        return () => { cancelled = true; };
-    }, [symbol, interval]);
-    if (!closes || closes.length < 3) return null;
-    const min = Math.min(...closes);
-    const max = Math.max(...closes);
-    const span = max - min || 1;
-    const up = closes[closes.length - 1] >= closes[0];
-    const stroke = up
-        ? chartColor('--color-emerald-500', '#07b56a')
-        : chartColor('--color-rose-500', '#f75d5f');
-    const xAt = (i: number): number => (i / (closes.length - 1)) * (SPARK_W - 3) + 1;
-    const yAt = (c: number): number => (SPARK_H - 2) - ((c - min) / span) * (SPARK_H - 6);
-    const pts = closes.map((c, i) => `${xAt(i).toFixed(1)},${yAt(c).toFixed(1)}`).join(' ');
-    const lastX = xAt(closes.length - 1);
-    const lastY = yAt(closes[closes.length - 1]);
-    return (
-        <span className="tip tip-below hidden shrink-0 sm:block">
-            <svg width={SPARK_W} height={SPARK_H} aria-hidden="true" data-testid="hero-spark">
-                <defs>
-                    <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={stroke} stopOpacity="0.26" />
-                        <stop offset="100%" stopColor={stroke} stopOpacity="0" />
-                    </linearGradient>
-                </defs>
-                <polygon fill={`url(#${gradientId})`} points={`1,${SPARK_H} ${pts} ${(SPARK_W - 2).toFixed(1)},${SPARK_H}`} />
-                <polyline fill="none" stroke={stroke} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" points={pts} />
-                <circle cx={lastX.toFixed(1)} cy={lastY.toFixed(1)} r="1.9" fill={stroke} />
-            </svg>
-            <span className="tip-label">
-                {fmtPrice(min)} – {fmtPrice(max)}
-                <span className="text-zinc-500">· {closes.length} × {interval}</span>
-            </span>
-        </span>
-    );
 };
 
 /** Smallest move (basis points from the last FLASHED print) that earns a
@@ -594,6 +546,8 @@ const TradeView: React.FC<TradeViewProps> = ({
                         changePercent24h: market.priceChangePercent24h ?? 0,
                         volume24h: market.volume24h ?? 0,
                         oiValue: deriv.openInterestValue ?? 0,
+                        high24h: market.price24hHigh ?? 0,
+                        low24h: market.price24hLow ?? 0,
                     });
                 }
             } catch { /* the socket or the poll will fill it */ }
@@ -622,6 +576,8 @@ const TradeView: React.FC<TradeViewProps> = ({
                         changePercent24h: market.priceChangePercent24h ?? 0,
                         volume24h: market.volume24h ?? 0,
                         oiValue: deriv.openInterestValue ?? 0,
+                        high24h: market.price24hHigh ?? 0,
+                        low24h: market.price24hLow ?? 0,
                     });
                 }
             } catch { /* keep the last strip on a failed poll */ }
@@ -767,9 +723,11 @@ const TradeView: React.FC<TradeViewProps> = ({
         void notify('Chart AI watch fired', `${cond} — ${w.note}`, { tag: w.id });
     }), []);
 
+    // The design's change pill: tinted ground, tone text — the price figure
+    // itself stays plain ink (the tone lives in the pill, not the print).
     const changeTone = useMemo(() => {
         const v = changePct ?? 0;
-        return v > 0 ? 'text-emerald-400' : v < 0 ? 'text-rose-400' : 'text-zinc-300';
+        return v > 0 ? 'bg-emerald-500/10 text-emerald-400' : v < 0 ? 'bg-rose-500/10 text-rose-400' : 'bg-zinc-500/10 text-zinc-300';
     }, [changePct]);
     const tickFlash = useTickFlash(markPrice);
 
@@ -888,20 +846,23 @@ const TradeView: React.FC<TradeViewProps> = ({
 
     return (
         <div className="flex h-full min-h-0 flex-col bg-zinc-950" data-testid="trade-view">
-            {/* ROW 1 · identity + hero (prototype's market row): instrument,
-                spark, screener, feed state on the left; the big live price
-                with its 24h delta + MARK caption on the right.
+            {/* INSTRUMENT ROW · the v2 design's single hairline strip: the
+                instrument and its live price at the left, the tape of perp
+                readings filling the middle, the desk tools at the right.
 
-                CHROME (the reference's frame). The row is a TITLE BAR, not a
-                panel: a flat page with a hairline under it, a small icon row
-                at the left, and the instrument as the title with its chevron.
-                The old row carried a panel fill and boxed every control in it
-                — three borders and three raised fills around four words, which
-                is the "box around everything" the reference does not have.
-                The controls are now flat: the icon set is one row of one size
-                (14px), and a control's state is its colour, not a frame. */}
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] px-3 pb-1.5 pt-2">
-                <div className="flex min-w-0 items-center gap-2.5">
+                The prototype's two rows (hero + metrics strip) merge into one
+                row — the reference's 64px instrument bar: hairline-divided
+                tape cells, no fills, a control's state is its colour. Every
+                reading is the REAL one the two rows carried: mark price, 24h
+                change, volume, OI, funding with its countdown and depleting
+                window; the tape's 24h high/low come from the same perp ticker
+                the change already used (fetchFuturesTicker24h), and the
+                oracle reading rides along as the sixth cell rather than being
+                dropped. The sparkline left with the merge: the live chart
+                sits directly below, and a second small chart of the same data
+                was the duplication the reference removes. */}
+            <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] bg-zinc-950 px-3 py-2 sm:px-4">
+                <div className="flex min-w-0 items-center gap-1.5">
                     {/* The book column's own open/close control. It used to be
                         the activity bar's active Trade icon; that icon now
                         opens the surface menu, so the toggle moved to the row
@@ -924,7 +885,46 @@ const TradeView: React.FC<TradeViewProps> = ({
                         </button>
                     )}
                     <SymbolPicker symbols={symbols} value={symbol} onChange={changeSymbol} />
-                    <Sparkline symbol={symbol} interval={interval} />
+                    {/* The design's price-block: the figure in plain ink, the
+                        24h change in a tinted pill beside it. The tick flash
+                        still rides the figure — a print you can see land. */}
+                    <div className="ml-1 flex shrink-0 items-baseline gap-2">
+                        <div
+                            key={tickFlash.seq}
+                            data-testid="hero-price"
+                            className={`-mx-1 rounded-control px-1 font-mono text-ui-display font-medium tracking-[-0.035em] tabular-nums text-zinc-100 ${tickFlash.cls}`.trim()}
+                        >
+                            {Number.isFinite(markPrice) ? fmtPrice(markPrice!) : '—'}
+                        </div>
+                        {Number.isFinite(changePct) && (
+                            <span
+                                title="24h change · MARK"
+                                className={`shrink-0 rounded-[5px] px-1.5 py-1 font-mono text-[11px] font-medium leading-none tabular-nums ${changeTone}`}
+                            >
+                                {changePct! >= 0 ? '+' : ''}{fmtPercent(changePct!, 2)}
+                            </span>
+                        )}
+                    </div>
+                </div>
+                {/* The tape — the design's hairline-divided readings. Hidden
+                    below lg, where the surface shows one pane at a time. */}
+                <div
+                    data-testid="market-tape"
+                    className="ml-auto hidden min-w-0 items-stretch divide-x divide-white/[0.05] overflow-x-auto lg:flex"
+                >
+                    <TapeItem label="24h high" value={strip && strip.high24h > 0 ? fmtPrice(strip.high24h) : '—'} />
+                    <TapeItem label="24h low" value={strip && strip.low24h > 0 ? fmtPrice(strip.low24h) : '—'} />
+                    <TapeItem label="24h volume" value={Number.isFinite(quoteVolume) ? fmtUsd(quoteVolume!) : '—'} />
+                    <TapeItem label="Open interest" value={strip ? fmtUsd(strip.oiValue) : '—'} />
+                    <div className="flex w-[196px] shrink-0 flex-col justify-center gap-0.5 px-3.5">
+                        <span className="text-[9px] font-medium uppercase leading-none tracking-[0.07em] text-zinc-500">Funding · next in</span>
+                        {Number.isFinite(fundingRate)
+                            ? <FundingCountdown nextFundingTime={nextFundingTime ?? 0} fundingRate={fundingRate!} />
+                            : <span className="font-mono text-[11px] text-zinc-300">—</span>}
+                    </div>
+                    <TapeItem label="Oracle" value={Number.isFinite(indexPrice) ? fmtPrice(indexPrice!) : '—'} />
+                </div>
+                <div className="flex shrink-0 items-center gap-0.5 pl-1">
                     <button
                         type="button"
                         onClick={() => setScreenerOpen(true)}
@@ -961,59 +961,10 @@ const TradeView: React.FC<TradeViewProps> = ({
                         role="status"
                         aria-label={`Market feed ${feed.status}`}
                         title={feed.status === 'live' ? 'Live — websocket push (markPrice@1s · depth20@100ms · ticker · kline)' : feed.status === 'connecting' ? 'Opening websockets…' : 'Websocket down — REST polling every 5s'}
-                        className="flex shrink-0 items-center"
+                        className="flex shrink-0 items-center pl-1"
                     >
                         <span aria-hidden="true" className={`beacon ${feed.status === 'live' ? '' : 'is-quiet'}`.trim()} />
                     </span>
-                </div>
-                <div className="shrink-0 text-right leading-none">
-                    <div
-                        key={tickFlash.seq}
-                        data-testid="hero-price"
-                        className={`-mx-1 rounded-control px-1 font-mono text-ui-price font-semibold tabular-nums ${changeTone} ${tickFlash.cls}`.trim()}
-                    >
-                        {Number.isFinite(markPrice) ? fmtPrice(markPrice!) : '—'}
-                    </div>
-                    <div className="mt-1 flex items-center justify-end gap-1 text-ui-xs text-zinc-500">
-                        {Number.isFinite(changePct) && (
-                            <span className={`inline-flex items-center gap-0.5 font-medium ${changeTone}`}>
-                                {changePct! >= 0
-                                    ? <TrendingUp className="h-3 w-3" aria-hidden="true" />
-                                    : <TrendingDown className="h-3 w-3" aria-hidden="true" />}
-                                {changePct! >= 0 ? '+' : ''}{fmtPercent(changePct!, 2)}
-                            </span>
-                        )}
-                        <span>24h · MARK</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* ROW 2 · metrics strip — the quiet numbers a perp desk checks
-                without leaving the chart; Funding carries its own countdown +
-                depleting-window bar (amber + pulse inside 30 min).
-
-                CHROME. The strip is a section of a flat page, so it is a
-                HAIRLINE under the row above it and a hairline between its own
-                readouts — the old panel fill underneath it was the second box
-                in a row of two. The readouts themselves are unchanged: the
-                labels stay UPPERCASE and letter-spaced because that IS this
-                app's data-density rule (87 sites across components/, and the
-                order book's own PRICE/SIZE/TOTAL header is the same family),
-                and the figures stay `font-mono tabular-nums` because they are
-                numbers. What the reference's chrome adds here is the QUIET:
-                no fill behind the row, and the label is the only thing that
-                shouts. */}
-            <div className="flex shrink-0 items-center divide-x divide-white/[0.06] overflow-x-auto border-b border-white/[0.06] py-1.5 pr-3">
-                {/* Mark and 24h Change live once — in the hero price above.
-                    The strip keeps only numbers the hero does not show. */}
-                <Stat label="Oracle" value={Number.isFinite(indexPrice) ? fmtPrice(indexPrice!) : '—'} />
-                <Stat label="24h Volume" value={Number.isFinite(quoteVolume) ? fmtUsd(quoteVolume!) : '—'} />
-                <Stat label="Open Interest" value={strip ? fmtUsd(strip.oiValue) : '—'} />
-                <div className="flex w-[210px] shrink-0 flex-col px-3.5">
-                    <span className="text-ui-2xs uppercase tracking-wider text-zinc-500">Funding · next in</span>
-                    {Number.isFinite(fundingRate)
-                        ? <FundingCountdown nextFundingTime={nextFundingTime ?? 0} fundingRate={fundingRate!} />
-                        : <span className="font-mono text-ui-sm text-zinc-200">—</span>}
                 </div>
             </div>
 
