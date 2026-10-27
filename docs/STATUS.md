@@ -296,6 +296,49 @@ the unreachable update/download action.
    it to provider+model, and honouring a `Retry-After` the provider sends, are both trader-visible
    changes.
 
+## Session 4 — the last Phase-1 hole, Phase 2 removals, and the first Phase-4 items
+
+| item | change | proof |
+|---|---|---|
+| **L-7 (routing)** | a watch records the dock session that armed it; the queue keeps it per signal; the panel drains only the signals for the session on screen and switches to the owner when the queued wakes belong to another chat. Unbound signals (a level hit from a conversation, an older watch) drain to the active session exactly as before | CODE — the one-transcript model is preserved: the answer lands in the right thread instead of the visible one |
+| **R-4** | `NavRail` deleted. Its live half (three layout constants + `AccountRow`) moved verbatim to `components/shell/shellChrome.tsx`; the update download — which *only* its dead JSX hosted — is now mounted in the header beside the status cluster; `render-probe` reads the sidebar width from the new module | anchors repaired from the gate's findings; typecheck/lint/build green |
+| **R-6** | `DebateMailbox` → `PanelMailbox` (file, interface, factory, tool list), with the old name recorded in the header. The mailbox is live — panel cross-talk and group rounds use it — and a name that implies a deleted caller reads as "safe to delete" | grep: 7 references, all updated; anchors green |
+| **Update-trade flow** | deleted with its modal, state, both handlers, its capture-busy flag and the two bindings only it used: both openers had zero callers, so the overlay and its write path were unreachable | lint fell 376 → 375 |
+| **Phase 4 — tool progress** | every tool call that outlives `SLOW_CALL_NOTICE_MS` (2 s) emits ONE "still working" line through the loop's existing tool channel; deadline, receipt and digest untouched | **PROVEN live**: a 3-second call under a 5-second deadline fired the notice exactly once and still returned ok |
+| **Phase 4 — full-body recall** | a notebook note whose NAME matches the topic is served whole (bounded at 4k with the clipping note), so the topics index finally has a reader that can show the second paragraph | **PROVEN live**: `recall('funding note')` returned the body including its second paragraph (190 chars) |
+| **Phase 5 — activity drawer** | "Nothing running" renamed to what the list actually is — completed skill audits — with the distinction in the header and the empty state | CODE |
+
+### Phase 4 audit against the mission's list
+
+- **Memory**: one notebook + one profile store, both with a write path that records and rethrows
+  failures, a recall path (now includes full note bodies), a topics→detail UI with edit and delete
+  (profile editor added in N-3), duplicate/conflict handling (`rememberWithConsolidation`, the
+  notebook hygiene pass), and injection under `promptIndexBudget` in both homes.
+- **Tools**: one naming vocabulary (`toolKinds`), one digest grammar, hard per-call deadlines with
+  real cancellation, structured errors the model can act on, and progress for anything over 2 s.
+- **Skills**: lazy catalogue (names + descriptions only), a trigger description that is the
+  retrieval key, human-gated creation with a byte-checked approval, self-review via the supervisor,
+  and one-step undo that now restores the predicate as well as the prose.
+- **Context**: compaction keeps the system prompt, the newest user turn (which carries the desk
+  context block: the active plan, open trades and the rules), and repairs split `tool_calls` pairs.
+  Nothing else is pinned — a second pinning mechanism over the same block would be machinery
+  without a job.
+
+### Gate state — all green
+
+`typecheck` 0 · `typecheck:scripts` 0 · `typecheck:electron` 0 · `check:contracts` 138 ·
+`lint` 0 errors / **375** warnings (4 below the cap) · `build` 19.23 s · `check-flow-doc-anchors`
+**OK, 458 anchors** · live driver: deadline, forge, worker isolation, journal clocks, digests,
+skill retry, ask-input, note recall and the slow-call notice all green, zero page errors.
+
+### Still open
+
+**Phase 2:** R-5 is resolved as a KEEP (the learned-rules store now has a prompt reader, landed in
+session 3). R-4's `render-probe` run itself has not been executed in this session (the port pair is
+contended); the module move is gated by typecheck + the probe's own read-back pattern.
+**Phase 5:** the remaining polish is the owner's restyle territory — nothing in the audit is proven
+broken there beyond the drawer copy, which is fixed.
+
 ## Session 3 — the rest of the second wave, Phase 2, and the anchor gate
 
 | item | change | proof |

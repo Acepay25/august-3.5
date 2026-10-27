@@ -69,11 +69,11 @@ body{padding:24px;max-width:1180px;margin:0 auto}
  <div class="n"><b>useSurfaceRouter</b><i>hooks/useSurfaceRouter.ts:75 openJournal · :101 hash read · :159 serialize</i></div>
  <div class="n store"><b>URL hash ⇄ state</b><i>utils/appHash.ts:10</i></div>
 </div>
-<div class="down">↓ App.tsx:215 — surfaces render from :2404 down ↓</div>
+<div class="down">↓ App.tsx:2361 — surfaces render from :2404 down ↓</div>
 <div class="tier">
  <div class="n"><b>&lt;Header&gt; band</b><i>App.tsx:2383 band, guard surface !== 'agents' App.tsx:2382</i></div>
  <div class="n run"><b>SurfaceSwitch — 4 destinations</b><i>App:2059 · list SurfaceMenuList.tsx:44</i></div>
- <div class="n dead"><b>NavRail + its destination rows</b><i>imported App:119, never rendered · "NavRail is GONE" App:2361 · rows SurfaceMenuList.tsx:135 (only mount passes hideSurfaces, App:2587)</i></div>
+ <div class="n dead"><b>NavRail + its destination rows</b><i>imported App:118, never rendered · "NavRail is GONE" App:2361 · rows SurfaceMenuList.tsx:135 (only mount passes hideSurfaces, App:2585)</i></div>
  <div class="n dead"><b>onExpandNavRail is a prop, not a render</b><i>App:2397 · rail state App:658-680 · only the AccountRow export is mounted, App:2584</i></div>
 </div>
 <div class="down">↓ lazy + Suspense(SurfaceSkeleton) ↓</div>
@@ -95,7 +95,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
    <div class="d">send() components/agents/AgentsView.tsx:777 — branches on what is SELECTED</div>
    <div class="down">↓</div>
    <div class="n run"><b>a bot is selected → onSendBotTurn</b><i>components/agents/AgentsView.tsx:812 → App.tsx:2535 → useBotMailbox → runBotTurn</i></div>
-   <div class="n run"><b>no bot → onAnalyze(prompt, images)</b><i>components/agents/AgentsView.tsx:802 → App.tsx:1586 handleRunAnalysisFromChat</i></div>
+   <div class="n run"><b>no bot → onAnalyze(prompt, images)</b><i>components/agents/AgentsView.tsx:802 → App.tsx:1589 handleRunAnalysisFromChat</i></div>
    <div class="lbl">bots stay chat-only by the owner's ruling — their transport is reused, not rebuilt</div>
   </div>
  </div>
@@ -107,7 +107,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
    <div class="down">↓</div>
    <div class="n run"><b>solo → runSeatTurn</b><i>services/trade/chatTurnRunner.ts:1229 called · :616 defined</i></div>
    <div class="n run"><b>panel, 2+ seats → per-seat + mailbox</b><i>services/trade/chatTurnRunner.ts:1229 per-seat · createPanelMailbox :1162 · planPanelTurn :1149</i></div>
-   <div class="n run"><b>Full analysis → the SAME App.tsx:1586 wrapper</b><i>runFullAnalysis TradeChatPanel.tsx:577 — holds the run slot, writes no row</i></div>
+   <div class="n run"><b>Full analysis → the SAME App.tsx:1589 wrapper</b><i>runFullAnalysis TradeChatPanel.tsx:577 — holds the run slot, writes no row</i></div>
    <div class="down">↓ every dock turn ↓</div>
    <div class="n store"><b>chatStore.mutate / beginRun</b><i>survives unmount, owns the AbortControllers</i></div>
    <div class="down">↓ while it streams ↓</div>
@@ -151,7 +151,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
  <div class="n"><b>present_trade → runPresentTrade</b><i>presentTradeTool.ts:78 → a decision CARD on the row, in EITHER home · gate scan starts here, the cap binds at log time (<code>ensureStamp services/trade/proposalGate.ts:317</code>), and the same stamp answers for the shape of the plan: an inverted one refuses, a sub-floor ratio or an out-of-band stop warns on the card and on the row (<code>assessPlanShape services/trade/proposalGate.ts:152</code>, E-57 §5)</i></div>
  <div class="n store"><b>logged / dismissed dispositions</b><i>proposalDisposition.ts:22 — one map serves both homes</i></div>
 </div>
-<p class="note"><b>One entry, both homes.</b> <code>handleRunAnalysisFromChat</code> (App:1603) is the only analysis wrapper: the dock passes it as <code>onRunAnalysis</code> (App:2420) and the Chat surface as <code>onAnalyze</code>. It was two, and <code>services/trade/analysisTurn.ts</code> was deleted (2026-10-17) because a second writer keyed rows with ids no canonical row could match. The Chat surface's "no desk tools wired" gap closed on 2026-10-18 (stage 20b).</p>
+<p class="note"><b>One entry, both homes.</b> <code>handleRunAnalysisFromChat</code> (App:1602) is the only analysis wrapper: the dock passes it as <code>onRunAnalysis</code> (App:2420) and the Chat surface as <code>onAnalyze</code>. It was two, and <code>services/trade/analysisTurn.ts</code> was deleted (2026-10-17) because a second writer keyed rows with ids no canonical row could match. The Chat surface's "no desk tools wired" gap closed on 2026-10-18 (stage 20b).</p>
 <div class="cols">
  <div class="col"><h3>the answer</h3><div class="flow">
   <div class="n"><b>AnswerBody — the reading face</b><i>components/shared/AnswerBody.tsx · both homes mount it; the trader's bubble stays in the UI sans</i></div>
@@ -222,7 +222,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
  <div class="n run"><b>injected into the next prompt</b><i>resolveInvokedSkills, useAnalysisPipeline.ts — closes into stage 3</i></div>
  <div class="n"><b>idle suspension</b><i>skillIdleLifecycle.ts ← memoryHygiene.ts · rides <code>enabled</code>, not a 4th status</i></div>
  <div class="n"><b>heartbeat 15 min + visibilitychange</b><i>useLearningHeartbeat, mounted App:2063</i></div>
- <div class="n store"><b>one number</b><i>collectApprovalItems App:1813 → approvalsWaiting :1915 → the Knowledge tab that holds the queues</i></div>
+ <div class="n store"><b>one number</b><i>collectApprovalItems App:1813 → approvalsWaiting :1914 → the Knowledge tab that holds the queues</i></div>
 </div>
 <div class="back">↺ the injected skill feeds stage 3 (prompt assembly) — and since E-57 §1 a settled position feeds it again, through the reflection's IF/THEN draft</div>
 </div></div>
@@ -334,7 +334,7 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <h3>G.5 The learning loop, end to end</h3>
 <div class="loop"><div class="flow">
 <div class="tier">
- <div class="n run"><b>trade closes</b><i><code>logTradeWithFeedback</code> (<code>hooks/useTradeLogging.ts:274</code>) writes the journal row, memory note and measured R</i></div>
+ <div class="n run"><b>trade closes</b><i><code>logTradeWithFeedback</code> (<code>hooks/useTradeLogging.ts:275</code>) writes the journal row, memory note and measured R</i></div>
  <div class="n"><b>outcome</b><i><code>OutcomeAutopilotService.register</code> / <code>subscribe</code> → <code>settlementActionFor</code> (<code>utils/outcomeSettlement.ts:47</code>): automatic · shadow · confirm, 15s undo</i></div>
  <div class="n"><b>evidence</b><i><code>applySkillEvidence</code> (<code>SkillMemoryService.ts:2404</code>) · <code>calculatePnlR</code> (<code>PatternMemorySynthesisService.ts:249</code>)</i></div>
  <div class="n"><b>review</b><i><code>runSessionSkillReview</code> · <code>runWeeklyReviewIfDue</code> · <code>runMonthlyReportIfDue</code> · <code>passMining</code> · <code>chartScanSkills</code></i></div>
@@ -377,9 +377,9 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>3</td><td>App → useSurfaceRouter</td><td>surface + journalTab + journalOpenNonce, <code>useSurfaceRouter hooks/useSurfaceRouter.ts:54</code></td></tr>
 <tr><td>4</td><td>useSurfaceRouter → useSurface</td><td>persisted value, key <code>hooks/useSurface.ts:15 august_surface_v1</code>, valid set <code>:16</code></td></tr>
 <tr><td>5</td><td>useSurfaceRouter → appHash</td><td><code>#/journal|market|settings|watch</code> ⇄ state <code>hooks/useSurfaceRouter.ts:101</code>, serialize <code>:159</code></td></tr>
-<tr><td>6</td><td>App → Header</td><td>band <code>App.tsx:2380</code>, guard <code>surface !== 'agents'</code> <code>App.tsx:2384</code></td></tr>
-<tr><td>7</td><td>App → 4 lazy surfaces</td><td>each wrapped in <code>SurfaceSkeleton App.tsx:151</code> TradeView, <code>SurfaceSkeleton App.tsx:151</code> Journal, <code>SurfaceSkeleton App.tsx:151</code> LearnView, <code>SurfaceSkeleton App.tsx:151</code> StrategyStudio</td></tr>
-<tr><td>8</td><td>Header → SurfaceSwitch</td><td>the destination set <code>App.tsx:2163</code>, list <code>SurfaceMenuList.tsx:44</code></td></tr>
+<tr><td>6</td><td>App → Header</td><td>band <code>App.tsx:2361</code>, guard <code>surface !== 'agents'</code> <code>App.tsx:2384</code></td></tr>
+<tr><td>7</td><td>App → 4 lazy surfaces</td><td>each wrapped in <code>SurfaceSkeleton App.tsx:148</code> TradeView, <code>SurfaceSkeleton App.tsx:148</code> Journal, <code>SurfaceSkeleton App.tsx:148</code> LearnView, <code>SurfaceSkeleton App.tsx:148</code> StrategyStudio</td></tr>
+<tr><td>8</td><td>Header → SurfaceSwitch</td><td>the destination set <code>App.tsx:2161</code>, list <code>SurfaceMenuList.tsx:44</code></td></tr>
 <tr><td>9</td><td>App → AgentsView props</td><td>same switch + StatusCluster + AccountRow + SurfaceMenuList(hideSurfaces) <code>App.tsx:2522-2614</code></td></tr>
 <tr><td>10</td><td>TradeView → TradeChatPanel</td><td>the dock, inside Trade <code>components/trade/TradeView.tsx:1140</code></td></tr>
 <tr><td>11</td><td>AgentsView.send → bot branch</td><td>the selected bot answered at <code>components/agents/AgentsView.tsx:812</code></td></tr>
@@ -426,11 +426,11 @@ body{padding:24px;max-width:1180px;margin:0 auto}
 <tr><td>53</td><td>the chart gets its Entry/Stop/Target lines</td><td><code>latestChartVerdict(messages)</code> (<code>services/trade/chartData.ts</code>) is what App hands <code>TradeView</code> as <code>verdict</code>: the newest row carrying <code>Message.proposal</code>, with <code>Message.analysis</code> as the fallback for pre-debate history. Red-proved — the old selector keyed on the debate shapes and returned null for every tool-turn row. Gate state: render-probe PASSED on 2026-10-18 after these commits (zero pageerrors); it asserts no canvas overlay levels, so the drawn verdict line is still un-asserted, and lint / boot-probe / e2e remain unrun.</td></tr>
 <tr><td>54</td><td>request → context window</td><td><code>resolveContextWindow</code> (<code>utils/contextWindow.ts:136</code>) → <code>outputTokenBudget</code> (:187) / <code>promptTokenCeiling</code> (:169)</td></tr>
 <tr><td>55</td><td>array → compaction</td><td><code>compactForWire</code> (<code>services/providers/contextCompact.ts:343</code>) → <code>compactMessages</code> (:217); last user turn pinned</td></tr>
-<tr><td>56</td><td>tool round → bounded loop</td><td><code>runDeskToolLoop</code> (<code>services/analysis/DeskToolsService.ts:4405</code>) with the round/token/time caps</td></tr>
+<tr><td>56</td><td>tool round → bounded loop</td><td><code>runDeskToolLoop</code> (<code>services/analysis/DeskToolsService.ts:4423</code>) with the round/token/time caps</td></tr>
 <tr><td>57</td><td>tool result → artifact + payload</td><td><code>storeToolArtifact</code> (<code>services/analysis/toolArtifactStore.ts:88</code>) / <code>saveToolPayload</code> (<code>services/trade/toolPayloadStore.ts:110</code>)</td></tr>
 <tr><td>58</td><td>tool event → transcript trail</td><td><code>digestToolResult</code> (<code>DeskToolsService.ts:891</code>) → <code>Message.toolEvents</code>/<code>toolIds</code> → <code>ToolActivityRow</code></td></tr>
 <tr><td>59</td><td>wire decision → audit row</td><td><code>buildReasoningPatch</code> (<code>services/providers/reasoningControls.ts:271</code>) → <code>WireAuditEntry</code> → <code>WireAuditRow</code></td></tr>
-<tr><td>60</td><td>trade close → journal + autopilot</td><td><code>logTradeWithFeedback</code> (<code>hooks/useTradeLogging.ts:274</code>) → <code>OutcomeAutopilotService.register</code></td></tr>
+<tr><td>60</td><td>trade close → journal + autopilot</td><td><code>logTradeWithFeedback</code> (<code>hooks/useTradeLogging.ts:275</code>) → <code>OutcomeAutopilotService.register</code></td></tr>
 <tr><td>61</td><td>autopilot → settlement</td><td><code>settlementActionFor</code> (<code>utils/outcomeSettlement.ts:47</code>) — automatic · shadow · confirm; 15s undo</td></tr>
 <tr><td>62</td><td>outcome → skill ledger + pattern memory</td><td><code>applySkillEvidence</code> (<code>SkillMemoryService.ts:2382</code>) · <code>calculatePnlR</code> (<code>PatternMemorySynthesisService.ts:249</code>)</td></tr>
 <tr><td>63</td><td>review → draft</td><td><code>runSessionSkillReview</code> / <code>runWeeklyReviewIfDue</code> / <code>runMonthlyReportIfDue</code> → <code>queueSkillDraft</code></td></tr>
