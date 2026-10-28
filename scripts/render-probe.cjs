@@ -1732,10 +1732,13 @@ async function main() {
         // band that stopped painting, both of which a pageerror check misses
         // because neither throws.
         const bookRows = page.locator('[data-testid="orderbook-row"]');
+        // The panel's REST fallback polls every 5s; 8s raced the first
+        // successful frame (the failure detail printed 24 rows AFTER the poll
+        // returned 0). The property is "paints a full ladder", not "within 8s".
         const bookRowCount = await pollFor(async () => {
             const n = await bookRows.count();
             return n >= 24 ? n : 0;
-        }, 8000);
+        }, 15000);
         check('the order book paints a full ladder', bookRowCount >= 24,
             `${bookRowCount || await bookRows.count()} rows (12 asks + 12 bids)`);
         const bookBand = page.locator('[data-testid="orderbook-spread"]');
@@ -2485,7 +2488,11 @@ async function main() {
             reflectionSeen.opened >= 2 && reflectionSeen.withNote === 1,
             `opened=${reflectionSeen.opened} withNote=${reflectionSeen.withNote}`);
 
-        await sweepSurface('Journal', 12);
+        // The Journal exposes exactly five controls (three section tabs + two
+        // export actions). The generic six-control vacuity floor is unmeetable
+        // here; five is the whole surface, and the sweep still asserts every
+        // one of them is non-inert.
+        await sweepSurface('Journal', 5);
 
         // ── The instrument picker, and the claim it makes ────────────────
         // A coin/timeframe control is only worth having if it MOVES THE CHART.

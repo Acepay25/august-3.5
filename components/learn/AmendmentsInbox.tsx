@@ -1,5 +1,5 @@
 /**
- * AmendmentsInbox — the Learn → Queue surface for model-proposed notebook
+ * AmendmentsInbox — the Learn → Approvals surface for model-proposed notebook
  * corrections. Approve applies the change through the notebook write lock
  * (provenance preserved); reject tombstones the proposal so repeat
  * suggestions of the same correction stay visible.

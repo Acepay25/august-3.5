@@ -8,7 +8,7 @@
  * Chat | Coach switch inside the dock. The information architecture here is the
  * loop's own order:
  *
- *   Queue → Memory → Health → Coach
+ *   Approvals → Skills → Memory → Health
  *   what it's deciding   where it lives   whether it's sound   your call
  *
  * The playbook LIBRARY is deliberately not a tab here: StrategyStudio is the

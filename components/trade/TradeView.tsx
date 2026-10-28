@@ -706,7 +706,7 @@ const TradeView: React.FC<TradeViewProps> = ({
         // background turn's plan gets a null anchor (plain first-tick touch
         // test) rather than another coin's price.
         const at = plan.symbol === symbolRef.current ? markPriceRef.current : undefined;
-        levelWatch.arm(plan, typeof at === 'number' && Number.isFinite(at) ? at : null);
+        levelWatch.arm({ ...plan, ...(turn?.sid ? { sid: turn.sid } : {}) }, typeof at === 'number' && Number.isFinite(at) ? at : null);
     }, []);
     // Tick the level-watch AND the model's price watches on every live mark
     // print (~1s while the socket is up; the polled strip value drives it

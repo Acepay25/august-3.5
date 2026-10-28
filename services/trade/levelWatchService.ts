@@ -289,7 +289,7 @@ export const tick = (symbol: string, price: number): void => {
             // same class as the watchService lapse loss, but worse, because
             // the state was already spent. The emit below is presentation
             // only (the OS ping).
-            chatStore.queueHarnessSignal(formatLevelHitForModel(a.plan, h, firedLevelsFor(a.plan.planId)));
+            chatStore.queueHarnessSignal(formatLevelHitForModel(a.plan, h, firedLevelsFor(a.plan.planId)), a.plan.sid);
             for (const cb of subscribers) {
                 try { cb(h, a.plan); } catch (e) {
                     console.warn('[levelWatchService] subscriber threw:', e);

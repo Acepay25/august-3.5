@@ -30,6 +30,9 @@ export interface PlanLevel {
 
 export interface WatchPlan {
     planId: string;
+    /** The dock session that armed this plan, when it came from a turn. An
+     *  unbound plan (a Chat-surface verdict) drains to the active thread. */
+    sid?: string;
     symbol: string;
     direction: 'Long' | 'Short';
     entry: number;
