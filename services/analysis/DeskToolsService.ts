@@ -833,6 +833,7 @@ const TOOL_LABELS: Record<string, string> = {
     write_memory_note: 'memory note',
     get_notebook_map: 'notebook map',
     skill_view: 'skill reader',
+    ask_user_input: 'ask trader',
     propose_skill: 'skill proposal',
     propose_strategy: 'strategy plan',
     revise_skill: 'skill revision',
@@ -2871,7 +2872,9 @@ export async function executeDeskTool(
     // prompt: with memory off, a seat that still has these tools offered must
     // not be able to read or write the trader's notebook.
     if (context.memoryEnabled === false
-        && (call.name === 'remember' || call.name === 'read_memory' || call.name === 'forget')) {
+        && (call.name === 'remember' || call.name === 'read_memory' || call.name === 'forget'
+            || call.name === 'recall' || call.name === 'write_memory_note'
+            || call.name === 'amend_memory' || call.name === 'get_notebook_map')) {
         return rejectedResult(call, `${call.name} rejected: memory is OFF for this turn — nothing is read or saved.`);
     }
     if (call.name === 'forget' && typeof context.lastUserMessage === 'string') {
@@ -4222,7 +4225,10 @@ ${body}`);
         // A failure sentinel must not be cached — that would freeze an
         // outage into the TTL even after the source recovers. Only the
         // whitelisted network reads cache at all (see CACHEABLE_TOOLS).
-        if (cacheable && !isDataUnavailable(budgeted)) {
+        // Nor may a lookup whose deadline already passed write its late
+        // answer: the seat was told it failed, so a cache hit would replay
+        // data from a call the transcript says never returned.
+        if (cacheable && !isDataUnavailable(budgeted) && !context.signal?.aborted) {
             cacheTool(cacheKey, budgeted);
         }
         const contentOut = budgeted + tail;

@@ -1079,19 +1079,23 @@ export const isApprovedSkill = (meta: Pick<SkillMeta, 'approvedBy' | 'prior'>): 
 export const activateSkillForTrigger = async (ifCondition: string, username: string): Promise<string | null> => {
     const want = (ifCondition ?? '').trim().toLowerCase();
     if (!want) return null;
-    const hit = getMemoryFiles().files.filter(isSkillFile)
-        .map(f => ({ f, meta: parseSkillMarkdown(f.content) }))
-        .find(({ meta }) => (meta?.ifCondition ?? '').trim().toLowerCase() === want);
-    if (!hit?.meta) return null;
-    // The approval fact only — the prose, predicate and evidence stay exactly as
-    // the row carried them, because this is consent for existing content, not a
-    // rewrite of it.
-    const next: SkillMeta = { ...hit.meta, approvedBy: 'human', prior: 'gated' };
-    const body = serializeSkill(next, titleFromMeta(next));
-    // The notebook's own lock: this is a second writer of the same file the ingest
-    // path writes, and two writers of one file must share one queue.
-    await withNotebookWriteLock(() => updateMemoryFileUnlocked(hit.f.id, { content: body, enabled: true }, username));
-    return hit.f.name;
+    // Read, rewrite and persist under the notebook's own lock: this is a second
+    // writer of the file the ingest path writes, and a read outside the queue
+    // clobbers an attribution write that landed between read and persist.
+    return withNotebookWriteLock(async () => {
+        const hit = getMemoryFiles().files.filter(isSkillFile)
+            .map(f => ({ f, meta: parseSkillMarkdown(f.content) }))
+            .find(({ meta }) => (meta?.ifCondition ?? '').trim().toLowerCase() === want);
+        if (!hit?.meta) return null;
+        // The approval fact only — the prose, predicate and evidence stay exactly
+        // as the row carried them. A suspension is cleared because this press IS
+        // the human override the idle lifecycle is waiting for; `enabled` is then
+        // derived by the one flag, never written as a literal.
+        const next: SkillMeta = { ...hit.meta, approvedBy: 'human', prior: 'gated', suspendedAt: undefined };
+        const body = serializeSkill(next, titleFromMeta(next));
+        await updateMemoryFileUnlocked(hit.f.id, { content: body, enabled: skillEnabledFlag(next) }, username);
+        return hit.f.name;
+    });
 };
 
 /** The ONE projection from the library to the skills-index row shape.

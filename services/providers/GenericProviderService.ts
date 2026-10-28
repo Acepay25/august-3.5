@@ -198,7 +198,7 @@ function reportFinishReason(config: ProviderConfig, reason: FinishReason, option
     // (docs/AUDIT.md L-7).
     if (options?.onFinishReason) options.onFinishReason(reason);
     else recordFinishReason(reason);
-    options?.onFinishReason?.(reason);
+    // The sink was called above; a second call doubled every run's tally.
 }
 
 /** Extract, report and return the stop signal from any response body shape. */

@@ -54,10 +54,12 @@ export const storeBackendKind = (): StoreBackendKind => (bridge() ? 'desktop-fil
  *  once per boot rather than on every read. */
 const migrated = new Set<string>();
 let lastFailure: StoreFailure | null = null;
-/** Set when a READ failed outright. While it is set, writes are refused: a store
- *  whose contents we could not read must not be overwritten by whatever an
- *  empty-looking load would seed into it. A later successful read clears it. */
-let readFailed = false;
+/** Set when a READ failed outright, per key. While a key is in this set its
+ *  writes are refused: a store whose contents we could not read must not be
+ *  overwritten by whatever an empty-looking load would seed into it. A later
+ *  successful read of that key clears it — a different key's success says
+ *  nothing about this one. */
+const failedKeys = new Set<string>();
 
 export const getStoreFailure = (): StoreFailure | null => lastFailure;
 
@@ -86,7 +88,7 @@ export const readStore = async (key: string): Promise<{ ok: true; value: string 
     const fileKey = fileKeyFor(key);
     const res = await api.read(fileKey);
     if (!res.ok) {
-        readFailed = true;
+        failedKeys.add(key);
         // An unusable file store must not hide data that is still in the browser
         // store; read the legacy copy and say the read went through it.
         try {
@@ -95,19 +97,18 @@ export const readStore = async (key: string): Promise<{ ok: true; value: string 
         } catch { /* private mode */ }
         return { ok: false, error: res.error ?? 'read failed' };
     }
-    readFailed = false;
+    failedKeys.delete(key);
     if (res.value != null) return { ok: true, value: res.value };
 
     // First run for this key: copy the legacy bytes ONCE, verify, then serve.
     if (migrated.has(key)) return { ok: true, value: null };
-    migrated.add(key);
     let legacy: string | null;
     try { legacy = localStorage.getItem(key); } catch { legacy = null; }
-    if (legacy === null) return { ok: true, value: null };
+    if (legacy === null) { migrated.add(key); return { ok: true, value: null }; }
     const wrote = await api.write(fileKey, legacy);
     if (!wrote.ok) {
         recordFailure({ key, error: wrote.error ?? 'migration write failed', at: Date.now(), fellBack: true });
-        return { ok: true, value: legacy }; // still serve the bytes we have
+        return { ok: true, value: legacy }; // still serve the bytes we have; retry next read
     }
     const back = await api.read(fileKey);
     if (!back.ok || back.value !== legacy) {
@@ -116,6 +117,7 @@ export const readStore = async (key: string): Promise<{ ok: true; value: string 
         recordFailure({ key, error: back.ok ? 'migration read-back mismatch' : (back.error ?? 'migration read failed'), at: Date.now(), fellBack: true });
         return { ok: true, value: legacy };
     }
+    migrated.add(key);
     return { ok: true, value: back.value };
 };
 
@@ -133,9 +135,9 @@ export const writeStore = async (key: string, value: string): Promise<{ ok: bool
             return { ok: false, error, backend: 'browser-storage' };
         }
     }
-    if (readFailed) {
-        // Refuse rather than overwrite: see `readFailed`.
-        const error = 'store is unavailable after a failed read — refusing to overwrite it';
+    if (failedKeys.has(key)) {
+        // Refuse rather than overwrite: see `failedKeys`.
+        const error = `store key "${key}" is unavailable after a failed read — refusing to overwrite it`;
         recordFailure({ key, error, at: Date.now(), fellBack: false });
         return { ok: false, error, backend: 'desktop-files' };
     }

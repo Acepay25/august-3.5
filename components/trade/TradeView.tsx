@@ -30,9 +30,9 @@ import type { TradeProposal } from '../../services/trade/proposedTrade';
 import { getActiveUsername } from '../../utils/activeUser';
 import { fmtPercent, fmtPrice, fmtUsd } from '../../utils/formatters';
 import * as levelWatch from '../../services/trade/levelWatchService';
-import { formatLevelHitForModel, type WatchPlan } from '../../services/trade/tradePlanLevels';
+import type { WatchPlan } from '../../services/trade/tradePlanLevels';
 import * as watchService from '../../services/trade/watchService';
-import { notify, ensureNotifyPermission } from '../../services/infrastructure/notify';
+import { ensureNotifyPermission } from '../../services/infrastructure/notify';
 import * as chatStore from '../../services/trade/chatStore';
 import { useFuturesLiveFeed } from '../../hooks/useFuturesLiveFeed';
 import { useSharedTicker } from '../../hooks/useSharedTicker';
@@ -717,19 +717,12 @@ const TradeView: React.FC<TradeViewProps> = ({
             watchService.tick(symbol, markPrice!);
         }
     }, [symbol, markPrice]);
-    // Route every level hit into the Chart AI queue as a model warning. The
-    // store holds it if a run is busy or the dock is unmounted, so nothing
-    // drops — the panel flushes the queue when its session goes idle. Also
-    // ping the user's computer: a level hitting is exactly the moment they
-    // stepped away waiting for.
-    useEffect(() => levelWatch.subscribe((hit, plan) => {
-        chatStore.queueHarnessSignal(formatLevelHitForModel(plan, hit, levelWatch.firedLevelsFor(plan.planId)));
-        void notify(`${plan.symbol} ${hit.label} hit`, `${hit.label} @ ${hit.price} reached (mark ${hit.hitPrice}). Chart AI is reviewing the plan.`, { tag: hit.levelId });
-    }), []);
-    // The model's price watches and time wakes no longer subscribe HERE: a
-    // subscription on a surface the trader can navigate away from dropped
-    // every fire that happened while it was unmounted. App.tsx (always
-    // mounted) owns that subscription now — including a watch's lapse.
+    // Level hits and model watches no longer subscribe HERE: a subscription
+    // on a mountable surface dropped every hit that happened while the
+    // trader was on another surface — and for a level hit that was WORSE
+    // than a dropped ping, because the fire-once latch had already spent
+    // the state. The harness record is queued by the services themselves;
+    // App.tsx (never unmounted) carries the OS ping.
 
     // The design's change pill: tinted ground, tone text — the price figure
     // itself stays plain ink (the tone lives in the pill, not the print).

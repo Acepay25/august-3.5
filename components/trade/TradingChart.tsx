@@ -696,12 +696,14 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
         const idx = logicalForTime(p.t);
         if (idx === null) return null;
         // x converts through an in-window REFERENCE PAIR rather than asking
-        // logicalToCoordinate for the anchor's own logical: the API declines
-        // logicals outside the loaded window (an out-of-window anchor read as
-        // null and the shape silently painted NOTHING — the audit's
-        // vanishing), while the scale itself is linear, so two neighbouring
-        // in-window bars measure its px-per-bar and ANY logical — negative,
-        // fractional, beyond the data — maps exactly.
+        // logicalToCoordinate for the anchor's own logical. The pair is
+        // mathematically identical to the direct call — the scale is linear
+        // for ANY logical (negative, fractional, beyond the data) — but it
+        // pins the conversion to THIS library's contract instead of assuming
+        // it, and it measures px-per-bar from live bars rather than trusting
+        // a configured default. The vanishing the audit measured came from
+        // the old CLAMP (an out-of-window anchor collapsed onto bar 0: a
+        // zero-width shape or a warped slope), not from a null here.
         const data = (cs.data?.() ?? []) as readonly { time: number }[];
         if (data.length < 2) return null;
         const l1 = Math.floor((data.length - 1) / 2);

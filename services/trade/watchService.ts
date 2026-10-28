@@ -38,7 +38,9 @@
 
 import { getActiveUsername } from '../../utils/activeUser';
 import { fetchMarkPrice } from './markPricePoll';
+import * as chatStore from './chatStore';
 import {
+    formatWatchFiredForModel, formatWatchesLapsedForModel,
     watchConditionHolds, watchExpired,
     type WatchFired, type WatchItem,
 } from './chartTriggers';
@@ -135,11 +137,22 @@ const loadWatches = (): void => {
         const parsed: unknown = raw ? JSON.parse(raw) : [];
         if (Array.isArray(parsed)) {
             const nowMs = Date.now();
+            const lapsedWhileClosed: WatchItem[] = [];
             for (const w of parsed) {
                 if (validWatch(w) && !watchExpired(w, nowMs) && (w.kind === 'price' || w.atMs > nowMs - 60_000)) {
                     watches.set(w.id, w);
                     if (w.kind === 'price') hydrated.add(w.id);
+                } else if (validWatch(w) && watchExpired(w, nowMs)) {
+                    // The deadline passed while the app was shut. STALE IS NOT
+                    // NEWS covers a level the tape already met; it does not
+                    // cover a promised report — the note said "check back in
+                    // 30 minutes" and the trader deserves the closure line.
+                    lapsedWhileClosed.push(w);
                 }
+            }
+            if (lapsedWhileClosed.length > 0) {
+                recordLapses(lapsedWhileClosed.map(w => ({ watch: w, price: null, at: nowMs, expired: true })), []);
+                persist();
             }
         }
     } catch { /* fresh slate */ }
@@ -162,9 +175,38 @@ const syncClock = (): void => {
     if (!needsClock && clock) { clearInterval(clock); clock = null; }
 };
 
+/** The durable half of a completed watch: the arming thread's harness record,
+ *  queued by the SERVICE — before this it was written by whichever component
+ *  happened to be mounted, and a fire or lapse with zero listeners (the
+ *  trader on another surface) deleted the watch and lost the record with it.
+ *  The emit below is presentation only (the OS ping). */
+const recordWatch = (fired: WatchFired, remaining: WatchItem[]): void => {
+    chatStore.queueHarnessSignal(formatWatchFiredForModel(fired, remaining.length), fired.watch.sid);
+};
+
+/** Simultaneous lapses become ONE record per session — N instruction blocks
+ *  for the same close-the-loop ask is noise, and the signal queue caps at 8,
+ *  so a 10-lapse burst as separate signals would drop the oldest two. */
+const recordLapses = (lapses: WatchFired[], remaining: WatchItem[]): void => {
+    if (lapses.length === 0) return;
+    const bySid = new Map<string | undefined, WatchFired[]>();
+    for (const f of lapses) {
+        const list = bySid.get(f.watch.sid) ?? [];
+        list.push(f);
+        bySid.set(f.watch.sid, list);
+    }
+    for (const [sid, group] of bySid) {
+        chatStore.queueHarnessSignal(formatWatchesLapsedForModel(group, remaining.length), sid);
+    }
+};
+
 const emit = (fired: WatchFired, remaining: WatchItem[]): void => {
     for (const cb of subscribers) {
-        try { cb(fired, remaining); } catch { /* one bad listener must not stall the harness */ }
+        try { cb(fired, remaining); } catch (e) {
+            // A throwing listener must not stall the harness — and with the
+            // record queued above, this is presentation loss only. Say so.
+            console.warn('[watchService] subscriber threw:', e);
+        }
     }
 };
 
@@ -183,15 +225,16 @@ const priceFor = (symbol: string, nowMs: number): number | null => {
 const evaluateWatches = (nowMs: number): void => {
     loadWatches();
     if (watches.size === 0) return;
+    const lapses: WatchFired[] = [];
     for (const w of [...watches.values()]) {
         if (watchExpired(w, nowMs)) {
             watches.delete(w.id);
             persist();
             // A lapse is a fact the trader was promised a report on — the note
-            // said "check back in N minutes". Record it through the same
-            // channel a fire uses so the arming thread learns the wait is
-            // over, instead of the watch vanishing.
-            emit({ watch: w, price: null, at: nowMs, expired: true }, [...watches.values()]);
+            // said "check back in N minutes". The record is queued here (see
+            // recordWatch); the emit is only the OS-presentation channel, and
+            // a lapse does not ping the OS.
+            lapses.push({ watch: w, price: null, at: nowMs, expired: true });
             continue;
         }
         // The price only rides the signal when it's THIS symbol's mark —
@@ -214,8 +257,11 @@ const evaluateWatches = (nowMs: number): void => {
         if (!watchConditionHolds(w, price, nowMs)) continue;
         watches.delete(w.id);
         persist();
-        emit({ watch: w, price, at: nowMs }, [...watches.values()]);
+        const remaining = [...watches.values()];
+        recordWatch({ watch: w, price, at: nowMs }, remaining);
+        emit({ watch: w, price, at: nowMs }, remaining);
     }
+    recordLapses(lapses, [...watches.values()]);
     syncClock();
 };
 
@@ -234,7 +280,14 @@ export const arm = (w: WatchItem, liveMark: number | null = null): 'armed' | 're
     if (watches.size >= MAX_WATCHES) {
         // Oldest first out — the newest ask is the one the user just made.
         const oldest = [...watches.values()].sort((a, b) => a.createdAt - b.createdAt)[0];
-        if (oldest) watches.delete(oldest.id);
+        if (oldest) {
+            watches.delete(oldest.id);
+            // The evicted watch's promise dies here ("the harness will wake
+            // you", the arm receipt told the seat) — record it the way a
+            // lapse is recorded, or the seat waits forever for a wake that
+            // was silently dropped.
+            recordLapses([{ watch: oldest, price: null, at: Date.now(), expired: true }], []);
+        }
     }
     watches.set(w.id, w);
     persist();

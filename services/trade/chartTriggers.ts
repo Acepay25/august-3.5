@@ -194,3 +194,25 @@ Close the loop in one short line: tell the user the watch lapsed without the lev
     return `${event}
 Act on it now: pull a fresh read (desk tools), tell the user whether their awaited condition is here and whether the setup is ready to trade or not, and arm a new watch only if there is a specific reason to.`;
 };
+
+/** Several watches hitting their deadlines in one sweep (the service's 1s
+ *  clock evaluates in a burst) become ONE transcript record — N instruction
+ *  blocks for the same close-the-loop ask is noise, and the store's signal
+ *  queue caps at 8, so a 10-lapse burst as separate signals would drop the
+ *  oldest two. Grouped per session by the caller. */
+export const formatWatchesLapsedForModel = (fireds: WatchFired[], armedCount: number): string => {
+    const lines = fireds.map(f => {
+        const w = f.watch;
+        const cond = w.kind === 'price'
+            ? `${w.symbol} ${w.condition} ${w.price}`
+            : `${w.symbol} scheduled re-check`;
+        return `- ${cond} [${w.id}] — note: "${w.note}" (deadline ${phtClock(f.at)} PHT)`;
+    });
+    const event = [
+        `[HARNESS TRIGGER — ${fireds.length} watch(es) lapsed, not the user] Their deadlines passed without the conditions ever holding:`,
+        ...lines,
+        armedCount > 0 ? `Still armed after this: ${armedCount} watch(es).` : 'No other watches are armed.',
+    ].join('\n');
+    return `${event}
+Close the loop in one short line per watch: tell the user each wait ended without its level printing. Do not run fresh analyses for these, and do not re-arm the same watches on your own.`;
+};

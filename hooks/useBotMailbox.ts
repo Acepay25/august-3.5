@@ -159,61 +159,87 @@ export const useBotMailbox = ({
         // Hybrid Intelligence for the turn: one fetch, keyed on the symbol
         // the prompt names; silent fallback to the bot's own knowledge when
         // the fetch fails or no symbol is present (the rooms' exact pattern).
-        let hybridInjection = '';
-        if (hybridEnabled) {
-            try {
-                const hybridResult = await tryFetchHybridDataFromPromptWithCalibration(prompt);
-                if (hybridResult) hybridInjection = hybridResult.enhancedInjection || hybridResult.promptInjection;
-            } catch { /* offline / no symbol — the turn runs without live data */ }
-        }
-        const replyId = `dmr-${Date.now()}-${bot.id}`;
-        // WS-3: the bot reads the shared notebook too — a budgeted retrieval
-        // slice keyed on the prompt's setup, recorded under this turn's id so a
-        // trade that follows the bot's call credits what it was ACTUALLY shown.
-        // The scope comes off the bot now: an isolated bot gets no shared slice
-        // at all (it did not used to, either — the field did not exist).
-        const memoryScope = bot.memoryScope ?? 'global';
-        let sharedMemory = '';
-        if (username) {
-            sharedMemory = buildBotSharedMemoryContext(prompt, { botId: bot.id, memoryScope, runId: replyId });
-            recordBotTurnInjection({ botId: bot.id, username, runId: replyId });
-        }
-        const system = buildBotSystemPrompt(bot, { persona, notes, teammates: botsRef.current })
-            + (sharedMemory ? `\n\nSHARED NOTEBOOK (weigh it like your own notes):\n${sharedMemory}` : '')
-            + (hybridInjection ? `\n\n${hybridInjection}` : '');
-        const history = threadForProvider(messagesRef.current, bot.providerId, bot.modelId, bot.id);
-        // The incoming DM itself must be VISIBLE in the target's thread
-        // (the texting metaphor): a user-role dmFrom row that the reply
-        // below claims via threadForProvider's pending-user rule.
-        if (opts.triggeredBy) {
-            appendMessage(dmMessageRow(
-                dmEnvelopeText(opts.triggeredBy.from.name, opts.triggeredBy.envelope),
-                `dmr-in-${opts.triggeredBy.envelope.id}`,
-                {
-                    fromName: opts.triggeredBy.from.name,
-                    task: opts.triggeredBy.envelope.text,
-                    constraints: opts.triggeredBy.envelope.constraints,
-                    expecting: opts.triggeredBy.envelope.expecting,
-                },
-            ));
-        }
-        appendMessage({
-            id: replyId,
-            role: MessageRole.AI,
-            text: '',
-            createdAt: new Date().toISOString(),
-            modelsUsed: { [bot.providerId]: bot.modelId },
-            // Identity, not just provider+model: a solo Chat-AI answer from this
-            // same model otherwise looks exactly like this bot's reply.
-            botId: bot.id,
-            isStreaming: true,
-        });
+        // The controller is armed BEFORE the network-bound hybrid fetch, not
+        // just before the model stream: the composer's Stop is already red
+        // while this fetch runs, and a stop that silently no-ops through it
+        // reads as broken. (The repo's own rule — chatTurnRunner arms before
+        // its context fetch for exactly this reason.) The fetch itself does
+        // not take a signal, so an abort here is honoured by the check below.
         const controller = new AbortController();
         let live = controllers.current.get(bot.id);
         if (!live) { live = new Set(); controllers.current.set(bot.id, live); }
         live.add(controller);
+        const replyId = `dmr-${Date.now()}-${bot.id}`;
         try {
-            const replyStartedAt = Date.now();
+            // Armed BEFORE the network-bound hybrid fetch, not just before the
+            // model stream: the composer's Stop is already red while this fetch
+            // runs, and a stop that silently no-ops through it reads as broken.
+            // (The repo's own rule — chatTurnRunner arms before its context
+            // fetch for exactly this reason.) The fetch itself does not take a
+            // signal, so an abort here is honoured by the check below.
+            let hybridInjection = '';
+            if (hybridEnabled) {
+                try {
+                    const hybridResult = await tryFetchHybridDataFromPromptWithCalibration(prompt);
+                    if (hybridResult) hybridInjection = hybridResult.enhancedInjection || hybridResult.promptInjection;
+                } catch { /* offline / no symbol — the turn runs without live data */ }
+            }
+            // WS-3: the bot reads the shared notebook too — a budgeted retrieval
+            // slice keyed on the prompt's setup, recorded under this turn's id so a
+            // trade that follows the bot's call credits what it was ACTUALLY shown.
+            // The scope comes off the bot now: an isolated bot gets no shared slice
+            // at all (it did not used to, either — the field did not exist).
+            const memoryScope = bot.memoryScope ?? 'global';
+            let sharedMemory = '';
+            if (username) {
+                sharedMemory = buildBotSharedMemoryContext(prompt, { botId: bot.id, memoryScope, runId: replyId });
+                recordBotTurnInjection({ botId: bot.id, username, runId: replyId });
+            }
+            const system = buildBotSystemPrompt(bot, { persona, notes, teammates: botsRef.current })
+                + (sharedMemory ? `\n\nSHARED NOTEBOOK (weigh it like your own notes):\n${sharedMemory}` : '')
+                + (hybridInjection ? `\n\n${hybridInjection}` : '');
+            const history = threadForProvider(messagesRef.current, bot.providerId, bot.modelId, bot.id);
+            // The incoming DM itself must be VISIBLE in the target's thread
+            // (the texting metaphor): a user-role dmFrom row that the reply
+            // below claims via threadForProvider's pending-user rule. Written
+            // BEFORE the abort check: a stopped turn must not erase the message
+            // it was answering.
+            if (opts.triggeredBy) {
+                appendMessage(dmMessageRow(
+                    dmEnvelopeText(opts.triggeredBy.from.name, opts.triggeredBy.envelope),
+                    `dmr-in-${opts.triggeredBy.envelope.id}`,
+                    {
+                        fromName: opts.triggeredBy.from.name,
+                        task: opts.triggeredBy.envelope.text,
+                        constraints: opts.triggeredBy.envelope.constraints,
+                        expecting: opts.triggeredBy.envelope.expecting,
+                    },
+                ));
+            }
+            if (controller.signal.aborted) {
+                // Stopped during the hybrid fetch: no bubble was ever opened, so
+                // the receipt is the whole row — never a fabricated premise.
+                appendMessage({
+                    id: replyId, role: MessageRole.AI,
+                    text: `(${bot.name}'s reply was stopped.)`,
+                    createdAt: new Date().toISOString(),
+                    modelsUsed: { [bot.providerId]: bot.modelId },
+                    botId: bot.id, isStreaming: false,
+                });
+                return;
+            }
+            appendMessage({
+                id: replyId,
+                role: MessageRole.AI,
+                text: '',
+                createdAt: new Date().toISOString(),
+                modelsUsed: { [bot.providerId]: bot.modelId },
+                // Identity, not just provider+model: a solo Chat-AI answer from this
+                // same model otherwise looks exactly like this bot's reply.
+                botId: bot.id,
+                isStreaming: true,
+            });
+        const replyStartedAt = Date.now();
             const raw = await streamQuickResponse(
                 { ...provider, selectedModel: bot.modelId },
                 prompt,

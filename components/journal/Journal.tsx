@@ -93,8 +93,8 @@ const ExportTray: React.FC<{ trades: LoggedTrade[] }> = ({ trades }) => {
                 type="button"
                 onClick={() => exportTradesHTML(trades)}
                 disabled={empty}
-                title={empty ? 'Log a trade to export' : 'Open printable report (Ctrl+P to save as PDF)'}
-                aria-label="Open printable trade report"
+                title={empty ? 'Log a trade to export' : 'Export the printable trade report (open it and print-to-PDF)'}
+                aria-label="Export printable trade report"
                 className={cls}
             >
                 <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />

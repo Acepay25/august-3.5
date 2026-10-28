@@ -16,6 +16,9 @@ import { CHAT_SURFACE_TOOLS } from './chatSurfaceTurn';
 export const UNATTENDED_DENY = [
     'write_memory_note', 'amend_memory', 'remember', 'forget',
     'propose_skill', 'revise_skill', 'propose_strategy', 'forge_tool',
+    // A detached evaluator has no human to answer, and the question would park
+    // the run for its whole window.
+    'ask_user_input',
     // A detached evaluator may read the environment it judges; it must not
     // reshape the trader's goals.
     'create_goal', 'update_goal', 'restore_goal',

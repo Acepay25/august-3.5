@@ -40,6 +40,8 @@ import { offlineQueue } from '../services/infrastructure/OfflineQueueService';
 import { runMigrations, checkDataIntegrity, createStartupBackup, logIntegrityEvent } from '../services/validation/DataIntegrityService';
 import { startAutoBackup } from '../services/infrastructure/BackupService';
 import { getPreferenceObject, PREF_KEYS } from '../services/infrastructure/PreferencesService';
+import { primeChatSessions } from '../services/trade/chatSessions';
+import * as chatStore from '../services/trade/chatStore';
 import { createNewConversation, LEGACY_LEVERAGE } from '../utils/conversationUtils';
 import { recalculateAnalysisMetrics } from '../utils/analysisUtils';
 import { getFirstReadyProvider } from '../utils/providerUtils';
@@ -509,9 +511,12 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
             }
 
             if (isStale()) return;
+            await primeChatSessions(username);
+            if (isStale()) return;
             setActiveUsername(username);
             sessionStorage.setItem('activeUsername', username);
             localStorage.setItem('last_active_user', username);
+            chatStore.resetForUserSwitch();
             profileSelectionStartedRef.current = true;
             setIsUserModalOpen(false);
             setIsLoading(false);

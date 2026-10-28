@@ -92,25 +92,29 @@ export const exportTradesHTML = (trades: LoggedTrade[]): void => {
     const wins = completed.filter(t => t.outcome === TradeOutcome.WIN).length;
     const losses = completed.length - wins;
     const winRate = completed.length > 0 ? Math.round((wins / completed.length) * 100) : 0;
-    const totalPnl = trades.reduce((sum, t) => sum + (t.pnlAmount || 0), 0);
+    const priced = trades.filter(t => typeof t.pnlAmount === 'number');
+    const totalPnl = priced.reduce((sum, t) => sum + (t.pnlAmount as number), 0);
     const grossWin = trades.filter(t => t.outcome === TradeOutcome.WIN).reduce((s, t) => s + (t.pnlAmount || 0), 0);
     const grossLoss = Math.abs(trades.filter(t => t.outcome === TradeOutcome.LOSS).reduce((s, t) => s + (t.pnlAmount || 0), 0));
     const profitFactor = grossLoss > 0 ? (grossWin / grossLoss).toFixed(2) : (grossWin > 0 ? '∞' : '—');
 
-    const rows = trades.map(t => `
+    const rows = trades.map(t => {
+        const a = t.analysis ?? ({} as LoggedTrade['analysis']);
+        return `
         <tr>
             <td>${phtDayYear(t.timestamp)}</td>
-            <td>${escapeHtml(t.analysis.coinName) || '—'}</td>
-            <td>${escapeHtml(t.analysis.direction) || '—'}</td>
+            <td>${escapeHtml(a.coinName) || '—'}</td>
+            <td>${escapeHtml(a.direction) || '—'}</td>
             <td>${escapeHtml(t.outcome)}</td>
-            <td>${escapeHtml(t.analysis.entryPoints?.[0]?.price) || '—'}</td>
-            <td>${escapeHtml(t.analysis.stopLoss) || '—'}</td>
-            <td>${escapeHtml((t.analysis.takeProfit || []).map(tp => tp.price).join(' / ')) || '—'}</td>
+            <td>${escapeHtml(a.entryPoints?.[0]?.price) || '—'}</td>
+            <td>${escapeHtml(a.stopLoss) || '—'}</td>
+            <td>${escapeHtml((a.takeProfit || []).map(tp => tp.price).join(' / ')) || '—'}</td>
             <td>${escapeHtml(t.leverage) || '—'}x</td>
             <td>${t.pnlAmount !== undefined ? t.pnlAmount.toFixed(2) : (t.pnlPercent !== undefined ? `${t.pnlPercent >= 0 ? '+' : ''}${t.pnlPercent.toFixed(1)}%` : '—')}</td>
-            <td>${escapeHtml(t.analysis.detectedPatternFamily) || '—'}</td>
-            <td>${escapeHtml(t.analysis.strategy) || '—'}</td>
-        </tr>`).join('');
+            <td>${escapeHtml(a.detectedPatternFamily) || '—'}</td>
+            <td>${escapeHtml(a.strategy) || '—'}</td>
+        </tr>`;
+    }).join('');
 
     const html = `<!doctype html>
 <html lang="en">
@@ -138,7 +142,7 @@ export const exportTradesHTML = (trades: LoggedTrade[]): void => {
   <div class="sub">Generated ${phtFullStamp(Date.now())} · ${trades.length} trades (${wins} W / ${losses} L)</div>
   <div class="stats">
     <div class="stat"><b>${winRate}%</b><span>Win rate</span></div>
-    <div class="stat"><b>${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</b><span>Net PnL (USD)</span></div>
+    <div class="stat"><b>${priced.length > 0 ? `${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}${priced.length < trades.length ? ` (${priced.length}/${trades.length})` : ''}` : 'not captured'}</b><span>Net PnL (USD)</span></div>
     <div class="stat"><b>${profitFactor}</b><span>Profit factor</span></div>
     <div class="stat"><b>${trades.length}</b><span>Trades</span></div>
   </div>

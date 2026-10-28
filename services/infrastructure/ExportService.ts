@@ -199,6 +199,8 @@ export const canShare = async (): Promise<boolean> => {
 
 
 import { getAllKeys, getPreferenceObject, setPreference, setPreferenceObject, PREF_KEYS } from './PreferencesService';
+import { readStore } from './storeBackend';
+import { getActiveUsername } from '../../utils/activeUser';
 import { ProviderConfig } from '../../types/provider';
 import { validateProviderUrl } from '../../utils/providerUrlValidation';
 import { saveProviderConfigs } from './ProviderConfigService';
@@ -440,6 +442,7 @@ const EXPORT_KEY_CAPS: ReadonlyArray<{ prefix: string; bytes: number }> = [
     // the whole backup either — the live key is untouched when over.
     { prefix: 'trade_tool_payloads_v1', bytes: 256 * 1024 },
     { prefix: 'trade_session_drawings_v1', bytes: 1024 * 1024 },
+    { prefix: 'trade_session_model_v1', bytes: 1024 * 1024 },
     { prefix: 'desk_tools_forged_v1', bytes: 256 * 1024 },
     { prefix: 'trading_checklist_v1', bytes: 64 * 1024 },
 ];
@@ -514,7 +517,24 @@ const isRawStringEnvelope = (value: unknown): value is Record<string, string> =>
     && typeof (value as Record<string, unknown>)[RAW_STRING_ENVELOPE] === 'string';
 
 /** The value as its owner would read it, or null when neither store has it. */
+/** The two session-drawing buckets live behind storeBackend (a JSON file per
+ *  session on desktop, localStorage on web) — NOT raw localStorage — so their
+ *  export must read the same path the app reads, and a pre-migration
+ *  localStorage copy must never shadow the file's fresher bytes. */
+const STOREBACKED_DRAWING_PREFIXES: readonly string[] = [
+    'trade_session_drawings_v1_',
+    'trade_session_model_v1_',
+];
+
 const readSweptValue = async (key: string): Promise<unknown> => {
+    if (STOREBACKED_DRAWING_PREFIXES.some(prefix => key.startsWith(prefix))) {
+        const res = await readStore(key);
+        if (res.ok && res.value !== null) {
+            try { return JSON.parse(res.value); } catch { /* corrupt store → fall through */ }
+        }
+        // Absent or unreadable file: fall through — the legacy localStorage
+        // copy (kept by the store's migration) is better than nothing.
+    }
     // Raw-localStorage owners (profile memory, learning rules, the agent
     // rosters, the calibration stats, the learning-loop stores) write
     // localStorage DIRECTLY and never touch Preferences — so on native a
@@ -680,6 +700,29 @@ export const exportPreferencesData = async (): Promise<Record<string, any>> => {
         console.warn('[ExportService] Per-user key sweep failed:', e);
     }
 
+    // The session-drawing buckets are FILE-backed on desktop and keyed by
+    // session id, so neither sweep source (localStorage, Preferences keys)
+    // enumerates them — a fresh desktop profile's drawings would silently
+    // miss every backup. Enumerate the sessions the same way the app does
+    // (the sessions store, read file-aware) and export both buckets per
+    // session. Keys the generic sweep already found are re-put here with the
+    // file's fresher bytes — last write wins, deliberately.
+    try {
+        const user = getActiveUsername();
+        const sessionsRes = await readStore(`trade_chat_sessions_v1_${user}`);
+        const parsed = sessionsRes.ok && sessionsRes.value ? JSON.parse(sessionsRes.value) : null;
+        const sessions = Array.isArray(parsed) ? parsed : [];
+        for (const sid of sessions.map(sessionIdOf).filter((v): v is string => !!v)) {
+            for (const prefix of STOREBACKED_DRAWING_PREFIXES) {
+                const key = `${prefix}${user}_${sid}`;
+                const value = await readSweptValue(key);
+                if (value !== null) putSweptValue(backup, notices, key, value);
+            }
+        }
+    } catch (e) {
+        console.warn('[ExportService] Session-drawings sweep failed:', e);
+    }
+
     // Only present when something was left out. Restores skip it as an
     // un-allow-listed key, which is what makes the omission visible on both ends
     // instead of a silent hole in the backup.
@@ -784,6 +827,7 @@ const RESTORABLE_PREFERENCE_KEY_PREFIXES: readonly string[] = [
     'trade_chat_active_v1_',
     'trade_drawings_v1_',
     'trade_session_drawings_v1_',
+    'trade_session_model_v1_',
     'trade_sidebar_open_v1',
     'trade_tf_bar_v1',
     // Bots / agents / desk

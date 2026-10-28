@@ -88,7 +88,7 @@ The goal is one tool-capable turn in **both** chat homes. Facts, so the next
 session does not re-derive them:
 
 - `streamChatWithDeskTools` is an **async generator** returning text deltas
-  (`services/analysis/DeskToolsService.ts:4991`), and **every option is optional**
+  (`services/analysis/DeskToolsService.ts:5155`), and **every option is optional**
   (`StreamWithDeskToolsOptions`). It self-gates on
   `getHarnessSettings().deskToolsEnabled`, and `withDeskToolsSystemPrompt` will not
   double-inject the DESK TOOLS block if the system message already carries it.
@@ -127,7 +127,7 @@ So the target is NOT "keep the branch and shrink it to one seat". It is:
   SETUP / STRATEGY / LIVE MARKET and that whole gate goes away — a send is one
   turn, always.
 - **One turn path**: the tool-capable transport both homes use —
-  `streamChatWithDeskTools` (`DeskToolsService.ts:5149`), which the dock's solo
+  `streamChatWithDeskTools` (`DeskToolsService.ts:5155`), which the dock's solo
   seat already runs at `chatTurnRunner.ts:650`.
 - **The verdict and the journal row become tools the model chooses to call**, not
   a pipeline stage it has to earn. What already exists: `present_trade`
@@ -749,7 +749,7 @@ watching the suite stay green:
    now stripped before matching, so a consumer must use the name in its body. That second
    hole briefly accused `harnessNoteLegend` of being orphaned — a false red from my own
    stripper closing an import run on a line ending in a backtick; the real call is
-   `DeskToolsService.ts:4252`. The control that caught it is the new
+   `DeskToolsService.ts:4378`. The control that caught it is the new
    `the reachability walk separates live from dead` test.
 
 Proof of load-bearing: producer reverted → `withDetectedTradeType` FAILS; restored →
@@ -1131,7 +1131,7 @@ than assumed — worth keeping as the record of what this phase actually needs:
    Fixed with a route click.
 3. a control send (plain text, same point in the run) failed IDENTICALLY, which
    exonerated the tool path — the hang was never an app defect, and the mock's
-   `Unknown tool` branch at DeskToolsService.ts:3891 settles fine.
+   `Unknown tool` branch at DeskToolsService.ts:4212 settles fine.
 4. the phase, moved next to the dock sends, called `navTo` before its `const`
    initialization (`ReferenceError`, probe line 636) → replaced with the same DOM
    click inline; `surface-switch-${id}` is real (SurfaceSwitch.tsx:56).
@@ -1690,8 +1690,7 @@ action and is actually two.
 
 Nothing produces a transcript any more: the only writes are copies
 (`hooks/useTradeLogging.ts:349`, `utils/watchList.ts:30`) and **no code sets
-`isDebating: true`** — every remaining `isDebating` is a literal `false`, and
-`hooks/useUserProfileLoader.ts:385` forces it false on load. So the failure-path
+`isDebating`** — the field is gone from the loader entirely. So the failure-path
 guard inside `classifyRunFailure` (`hooks/analysisPipeline/runOutcome.ts:47`) is unreachable and the three
 verdict-fallback parameters in `utils/analysisUtils.ts` (the final-verdict text,
 the level hit-odds legacy parse, the signal-card "why") only ever take their
@@ -2291,7 +2290,7 @@ file — a ternary arm — while the stamp was in hooks/useAnalysisPipeline.ts (
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44, the Enter branch at
 components/trade/panels/ChatComposer.tsx:155, systemPromptFor components/trade/TradeChatPanel.tsx:438 with
 TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:512, useBotThread hooks/useAnalysisPipeline.ts:1098,
-entriesForSession services/trade/chatSessions.ts:595, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:140
+entriesForSession services/trade/chatSessions.ts:639, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:140
 with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
 services/trade/automationTurn.ts:81, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices
 services/trade/automationTurn.ts:156, latestChartVerdict services/trade/chartData.ts:95. The gate prints
@@ -2364,12 +2363,12 @@ The point of printing the recipes is that an absence claim is exactly the kind o
 silently: a reader-less field can regain a writer with one line of code and no anchor moves.
 
 **Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions
-services/trade/chatSessions.ts:456, collectApprovalItems utils/approvalInbox.ts:57, resolveInvokedSkills
+services/trade/chatSessions.ts:493, collectApprovalItems utils/approvalInbox.ts:57, resolveInvokedSkills
 services/learning/SkillMemoryService.ts:629), and the gate caught the pairing that insertion created: the row
 also names approvalsWaiting, which is not on that line — a SYMBOL MISS. It now cites App.tsx:1842, where the
 useMemo actually is. 31 of 53 rows cite a file, all bound; 22 name no file at all.
 
-**Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions chatSessions.ts:456,
+**Arrow coverage 28 became 31.** Three prose-only rows gained verified citations (saveSessions chatSessions.ts:493,
 collectApprovalItems approvalInbox.ts:57, resolveInvokedSkills SkillMemoryService.ts:629), and the gate caught the
 pairing that insertion created: the same row also names approvalsWaiting, which is not on that line — a SYMBOL
 MISS, because pairing is positional. It now cites App.tsx:1842, where the useMemo actually is. 31 of 53 rows cite

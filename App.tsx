@@ -19,7 +19,7 @@ import { buildProposedTradeMessage, type TradeProposal } from './services/trade/
 import { ensureStamp } from './services/trade/proposalGate';
 import * as chatStore from './services/trade/chatStore';
 import * as watchService from './services/trade/watchService';
-import { formatWatchFiredForModel } from './services/trade/chartTriggers';
+import * as levelWatch from './services/trade/levelWatchService';
 import { notify } from './services/infrastructure/notify';
 import { latestChartVerdict } from './services/trade/chartData';
 
@@ -1234,36 +1234,39 @@ const App: React.FC = () => {
         }
     }, [messages]);
 
-    // The Agents composer's Stop answers for whichever run is live: the
-    // analysis pipeline when one is, otherwise the bot DM turn the mailbox
-    // is streaming — which had no stopper at all (Stop cancelled the
-    // pipeline and left the bot's request running to completion).
-    const handleStopAgentsRun = useCallback(() => {
-        if (isAnalysisInProgress) {
-            handleCancelAnalysis();
+    // The Agents composer's Stop names its target, because App cannot guess
+    // it: two bots can stream at once (a user turn plus an autonomous DM)
+    // and a first-match abort kills the wrong one. The press routes to the
+    // pipeline, a dock run, or the bot whose composer was used.
+    const handleStopAgentsRun = useCallback((target?: { kind: 'analysis' } | { kind: 'dock' } | { kind: 'bot'; botId: string }) => {
+        if (!target || target.kind === 'analysis') {
+            if (isAnalysisInProgress) handleCancelAnalysis();
             return;
         }
-        const busyBotId = mailboxRef.current?.dmBusyBotIds[0] ?? null;
-        if (busyBotId) mailboxRef.current?.cancelDmTurn(busyBotId);
+        if (target.kind === 'bot') mailboxRef.current?.cancelDmTurn(target.botId);
+        // 'dock': a dock turn streaming into this thread — the dock's own
+        // composer owns that controller; this surface's Stop cannot reach it.
     }, [isAnalysisInProgress, handleCancelAnalysis]);
 
-    // The model's watches subscribe HERE, not on the Trade surface: a
-    // subscription on a mountable surface dropped every fire (and every
-    // lapse) that happened while the trader was on another tab — the watch
-    // was already deleted and the signal had no listener. App never
-    // unmounts, so a trigger reaches the thread that armed it wherever the
-    // trader is. The wake goes to the thread that armed it (the store
-    // queues it); a watch from before that field drains to the active
-    // session as before.
-    useEffect(() => watchService.subscribe((fired, remaining) => {
-        chatStore.queueHarnessSignal(formatWatchFiredForModel(fired, remaining.length), fired.watch.sid);
-        if (fired.expired) return; // the lapse is recorded in the thread; an OS banner for it is noise
-        const w = fired.watch;
-        const cond = w.kind === 'price'
-            ? `${w.symbol} ${w.condition} ${w.price}${fired.price !== null ? ` (now ${fired.price})` : ''}`
-            : `${w.symbol} scheduled re-check is due`;
-        void notify('Chart AI watch fired', `${cond} — ${w.note}`, { tag: w.id });
-    }), []);
+    // The model's watches and the trade-plan level hits subscribe HERE, on
+    // the surface that never unmounts — but only for the OS ping: the
+    // harness RECORD is queued by the services themselves at the moment the
+    // state is deleted or latched, so no trigger's record can depend on any
+    // component being mounted (the review's zero-listener class).
+    useEffect(() => {
+        const unwatch = watchService.subscribe((fired) => {
+            if (fired.expired) return; // a lapse is recorded in the thread; an OS banner for it is noise
+            const w = fired.watch;
+            const cond = w.kind === 'price'
+                ? `${w.symbol} ${w.condition} ${w.price}${fired.price !== null ? ` (now ${fired.price})` : ''}`
+                : `${w.symbol} scheduled re-check is due`;
+            void notify('Chart AI watch fired', `${cond} — ${w.note}`, { tag: w.id });
+        });
+        const unlevel = levelWatch.subscribe((hit, plan) => {
+            void notify(`${plan.symbol} ${hit.label} hit`, `${hit.label} @ ${hit.price} reached (mark ${hit.hitPrice}). Chart AI is reviewing the plan.`, { tag: hit.levelId });
+        });
+        return () => { unwatch(); unlevel(); };
+    }, []);
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -2565,6 +2568,7 @@ const App: React.FC = () => {
                                     renderGroup={g => renderGroupSurface(g.id)}
                                     coachCount={coachCount}
                                     workingBotId={workingBotId ?? dmWorkingBotId}
+                                    mailboxBusyBotIds={mailbox.dmBusyBotIds}
                                     lastOpenedMap={threadOpenedMap}
                                     attentionMap={attentionMap}
                                     botStats={botStats}

@@ -283,10 +283,16 @@ const isEffort = (v: unknown): v is ReasoningEffort =>
  * also the whole story on web.
  */
 let primedRaw: string | null | undefined;
+/** The user those bytes were read for. Serving them under another identity is
+ *  how one profile's chats appeared in another's dock. */
+let primedFor: string | null = null;
 
-export const primeChatSessions = async (): Promise<void> => {
+export const primeChatSessions = async (username = getActiveUsername()): Promise<void> => {
+    primedFor = username;
+    primedRaw = undefined;
     try {
-        const res = await readStore(storageKey());
+        const res = await readStore(`trade_chat_sessions_v1_${username}`);
+        if (primedFor !== username) return;
         if (res.ok) primedRaw = res.value;
     } catch {
         // Leave it unprimed: the localStorage path below still serves, and a boot
@@ -297,7 +303,7 @@ export const primeChatSessions = async (): Promise<void> => {
 /** Read + validate + bound the stored list; any corruption yields []. */
 export const loadSessions = (): ChatSession[] => {
     try {
-        const raw = primedRaw !== undefined ? primedRaw : localStorage.getItem(storageKey());
+        const raw = primedFor === getActiveUsername() && primedRaw !== undefined ? primedRaw : localStorage.getItem(storageKey());
         if (!raw) return [];
         const parsed: unknown = JSON.parse(raw);
         if (!Array.isArray(parsed)) return [];
@@ -448,7 +454,7 @@ const fitToByteBudget = (
 
     // Pass 3 — whole oldest conversations, but never a PINNED one, and never
     // the last session standing.
-    while (size > MAX_STORED_CHARS && work.length > 1) {
+    while (size > storedCharsBudget() && work.length > 1) {
         const idx = work.findIndex(s => !pinned.has(s.id));
         if (idx < 0) break;
         const gone = work.splice(idx, 1)[0];
@@ -460,7 +466,7 @@ const fitToByteBudget = (
     // ten, never wiped whole) and RECORD it, so the rail can say a pinned chat
     // was trimmed. Silent here is the failure this whole path exists to avoid.
     const pinnedTrimmed: string[] = [];
-    if (size > MAX_STORED_CHARS) {
+    if (size > storedCharsBudget()) {
         for (const s of work) {
             if (size <= storedCharsBudget()) break;
             if (s.entries.length <= 10) continue;

@@ -51,11 +51,12 @@ const SkillsLibrary: React.FC<{ studio?: React.ReactNode }> = ({ studio }) => {
             <div className="border-t border-zinc-800/80 pt-4">
                 <div className="flex items-center gap-2">
                     <h3 className="text-ui-sm text-zinc-500">Forged tools</h3>
-                    <StatusPill tone="neutral">Candidates + confirmed</StatusPill>
+                    <StatusPill tone="neutral">Candidates · Confirmed · Retired</StatusPill>
                 </div>
                 <p className="mt-1 text-ui-dense text-zinc-500">
                     Desk tools the model wrote. A candidate waits for your decision; a
-                    confirmed one stays listed with its usage.
+                    confirmed one stays listed with its usage; a retired one is kept for
+                    its history.
                 </p>
                 <div className="mt-3">
                     <ToolForgeManager />

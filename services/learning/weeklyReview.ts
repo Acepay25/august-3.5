@@ -100,11 +100,11 @@ export const buildWeekStats = (trades: LoggedTrade[], nowMs: number): WeeklyRevi
 /** Does this week actually have dollar figures? One predicate, so the prompt the
  *  coach is grounded in and the card the trader reads cannot disagree about it. */
 export const weekPnlCaptured = (s: WeeklyReviewDigest['stats']): boolean =>
-    (s.dollarRows ?? s.closed) > 0;
+    (s.dollarRows ?? 0) > 0;
 
 /** The money, or the honest absence of it. A digest stored before `dollarRows`
- *  existed has no way to say which rows carried dollars, so it is read as the
- *  figure it printed — and it is regenerated weekly regardless. */
+ *  existed cannot prove any row carried dollars, so it says "not captured"
+ *  until regenerated — the alternative printed `$0` over percent-only weeks. */
 export const weekPnlText = (s: WeeklyReviewDigest['stats']): string => {
     if (!weekPnlCaptured(s)) return 'not captured';
     const partial = s.dollarRows < s.closed ? ` (${s.dollarRows}/${s.closed} rows)` : '';

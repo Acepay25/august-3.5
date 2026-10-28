@@ -15,6 +15,7 @@
 
 import { LoggedTrade, TradeOutcome } from '../types';
 import { computeJournalStats, decidedAtOf } from './journalAnalytics';
+import { phtDayKey } from './timezone';
 
 /** How many rows a brief carries by default — and how many the model may pull. */
 export const RECENT_TRADES_WINDOW = 20;
@@ -104,7 +105,13 @@ const sum = (nums: number[]): number | null =>
 const round = (n: number | null, places = 2): number | null =>
     n === null || !Number.isFinite(n) ? null : Math.round(n * 10 ** places) / 10 ** places;
 
-const sameDay = (a: string, b: string): boolean => !!a && !!b && a.slice(0, 10) === b.slice(0, 10);
+/** The trader's day, not the UTC day an ISO string happens to start on. */
+const dayKey = (iso: string): string => {
+    const ms = Date.parse(iso);
+    return Number.isFinite(ms) ? phtDayKey(ms) : '';
+};
+
+const sameDay = (a: string, b: string): boolean => !!a && !!b && dayKey(a) === dayKey(b) && dayKey(a) !== '';
 
 /**
  * The window the brief is built over: filtered, sorted by log time ASCENDING,
@@ -217,7 +224,7 @@ export const buildRecentTradesBrief = (trades: LoggedTrade[]): RecentTradesBrief
  */
 export const neutralRowsText = (brief: RecentTradesBrief): string => {
     if (brief.rows.length === 0) return 'Logged trades: none.';
-    const day = (iso: string): string => iso.slice(0, 10);
+    const day = (iso: string): string => dayKey(iso) || iso.slice(0, 10);
     return [
         `Logged trades, oldest first (${brief.rows.length}):`,
         ...brief.rows.map(r => {
@@ -255,7 +262,7 @@ const money = (n: number): string => `${n >= 0 ? '+' : '-'}$${Math.abs(n).toFixe
 export const tallyLine = (brief: RecentTradesBrief, title = `Last ${RECENT_TRADES_WINDOW} logged trades`): string => {
     if (brief.rows.length === 0) return `${title}: none logged.`;
     const parts = [
-        `${title} (${sameDay(brief.from ?? '', brief.to ?? '') ? brief.to?.slice(0, 10) : `${brief.from?.slice(0, 10)} → ${brief.to?.slice(0, 10)}`})`,
+        `${title}${brief.from && brief.to ? ` (${sameDay(brief.from, brief.to) ? dayKey(brief.to) : `${dayKey(brief.from)} → ${dayKey(brief.to)}`})` : ''}`,
         `${brief.wins}W/${brief.losses}L`,
         brief.winRate === null ? 'no settled trades' : `${brief.winRate.toFixed(1)}% win rate`,
         brief.avgRealizedR === null

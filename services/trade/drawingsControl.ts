@@ -17,8 +17,6 @@
  * the merge/cap/persist rules stay unit-testable.
  */
 import {
-    loadDrawings,
-    saveDrawings,
     saveSessionDrawings,
     saveSessionModelDrawings,
     readSessionDrawingsSync,
@@ -40,8 +38,11 @@ interface BucketIo {
 }
 
 const BUCKETS: Record<DrawingBucket, BucketIo> = {
-    user: { load: readSessionDrawingsSync, save: saveSessionDrawings },
-    model: { load: readSessionDrawingsSync, save: saveSessionModelDrawings },
+    // Each bucket merges against ITS OWN mirror — the sync reader was
+    // bucket-blind once, and a model shape landing off-view merged against
+    // the user's map and rewrote the model store with it.
+    user: { load: (sid, sym, user) => readSessionDrawingsSync('user', sid, sym, user), save: saveSessionDrawings },
+    model: { load: (sid, sym, user) => readSessionDrawingsSync('model', sid, sym, user), save: saveSessionModelDrawings },
 };
 
 /** Trim to the storage contract: newest N drawings, newest N points each. */

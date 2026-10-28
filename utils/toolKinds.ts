@@ -115,6 +115,7 @@ const BY_LABEL: Record<string, ToolKindInfo> = {
 
     // ── writes: the desk is changing the notebook ────────────────────────
     'amend memory': { kind: 'write', activity: 'Amending memory' },
+    'ask trader': { kind: 'other', activity: 'Asking the trader' },
     'cancel watch': { kind: 'write', activity: 'Cancelling the price watch' },
     'direct message': { kind: 'write', activity: 'Messaging an agent' },
     'forge tool': { kind: 'write', activity: 'Forging a tool' },
@@ -214,4 +215,6 @@ export const DESK_TOOL_NAMES: readonly string[] = [
     'list_goals', 'open_goal', 'create_goal', 'update_goal', 'restore_goal',
     // The harness change ledger: reading and moving its own self-modifications.
     'list_self_changes', 'propose_self_change', 'revert_self_change',
+    // A human answer is a tool, not a broadcast: the dock's seat can ask too.
+    'ask_user_input',
 ];

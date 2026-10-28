@@ -166,6 +166,10 @@ const sanitizeDrawings = (parsed: unknown): ChartDrawing[] => {
 const DRAWINGS_FLUSH_MS = 400;
 const coinMapMirror = new Map<string, Record<string, ChartDrawing[]>>();
 const pendingFlushes = new Map<string, ReturnType<typeof setTimeout>>();
+/** Stores explicitly deleted this boot. An in-flight flush captured before the
+ *  delete must not write its stale bytes back over the removal — the delete's
+ *  mirror entry is gone, but the flush already HOLDS the old map. */
+const deletedStores = new Set<string>();
 
 /** Keys whose mirror came from a completed store read. A key that was never
  *  read can still be WRITTEN (a model shape arriving for a bucket the chart
@@ -177,10 +181,12 @@ const mirrorLoaded = new Set<string>();
 const flushCoinMap = (storeKey: string): Promise<void> => {
     const timer = pendingFlushes.get(storeKey);
     if (timer !== undefined) { clearTimeout(timer); pendingFlushes.delete(storeKey); }
+    if (deletedStores.has(storeKey)) return Promise.resolve();
     const mirror = coinMapMirror.get(storeKey);
     if (!mirror) return Promise.resolve();
     if (mirrorLoaded.has(storeKey)) return writeStore(storeKey, JSON.stringify(mirror)).then(() => undefined);
     return readStore(storeKey).then(res => {
+        if (deletedStores.has(storeKey)) return undefined; // deleted mid-read
         const merged = { ...parseCoinMap(res.ok ? res.value : null), ...mirror };
         mirrorLoaded.add(storeKey);
         coinMapMirror.set(storeKey, merged);
@@ -227,12 +233,18 @@ const parseCoinMap = (raw: string | null): Record<string, ChartDrawing[]> => {
 const loadCoinMap = async (storeKey: string): Promise<Record<string, ChartDrawing[]>> => {
     if (coinMapMirror.has(storeKey)) return coinMapMirror.get(storeKey)!;
     const res = await readStore(storeKey);
-    const map = res.ok ? parseCoinMap(res.value) : {};
     // A write that happened while the read was in flight wins.
-    if (!coinMapMirror.has(storeKey)) {
-        coinMapMirror.set(storeKey, map);
-        mirrorLoaded.add(storeKey);
+    if (coinMapMirror.has(storeKey)) return coinMapMirror.get(storeKey)!;
+    if (!res.ok) {
+        // A TRANSIENT read failure must not seed an empty authoritative
+        // mirror: that would freeze the bucket as empty for the boot and let
+        // the next flush overwrite the file. Leave unloaded — a later load
+        // retries, and flushCoinMap's read-merge-write still protects a
+        // write that lands before any successful read.
+        return {};
     }
+    coinMapMirror.set(storeKey, parseCoinMap(res.value));
+    mirrorLoaded.add(storeKey);
     return coinMapMirror.get(storeKey)!;
 };
 
@@ -250,8 +262,10 @@ const saveCoinMap = (storeKey: string, symbol: string, drawings: ChartDrawing[])
  *  merge base `drawingsControl` mutates against once the initial async load
  *  has resolved. Empty until then, and a write before the load still lands:
  *  the mirror is authoritative from its first touch. */
-export const readSessionDrawingsSync = (sessionId: string, symbol: string, username = getActiveUsername()): ChartDrawing[] =>
-    coinMapMirror.get(sessionStorageKey(username, sessionId))?.[symbol.toUpperCase()] ?? [];
+export const readSessionDrawingsSync = (bucket: 'user' | 'model', sessionId: string, symbol: string, username = getActiveUsername()): ChartDrawing[] =>
+    coinMapMirror.get(bucket === 'user'
+        ? sessionStorageKey(username, sessionId)
+        : sessionModelStorageKey(username, sessionId))?.[symbol.toUpperCase()] ?? [];
 
 /**
  * SESSION+COIN-scoped USER drawings — each Chart AI session owns a map of
@@ -283,6 +297,7 @@ export const deleteSessionDrawings = async (sessionId: string, username = getAct
     for (const storeKey of [sessionStorageKey(username, sessionId), sessionModelStorageKey(username, sessionId)]) {
         const timer = pendingFlushes.get(storeKey);
         if (timer !== undefined) { clearTimeout(timer); pendingFlushes.delete(storeKey); }
+        deletedStores.add(storeKey); // an in-flight flush must not resurrect this
         coinMapMirror.delete(storeKey);
         mirrorLoaded.delete(storeKey);
         await removeStore(storeKey);

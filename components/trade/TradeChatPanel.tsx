@@ -924,11 +924,15 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     }, [symbol, interval, effort, selectedChatModel]);
 
     const removeSession = useCallback((id: string): void => {
+        // Abort the session's runs FIRST: chatStore.removeSession kills the
+        // in-flight controllers, and a tool response already being processed
+        // could otherwise save drawings after the delete and rebuild the
+        // store (the delete-vs-flush resurrection the review found).
+        chatStore.removeSession(id);
         // The session's drawings die WITH it — user's and the model's alike.
         // Without this, every deleted chat left a drawings store orphaned in
         // the store directory forever (the audit's session-delete finding).
         void deleteSessionDrawings(id);
-        chatStore.removeSession(id);
     }, []);
 
     /** Panel seat management: add (max 5) / remove a model. */

@@ -1154,4 +1154,6 @@ ${shown}`
         result: digest.length > MAX_TOOL_CONTENT_RECALL ? `${digest.slice(0, MAX_TOOL_CONTENT_RECALL)}\n…` : digest,
     });
 };
-const MAX_TOOL_CONTENT_RECALL = 1600;
+/** The recall digest ceiling: a named note may occupy its own 4k budget, so the
+ *  result must have room for that whole body plus the ranked index rows below. */
+const MAX_TOOL_CONTENT_RECALL = 6_000;

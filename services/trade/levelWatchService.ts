@@ -47,8 +47,9 @@
 
 import { getActiveUsername } from '../../utils/activeUser';
 import { fetchMarkPrice } from './markPricePoll';
+import * as chatStore from './chatStore';
 import {
-    buildPlanLevels, detectLevelHits, staleLevelsAtArm,
+    buildPlanLevels, detectLevelHits, formatLevelHitForModel, staleLevelsAtArm,
     type LevelHit, type PlanLevel, type WatchPlan,
 } from './tradePlanLevels';
 
@@ -281,8 +282,18 @@ export const tick = (symbol: string, price: number): void => {
         if (hits.length === 0 && !rearmed) continue;
         persistFired(); // latch mutations (fires AND re-arms) persist at once
         for (const h of hits) {
+            // The harness record is queued by the SERVICE — the hit was just
+            // latched AND persisted, so with the record left to a subscriber
+            // (TradeView) a level hit on an unmounted surface was announced
+            // to nobody, and the fire-once latch made it unrecoverable: the
+            // same class as the watchService lapse loss, but worse, because
+            // the state was already spent. The emit below is presentation
+            // only (the OS ping).
+            chatStore.queueHarnessSignal(formatLevelHitForModel(a.plan, h, firedLevelsFor(a.plan.planId)));
             for (const cb of subscribers) {
-                try { cb(h, a.plan); } catch { /* one bad listener must not stall the watch */ }
+                try { cb(h, a.plan); } catch (e) {
+                    console.warn('[levelWatchService] subscriber threw:', e);
+                }
             }
         }
     }

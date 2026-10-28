@@ -112,8 +112,16 @@ interface AgentsViewProps {
      *  this surface holds no notification of its own. */
     onAnalysisError?: (message: string) => void;
     /** Ends the run this surface started. Without it the send button never
-     *  turns into Stop and a running analysis cannot be cancelled here. */
-    onStopRun?: () => void;
+     *  turns into Stop and a running analysis cannot be cancelled here. The
+     *  press names its target — the pipeline, a dock turn in this thread, or
+     *  the bot whose composer was used — because App cannot guess it: two
+     *  bots can be streaming at once, and a first-match abort kills the
+     *  wrong turn. */
+    onStopRun?: (target: { kind: 'analysis' } | { kind: 'dock' } | { kind: 'bot'; botId: string }) => void;
+    /** Bots whose mailbox is streaming right now (queue-drained or user
+     *  turns) — gives THIS composer's Stop the queue-drained case, which the
+     *  local `busy` never sees. */
+    mailboxBusyBotIds?: string[];
     /** The pipeline's own run flag. This surface unmounts when you hop to
      *  Trade, which resets the local `busy` to false mid-run — so Stop is
      *  derived from the run, not only from this component's state, or a hop
@@ -466,7 +474,7 @@ interface BotRow {
 
 const AgentsView: React.FC<AgentsViewProps> = ({
     username, bots, groups, messages, selection, onSelect, onNewBot, onNewGroup,
-    onSendBotTurn, onAnalyze, onLogProposedTrade, onAnalysisError, onStopRun, analysisRunning = false, renderGroup, coachCount, workingBotId,
+    onSendBotTurn, onAnalyze, onLogProposedTrade, onAnalysisError, onStopRun, analysisRunning = false, renderGroup, coachCount, workingBotId, mailboxBusyBotIds,
     lastOpenedMap = {}, modelPicker, modelFallback = null, destinationMenu, accountRow,
     railExpanded = true, onToggleRailExpanded, statusCluster, surfaceSwitch,
     onRevertTo, onEditPromptMessage, onStepVersion, parkedCount = 0, onRestoreParked,
@@ -511,9 +519,6 @@ const AgentsView: React.FC<AgentsViewProps> = ({
      *  answer streaming in from the chart, and pressing it started a second run
      *  on top of the first. */
     const dockRunning = !!activeConversationId && !!snap.conversationRunning[activeConversationId];
-    /** Everything below that asks "is this thread busy" asks THIS: the local
-     *  bot send, the pipeline's own run, and a dock turn in the same thread. */
-    const running = busy || analysisRunning || dockRunning;
     const sessionSymbol = activeSession?.symbol ?? 'BTCUSDT';
     const sessionInterval = (activeSession?.interval ?? '15m') as ChartInterval;
     const symbols = useSymbolUniverse();
@@ -723,6 +728,12 @@ const AgentsView: React.FC<AgentsViewProps> = ({
         : conversationRows.slice(0, 8);
 
     const activeBot = selection.kind === 'bot' ? bots.find(b => b.id === selection.botId) ?? null : null;
+    // The composer's own busy flag never sees a QUEUE-drained DM to this bot
+    // (only the mailbox knows); a bot streaming in the thread you are reading
+    // shows Stop, and the press names that bot — App cannot guess it, because
+    // two bots can stream at once and a first-match abort kills the wrong one.
+    const mailboxBusyBot = !!mailboxBusyBotIds?.includes(activeBot?.id ?? '');
+    const running = busy || analysisRunning || dockRunning || mailboxBusyBot;
     /** The agent whose full card is open, and the trace of its last turn —
      *  the two things a trader wants before handing a turn to it. */
     const detailBot = detailBotId ? bots.find(b => b.id === detailBotId) ?? null : null;
@@ -1671,7 +1682,12 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                     <div className="ml-auto flex min-w-0 items-center gap-1.5" data-testid="composer-model-and-send">
                                         {modelPicker?.({ showEffort: !activeBot })}
                                         <button type="button"
-                                            onClick={() => { if (running) { onStopRun?.(); return; } void send(); }}
+                                            onClick={() => {
+                                                if (!running) { void send(); return; }
+                                                if (activeBot && (busy || mailboxBusyBot)) onStopRun?.({ kind: 'bot', botId: activeBot.id });
+                                                else if (analysisRunning) onStopRun?.({ kind: 'analysis' });
+                                                else onStopRun?.({ kind: 'dock' });
+                                            }}
                                             disabled={!running && !text.trim()}
                                             aria-label={running ? 'Stop' : 'Send'} data-testid="composer-send"
                                             /* Two states, like the dock's composer. Stop used to live only on the

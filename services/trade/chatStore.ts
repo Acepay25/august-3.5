@@ -231,7 +231,7 @@ export const persistInterrupted = (): void => {
         if (!loaded || getActiveUsername() !== loadedFor) return;
         const stored: ChatSession[] = sessions.map(s => ({
             ...s,
-            entries: s.entries.map(({ streaming: _streaming, proposal: _proposal, ...rest }) => rest),
+            entries: s.entries.map(({ streaming, proposal: _proposal, ...rest }) => (streaming ? { ...rest, interrupted: true } : rest)),
             openTrades: undefined,
             loggedTradeIds: undefined,
         }));
@@ -378,6 +378,10 @@ export const removeSession = (id: string): string => {
     ensureLoaded();
     controllers.get(id)?.abort();
     controllers.delete(id);
+    // Queued harness signals bound to a deleted session can never drain (the
+    // dock's drain only takes signals for a LIVE session) — they sat until
+    // cap eviction, carrying records the seat was promised. Drop them.
+    pendingSignals = pendingSignals.filter(sig => sig.sid !== id);
     const next = sessions.filter(s => s.id !== id);
     if (next.length === 0) {
         const fresh: LiveSession = { ...createSession(), entries: [] };
@@ -623,6 +627,24 @@ export const anyConversationRunning = (): boolean => conversationControllers.siz
 export const abortActive = (): void => {
     const ctrl = controllers.get(activeId);
     if (ctrl) ctrl.abort();
+};
+
+/** A profile switch: abort the outgoing identity's runs, drop its in-memory
+ *  transcript and pending signals, then load the incoming user's sessions.
+ *  Called after the active-user marker has changed. */
+export const resetForUserSwitch = (): void => {
+    for (const c of controllers.values()) { try { c.abort(); } catch { /* older runtimes */ } }
+    controllers.clear();
+    for (const c of conversationControllers.values()) { try { c.abort(); } catch { /* older runtimes */ } }
+    conversationControllers.clear();
+    if (saveTimer) window.clearTimeout(saveTimer);
+    saveTimer = 0;
+    sessions = [];
+    activeId = '';
+    loaded = false;
+    loadedFor = '';
+    pendingSignals = [];
+    ensureLoaded();
 };
 
 /** Test hook: reset the singleton between suites. */
