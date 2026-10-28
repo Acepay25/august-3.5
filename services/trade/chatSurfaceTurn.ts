@@ -342,6 +342,11 @@ export const runChatSurfaceTurn = async (req: ChatSurfaceTurnRequest): Promise<T
                 liveToolEvents: { ...m.liveToolEvents, [DESK_SPEAKER]: lines.slice(-MAX_LIVE_TOOL_LINES).join('\n') },
             };
         }),
+        addLiveToolLine: line => req.patch(m => {
+            const feed = m.liveToolEvents?.[DESK_SPEAKER] ?? '';
+            const lines = feed ? `${feed}\n${line}`.split('\n') : [line];
+            return { ...m, liveToolEvents: { ...m.liveToolEvents, [DESK_SPEAKER]: lines.slice(-MAX_LIVE_TOOL_LINES).join('\n') } };
+        }),
         attachPayload: payload => {
             try {
                 saveToolPayload(payload);

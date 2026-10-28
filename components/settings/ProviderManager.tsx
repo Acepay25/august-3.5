@@ -16,7 +16,7 @@ import { discoverProviderModelCatalog, discoverProviderModels } from '../../serv
 import { resetProviderHealth, getProviderHealth, providerCooldownRemainingMs } from '../../services/infrastructure/ProviderHealthService';
 import { probeAndLearn } from '../../services/learning/harnessLessons';
 import { validateProviderUrl } from '../../utils/providerUrlValidation';
-import { findProviderById, mergeDiscoveredModels, mergeModelContextWindows, sameModelContextWindows, sortModelsFreeFirst } from '../../utils/providerUtils';
+import { findProviderById, mergeDiscoveredModels, mergeModelContextWindows, sameModelContextWindows, sortModelsFreeFirst, isProviderReady } from '../../utils/providerUtils';
 import { resolveContextWindow } from '../../utils/contextWindow';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import { SelectMenu } from '../shared/SelectMenu';
@@ -600,7 +600,7 @@ const ProviderManager: React.FC<ProviderManagerProps> = ({
                                 <div className="space-y-0.5">
                                     {section.items.map(c => {
                                         const isSelectedRow = selected?.id === c.id && !showAddProvider;
-                                        const isReady = c.isEnabled && c.apiKey.trim().length > 0;
+                                        const isReady = isProviderReady(c);
                                         return (
                                             <button
                                                 key={c.id}

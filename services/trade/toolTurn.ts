@@ -44,6 +44,10 @@ export interface ToolTurnEvents {
     setText(text: string): void;
     addReasoning(chunk: string): void;
     addToolLine(line: string): void;
+    /** A transient "still working" line. Never part of the settled trail:
+     *  calls are paired one-call-one-row, and a progress line in that grammar
+     *  reads as a completed result. */
+    addLiveToolLine?(line: string): void;
     /** The model's tool NAME, once per executed call. Separate from the display
      *  line because a caller that checks what a turn looked up must not parse
      *  prose: `calling present_trade…` reads like any other lookup. */
@@ -194,6 +198,7 @@ const runToolTurnInner = async (req: ToolTurnRequest): Promise<InnerOutcome> => 
         },
         onReasoning: chunk => { reasoning += chunk; events.addReasoning(chunk); },
         onToolEvent: line => events.addToolLine(line),
+        onToolProgress: line => events.addLiveToolLine?.(line),
         onToolCall: name => events.addToolCall?.(name),
         onToolPayload: payload => events.attachPayload(payload),
         onToolAction: action => events.addAction(action),

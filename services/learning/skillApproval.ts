@@ -25,10 +25,10 @@ import type { LoggedTrade } from '../../types';
 
 export type SkillApprovalResult =
     /** The library now carries this trigger and the draft was consumed. */
-    | { created: true; slug: string }
+    | { created: true; slug: string; draftRemains?: boolean }
     /** The trigger was ALREADY a live skill before the write — nothing new was
-     *  born, but the draft has served its purpose, so it is consumed. */
-    | { created: false; reason: 'duplicate'; slug: string }
+     *  born. `draftRemains` says the inbox row survived a refused removal. */
+    | { created: false; reason: 'duplicate'; slug: string; draftRemains?: boolean }
     /** The write path declined for a named reason, or threw. The draft is LEFT
      *  IN THE INBOX so the human can fix and retry it, rather than being
      *  destroyed on an assumption. */
@@ -99,15 +99,15 @@ export const approveSkillDraft = async (
         if (!isApprovedSkill(after.meta)) {
             const activated = await activateSkillForTrigger(trigger, user);
             if (activated) {
-                takeSkillDraft(draft.id, username || undefined);
-                return { created: true, slug: activated };
+                const consumed = takeSkillDraft(draft.id, username || undefined);
+                return { created: true, slug: activated, ...(consumed ? {} : { draftRemains: true }) };
             }
         }
-        takeSkillDraft(draft.id, username || undefined);
-        return { created: false, reason: 'duplicate', slug: after.name };
+        const consumed = takeSkillDraft(draft.id, username || undefined);
+        return { created: false, reason: 'duplicate', slug: after.name, ...(consumed ? {} : { draftRemains: true }) };
     }
-    takeSkillDraft(draft.id, username || undefined);
-    return { created: true, slug: after.name };
+    const consumed = takeSkillDraft(draft.id, username || undefined);
+    return { created: true, slug: after.name, ...(consumed ? {} : { draftRemains: true }) };
 };
 
 /** What an INGEST's named outcome means to the human who just pressed a button
@@ -135,9 +135,19 @@ export const skillApprovalToast = (
     result: SkillApprovalResult,
     name: string,
 ): { kind: 'success' | 'info' | 'error'; title: string; body: string } => {
-    if (result.created) return { kind: 'success', title: 'Skill saved', body: name };
+    if (result.created) {
+        return {
+            kind: 'success',
+            title: 'Skill saved',
+            body: `${name}${result.draftRemains ? ' — the draft could not be removed from the inbox; it is still there.' : ''}`,
+        };
+    }
     if (result.reason === 'duplicate') {
-        return { kind: 'info', title: 'Already learned', body: `${name} — this trigger is already a live skill` };
+        return {
+            kind: 'info',
+            title: 'Already learned',
+            body: `${name} — this trigger is already a live skill${result.draftRemains ? ' (the draft is still in the inbox)' : ''}`,
+        };
     }
     return {
         kind: 'error',

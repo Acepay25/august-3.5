@@ -11,6 +11,7 @@ import { useAutoUpdate } from '../../../hooks/useAutoUpdate';
 import { SettingsGroup, SettingsPageHeader, SettingsRow } from './shared';
 import type { SettingsTab } from '../SettingsMenu';
 import type { SettingsTabProps } from './types';
+import { isProviderReady } from '../../../utils/providerUtils';
 
 export interface ProfileTabProps extends SettingsTabProps {
     onSwitchUser?: () => void;
@@ -69,7 +70,7 @@ const ProfileTab: React.FC<{ tab: ProfileTabProps }> = ({ tab: props }) => {
     const wins = trades.filter(t => t.outcome === 'WIN').length;
     const losses = trades.filter(t => t.outcome === 'LOSS').length;
     const decided = wins + losses;
-    const readyProviders = (providerConfigs ?? []).filter(c => c.isEnabled && c.apiKey.trim().length > 0).length;
+    const readyProviders = (providerConfigs ?? []).filter(isProviderReady).length;
     const initial = (username || '?').trim().charAt(0).toUpperCase();
     return (
         <div className="space-y-5 animate-fade-in">

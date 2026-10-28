@@ -19,7 +19,7 @@ import { DeskToolDefinition } from './DeskToolsService';
  * tool-style reply rows in the side panel all keep working unchanged.
  */
 
-export interface DebateMessage {
+export interface PanelMessage {
     /** Sending seat's display name ('Moderator' included). */
     from: string;
     /** Recipient seat's display name (lowercased key). */
@@ -46,15 +46,15 @@ export interface PanelMailbox {
     /** Distinct recipients this seat successfully messaged in a round. */
     recipientsFor: (name: string, round: number) => string[];
     /** Every message ever sent (for DM visibility lines in the transcript). */
-    all: () => DebateMessage[];
+    all: () => PanelMessage[];
 }
 
 export const createPanelMailbox = (rosterNames: string[]): PanelMailbox => {
     const aliases = rosterNames.map(n => ({ label: n, key: n.trim().toLowerCase() })).filter(a => a.key);
     // Inbox keyed by recipient lowercased name.
-    const inbox = new Map<string, DebateMessage[]>();
+    const inbox = new Map<string, PanelMessage[]>();
     // All deliveries, in arrival order (for DM lines + recipient lookup).
-    const sent: DebateMessage[] = [];
+    const sent: PanelMessage[] = [];
 
     const resolveTarget = (raw: unknown): { label: string; key: string } | null => {
         const needle = String(raw ?? '').trim().replace(/^@/, '').toLowerCase();
@@ -69,7 +69,7 @@ export const createPanelMailbox = (rosterNames: string[]): PanelMailbox => {
             if (!target || !text) {
                 return `send_message failed: address the message to exactly ONE seat (${rosterNames.join(', ')}) and include non-empty text.`;
             }
-            const msg: DebateMessage = { from, toKey: target.key, toLabel: target.label, text, round };
+            const msg: PanelMessage = { from, toKey: target.key, toLabel: target.label, text, round };
             const box = inbox.get(target.key) ?? [];
             box.push(msg);
             inbox.set(target.key, box);
@@ -122,7 +122,7 @@ export const PANEL_MAIL_TOOLS: DeskToolDefinition[] = [
         function: {
             name: 'send_message',
             description:
-                'Send a DIRECT MESSAGE to exactly one other debate seat (another analyst or the Moderator). ' +
+                'Send a DIRECT MESSAGE to exactly one other panel seat (another analyst or the Moderator). ' +
                 'Use to answer a specific argument without broadcasting, to ask a rival to reconsider a level, ' +
                 'or to privately concede. The recipient is told they have unread mail and will read it before their next turn. ' +
                 'Your public Floor turn is separate — send_message does not replace it.',
@@ -173,7 +173,7 @@ export const synthesizeReplyToLine = (
 };
 
 /** Compact transcript line for a delivered DM (visibility in the thread). */
-export const formatDmEventLine = (m: DebateMessage): string => {
+export const formatDmEventLine = (m: PanelMessage): string => {
     const snippet = m.text.length > 220 ? `${m.text.slice(0, 220).trimEnd()}…` : m.text;
     return `${m.from} → ${m.toLabel} (direct message): "${snippet}"`;
 };

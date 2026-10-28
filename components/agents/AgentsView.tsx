@@ -117,7 +117,7 @@ interface AgentsViewProps {
      *  the bot whose composer was used — because App cannot guess it: two
      *  bots can be streaming at once, and a first-match abort kills the
      *  wrong turn. */
-    onStopRun?: (target: { kind: 'analysis' } | { kind: 'dock' } | { kind: 'bot'; botId: string }) => void;
+    onStopRun?: (target: { kind: 'analysis' } | { kind: 'dock'; conversationId: string } | { kind: 'bot'; botId: string }) => void;
     /** Bots whose mailbox is streaming right now (queue-drained or user
      *  turns) — gives THIS composer's Stop the queue-drained case, which the
      *  local `busy` never sees. */
@@ -1686,7 +1686,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                                 if (!running) { void send(); return; }
                                                 if (activeBot && (busy || mailboxBusyBot)) onStopRun?.({ kind: 'bot', botId: activeBot.id });
                                                 else if (analysisRunning) onStopRun?.({ kind: 'analysis' });
-                                                else onStopRun?.({ kind: 'dock' });
+                                                else if (activeConversationId) onStopRun?.({ kind: 'dock', conversationId: activeConversationId });
                                             }}
                                             disabled={!running && !text.trim()}
                                             aria-label={running ? 'Stop' : 'Send'} data-testid="composer-send"

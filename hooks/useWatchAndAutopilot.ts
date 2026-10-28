@@ -22,8 +22,8 @@ export interface UseWatchAndAutopilotArgs {
     setIsWatchListVisible: (open: boolean) => void;
     /** Returns whether a row was written NOW (`false` = handed to the capture
      *  modal; the caller must not report a logged trade). */
-    confirmAutopilotOutcome: (msg: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, pnlPercent?: number, slData?: any, resolved?: { at?: string; excursions?: { maePercent: number; mfePercent: number }; realizedR?: number }) => boolean;
-    confirmAutopilotEntryNotHit: (msg: Message) => void;
+    confirmAutopilotOutcome: (msg: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, pnlPercent?: number, slData?: any, resolved?: { at?: string; excursions?: { maePercent: number; mfePercent: number }; realizedR?: number }, conversationId?: string) => boolean;
+    confirmAutopilotEntryNotHit: (msg: Message, conversationId?: string) => void;
     handleInitiateLogTrade: (messageId: string, outcome: TradeOutcome.WIN | TradeOutcome.LOSS) => void;
     /** Latest-ref bridge: the pipeline's resolution callbacks read the
      *  freshest confirm handler through this ref (assigned in the hook body). */
@@ -197,7 +197,18 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
     }, [messages]);
 
     const handleConfirmAutopilot = useCallback((messageId: string) => {
-        const msg = messages.find(m => m.id === messageId);
+        // Resolve from the WHOLE history, not only the active conversation: the
+        // autopilot detects outcomes for every registered thread, and a settle
+        // path that could only see the visible one dropped the off-thread
+        // outcome after the service had already spent its registration.
+        const activeMsg = messages.find(m => m.id === messageId);
+        const owner = activeMsg
+            ? { msg: activeMsg, conversationId: activeConversationId ?? undefined }
+            : conversationHistory
+                .map(c => ({ conversationId: c.id, msg: (c.messages ?? []).find(m => m.id === messageId) }))
+                .find(x => x.msg);
+        const msg = owner?.msg;
+        const conversationId = owner?.conversationId;
         const resolution = OutcomeAutopilotService.getResolution(messageId);
         if (!msg || !resolution || resolution.expiredOpen) return;
         // A hand-off to the capture modal is NOT a logged trade. This used to
@@ -209,14 +220,14 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
         // cleared and announced; a deferred one stays pending and re-confirmable.
         let loggedNow: boolean;
         if (resolution.outcome === TradeOutcome.ENTRY_NOT_HIT) {
-            confirmAutopilotEntryNotHit(msg);
+            confirmAutopilotEntryNotHit(msg, conversationId);
             loggedNow = true;
         } else {
             loggedNow = confirmAutopilotOutcome(msg, resolution.outcome, resolution.pnlPercent, resolution.slOptimizationData, {
                 at: resolution.detectedAt,
                 excursions: resolution.excursions,
                 realizedR: resolution.realizedR,
-            });
+            }, conversationId);
         }
         if (!loggedNow) return;
         OutcomeAutopilotService.markProcessed(messageId);
@@ -226,7 +237,7 @@ export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAn
             return next;
         });
         toast.success('Trade logged', `${resolution.outcome} confirmed via autopilot`);
-    }, [messages, confirmAutopilotOutcome, confirmAutopilotEntryNotHit, toast]);
+    }, [messages, conversationHistory, activeConversationId, confirmAutopilotOutcome, confirmAutopilotEntryNotHit, toast]);
     confirmAutopilotRef.current = handleConfirmAutopilot;
 
     const runWatchListAction = useCallback((

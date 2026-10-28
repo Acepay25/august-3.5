@@ -30,6 +30,7 @@ import {
     buildProfileMemoryIndex, type ProfileMemoryKind,
 } from './profileMemory';
 import { rememberWithConsolidation } from './profileMemoryConsolidation';
+import { getUserProfile } from '../infrastructure/dbService';
 
 const COUNTER_KEY = 'trader_learner_counter_v1';
 const TOGGLE_KEY = 'trader_learning_v1';
@@ -93,6 +94,15 @@ export const runTraderLearner = async (
     transcripts: string[],
 ): Promise<number> => {
     if (!isTraderLearningEnabled(username)) return 0;
+    // The learner is a memory writer, so the memory switch is its gate too.
+    // It ran behind its own toggle only, which meant a trader who turned
+    // memory OFF still had facts distilled and stored (docs/AUDIT.md M-2's
+    // sibling). A profile that cannot be read falls through to the old
+    // default-on behaviour rather than silently disabling learning.
+    try {
+        const profile = await getUserProfile(username);
+        if (profile?.settings?.isGlobalMemoryEnabled === false) return 0;
+    } catch { /* no readable profile: keep the learner's own toggle */ }
     const flat = transcripts.join('\n\n').trim();
     // Length + toggle checks come BEFORE the counter bump, so a tiny or
     // disabled session never consumes the every-2 cadence.

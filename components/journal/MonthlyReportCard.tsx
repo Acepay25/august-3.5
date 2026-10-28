@@ -20,6 +20,13 @@ export const MonthlyReportCard: React.FC<{ username: string }> = ({ username }) 
     if (!card) return null;
     const w = card.whatHappened;
     const l = card.whatLearned;
+    // A percent-only month has no dollars to sum. Legacy cards stored no
+    // dollarRows; a nonzero net is still evidence it carried some, while a
+    // stored zero is not evidence of a zero-P&L month.
+    const pnlCaptured = w.dollarRows === undefined ? w.netPnlUsd !== 0 : w.dollarRows > 0;
+    const pnlText = pnlCaptured
+        ? `Net $${Math.round(w.netPnlUsd)}${w.dollarRows !== undefined && w.dollarRows < w.closed ? ` (${w.dollarRows}/${w.closed} rows)` : ''}`
+        : 'Net not captured';
     const gradeCell = (row: { label: string; n: number; winRate: number; brier: number | null; quality: string } | null): React.ReactNode => {
         if (!row || row.n === 0) return null;
         return (
@@ -42,7 +49,7 @@ export const MonthlyReportCard: React.FC<{ username: string }> = ({ username }) 
             </div>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-ui-dense text-zinc-500 tabular-nums">
                 <span>{w.closed} closed ({w.wins}W/{w.losses}L)</span>
-                <span>Net ${Math.round(w.netPnlUsd)}</span>
+                <span>{pnlText}</span>
                 {w.avgR !== null && <span>avg R {fmtRMultiple(w.avgR)}</span>}
                 {l.adherenceFollowedPct !== null && <span>adherence {l.adherenceFollowedPct}%</span>}
                 {l.biggestMistake && <span>costliest: {l.biggestMistake}</span>}

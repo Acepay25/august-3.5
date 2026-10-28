@@ -304,6 +304,17 @@ export const deleteSessionDrawings = async (sessionId: string, username = getAct
     }
 };
 
+/** A restore replaced the files under the mirror. Drop the cache — including
+ *  any pending debounce — so the next read comes from the restored store
+ *  rather than the shapes that were live before the import. */
+export const resetDrawingsCache = (): void => {
+    for (const timer of pendingFlushes.values()) clearTimeout(timer);
+    pendingFlushes.clear();
+    coinMapMirror.clear();
+    mirrorLoaded.clear();
+    deletedStores.clear();
+};
+
 export const createDrawingId = (): string =>
     `d-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 

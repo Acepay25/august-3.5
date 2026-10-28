@@ -538,17 +538,26 @@ class OutcomeAutopilotServiceClass {
             const tpIndex = hitTarget === 'TP2' ? 1 : hitTarget === 'TP3' ? 2 : 0;
             pnlPercent = this.parsePercent(analysis.takeProfit?.[tpIndex]?.percentage || analysis.takeProfit?.[0]?.percentage || '');
         }
+        // `priceAtHit` is the engine's BLENDED exit, not the level the tape
+        // printed. Name both: the level the plan reached, and the exit the row
+        // actually books. Printing the blend as "@ TP1" claimed a price the
+        // tape never showed (docs/AUDIT.md A-4's display half).
+        const lastHit = result.tpHits?.[result.tpHits.length - 1];
+        const levelPrice = lastHit?.price;
+        const exitNote = result.priceAtHit !== undefined
+            ? ` · exit @ ${result.priceAtHit}${scaleOutDetected || (result.tpHits?.length ?? 0) > 1 ? ' (blended)' : ''}`
+            : '';
         return {
             outcome: TradeOutcome.WIN,
             expiredOpen: false,
             pnlPercent,
-            hitLevel: result.priceAtHit !== undefined ? String(result.priceAtHit) : undefined,
+            hitLevel: levelPrice !== undefined ? String(levelPrice) : (result.priceAtHit !== undefined ? String(result.priceAtHit) : undefined),
             hitTarget,
             // Confidence tier: a win where the SL was touched first is weaker
             // than a clean run to the TP — but a breakeven scale-out (TP1
             // then entry-priced stop) is NOT an SL touch; exclude it.
             recoveredAfterSlTouch: !!result.slHit && !scaleOutDetected,
-            detail: `${hitTarget} hit${result.priceAtHit !== undefined ? ` @ ${result.priceAtHit}` : ''}${result.slHit ? ' · recovered after SL touch' : ' · clean'}${scaleOutDetected ? ' · TP1 scale-out to breakeven' : ''}${!scaleOutDetected && result.tpHits && result.tpHits.length > 1 ? ' · TP1 partial scale-out, remainder to last TP' : ''}${result.timeToOutcome ? ` · ${result.timeToOutcome} after analysis` : ''}`,
+            detail: `${hitTarget} hit${levelPrice !== undefined ? ` @ ${levelPrice}` : ''}${exitNote}${result.slHit ? ' · recovered after SL touch' : ' · clean'}${scaleOutDetected ? ' · TP1 scale-out to breakeven' : ''}${!scaleOutDetected && result.tpHits && result.tpHits.length > 1 ? ' · TP1 partial scale-out, remainder to last TP' : ''}${result.timeToOutcome ? ` · ${result.timeToOutcome} after analysis` : ''}`,
             detectedAt: new Date().toISOString(),
             timeToOutcome: result.timeToOutcome,
             slOptimizationData: this.computeSLOptimization(reg, result),

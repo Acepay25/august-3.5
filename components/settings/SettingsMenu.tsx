@@ -13,6 +13,7 @@ import { getIdleMotionEnabled, subscribeIdleMotion } from '../../services/desk/i
 import { loadForgedTools } from '../../services/tools/toolForge';
 import { listAmendments } from '../../services/learning/memoryAmendments';
 import { getHarnessSettings } from '../../utils/harnessSettings';
+import { isProviderReady } from '../../utils/providerUtils';
 import type { LearnTab } from '../learn/LearnView';
 import type { InstructionTab } from './CustomInstructionsEditor';
 
@@ -225,7 +226,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     // card points beginners there anyway). The old default was the most
     // technical tab (provider CRUD).
     const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
-        const hasReadyProvider = (providerConfigs ?? []).some(c => c.isEnabled && c.apiKey.trim().length > 0);
+        const hasReadyProvider = (providerConfigs ?? []).some(isProviderReady);
         return hasReadyProvider ? 'general' : 'models';
     });
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
@@ -316,7 +317,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     // Enabled providers list for lens settings —
     // derived from dynamic provider configs (ready = enabled + API key).
     const readyConfigProviders = useMemo(
-        () => (providerConfigs ?? []).filter(c => c.isEnabled && c.apiKey.trim().length > 0),
+        () => (providerConfigs ?? []).filter(isProviderReady),
         [providerConfigs],
     );
 

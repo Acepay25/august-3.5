@@ -57,6 +57,9 @@ export interface MonthlyReportCard {
         wins: number;
         losses: number;
         netPnlUsd: number;
+        /** Rows that actually carried a dollar figure. Absent on cards stored
+         *  before this field existed; the card then refuses to claim $0. */
+        dollarRows?: number;
         avgR: number | null;
     };
     whatLearned: {
@@ -296,6 +299,7 @@ export const buildMonthReport = (trades: LoggedTrade[], nowMs: number, injection
             wins: wins.length,
             losses: losses.length,
             netPnlUsd: period.reduce((s, t) => s + (typeof t.pnlAmount === 'number' ? t.pnlAmount : 0), 0),
+            dollarRows: period.filter(t => typeof t.pnlAmount === 'number').length,
             avgR: rs.length > 0 ? rs.reduce((s, r) => s + r, 0) / rs.length : null,
         },
         whatLearned: { adherenceFollowedPct, biggestMistake: topCost && topCost.totalPnlUsd < 0 ? topCost.tag : null, bestTrade, tide },

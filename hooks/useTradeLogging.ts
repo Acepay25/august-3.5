@@ -62,7 +62,7 @@ export interface UseTradeLoggingParams {
     // handlers feed chatContext, whose memoization would otherwise be
     // defeated every stream chunk by a fresh `messages` closure.
     messagesRef: { current: Message[] };
-    updateMessages: (updater: (prev: Message[]) => Message[]) => void;
+    updateMessages: (updater: (prev: Message[]) => Message[], conversationId?: string) => void;
     activeConversationLeverage?: number;
     moderatorProviderId: string;
     moderatorModel: string;
@@ -272,7 +272,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     // ─── Trade Logging ────────────────────────────────────────────────────
 
     // Helper function to log trade (called by all capture handlers)
-    const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount?: number; pnlPercent?: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; slOptimizationData?: SLOptimizationData; journalTags?: CaptureJournalTags; benchmark?: BenchmarkAlpha; outcomeResolvedAt?: string; excursions?: { maePercent: number; mfePercent: number }; realizedR?: number; resolutionSource?: 'autopilot' | 'manual'; }) => {
+    const logTradeWithFeedback = useCallback(async (message: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, feedback: { pnlAmount?: number; pnlPercent?: number; correctedStopLoss?: string; correctedTakeProfit?: string; selectedEntryIndices?: number[]; slOptimizationData?: SLOptimizationData; journalTags?: CaptureJournalTags; benchmark?: BenchmarkAlpha; outcomeResolvedAt?: string; excursions?: { maePercent: number; mfePercent: number }; realizedR?: number; resolutionSource?: 'autopilot' | 'manual'; }, conversationId?: string) => {
         // The regime this trade was settled in, resolved once in the agreed
         // order: the live hybrid packet, else the regime ledger's observation
         // for this coin on this day (or the nearest earlier one), else the
@@ -462,7 +462,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             if (m.id !== message.id) return m;
             const next = { ...m, outcome };
             return m.watched ? appendWatchEpisode(next, 'logged', outcome) : next;
-        }));
+        }), conversationId);
 
         // Message chrome (outcome stamp + watch episode) is idempotent and
         // always applies; everything that ACCUMULATES statistics runs once.
@@ -761,7 +761,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
     // ─── Entry Not Hit Capture Handlers ───────────────────────────────────
 
     // Helper to log Entry Not Hit trade (called when user confirms capture choice)
-    const logEntryNotHitTrade = useCallback(async (candidate: { message: Message; correctedEntry?: string }, resolutionSource: 'autopilot' | 'manual' = 'manual') => {
+    const logEntryNotHitTrade = useCallback(async (candidate: { message: Message; correctedEntry?: string }, resolutionSource: 'autopilot' | 'manual' = 'manual', conversationId?: string) => {
         if (!candidate.message.analysis) return;
 
         // Update message outcome
@@ -769,7 +769,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             m.id === candidate.message.id
                 ? { ...m, outcome: TradeOutcome.ENTRY_NOT_HIT, correctedEntry: candidate.correctedEntry }
                 : m
-        ));
+        ), conversationId);
 
         // Log the trade
         const loggedTrade: LoggedTrade = {
@@ -870,10 +870,8 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         /** What the detector actually measured, carried onto the row instead of
          *  being dropped at the confirm click. */
         resolved?: { at?: string; excursions?: { maePercent: number; mfePercent: number }; realizedR?: number },
-    /** `true` = a row EXISTS now. `false` = the write was handed to the capture
-     *  modal, so the caller must not report a logged trade, must not consume
-     *  the resolution, and must leave the setup open for the trader to finish
-     *  (or cancel and log from the watch row later). */
+    /** The conversation that owns the row — omitted for the active one. */
+    conversationId?: string,
     ): boolean => {
         // pnlPercent is a PERCENT (e.g. +200), not dollars — it must not be
         // written into pnlAmount, which dashboards sum as USD. It is carried
@@ -902,7 +900,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             excursions: resolved?.excursions,
             realizedR: resolved?.realizedR,
             resolutionSource: 'autopilot',
-        });
+        }, conversationId);
         // Every other logging path (capture modal auto/skip, entry-not-hit)
         // starts the post-mortem right after logging — the autopilot
         // one-click confirm must do the same, or a confirmed outcome never
@@ -917,8 +915,8 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         return true;
     }, [logTradeWithFeedback, pushTradeClosedEvent, isAutoCapturing]);
 
-    const confirmAutopilotEntryNotHit = useCallback((message: Message) => {
-        logEntryNotHitTrade({ message }, 'autopilot');
+    const confirmAutopilotEntryNotHit = useCallback((message: Message, conversationId?: string) => {
+        logEntryNotHitTrade({ message }, 'autopilot', conversationId);
     }, [logEntryNotHitTrade]);
 
     // (pushTradeClosedEvent is declared above so confirmAutopilotOutcome can

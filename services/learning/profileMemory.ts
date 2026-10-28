@@ -24,6 +24,8 @@
  */
 
 import { getActiveUsername } from '../../utils/activeUser';
+import { filterMemoryWrite } from '../../utils/memoryWriteFilters';
+import { getHarnessSettings } from '../../utils/harnessSettings';
 
 export type ProfileMemoryKind = 'user' | 'feedback' | 'project' | 'reference';
 
@@ -208,6 +210,13 @@ export const rememberProfileMemory = (input: {
         return { conflict: true, current: all[idx] };
     }
     const prior = idx >= 0 ? all[idx] : undefined;
+    // The same gate as the remember tool, enforced at the STORE so a human
+    // edit cannot bypass it: a secret is refused, a sensitive fact is flagged,
+    // and sensitive storage is refused when the setting is off (docs/AUDIT.md
+    // M-2's privacy half — the edit path used to store either unflagged).
+    const verdict = filterMemoryWrite(`${input.description}
+${input.body}`);
+    const sensitive = input.sensitive === true || verdict.sensitive;
     const entry: ProfileMemoryEntry = {
         slug: slug || `memory-${Date.now().toString(36)}`,
         description: input.description.trim().slice(0, MAX_DESC_CHARS),
@@ -215,7 +224,7 @@ export const rememberProfileMemory = (input: {
         body: input.body.trim().slice(0, MAX_BODY_CHARS),
         ...(input.source ? { source: input.source } : {}),
         ...(input.tag ? { tag: input.tag } : {}),
-        ...(input.sensitive !== undefined ? { sensitive: input.sensitive } : {}),
+        ...(sensitive ? { sensitive: true } : {}),
         ...(input.aliases ? { aliases: input.aliases.map(a => a.trim()).filter(Boolean).slice(0, 8) } : {}),
         ...(subjectField ? { subject: subjectField } : {}),
         ...(input.sourceSession?.trim() ? { sourceSession: input.sourceSession.trim().slice(0, 80) } : {}),
@@ -237,6 +246,13 @@ export const rememberProfileMemory = (input: {
             : {}),
     };
     const created = idx < 0;
+    if (verdict.refused) return { entry, created, persisted: false, error: verdict.refused };
+    if (sensitive && getHarnessSettings().sensitiveMemoryEnabled !== true) {
+        return {
+            entry, created, persisted: false,
+            error: 'this fact is in a sensitive category and sensitive memory is off — nothing was written',
+        };
+    }
     if (created && all.length >= MAX_ENTRIES) {
         // The ceiling refuses instead of evicting. `rememberWithConsolidation`
         // frees room first (merge the two oldest non-sensitive rows) and is the

@@ -8,6 +8,7 @@ import { getPreferenceObject, setPreferenceObject } from './PreferencesService';
 import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
 import { usesGoogleGeminiDiscovery, googleModelsUrl } from '../../utils/googleGeminiFormat';
 import { isLocalBaseUrl, normalizeProviderUrl } from '../../shared/providerRequestPolicy.cjs';
+import { isProviderReady } from '../../utils/providerUtils';
 
 const STORAGE_KEY = 'provider_configs_v1';
 
@@ -369,16 +370,11 @@ export async function updateModelInProvider(providerId: string, oldModelId: stri
 /**
  * Get only enabled providers that have a usable model AND either an API key
  * or a local base URL — Ollama / LM Studio style servers are keyless, so an
- * empty key must not make them "not ready" (users were inventing dummy keys
- * to get past the old hard requirement). A provider whose last model was
- * deleted (models: [] and no selectedModel) must not be "ready" either (its
- * phantom 'default' model used to fail on every API call). Mirrors
- * providerUtils.isProviderReady exactly.
+ * empty key must not make them "not ready". The predicate is providerUtils's,
+ * so this list and every caller cannot drift apart again.
  */
 export function getReadyProviders(configs: ProviderConfig[]): ProviderConfig[] {
-    return configs.filter(c => c.isEnabled
-        && (c.apiKey.trim().length > 0 || isLocalBaseUrl(c.baseUrl))
-        && (c.models.length > 0 || !!c.selectedModel));
+    return configs.filter(isProviderReady);
 }
 
 /**

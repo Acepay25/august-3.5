@@ -8,7 +8,7 @@ import {
 } from '../types';
 
 import { ProviderConfig } from '../types/provider';
-import { readyProviderModels } from '../utils/providerUtils';
+import { readyProviderModels, isProviderReady } from '../utils/providerUtils';
 import { analyzeTradingView, streamQuickResponse } from '../services/providers/GenericAnalysisService';
 import type { ToolAction } from '../types/message';
 import { WireAuditEntry, type ReasoningEffort } from '../services/providers/reasoningControls';
@@ -1093,7 +1093,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // behavior is unchanged.
             const activeBot = getActiveBot?.() ?? null;
             const botProvider = activeBot
-                ? providerConfigs.find(c => c.id === activeBot.providerId && c.isEnabled && c.apiKey.trim().length > 0 && c.models.includes(activeBot.modelId))
+                ? providerConfigs.find(c => c.id === activeBot.providerId && isProviderReady(c) && c.models.includes(activeBot.modelId))
                 : undefined;
             const useBotThread = Boolean(activeBot && botProvider);
             // The composer selection is provider-qualified

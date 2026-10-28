@@ -13,7 +13,7 @@ import { BotFace, BUILTIN_FACES, UPLOADABLE_FACES, randomFace, type BotFaceSpec,
 import { PixelAvatarFigure } from './BotAvatar';
 import type { AgentBot } from '../../services/agents/agentRoster';
 import { ProviderConfig } from '../../types/provider';
-import { findProviderById, formatModelDisplayName } from '../../utils/providerUtils';
+import { findProviderById, formatModelDisplayName, isProviderReady } from '../../utils/providerUtils';
 import { ROLE_ACCENTS } from './pixelAvatars';
 import { SelectMenu } from '../shared/SelectMenu';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
@@ -30,7 +30,7 @@ const PIXEL_ROLE_CHOICES = (Object.keys(ROLE_ACCENTS) as Array<keyof typeof ROLE
 
 /** Default the dialog to the first ready provider (enabled + keyed). */
 const firstReadyProviderId = (providers: ProviderConfig[]): string =>
-    providers.find(p => p.isEnabled && p.apiKey.trim().length > 0)?.id ?? providers[0]?.id ?? '';
+    providers.find(isProviderReady)?.id ?? providers[0]?.id ?? '';
 
 export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCreate, providers }) => {
     const [name, setName] = React.useState('');
@@ -72,7 +72,7 @@ export const NewBotDialog: React.FC<NewBotDialogProps> = ({ open, onClose, onCre
     const dialogRef = useFocusTrap<HTMLDivElement>(open);
     if (!open) return null;
 
-    const readyProviders = providers.filter(p => p.isEnabled && p.apiKey.trim().length > 0);
+    const readyProviders = providers.filter(isProviderReady);
     const canCreate = name.trim().length > 0 && provider && effectiveModel.length > 0;
 
     const create = (): void => {

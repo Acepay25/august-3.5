@@ -700,18 +700,20 @@ export const exportPreferencesData = async (): Promise<Record<string, any>> => {
         console.warn('[ExportService] Per-user key sweep failed:', e);
     }
 
-    // The session-drawing buckets are FILE-backed on desktop and keyed by
-    // session id, so neither sweep source (localStorage, Preferences keys)
-    // enumerates them — a fresh desktop profile's drawings would silently
-    // miss every backup. Enumerate the sessions the same way the app does
-    // (the sessions store, read file-aware) and export both buckets per
-    // session. Keys the generic sweep already found are re-put here with the
-    // file's fresher bytes — last write wins, deliberately.
+    // The session stores are FILE-backed on desktop and keyed by user/session,
+    // so neither sweep source (localStorage, Preferences keys) enumerates them —
+    // a fresh desktop profile's chats and drawings would silently miss every
+    // backup. Read the sessions store file-aware, export the chat list itself,
+    // then export both drawing buckets per session. Keys the generic sweep
+    // already found are re-put here with the file's fresher bytes — last write
+    // wins, deliberately.
     try {
         const user = getActiveUsername();
-        const sessionsRes = await readStore(`trade_chat_sessions_v1_${user}`);
+        const chatKey = `trade_chat_sessions_v1_${user}`;
+        const sessionsRes = await readStore(chatKey);
         const parsed = sessionsRes.ok && sessionsRes.value ? JSON.parse(sessionsRes.value) : null;
         const sessions = Array.isArray(parsed) ? parsed : [];
+        if (Array.isArray(parsed)) putSweptValue(backup, notices, chatKey, parsed);
         for (const sid of sessions.map(sessionIdOf).filter((v): v is string => !!v)) {
             for (const prefix of STOREBACKED_DRAWING_PREFIXES) {
                 const key = `${prefix}${user}_${sid}`;
@@ -720,7 +722,7 @@ export const exportPreferencesData = async (): Promise<Record<string, any>> => {
             }
         }
     } catch (e) {
-        console.warn('[ExportService] Session-drawings sweep failed:', e);
+        console.warn('[ExportService] Session-store sweep failed:', e);
     }
 
     // Only present when something was left out. Restores skip it as an
@@ -1055,6 +1057,28 @@ export const importPreferencesData = async (
         } catch (error) {
             console.error(`[ExportService] Failed to import key ${key}:`, error);
             report.failedKeys.push(key);
+        }
+    }
+
+    // A restore of the file-backed session stores replaced bytes under the
+    // running caches. Re-prime the chat store and drop the drawings mirror so
+    // the next read is the restored file, not the pre-import copy.
+    const restoredSessionStores = Object.keys(backup).some(k =>
+        k.startsWith('trade_chat_sessions_v1')
+        || k.startsWith('trade_session_drawings_v1_')
+        || k.startsWith('trade_session_model_v1_'));
+    if (restoredSessionStores && report.keysWritten > 0) {
+        try {
+            const [{ primeChatSessions }, chatStore, { resetDrawingsCache }] = await Promise.all([
+                import('../trade/chatSessions'),
+                import('../trade/chatStore'),
+                import('../trade/chartDrawings'),
+            ]);
+            await primeChatSessions(getActiveUsername());
+            chatStore.resetForUserSwitch();
+            resetDrawingsCache();
+        } catch (e) {
+            console.warn('[ExportService] Post-restore session cache refresh failed:', e);
         }
     }
 

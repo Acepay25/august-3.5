@@ -4516,6 +4516,8 @@ export async function runDeskToolLoop(params: {
     getLiveMarkPrice?: () => number | null;
     getFormingCandle?: () => FormingCandle | null;
     onToolEvent?: (line: string) => void;
+    /** A transient progress line for a slow call; never part of the trail. */
+    onToolProgress?: (line: string) => void;
     /** The model's tool NAME, once per executed call, before it runs. The line
      *  callback above carries human labels, so a caller that must know WHICH
      *  tool ran (was the tape read, or only a plan presented?) reads this. */
@@ -4574,6 +4576,7 @@ export async function runDeskToolLoop(params: {
         getLiveMarkPrice,
         getFormingCandle,
         onToolEvent,
+        onToolProgress,
         onToolCall,
         artifactOwner = '',
         onToolPayload,
@@ -4836,8 +4839,27 @@ export async function runDeskToolLoop(params: {
         // state and must not go through the pure market-data executor.
         const extraResults: DeskToolResult[] = [];
         const coreCalls: DeskToolCall[] = [];
+        const budgetExceeded = (): boolean => Date.now() - turnStartedAt >= DESK_TURN_BUDGET_MS;
+        const budgetReceipt = (call: DeskToolCall): DeskToolResult => ({
+            toolCallId: call.id,
+            name: call.name,
+            ok: false,
+            content: dataUnavailable(
+                toolLabel(call.name),
+                `the turn used its ${Math.round(DESK_TURN_BUDGET_MS / 1000)}s budget before this lookup could run`,
+                'Answer from what you already have and name what you did not get to.',
+            ),
+        });
         for (const call of calls) {
             if (executeExtraTool) {
+                // The extra lane (chart actions, mailbox, the human question) runs
+                // BEFORE the core executor, so the budget must be checked here or
+                // a chart write can still run past the turn's ceiling. The question
+                // is exempt: its window is the human's, not a lookup's.
+                if (budgetExceeded() && call.name !== 'ask_user_input') {
+                    extraResults.push(budgetReceipt(call));
+                    continue;
+                }
                 const handled = await executeExtraTool(call);
                 if (handled) {
                     extraResults.push(handled);
@@ -4866,7 +4888,7 @@ export async function runDeskToolLoop(params: {
         // answered by a tool result or the provider rejects the transcript), and
         // the round loop ends so the caller streams the one worded reply the
         // wrap-up notice asked for (docs/AUDIT.md L-9).
-        const overBudget = Date.now() - turnStartedAt >= DESK_TURN_BUDGET_MS;
+        const overBudget = budgetExceeded();
         for (const call of coreCalls) {
             if (!call.name.startsWith('custom_')) { builtInCalls.push(call); continue; }
             if (!seatAllows(allowedTools, call.name)) {
@@ -4874,16 +4896,7 @@ export async function runDeskToolLoop(params: {
                 continue;
             }
             if (overBudget) {
-                forgedResults.push({
-                    toolCallId: call.id,
-                    name: call.name,
-                    ok: false,
-                    content: dataUnavailable(
-                        toolLabel(call.name),
-                        `the turn used its ${Math.round(DESK_TURN_BUDGET_MS / 1000)}s budget before this lookup could run`,
-                        'Answer from what you already have and name what you did not get to.',
-                    ),
-                });
+                forgedResults.push(budgetReceipt(call));
                 continue;
             }
             // A forged recipe is an HTTPS call the MODEL wrote, so it gets the
@@ -4899,16 +4912,7 @@ export async function runDeskToolLoop(params: {
             if (forged.content !== FORGED_MISS) forgedResults.push(forged);
         }
         const coreResults = overBudget
-            ? builtInCalls.map((call): DeskToolResult => ({
-                toolCallId: call.id,
-                name: call.name,
-                ok: false,
-                content: dataUnavailable(
-                    toolLabel(call.name),
-                    `the turn used its ${Math.round(DESK_TURN_BUDGET_MS / 1000)}s budget before this lookup could run`,
-                    'Answer from what you already have and name what you did not get to.',
-                ),
-            }))
+            ? builtInCalls.map(budgetReceipt)
             : builtInCalls.length > 0
             ? await executeDeskTools(builtInCalls, {
                 defaultSymbol,
@@ -4929,7 +4933,7 @@ export async function runDeskToolLoop(params: {
                 memoryEnabled,
                 lastUserMessage,
                 untrustedSeen,
-                onSlowCall: label => onToolEvent?.(`${label} · still working…`),
+                onSlowCall: label => onToolProgress?.(`${label} · still working…`),
             })
             : [];
         const results = [...replays, ...extraResults, ...forgedResults, ...coreResults];
@@ -5079,6 +5083,8 @@ export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
     /** Live tool-call visibility (Floor chips) — fires before and after each
      *  tool round with a short human-readable line. */
     onToolEvent?: (line: string) => void;
+    /** A transient progress line; keep it out of the settled trail. */
+    onToolProgress?: (line: string) => void;
     /** Same contract as the loop options: the model's tool NAME per call. */
     onToolCall?: (name: string) => void;
     /** See the main options interface — same contract, so a payload can be
@@ -5223,6 +5229,7 @@ export async function* streamChatWithDeskTools(
         getLiveMarkPrice,
         getFormingCandle,
         onToolEvent,
+        onToolProgress,
         onToolCall,
         onToolAction,
         // NOT part of `chatOptions`: the loop reads this off its OWN parameters,
@@ -5413,6 +5420,7 @@ export async function* streamChatWithDeskTools(
             onToolEvent?.(line);
             options?.onReasoning?.(`\n[Desk tools] ${line}\n`);
         },
+        onToolProgress,
     });
     loopPromise.then(settle, settle);
 

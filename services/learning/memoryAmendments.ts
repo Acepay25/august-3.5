@@ -166,22 +166,27 @@ export const applyAmendmentContent = async (
     a: MemoryAmendment,
     username: string,
 ): Promise<{ ok: boolean; error?: string }> => {
-    const { getMemoryFiles, updateMemoryFile } = await import('./MemoryFilesService');
-    const file = getMemoryFiles().files.find(f => f.id === a.fileId);
-    if (!file) return { ok: false, error: 'The note this correction targeted no longer exists, so nothing was changed.' };
-    const next = a.kind === 'supersede'
-        ? `${file.content}
+    const { getMemoryFiles, updateMemoryFileUnlocked, withNotebookWriteLock } = await import('./MemoryFilesService');
+    // Read the note INSIDE the notebook queue: a read outside it can carry a
+    // body that an attribution write replaced before this correction lands,
+    // and the next append would silently clobber that write.
+    return withNotebookWriteLock(async () => {
+        const file = getMemoryFiles().files.find(f => f.id === a.fileId);
+        if (!file) return { ok: false, error: 'The note this correction targeted no longer exists, so nothing was changed.' };
+        const next = a.kind === 'supersede'
+            ? `${file.content}
 
 ## Correction (${nowIso()})
 
 ${a.proposedContent}`
-        : a.proposedContent;
-    try {
-        await updateMemoryFile(a.fileId, { content: next }, username);
-        return { ok: true };
-    } catch (e) {
-        return { ok: false, error: e instanceof Error ? e.message : String(e) };
-    }
+            : a.proposedContent;
+        try {
+            await updateMemoryFileUnlocked(a.fileId, { content: next }, username);
+            return { ok: true };
+        } catch (e) {
+            return { ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
+    });
 };
 
 /** APPROVE: call only AFTER `applyAmendmentContent` reported ok. */

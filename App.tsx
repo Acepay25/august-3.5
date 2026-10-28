@@ -1238,14 +1238,13 @@ const App: React.FC = () => {
     // it: two bots can stream at once (a user turn plus an autonomous DM)
     // and a first-match abort kills the wrong one. The press routes to the
     // pipeline, a dock run, or the bot whose composer was used.
-    const handleStopAgentsRun = useCallback((target?: { kind: 'analysis' } | { kind: 'dock' } | { kind: 'bot'; botId: string }) => {
+    const handleStopAgentsRun = useCallback((target?: { kind: 'analysis' } | { kind: 'dock'; conversationId: string } | { kind: 'bot'; botId: string }) => {
         if (!target || target.kind === 'analysis') {
             if (isAnalysisInProgress) handleCancelAnalysis();
             return;
         }
         if (target.kind === 'bot') mailboxRef.current?.cancelDmTurn(target.botId);
-        // 'dock': a dock turn streaming into this thread — the dock's own
-        // composer owns that controller; this surface's Stop cannot reach it.
+        else if (target.kind === 'dock') chatStore.abortConversationRun(target.conversationId);
     }, [isAnalysisInProgress, handleCancelAnalysis]);
 
     // The model's watches and the trade-plan level hits subscribe HERE, on
@@ -1951,7 +1950,11 @@ const App: React.FC = () => {
             .then(r => { const t = skillApprovalToast(r, draft.crafted.name); toast[t.kind](t.title, t.body); });
     }, [activeUsername]);
     const coachDenyDraft = useCallback((draft: SkillDraft): void => {
-        takeSkillDraft(draft.id, activeUsername || undefined);
+        const taken = takeSkillDraft(draft.id, activeUsername || undefined);
+        if (!taken) {
+            toast.warning('Draft not discarded', 'It is still in your inbox — retry, or approve it there.');
+            return;
+        }
         tombstoneSkillDraftKey(
             draftTriggerKey(draft.coin, draft.crafted),
             activeUsername || undefined,
@@ -2151,6 +2154,8 @@ const App: React.FC = () => {
                         activeUsername || undefined,
                     );
                     toast.success('Skill discarded', 'Similar suggestions paused for 7 days');
+                } else {
+                    toast.warning('Draft not discarded', 'It is still in your inbox — retry, or approve it there.');
                 }
                 return;
             }
