@@ -3,7 +3,7 @@
  *
  * This app computed R:R four different ways and showed all of them to the
  * user: nearest-TP ÷ stop (analysisUtils), `takeProfits[0]` ÷ stop by ARRAY
- * ORDER (proposedTrade, ScenarioSimulator), and highest-TP-hit ÷ stop
+ * ORDER (proposedTrade), and highest-TP-hit ÷ stop
  * (BacktestingService). The first two disagree whenever the model emits its
  * targets out of order — which it does — so the same trade could read 1.8R on
  * the card and 3.1R in the journal.

@@ -25,11 +25,6 @@ export interface InjectedSource {
      *  their `path` stays fixed (the recent-form brief differs by audience and
      *  by window). Lets a stored decision be traced to the context it saw. */
     fingerprint?: string;
-    /** Adherence linkage: TRUE when the verdict actually CITED this
-     *  skill (followed), FALSE when it was injected and ignored
-     *  (overridden), undefined on legacy records / non-skill sources —
-     *  callers must treat undefined as UNKNOWN and keep the old behavior. */
-    cited?: boolean;
 }
 
 export interface MemoryInjectionRecord {
@@ -178,10 +173,10 @@ export type SkillAdherence = 'followed' | 'overridden' | 'injected-unknown' | 'n
  * shaped the trade PREDATES the log click, so "records since the trade"
  * looked at later, unrelated runs and mislabeled every followed skill as
  * CONTROL.
- *   'followed'        — injected in this run AND cited by the verdict
- *   'overridden'      — injected in this run and NOT cited (ignored)
- *   'injected-unknown'— injected, but no citation annotation exists (legacy
- *                       records / opening-stage-only injection)
+ *   'followed'        — legacy value; the citation annotator is deleted
+ *   'overridden'      — legacy value; the citation annotator is deleted
+ *   'injected-unknown'— injected, but no citation annotation exists. This is
+ *                       every new record (the live path is Message.injectedSkills)
  *   'not-injected'    — this run recorded injections but none carried it (CONTROL)
  *   null              — no telemetry for this run at all (UNKNOWN → full credit)
  */
@@ -195,18 +190,17 @@ export const skillAdherenceForRun = async (
     const scoped = recs.filter(r => r.runId === runId);
     if (scoped.length === 0) return null; // predates runId persistence — UNKNOWN
     let injected = false;
-    let cited: boolean | null = null;
     for (const r of scoped) {
         for (const s of r.sources) {
             if (s.path !== `skills/${skillFileName}`) continue;
             injected = true;
-            if (s.cited === true) cited = true;
-            else if (s.cited === false && cited !== true) cited = false;
         }
     }
     if (!injected) return 'not-injected';
-    if (cited === true) return 'followed';
-    if (cited === false) return 'overridden';
+    // No citation field is written any more. A record that still carries an old
+    // `cited` value on disk is read as unknown, deliberately: live attribution
+    // runs through Message.injectedSkills → settlement reflection, and
+    // resurrecting the dead annotator's heuristic would misroute credit again.
     return 'injected-unknown';
 };
 

@@ -30,6 +30,7 @@ import type { SkillIndexRow } from '../trade/tradeChatContext';
 import { netRiskReward, stopDistancePercent } from '../../utils/netRiskReward';
 import { parsePrice } from '../../utils/analysisUtils';
 import { formatCraftedSkillBody, refineSkillFromLosses } from './SkillCraftService';
+import { recordLearningRulesFromPostMortem } from './learningRules';
 import { captureUnknownFrontmatter, declaredCompatibility, hasUseWhenTrigger, skillBodyCaps, skillRunsHere, type SkillRuntime } from '../../utils/skillFrontmatter';
 import { DESK_TOOL_NAMES } from '../../utils/toolKinds';
 import {
@@ -3259,9 +3260,14 @@ function skillCoverageReader(): CoverReader<SkillMeta> {
 const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: string): Promise<void> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
     if (!tradeAdmitsTechnicalStrategyRule(trade)) return;
-    if (listSkillDrafts(username).some(d => d.tradeId === trade.id)) return;
     const clauses = parseIfThenClauses(trade.postMortem ?? '');
     if (clauses.length === 0) return;
+    // The prompt index has read this store since M-5, but nothing wrote it.
+    // Record the same clauses that become skill drafts, before the draft
+    // dedupe below can skip a re-ingest: the rule's own writer is idempotent
+    // by source trade.
+    recordLearningRulesFromPostMortem(trade, clauses);
+    if (listSkillDrafts(username).some(d => d.tradeId === trade.id)) return;
     await ensureHarnessFoldersUnlocked(username);
     const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
     if (!folder) return;

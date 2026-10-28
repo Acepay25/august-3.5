@@ -109,13 +109,13 @@ import type { AppSurface } from './hooks/useSurface';
 import type { TradeMode } from './components/trade/TradeView';
 import type { SoloTurnRow } from './services/trade/chatTurnMirror';
 import SurfaceMenuList, { type NavBadge } from './components/shell/SurfaceMenuList';
-// The default export is the rail component itself, and NOTHING renders it
-// since its five destination rows were deleted with the tab strip
-// (`tests/deadControlsGuard.test.ts` pins that absence in this file's source).
-// What is still live from that module is the row it exports and the collapse
-// threshold, so the dead node stops being imported here; the component's own
-// removal is a separate pass because a geometry test and one audit row still
-// read its source. (O-92)
+// The rail is DELETED (2026-10-28). Its live row and collapse threshold moved
+// to shellChrome; the update control moved to the header. Nothing imports the
+// old module, and the dead test reference went with it.
+//
+// This note stays where the old import sat: the account row and the collapse
+// threshold are the live pieces of that shell module, and the deletion is not
+// a rename that a future reader should undo.
 import { AccountRow, NAV_RAIL_AUTO_COLLAPSE_PX } from './components/shell/shellChrome';
 import StatusCluster from './components/shell/StatusCluster';
 import SurfaceSwitch from './components/shell/SurfaceSwitch';

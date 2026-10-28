@@ -31,6 +31,7 @@ import type { ChatMessage, ContentPart } from '../providers/GenericProviderServi
 import type { DeskToolCall, DeskToolResult } from '../analysis/DeskToolsService';
 import { fetchHybridData, generateHybridPromptInjection } from '../analysis/HybridIntelligenceService';
 import { DESK_TOOL_NAMES } from '../../utils/toolKinds';
+import { settleDockEntry } from '../../utils/rowSettlement';
 import { CHART_ACTION_TOOL_DEFS } from '../analysis/DeskToolsService';
 import { focusedGoal } from '../goals/GoalService';
 import { buildTradeChatContext, describeChartSnapshotForModel } from './tradeChatContext';
@@ -692,7 +693,8 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             // loop is assembled `[...replays, ...extra, ...forged, ...core]`, so
             // its order does not match the `calling…` lines rendered here.
             // Pairing by index would silently attach the wrong payload to a row.
-            addToolLine: line => patch(e => ({ ...e, tools: [...e.tools, line], toolIds: [...(e.toolIds ?? []), ''] })),
+            addToolLine: line => patch(e => ({ ...e, tools: [...e.tools, line], toolIds: [...(e.toolIds ?? []), ''], liveProgress: undefined })),
+            addLiveToolLine: line => patch(e => ({ ...e, liveProgress: line })),
             attachPayload: payload => {
                 // The desk loop emits the digest line before this, so the row
                 // exists and `tools`/`toolIds` are already the same length.
@@ -765,9 +767,8 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         // may end mid-sentence, and the trader must be able to tell that from
         // an answer that simply finished.
         const cutOff = truncationNotice(summary);
-        patch(e => ({
+        patch(e => settleDockEntry({
             ...e,
-            streaming: false,
             workedMs: outcome.workedMs,
             // The tier the turn was sent under, so the answer row can show it.
             // It comes out of the executor rather than being resolved again
@@ -782,7 +783,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 // A stopped turn keeps whatever text was already painted: a
                 // hidden-pass seat that never spoke must not reveal its partial
                 // accumulator just because the user pressed Stop.
-                ? { interrupted: true }
+                ? {}
                 : {
                     text: outcome.text,
                     reasoning: outcome.leaked
@@ -791,7 +792,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 }),
             ...(outcome.notice ? { tools: [...e.tools, outcome.notice] } : {}),
             ...(cutOff ? { tools: [...e.tools, cutOff] } : {}),
-        }));
+        }, outcome.interrupted ? 'stopped' : 'completed'));
         return outcome.carry;
     };
 
@@ -1068,18 +1069,15 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                     mutate(sid, s => ({
                         ...s,
                         entries: s.entries.map(en => en.id === aiEntry.id
-                            ? {
+                            ? settleDockEntry({
                                 ...en,
-                                error: message,
-                                streaming: false,
-                                ...(en.text && en.text.trim() ? { interrupted: true } : {}),
                                 workedMs: workedMsFor(soloStartedAt),
-                            }
+                            }, 'failed', { error: message, hasText: !!(en.text && en.text.trim()) })
                             : en),
                     }));
                 }
             } finally {
-                mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? { ...en, streaming: false, ...(en.workedMs === undefined ? { workedMs: workedMsFor(soloStartedAt) } : {}) } : en)) }));
+                mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? settleDockEntry({ ...en, ...(en.workedMs === undefined ? { workedMs: workedMsFor(soloStartedAt) } : {}) }, 'completed') : en)) }));
                 endRunOwned(sid, controller);
                 maybeReviewSessions(supervisorCfg);
                 // THE TURN HAS TO TEACH THE BOT. `recordBotTurnOutcome` writes

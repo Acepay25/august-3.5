@@ -97,6 +97,9 @@ export const exportTradesHTML = (trades: LoggedTrade[]): void => {
     const grossWin = trades.filter(t => t.outcome === TradeOutcome.WIN).reduce((s, t) => s + (t.pnlAmount || 0), 0);
     const grossLoss = Math.abs(trades.filter(t => t.outcome === TradeOutcome.LOSS).reduce((s, t) => s + (t.pnlAmount || 0), 0));
     const profitFactor = grossLoss > 0 ? (grossWin / grossLoss).toFixed(2) : (grossWin > 0 ? '∞' : '—');
+    const factorLabel = priced.length > 0 && priced.length < trades.length
+        ? `Profit factor (${priced.length}/${trades.length})`
+        : 'Profit factor';
 
     const rows = trades.map(t => {
         const a = t.analysis ?? ({} as LoggedTrade['analysis']);
@@ -143,7 +146,7 @@ export const exportTradesHTML = (trades: LoggedTrade[]): void => {
   <div class="stats">
     <div class="stat"><b>${winRate}%</b><span>Win rate</span></div>
     <div class="stat"><b>${priced.length > 0 ? `${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}${priced.length < trades.length ? ` (${priced.length}/${trades.length})` : ''}` : 'not captured'}</b><span>Net PnL (USD)</span></div>
-    <div class="stat"><b>${profitFactor}</b><span>Profit factor</span></div>
+    <div class="stat"><b>${profitFactor}</b><span>${factorLabel}</span></div>
     <div class="stat"><b>${trades.length}</b><span>Trades</span></div>
   </div>
   <table>

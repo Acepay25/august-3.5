@@ -50,6 +50,8 @@ export type LiveEntry = StoredChatEntry & {
     /** A trade the model PRESENTED via the present_trade tool — the dock
      *  renders it as a card with Log-this-trade / Cancel. Not persisted. */
     proposal?: TradeProposal;
+    /** The live-only "still working" line for a slow call; not persisted. */
+    liveProgress?: string;
 };
 export type LiveSession = Omit<ChatSession, 'entries'> & {
     entries: LiveEntry[];
@@ -178,7 +180,7 @@ const schedulePersist = (): void => {
             ...s,
             entries: s.entries
                 .filter(e => !e.streaming)
-                .map(({ streaming: _streaming, proposal: _proposal, ...rest }) => rest),
+                .map(({ streaming: _streaming, proposal: _proposal, liveProgress: _liveProgress, ...rest }) => rest),
             // openTrades / loggedTradeIds are runtime-only — persisted sessions
             // never carry them (a reload means "we have no live trade state"),
             // so strip them defensively here even though chatSessions.ts also
@@ -231,7 +233,7 @@ export const persistInterrupted = (): void => {
         if (!loaded || getActiveUsername() !== loadedFor) return;
         const stored: ChatSession[] = sessions.map(s => ({
             ...s,
-            entries: s.entries.map(({ streaming, proposal: _proposal, ...rest }) => (streaming ? { ...rest, interrupted: true } : rest)),
+            entries: s.entries.map(({ streaming, proposal: _proposal, liveProgress: _liveProgress, ...rest }) => (streaming ? { ...rest, interrupted: true } : rest)),
             openTrades: undefined,
             loggedTradeIds: undefined,
         }));

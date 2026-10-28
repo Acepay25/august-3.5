@@ -15,7 +15,11 @@ import type { LearningRule } from '../types/learning';
 export const buildLearningRulesIndex = (rules: readonly LearningRule[] | undefined, limit: number): string => {
     if (!rules || rules.length === 0 || limit <= 0) return '';
     const rows = rules
+        .filter(r => r.status !== 'retired')
         .filter(r => (r.ifCondition ?? '').trim() && (r.thenAction ?? '').trim())
+        // Newest first: the store appends, and the oldest rule must not hold a
+        // prompt slot forever while this week's lessons wait behind it.
+        .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0))
         .slice(0, Math.floor(limit))
         .map(r => {
             const coin = r.coin ? `${r.coin} · ` : '';

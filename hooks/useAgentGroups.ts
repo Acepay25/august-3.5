@@ -30,6 +30,7 @@ import { streamQuickResponse } from '../services/providers/GenericAnalysisServic
 import { tryFetchHybridDataFromPromptWithCalibration } from '../services/analysis/HybridIntelligenceService';
 import { AgentBot, findBotById } from '../services/agents/agentRoster';
 import { readBotSystemMarkdown, readBotMemoryMarkdown } from '../services/bots/BotMemoryService';
+import { settleMessageRow } from '../utils/rowSettlement';
 import {
     ROOM_HUMAN_LABEL,
     ROOM_ROUND_CAP,
@@ -251,13 +252,12 @@ export const useAgentGroups = ({
                             // the bubble streaming for the rest of the session —
                             // a row no later write ever finishes (docs/AUDIT.md L-4).
                             if (abort.signal.aborted) {
-                                patchMessage(replyId, {
+                                patchMessage(replyId, settleMessageRow({
                                     text: visible ? `${visible}
 
 (cancelled)` : '',
-                                    isStreaming: false,
                                     hidden: !visible,
-                                });
+                                }, 'stopped'));
                             }
                             return;
                         }
@@ -274,15 +274,15 @@ export const useAgentGroups = ({
                         if (isPassReply(finalText)) {
                             // Silence is a first-class outcome: no bubble,
                             // no room entry — just the activity feed.
-                            patchMessage(replyId, { text: '', isStreaming: false, hidden: true });
+                            patchMessage(replyId, settleMessageRow({ text: '', hidden: true }, 'completed'));
                             pushActivity({ kind: 'passed', botName: bot.name });
                         } else {
-                            patchMessage(replyId, { text: finalText, isStreaming: false, runStats: {
+                            patchMessage(replyId, settleMessageRow({ text: finalText, runStats: {
                                 runId: replyId,
                                 startedAt: new Date(replyStartedAt).toISOString(),
                                 finishedAt: new Date().toISOString(),
                                 durationMs: Date.now() - replyStartedAt,
-                            } });
+                            } }, 'completed'));
                             room.push({ speaker: bot.name, text: finalText });
                             pushActivity({ kind: 'replied', botName: bot.name });
                             if (username) {
@@ -330,15 +330,14 @@ export const useAgentGroups = ({
                             const reason = rawReason
                                 ? /[.!?]$/.test(rawReason) ? rawReason.slice(0, 160) : `${rawReason.slice(0, 160)}.`
                                 : 'provider error';
-                            patchMessage(replyId, {
+                            patchMessage(replyId, settleMessageRow({
                                 text: aborted
                                     ? (visible ? `${visible}\n\n(cancelled)` : '')
                                     : (visible
                                         ? `${visible}\n\n(failed: ${reason})`
                                         : `(${bot.name} could not reply — ${reason})`),
-                                isStreaming: false,
                                 hidden: aborted && !visible,
-                            });
+                            }, aborted ? 'stopped' : 'failed', { error: aborted ? undefined : reason, hasText: !!visible }));
                             if (!aborted) pushActivity({ kind: 'passed', botName: bot.name, detail: reason });
                         }
                     }

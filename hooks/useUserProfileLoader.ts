@@ -44,6 +44,7 @@ import { primeChatSessions } from '../services/trade/chatSessions';
 import * as chatStore from '../services/trade/chatStore';
 import { createNewConversation, LEGACY_LEVERAGE } from '../utils/conversationUtils';
 import { recalculateAnalysisMetrics } from '../utils/analysisUtils';
+import { settleMessageRow } from '../utils/rowSettlement';
 import { getFirstReadyProvider } from '../utils/providerUtils';
 import { DEFAULT_FRAMEWORKS } from '../constants/models';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
@@ -407,7 +408,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                         // running any more. Restoring `isStreaming: true` made a
                         // killed turn come back looking alive, with a spinner no
                         // writer would ever clear (docs/AUDIT.md L-6).
-                        return next.isStreaming ? { ...next, isStreaming: false } : next;
+                        return next.isStreaming ? settleMessageRow(next, 'interrupted') : next;
                     });
                     return { ...conv, leverage, messages: correctedMessages };
                 });

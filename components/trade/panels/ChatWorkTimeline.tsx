@@ -55,6 +55,10 @@ export interface ChatWorkView {
     workedMs?: number;
     /** One payload id per entry in `tools`, same order. */
     toolIds?: string[];
+    /** The live-only "still working" line for a slow call. It is never part of
+     *  `tools`: a progress line in the result grammar parses as a completed
+     *  row. Hidden the moment the run settles. */
+    liveProgress?: string;
     /** What the wire was actually asked, one entry per call. It is what lets
      *  the card say WHY a turn has no trace. */
     wireAudit?: WireAuditEntry[];
@@ -186,6 +190,11 @@ const ChatWorkTimeline: React.FC<ChatWorkTimelineProps> = ({ entry }) => {
                     activity={activity}
                 >
                     {nodes}
+                    {entry.liveProgress && entry.streaming && (
+                        <p className="text-ui-dense leading-5 text-zinc-500" data-testid="slow-call-progress">
+                            {entry.liveProgress}
+                        </p>
+                    )}
                     {writeFailureNote && (
                         <p className="text-ui-dense leading-5 text-zinc-500" data-testid="payload-write-failure">
                             {writeFailureNote}

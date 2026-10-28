@@ -157,7 +157,8 @@ export const removeStore = async (key: string): Promise<void> => {
     const api = bridge();
     if (api) {
         const res = await api.remove(fileKeyFor(key));
-        if (!res.ok) recordFailure({ key, error: res.error ?? 'remove failed', at: Date.now(), fellBack: false });
+        if (res.ok) failedKeys.delete(key);
+        else recordFailure({ key, error: res.error ?? 'remove failed', at: Date.now(), fellBack: false });
     }
     try { localStorage.removeItem(key); } catch { /* private mode */ }
 };

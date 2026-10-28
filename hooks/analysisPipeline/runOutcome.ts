@@ -15,6 +15,7 @@ import { Message } from '../../types';
 import { ProviderConfig } from '../../types/provider';
 import { isQuotaError } from '../../utils/errorUtils';
 import { buildModelIdToName } from '../../utils/providerUtils';
+import { settleMessageRow } from '../../utils/rowSettlement';
 
 /**
  * Map the conversation through a run's cancel/error: a live-streaming casual
@@ -31,7 +32,7 @@ export const mapRunFailureMessages = (prev: Message[], ctx: {
     // keep whatever text already arrived, drop the streaming flag.
     if (ctx.casualMessageId && m.id === ctx.casualMessageId) {
         if (!m.text.trim()) return null;
-        return { ...m, isStreaming: false };
+        return settleMessageRow(m, 'completed');
     }
     return m;
 }).filter((m): m is Message => m !== null);

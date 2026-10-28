@@ -42,6 +42,9 @@ export const MAX_TRADE_SUMMARIES = 100;
 export type CaptureCandidate = {
     message: Message;
     outcome: TradeOutcome;
+    /** The conversation that owns the row, when the detection came from
+     *  another thread. The modal's write must land there, not in the active one. */
+    conversationId?: string;
     feedback?: {
         pnlAmount?: number;
         correctedEntry?: string;
@@ -691,7 +694,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
                     benchmark: result.historicalOutcome?.benchmark,
                     excursions: result.historicalOutcome?.excursions ?? dataCaptureCandidate.feedback?.excursions,
                     realizedR: result.historicalOutcome?.realizedR ?? dataCaptureCandidate.feedback?.realizedR,
-                });
+                }, dataCaptureCandidate.conversationId);
             } else {
                 console.error('[AutoCapture] Failed:', result.error);
                 toast.error("Auto-Capture Failed", `${result.error || 'Unknown error'}. Please try again or skip the capture.`);
@@ -712,7 +715,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             logTradeWithFeedback(dataCaptureCandidate.message, dataCaptureCandidate.outcome as any, {
                 ...dataCaptureCandidate.feedback,
                 ...feedback,
-            });
+            }, dataCaptureCandidate.conversationId);
             setDataCaptureCandidate(null);
         }
     };
@@ -883,6 +886,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             setDataCaptureCandidate({
                 message,
                 outcome,
+                conversationId,
                 // The detection facts ride the candidate so the capture modal's
                 // own payload cannot silently drop them.
                 feedback: {

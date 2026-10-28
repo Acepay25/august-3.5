@@ -114,7 +114,7 @@ export interface LearningRule {
   pattern?: string;                 // Pattern family (optional)
   direction?: 'Long' | 'Short';     // Trade direction (optional)
   createdAt: string;                // ISO timestamp
-  useCount: number;                 // Recurrences at distillation time; never incremented on injection (and this store has no reader at all — only the backup sweeps it)
+  useCount: number;                 // Recurrences at distillation time; never incremented on injection. The prompt index reads this store.
   lastUsed?: string;                // Last time rule was used
   wins?: number;                    // Later outcomes that matched this rule
   losses?: number;

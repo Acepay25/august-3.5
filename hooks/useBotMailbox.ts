@@ -13,6 +13,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { AgentBot } from '../services/agents/agentRoster';
 import { findProviderById, isProviderReady } from '../utils/providerUtils';
+import { settleMessageRow } from '../utils/rowSettlement';
 import type { ProviderConfig } from '../types/provider';
 import type { Message } from '../types';
 import { MessageRole } from '../types/enums';
@@ -254,16 +255,15 @@ export const useBotMailbox = ({
             // trade logged from this reply carries sourceRunId = replyId, so
             // applySkillEvidence can credit the skills the bot was actually
             // shown. Before this, no bot reply joined to any injection record.
-            patchMessage(replyId, {
+            patchMessage(replyId, settleMessageRow({
                 text: raw,
-                isStreaming: false,
                 runStats: {
                     runId: replyId,
                     startedAt: new Date(replyStartedAt).toISOString(),
                     finishedAt: new Date().toISOString(),
                     durationMs: Date.now() - replyStartedAt,
                 },
-            });
+            }, 'completed'));
             // Chain depth: a DM-triggered turn's own DMs are one hop deeper
             // than the envelope that woke it.
             const nextHop = opts.triggeredBy ? opts.triggeredBy.envelope.hop + 1 : 0;
@@ -297,10 +297,9 @@ export const useBotMailbox = ({
             if (controller.signal.aborted) {
                 // A deliberate Stop, not a failure: the provider never erred
                 // and the turn must not read as one.
-                patchMessage(replyId, {
+                patchMessage(replyId, settleMessageRow({
                     text: `(${bot.name}'s reply was stopped.)`,
-                    isStreaming: false,
-                });
+                }, 'stopped'));
             } else {
                 // Surface the transport's user-safe reason (toFriendlyProviderError)
                 // — a bare "provider error" hid WHY every DM turn was dying.
@@ -308,10 +307,9 @@ export const useBotMailbox = ({
                 const reason = rawReason
                     ? /[.!?]$/.test(rawReason) ? rawReason.slice(0, 160) : `${rawReason.slice(0, 160)}.`
                     : 'provider error';
-                patchMessage(replyId, {
+                patchMessage(replyId, settleMessageRow({
                     text: `(${bot.name} could not process the DM — ${reason})`,
-                    isStreaming: false,
-                });
+                }, 'failed', { error: reason, hasText: true }));
             }
         } finally {
             live?.delete(controller);
