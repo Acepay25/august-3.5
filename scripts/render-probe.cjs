@@ -735,7 +735,7 @@ async function main() {
         check('the tool line names the call the model actually made',
             namesTheCall(firstText), `rendered: ${firstText || '(none)'}`);
         const ledgerAfter = await usageBytes();
-        check('the settled turn grew the usage ledger the Knowledge panel reads',
+        check('the settled turn grew the usage ledger the Learning panel reads',
             ledgerAfter > ledgerBefore, `ledger bytes ${ledgerBefore} -> ${ledgerAfter}`);
 
         await page.reload({ waitUntil: 'domcontentloaded' });
@@ -801,7 +801,7 @@ async function main() {
             const rr = row.getBoundingClientRect();
             const sr = send.getBoundingClientRect();
             // A zero-size measurement is not a pass. Below its breakpoint the
-            // Trade surface hides this dock entirely, and a check that reads 0
+            // Analyze surface hides this dock entirely, and a check that reads 0
             // for every number answers a question about nothing.
             if (rr.width < 40 || sr.width < 8) {
                 return { found: false, why: `not laid out here (row ${Math.round(rr.width)}px, send ${Math.round(sr.width)}px)` };
@@ -943,7 +943,7 @@ async function main() {
 
         // The dock header's primary control is a direct hop to Chat, so the
         // move that a trader makes constantly is one click instead of opening
-        // the hamburger. Asserted HERE, from the Trade surface, because the
+        // the hamburger. Asserted HERE, from the Analyze surface, because the
         // reverse direction (Chat → Desk AI) is the mode pill now:
         // `chat-mode-chart-ai` in the Chat instrument bar.
         //
@@ -954,7 +954,7 @@ async function main() {
         // and the item lookup are TWO evaluates with a settle between them:
         // the menu is a React portal and one synchronous pass would query
         // before the commit.
-        // The dock header exists ONLY on the Trade surface, and a synchronous
+        // The dock header exists ONLY on the Analyze surface, and a synchronous
         // query fired while the app is still mid-transition (an earlier check
         // hops surfaces) reported "no menu button" — that report measured the
         // probe's own timing, not the app, and it made this check flake. Wait
@@ -1004,7 +1004,7 @@ async function main() {
 
         // ── ONE THREAD, TWO HOMES: the answer is still ARRIVING across the hop ──
         // The requirement in one sentence: generating in Chart AI, switch to the
-        // Chat surface, STILL generating. Nothing above proves it. Every dock
+        // Agents surface, STILL generating. Nothing above proves it. Every dock
         // check waits for the reply to SETTLE before it moves on, and a mirror
         // that commits only at settle passes all of them while the other home
         // shows a silent thread mid-run. So this phase asks slowly — the mock's
@@ -1042,14 +1042,14 @@ async function main() {
         // settle-only mirror fails this).
         const busyOnChat = await page.evaluate(() => [...document.querySelectorAll('main button')]
             .some(b => /stop/i.test(`${b.getAttribute('aria-label') || ''} ${b.title || ''}`)));
-        check('the Chat surface shows the dock’s turn as still running', busyOnChat,
+        check('the Agents surface shows the dock’s turn as still running', busyOnChat,
             'the Chat composer offered Send while the Chart AI turn was generating');
         const aiCharsOnChat = () => page.evaluate(() => [...document.querySelectorAll(
             '[data-testid="agent-message"][data-role="ai"]')].reduce((n, e) => n + (e.textContent || '').length, 0));
         const growA = await aiCharsOnChat();
         await sleep(700);
         const growB = await aiCharsOnChat();
-        check('the answer keeps growing on the Chat surface', growB > growA && growA > 0,
+        check('the answer keeps growing on the Agents surface', growB > growA && growA > 0,
             `${growA} -> ${growB} characters`);
         // The settle signal here is the CONTROL CHANGING IDENTITY, not becoming
         // enabled: `waitSendable` asks for an enabled Send, and a composer with
@@ -1076,7 +1076,7 @@ async function main() {
         await page.locator('[data-testid="trade-view"]').waitFor({ timeout: 8000 }).catch(() => {});
 
 
-        // ── The Chat surface (id/testids still "agents") ───────────────────────────────────────────
+        // ── The Agents surface (id/testids still "agents") ───────────────────────────────────────────
         // It reads the App-side message array through a filter
         // (`utils/agentThreads.deskThread`), which is a DIFFERENT store from the
         // dock's chat session — so it gets driven and counted on its own. This
@@ -1109,7 +1109,7 @@ async function main() {
         // This check used to assert the desk thread was EMPTY, which was a
         // description of the SPLIT (two stores, two transcripts) rather than of
         // a contract. A turn asked in the Chart AI dock now resolves a
-        // conversation and mirrors into it, so the Chat surface opens ON the
+        // conversation and mirrors into it, so the Agents surface opens ON the
         // dock's own exchange — and that is what is worth asserting here: the
         // dock's prompts, rendered on the other home, from the same rows.
         const mergedRows = await agentRows();
@@ -1120,11 +1120,11 @@ async function main() {
         // minted seconds before one of this probe's reloads is genuinely gone,
         // and the dock rebinds to a live one on its next send — asserting the
         // pre-reload rows were here would be measuring the save timer, not the
-        // sync. What must hold is that the thread the Chat surface opens on IS
+        // sync. What must hold is that the thread the Agents surface opens on IS
         // the one the dock last wrote to.
         const hasLive = /PROBE_SLOW_STREAM/.test(mergedText);
         const hasTool = /PROBE_TOOL_ROUND/.test(mergedText);
-        check('the Chat surface opens on the dock’s own exchange',
+        check('the Agents surface opens on the dock’s own exchange',
             mergedRows >= 2 && hasLive && hasTool,
             `${mergedRows} rows, the hop turn ${hasLive}, the tool turn ${hasTool}`);
         // Then a clean thread, so the phase below counts what IT sends.
@@ -1134,7 +1134,7 @@ async function main() {
         });
         await sleep(600);
         const freshRows = await agentRows();
-        check('a new chat on the Chat surface starts empty', freshRows === 0, `${freshRows} rows`);
+        check('a new chat on the Agents surface starts empty', freshRows === 0, `${freshRows} rows`);
 
         const sendInAgents = async (text) => {
             const before = await agentRows();
@@ -1238,14 +1238,14 @@ async function main() {
         // AND for a pageerror delta, so a surface that renders then throws is
         // caught at the surface that caused it rather than at the end.
         const surfaces = [
-            { label: 'Trade', expect: '[data-testid="trade-view"]' },
-            { label: 'Journal', expect: null },
+            { label: 'Analyze', switchId: 'trade', expect: '[data-testid="trade-view"]' },
+            { label: 'Journal', switchId: 'journal', expect: null },
             // 'Skills' is gone from this list because it is gone from the rail:
             // the Strategy Studio is the Skills SETTINGS tab now. The rail row
             // that replaced it is Customize, which opens an overlay rather than
             // switching a surface, so it cannot be measured here — the Studio's
             // render is covered by the Settings sweep instead.
-            { label: 'Chat', expect: '[data-testid="agents-view"]' },
+            { label: 'Agents', switchId: 'agents', expect: '[data-testid="agents-view"]' },
             // The Approvals row used to open a fixed OVERLAY mounted outside
             // <main>, which is why an entry like this asserts the overlay's own
             // root: measuring <main> re-reported whatever surface was open before
@@ -1254,8 +1254,8 @@ async function main() {
             // assert the thing the click actually changes.
             // Approvals had an entry here while it was a rail row that routed
             // into Learn's inbox tab. The row is gone — the queue is a tab of the
-            // Knowledge surface, which the entry below visits and sweeps.
-            { label: 'Knowledge', expect: '[data-testid="learn-view"]' },
+            // Learning surface, which the entry below visits and sweeps.
+            { label: 'Learning', switchId: 'learn', expect: '[data-testid="learn-view"]' },
         ];
         /** Some menu entries open a dialog rather than switch a surface (the
          *  approvals inbox does). A dialog leaves a full-screen backdrop that
@@ -1278,10 +1278,11 @@ async function main() {
                 // The destination rows are gone — the title-bar switch is the
                 // navigation — so press the switch by surface id first. The
                 // label→id map is spelled out rather than guessed from the
-                // label, because 'Chat' is `agents` and 'Knowledge' is `learn`,
-                // and a switch that is missing must return 'not found' instead
-                // of clicking some other button whose text happens to match.
-                const IDS = { Trade: 'trade', Journal: 'journal', Chat: 'agents', Knowledge: 'learn' };
+                // label: the labels are Analyze/Journal/Agents/Learning while
+                // the ids are still trade/journal/agents/learn, and a switch
+                // that is missing must return 'not found' instead of clicking
+                // some other button whose text happens to match.
+                const IDS = { Analyze: 'trade', Journal: 'journal', Agents: 'agents', Learning: 'learn' };
                 const id = IDS[name];
                 if (id) {
                     const sw = document.querySelector(`[data-testid="surface-switch-${id}"]`);
@@ -1291,8 +1292,8 @@ async function main() {
                 const matches = (b) => re.test((b.getAttribute('aria-label') || '').trim())
                     || re.test((b.textContent || '').trim());
                 // Scoped to a nav list first, exactly as before: SymbolPicker's
-                // trigger is labelled "Trade symbol", so a bare page-wide search
-                // for 'Trade' opens the coin picker instead of navigating.
+                // trigger is still labelled "Trade symbol", so a page-wide search
+                // can hit the coin picker instead of a destination.
                 const inMenu = [...document.querySelectorAll('[data-testid="surface-menu"] button')]
                     .find(matches);
                 const hit = inMenu ?? null;
@@ -1318,8 +1319,8 @@ async function main() {
             toggle.click();
             return 'expanded';
         });
-        // ── The Chat surface's mode pill ─────────────────────────────────
-        // The Chat surface's switch is a ROUTE to the charted form of the desk,
+        // ── The Agents surface's mode pill ─────────────────────────────────
+        // The Agents surface's switch is a ROUTE to the charted form of the desk,
         // so only a browser can prove it works: press it, and the canvas plus the
         // dock must appear WITH the conversation that was on screen. The earlier
         // build of this control swapped a chartless copy of the same panel in
@@ -1327,7 +1328,7 @@ async function main() {
         // doing nothing at all — so these checks measure the destination, the
         // rows carried, and the way back.
         {
-            const landed = await navTo('Chat');
+            const landed = await navTo('Agents');
             const before = landed === 'clicked' ? await page.evaluate(() => {
                 // The left column is measured on BOTH sides of the hop because
                 // the two surfaces used to render it from two components with
@@ -1389,7 +1390,7 @@ async function main() {
                         '[data-testid="trade-chat-panel"] [data-testid="inline-verdict"]').length,
                 };
             }) : null;
-            check('the pill takes the Chat surface to the chart AND the Chart AI dock',
+            check('the pill takes the Agents surface to the chart AND the Chart AI dock',
                 !!hop && hop.chart && hop.dock && !hop.chat,
                 hop ? `chart=${hop.chart} dock=${hop.dock} chatStillMounted=${hop.chat}` : String(pressed));
             // The merged thread is the reason the hop is worth taking: the dock
@@ -1440,7 +1441,7 @@ async function main() {
         // so the rail is checked rather than assumed by them. "Navigation still
         // works" is NOT the same claim as "navigation is on screen with no menu
         // to open", and only this block makes the second one.
-        // Navigation lives in TWO hosts now, on purpose: the Chat surface folded
+        // Navigation lives in TWO hosts now, on purpose: the Agents surface folded
         // its destinations and account row into the one sidebar it already had —
         // the reference has a single column, not a rail standing beside a chat
         // list — while every other surface still uses the rail. The claim being
@@ -1483,9 +1484,9 @@ async function main() {
                 nav.railTop > 0 && nav.railTop <= 64 && nav.railTop >= nav.topbarHeight - 1,
                 `agents-rail top ${nav.railTop}px, topbar ${nav.topbarHeight}px`);
 
-            // Ctrl+B belongs to the RAIL specifically, which the Chat surface no
+            // Ctrl+B belongs to the RAIL specifically, which the Agents surface no
             // longer mounts — so press it on a surface that has one.
-            await navTo('Trade');
+            await navTo('Analyze');
             await sleep(900);
 
             // The surfaces that lost the rail must show it: the title bar now
@@ -1518,7 +1519,7 @@ async function main() {
             // and check the pairing that matters, that the header offers the
             // expand button exactly while the column is away. An unreachable nav
             // is the trap this catches.
-            await navTo('Chat');
+            await navTo('Agents');
             await sleep(900);
             const away = async () => page.evaluate(() => {
                 const el = document.querySelector('[data-testid="agents-rail"]');
@@ -1560,7 +1561,7 @@ async function main() {
             await page.evaluate(() => document.querySelector('[data-testid="nav-rail-toggle-header"]')?.click());
             await sleep(500);
             // Leave the run on a known surface before the sweep.
-            await navTo('Trade');
+            await navTo('Analyze');
             await sleep(400);
         }
 
@@ -1611,6 +1612,20 @@ async function main() {
                 how = await navTo(surface.label);
             }
             check(`can navigate to ${surface.label}`, how === 'clicked', how);
+            // The TAB must READ the name we meant to open. Navigation resolves
+            // by surface id, so a stale label would still route correctly and
+            // still mislead the trader — the label is a promise about the
+            // surface, and the 2026-10-29 rename exists because 'Trade'
+            // promised execution this app never performs.
+            // Read the ANNOUNCED name, not the raw text: a tab may carry a badge
+            // count inside the same button (Learning renders "Learning9+"), and
+            // the accessible name is what a reader actually hears.
+            const switchText = await page.evaluate((id) => {
+                const el = document.querySelector(`[data-testid="surface-switch-${id}"]`);
+                return el ? (el.getAttribute('aria-label') || '').trim() : null;
+            }, surface.switchId);
+            check(`the ${surface.label} tab reads its own name`,
+                !!switchText && new RegExp('^' + surface.label + '[,. ]').test(switchText), String(switchText));
             if (surface.overlay) {
                 let mounted = 0;
                 const until = Date.now() + 12000;
@@ -1652,7 +1667,7 @@ async function main() {
         // first run never meets.
         {
             await openMenu(); await sleep(300);
-            await navTo('Knowledge'); await sleep(900);
+            await navTo('Learning'); await sleep(900);
             const coachTab = page.locator('[data-testid="learn-tab-health"]');
             if (await coachTab.count() === 1) await coachTab.click();
             await sleep(1200);
@@ -1685,7 +1700,7 @@ async function main() {
                 .querySelector('[data-testid="learn-tab-health"]')?.click());
             const card = page.locator('[data-testid="memory-health-card"]');
             const hasCard = await pollFor(async () => (await card.count()) === 1);
-            check('Learn → Health opens the memory health card', hasCard === true, `${hasCard}`);
+            check('Learning → Health opens the memory health card', hasCard === true, `${hasCard}`);
             if (hasCard) {
                 const cardText = await card.innerText();
                 check('the idle skill sweep reports itself on screen',
@@ -1699,7 +1714,7 @@ async function main() {
                         cardText.indexOf('skills suspended from prompts') + 60));
             }
         } else {
-            check('Learn → Health tab is reachable', false, 'no learn-tab-health control');
+            check('Learning → Health tab is reachable', false, 'no learn-tab-health control');
         }
 
         // ── The validation gate and the analytics panel are DAILY paths with no
@@ -1715,11 +1730,11 @@ async function main() {
         // measures the wrong screen and fails for the wrong reason.
         // The surface menu is the persistent nav rail, so a bare navTo always finds
         // the row — no "open the menu first" dance is needed any more.
-        let toTrade = await navTo('Trade');
+        let toTrade = await navTo('Analyze');
         if (toTrade === 'not found') {
             await openMenu();
             await sleep(400);
-            toTrade = await navTo('Trade');
+            toTrade = await navTo('Analyze');
         }
         await sleep(500);
         check('returned to Trade for the daily-path checks', toTrade !== 'not found', `${toTrade}`);
@@ -1796,15 +1811,15 @@ async function main() {
         //    must still be on screen. This is the browser proof for the row that
         //    used to render NOWHERE — claimed out of the desk pane by
         //    provider+model, never shown in the bot's own thread.
-        let backToChat = await navTo('Chat');
+        let backToChat = await navTo('Agents');
         if (backToChat === 'not found') {
             await openMenu();
             await sleep(400);
-            backToChat = await navTo('Chat');
+            backToChat = await navTo('Agents');
         }
-        check('can return to the Chat surface', backToChat === 'clicked', backToChat);
+        check('can return to the Agents surface', backToChat === 'clicked', backToChat);
 
-        // ── A turn asked in the DOCK is visible in the Chat surface's bot
+        // ── A turn asked in the DOCK is visible in the Agents surface's bot
         //    thread. Nothing measured this until now: the probe proved both
         //    surfaces render, never that a turn CROSSES between them. It is
         //    easy to break — a composer appending to the chat session instead
@@ -1814,7 +1829,7 @@ async function main() {
         //
         //    The menu is opened BEFORE navigating, deliberately. `navTo` falls
         //    back to a page-wide search when the menu is not mounted, and on
-        //    the Chat surface that search matches SymbolPicker's "Trade
+        //    the Agents surface that search matches SymbolPicker's "Trade
         //    symbol" trigger — clicking the coin picker and reporting
         //    'clicked'. Opening the menu first makes the scoped search find
         //    the real nav item, which is the whole reason that helper scopes
@@ -1824,7 +1839,7 @@ async function main() {
         {
             await openMenu();
             await sleep(400);
-            const toTrade = await navTo('Trade');
+            const toTrade = await navTo('Analyze');
             await sleep(900);
             // The dock is a lg+ affordance and can be collapsed to a rail.
             await page.evaluate(() => {
@@ -1877,9 +1892,9 @@ async function main() {
             // Wait for the dock turn to be committed before switching surfaces.
             // A fixed sleep here raced the store write, and the failure it
             // produced was reported against the WRONG surface — "not in the bot
-            // thread on the Chat surface" — for a turn that had not yet landed
+            // thread on the Agents surface" — for a turn that had not yet landed
             // in the dock at all. Two defects are now distinguished: the dock
-            // never took it, or the Chat surface never showed it.
+            // never took it, or the Agents surface never showed it.
             const landedInDock = await pollFor(async () => {
                 const text = await page.locator('[data-testid="trade-chat-panel"], [data-testid="trade-dock"]').first().innerText();
                 return text.includes(HOP_ASK) ? true : null;
@@ -1887,7 +1902,7 @@ async function main() {
             check('a turn asked in the dock shows in the dock', landedInDock != null,
                 landedInDock == null ? 'the dock never rendered the turn' : 'rendered');
 
-            await navTo('Chat');
+            await navTo('Agents');
             await pollFor(async () => {
                 const visible = await page.locator('[data-testid="agents-view"]').count();
                 return visible > 0 ? true : null;
@@ -1912,11 +1927,11 @@ async function main() {
                 const t = await pane.innerText();
                 return t.includes(HOP_ASK) ? await pane.locator('[data-testid="agent-message"]').count() : null;
             }, 15000);
-            check('a turn asked in the dock is visible in the Chat surface',
+            check('a turn asked in the dock is visible in the Agents surface',
                 found != null,
                 found == null
                     ? (openedBot == null
-                        ? 'the bot row was never available on the Chat surface'
+                        ? 'the bot row was never available on the Agents surface'
                         : 'the dock turn never appeared in the bot thread')
                     : `${found} rows`);
         }
@@ -1966,7 +1981,7 @@ async function main() {
         // Three things, because landing on the right SURFACE is not the claim —
         // the row promises the library, so the Skills tab must be the one showing
         // and the Studio must actually be mounted inside it.
-        check('the Customize row lands on the Skills tab of the Knowledge surface',
+        check('the Customize row lands on the Skills tab of the Learning surface',
             customize === 'clicked' && reached.knowledge && reached.skillsTab && reached.studio,
             `${customize} knowledge=${reached.knowledge} skills=${reached.skillsTab} studio=${reached.studio}`);
         await page.waitForTimeout(600);
@@ -2162,7 +2177,7 @@ async function main() {
             }, stale ? 'probe-provider::probe-stale-model' : null);
             await page.reload();
             await sleep(1800);
-            const how = await navTo('Chat');
+            const how = await navTo('Agents');
             await sleep(1200);
             const text = await page.evaluate(() => {
                 const el = document.querySelector('[data-testid="model-fallback-warning"]');
@@ -2171,7 +2186,7 @@ async function main() {
             return { how, text };
         };
         const withStale = await bannerOnChat(true);
-        check('a stale chat-model pick warns on the Chat surface',
+        check('a stale chat-model pick warns on the Agents surface',
             withStale.how === 'clicked' && !!withStale.text
             && /no longer configured|disabled or has no API key/.test(withStale.text)
             && /Answering with/.test(withStale.text),
@@ -2235,7 +2250,7 @@ async function main() {
                             && b.getAttribute('aria-pressed') !== 'true'
                             // ANY aria-current marks the control as the one you
                             // are already on — the nav rows and the title-bar
-                            // switch say `page`, the Learn tabs say `true`. The
+                            // switch say `page`, the Learning tabs say `true`. The
                             // sweep only recognised 'true', so it judged the
                             // current screen's own switch button inert.
                             && !b.getAttribute('aria-current')
@@ -2361,7 +2376,7 @@ async function main() {
         // others unjudged — the gate could not see a dead control inside Memory
         // or Health. 18 rounds, because Health alone stacks six panels now that
         // System's telemetry and the supervisor's log fold into it.
-        await sweepSurface('Knowledge', 18, [
+        await sweepSurface('Learning', 18, [
             'learn-tab-coach', 'learn-tab-memory', 'learn-tab-health',
         ]);
         // ── The skill viewer round trip (gap 1) ──────────────────────────
@@ -2372,11 +2387,11 @@ async function main() {
         // close that returns the surface. A unit test mounts the panel in
         // jsdom and passes; only this can see the panel actually appear.
         {
-            let how = await navTo('Knowledge');
+            let how = await navTo('Learning');
             if (how === 'not found') {
                 await openMenu();
                 await sleep(400);
-                how = await navTo('Knowledge');
+                how = await navTo('Learning');
             }
             await page.evaluate(() => document
                 .querySelector('[data-testid="learn-tab-memory"]')?.click());
@@ -2518,7 +2533,7 @@ async function main() {
         {
             const goSurface = async (name) => {
                 return page.evaluate((n) => {
-                    const IDS = { Trade: 'trade', Journal: 'journal', Chat: 'agents', Knowledge: 'learn' };
+                    const IDS = { Analyze: 'trade', Journal: 'journal', Agents: 'agents', Learning: 'learn' };
                     const sw = document.querySelector(`[data-testid="surface-switch-${IDS[n] || ''}"]`);
                     if (sw) { sw.click(); return 'clicked'; }
                     const hit = [...document.querySelectorAll('[data-testid="surface-menu"] button')]
@@ -2532,12 +2547,12 @@ async function main() {
             check('nothing overflows the viewport horizontally',
                 overflowIsClean(overflow), overflowWhy(overflow));
 
-            const landedChat = await goSurface('Chat');
+            const landedChat = await goSurface('Agents');
             const onChat = await page.locator('[data-testid="agents-view"]')
                 .waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
             let picked = null;
             if (landedChat !== 'clicked' || !onChat) {
-                check('the Chat surface carries an instrument picker', false, `${landedChat}/${onChat}`);
+                check('the Agents surface carries an instrument picker', false, `${landedChat}/${onChat}`);
             } else {
                 const opened = await page.evaluate(() => {
                     // 2026-10-27: the picker left the CARD and took its own row
@@ -2562,7 +2577,7 @@ async function main() {
                     return 'opened';
                 });
                 if (opened !== 'opened') {
-                    check('the Chat surface carries an instrument picker outside the composer card', false, opened);
+                    check('the Agents surface carries an instrument picker outside the composer card', false, opened);
                 } else {
                     await sleep(400);
                     picked = await page.evaluate(() => {
@@ -2573,7 +2588,7 @@ async function main() {
                         other.click();
                         return id.replace('symbol-row-', '') || null;
                     });
-                    check('the Chat surface carries an instrument picker outside the composer card',
+                    check('the Agents surface carries an instrument picker outside the composer card',
                         picked !== null, `picked ${picked}`);
                 }
                 // The popover portals to <body> and covers the nav trigger.
@@ -2582,7 +2597,7 @@ async function main() {
                 await sleep(300);
             }
             if (picked) {
-                await goSurface('Trade');
+                await goSurface('Analyze');
                 const onTrade = await page.locator('[data-testid="trade-view"]')
                     .waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
                 const readChart = () => page.evaluate(() => {
@@ -2666,7 +2681,7 @@ async function main() {
             return { real: rows, plain: synthetic(''), ringed: synthetic('focus-visible:ring-2 focus-visible:ring-cyan-500/50') };
         });
 
-        await navTo('Trade');
+        await navTo('Analyze');
         await page.locator('[data-testid="trade-view"]').waitFor({ timeout: 10000 }).catch(() => {});
         // Keyboard modality: :focus-visible is modality-aware, and a JS-driven
         // focus() only inherits it if the last real input was the keyboard.
@@ -2728,7 +2743,7 @@ async function main() {
             await navTo(surface.label);
             await sleep(900);
             const bad = await page.evaluate(({ floor }) => {
-                // The Chat surface's sidebar is `agents-rail`, not `nav-rail` —
+                // The Agents surface's sidebar is `agents-rail`, not `nav-rail` —
                 // the rail is not mounted there at all now, so a sweep that only
                 // knew the second name would leave every destination row on that
                 // surface unmeasured.

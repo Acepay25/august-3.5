@@ -357,7 +357,7 @@ const appendTurnNotice = (messages: ChatMessage[], text: string): void => {
  * wire, and say out loud what was cut.
  *
  * A tool turn grows its own request: every round adds an assistant call plus a
- * market payload per call, and the Chat surface hands in the whole stored
+ * market payload per call, and the Agents surface hands in the whole stored
  * conversation. Nothing used to look at the running total, so the turn died as
  * either a provider 400 or a `finish_reason: length` answer with no answer in
  * it — both of which the trader experiences as "it never replied".

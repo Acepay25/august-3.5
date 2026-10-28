@@ -27,14 +27,14 @@ export interface SettingsTabProps {
     /** False while provider configs are still loading — avoids the
      *  "No providers configured" empty-state flash. */
     providerConfigsLoaded?: boolean;
-    /** Opens the Learn surface — the one home for the queues, the notebook and
+    /** Opens the Learning surface — the one home for the queues, the notebook and
      *  memory health. Settings keeps the provider/model switches and links here.
      *  Pass a tab to land somewhere specific. */
     onOpenLearn?: (tab?: LearnTab) => void;
     /** The librarian's ProviderConfig — Models picks it, Memory names it. */
     memoryConfig?: ProviderConfig | null;
     /** Jump to the skill library. It used to open a full-screen surface, then a
-     *  Settings tab; it is now the Knowledge surface's Skills tab, so this
+     *  Settings tab; it is now the Learning surface's Skills tab, so this
      *  crosses surfaces. Kept as a callback because the Strategies tab's
      *  "browse everything" button needs it and cannot navigate itself. */
     onOpenStrategyStudio?: () => void;

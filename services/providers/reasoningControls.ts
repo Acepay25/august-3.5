@@ -78,7 +78,7 @@ export const EFFORT_BY_TASK = {
     clarification: 'low',
     /** Casual chat / bot 1:1 replies. */
     chat: 'low',
-    /** Any turn that can call `present_trade` — the Chat surface and the dock.
+    /** Any turn that can call `present_trade` — the Agents surface and the dock.
      *  This is the one output that moves money; it must not be the cheapest
      *  tier in the schedule (E-39). A trader's explicit composer pick still
      *  wins over this default. */
@@ -126,7 +126,7 @@ export const effortForTask = (
  * chat behavior; any real tier passes through untouched.
  *
  * Both chat transports need exactly this mapping — the dock's seat turn
- * (`chatTurnRunner`) and the Chat surface's casual turn
+ * (`chatTurnRunner`) and the Agents surface's casual turn
  * (`GenericAnalysisService.streamQuickResponse`) — and they now share ONE
  * session row for the choice, so the rule lives beside the schedule it
  * consults rather than in whichever file asked for it first. Two copies is

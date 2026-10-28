@@ -3,7 +3,7 @@
  *
  * This branch used to live inside the Chart AI dock's `executePanelTool`, where
  * it was welded to a `chatStore` entry, a live canvas and the level-watch. The
- * Chat surface cannot present a plan without it, and copying it would have been
+ * Agents surface cannot present a plan without it, and copying it would have been
  * a second answer to "what did the model propose" — the exact split stage 20
  * exists to close. So the TRANSITION lives here and every side-effect goes
  * through a sink the calling row owns.

@@ -2,7 +2,7 @@
  * messageVersions — the arithmetic behind reverting and versioning a transcript.
  *
  * WHY A SEPARATE PURE MODULE. One conversation has two homes: the dock stores a
- * `StoredChatEntry`, the Chat surface stores a pipeline `Message`. They do not
+ * `StoredChatEntry`, the Agents surface stores a pipeline `Message`. They do not
  * share field NAMES (`tools` vs `toolEvents`, `reasoning` vs `thoughtProcesses`),
  * so no single function can read both rows. What they MUST share is the
  * mechanics — which generation is live, how a step moves, where a parked tail
@@ -38,7 +38,7 @@ export interface TurnSnapshot {
     text: string;
     /** The thinking trace, already joined to a single string by the caller. */
     reasoning: string;
-    /** The per-provider trace map, when the host keeps one — the Chat surface's
+    /** The per-provider trace map, when the host keeps one — the Agents surface's
      *  `thoughtProcesses`. `reasoning` is what a row RENDERS; this is the
      *  original shape, and without it a round-trip through a generation would
      *  collapse a multi-model run's separate traces into one anonymous seat and

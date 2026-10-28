@@ -2,7 +2,7 @@
  * KlineService - Candlestick (kline) data fetching.
  *
  * PRIMARY source: Binance USDT-FUTURES klines (fapi) — the SAME market as the
- * Trade surface's markPrice@1s websocket, funding/OI, and the hybrid packet.
+ * Analyze surface's markPrice@1s websocket, funding/OI, and the hybrid packet.
  * The desk is a perps desk: chart history from the SPOT market made the
  * painted candles deviate from the live mark on moving symbols (the
  * spot↔perp basis read as a price move). fapi sends

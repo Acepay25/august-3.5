@@ -228,7 +228,7 @@ async function main() {
         console.log('\n── conversation column collapse ──────────────────────');
         await page.setViewportSize({ width: 1440, height: 900 });
         await sleep(500);
-        // The column that collapses belongs to the Chat surface, and the width
+        // The column that collapses belongs to the Agents surface, and the width
         // tour above leaves the app on Journal — measuring the wrong surface
         // makes `rail` null, which reads as a crash rather than as a moved
         // layout. This is also what Ctrl+B does for a person: it puts away the

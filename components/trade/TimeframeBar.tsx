@@ -1,5 +1,5 @@
 /**
- * The timeframe bar, lifted out of `TradingChart` so the Chat surface can
+ * The timeframe bar, lifted out of `TradingChart` so the Agents surface can
  * offer the same control over the same data.
  *
  * It reads `CHART_INTERVALS` and the per-user `trade_tf_bar_v1_<user>`
@@ -144,7 +144,7 @@ const TimeframeBar: React.FC<TimeframeBarProps> = ({ interval, onIntervalChange,
                 <>
                     <div className="fixed inset-0 z-20" aria-hidden onClick={() => setOpen(false)} />
                     {/* z-40, not the chart's z-30: this bar is also rendered
-                        on the Chat surface, and the Chat composer sits at
+                        on the Agents surface, and the Chat composer sits at
                         z-[90]. The overlay that closes it is z-20 either
                         way; only the panel needed lifting. */}
                     <div className={`absolute left-2 ${pickerUp ? 'bottom-9' : 'top-9'} z-40 w-40 rounded-bubble border border-white/10 bg-zinc-900 p-1 shadow-xl`} data-testid="tf-picker">

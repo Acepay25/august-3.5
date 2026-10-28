@@ -136,7 +136,7 @@ export interface ChatSession {
     botId?: string;
     /** Group-room sessions: the dock mirrors this AgentGroup's transcript. */
     groupId?: string;
-    /** The Chat surface's conversation this session IS, when there is one.
+    /** The Agents surface's conversation this session IS, when there is one.
      *
      *  `botId`/`groupId` already said "this session is a view of that roster
      *  thread"; a solo or panel session had no counterpart, so the SAME
@@ -158,7 +158,7 @@ export interface ChatSession {
     interval?: string;
     /** The composer's thinking-effort choice for this session — THE shared
      *  value, since both chat homes now drive one dial from this row (the dock
-     *  and the Chat surface). Typed as the tier union, not `string`: two
+     *  and the Agents surface). Typed as the tier union, not `string`: two
      *  readers casting the same field is how one surface ends up sending a
      *  tier the other never heard of. Absent ⇒ `'auto'` (the task default). */
     effort?: ReasoningEffort;
@@ -311,7 +311,7 @@ export const loadSessions = (): ChatSession[] => {
         return parsed
             .filter(validSession)
             // The Coach inbox used to be a dock session (kind 'coach') holding
-            // no transcript of its own. It is the Learn surface's tab now, so a
+            // no transcript of its own. It is the Learning surface's tab now, so a
             // stored one drops rather than resurfacing as an empty chat.
             .filter(s => (s.kind as LegacySessionKind | undefined) !== 'coach')
             .map(s => ({
@@ -582,7 +582,7 @@ export const liveEntryFromMessage = (m: Message): ProjectedChatEntry => {
         // `proposal` is deliberately NOT projected. The dock keeps its card on the
         // RUNTIME entry only (`chatStore.LiveEntry`, not `StoredChatEntry`) so a
         // presented plan never rides the byte-capped session blob — and a plan
-        // presented on the Chat surface renders from its canonical
+        // presented on the Agents surface renders from its canonical
         // `Message.proposal` THERE. One card per plan, in the home that asked for
         // it; the disposition both homes consult is keyed by the shared row id.
         image: m.images?.[0],
@@ -597,7 +597,7 @@ export const liveEntryFromMessage = (m: Message): ProjectedChatEntry => {
         // that the answer was produced under a different tier.
         effort: m.runStats?.effort,
         // …and the payload ids, so the dock's rows can open onto the real
-        // output for a turn the Chat surface answered.
+        // output for a turn the Agents surface answered.
         toolIds: m.toolIds,
         // A row with an unparseable timestamp keeps `at` undefined rather than
         // stamping it as 0: the memory-attribution window join treats a real

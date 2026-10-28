@@ -8,7 +8,7 @@ const { chromium } = require('@playwright/test');
 
 const PORT = process.env.PROBE_PORT ? Number(process.env.PROBE_PORT) : 4191;
 const MOCK_PORT = process.env.MOCK_PORT ? Number(process.env.MOCK_PORT) : 8791;
-// SHOTS_EMPTY=1 profiles with no conversation, so the Chat surface's empty
+// SHOTS_EMPTY=1 profiles with no conversation, so the Agents surface's empty
 // state can be looked at rather than asserted.
 const SHOTS_EMPTY = !!process.env.SHOTS_EMPTY;
 // LIVE_BASE=http://127.0.0.1:3000 attaches to an ALREADY-RUNNING dev server
@@ -93,7 +93,7 @@ async function seed(page) {
         store.put({
             ...(cur || { username: 'Probe User' }),
             // SHOTS_EMPTY=1 leaves the profile with no conversation, so the
-            // Chat surface's empty state — the one screen the reference is most
+            // Agents surface's empty state — the one screen the reference is most
             // recognisable for — can actually be looked at rather than asserted.
             conversations: empty ? [] : [conv],
             lastActiveConversationId: empty ? null : conv.id,
@@ -139,7 +139,7 @@ async function main() {
         // now — so press the switch by surface id. The label→id map is written
         // out because a switch that no longer exists returns 'not found' and
         // would otherwise re-shoot whatever surface happened to be open.
-        const SWITCH_ID = { Trade: 'trade', Journal: 'journal', Chat: 'agents', Knowledge: 'learn' };
+        const SWITCH_ID = { Analyze: 'trade', Journal: 'journal', Agents: 'agents', Learning: 'learn' };
         const navTo = async (name) => page.evaluate((id) => {
             const hit = document.querySelector(`[data-testid="surface-switch-${id}"]`);
             if (!hit) return 'not found';
@@ -147,19 +147,19 @@ async function main() {
             return 'clicked';
         }, SWITCH_ID[name] || name);
 
-        // 'Skills' is gone from the rail — it is a tab of the Knowledge surface,
+        // 'Skills' is gone from the rail — it is a tab of the Learning surface,
         // shot below through the Customize row that reaches it. The surface row
-        // itself is named 'Knowledge' now, and the sweep must ask for that: a
+        // itself is named 'Learning' now, and the sweep must ask for that: a
         // label that no longer matches returns 'not found' and re-shoots whatever
         // surface happened to be open, which is the vacuous read every gate here
         // exists to catch.
-        for (const surface of ['Trade', 'Journal', 'Chat', 'Knowledge']) {
+        for (const surface of ['Analyze', 'Journal', 'Agents', 'Learning']) {
             const how = await navTo(surface);
             await sleep(2500); // let lazy chunks + data settle
             await page.screenshot({ path: path.join(SHOTS, `surface-${surface.toLowerCase()}.png`) });
             console.log(`  ${surface}: ${how} -> surface-${surface.toLowerCase()}.png`);
         }
-        // The Chat surface's switch, shot as the destination it reaches: the
+        // The Agents surface's switch, shot as the destination it reaches: the
         // chart with the Chart AI dock carrying the SAME conversation. Judging
         // "is this as clean as Claude" off the thread alone would miss the one
         // hop this surface has.
@@ -185,13 +185,13 @@ async function main() {
         await page.screenshot({ path: path.join(SHOTS, 'surface-settings.png') });
         console.log('  Settings -> surface-settings.png');
         // The skill library, shot through the row that promises it — Customize
-        // lands on the Knowledge surface's Skills tab.
+        // lands on the Learning surface's Skills tab.
         await page.keyboard.press('Escape');
         await sleep(800);
         const tabbed = await page.evaluate(() => {
             // Dismiss anything floating above the app first: this step used to
             // run while the Settings dialog was still open, so the click landed
-            // on the sidebar BEHIND the overlay and the "Knowledge → Skills"
+            // on the sidebar BEHIND the overlay and the "Learning → Skills"
             // screenshot was a picture of the Settings dialog.
             const dlg = document.querySelector('[aria-labelledby="settings-title"]');
             if (dlg) return 'settings dialog still open';
@@ -201,8 +201,8 @@ async function main() {
             return 'clicked';
         });
         await sleep(2500);
-        await page.screenshot({ path: path.join(SHOTS, 'surface-knowledge-skills.png') });
-        console.log(`  Knowledge → Skills: ${tabbed} -> surface-knowledge-skills.png`);
+        await page.screenshot({ path: path.join(SHOTS, 'surface-learning-skills.png') });
+        console.log(`  Learning → Skills: ${tabbed} -> surface-learning-skills.png`);
 
         // ── The states the reference is drawn in, not just the surfaces ──
         // Comparing "is this Claude" against four root screenshots misses the
@@ -227,7 +227,7 @@ async function main() {
         };
 
         // The skill record in the right panel — the reference's SKILL.md view.
-        // The catalog lives on Knowledge's MEMORY tab (the Skills tab is the
+        // The catalog lives on Learning's MEMORY tab (the Skills tab is the
         // library + studio), so this switches tabs before pressing a row.
         await press('[data-testid="learn-tab-memory"]', 1800);
         let how = await press('[data-testid="skills-catalog-grid"] button', 1500);
@@ -251,7 +251,7 @@ async function main() {
         await sleep(500);
 
         // Settings on a section that is not the first — the reference's Memory
-        // list is what the Knowledge surface's own tabs are compared against.
+        // list is what the Learning surface's own tabs are compared against.
         // The gear lives in two places by design: the title-bar band everywhere
         // except Chat, and Chat's account row (that surface has no band). A
         // selector list, so this does not silently shoot the open surface again.

@@ -6,7 +6,7 @@
  * It also carries the update-status dot — the DSH pattern the shell already uses,
  * where the one quiet status carrier stays visible in the resting view. Like
  * [[StatusCluster]] it is a component rather than markup inside `shared/Header`
- * because the Chat surface's own title bar needs it too, and that surface no
+ * because the Agents surface's own title bar needs it too, and that surface no
  * longer renders the band above the sidebar.
  */
 import React from 'react';

@@ -5,7 +5,7 @@
  * A plan's card is per-row: clicking "Log this trade" must not write a second
  * journal row on a re-click, and dismissing it must not bring it back on the
  * next render. That state lived in `ChatTranscriptList` at module scope so it
- * survived a dock unmount/remount — which is also exactly why the Chat surface
+ * survived a dock unmount/remount — which is also exactly why the Agents surface
  * could not share it: the store was welded to the dock's file. Stage 20b puts
  * the card in both homes, so the map lives here and both surfaces read it.
  *

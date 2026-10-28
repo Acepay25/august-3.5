@@ -3,7 +3,7 @@
  *
  * The error text is the provider's own words (the status, the message and the
  * cause underneath), never a canned sentence and never written into the answer
- * field. The dock and the Chat surface render the same row so a failure cannot
+ * field. The dock and the Agents surface render the same row so a failure cannot
  * be visible in one home and silently disappear in the other.
  */
 import React from 'react';

@@ -11,7 +11,7 @@
  *
  * A `skill` item is NOT rendered here any more. `collectApprovalItems` still
  * yields them, because the Chart AI dock reads that list for its own notice,
- * but a draft has exactly one place a press saves it: Learn → Approvals.
+ * but a draft has exactly one place a press saves it: Learning → Approvals.
  */
 
 import React from 'react';

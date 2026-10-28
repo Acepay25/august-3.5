@@ -1,7 +1,7 @@
 /**
  * InlineVerdict — the decision table a settled verdict leaves behind.
  *
- * This lived inside `AgentsView`, which made the Chat surface the only home that
+ * This lived inside `AgentsView`, which made the Agents surface the only home that
  * could draw it. The Chart AI panel drew `VerdictAudit` on its own instead, and
  * that component returns null for a plain Long/High verdict carrying no evidence
  * pack or stage ladder — so ONE conversation showed ENTRY/STOP/TARGET/

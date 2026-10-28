@@ -55,7 +55,7 @@ interface ChatComposerProps {
      *  its old chat-only meaning. */
     onStopRun?: () => void;
     effort: ReasoningEffort;
-    /** Writes the tier onto the active chat session — the row the Chat surface
+    /** Writes the tier onto the active chat session — the row the Agents surface
      *  renders too, so one pick is both homes' pick. */
     changeEffort: (next: ReasoningEffort) => void;
     /** Visible explanation when the stored model pick went stale. */
@@ -114,7 +114,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
 }) => {
     // One shared ModelChip (components/shared/ModelChip.tsx), which is now also
     // the effort dial: the tier rides the trigger's label and is edited on the
-    // slider in the same panel, so the Chat surface and this dock cannot end up
+    // slider in the same panel, so the Agents surface and this dock cannot end up
     // with a dial the other lacks — or a label that disagrees with the request.
     // Flat by owner ruling (2026-10-27). This block used to sit on a translucent
     // band (`bg-zinc-900/45`) closed off from the transcript by a hairline
@@ -142,7 +142,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
         )}
         {/* The card IS the field: what you type, what rides the message
             (attachments), and the controls that send it. Market context — the
-            coin and the timeframe — does not live in here; on the Chat surface
+            coin and the timeframe — does not live in here; on the Agents surface
             they sit on their own row outside the card (see AgentsView). */}
         <div className="rounded-bubble border border-white/[0.09] bg-surface-raised px-3 py-3 shadow-lg transition-colors focus-within:border-cyan-500/40">
             <textarea

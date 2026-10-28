@@ -1,9 +1,9 @@
 /**
- * One transcript row, shared by the Chart AI dock and the Chat surface.
+ * One transcript row, shared by the Chart AI dock and the Agents surface.
  *
  * The dock already had this furniture — markdown body, Thought rows, desk-tool
  * activity, side-effect status rows, copy, key levels, the verdict — and the
- * Chat surface was still a bare `{m.text}` div. Rather than write it twice,
+ * Agents surface was still a bare `{m.text}` div. Rather than write it twice,
  * both now render this over their own row model (see `ChatRowView`).
  *
  * Two things are honestly approximate and say so at the call site rather than

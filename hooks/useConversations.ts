@@ -77,7 +77,7 @@ export function useConversations() {
 
     /* ── Revert and versions ───────────────────────────────────────────────
        The rule lives on the CONVERSATION store, not in a surface. One
-       conversation has two readers — the Chat surface and the Chart AI dock,
+       conversation has two readers — the Agents surface and the Chart AI dock,
        joined by `entriesForSession` — and a revert applied inside one of them
        would appear and then be undone by the other's next merge. Here there is
        one writer, and both readers see the same thread.

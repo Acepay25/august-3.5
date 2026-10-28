@@ -99,15 +99,15 @@ interface TradeViewProps {
     /** A solo turn asked in the dock has to reach the conversation too, or the
      *  merged thread stays one-way on this surface exactly as it did on Chat.
      *  The row shape is the mirror's — it carries the LIVE state as well as the
-     *  settled one, which is what lets the Chat surface show a turn that started
+     *  settled one, which is what lets the Agents surface show a turn that started
      *  over here as still arriving. */
     onSoloTurnCommit?: (row: SoloTurnRow, conversationId: string) => void;
     /** Adopt (or mint) the conversation a dock solo turn speaks into, and point
-     *  the Chat surface at it. Absent ⇒ a session with no thread stays invisible
+     *  the Agents surface at it. Absent ⇒ a session with no thread stays invisible
      *  to the other home, which is the split this closes. */
     onSyncConversation?: (conversationId?: string) => string | null;
     /** The App conversation the dock's bound session stands in for, so the chart
-     *  and the Chat surface show ONE thread rather than two transcripts.
+     *  and the Agents surface show ONE thread rather than two transcripts.
      *  Read through `entriesForSession`; absent ⇒ the dock is its own chat. */
     conversationRows?: Message[];
     /** Resolve the analysis message `onRunAnalysis` created, so the dock can
@@ -120,7 +120,7 @@ interface TradeViewProps {
     onLogProposedTrade?: (proposal: TradeProposal) => void;
     /** Group rooms the Chart AI dock embeds as a session. The Coach inbox used
      *  to be handed through here for the dock's Chat | Coach switch; it is a
-     *  tab on the Learn surface now. */
+     *  tab on the Learning surface now. */
     renderGroupSurface?: (groupId: string) => React.ReactNode;
     /** Group rooms offered in the dock's New-session menu (name for tabs). */
     groups?: Array<{ id: string; name: string }>;
@@ -146,7 +146,7 @@ interface TradeViewProps {
     /** Reports every mode change upward so App's toggle semantics (which
      *  mode is currently active) stay in sync with the user's own picks. */
     onTradeModeChange?: (mode: TradeMode) => void;
-    /** Jump straight to the Chat surface from the dock header. */
+    /** Jump straight to the Agents surface from the dock header. */
     onOpenChat?: () => void;
     /** Opens the WatchListPanel (pinned signals) — its one chrome home since
         stage 3 moved it off the app header. The count badge mirrors the
@@ -334,7 +334,7 @@ const TradeView: React.FC<TradeViewProps> = ({
     const [interval, setInterval_] = useState<ChartInterval>(
         () => (chatStore.getActiveSession()?.interval as ChartInterval) ?? '15m',
     );
-    // Shared with the Chat surface, which needs the same picker over the same
+    // Shared with the Agents surface, which needs the same picker over the same
     // list — two 60s polls for one exchange answer would be waste.
     const symbols = useSymbolUniverse();
     const [strip, setStrip] = useState<StripData | null>(null);
@@ -487,12 +487,12 @@ const TradeView: React.FC<TradeViewProps> = ({
     const intervalRef = useRef(interval);
     intervalRef.current = interval;
     // Follow the active session's instrument, and follow it LIVE — not only
-    // when the session id changes. A coin picked in the Chat surface has to
+    // when the session id changes. A coin picked in the Agents surface has to
     // move this chart while it is mounted behind it, or the picker is a lie
     // the moment you return.
     //
     // `sharedSession` is resolved by chatStore's own rule (active row, else the
-    // first) rather than by raw id: the Chat surface writes and reads through
+    // first) rather than by raw id: the Agents surface writes and reads through
     // that same accessor, so the row the picker painted is the row adopted here.
     const sharedSession = chatSnap.sessions.find(x => x.id === chatSnap.activeId) ?? chatSnap.sessions[0];
     useEffect(() => {
@@ -997,7 +997,7 @@ const TradeView: React.FC<TradeViewProps> = ({
                 <div
                     ref={switcherRef}
                     role="tablist"
-                    aria-label="Trade surface mode"
+                    aria-label="Analyze surface mode"
                     onKeyDown={(e) => {
                         if (e.key === 'ArrowRight') { e.preventDefault(); stepMode(1); }
                         else if (e.key === 'ArrowLeft') { e.preventDefault(); stepMode(-1); }

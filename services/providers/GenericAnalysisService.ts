@@ -599,7 +599,7 @@ export async function getQuickResponse(
  * and a chat turn that never names a tier must keep sending the task default
  * (`effortForTask('chat')`), not a new one. It exists because the composer's
  * dial was previously honored by the dock's seat turn and ignored here, so the
- * same chip on the Chat surface changed nothing on the wire — and a control
+ * same chip on the Agents surface changed nothing on the wire — and a control
  * that changes nothing is worse than no control.
  */
 export async function streamQuickResponse(

@@ -15,7 +15,7 @@
  * pending skill draft (`kind: 'skill'`, utils/approvalInbox.ts) with a working
  * Allow button. A label that names half the contents is worse than a general
  * one, because it teaches the reader the other half isn't there. The skill
- * drafts' own home is Learn → Skill approvals; this row stays honest about
+ * drafts' own home is Learning → Approvals; this row stays honest about
  * being the mixed tray.
  */
 
@@ -47,35 +47,41 @@ export const SURFACE_ITEMS: Array<{
     shortcut: string;
     Icon: React.FC<{ className?: string }>;
 }> = [
-    { id: 'trade', label: 'Trade', shortcut: 'Alt+1', Icon: ActivityIcon },
+    // NAMED FOR WHAT IT DOES (owner ruling, 2026-10-29: "Trade does not
+    // trade"). The four labels name the function — Analyze, Journal, Agents,
+    // Learning — while the ids stay `trade` / `journal` / `agents` / `learn`:
+    // dozens of gates pin the ids and their testids independently of the
+    // label, and renaming an id would churn all of them for no user-visible
+    // gain. A label is a promise; "Trade" promised execution this surface
+    // never performs.
+    { id: 'trade', label: 'Analyze', shortcut: 'Alt+1', Icon: ActivityIcon },
     { id: 'journal', label: 'Journal', shortcut: 'Alt+2', Icon: FileTextIcon },
     // 'skills' is NOT a surface any more — the Strategy Studio is the Skills
     // SETTINGS tab. Its Alt+3 chord and its LayersIcon survive on the
     // Customize row below, so the muscle memory and the glyph both keep their
-    // meaning; only the destination changed. Chat/Learn keep Alt+4/Alt+5
+    // meaning; only the destination changed. Agents/Learning keep Alt+4/Alt+5
     // rather than sliding up a slot and breaking every chord at once.
-    // The surface is called Chat; the id stays `agents` because a dozen gates
-    // pin it independently of the label (surfaceMenu.test asserts
-    // onSelect('agents'), and agents-view / agents-rail / chart-ai-row are
-    // testids across agentsSurface.test, deadControlsGuard and the probe).
-    // Renaming the id would churn all of them for no user-visible gain.
-    // The RAIL keeps its own "Agents" pill — that names the bot roster, which
-    // is a section of this surface, not the surface itself.
-    { id: 'agents', label: 'Chat', shortcut: 'Alt+4', Icon: BotIcon },
-    // Named for what it holds now that it holds the library too: Approvals,
-    // Skills, Memory and Health are tabs of this one surface. "Learn" described
-    // an action and hid the skill library entirely, which is why the Customize
-    // row had to point somewhere else.
-    { id: 'learn', label: 'Knowledge', shortcut: 'Alt+5', Icon: GraduationCap },
+    // The id stays `agents` because a dozen gates pin it independently of the
+    // label (surfaceMenu.test asserts onSelect('agents'), and agents-view /
+    // agents-rail / chart-ai-row are testids across agentsSurface.test,
+    // deadControlsGuard and the probe).
+    // The RAIL keeps its own "Agents" pill naming the bot roster inside this
+    // surface — the same word for the surface and its roster is intended.
+    { id: 'agents', label: 'Agents', shortcut: 'Alt+4', Icon: BotIcon },
+    // Approvals, Skills, Memory and Health are tabs of this one surface: it
+    // governs what the app LEARNED, which is why the label is Learning and no
+    // longer Knowledge (a library you browse) or Learn (an action that hid the
+    // library entirely).
+    { id: 'learn', label: 'Learning', shortcut: 'Alt+5', Icon: GraduationCap },
 ];
 
 export const surfaceLabel = (id: AppSurface): string =>
-    SURFACE_ITEMS.find(i => i.id === id)?.label ?? 'Trade';
+    SURFACE_ITEMS.find(i => i.id === id)?.label ?? 'Analyze';
 
 interface SurfaceMenuListProps {
     surface: AppSurface;
     onSelect: (surface: AppSurface) => void;
-    /** The Customize row: opens the Knowledge surface on its Skills tab. Not a
+    /** The Customize row: opens the Learning surface on its Skills tab. Not a
      *  surface id of its own, so it never claims `aria-current="page"` — it is a
      *  route into a tab. */
     onOpenCustomize?: () => void;
@@ -201,7 +207,7 @@ const SurfaceMenuList: React.FC<SurfaceMenuListProps> = ({
 
         {/* No Approvals row. It was a second way into the surface below it, with
             the same count on both, so one screen showed "Approvals 12" twice —
-            and the number now rides the Knowledge row that actually holds the
+            and the number now rides the Learning row that actually holds the
             queue. */}
 
         {onOpenCustomize && (

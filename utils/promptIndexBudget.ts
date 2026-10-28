@@ -4,7 +4,7 @@
  *
  * The indexes are always-on bytes: on a 1M-window frontier model 30 skill
  * lines plus 30 memory lines is noise; on an 8k local model it is the whole
- * prompt. Both composition sites (the Chat surface's `surfacePromptWith` and
+ * prompt. Both composition sites (the Agents surface's `surfacePromptWith` and
  * the dock's seat-prompt builder) read THIS table, so the two homes shrink
  * together and one model's budget never depends on which surface asked.
  *

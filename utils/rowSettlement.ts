@@ -36,7 +36,7 @@ export const settleFields = (reason: RowSettleReason, opts: SettleOptions = {}):
     return { interrupted: true };
 };
 
-/** Adapter for the Chat surface's `Message` shape. */
+/** Adapter for the Agents surface's `Message` shape. */
 export const settleMessageRow = <T extends object>(
     row: T,
     reason: RowSettleReason,

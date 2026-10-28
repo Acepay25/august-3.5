@@ -203,7 +203,7 @@ async function main() {
         // by surface id, and a miss throws: this loop used to ignore navTo's
         // return value, which meant a broken route measured whichever surface
         // happened to be mounted and still reported a number.
-        const SWITCH_ID = { Trade: 'trade', Journal: 'journal', Chat: 'agents', Knowledge: 'learn' };
+        const SWITCH_ID = { Analyze: 'trade', Journal: 'journal', Agents: 'agents', Learning: 'learn' };
         const navTo = async (name) => page.evaluate((id) => {
             const hit = document.querySelector(`[data-testid="surface-switch-${id}"]`);
             if (!hit) return false;
@@ -220,7 +220,7 @@ async function main() {
         };
         // 'Skills' is gone from the rail sweep — the Studio is measured under
         // Settings below, where it now actually lives.
-        for (const surface of ['Trade', 'Journal', 'Chat', 'Knowledge']) {
+        for (const surface of ['Analyze', 'Journal', 'Agents', 'Learning']) {
             if (!await navTo(surface)) throw new Error(`no switch entry for ${surface}`);
             const sel = ROOTS[surface.toLowerCase()];
             const ok = await page.waitForSelector(sel, { timeout: 15000 })
@@ -240,7 +240,7 @@ async function main() {
         await page.keyboard.press('Escape');
         await sleep(800);
         // The Strategy Studio is reached from the Customize row, and that row now
-        // lives in the Chat surface's sidebar — so go back to Chat first. Pressing
+        // lives in the Agents surface's sidebar — so go back to Chat first. Pressing
         // a row that is not mounted would fall through to `main` and report
         // whatever surface happened to be open, the vacuous read this census
         // documents for every other surface.

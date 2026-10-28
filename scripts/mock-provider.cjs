@@ -138,7 +138,7 @@ const replyTo = (body) => {
 /** OPT-IN slow scenario, keyed on a marker in the REQUEST rather than an env
  *  flag, for the same reason `PROBE_TOOL_ROUND` is: the default answer streams in
  *  ~60 ms, which is over before a surface switch even renders, so the live-sync
- *  check ("a turn asked in the dock is still ARRIVING on the Chat surface")
+ *  check ("a turn asked in the dock is still ARRIVING on the Agents surface")
  *  could only ever measure a settled row. A sentinel in one message arms this
  *  for that message alone and cannot leak into another phase's turn. */
 const SLOW_MARK = 'PROBE_SLOW_STREAM';

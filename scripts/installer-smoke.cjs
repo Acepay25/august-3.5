@@ -1,6 +1,6 @@
 /**
  * installer-smoke — verify the PACKAGED Electron app boots and renders the
- * production Trade surface + expanded Chart AI dock.
+ * production Analyze surface + expanded Chart AI dock.
  *
  * This probe intentionally drives the real packaged executable through
  * Playwright's Electron API. A renderer-only Vite preview cannot catch failures
@@ -364,7 +364,7 @@ async function verifyTradeSurface(page) {
         .or(panel.getByText('Chart AI', { exact: true }))
         .first();
     await dockIdentity.waitFor({ state: 'visible', timeout: PROBE_TIMEOUT_MS });
-    console.log('[smoke] Trade surface and expanded Chart AI dock are visible');
+    console.log('[smoke] Analyze surface and expanded Chart AI dock are visible');
 
     // Re-sample after a bounded pause so a post-mount TDZ/abort crash cannot
     // pass as a successful boot merely because the first paint was complete.
@@ -377,7 +377,7 @@ async function verifyTradeSurface(page) {
         dockIdentity.isVisible(),
     ]);
     if (checks.some((visible) => !visible)) {
-        throw new Error(`Trade surface disappeared on liveness re-sample: ${JSON.stringify(checks)}`);
+        throw new Error(`Analyze surface disappeared on liveness re-sample: ${JSON.stringify(checks)}`);
     }
 }
 
@@ -530,7 +530,7 @@ async function runProbe() {
         throw new Error(`Packaged Electron exited unexpectedly (code=${appExitCode} signal=${appExitSignal})`);
     }
 
-    console.log('INSTALLER SMOKE OK — packaged Electron boots, Trade surface + Chart AI dock render, zero pageerrors.');
+    console.log('INSTALLER SMOKE OK — packaged Electron boots, Analyze surface + Chart AI dock render, zero pageerrors.');
 }
 
 async function main() {

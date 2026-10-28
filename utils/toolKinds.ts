@@ -178,7 +178,7 @@ export const NO_TOOLS_ALLOWED: string[] = [''];
  * goal cannot resurrect a tool this build does not ship.
  *
  * The interesting case is the empty one. A goal authored on a wider seat (the
- * Chat surface's list is not the trade seat's `TRADE_TOOLS`) can name tools
+ * Agents surface's list is not the trade seat's `TRADE_TOOLS`) can name tools
  * this seat never had; returning `[]` there would NOT mean "nothing", because
  * `[]` reads as unrestricted. So an empty intersection returns
  * `NO_TOOLS_ALLOWED`. Pure and exported because the never-widen invariant
@@ -209,7 +209,7 @@ export const DESK_TOOL_NAMES: readonly string[] = [
     'skill_view',
     // The collaboration-memory trio the dock's own mandate already asks for.
     // They were refused at the executor because this list did not name them;
-    // the chart copilot can now save/recall/forget like the Chat surface.
+    // the chart copilot can now save/recall/forget like the Agents surface.
     'remember', 'read_memory', 'forget',
     // Goal environments: durable work state, edited mid-task.
     'list_goals', 'open_goal', 'create_goal', 'update_goal', 'restore_goal',

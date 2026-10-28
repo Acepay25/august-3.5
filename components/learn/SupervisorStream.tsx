@@ -8,7 +8,7 @@
  * snapshot), the pass can be paused (finishes the current item, starts
  * nothing new), and "Run now" forces a pass even while paused.
  *
- * Extracted from SupervisorPanel so the dock overlay and the Learn surface's
+ * Extracted from SupervisorPanel so the dock overlay and the Learning surface's
  * Queue tab render the SAME stream from the SAME store, rather than the dock
  * being the only place a user can see the model govern itself.
  */
@@ -170,7 +170,7 @@ const EventRow: React.FC<{ ev: SupervisorEvent }> = ({ ev }) => {
 };
 
 interface SupervisorStreamProps {
-    /** Present in the dock overlay; the Learn tab embeds without a close box. */
+    /** Present in the dock overlay; the Learning tab embeds without a close box. */
     onClose?: () => void;
 }
 

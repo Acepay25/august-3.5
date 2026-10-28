@@ -2,7 +2,7 @@
  * turnStatus — the ONE answer to "what is this turn doing right now?".
  *
  * WHY A MODULE AND NOT A LABEL IN A COMPONENT. Two surfaces render a turn's
- * work — the Chart AI dock and the Chat surface — and they used to derive the
+ * work — the Chart AI dock and the Agents surface — and they used to derive the
  * words separately: `ChatWorkTimeline` had its own regex to name the work
  * after the fact, and `ToolActivityRow` had another to pair a call with its
  * result. Two parsers of one grammar is how the summary and the rows stop

@@ -30,7 +30,7 @@ const Icons = {
 };
 
 export const VersionHistoryDashboard: React.FC = () => {
-    // Stage 3: this dashboard has ONE home — the Learn surface's System tab.
+    // Stage 3: this dashboard has ONE home — the Learning surface's System tab.
     // Its header-overlay shell (opened by the header's clock button), the
     // tab strip and the "Algorithm" placeholder cards are all deleted; what
     // is left is real, measured data, stacked in one scroll.
@@ -356,7 +356,7 @@ export const VersionHistoryDashboard: React.FC = () => {
     return (
         <div className="flex flex-col gap-4 bg-zinc-950" data-testid="system-intelligence-embedded">
             {/* Identity + the running version — the one place this screen says
-                which build the trader is on. The Learn tab owns the chrome. */}
+                which build the trader is on. The Learning tab owns the chrome. */}
             <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] pb-2.5">
                 <div className="flex items-center gap-2.5">
                     <div className="rounded-control border border-zinc-700 bg-zinc-800 p-1.5">

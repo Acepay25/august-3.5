@@ -47,7 +47,7 @@ interface HeaderProps {
     /** The signed-in user's name: the avatar shows its initial. */
     username?: string;
     /** Settings. The v2 topbar carries the gear and the account chip on every
-     *  surface, so the Chat surface's account row no longer has to. */
+     *  surface, so the Agents surface's account row no longer has to. */
     onOpenSettings?: () => void;
     /** The band's own status cluster, overridable so the App can build it ONCE
      *  and hand the same node around. Absent, the band wires its own. */

@@ -3,7 +3,7 @@
  *
  * The scheduled-automation feature is deleted (owner request, 2026-10-24), so
  * the skill evaluator is the one remaining unattended caller. Its job is to
- * judge a skill, not to act: it gets the Chat surface's read set minus every
+ * judge a skill, not to act: it gets the Agents surface's read set minus every
  * tool that edits the trader's notebook and minus the two tools that change
  * the journal (present_trade draws/arms a watch; decline_trade records a skip).
  *

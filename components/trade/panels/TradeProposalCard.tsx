@@ -80,7 +80,7 @@ const TradeProposalCard: React.FC<TradeProposalCardProps> = ({ proposal, canLog,
             <span className={`rounded-control px-1.5 py-0.5 text-ui-xs font-bold ${proposal.direction === 'Long' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}`}>{proposal.direction}</span>
             <span className="font-mono text-ui-sm font-bold text-zinc-100">{proposal.symbol}</span>
             {/* The number that gates "Log this trade" — from the canonical
-                planned-R:R util, the same chip the Chat surface header shows. */}
+                planned-R:R util, the same chip the Agents surface header shows. */}
             {computeRrRatio(proposal) > 0 && (
                 <span className="rounded-control border border-white/[0.04] bg-white/[0.04] px-1.5 py-0.5 font-mono text-ui-xs font-medium text-zinc-300">
                     {fmtRiskReward(computeRrRatio(proposal), 1)} R:R

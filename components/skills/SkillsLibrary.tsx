@@ -3,9 +3,9 @@
 //
 // It has had three homes. A full-screen surface in the rail (two ways to reach
 // one library with two chrome treatments), then Settings → Skills under a
-// "Customize" shortcut, and now the Skills tab of the Knowledge surface — which
+// "Customize" shortcut, and now the Skills tab of the Learning surface — which
 // is where the target plan recorded it (`docs/plan/open-items.md` §5 Q2:
-// one view, Skills and Learn as tabs, not two rail rows). The file moved out of
+// one view, Skills and Learning as tabs, not two rail rows). The file moved out of
 // `settings/tabs/` with it, because a component that belongs to no dialog
 // should not live in one.
 //

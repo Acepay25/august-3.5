@@ -5,7 +5,7 @@
  * prod-only TDZ/cyclic-import crash (splash hang) shipped past it once. This
  * probe serves `dist/` through vite preview and drives the real app with
  * Playwright: seeds a profile so the user modal is skipped, lands on the
- * Trade surface (which lazy-imports chatStore / levelWatchService /
+ * Analyze surface (which lazy-imports chatStore / levelWatchService /
  * tradePlanLevels / the Chart AI dock), and fails on ANY pageerror — plus a
  * double-sample so a post-mount crash can't slip through between "rendered"
  * and "reported".
@@ -117,7 +117,7 @@ async function main() {
 
             // Splash must clear (the v1.0.20 crash symptom WAS a splash hang)…
             await page.waitForFunction(() => !document.querySelector('#splash'), null, { timeout: 20000 });
-            // …and the lazy Trade surface must actually mount — this loads the
+            // …and the lazy Analyze surface must actually mount — this loads the
             // new chatStore/levelWatch modules from the PRODUCTION chunks.
             await page.waitForSelector('[data-testid="trade-view"]', { timeout: 20000 });
 
@@ -143,7 +143,7 @@ async function main() {
                 failed = true;
             }
             if (!failed) {
-                console.log('BOOT PROBE OK — prod bundle boots, trade surface + Chart AI dock render, zero pageerrors.');
+                console.log('BOOT PROBE OK — prod bundle boots, Analyze surface + Chart AI dock render, zero pageerrors.');
             }
         }
     } catch (err) {

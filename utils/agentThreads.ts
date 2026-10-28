@@ -26,7 +26,7 @@ import { Message } from '../types/message';
  *  transcript (the boot surface — your last conversation); 'bot' = a
  *  named bot's 1:1; 'group' = a bot group room (also the debate room —
  *  the Team merged into groups). The learning inbox is not a thread here:
- *  the Coach is a tab on the Learn surface. */
+ *  the Coach is a tab on the Learning surface. */
 export type ThreadSelection =
     | { kind: 'team' }
     | { kind: 'bot'; botId: string }

@@ -231,7 +231,7 @@ export interface ChatTurnRunnerDeps {
      *  render calls, imported rather than injected so there is no second copy
      *  to drift and no prop a future caller can forget to pass. */
     botThreadRows?: Message[];
-    /** The Chat surface's thread, for a session bound by `conversationId`. Same
+    /** The Agents surface's thread, for a session bound by `conversationId`. Same
      *  reason as `botThreadRows`: the bot must answer from the conversation the
      *  trader is looking at, not from a copy. */
     conversationRows?: Message[];
@@ -269,13 +269,13 @@ export interface ChatTurnRunnerDeps {
      *
      *  It now carries the LIVE row too, not just the settled one — see
      *  `chatTurnMirror`, which exists because a turn started here was invisible
-     *  to the Chat surface until it finished. */
+     *  to the Agents surface until it finished. */
     onSoloTurnCommit?: (row: SoloTurnRow, conversationId: string) => void;
-    /** Make the conversation this dock turn belongs to the one the Chat surface
+    /** Make the conversation this dock turn belongs to the one the Agents surface
      *  is showing, minting one when the session has never had a thread.
      *
      *  A dock session started on the Trade screen had no `conversationId` at all,
-     *  so nothing it said could reach the Chat surface — the two homes were two
+     *  so nothing it said could reach the Agents surface — the two homes were two
      *  transcripts wearing one app. The caller owns conversations, so this asks
      *  it to adopt (or create) the thread and hands the id back for the session
      *  to bind. Returns null only when the host has no conversation to give, and
@@ -283,7 +283,7 @@ export interface ChatTurnRunnerDeps {
      *  does not exist. */
     onSyncConversation?: (conversationId?: string) => string | null;
     /** Launches the FULL ensemble pipeline from this chat. It writes its rows
-     *  into the ACTIVE conversation — the same thread the Chat surface renders —
+     *  into the ACTIVE conversation — the same thread the Agents surface renders —
      *  so this resolves when the run ends and carries no answer text. */
     onRunAnalysis?: (prompt: string, images: Array<{ name: string; dataURL: string }>) => Promise<void>;
     /** Where a run that never started says why. The pipeline writes its own
@@ -426,7 +426,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         }
         // present_trade: draw the plan, arm the harness level-watch, and surface a
         // "Log this trade" card on the streaming entry. The TRANSITION lives in
-        // services/trade/presentTradeTool — the Chat surface presents the same plan
+        // services/trade/presentTradeTool — the Agents surface presents the same plan
         // through the same rules — so everything below is the DOCK'S SINK: four
         // writes onto the running entry, plus the canvas and the watch only this
         // surface owns.
@@ -654,7 +654,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         };
         // The transport options stay HERE (they are this row's context); the
         // loop, the reasoning/echo/peel repair and the settle live in
-        // services/trade/toolTurn so the Chat surface can run the same turn
+        // services/trade/toolTurn so the Agents surface can run the same turn
         // against a canonical row instead of copying that logic.
         const transport: ToolTurnRequest['transport'] = {
             defaultSymbol: symbol,
@@ -863,7 +863,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             : attachments;
         if ((!text && sentAttachments.length === 0 && !retryEntry) || live.running[sid]) return;
         // A run belongs to the thread, not to the surface that typed it. While
-        // the Chat surface is answering IN THIS CONVERSATION, a second send from
+        // the Agents surface is answering IN THIS CONVERSATION, a second send from
         // the dock would put two writers on one answer — so the dock refuses,
         // exactly as it refuses against its own running session above.
         if (session0.conversationId && chatStore.isConversationRunning(session0.conversationId)) return;
@@ -881,7 +881,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         }
         const session = session0;
         // ONE conversation, two homes. A solo dock turn always speaks into a
-        // thread the Chat surface can open: a session that never had one adopts
+        // thread the Agents surface can open: a session that never had one adopts
         // (or mints) it here, and a session that has one makes sure the Chat
         // surface is LOOKING at it — otherwise switching across showed an older
         // thread and the exchange you were mid-way through was nowhere.
@@ -933,7 +933,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
         // homes key their run registries differently on purpose (a session id
         // and a conversation id must not collide), but a thread that is
         // answering must read as busy from either home: this is what lets the
-        // Chat surface's Stop reach a run started here, and what lights the
+        // Agents surface's Stop reach a run started here, and what lights the
         // rail's "still working" badge for it. Solo turns only — a panel is a
         // room, and a bot session's thread is committed by its own path.
         const registersConversation = session.kind !== 'panel' && !session.botId && !!turnConversationId;
@@ -972,7 +972,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             // thread stays busy forever: the run is over, but every home still
             // reads `conversationRunning` and offers a Stop for a turn that
             // already ended — which is what made a stopped dock turn block the
-            // Chat surface's composer for the rest of the session.
+            // Agents surface's composer for the rest of the session.
             if (registersConversation && turnConversationId) {
                 chatStore.endConversationRunOwned(turnConversationId, controller);
             }
@@ -997,16 +997,16 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? { ...en, speaker: bot?.name ?? `${soloProvider.id}:${soloProvider.selectedModel}` } : en)) }));
 
             // Commit the QUESTION to the conversation that owns it, so the
-            // Chat surface shows the exchange while it is still being answered
+            // Agents surface shows the exchange while it is still being answered
             // rather than after. The dock's composer writes into the chat
-            // session, not into `messages`, so unlike the Chat surface there is
+            // session, not into `messages`, so unlike the Agents surface there is
             // no trader's row already waiting to be claimed.
             if (bot) onBotTurnCommit?.(bot, text);
             else if (turnConversationId) {
                 onSoloTurnCommit?.({ id: userEntry.id, role: 'user', text }, turnConversationId);
             }
             // THE LIVE MIRROR. Without it the conversation gained this turn's
-            // answer only when it settled, so crossing to the Chat surface
+            // answer only when it settled, so crossing to the Agents surface
             // mid-generation showed the question and a silent thread. The mirror
             // copies this entry into the conversation under the same id, and
             // `finally` stops it — which flushes, so a stopped or failed turn
@@ -1049,7 +1049,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 // with a failure row.
                 if (!controller.signal.aborted) {
                     // The CANONICAL sanitizer (utils/runStatus), the same one the
-                    // Chat surface uses: an unredacted provider message can carry
+                    // Agents surface uses: an unredacted provider message can carry
                     // a credential-shaped token, and this string is persisted into
                     // the session and out into a backup.
                     const message = sanitizeErrorText(e);
@@ -1086,7 +1086,7 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                 // mailbox and the group rooms both call it on
                 // every reply — this dock did not, so asking a bot something
                 // in Chart AI taught it NOTHING, while the same question in
-                // the Chat surface did. A bot's memory was whichever surface
+                // the Agents surface did. A bot's memory was whichever surface
                 // you happened to use, which is not a property anyone would
                 // defend.
                 //

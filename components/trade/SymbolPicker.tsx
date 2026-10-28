@@ -1,5 +1,5 @@
 /**
- * SymbolPicker — TradingView-style instrument search for the Trade surface.
+ * SymbolPicker — TradingView-style instrument search for the Analyze surface.
  * The whole USDT-perp universe (/fapi/v1/exchangeInfo ∩ 24hr tickers) sits
  * behind one button: a search field filters by ticker or base asset, rows
  * show last price + 24h change, and ↑↓/↵/Esc navigate — no more 20-symbol

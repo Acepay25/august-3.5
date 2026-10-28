@@ -48,7 +48,7 @@ export const appendSessionUsage = async (entry: SessionUsageEntry): Promise<void
 };
 
 /**
- * The tool turn's writer. One mapping, so every run that answers — Chat surface,
+ * The tool turn's writer. One mapping, so every run that answers — Agents surface,
  * Chart AI dock, or a schedule — lands the same shape, and the Session Usage
  * panel stops depending on a verdict finalizer that stage 19 took out of the send
  * path (with that gone the panel had a reader and no writer: it rendered an empty

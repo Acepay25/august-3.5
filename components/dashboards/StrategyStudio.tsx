@@ -609,7 +609,7 @@ const StrategyStudio: React.FC<StrategyStudioProps> = ({ trades, username, curre
                 {rows.length === 0 ? (
                     <p className="text-ui-sm italic text-zinc-600">
                         {skills.length === 0
-                            ? 'No playbooks yet — approve a drafted skill in Learn → Approvals, run Scan → skills on a chart, or import skill .md files above.'
+                            ? 'No playbooks yet — approve a drafted skill in Learning → Approvals, run Scan → skills on a chart, or import skill .md files above.'
                             : 'No playbooks match — clear the filters.'}
                     </p>
                 ) : (

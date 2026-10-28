@@ -1101,7 +1101,7 @@ export const activateSkillForTrigger = async (ifCondition: string, username: str
 
 /** The ONE projection from the library to the skills-index row shape.
  *
- *  Both surfaces that build the index (the Chat surface and the dock) call this
+ *  Both surfaces that build the index (the Agents surface and the dock) call this
  *  instead of mapping `listSkills()` themselves. They had two copies, and they
  *  drifted: one passed four of the filter facts, the other passed none — so a
  *  suspended, trader-disabled, human-invoked-only or other-audience skill could

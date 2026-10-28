@@ -5,7 +5,7 @@
  * `weeklyReview` established (per-user Preferences key, last run stamped in
  * the payload, missing-or-unparsable ⇒ due). It runs the maintenance jobs that
  * nothing else was doing on a schedule, and writes a one-line entry for each
- * so the Learn surface's Health tab can say what memory looks like without
+ * so the Learning surface's Health tab can say what memory looks like without
  * the user having to go looking.
  *
  * Deliberately absent — but NOT for the reason this comment used to give:

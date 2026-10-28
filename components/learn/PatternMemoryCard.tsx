@@ -2,7 +2,7 @@
  * PatternMemoryCard — the journal review's synthesis, read where the memory
  * it describes lives. It used to sit inside the Journal's trade log (a
  * pattern-memory.md row above the ledger); the Journal is the trade ledger
- * alone now, and this card is the Learn surface's Memory tab.
+ * alone now, and this card is the Learning surface's Memory tab.
  *
  * The document itself lives in the notebook (profile/pattern-memory.md) and
  * is rewritten by the Memory model when the journal updates, so the card

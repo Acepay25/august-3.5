@@ -1,5 +1,5 @@
 /**
- * AgentsView — the Chat surface, not a roster that bounces you somewhere
+ * AgentsView — the Agents surface, not a roster that bounces you somewhere
  * else (WS-6). Reached from the nav as "Chat"; the surface id and every
  * testid still say `agents`, because a dozen gates pin them independently of
  * the label.
@@ -146,7 +146,7 @@ interface AgentsViewProps {
     providerReady?: boolean;
     /** Rename a bot in place (WS-6's row affordances). */
     onRenameBot?: (botId: string, name: string) => void;
-    /** Jump to the Coach inbox, which lives on the Learn surface. Without it
+    /** Jump to the Coach inbox, which lives on the Learning surface. Without it
      *  the rail shows no Coach pill — a shortcut to a thread this surface no
      *  longer owns would be a dead end wearing a badge. */
     onOpenCoach?: () => void;
@@ -158,7 +158,7 @@ interface AgentsViewProps {
      *  (`showEffort: false`) rather than showing a dial nothing reads. */
     modelPicker?: (opts: { showEffort: boolean }) => React.ReactNode;
     /** Why the stored chat model cannot answer, and what will instead (stage 3
-     *  F4b). The Chat surface runs the same solo pick as the dock, so it must
+     *  F4b). The Agents surface runs the same solo pick as the dock, so it must
      *  carry the same amber warning — hidden while a bot is selected, because a
      *  bot answers from its own config and the pick is irrelevant to it. */
     modelFallback?: { issue: string; provider: ProviderConfig } | null;
@@ -268,7 +268,7 @@ const chatRowFrom = (m: Message, username: string, deskName: string): ChatRowVie
     const trace = messageTraceText(m);
     // The trail, one line per entry. `liveToolEvents` is the capped,
     // newline-JOINED live feed — read as a list it is ONE row holding every
-    // line, which is why the Chat surface's tool rows never paired. The
+    // line, which is why the Agents surface's tool rows never paired. The
     // settled trail is `toolEvents`; the live feed is the fallback, and its
     // newlines are split so an older row still draws one row per line.
     const liveFeed = Object.values(m.liveToolEvents ?? {})
@@ -286,7 +286,7 @@ const chatRowFrom = (m: Message, username: string, deskName: string): ChatRowVie
         reasoning: trace.length > 0 ? trace : undefined,
         toolLines: trail,
         // The payload ids, so the tool rows can open onto the real output —
-        // the expander is the dock's one job the Chat surface could not do.
+        // the expander is the dock's one job the Agents surface could not do.
         toolIds: m.toolIds,
         // What the wire was asked, so the row can say WHY a turn has no trace.
         wireAudit: m.wireAudit,
@@ -756,7 +756,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
     const botIsolated = !!activeBot && (activeBot.memoryScope ?? 'global') !== 'global';
     // The Chart AI pane IS the dock's conversation — the same array, not a
     // copy (WS-6's hard requirement). It used to be [], which made "opening it
-    // here and on the Trade surface shows the same conversation" false: the
+    // here and on the Analyze surface shows the same conversation" false: the
     // pane was a launcher wearing a transcript. The desk's own slice is
     // deskThread: desk-tool verdicts and session-model answers land
     // inline, while a bot's DM stays in that bot's row instead of leaking
@@ -1023,7 +1023,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                     </button>
                     {onOpenCoach && (
                         /* A route, not a second counter. The queue's number
-                           rides the Knowledge tab that hosts it — this row used
+                           rides the Learning tab that hosts it — this row used
                            to carry `coachCount` (drafts + proposals) while the
                            switch badge beside it showed `approvalsWaiting`
                            (everything pending, permissions included), so one

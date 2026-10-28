@@ -40,7 +40,7 @@ export const workSummaryLabel = (tools: string[]): string | null =>
 export const workKindSummary = (tools: string[]): string | null => turnKindSummary(tools);
 
 /** The shape this actually reads. The dock passes its `LiveEntry` straight
- *  in; the Chat surface adapts a pipeline `Message` onto the same fields.
+ *  in; the Agents surface adapts a pipeline `Message` onto the same fields.
  *  Widening the prop to the fields rather than to a store type is what lets
  *  two surfaces render one timeline without either owning the other's model. */
 export interface ChatWorkView {

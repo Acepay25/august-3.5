@@ -176,7 +176,7 @@ const BACKUP_WATCHDOG_REPEAT_MS = 2 * 60 * 60 * 1000;
 const BACKUP_WATCHDOG_EVERY_MS = 2 * 60 * 1000;
 
 /**
- * The Chat surface's model control — provider, model and the thinking dial,
+ * The Agents surface's model control — provider, model and the thinking dial,
  * subscribed HERE rather than in App's body.
  *
  * `chatStore` latches the username it loaded for on its FIRST touch and rehashes
@@ -186,7 +186,7 @@ const BACKUP_WATCHDOG_EVERY_MS = 2 * 60 * 1000;
  * one, and the session id the dock had been writing into simply stopped existing
  * — `mutate` no-ops on an unknown id, so a send appended nothing and the run
  * hung behind a bubble that never settled. Mounting this node is what touches
- * the store, and that only happens once the Chat surface is on screen.
+ * the store, and that only happens once the Agents surface is on screen.
  *
  * The snapshot is the tier itself, so the subscription re-renders on a real
  * change and not on every streaming patch of the session store.
@@ -361,7 +361,7 @@ const App: React.FC = () => {
                     if (wrote) {
                         // NOT a misroute, verified: Settings → Memory carries an
                         // "Open the notebook" button (Alt+5) that routes to
-                        // Learn → Memory, which is where Suggestions renders. The
+                        // Learning → Memory, which is where Suggestions renders. The
                         // signpost is the switches tab, the file is one hop on —
                         // the convention `tests/toolActions.test.tsx` pins.
                         toast.success('Memory reviewed', 'Open Suggestions in Settings → Memory.');
@@ -376,7 +376,7 @@ const App: React.FC = () => {
             if (timer) clearTimeout(timer);
         };
     }, [toast]);
-    /** Set when another surface asks to open Learn on a SPECIFIC tab
+    /** Set when another surface asks to open Learning on a SPECIFIC tab
      *  (Settings → "Open the notebook"). LearnView reports it consumed
      *  (onInitialTabConsumed), so it navigates exactly once and the user's own
      *  last tab survives the next mount — same contract as journalTab. */
@@ -398,9 +398,9 @@ const App: React.FC = () => {
         isWatchListVisible, setIsWatchListVisible,
         setLearnTab,
     });
-    /** The Chat surface's switch: go and talk to the desk WITH the chart.
+    /** The Agents surface's switch: go and talk to the desk WITH the chart.
      *
-     *  A route, not a mode. The Chat surface is the thread; the Chart AI
+     *  A route, not a mode. The Agents surface is the thread; the Chart AI
      *  experience lives where the chart is, so the hop lands on the session that
      *  stands in for the conversation being read — otherwise the dock opens on
      *  whichever chat was last used and the two surfaces become two transcripts
@@ -466,7 +466,7 @@ const App: React.FC = () => {
     }, [surface]);
 
     /** The Customize rail row's destination: the skill library, which is a tab of
-     *  the Knowledge surface now. It used to open Settings → Skills, and before
+     *  the Learning surface now. It used to open Settings → Skills, and before
      *  that a rail surface — three homes for one library. */
     const openCustomize = useCallback((): void => {
         setLearnTab('skills');
@@ -699,10 +699,10 @@ const App: React.FC = () => {
     // puts the rail back where the user left it.
     const closeNavOverlay = useCallback(() => setIsNavOverlayOpen(false), []);
 
-    // Chart AI dock routing (the Chat surface is gone — roster clicks open
+    // Chart AI dock routing (the Agents surface is gone — roster clicks open
     // sessions inside the trade surface instead). Nonce-keyed so re-clicking
     // the same bot/group re-fires the open effect. The Coach inbox is not
-    // routed here any more: it is a Learn tab.
+    // routed here any more: it is a Learning tab.
     const [tradeBotRequest, setTradeBotRequest] = useState<{ botId: string; nonce: number } | null>(null);
     const [tradeGroupRequest, setTradeGroupRequest] = useState<{ groupId: string; nonce: number } | null>(null);
 
@@ -713,7 +713,7 @@ const App: React.FC = () => {
         try { return localStorage.getItem(PREF_KEYS.CASUAL_CHAT_MODEL) || ''; } catch { return ''; }
     });
     /** The one model-change writer for every chat home: the app-wide default AND
-     *  the active session row. The dock and the Chat surface used to each spell
+     *  the active session row. The dock and the Agents surface used to each spell
      *  this pair — two statements for one decision, which is how two homes start
      *  answering with different models. (E-51 Phase 2, G-4.) */
     const changeChatSoloModel = useCallback((value: string): void => {
@@ -1309,13 +1309,13 @@ const App: React.FC = () => {
             // still exists — it is the Skills SETTINGS tab now. A key that goes
             // silently missing is the worse outcome.
             // chord is muscle memory for "my skill library", and the library
-            // still exists — it is the Skills tab of the Knowledge surface now.
+            // still exists — it is the Skills tab of the Learning surface now.
             // A key that goes silently missing is the worse outcome.
             if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === '3') {
                 e.preventDefault();
                 openCustomize();
             }
-            // Alt+6 takes the Chat surface's question to the chart. Scoped to
+            // Alt+6 takes the Agents surface's question to the chart. Scoped to
             // that surface: on any other one the chord would move something the
             // user cannot see, and a key that silently does nothing is worse
             // than one that is not bound — so it does not even preventDefault
@@ -1611,8 +1611,8 @@ const App: React.FC = () => {
      *
      * The Chart AI dock used to run with the scheduler's private-run option,
      * which sent the run into a message list built here, so a Full analysis
-     * started on the chart never appeared in the Chat surface's thread or the
-     * rail's list. The Chat surface ran on the active conversation instead.
+     * started on the chart never appeared in the Agents surface's thread or the
+     * rail's list. The Agents surface ran on the active conversation instead.
      * Two entries for one feature is how the two homes ended up showing
      * different answers to the same question, so there is now one: the run
      * writes the active conversation, which is the thread `entriesForSession`
@@ -1629,7 +1629,7 @@ const App: React.FC = () => {
         // what the dock renders, and it only merges the conversation's rows
         // once that link exists. A chart-side session with a transcript of its
         // own is not blank, so this mints the conversation's session and makes
-        // it active — the analysis lands where the Chat surface can see it, and
+        // it active — the analysis lands where the Agents surface can see it, and
         // the earlier chart-only chat stays in the rail as itself.
         if (activeConversationId) chatStore.bindConversation(activeConversationId);
         const images: ImageMetadata[] = chatImages.map(img => ({
@@ -1685,7 +1685,7 @@ const App: React.FC = () => {
      *  exchange had never happened.
      *
      *  Both rows go in, because the dock's composer writes into the chat
-     *  session, not the conversation: unlike the Chat surface, the trader's own
+     *  session, not the conversation: unlike the Agents surface, the trader's own
      *  line is NOT already there waiting to be claimed. The answer is stamped
      *  `botId` + `modelsUsed`, which is what lets `threadForProvider` claim the
      *  pair as this bot's thread, and what keeps it out of the desk pane —
@@ -1707,7 +1707,7 @@ const App: React.FC = () => {
                 modelsUsed: { [bot.providerId]: bot.modelId },
                 botId: bot.id,
                 // The work time the dock's own block measured, committed onto the
-                // message so the Chat surface's collapsed block shows the same
+                // message so the Agents surface's collapsed block shows the same
                 // "Analyzed for Ns" this dock row did — and so it survives a
                 // reload. Without it the Chat rail's runStats is the only source
                 // and a dock-native answer shows no duration there.
@@ -1733,7 +1733,7 @@ const App: React.FC = () => {
     ): void => {
         const at = new Date().toISOString();
         // What a mirrored desk turn OWNS on the row. The trace rides under the
-        // answering provider's key — the same key the Chat surface's own live
+        // answering provider's key — the same key the Agents surface's own live
         // writer uses — so one turn is one paragraph, not two.
         const live = (createdAt: string): Partial<Message> => ({
             isStreaming: !!row.streaming,
@@ -1767,10 +1767,10 @@ const App: React.FC = () => {
     }, [updateMessages]);
 
     /** Adopt (or mint) the conversation a Chart AI solo turn speaks into, and
-     *  point the Chat surface at it.
+     *  point the Agents surface at it.
      *
      *  A dock session started on the Trade screen had no conversation at all, so
-     *  nothing said there could ever appear in the Chat surface — the two homes
+     *  nothing said there could ever appear in the Agents surface — the two homes
      *  were two transcripts wearing one app. Every solo turn now resolves to a
      *  thread first: the session's own binding if it still exists, else the
      *  unused blank conversation the housekeeping reuses for "New chat", else a
@@ -1903,7 +1903,7 @@ const App: React.FC = () => {
     // Per-bot learning stats for the Agents rail (WS-3.4). Walks the notebook,
     // so it is keyed to notebook writes and the roster — not to price ticks.
     const botStats = useMemo(() => loadBotLearningStats(), [bots, memoryNonce]);
-    // One number for one meaning: the union of every queue the Knowledge surface
+    // One number for one meaning: the union of every queue the Learning surface
     // hosts — the notebook's pending drafts, proposals and amendments, plus the
     // permissions the harness is asking for. A skill draft appears in
     // approvalItems too, so it is counted once, from the store — not twice
@@ -1961,7 +1961,7 @@ const App: React.FC = () => {
         );
         toast.success('Skill discarded', 'Similar suggestions paused for 7 days');
     }, [activeUsername]);
-    // Roster clicks route into the Chart AI dock (the Chat surface is gone).
+    // Roster clicks route into the Chart AI dock (the Agents surface is gone).
     // Declared after the thread selectors above so their useCallback
     // identities exist at first read.
     const openBotInTrade = useCallback((id: string) => {
@@ -1974,7 +1974,7 @@ const App: React.FC = () => {
         setTradeGroupRequest({ groupId: id, nonce: Date.now() });
         setSurface('trade');
     }, [selectGroupThread, setSurface]);
-    /** The Coach inbox merged into the Learn surface, so a coach hop names the
+    /** The Coach inbox merged into the Learning surface, so a coach hop names the
      *  tab rather than opening a dock session. */
     const renderCoachInbox = useCallback(() => (
         <React.Suspense fallback={null}>
@@ -1993,7 +1993,7 @@ const App: React.FC = () => {
     // already open). The Settings → Skills tab is now just a pointer here.
     useEffect(() => {
         const onOpenSkill = (): void => {
-            // The library is the Knowledge surface's Skills tab, so this lands
+            // The library is the Learning surface's Skills tab, so this lands
             // there — the same destination as the Customize row and Alt+3, not a
             // third one.
             openCustomize();
@@ -2003,7 +2003,7 @@ const App: React.FC = () => {
     }, [openCustomize]);
 
     // "Try in chat" from the Studio or the learning queue: the dock reads the
-    // hand-off itself (see skillDeepLink), but on Learn nothing would show the
+    // hand-off itself (see skillDeepLink), but on Learning nothing would show the
     // result, so App does the travelling.
     useEffect(() => {
         const onTrySkill = (): void => setSurface('trade');
@@ -2198,9 +2198,9 @@ const App: React.FC = () => {
 
 
     // The title bar's status cluster, built ONCE. Every surface now has exactly
-    // one bar: Trade/Journal/Knowledge get the band — moved INSIDE the content
+    // one bar: Analyze/Journal/Learning get the band — moved INSIDE the content
     // column so the sidebar runs the full height, the reference's silhouette —
-    // and the Chat surface keeps its own header row, which is why this travels
+    // and the Agents surface keeps its own header row, which is why this travels
     // as a node rather than markup only `shared/Header` can reach. The collapsed
     // rail's expand button is deliberately NOT a node: each bar renders
     // `NavExpandButton` from the callbacks it already holds, because an
@@ -2393,16 +2393,16 @@ const App: React.FC = () => {
 
             {/* Main row. The NavRail is GONE: its five destination rows were the
                 tab strip the redesign was asked to remove, and the switch in each
-                surface's title bar replaces them. The Chat surface keeps its own
+                surface's title bar replaces them. The Agents surface keeps its own
                 conversation column, which is the sidebar the reference has. */}
             <div className="flex-1 flex flex-row min-h-0">
                 {/* The NavRail is gone. Its five destination rows were the tab
                     strip this redesign was asked to remove; the switch now in
-                    each surface's title bar replaces them, and the Chat surface
+                    each surface's title bar replaces them, and the Agents surface
                     keeps the conversation column that IS the reference's sidebar. */}
-                {/* Surfaces: pages, not modals. The Chat surface is gone — the
+                {/* Surfaces: pages, not modals. The Agents surface is gone — the
                     trade surface's Chart AI dock carries the chats, panels and
-                    roster threads; the Coach inbox is a Learn tab; the other
+                    roster threads; the Coach inbox is a Learning tab; the other
                     tabs embed existing components. */}
                 <main className="flex-1 flex flex-col min-h-0 min-w-0 relative bg-zinc-950">
                     {/* The v2 topbar is the ONE shell bar on EVERY surface —
@@ -2431,7 +2431,7 @@ const App: React.FC = () => {
                     />
 
                     {/* The first-run onboarding card used to sit here as a
-                        centered banner, but it ate ~50% of the Trade surface
+                        centered banner, but it ate ~50% of the Analyze surface
                         width. The same nudge now lives inside the Chart AI
                         dock's composer card (see TradeChatPanel) so it shows
                         up exactly where the user needs to take action. */}
@@ -2691,7 +2691,7 @@ const App: React.FC = () => {
                 scroll-to-bottom pill. Every other entry was a duplicate. */}
 
             {/* The Strategy Studio is no longer a surface and no longer a
-                SETTINGS tab either: it is mounted by the Knowledge surface's
+                SETTINGS tab either: it is mounted by the Learning surface's
                 Skills tab (see `renderSkills` on LearnView above), reached from
                 the sidebar's Customize row or Alt+3. No overlay state to manage
                 either way. */}

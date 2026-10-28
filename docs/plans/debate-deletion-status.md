@@ -45,7 +45,7 @@ move `useBotMailbox` / `botRoutine` / `groupRounds` onto the tool turn; (3) add 
 trade-shaped-prose-without-`present_trade` detector with a "log this?" chip; (4) add
 max rounds, per-tool timeout, repeat-call detection, Stop-aborts-a-running-tool, and
 a defined fallback when `deskToolsEnabled` is off or the provider can't call tools;
-(5) specify the Chat surface's system prompt and log which skills were injected per
+(5) specify the Agents surface's system prompt and log which skills were injected per
 turn; (6) add reload-persistence and Stop-mid-tool probes. Decisions: Full analysis
 survives as an instruction shortcut **with a required-tools check**; automations get
 the same tool turn through a **third sink** with per-run and per-day trade caps and
@@ -66,7 +66,7 @@ The two row types do **not** share the tool transcript's fields, measured 2026-1
 
 So an executor that emits one shared state object cannot serve both homes without
 either widening `Message` (a type change) or losing the chip/payload pairing on the
-Chat surface. The extraction therefore takes an **event sink** — the executor calls
+Agents surface. The extraction therefore takes an **event sink** — the executor calls
 `onText / onReasoning / onToolLine / onToolPayload / onAction / onReset / settle` and
 each home maps them onto its own fields. That is what 20a builds.
 
@@ -96,7 +96,7 @@ session does not re-derive them:
   (`:96`, ~20 names, chart-aware: `get_chart_view`, `mark_trade_levels`,
   `draw_on_chart`) plus a frozen `PanelTurnContext` so a background turn still
   writes into its own transcript.
-- The Chat surface's casual turn is the OTHER transport:
+- The Agents surface's casual turn is the OTHER transport:
   `streamQuickResponse(...)` at `useAnalysisPipeline.ts` line 3197 (pre-deletion
 numbering; the file is shorter now) — eight positional
   args, separate `onReasoning` channel, no tool loop. That is the asymmetry stage 20
@@ -105,7 +105,7 @@ numbering; the file is shorter now) — eight positional
   deciding while doing it: (1) the reasoning side-channel — the generator yields
   visible text, so `Message.thoughtProcesses` needs its own route; (2) which tool
   subset a surface WITHOUT a chart may call — `get_chart_view` / `draw_on_chart`
-  have no target there; (3) whether the Chat surface renders a tool chip (the dock's
+  have no target there; (3) whether the Agents surface renders a tool chip (the dock's
   transcript rows already do).
 - Lifting `createChatTurnRunner` into App is **not** the cheap route: its deps
   object (`chatTurnRunner.ts:193-293`) is 35 fields, most of them chart state
@@ -145,7 +145,7 @@ Open engineering questions to settle while implementing, not before:
    answer is "keep it in the tool".
 2. **`reasoningEffort`**: the tool generator yields visible text only, so the
    `Message.thoughtProcesses` side-channel needs its own route (the dock has one;
-   the Chat surface currently gets it from `streamQuickResponse`'s `onReasoning`).
+   the Agents surface currently gets it from `streamQuickResponse`'s `onReasoning`).
 3. Which tools are meaningless on a surface with **no chart**
    (`get_chart_view`, `draw_on_chart`) — pass a chart-aware subset per home, do not
    let a tool call quietly no-op.
@@ -186,7 +186,7 @@ reading is expensive to undo.
    lists `isEnsembleEnabled` as a trigger term, and the guard at :1488 is
    `isChartAnalysisRequested && runEnsembleEnabled`, with casual chat in the
    `else` at :3153. Delete the branch first and every send becomes casual chat
-   with **no desk tools** — so move the Chat surface onto `chatTurnRunner` (the
+   with **no desk tools** — so move the Agents surface onto `chatTurnRunner` (the
    tool-capable runner the dock already uses) in the same change.
 2. **Stage 19** the engine: branch 1488-3152 plus `runEnsembleEnabled` at
    848/872/1091/1154/1188, then `ensembleService`, `ensembleConsensus`,
@@ -237,7 +237,7 @@ reading is expensive to undo.
   `tests/chartFollowsChatSession.test.tsx` (6). render-probe's check now also
   waits for convergence and prints the first paint, so a chart that merely
   lags is distinguishable from one that never follows.
-- **20b (#27)** — the Chat surface's non-bot branch runs a tool turn:
+- **20b (#27)** — the Agents surface's non-bot branch runs a tool turn:
   `services/trade/chatSurfaceTurn.ts` (tools from `CHAT_SURFACE_TOOLS`, no
   canvas tools), split from the bot arm at `useAnalysisPipeline.ts` line 3211
 (pre-deletion numbering).
@@ -248,7 +248,7 @@ reading is expensive to undo.
   a plan presented from Chat lands a decision card on its own row; the
   logged/dismissed disposition map moved to `proposalDisposition.ts` so one
   store serves both. `watchable` is an explicit flag, not an inferred one — the
-  dock arms a level-watch, the Chat surface honestly says it cannot.
+  dock arms a level-watch, the Agents surface honestly says it cannot.
 - **20t (#29)** — `tests/automationRouteCharacterization.test.tsx` (8) pins the
   automation route BEFORE stage 19: private conversation, run continuity, the
   7-run cap, the overrides, the bot fork, the persisted direction, and the
@@ -277,7 +277,7 @@ reading is expensive to undo.
   source-shape pin, which I rewrote to bind the guard to its first statement
   (`if (runEnsembleEnabled) {` also appears at the data pull, so a bare match would
   stay green with the fork deleted) and to forbid the call shape `Prompt.includes(`.
-- **20s (#25)** — the Chat surface finally has a prompt of its own.
+- **20s (#25)** — the Agents surface finally has a prompt of its own.
   `chatSurfaceSystemPrompt` (`chatSurfaceTurn.ts:223`) leads with
   `CHAT_SURFACE_SYSTEM_PROMPT` (`chatPrompts.ts:40`), which is
   `CASUAL_CHAT_SYSTEM_PROMPT` **plus** a calling mandate and an explicit
@@ -323,7 +323,7 @@ RENDER PROBE OK.
 20c deleted the keyword gate, which left the dock's "Full analysis" button with two
 possible meanings: a run that is TOLD to look things up, or nothing. It is the first
 now. `handleRunAnalysisFromChat` takes `fullAnalysis` as a third argument and only
-the dock's binding passes `true` (the Chat surface's ordinary send keeps the plain
+the dock's binding passes `true` (the Agents surface's ordinary send keeps the plain
 wrapper, so an every-turn mandate never shames a definition question). The flag
 rides the options bag → `requireTools` on the turn → the seat is told to call the
 tape before it states a number, and the settled turn carries
@@ -347,7 +347,7 @@ behaviour at every revision. The arm sits in the pipeline at
 
 `services/trade/automationTurn.ts` is the third sink over the same `runToolTurn`.
 It reuses `chatSurfaceTurnMessages` and `surfacePromptWith`, so a schedule and the
-Chat surface cannot answer the same question with two prompt shapes; the `where`
+Agents surface cannot answer the same question with two prompt shapes; the `where`
 wording becomes "a schedule running unattended", which is what the seat needs to
 know. Two decisions worth naming:
 
@@ -776,7 +776,7 @@ picks up. My four changed files report 0 errors / 12 warnings.
 
 The reachability walk found the label was not the only orphaned write:
 
-1. **Knowledge → Session Usage panel reads a store nothing writes.**
+1. **Learning → Session Usage panel reads a store nothing writes.**
    `components/settings/SessionUsagePanel.tsx:33` calls `loadSessionUsage()` and
    `LearnView.tsx:314` mounts it, but `appendSessionUsage` is called only at
    `verdictFinalizer.ts:645`. So the panel has shown nothing new since tranche 1, and
@@ -1124,7 +1124,7 @@ repo-wide); render-probe re-run because the panel's source module changed.
 Runs 4-8 each failed for a DIFFERENT reason, and each one was measured rather
 than assumed — worth keeping as the record of what this phase actually needs:
 
-1. waited for `[data-testid="trade-view"]` (Trade surface) after a reload that
+1. waited for `[data-testid="trade-view"]` (Analyze surface) after a reload that
    restored the Agents surface → timeout. Removed.
 2. no click at all: a reload restores the persisted surface (Settings after the
    sweep), so `sendInDock` had no composer → "no Send button and no Stop button".
@@ -1134,7 +1134,7 @@ than assumed — worth keeping as the record of what this phase actually needs:
    `Unknown tool` branch at DeskToolsService.ts:4212 settles fine.
 4. the phase, moved next to the dock sends, called `navTo` before its `const`
    initialization (`ReferenceError`, probe line 636) → replaced with the same DOM
-   click inline; `surface-switch-${id}` is real (SurfaceSwitch.tsx:56).
+   click inline; `surface-switch-${id}` is real (SurfaceSwitch.tsx:58).
 5. runs 7 and 8 then failed in the boot sequence itself (`trade-view` wait, then
    `page.goto` timeout): run 6 was still alive when 7 launched, so two dev servers
    fought for :3000, and 8 inherited a dead server. Two of my gate cycles were
@@ -1173,7 +1173,7 @@ OK, `RENDER_EXIT=0`**, with `0 → 1` tool rows projected, both name assertions
 green, the tool line surviving a reload (`1 → 1`), and zero pageerrors.
 
 What the phase now covers, all browser-measured: a tool round projects a
-`tool-actions-row` (`0 → 1`), the same turn grows the usage ledger the Knowledge
+`tool-actions-row` (`0 → 1`), the same turn grows the usage ledger the Learning
 panel reads (`364 → 485` bytes), the tool line survives a reload (`1 → 1`), Stop
 during a round leaves one settled row (`3 → 3`), and the dock/Agents/Settings
 sweeps still pass with zero pageerrors.
@@ -1353,7 +1353,7 @@ would have landed half-finished on a `main` that is pushed.
    the automation card's Lenses/Analysts chips go away. A saved schedule keeps running instead
    of failing validation on load, which is the whole reason not to drop the field outright.
 3. *Calibration*: the owner chose **delete the dashboards too**, after being told in plain terms
-   that this removes the Learn tab's calibration bar, trader profile cards and monthly report — not
+   that this removes the Learning tab's calibration bar, trader profile cards and monthly report — not
    just a hidden store. It stays a separate gated pass; it is the largest of the four.
 Also agreed: anything the user typed into the two accuracy instruction boxes is deleted with them,
 with an offer to migrate that text into the general list before the tabs go.
@@ -1484,7 +1484,7 @@ not uniform across a file.
 
 Residual design note the pass confirmed: two prompt-registry entries
 (`analysis.accuracy`, `analysis.pure_ai`) survive the mode and are now editable by
-the Prompts tab but consumed by nothing, and the calibration store plus the Learn
+the Prompts tab but consumed by nothing, and the calibration store plus the Learning
 dashboards — the owner's second DELETE ruling inside this decision — are untouched.
 
 ## 2026-10-19 — #17 second pass: committed locally, two gates still owed
@@ -1640,7 +1640,7 @@ at a time, never alongside the probe.
 ## 2026-10-19 — the calibration dashboards are deleted; one claim of mine was wrong
 
 The owner's second ruling inside #17 is now executed. The Confidence Calibration
-card and its bar are gone from the Learn surface, the profile no longer computes
+card and its bar are gone from the Learning surface, the profile no longer computes
 a per-confidence win-rate list, and the card that shared the file with them kept
 its own name: the surviving component is
 `components/dashboards/learning/AvoidSetupsSection.tsx`, because it renders
@@ -2394,7 +2394,7 @@ file: 33, every one bound; 20 rows name no file, floors moved to 33.
 **Resume state (2026-10-19, end of this session).** Arrow coverage measures 52 of 53 rows content-checked, and the one uncited row is the ensemble row, which claims no stage number because the code names none. Three decisions belong to the owner and nothing further moves without them: whether the still-live ensemble leg stays, whether the release workflow gains the flow-doc anchor step that only CI runs today, and whether these commits get pushed. Two review items are unproven rather than unaddressed: that the browser gates wait on the splash node, and the count of provider clients that replaced the deleted per-provider services, which the reviewer called unfalsifiable — making it falsifiable means adding a census recipe this gate re-executes, the same shape as the existing provider-deletion census. Figures quoted here are a dated record; the two flow docs carry the live claims.
 
 
-**The last unverified review item is now measured (2026-10-19): do the browser gates wait on the splash node?** Yes, both of them, and each is cited to the line that does it. boot-probe clears the splash with `waitForFunction scripts/boot-probe.cjs:119` — the predicate is that no #splash element remains — and then waits for the lazy Trade surface at `waitForSelector scripts/boot-probe.cjs:122`, which is the pair the probe was written for (the v1.0.20 symptom WAS a splash hang, so waiting for the splash to vanish is the assertion, not a nicety). The e2e smoke does the same from the other side: `toHaveCount e2e/smoke.spec.ts:54` inside the workspace seeder, and again per-test at `toHaveCount e2e/smoke.spec.ts:140`, both asserting the #splash node is gone after React mounts. So the reviewer could not see it from the doc, and it is true in the code: neither gate can pass while the app is still showing the splash. Related, the other item the reviewer called unfalsifiable — the provider-client count — is already a recipe the anchor gate re-executes, and it prints git names 24 deleted files under services/providers/ with 6 remaining.
+**The last unverified review item is now measured (2026-10-19): do the browser gates wait on the splash node?** Yes, both of them, and each is cited to the line that does it. boot-probe clears the splash with `waitForFunction scripts/boot-probe.cjs:119` — the predicate is that no #splash element remains — and then waits for the lazy Analyze surface at `waitForSelector scripts/boot-probe.cjs:122`, which is the pair the probe was written for (the v1.0.20 symptom WAS a splash hang, so waiting for the splash to vanish is the assertion, not a nicety). The e2e smoke does the same from the other side: `toHaveCount e2e/smoke.spec.ts:54` inside the workspace seeder, and again per-test at `toHaveCount e2e/smoke.spec.ts:140`, both asserting the #splash node is gone after React mounts. So the reviewer could not see it from the doc, and it is true in the code: neither gate can pass while the app is still showing the splash. Related, the other item the reviewer called unfalsifiable — the provider-client count — is already a recipe the anchor gate re-executes, and it prints git names 24 deleted files under services/providers/ with 6 remaining.
 
 
 **Stage 1 of #19 landed (2026-10-19): the ensemble flag stops deciding data work.** Per the owner ruling — keep Hybrid Intelligence, delete the ensemble leg, let market data be pulled on demand — a manual send no longer fetches real-time data: the seat calls get_market_packet, which already runs the same fetchHybridData + generateHybridPromptInjection path, so the capability is unchanged while an ordinary answer stops spending an exchange round trip it never asked for. Scheduled runs keep their unconditional pull, because for them the data IS the point. hooks/useMarketData now keys live polling to the Hybrid Intelligence toggle alone (guard at :44, reachability check at :127 and :161, effect deps at :118 and :192), which is exactly the re-parenting the grep-and-delete warning above said would be required before the toggle could go. Two things this pass caught about itself: (1) tests/automationRouteCharacterization.test.tsx went red because the deletion SUCCEEDED — it required an `if (runEnsembleEnabled) {` block to still exist, and its own comment anticipated the deletion — so it now asserts the property (no mode-gated block, the arm inside the schedule guard, a schedule-only fetch) and was checked against HEAD source to prove those assertions fail there; (2) 22 citations into the hook drifted when about fifteen lines vanished and the gate caught only six of them, because the rest are bare continuation numbers that land silently on whatever code is now there — including two that landed on comment lines and were flagged only in the ledger. The anchor count moved 305 to 302 as citations collapsed onto shared lines and others were re-anchored.

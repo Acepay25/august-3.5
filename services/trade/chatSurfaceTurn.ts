@@ -1,12 +1,12 @@
 /**
  * chatSurfaceTurn — ONE Chat-surface turn against the desk-tool transport.
  *
- * The Chat surface answered with `streamQuickResponse`: one request, no tools.
+ * The Agents surface answered with `streamQuickResponse`: one request, no tools.
  * So a question about the current price was answered out of the model's
  * training data while the Chart AI dock, asked the same question, looked it up.
  * Stage 20's premise is that a seat finds things out by CALLING, so both homes
  * now run the same executor (`services/trade/toolTurn`). What differs is the
- * ROW: the dock writes a `chatStore` `LiveEntry`, the Chat surface writes a
+ * ROW: the dock writes a `chatStore` `LiveEntry`, the Agents surface writes a
  * canonical `Message` — the record the rail, the Journal and the learning loop
  * read. The sink below is that difference and nothing else.
  *
@@ -88,7 +88,7 @@ export const CHAT_SURFACE_TOOLS = [
     // shared executor draws nothing and arms no watch for this sink — and says
     // so in the receipt rather than promising a [HARNESS SIGNAL] that cannot come.
     'present_trade',
-    // A skip is a decision; the Chat surface must be able to leave the HOLD
+    // A skip is a decision; the Agents surface must be able to leave the HOLD
     // record it was told to consider.
     'decline_trade',
     // Anything that can be clipped must be able to be re-read.
@@ -114,7 +114,7 @@ export interface ChatSurfacePrompt {
  * turn's prompt instead of waiting for a reload.
  *
  * `where` phrases the skills heading, because two surfaces ask the same question
- * about different subjects — the Chat surface matches a skill to "what the trader
+ * about different subjects — the Agents surface matches a skill to "what the trader
  * asks about", a scheduled run to "what this schedule is looking at".
  *
  * Every block is guarded separately. An unreadable notebook must not cost the
@@ -215,7 +215,7 @@ export const surfacePromptWith = (mandate: string, where: string, opts: { memory
 };
 
 /**
- * The Chat surface's own system prompt (stage 20s), assembled the way the dock
+ * The Agents surface's own system prompt (stage 20s), assembled the way the dock
  * assembles its seat prompt, with one difference this surface has to honour: the
  * skills heading says "what the trader asks about", because there is no chart
  * here to match against, and the mandate forbids the tool calls the canvas owns.

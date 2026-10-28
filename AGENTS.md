@@ -217,7 +217,7 @@ is how the numbers drift apart:
   open onto the REAL output the tool returned. `Message.liveToolEvents` is
   something else: the capped, newline-JOINED LIVE feed a filling bubble shows
   — read it as a list and you get ONE row holding every line, which is how the
-  Chat surface's tool rows never paired a call with its result.
+  Agents surface's tool rows never paired a call with its result.
 - `utils/finishReason.ts` — normalizes the four providers' stop signals onto one
   `FinishReason`, and brackets a run's truncation tally. Read the ceiling with
   `peekTruncations()`; don't re-derive it from a missing regex match.
@@ -264,7 +264,7 @@ is how the numbers drift apart:
   picker takes the panel, it does not grow a second flyout. `ModelPicker` keeps
   only the trigger and the value shape its `mode` speaks.
 - `components/shared/JumpToLatestFab.tsx` — the ONE way back to the newest row,
-  mounted by both conversation homes (the Chat surface and the Chart AI dock).
+  mounted by both conversation homes (the Agents surface and the Chart AI dock).
   It appears when the trader has scrolled away, and while a turn runs it shows
   an INDETERMINATE ring: a desk turn has no denominator anyone could honestly
   draw, so a "60% done" arc would be a number the app invented. `JUMP_AWAY_PX`

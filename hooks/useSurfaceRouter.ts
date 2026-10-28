@@ -37,7 +37,7 @@ export interface SurfaceRouterOptions {
     setIsLiveMarketVisible: (visible: boolean) => void;
     isWatchListVisible: boolean;
     setIsWatchListVisible: (visible: boolean) => void;
-    /** The #/journal/learning bookmark used to land on the Learn surface. */
+    /** The #/journal/learning bookmark used to land on the Learning surface. */
     setLearnTab: (tab: LearnTab | null) => void;
 }
 

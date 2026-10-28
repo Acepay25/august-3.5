@@ -385,10 +385,10 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
      *
      * This used to be ONE `analysisAbortController` ref for the whole app, and
      * an effect on `activeConversationId` that aborted it on any conversation
-     * change. That made the Chat surface's run the opposite of the dock's: the
+     * change. That made the Agents surface's run the opposite of the dock's: the
      * dock's session state is hoisted into `services/trade/chatStore.ts` and its
      * controller is per-session, so an answer survives a surface switch, while
-     * the Chat surface's run died the moment you looked at another thread.
+     * the Agents surface's run died the moment you looked at another thread.
      *
      * The machinery to survive a switch was already here — every async write
      * goes through `updateRequestMessages`, which binds the write to the

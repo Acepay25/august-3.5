@@ -59,7 +59,7 @@ interface TabConfig {
 }
 
 /** Dead tabs fold to the ledger. 'performance' predates this file's tab
- *  rename; 'learning'/'memory' moved to the Learn surface with the Studio
+ *  rename; 'learning'/'memory' moved to the Learning surface with the Studio
  *  merge; 'models' and 'reasoning' were deleted outright on 2026-10-07 —
  *  a stale hash or old bookmark lands on the trades, never a blank panel. */
 const resolveTab = (tab: string): TabId =>
@@ -236,7 +236,7 @@ const JournalInner: React.FC<JournalProps> = ({
                             role="tab"
                             id={`journal-tab-${tab.id}`}
                             /* The probe's tabbed sweep enters a view by testid
-                               (the Learn tabs' convention); the id alone is not
+                               (the Learning tabs' convention); the id alone is not
                                queryable there. */
                             data-testid={`journal-tab-${tab.id}`}
                             aria-selected={isActive}

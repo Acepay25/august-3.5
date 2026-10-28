@@ -8,7 +8,7 @@
  * write_memory_note / get_notebook_map / propose_skill / revise_skill /
  * amend_memory / forge_tool — so the model can create, update and edit its
  * own memory, skills and tools right from this chat (proposals still need the
- * human's approval in Settings / the Learn surface's Coach tab; visible status rows show
+ * human's approval in Settings / the Learning surface's Coach tab; visible status rows show
  * every side-effect). It can also DRAW on the live chart exactly like the
  * user: mark_trade_levels lays an Entry/SL/TP plan as labeled lines,
  * draw_on_chart adds a trendline/ray/zone, clear_chart_drawings wipes them —
@@ -94,7 +94,7 @@ export { __clearProposalStateForTests } from './panels/ChatTranscriptList';
 
 interface TradeChatPanelProps {
     /** The Settings memory toggle — false strips the notebook-topics block
-     *  from the dock seat prompt, the same promise the Chat surface keeps. */
+     *  from the dock seat prompt, the same promise the Agents surface keeps. */
     memoryEnabled?: boolean;
     /** The Settings → Strategies master switch — false strips the active plans
      *  and the uploaded books from this dock seat, the same promise the Chat
@@ -140,7 +140,7 @@ interface TradeChatPanelProps {
      *  (or switch to) a session bound to it. Nonce-keyed so repeats work. */
     botSessionRequest?: { botId: string; nonce: number };
     /** Same, for group rooms. The Coach inbox is not here — it moved to the
-     *  Learn surface when the tabs went into the hamburger menu. */
+     *  Learning surface when the tabs went into the hamburger menu. */
     groupSessionRequest?: { groupId: string; nonce: number };
     /** Launches the FULL ensemble pipeline from this chat. Absent ⇒ the option
      *  is hidden. It resolves when the run ENDS: the pipeline writes the
@@ -179,7 +179,7 @@ interface TradeChatPanelProps {
     /** Group rooms carried into the dock: the room renders INSIDE the session
      *  tabs (App owns the wiring — the dock only shows the slot). Absent ⇒
      *  those session options are hidden. The Coach inbox is not one of them:
-     *  it lives on the Learn surface now. */
+     *  it lives on the Learning surface now. */
     renderGroupSurface?: (groupId: string) => React.ReactNode;
     /** Group rooms available to open as a session (title for the tab). */
     groups?: Array<{ id: string; name: string }>;
@@ -204,7 +204,7 @@ interface TradeChatPanelProps {
      *  both, and the dock is meant to be its compact form, not a
      *  second-class one. */
     onNewGroup?: () => void;
-    /** Jump to the Coach inbox (Learn → Coach), the same destination
+    /** Jump to the Coach inbox (Learning → Coach), the same destination
      *  the Chat rail's Coach pill uses. Absent ⇒ the row is not rendered,
      *  so the dock never shows a control it cannot honor. */
     onOpenCoach?: () => void;
@@ -212,10 +212,10 @@ interface TradeChatPanelProps {
     coachCount?: number;
     /** The canonical conversation for the bot this session is bound to,
      *  as rows. LIVE, not a snapshot: App recomputes it whenever
-     *  `messages` changes, so a turn said in the Chat surface appears in an
+     *  `messages` changes, so a turn said in the Agents surface appears in an
      *  already-open dock session without the trader reopening anything. */
     botThreadRows?: Message[];
-    /** The Chat surface's current thread, handed over by the surface that owns
+    /** The Agents surface's current thread, handed over by the surface that owns
      *  the selection. Used ONLY for a session bound by `conversationId` — the
      *  link that makes one conversation visible in both homes. It is passed in
      *  rather than recomputed here because deciding which rows belong to a
@@ -233,11 +233,11 @@ interface TradeChatPanelProps {
      *  trader types here ever reaches the other home. */
     onSoloTurnCommit?: ChatTurnRunnerDeps['onSoloTurnCommit'];
     /** Adopt (or mint) the App conversation a solo dock turn speaks into, and
-     *  make the Chat surface show it. Without it a session started on the Trade
+     *  make the Agents surface show it. Without it a session started on the Trade
      *  screen had no thread at all, so nothing said here could ever appear
      *  there — the two homes were two transcripts wearing one app. */
     onSyncConversation?: ChatTurnRunnerDeps['onSyncConversation'];
-    /** Jump straight to the Chat surface from the dock header. Routed
+    /** Jump straight to the Agents surface from the dock header. Routed
      *  through App's surface select so the directional enter animation
      *  (Chat arrives from the left) fires like every other Chat hop. */
     onOpenChat?: () => void;
@@ -353,7 +353,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const activeSession = sessions.find(s => s.id === activeId) ?? sessions[0];
     const isPanel = activeSession.kind === 'panel';
     /** The composer's thinking tier — read from the SESSION ROW, not component
-     *  state. The dock unmounts when you hop to the Chat surface, so a `useState`
+     *  state. The dock unmounts when you hop to the Agents surface, so a `useState`
      *  here died with it and the two homes disagreed about what the chat was
      *  asking for. Both now render one chip over one field, and a turn sends
      *  exactly what the chip shows (`chatTurnRunner` → `resolveComposerEffort`). */
@@ -438,19 +438,19 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const skillsIndexForPrompt = (config: ProviderConfig | null): string => {
         try {
             // The ONE projection (SkillMemoryService.skillIndexRows), so this
-            // surface cannot drift from the Chat surface's filter again: it used
+            // surface cannot drift from the Agents surface's filter again: it used
             // to pass none of the gate's facts, naming suspended, disabled,
             // manual-only, other-audience and unapproved rules to a seat.
             // The notebook topics ride the same block — listing-first recall,
             // one line per subject, bodies on demand. ONE budget shared with
-            // the Chat surface (utils/promptIndexBudget), scaled to the seat's
+            // the Agents surface (utils/promptIndexBudget), scaled to the seat's
             // context window, so a small local model gets small indexes in
             // both homes.
             const budget = indexBudgetFor(config?.contextWindowTokens ?? 200_000);
             const store = getMemoryFiles();
             const topics = memoryEnabled !== false ? buildNotebookTopicsIndex(store.files, store.folders, budget.topics) : '';
             const goals = buildGoalsIndex(budget.goals);
-            // The learned rules ride the same block as the Chat surface: they had
+            // The learned rules ride the same block as the Agents surface: they had
             // no reader at all before (docs/AUDIT.md M-5), and a rule only one of
             // the two homes can see is the drift this file keeps fixing.
             const rules = memoryEnabled !== false
@@ -491,7 +491,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     const systemPromptFor = useCallback((bot?: AgentBot, roleNote?: string): string => {
         const skillsBlock = skillsIndexForPrompt(provider);
         const strategiesBlock = strategiesForPrompt();
-        // ONE setting, one answer: the Chat surface gates this block on the same
+        // ONE setting, one answer: the Agents surface gates this block on the same
         // flag AND passes the same scaled budget (chatSurfaceTurn.ts:155-162).
         // The dock used to inject the profile index with memory switched OFF and
         // with the default row count on an 8k model, so the two homes disagreed
@@ -534,7 +534,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     // can't silently route to the wrong one). Legacy bare model ids resolve
     // heuristically; when nothing matches, the first ready provider answers
     // so the dock never dies — but NEVER silently: modelIssue explains it.
-    // One computation, shared with the Chat surface composer: a stale pick must
+    // One computation, shared with the Agents surface composer: a stale pick must
     // read the same in both places.
     const fallback = useMemo(() => computeChatModelFallback(providers, selectedChatModel), [providers, selectedChatModel]);
     const provider = fallback.provider;
@@ -673,7 +673,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     }, [applySkillToken]);
     /** Composer model change: keep the app-wide default AND bind it to the
      *  active session so coming back to this chat reselects it. The per-session
-     *  half goes through the store's own writer, because the Chat surface's chip
+     *  half goes through the store's own writer, because the Agents surface's chip
      *  writes the same field and two rules for one row is how the two homes
      *  start answering with different models. */
     const changeSoloModel = useCallback((value: string): void => {
@@ -681,7 +681,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
         chatStore.setActiveSoloModel(value);
     }, [onSelectChatModel]);
     /** One write, on the row both homes read — no component state to keep in
-     *  step, so nothing here can go stale while the Chat surface changes it. */
+     *  step, so nothing here can go stale while the Agents surface changes it. */
     const changeEffort = useCallback((next: ReasoningEffort): void => {
         chatStore.mutate(activeId, sess => ({ ...sess, effort: next }));
     }, [activeId]);
@@ -693,7 +693,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
     /** The trader has scrolled away from the newest row — the one state the
      *  follow-the-bottom behaviour will NOT fix on its own, because a
      *  transcript that moves while you read it cannot be read. The jump
-     *  control is the way back, and it is the same control the Chat surface
+     *  control is the way back, and it is the same control the Agents surface
      *  mounts (components/shared/JumpToLatestFab.tsx), on the same threshold:
      *  one rule for both homes, so neither yanks a reader the other one
      *  offered a button for. */
@@ -1018,8 +1018,8 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                 })()}
                 <div className="ml-auto flex shrink-0 items-center gap-1">
                     <SupervisorIndicator onOpen={() => setSupervisorOpen(true)} compact />
-                    {/* The same switch the Chat surface carries, so the hop is
-                        visible from BOTH ends. The ⋯ menu's "Open in Chat" row
+                    {/* The same switch the Agents surface carries, so the hop is
+                        visible from BOTH ends. The ⋯ menu's "Open in Agents" row
                         stays, but a return route nobody can see is exactly the
                         asymmetry that made the first version of this control a
                         dead end — the render probe could get here and not back. */}
@@ -1071,7 +1071,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                         );
                                     })()}
                                     {/* Gated on its handler like Collapse is: the
-                                        Chat surface's pane passes none, and a row
+                                        Agents surface's pane passes none, and a row
                                         reading "Expand over chart" in a host with
                                         no chart is a promise plus a dead press. */}
                                     {onToggleExpanded && (
@@ -1088,7 +1088,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
                                         <button type="button" onClick={() => { setShowNewMenu(false); onOpenChat(); }}
                                             data-testid="dock-open-chat"
                                             className="block w-full rounded-control px-2 py-1.5 text-left text-ui-dense text-zinc-300 hover:bg-white/[0.06]">
-                                            Open in Chat
+                                            Open in Agents
                                         </button>
                                     )}
                                     <div className="my-1 border-t border-white/[0.06]" />
@@ -1218,7 +1218,7 @@ const TradeChatPanel: React.FC<TradeChatPanelProps> = ({
 
             {/* Group room: the roster surface the dock embeds (App owns the
                 wiring) instead of the chat transcript. The Coach inbox used to
-                render here too, behind a Chat | Coach switch; it is the Learn
+                render here too, behind a Chat | Coach switch; it is the Learning
                 surface's own tab now. */}
             {activeSession.kind === 'group' && (
                 <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar" data-testid="chat-group-surface">

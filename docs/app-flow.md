@@ -58,13 +58,13 @@ flowchart TD
     APP --> HD["Header band App.tsx:2413 — guard surface !== 'agents' :2551"]
     HD --> SW["SurfaceSwitch App.tsx:2161 — 4 destinations, list in SurfaceMenuList.tsx:44"]
     APP --> AV["AgentsView gets the same nodes as props App.tsx:2553-2651"]
-    SW --> T["Trade · trade-view · App:2434"]
+    SW --> T["Analyze · trade-view · App:2434"]
     SW --> J["Journal · journal-view · App:2482"]
-    SW --> C["Chat · agents-view · App:2553"]
-    SW --> K["Knowledge · learn-view · App:2504"]
-    K -.-> AP["Approvals is a TAB of Knowledge — components/learn/LearnView.tsx:64"]
+    SW --> C["Agents · agents-view · App:2553"]
+    SW --> K["Learning · learn-view · App:2504"]
+    K -.-> AP["Approvals is a TAB of Learning — components/learn/LearnView.tsx:64"]
     NR["NavRail — DELETED (only the shell-chrome consts App:119 remain), NEVER rendered (see correction 5); its AccountRow export IS, App:2625; NAV_RAIL_AUTO_COLLAPSE_PX and NAV_RAIL_EXPANDED_PX are live too"]:::dead
-    SM["SurfaceMenuList components/shell/SurfaceMenuList.tsx:135 destination rows — only mount passes hideSurfaces (App:2462)"]:::dead
+    SM["SurfaceMenuList components/shell/SurfaceMenuList.tsx:141 destination rows — only mount passes hideSurfaces (App:2462)"]:::dead
     classDef dead stroke-dasharray: 5 5,opacity:.5
 ```
 
@@ -77,7 +77,7 @@ Stored surface values `'chat'`, `'boards'`, `'skills'` all migrate to `'trade'`
 
 ```mermaid
 flowchart TD
-    subgraph CHAT["Chat surface (agents)"]
+    subgraph CHAT["Agents surface (agents)"]
         CB["composer textarea — AgentsView.tsx:602 ref, Enter :1677"] --> D1{"send() :787 branches on what is SELECTED"}
         D1 -->|a bot is selected| BOT["onSendBotTurn components/agents/AgentsView.tsx:787 → App:2561 → useBotMailbox → runBotTurn"]
         D1 -->|no bot| AN["onAnalyze(prompt, images) components/agents/AgentsView.tsx:817 → App:1626 handleRunAnalysisFromChat"]
@@ -110,7 +110,7 @@ flowchart TD
 The dock's system prompt is assembled by `systemPromptFor`
 ([TradeChatPanel.tsx:438](../components/trade/TradeChatPanel.tsx)) from
 `TRADE_CHAT_SYSTEM_PROMPT` + skills index + strategies + profile memory + persona.
-The Chat surface's prompt is its own now (stage 20s): `chatSurfaceSystemPrompt`
+The Agents surface's prompt is its own now (stage 20s): `chatSurfaceSystemPrompt`
 ([services/trade/chatSurfaceTurn.ts:204](../services/trade/chatSurfaceTurn.ts))
 leads with `CHAT_SURFACE_SYSTEM_PROMPT`
 ([chatPrompts.ts:40](../constants/prompts/chatPrompts.ts)) — which is
@@ -126,7 +126,7 @@ to the 30 the index prints — a row naming skills the model never saw would be 
 audit defect, not an audit trail.
 
 **One entry, both homes.** `handleRunAnalysisFromChat` (App.tsx:1626) is the only
-analysis wrapper: the dock passes it as `onRunAnalysis` (App:2472) and the Chat
+analysis wrapper: the dock passes it as `onRunAnalysis` (App:2472) and the Agents
 surface as `onAnalyze` (App:2568). It was two, and `services/trade/analysisTurn.ts`
 was deleted (2026-10-17) because a second writer keyed rows with ids no canonical
 row could match — that is what made the two homes disagree.
@@ -136,12 +136,12 @@ row could match — that is what made the two homes disagree.
 the tool rounds, the abort-before-repair order, the text-protocol strip and the
 reasoning peel. The ROW stays with the caller, because the two shapes do not share
 those fields: the dock writes a `chatStore` `LiveEntry` (`tools`/`toolIds`), the
-Chat surface writes a canonical `Message` (`liveToolEvents`, `toolActions`,
+Agents surface writes a canonical `Message` (`liveToolEvents`, `toolActions`,
 `thoughtProcesses`). That is why the executor takes an event SINK and not a shared
-state object — and why the Chat surface stopped answering live-data questions from
+state object — and why the Agents surface stopped answering live-data questions from
 the model's training data (stage 20b, `chatSurfaceTurn.ts`).
 
-A desk seat on the Chat surface may call the canvas-free half of the dock's tools
+A desk seat on the Agents surface may call the canvas-free half of the dock's tools
 plus `present_trade`; the other seven `CHART_ACTION_TOOL_DEFS` are not offered at
 all, because `streamChatWithDeskTools` lists a chart-action definition only when a
 caller dispatches it **and** the seat's allow-list names it. Bots are the exception
@@ -158,7 +158,7 @@ visibly running on the other, and switching mid-answer does not restart,
 duplicate or hide it.
 
 - Chat → dock: `liveEntryFromMessage` (`services/trade/chatSessions.ts:544`)
-  carries `Message.isStreaming` onto the projected row, so a Chat-surface run
+  carries `Message.isStreaming` onto the projected row, so an Agents-surface run
   keeps its activity line, its open work card and its live text after the trader
   hops to the chart. Without that one field the dock showed a FINISHED answer
   that the next token then rewrote under the trader's eyes.
@@ -186,7 +186,7 @@ duplicate or hide it.
 
 ### B.1 The row, the work, the wire and the control
 
-The two homes render one conversation furniture. `ChatTranscriptRow` is the Chat
+The two homes render one conversation furniture. `ChatTranscriptRow` is the Agents
 surface's row; `ChatTranscriptList` is the dock's; both mount
 `ChatWorkTimeline`, which draws the work as one expandable line plus rows:
 `AnalyzedRow` is the live activity line (`turnActivityLabel`) and the settled
@@ -203,7 +203,7 @@ to the UI stack.
 
 The transcript data has two shapes on purpose. `Message.toolEvents` + `toolIds`
 are the settled trail and the payload ids for each line; `liveToolEvents` is the
-capped, newline-joined live feed a filling bubble shows. The Chat surface writes
+capped, newline-joined live feed a filling bubble shows. The Agents surface writes
 the former through `streamChatWithDeskTools`; `liveEntryFromMessage` projects a
 Message onto the dock's `LiveEntry` without losing the trail. A failed turn is
 not an answer: `ChatFailureRow` renders `Message.error` in both homes, and a
@@ -385,7 +385,7 @@ flowchart TD
     INJ -->|closes the loop| C3["stage 3, prompt assembly"]
     HB["heartbeat 15 min + visibilitychange — useLearningHeartbeat, mounted App"] --> HYG["memory hygiene → memoryHygiene.ts"]
     HYG --> IDL["idle suspension — skillIdleLifecycle.ts, rides enabled not a 4th status"]
-    BADGE["one number: approvalsWaiting App, shown on the Knowledge tab that holds the queues"]
+    BADGE["one number: approvalsWaiting App, shown on the Learning tab that holds the queues"]
     IN -.-> BADGE
 ```
 
@@ -468,7 +468,7 @@ What survives is the one unattended caller that is not a conversation — the
 detached skill evaluator, reached from the trade-sync path
 (`runDueSkillEvalWithDefaultRunner services/learning/SkillMemoryService.ts:4088`)
 and from the skill detail's own run. Because nobody is watching it, it runs on
-`DETACHED_EVAL_TOOLS` (`services/trade/unattendedTools.ts:30`): the Chat surface's
+`DETACHED_EVAL_TOOLS` (`services/trade/unattendedTools.ts:30`): the Agents surface's
 set minus every notebook-writer and minus `present_trade` / `decline_trade`, so a detached
 judgement can read the tape and cannot act on the journal. The deny list
 in that module is the single owner of "not without a human".
@@ -699,7 +699,7 @@ where the spec and the code disagreed):
   (`hooks/analysisPipeline/memoryContext.ts:152`) — the same table every other
   seat reads.
   Its ONE writer is the `Global memory` toggle in the notebook manager
-  (`MemoryFilesManager.tsx:366`), on the Learn surface — Settings → Memory shows
+  (`MemoryFilesManager.tsx:366`), on the Learning surface — Settings → Memory shows
   the LIST, not the switch, which is why a probe that looks for it there finds
   nothing. It is a per-profile setting
   (`useProfilePersistence.ts:108` writes `settings.isGlobalMemoryEnabled`,
@@ -720,7 +720,7 @@ where the spec and the code disagreed):
   uploads from `getEnabledStrategiesText`
   (`services/infrastructure/StrategyService.ts:103`), and it returns '' for the
   whole section on an explicit `enabled: false`. Both seat homes call that one
-  function — the Chat surface through
+  function — the Agents surface through
   `surfacePromptWith services/trade/chatSurfaceTurn.ts:124` and the dock through
   `strategiesForPrompt components/trade/TradeChatPanel.tsx:472` — so the switch
   cannot be honoured by one surface and missed by the other. It used to be
@@ -952,14 +952,14 @@ mailbox tools. The surface decides what is offered:
   `DESK_TOOL_NAMES` alone emptied the chart set at that filter, and the widening
   step after it had nothing left to add, which is how a seat answering over a
   live chart told the trader there was no canvas to draw on (2026-10-28);
-- the Chat surface uses `CHAT_SURFACE_TOOLS` (`chatSurfaceTurn.ts:63`), which has
+- the Agents surface uses `CHAT_SURFACE_TOOLS` (`chatSurfaceTurn.ts:63`), which has
   no canvas tools but includes `present_trade`, `decline_trade`,
   `read_tool_output` and `skill_view` — the progressive-disclosure reader
   (L1 body + bundled-file list, L2 one bundled file) that the skills index
   header points every seat at — plus the goal environment tools and the change
   ledger tools (see G.9);
 - a detached skill eval uses `DETACHED_EVAL_TOOLS` (`services/trade/unattendedTools.ts:30`),
-  the Chat set minus the notebook-writers and the two journal-acting tools;
+  `CHAT_SURFACE_TOOLS` minus the notebook-writers and the two journal-acting tools;
 - a panel seat adds the chart-action definitions only when its own allow-list
   names them.
 
@@ -985,7 +985,7 @@ Forged tools are human-gated: `validateProposal` (`toolForge.ts:124`),
 `approveForgedTool` and `executeForgedTool` never run a
 candidate before approval. The chart actions (`draw_on_chart`,
 `mark_trade_levels`, `clear_chart_drawings`) are offered only when the caller owns
-a canvas; the Chat surface's `present_trade` receipt says the card exists but no
+a canvas; the Agents surface's `present_trade` receipt says the card exists but no
 level-watch is armed. The Settings `DeskToolCatalogue` is a reader of the same
 `DESK_TOOL_DEFINITIONS`/`toolLabel` vocabulary, grouped by `toolKinds`; it has no
 per-tool switch because the allow-lists are code, not preferences.
@@ -1090,7 +1090,7 @@ still holds whatever rows history wrote — dropping a table is a migration on t
 live journal, which is a different act from deleting the code that read it.
 
 A presented plan is remembered on its row, not in a store of its own: the dock keeps
-`proposal` on the runtime `LiveEntry` only, the Chat surface on `Message.proposal`
+`proposal` on the runtime `LiveEntry` only, the Agents surface on `Message.proposal`
 (persisted with the conversation), and the logged/dismissed decision in
 `proposalDisposition` — module scope, bounded, deliberately not persisted, because a
 card that forgets it was clicked offers a second journal row.
@@ -1145,7 +1145,7 @@ at the transport — `goalAllowedTools services/trade/chatSurfaceTurn.ts:382`
 › `effectiveAllowed services/analysis/DeskToolsService.ts:5303`, and the rule
 itself is `intersectGoalPolicy utils/toolKinds.ts:188`
 so a goal can only NARROW what a seat may call, and no goal text can widen a
-policy. The intersection has one hard case: a goal authored on the Chat surface
+policy. The intersection has one hard case: a goal authored on the Agents surface
 can name tools the trade seat's `TRADE_TOOLS` never had, and an EMPTY list does
 not mean "nothing" anywhere in this file — `seatAllows` reads it as
 unrestricted — so an empty intersection returns
@@ -1217,7 +1217,7 @@ included: `setSelfModMode services/selfMod/SelfModificationService.ts:166`
 and the toggle sits beside the knobs it governs, in the Harness block at
 `Self-modification components/settings/SessionUsagePanel.tsx:281`
 
-**Where the trader sees it.** The Chat rail's third tab is the audit and the
+**Where the trader sees it.** The Agents rail's third tab is the audit and the
 undo for both kinds of state —
 `GoalRailPanel components/agents/GoalRailPanel.tsx:333`
 lists every goal with its focus control, its status, its history restores and a
@@ -1290,7 +1290,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 40 | reasoning deltas → their own field | the trace rides ON THE ROW: `thoughtProcesses types/message.ts:174` is what the Thinking row draws. The thinking STORE is written when a trade is logged (`useTradeLogging hooks/useTradeLogging.ts:103`); `saveThinkingBatch services/infrastructure/ThinkingStoreService.ts:130` is the RESTORE/migration path (`BackupService`, `SqliteService`), not a per-delta write |
 | 41 | notebook writes → byte tiers | a write asks `notebookPressureAllows services/learning/MemoryFilesService.ts:657` before the notebook may grow; the tiers come from utils/memoryBudget.ts and Settings Health reads memoryHealth.ts |
 | 42 | heartbeat → hygiene + idle sweep | `useLearningHeartbeat hooks/useLearningHeartbeat.ts:42` → `memoryHygiene.ts` → `skillIdleLifecycle.ts` |
-| 43 | approval tray → badge | `collectApprovalItems utils/approvalInbox.ts:57` → `approvalsWaiting App.tsx:1912` → Knowledge tab only |
+| 43 | approval tray → badge | `collectApprovalItems utils/approvalInbox.ts:57` → `approvalsWaiting App.tsx:1912` → Learning tab only |
 | 44 | the pane filters what it shows | `deskThread utils/agentThreads.ts:118` read at `AgentsView.tsx` |
 | 45 | `present_trade` → a card in either home | `runPresentTrade presentTradeTool.ts:78` ← dock sink `chatTurnRunner.ts` / desk sink `chatSurfaceTurn.ts`; gate scan starts there, the cap binds at log time (`ensureStamp services/trade/proposalGate.ts:317`), and the same stamp answers for the shape of the plan — `assessPlanShape services/trade/proposalGate.ts:152` refuses an inverted one and warns on a sub-floor ratio or an out-of-band stop, per ruling (c) of E-57 §5 |
 | 46 | `chatSurfaceSystemPrompt` → the desk arm's prompt | `chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:223` — mandate (`CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40`) + skills index + active strategies and uploaded books + memory index, read FRESH per turn; the 30 slugs printed are the 30 recorded on the row (`types/message.ts:352`) |
@@ -1298,7 +1298,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 48 | ~~a scheduled run → a rationed plan~~ | DELETED with the feature; the two live turn owners still ration nothing |
 | 49 | ~~a schedule's failure → the row and the toast~~ | DELETED with the feature. The rule it carried still binds anything unattended: a run that called nothing must not settle as a clean answer |
 | 50 | a journal row gets its scalp/swing class | `withDetectedTradeType` (`services/analysis/ScalpDetectionService.ts`) is called at the two row-minting sites `withDetectedTradeType hooks/useTradeLogging.ts:372` and `withDetectedTradeType hooks/useTradeLogging.ts:780` — label-only, so no `validityDurationMinutes` appears and the autopilot expiry window never widens. The filter reads it at `components/journal/TradeLog.tsx:540` |
-| 51 | a run records its measured cost | `recordToolTurnUsage utils/sessionUsage.ts:63` is called by both turn owners — desk arm chatSurfaceTurn.ts, dock seats chatTurnRunner.ts — from the usage the wire reported per request. Knowledge → Session Usage reads that ledger; stage 19 left it with a reader and no writer. usageCalls distinguishes a zero-cost run from a provider that sent no usage frame |
+| 51 | a run records its measured cost | `recordToolTurnUsage utils/sessionUsage.ts:63` is called by both turn owners — desk arm chatSurfaceTurn.ts, dock seats chatTurnRunner.ts — from the usage the wire reported per request. Learning → Session Usage reads that ledger; stage 19 left it with a reader and no writer. usageCalls distinguishes a zero-cost run from a provider that sent no usage frame |
 | 52 | a finished analysis says so | `notify()` (`services/infrastructure/notify.ts`) fires when a Full-analysis send settles un-stopped (`notify hooks/useAnalysisPipeline.ts:1276`). Before stage 19 this came from the verdict finalizer; the old channel name CompletionNotifications was a native-only copy of the same thing, and its FILE is gone with stage 19's tranche — the only surviving mention is a comment in `services/infrastructure/notify.ts` — so the app speaks through one notifier |
 | 53 | the chart gets its Entry/Stop/Target lines | `latestChartVerdict(messages)` `latestChartVerdict services/trade/chartData.ts:95` is what App hands `TradeView` as `verdict` — the newest row carrying `Message.proposal` (what `present_trade` stamps; `proposal services/trade/chatSurfaceTurn.ts:411`), with `Message.analysis` as the fallback for pre-debate history. Red-proved: the old selector keyed on `ensembleProgress` / >1 `modelsUsed` / `debateTurns` and returned null for every tool-turn row. render-probe PASSED on 2026-10-18 after this change (zero pageerrors, every row rendered), but the probe asserts no canvas overlay levels, so the drawn Entry/Stop/Target line is still un-asserted by any gate |
 | 54 | request → context window | `resolveContextWindow utils/contextWindow.ts:136` resolves user → measured → model → assumed; `outputTokenBudget utils/contextWindow.ts:187` and `promptTokenCeiling utils/contextWindow.ts:169` size the two halves of one request |
@@ -1332,15 +1332,15 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 2. There is **no `utils/deskThread.ts`** — `deskThread` is `utils/agentThreads.ts`.
 3. The provider layer speaks **four** wire formats (`types/provider.ts`); "three"
    describes only `electron/sseParser.cjs`, which has no `google` dialect.
-4. Approvals is a **tab** of the Knowledge surface, not a fifth destination. The live
-   destination set is exactly `trade | journal | agents (labelled Chat) | learn
-   (labelled Knowledge)`.
+4. Approvals is a **tab** of the Learning surface, not a fifth destination. The live
+   destination set is exactly `trade | journal | agents | learn`, labelled
+   Analyze, Journal, Agents and Learning.
 5. **`NavRail` is DELETED (2026-10-28).** The component had no rendered caller; the only
    thing it alone hosted was the update download, which had no other entry point anywhere in
    the app. The download moved to the header (`components/shared/Header.tsx` mounts
    `UpdateButton`), and the two live pieces of the file moved with it: the layout constants
    (`NAV_RAIL_COLLAPSED_PX`, `NAV_RAIL_EXPANDED_PX`, `NAV_RAIL_AUTO_COLLAPSE_PX`) and
-   `AccountRow` now live in `components/shell/shellChrome.tsx`, which is what App, the Chat
+   `AccountRow` now live in `components/shell/shellChrome.tsx`, which is what App, the Agents
    surface and the render probe import. `NAV_RAIL_EXPANDED_PX` is still the sidebar width the
    probe measures, so the probe reads it from that module.
 6. **A doc line number is a claim, not a citation — and `npm run
@@ -1405,7 +1405,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
    taken with `grep -c` rather than a truncated listing — the first version of
    correction 5 died by exactly that truncation. Numbers in section C are
    deliberately omitted: they are the lines stage 19 deletes.
-7. **"The Chat surface has no tools wired" was true, and stopped being true on
+7. **"The Agents surface has no tools wired" was true, and stopped being true on
    2026-10-18.** Both homes now run `runToolTurn`; what still differs is the row
    each writes and which tools that row can honour (a Chat seat gets no canvas
    tools, and its `present_trade` receipt says so rather than promising a level-watch

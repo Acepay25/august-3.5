@@ -4,7 +4,7 @@
  * The rail itself was deleted on 2026-10-28: no rendered or default-import caller
  * existed, and the update download it alone hosted had no other entry point. What
  * remains here is what OTHER files import — the three layout constants the shell
- * and the probes measure the sidebar with, and the account row the Chat surface's
+ * and the probes measure the sidebar with, and the account row the Agents surface's
  * sidebar carries once the rail is not rendered there.
  */
 import React from 'react';
@@ -25,7 +25,7 @@ export const NAV_RAIL_EXPANDED_PX = 240;
  *  widening the window restores what the user actually picked. */
 export const NAV_RAIL_AUTO_COLLAPSE_PX = 1024;
 
-/** Exported because the Chat surface's single sidebar carries it once the rail is
+/** Exported because the Agents surface's single sidebar carries it once the rail is
  *  not rendered there — one account row per screen either way. */
 export const AccountRow: React.FC<{
     expanded: boolean;

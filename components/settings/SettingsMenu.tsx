@@ -65,7 +65,7 @@ interface SettingsMenuProps {
     customInstructions: CustomInstructionsMap;
     setCustomInstructions: (instructions: CustomInstructionsMap) => void;
     // Modals & Navigation triggers from main view
-    /** Opens the Learn surface — the one home for the queues, the notebook and
+    /** Opens the Learning surface — the one home for the queues, the notebook and
      *  memory health. Settings keeps the provider/model switches and links here.
      *  Pass a tab to land somewhere specific. */
     onOpenLearn?: (tab?: LearnTab) => void;
@@ -192,9 +192,9 @@ const NAV_GROUPS: NavGroup[] = [
         ],
     },
     {
-        title: 'Knowledge',
+        title: 'Learning',
         entries: [
-            // Skills left this dialog for the Knowledge SURFACE's own tab, so the
+            // Skills left this dialog for the Learning surface's own tab, so the
             // library and the notebook sit together instead of one being a
             // settings pane. The rail's Customize row and Alt+3 land there.
             { id: 'memory', label: 'Memory', icon: <Brain className={NAV_ICON} />, keywords: 'notebook amendment supervisor profile memory files global' },
@@ -240,7 +240,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
     const [navQuery, setNavQuery] = useState('');
     // The notebook amendments waiting for a human decision. The forged-tool count
     // used to sit here too, badging the Skills tab; the queue moved to the
-    // Knowledge surface with the library, and a badge for a tab that is no longer
+    // Learning surface with the library, and a badge for a tab that is no longer
     // in this dialog is just a number chasing nothing.
     const [pendingAmendments, setPendingAmendments] = useState(() => listAmendments('pending').length);
     useEffect(() => {
@@ -418,7 +418,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                     </summary>
                                     <div className="mt-2 px-2 pb-1 text-ui-dense leading-5 text-zinc-500">
                                         Runtime errors and the thinking-leak bin moved
-                                        to <span className="text-zinc-300">Learn → Health</span>.
+                                        to <span className="text-zinc-300">Learning → Health</span>.
                                     </div>
                                 </details>
                                 <p className="text-ui-xs text-zinc-600 text-center font-mono">
@@ -554,7 +554,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                                         isStrategiesEnabled: props.isStrategiesEnabled,
                                         setIsStrategiesEnabled: props.setIsStrategiesEnabled,
                                         // The library left this dialog for the
-                                        // Knowledge surface's Skills tab, so the
+                                        // Learning surface's Skills tab, so the
                                         // jump crosses surfaces now — and Settings
                                         // closes itself on the way, the same way
                                         // "open the notebook" already does.

@@ -1,5 +1,5 @@
 /**
- * useSurface — the app is a set of surfaces (Trade, Journal, Chat, Learn)
+ * useSurface — the app is a set of surfaces (Analyze, Journal, Agents, Learning)
  * chosen from the rail, not a single page with modal everything. Two surfaces
  * have been removed and their stored values migrate: 'chat' (the Chart AI dock
  * carried the conversations) and 'skills' (the Strategy Studio is the Skills

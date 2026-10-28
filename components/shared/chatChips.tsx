@@ -1,5 +1,5 @@
 /**
- * The small row controls the Chart AI dock and the Chat surface both need. They
+ * The small row controls the Chart AI dock and the Agents surface both need. They
  * were module-local to `TradeChatPanel.tsx` only because there was one caller;
  * with two surfaces rendering the same transcript furniture, they live here so
  * the copy affordance and the row's visibility cannot drift.

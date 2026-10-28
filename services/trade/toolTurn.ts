@@ -4,7 +4,7 @@
  * This is the half of `runSeatTurn` that was never about the dock: stream a
  * reply, let the model call tools while it does, keep its reasoning out of the
  * answer channel, and settle the row honestly. It lived inside the Chart AI
- * panel's session machinery, so the Chat surface could not get tool calls
+ * panel's session machinery, so the Agents surface could not get tool calls
  * without copying that machinery — and a second copy is how two homes start
  * disagreeing about one turn.
  *

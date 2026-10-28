@@ -27,7 +27,7 @@ import AnswerBody from '../../shared/AnswerBody';
 import ChatFailureRow from '../../shared/ChatFailureRow';
 
 /** Per-entry disposition of a model proposal card ('logged' / 'dismissed')
- *  moved to `services/trade/proposalDisposition` when the Chat surface grew a
+ *  moved to `services/trade/proposalDisposition` when the Agents surface grew a
  *  card of its own. It is STILL module scope, so a 'logged' plan survives a dock
  *  unmount exactly as before — the difference is that both homes now read one
  *  map keyed by the row id `entriesForSession` already shares between them, so
@@ -236,7 +236,7 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                                     them. */
                                 <div className="flex items-center gap-2">
                                     {/* The tier this answer was produced under —
-                                        the same muted chip the Chat surface
+                                        the same muted chip the Agents surface
                                         shows, so the two homes say the same
                                         thing about the same turn. */}
                                     {e.effort && <ThinkingTierChip effort={e.effort} />}

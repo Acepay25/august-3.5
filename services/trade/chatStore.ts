@@ -190,7 +190,7 @@ const schedulePersist = (): void => {
         }));
         saveSessions(stored);
         // The last-open session rides the same debounce — reopening the app
-        // (or the Trade surface) lands back in this session, with its chart
+        // (or the Analyze surface) lands back in this session, with its chart
         // setup, model and effort restored from the session row itself.
         try { localStorage.setItem(activeKey(loadedFor), activeId); } catch { /* private mode */ }
     }, 400);
@@ -306,7 +306,7 @@ export const getActiveSession = (): LiveSession | undefined => {
 /**
  * The ACTIVE session's composer thinking tier, read fresh (no subscription).
  *
- * One row, two homes: the Chart AI dock and the Chat surface both drive this
+ * One row, two homes: the Chart AI dock and the Agents surface both drive this
  * dial, so the value a turn sends must come from here rather than from
  * whichever component last wrote it. A session with no stored tier is
  * `'auto'` — "whatever this task defaults to" — which is the behavior every
@@ -319,7 +319,7 @@ export const getActiveEffort = (): ReasoningEffort => {
 
 /** Set it on the ACTIVE session, so the other home sees the same tier the
  *  moment it re-renders. Writing a row rather than component state is the
- *  point: the dock unmounts when you hop to the Chat surface, and state that
+ *  point: the dock unmounts when you hop to the Agents surface, and state that
  *  died with it is the sync gap this closes. */
 export const setActiveEffort = (next: ReasoningEffort): void => {
     ensureLoaded();
@@ -328,7 +328,7 @@ export const setActiveEffort = (next: ReasoningEffort): void => {
 };
 
 /** The same write-through for the composer's model pick: the app-wide default
- *  is App's state, the PER-SESSION binding is this row. A Chat surface that set
+ *  is App's state, the PER-SESSION binding is this row. A Agents surface that set
  *  only the default left the dock answering with whatever this chat last used —
  *  the other half of "the two surfaces don't sync". A panel session keeps its
  *  seats and is left alone. */
@@ -353,7 +353,7 @@ export const addSession = (partial: Partial<LiveSession> = {}, activate = true):
     // A new chat starts with the composer AS IT STANDS. The two composer
     // preferences — thinking tier and solo model — are inherited from the
     // session being left, because a chat created mid-run is not a new choice:
-    // `bindConversation` mints one the moment the Chat surface's send lands in a
+    // `bindConversation` mints one the moment the Agents surface's send lands in a
     // fresh App conversation, and a row that inherits nothing reset the dock's
     // chip to Auto right under the trader who had just picked High.
     //
@@ -422,7 +422,7 @@ export const mutate = (id: string, fn: (s: LiveSession) => LiveSession): void =>
 /** Select — or create — the session that stands in for an App conversation, and
  *  make it the active one.
  *
- *  The Chat surface and the Chart AI dock are ONE conversation across two
+ *  The Agents surface and the Chart AI dock are ONE conversation across two
  *  surfaces, and `ChatSession.conversationId` is the link. Hopping from a chat
  *  to the dock therefore has to land on that conversation's session, not on
  *  whichever session was last used.
@@ -577,9 +577,9 @@ export const endRun = (sid: string): void => {
     emit();
 };
 
-// ── Conversation-keyed runs (the Chat surface's runs) ───────────────────────
+// ── Conversation-keyed runs (the Agents surface's runs) ───────────────────────
 //
-// The Chat surface's run is OWNED BY THE CONVERSATION IT WAS TYPED IN, so a
+// The Agents surface's run is OWNED BY THE CONVERSATION IT WAS TYPED IN, so a
 // conversation switch moves the view and leaves the run alone. These are the
 // store-side half of that: the owner-checked release, a per-conversation Stop,
 // and the "is anything running" read the badge needs.

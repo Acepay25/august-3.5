@@ -6,7 +6,7 @@
  * is a market payload — an order book, a liquidation ladder, a notebook read —
  * each up to the per-result cap in `budgetToolContent`. Eight rounds of three
  * tools is twenty-four payloads inside ONE request, and nothing anywhere looked
- * at the running total. The Chat surface had the same shape from the other side:
+ * at the running total. The Agents surface had the same shape from the other side:
  * `chatSurfaceTurnMessages` maps the WHOLE stored conversation onto the wire,
  * so turn thirty sends twenty-nine prior turns verbatim. When the request gets
  * too big the provider either refuses it outright or — the worse shape, because

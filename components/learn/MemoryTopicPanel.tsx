@@ -24,7 +24,7 @@ import type { ProviderConfig } from '../../types/provider';
  *     a file row in a different surface;
  *   - ASK for a change in plain words: the instruction goes to the memory
  *     model, the rewrite it returns lands PENDING in the amendment queue, and
- *     a human approves it in Learn → Approvals. Nothing here writes the notebook
+ *     a human approves it in Learning → Approvals. Nothing here writes the notebook
  *     on its own — that is the governance the reference matches and this app
  *     already has.
  *
@@ -106,7 +106,7 @@ const MemoryTopicPanel: React.FC<MemoryTopicPanelProps> = ({ fileId, username, m
         setBusy(false);
         if (outcome.ok && outcome.amendment) {
             setInstruction('');
-            setFeedback('Queued for approval — review it in Learn → Approvals. Nothing changed in the notebook yet.');
+            setFeedback('Queued for approval — review it in Learning → Approvals. Nothing changed in the notebook yet.');
             toast.success('Edit proposed', 'Waiting for your approval in the Approvals tab.');
             return;
         }

@@ -14,7 +14,7 @@ export const FALLBACK_SYMBOLS: SymbolMeta[] = [
  *
  * This used to live in `TradeView` as local state, which meant a second
  * surface wanting the same picker would have had to either duplicate the poll
- * or reach into the trade surface. Hoisted so the Chat surface and the trade
+ * or reach into the trade surface. Hoisted so the Agents surface and the trade
  * header can each hold a `SymbolPicker` over one shared list.
  *
  * The poll is deliberately coarse and never replaces a good list with an empty

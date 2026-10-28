@@ -118,7 +118,7 @@ export interface ChatModelFallback {
  * disabled, lost its key, or the model was deleted. The answer must not die and
  * it must not silently come from a different model either, so every composer
  * that offers a picker shows this reason above the send button. It lives here
- * rather than in the dock because the Chat surface runs the same selection: two
+ * rather than in the dock because the Agents surface runs the same selection: two
  * copies of this branch is how one surface warns and the other lies.
  */
 export function computeChatModelFallback(

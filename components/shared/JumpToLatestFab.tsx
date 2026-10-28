@@ -2,7 +2,7 @@
  * JumpToLatestFab — the ONE control that returns the trader to the newest row.
  *
  * It exists because the two conversation homes had two different answers to
- * the same question, and one of them had none at all: the Chat surface grew a
+ * the same question, and one of them had none at all: the Agents surface grew a
  * "↓ Latest" pill when the palette's jump action was deleted, and the Chart AI
  * dock — the narrower surface, with the longer turns — never got one. A
  * trader reading up the dock's transcript had no way back to the answer that

@@ -3,10 +3,10 @@
  * conversation, so BOTH homes show the same answer arriving.
  *
  * WHY THIS EXISTS. The two homes had one merge and one writer each: the dock
- * streamed into its session's `entries`, and the Chat surface streamed into
+ * streamed into its session's `entries`, and the Agents surface streamed into
  * `Message.isStreaming` + `text`. `commitSoloChatTurn` only ever wrote the
  * conversation at SETTLE, so a turn started in Chart AI was invisible to the
- * Chat surface until it finished — switch across mid-generation and the thread
+ * Agents surface until it finished — switch across mid-generation and the thread
  * showed the question and nothing else, with no sign the desk was working. The
  * reverse direction already worked (`liveEntryFromMessage` projects the
  * conversation's rows into the dock), which made the asymmetry look like a
@@ -45,7 +45,7 @@ export interface SoloTurnRow {
     id: string;
     role: 'user' | 'ai';
     text: string;
-    /** The turn is still arriving — the Chat surface draws the running row from
+    /** The turn is still arriving — the Agents surface draws the running row from
      *  this, and clears it only when the mirror's final flush says false. */
     streaming?: boolean;
     /** The chain-of-thought as it streams, so the Thinking row is live too. */
@@ -59,7 +59,7 @@ export interface SoloTurnRow {
     workedMs?: number;
     effort?: ReasoningEffort;
     /** The provider whose key the trace rides under, so the mirrored trace
-     *  lands in the same `thoughtProcesses` slot the Chat surface's own writer
+     *  lands in the same `thoughtProcesses` slot the Agents surface's own writer
      *  uses instead of opening a second paragraph for one turn. */
     speakerKey?: string;
 }
@@ -97,7 +97,7 @@ export const startEntryMirror = (opts: {
     let timer = 0;
     // The store emits for EVERY session, and a second dock turn streaming in
     // another session would otherwise re-commit this entry unchanged ~5x/s —
-    // each one a React state write on the Chat surface. The row's own shape is
+    // each one a React state write on the Agents surface. The row's own shape is
     // the signature: nothing changed, nothing is sent.
     let last = '';
     const readEntry = (): LiveEntry | undefined => {
@@ -138,7 +138,7 @@ export const startEntryMirror = (opts: {
     };
 
     // The placeholder exists before the first token: commit it now, so the
-    // Chat surface shows a generating row the moment the dock does rather than
+    // Agents surface shows a generating row the moment the dock does rather than
     // after one throttle window of apparent silence.
     write(readEntry());
     const unsubscribe = chatStore.subscribe(schedule);

@@ -2,7 +2,7 @@ import React from 'react';
 import { Info, Pencil, RotateCcw } from './Icons';
 
 /**
- * InterruptedRunNotice — the "Run stopped" card, shared by the Chat surface
+ * InterruptedRunNotice — the "Run stopped" card, shared by the Agents surface
  * row (ChatTranscriptRow) and the Chart AI dock list (ChatTranscriptList),
  * which used to carry two drifting copies of the same furniture.
  *

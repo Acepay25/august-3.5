@@ -1,5 +1,5 @@
 /**
- * Learn — one surface for everything the system knows and how it decided that
+ * Learning — one surface for everything the system knows and how it decided that
  * (WS-5.1).
  *
  * Before this, the learning UI was scattered across nine components in three
@@ -192,8 +192,8 @@ const LearnView: React.FC<LearnViewProps> = ({
 
     return (
         <div className="flex h-full min-h-0 flex-col bg-surface-page" data-testid="learn-view">
-            <nav className="flex shrink-0 items-center gap-1.5 border-b border-zinc-800/80 bg-zinc-900/30 px-4 py-2" aria-label="Learn sections">
-                <span className="mr-3 hidden text-ui-caption font-semibold tracking-[-0.01em] text-zinc-200 lg:inline">Knowledge</span>
+            <nav className="flex shrink-0 items-center gap-1.5 border-b border-zinc-800/80 bg-zinc-900/30 px-4 py-2" aria-label="Learning sections">
+                <span className="mr-3 hidden text-ui-caption font-semibold tracking-[-0.01em] text-zinc-200 lg:inline">Learning</span>
                 {TABS.map(({ id, label, Icon }) => {
                     const active = tab === id;
                     return (
@@ -209,7 +209,7 @@ const LearnView: React.FC<LearnViewProps> = ({
                             }`}>
                             <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                             {label}
-                            {/* No count chip here. The Knowledge rail row already
+                            {/* No count chip here. The Learning rail row already
                                 carries the same number, and once you are inside
                                 this surface the drafts are the list on screen —
                                 so the tab was printing a second "12" for the
@@ -336,7 +336,7 @@ const LearnView: React.FC<LearnViewProps> = ({
                     onCloseDock={closePanel}
                     onResizeStart={rightPanel.startResize}
                     onResizeReset={rightPanel.resetWidth}
-                    label="Learn panels"
+                    label="Learning panels"
                     testId="learn-right-panel"
                     className="border-l border-zinc-800/80 bg-zinc-900 lg:w-[var(--panel-w)]"
                 >

@@ -531,7 +531,7 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     // seat's allow-list. Same reason this section exists at all — a refusal no
     // probe ever triggers. Measured, not assumed: `create_goal` validates a
     // policy against the CURRENT seat, so the dangerous shape (a goal naming
-    // tools this seat lacks) only arrives cross-surface — the Chat surface's
+    // tools this seat lacks) only arrives cross-surface — the Agents surface's
     // list is not the trade seat's TRADE_TOOLS — and there the old code
     // returned an empty list, which every gate reads as "unrestricted". The
     // live probe cannot reach it: the write gate blocks the same-surface case.

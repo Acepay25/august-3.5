@@ -358,7 +358,7 @@ export interface BotLearningStat {
     lastLessonAt: string | null;
 }
 
-/** Per-bot learning stats for the roster rail / Learn surface (WS-3.4). */
+/** Per-bot learning stats for the roster rail / Learning surface (WS-3.4). */
 export const loadBotLearningStats = (): BotLearningStat[] => {
     const skills = listSkills();
     return getBots().map(b => {

@@ -7,8 +7,10 @@
  *
  * It replaces the destination ROWS that used to stand in the sidebar. Those rows
  * were the thing the redesign was asked to remove, and the earlier passes only
- * renamed them (Learn → Knowledge, Approvals and Skills demoted to tabs), so the
- * same list survived with better labels. In the reference there is no surface
+ * renamed them (Learn → Knowledge, Approvals and Skills demoted to tabs; then
+ * the 2026-10-29 ruling named all four for their function — Analyze, Journal,
+ * Agents, Learning — because "Trade" promised execution the surface never
+ * performs), so the same list survived with better labels. In the reference there is no surface
  * list in the sidebar at all: the sidebar holds conversations and Customize, and
  * navigation lives in the topbar. This is that control.
  *

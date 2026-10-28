@@ -48,7 +48,7 @@ export interface ModelChipProps {
     effort?: EffortChoice;
     onEffortChange?: (id: EffortChoice) => void;
     showEffort?: boolean;
-    /** The dock's toolbar is 384px wide; the Chat surface's column is 880px.
+    /** The dock's toolbar is 384px wide; the Agents surface's column is 880px.
      *  Same control, same label, two widths — the compact form truncates. */
     compact?: boolean;
 }

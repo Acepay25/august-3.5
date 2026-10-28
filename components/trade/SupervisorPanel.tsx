@@ -1,7 +1,7 @@
 /**
  * SupervisorPanel — the Chart AI dock's overlay window onto the supervisor.
  *
- * The stream itself moved to `components/learn/SupervisorStream`, so the Learn
+ * The stream itself moved to `components/learn/SupervisorStream`, so the Learning
  * surface and this overlay read the same events from the same store instead of
  * the dock being the only place a user can watch the model govern itself. What
  * is left here is the backdrop and the sizing the dock needs.

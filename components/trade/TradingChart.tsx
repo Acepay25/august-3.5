@@ -1124,7 +1124,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ symbol, interval, onInterva
 
     return (
         <div className="flex h-full min-h-0 flex-col bg-zinc-950" data-testid="trading-chart" data-symbol={symbol}>
-            {/* The timeframe bar is shared with the Chat surface, so the customizable
+            {/* The timeframe bar is shared with the Agents surface, so the customizable
                 set and its persisted selection are one thing rather than two. The chart
                 keeps its own extras as children. */}
             <TimeframeBar interval={interval} onIntervalChange={onIntervalChange}>

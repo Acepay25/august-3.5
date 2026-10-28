@@ -18,7 +18,7 @@
  *     so a no-op model reply is reported as "no change needed" here instead
  *     of a confusing validation error;
  *   - nothing touches the notebook on proposal. The amendment lands PENDING
- *     and waits for the human in Learn → Queue.
+ *     and waits for the human in Learning → Queue.
  */
 
 import { getQuickResponse } from '../providers/GenericAnalysisService';

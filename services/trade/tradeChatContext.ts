@@ -348,7 +348,7 @@ export const rankSkillIndexRows = (
  * (what/when), then the IF/THEN rule.
  */
 /** The library index a seat reads. `where` names the thing a skill must match:
- *  the dock looks at a chart, the Chat surface looks at nothing, and a heading
+ *  the dock looks at a chart, the Agents surface looks at nothing, and a heading
  *  that says "match this chart" on a surface with no chart is a lie the model
  *  can only answer by inventing one. */
 export const buildSkillsIndexForPrompt = (
