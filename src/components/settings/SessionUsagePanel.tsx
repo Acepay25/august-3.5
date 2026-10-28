@@ -49,6 +49,11 @@ const SessionUsagePanel: React.FC = () => {
                     {s.tokensExact ? '' : '~'}{formatChars(tokens)} tok
                     {s.costUsd > 0 ? ` · $${s.costUsd.toFixed(3)}` : ''}
                 </p>
+                {s.cachedPromptTokens > 0 && (
+                    <p className="mt-1 text-ui-dense text-zinc-500">
+                        {formatChars(s.cachedPromptTokens)} cached input · billed below fresh input
+                    </p>
+                )}
             </div>
         );
     };
@@ -57,7 +62,7 @@ const SessionUsagePanel: React.FC = () => {
         <div className="space-y-3">
             <div>
                 <h4 className="text-ui-base font-bold text-white">Usage</h4>
-                <p className="text-ui-sm text-zinc-500 mt-0.5">Tokens from provider responses when available; otherwise estimated from output size.</p>
+                <p className="text-ui-sm text-zinc-500 mt-0.5">Tokens from provider responses when available; otherwise estimated from output size. Cached input is the provider-reported subset served from its prompt cache.</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
                 {renderSummary('Today', today)}

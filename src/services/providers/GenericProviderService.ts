@@ -20,6 +20,7 @@ import { ProviderConfig } from '../../types/provider';
 import { withRetry, ProviderName } from '../../utils/apiErrorUtils';
 import { assertValidProviderUrl } from '../../utils/providerUrlValidation';
 import {
+    anthropicCachedSystem,
     anthropicShouldSendThinking,
     anthropicThinkingFields,
     claudeThinkingBudgetTokens,
@@ -904,7 +905,10 @@ async function messagesCall(
     };
     const maxTokensForBody = body.max_tokens as number;
     if (systemMsg) {
-        body.system = typeof systemMsg.content === 'string' ? systemMsg.content : (systemMsg.content as ContentPart[]).map(p => p.type === 'text' ? p.text : '').join('');
+        const systemText = typeof systemMsg.content === 'string' ? systemMsg.content : (systemMsg.content as ContentPart[]).map(p => p.type === 'text' ? p.text : '').join('');
+        // One cache breakpoint (O-58): the system block repeats byte-for-byte
+        // on every round of a turn, so rounds 2..N bill at the cache-read rate.
+        body.system = anthropicCachedSystem(systemText);
     }
     // Temperature + extended thinking come from the shared policy module (all
     // three transports): explicit value or 0.7 default — Anthropic's own API

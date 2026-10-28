@@ -12,6 +12,7 @@ import {
   googleModelsUrl,
 } from './src/utils/googleGeminiFormat';
 import {
+  anthropicCachedSystem,
   anthropicThinkingFields,
   geminiThinkingParams,
   isLocalBaseUrl,
@@ -173,7 +174,8 @@ function devProviderProxy() {
             headers['anthropic-version'] = '2023-06-01';
             const system = messages.find((message: any) => message?.role === 'system');
             body = { model: config.selectedModel, max_tokens: request.maxTokens ?? 4096, messages: messages.filter((message: any) => message?.role !== 'system').map((message: any) => ({ role: message.role, content: toAnthropicContent(message.content) })) };
-            if (system) body.system = contentToText(system.content);
+            // Cache breakpoint on the stable system block (shared policy, O-58).
+            if (system) body.system = anthropicCachedSystem(contentToText(system.content));
             // Extended thinking + temperature come from the SHARED policy
             // module — model-id list, effort-scaled budget, 1024 floor,
             // 0.7-default temperature omitted while thinking is active —

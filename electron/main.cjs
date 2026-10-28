@@ -400,7 +400,8 @@ function providerRequestDetails(request) {
                 content: toAnthropicContent(message.content)
             })),
         };
-        if (system) body.system = contentToText(system.content);
+        // Cache breakpoint on the stable system block (shared policy, O-58).
+        if (system) body.system = policy.anthropicCachedSystem(contentToText(system.content));
         // Temperature + extended thinking come from the SHARED policy module
         // (identical to the renderer by construction): 0.7 default when no
         // thinking, thinking active → temperature omitted, effort-scaled

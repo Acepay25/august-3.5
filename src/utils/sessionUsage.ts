@@ -13,6 +13,8 @@ export interface SessionUsageEntry {
     durationMs: number;
     promptTokens: number;
     completionTokens: number;
+    /** Cached subset of promptTokens, when the provider reported it. */
+    cachedPromptTokens?: number;
     tokensEst: number;
     analystCount: number;
     costUsd?: number;
@@ -78,6 +80,7 @@ export const recordToolTurnUsage = (args: {
         durationMs: args.workedMs,
         promptTokens: usage.promptTokens,
         completionTokens: usage.completionTokens,
+        ...(usage.cachedPromptTokens ? { cachedPromptTokens: usage.cachedPromptTokens } : {}),
         tokensEst: Math.round((args.answer || '').length / 4),
         analystCount: args.seats ?? 1,
         costUsd: estimateCostUsd(usage, args.rates),
@@ -101,6 +104,7 @@ export interface PeriodUsageSummary {
     durationMs: number;
     promptTokens: number;
     completionTokens: number;
+    cachedPromptTokens: number;
     tokensEst: number;
     costUsd: number;
     tokensExact: boolean;
@@ -113,10 +117,11 @@ export const summarizeUsagePeriod = (entries: SessionUsageEntry[], sinceMs: numb
         durationMs: acc.durationMs + e.durationMs,
         promptTokens: acc.promptTokens + e.promptTokens,
         completionTokens: acc.completionTokens + e.completionTokens,
+        cachedPromptTokens: acc.cachedPromptTokens + (e.cachedPromptTokens ?? 0),
         tokensEst: acc.tokensEst + e.tokensEst,
         costUsd: acc.costUsd + (e.costUsd ?? 0),
         tokensExact: acc.tokensExact || (e.promptTokens + e.completionTokens) > 0,
-    }), { runs: 0, durationMs: 0, promptTokens: 0, completionTokens: 0, tokensEst: 0, costUsd: 0, tokensExact: false });
+    }), { runs: 0, durationMs: 0, promptTokens: 0, completionTokens: 0, cachedPromptTokens: 0, tokensEst: 0, costUsd: 0, tokensExact: false });
 };
 
 export interface ModelUsageSlice {

@@ -187,6 +187,30 @@ function anthropicThinkingFields(input) {
     };
 }
 
+// ─── Prompt caching (Anthropic messages format) ─────────────────────────────
+
+/**
+ * The one cache breakpoint the app places: the system prompt.
+ *
+ * Anthropic matches caches on an exact prefix and `cache_control` is only
+ * valid on a content block — a string `system` cannot carry it. The system
+ * prompt is the largest stable part of a desk turn (harness contract + desk
+ * mandate + skill index), so it is the breakpoint that pays on rounds 2..N;
+ * the conversation after it changes every round and is deliberately unmarked.
+ *
+ * The system block must stay BYTE-IDENTICAL between the rounds of a turn.
+ * Anything that varies per request (a timestamp, a per-turn notice) belongs in
+ * the messages array, not here — one changed byte invalidates the prefix.
+ * Below the provider's minimum cacheable size this is a no-op, not an error.
+ *
+ * @param {string} text
+ * @returns {Array<{ type: 'text', text: string, cache_control: { type: 'ephemeral' } }> | undefined}
+ */
+function anthropicCachedSystem(text) {
+    if (typeof text !== 'string' || text.length === 0) return undefined;
+    return [{ type: 'text', text, cache_control: { type: 'ephemeral' } }];
+}
+
 /**
  * The EFFECTIVE temperature per (API format × thinking state). This is the
  * one table the app promises, and the transport tests assert it:
@@ -558,6 +582,7 @@ const PROVIDER_REQUEST_POLICY = {
     claudeThinkingBudgetTokens,
     anthropicShouldSendThinking,
     anthropicThinkingFields,
+    anthropicCachedSystem,
     effectiveTemperature,
     geminiThinkingParams,
     geminiThinkingBudget,
