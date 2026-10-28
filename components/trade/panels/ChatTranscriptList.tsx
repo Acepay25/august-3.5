@@ -204,14 +204,23 @@ const ChatTranscriptList: React.FC<ChatTranscriptListProps> = ({
                             {e.interrupted && !e.streaming && (
                                 <InterruptedRunNotice
                                     cause={e.error}
+                                    /* A recovery is only offered against the USER turn
+                                       this answer was answering: `send('', retryOf)`
+                                       replays a USER entry and returns early for any
+                                       other id, so a card on a row whose predecessor is
+                                       a harness notice or another seat would carry a
+                                       dead button — and this notice's own contract says
+                                       it renders only with a handler that works. */
                                     onEditPrompt={(() => {
                                         const asked = entries[i - 1]?.role === 'user' ? entries[i - 1].text : '';
                                         return asked ? () => setDraftText?.(asked) : undefined;
                                     })()}
-                                    onTryAgain={() => {
-                                        const asked = entries[i - 1]?.role === 'user' ? entries[i - 1].text : '';
-                                        void send(asked, entries[i - 1]?.id);
-                                    }}
+                                    onTryAgain={(() => {
+                                        const prev = entries[i - 1];
+                                        return prev?.role === 'user' && prev.text.trim()
+                                            ? () => { void send('', prev.id); }
+                                            : undefined;
+                                    })()}
                                 />
                             )}
                             <div className="text-ui-base leading-relaxed text-zinc-200">

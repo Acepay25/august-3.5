@@ -55,10 +55,13 @@ export const storeBackendKind = (): StoreBackendKind => (bridge() ? 'desktop-fil
 const migrated = new Set<string>();
 let lastFailure: StoreFailure | null = null;
 /** Set when a READ failed outright, per key. While a key is in this set its
- *  writes are refused: a store whose contents we could not read must not be
- *  overwritten by whatever an empty-looking load would seed into it. A later
- *  successful read of that key clears it — a different key's success says
- *  nothing about this one. */
+ *  FILE is never written: a store whose contents we could not read must not be
+ *  overwritten by whatever an empty-looking load would seed into it. The value
+ *  still lands in the localStorage fallback (see writeStore), because that copy
+ *  is what readStore already serves while the file is unreadable — a later
+ *  successful read of that key clears the flag, and the next save rewrites the
+ *  file from the in-memory state. A different key's success says nothing about
+ *  this one. */
 const failedKeys = new Set<string>();
 
 export const getStoreFailure = (): StoreFailure | null => lastFailure;
@@ -136,9 +139,18 @@ export const writeStore = async (key: string, value: string): Promise<{ ok: bool
         }
     }
     if (failedKeys.has(key)) {
-        // Refuse rather than overwrite: see `failedKeys`.
-        const error = `store key "${key}" is unavailable after a failed read — refusing to overwrite it`;
-        recordFailure({ key, error, at: Date.now(), fellBack: false });
+        // Refuse the FILE (see `failedKeys`) but keep the bytes recoverable: the
+        // same localStorage copy readStore falls back to is the live copy while
+        // the file is unreadable, and letting it go stale would lose every write
+        // for the length of the outage. The flag clears on the next successful
+        // read, and the next save then rewrites the file from memory.
+        const error = `store key "${key}" is unavailable after a failed read — refusing to overwrite the file`;
+        let fellBack = false;
+        try {
+            localStorage.setItem(key, value);
+            fellBack = true;
+        } catch { /* nothing left to fall back to */ }
+        recordFailure({ key, error, at: Date.now(), fellBack });
         return { ok: false, error, backend: 'desktop-files' };
     }
     const res = await api.write(fileKeyFor(key), value);

@@ -1251,16 +1251,25 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
                     // session and blocked the store from persisting (docs/AUDIT.md
                     // L-4). A stop is not a failure: it keeps what streamed and
                     // says why the bubble is short.
+                    //
+                    // Through the ONE settlement rule (utils/rowSettlement.ts),
+                    // not a third hand-rolled branch: a Stop is interrupted, a
+                    // failure WITH prose is interrupted-with-cause, and a failure
+                    // with no prose is the failure row itself — the old
+                    // "(this seat failed to answer)" prose read as an answer.
                     seatFailed = true;
                     const msg = e instanceof Error ? e.message : String(e);
                     const aborted = controller.signal.aborted;
                     mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id
-                        ? {
-                            ...en,
-                            streaming: false,
-                            workedMs: workedMsFor(seatStartedAt),
-                            ...(en.text ? {} : { text: aborted ? '(stopped)' : `(this seat failed to answer: ${msg})` }),
-                        }
+                        ? settleDockEntry(
+                            {
+                                ...en,
+                                workedMs: workedMsFor(seatStartedAt),
+                                ...(aborted && !en.text ? { text: '(stopped)' } : {}),
+                            },
+                            aborted ? 'stopped' : 'failed',
+                            { ...(aborted ? {} : { error: msg }), hasText: !!en.text },
+                        )
                         : en)) }));
                 }
                 spoken.push(seat.id);
@@ -1368,10 +1377,30 @@ export const createChatTurnRunner = (deps: ChatTurnRunnerDeps): ChatTurnRunner =
             // A Stop of a harness warning is not a failure to narrate.
             if (!controller.signal.aborted) {
                 const message = e instanceof Error ? e.message : String(e);
-                mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id && !en.text ? { ...en, text: `The harness warning failed: ${message}`, streaming: false, workedMs: workedMsFor(harnessStartedAt) } : en)) }));
+                // The one settlement rule: the provider's reason is the row's
+                // ERROR, not a sentence pasted into its text (which rendered as
+                // though the seat had said it). A partial warning keeps its
+                // prose and is marked interrupted with the cause.
+                mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id
+                    ? settleDockEntry(en, 'failed', { error: message, hasText: !!en.text })
+                    : en)) }));
             }
         } finally {
-            mutate(sid, s => ({ ...s, entries: s.entries.map(en => (en.id === aiEntry.id ? { ...en, streaming: false, ...(en.workedMs === undefined ? { workedMs: workedMsFor(harnessStartedAt) } : {}) } : en)) }));
+            const stopped = controller.signal.aborted;
+            mutate(sid, s => ({
+                ...s,
+                entries: s.entries
+                    // A stopped warning that never produced a word is not a row:
+                    // the amber harness notice above it already says the event
+                    // happened, and an empty answer bubble says the opposite.
+                    .filter(en => !(stopped && en.id === aiEntry.id && !en.text.trim()))
+                    .map(en => (en.id === aiEntry.id
+                        ? settleDockEntry(
+                            { ...en, ...(en.workedMs === undefined ? { workedMs: workedMsFor(harnessStartedAt) } : {}) },
+                            stopped ? 'stopped' : 'completed',
+                        )
+                        : en)),
+            }));
             endRunOwned(sid, controller);
         }
     };

@@ -409,10 +409,14 @@ const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
     'supervisor_triaged_v1',
 ];
 
-/** One exported store may not exceed this. The notebook's own hard ceiling is
+/** The cap for a SMALL raw-localStorage store. The notebook's own hard ceiling is
  *  2 MB (`utils/memoryBudget.ts:38`) and the WebView origin quota is SHARED, so a
  *  single key gets a fraction of it — and a store that cannot fit even after its
  *  images are stripped is SKIPPED and reported, never truncated in silence.
+ *
+ *  NOT a blanket ceiling any more: the chat store outgrew browser storage (its
+ *  desktop file backend allows 32 MiB), so the stores listed in EXPORT_KEY_CAPS
+ *  carry their own; this number is what the remaining preference blobs get.
  *
  *  Scoped to the namespaces listed below ON PURPOSE: `memory_files_v1_<user>` is
  *  legitimately allowed to reach 2 MB, so a blanket cap here would drop the
@@ -423,7 +427,10 @@ export const EXPORT_RAW_KEY_CAP_BYTES = 512 * 1024;
 /** Per-store ceilings, chosen from each owner's OWN bound so a normal backup is
  *  never trimmed (measured 2026-10-05, recorded in docs/plan/open-items.md):
  *
- *  - chat sessions 512 KB — 12 × 60 rows, images already stripped.
+ *  - chat sessions 32 MiB — the store's own file ceiling
+ *    (`electron/storeFs.cjs` MAX_VALUE_BYTES), and above the desktop byte budget
+ *    (`chatSessions.storedCharsBudget`, 24 M chars). Entries are no longer
+ *    count-capped (owner ruling, 2026-10-27); images are stripped first.
  *  - session drawings 1 MB — `chartDrawings.ts:54-55` bounds a coin at 40 drawings ×
  *    200 points (≈180 KB), and one key holds EVERY coin traded in that session;
  *    a normal session is ~10 KB.
@@ -440,7 +447,7 @@ const EXPORT_KEY_CAPS: ReadonlyArray<{ prefix: string; bytes: number }> = [
     { prefix: 'trade_chat_sessions_v1', bytes: 32 * 1024 * 1024 },
     // The real tool output behind an expanded transcript row. A side store on
     // purpose: payloads inside `trade_chat_sessions_v1` entries would push the
-    // transcripts themselves out of the 512 KB backup cap. Capped below the
+    // transcripts themselves out of the chat-session ceiling. Capped below the
     // store's own 1,000,000-char ceiling so a payload-heavy session cannot take
     // the whole backup either — the live key is untouched when over.
     { prefix: 'trade_tool_payloads_v1', bytes: 256 * 1024 },

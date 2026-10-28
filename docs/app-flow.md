@@ -475,7 +475,7 @@ in that module is the single owner of "not without a human".
 
 Stored automation data was left alone deliberately: `automations_v1_`,
 `automation_runs_v1_` and `automation_last_seen_v1_` stay allow-listed for restore
-(`services/infrastructure/ExportService.ts:778`) so a backup taken before the
+(`services/infrastructure/ExportService.ts:785`) so a backup taken before the
 removal still comes back without dropping keys it names.
 
 **The Agents surface is a launch list, not a roster form.** A row says what the
@@ -1396,7 +1396,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
    `services/trade/chatTurnRunner.ts:620`, `createPanelMailbox` at
    `services/trade/chatTurnRunner.ts:1158`, `planPanelTurn` at
    `services/trade/chatTurnRunner.ts:1170`, the dock's `send` at
-   `services/trade/chatTurnRunner.ts:1296`, `runFullAnalysis` at
+   `services/trade/chatTurnRunner.ts:1305`, `runFullAnalysis` at
    `components/trade/TradeChatPanel.tsx:594`, and `MAX_PLANS_PER_RUN` at
    The pass also moved four surface anchors
    that pointed inside a prop list onto the guard that mounts the surface:
