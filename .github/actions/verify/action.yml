@@ -1,0 +1,135 @@
+name: Verify
+description: The one gate ladder. Run by ci.yml on every push/PR and by release.yml before it packages anything.
+
+# ONE DEFINITION, TWO CALLERS.
+#
+# This used to be a hand-copied list in ci.yml and another in release.yml, and
+# the two had already drifted: release skipped the docs gate and the
+# skill-approval probe, and neither ran the guard steps the other did. A
+# release that skips a gate is a release nobody proved.
+#
+# A composite action rather than a reusable workflow on purpose: the release
+# job must PACKAGE the dist this build produces, and a separate workflow job
+# would need an artifact round-trip (or a second build) to hand it over. A
+# composite runs inside the caller's job, so one build reaches the packager.
+#
+# Every run step declares `shell: bash`. This action runs on ubuntu (CI) and
+# windows (release), so the shell is never the runner's default by luck.
+# scripts/check-workflow-shells.cjs enforces that on this file too.
+
+runs:
+  using: composite
+  steps:
+    # Cheap, and the last release failed here after every expensive gate had
+    # gone green: a POSIX step without a declared shell on a Windows runner.
+    - name: Workflow steps declare their shell
+      shell: bash
+      run: node scripts/check-workflow-shells.cjs
+
+    - name: Type check
+      shell: bash
+      run: npm run typecheck
+
+    - name: Type check scripts
+      shell: bash
+      run: npm run typecheck:scripts
+
+    # tsc cannot see electron/*.cjs; a syntax break there only surfaces when a
+    # user launches the packaged app.
+    - name: Electron shell parses
+      shell: bash
+      run: npm run typecheck:electron
+
+    # Links resolve, symbol citations exist, gate names are real, and no
+    # line-number citation has crept back into the live docs.
+    - name: Docs
+      shell: bash
+      run: npm run check:docs
+
+    # The pure-logic contracts no browser probe can reach (planned R:R math,
+    # retry classification, harness marks, notebook pressure tiers, tool-pair
+    # compaction, AI-boundary coercion, skill authoring, index budget, policy
+    # tables) — plain node, no suite.
+    - name: Contract checks
+      shell: bash
+      run: npm run check:contracts
+
+    # The probe scripts are the gates; a syntax error in one is otherwise
+    # invisible until a machine runs it and silently reports nothing.
+    - name: Probe and tooling scripts parse
+      shell: bash
+      run: |
+        set -euo pipefail
+        for f in scripts/*.cjs electron/*.cjs; do
+          echo "  node --check $f"
+          node --check "$f"
+        done
+
+    # The same scripts, linted with error-level correctness rules only.
+    - name: Probe scripts lint
+      shell: bash
+      run: npx eslint --config scripts/eslint.config.mjs "scripts/*.cjs"
+
+    - name: Lint
+      shell: bash
+      run: npm run lint
+
+    - name: Production build
+      shell: bash
+      run: npm run build
+
+    # Source maps expose the whole source tree in the shipped artifact.
+    - name: Reject public source maps
+      shell: bash
+      run: |
+        if find dist -type f -name '*.map' | grep -q .; then
+          echo "::error::Source maps must not be included in release output"
+          exit 1
+        fi
+
+    # The ceiling is a ratchet. It fails on a REGRESSION past the current
+    # build and also when the build shrinks more than 10% below the ceiling,
+    # so the ratchet keeps binding instead of drifting loose.
+    - name: Startup chunk stays under the ratchet
+      shell: bash
+      run: |
+        set -euo pipefail
+        CEILING_KB=1200
+        STALE_FLOOR_KB=$(( CEILING_KB * 90 / 100 ))
+        entry=$(ls -S dist/assets/index-*.js | head -1)
+        if [ -z "$entry" ]; then
+          echo "::error::no entry chunk found in dist/assets"
+          exit 1
+        fi
+        size_kb=$(( $(wc -c < "$entry") / 1024 ))
+        echo "entry chunk: $(basename "$entry") = ${size_kb} kB (ceiling ${CEILING_KB} kB, stale below ${STALE_FLOOR_KB} kB)"
+        if [ "$size_kb" -gt "$CEILING_KB" ]; then
+          echo "::error::entry chunk ${size_kb} kB exceeds the ${CEILING_KB} kB ratchet — an eager import crept into the startup graph. Use React.lazy() or manualChunks."
+          exit 1
+        fi
+        if [ "$size_kb" -lt "$STALE_FLOOR_KB" ]; then
+          echo "::error::the build is ${size_kb} kB, more than 10% below the ${CEILING_KB} kB ceiling — lower CEILING_KB in .github/actions/verify/action.yml so the ratchet keeps binding."
+          exit 1
+        fi
+
+    # The probes drive real Chromium; the unit and e2e suites are gone.
+    - name: Install Chromium for the probes
+      shell: bash
+      run: npx playwright install --with-deps chromium
+
+    # boot-probe asks "does the production bundle start"; it cannot see a row.
+    - name: Boot probe (production bundle)
+      shell: bash
+      run: npm run boot-probe
+
+    # The only gate that can see a rendered row, an inert control, or a
+    # pageerror on any surface.
+    - name: Render probe (rendered rows, inert controls, zero pageerrors)
+      shell: bash
+      run: npm run render-probe
+
+    # The human-actuation path: the four draft outcomes and the queue's Apply,
+    # asserting the notebook BYTES after each click.
+    - name: Skill-approval probe (real clicks, notebook bytes after each)
+      shell: bash
+      run: npm run skill-approval-probe

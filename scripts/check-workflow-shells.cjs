@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Every `run:` step in a WINDOWS job must say which shell it runs under.
+ * Every multi-line `run:` step in a WINDOWS job — and in a composite action,
+ * which runs on both ubuntu and windows — must say which shell it runs under.
  *
  * WHY THIS EXISTS. A GitHub `run:` step with no `shell:` uses the runner's
  * default: bash on ubuntu, **pwsh on windows**. A step written with POSIX
@@ -32,6 +33,7 @@ const path = require('node:path');
 const yaml = require('js-yaml');
 
 const WORKFLOWS = path.join(__dirname, '..', '.github', 'workflows');
+const ACTIONS = path.join(__dirname, '..', '.github', 'actions');
 
 /** Windows runner labels. `windows-latest` and the pinned `-2022` style. */
 const isWindowsRunner = (runsOn) => {
@@ -84,12 +86,51 @@ const check = (dir = WORKFLOWS) => {
     return problems;
 };
 
-const problems = check();
+/**
+ * Composite actions run on whatever runner calls them — the same action is
+ * used by ubuntu CI and the windows release — so every multi-line `run:` in one
+ * must declare its shell unconditionally.
+ */
+const checkActions = (dir = ACTIONS) => {
+    const problems = [];
+    if (!fs.existsSync(dir)) return problems;
+    const walk = (d) => {
+        for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+            const p = path.join(d, e.name);
+            if (e.isDirectory()) { walk(p); continue; }
+            if (!/^action\.ya?ml$/.test(e.name)) continue;
+            const rel = path.relative(path.join(__dirname, '..'), p);
+            let doc;
+            try {
+                doc = yaml.load(fs.readFileSync(p, 'utf8'));
+            } catch (err) {
+                problems.push(`${rel}: could not parse (${err.message})`);
+                continue;
+            }
+            const steps = doc?.runs?.steps || [];
+            for (const [i, step] of steps.entries()) {
+                if (!step || typeof step.run !== 'string') continue;
+                if (step.shell) continue;
+                if (step.run.trim().split('\n').length < 2) continue;
+                const where = step.name ? `"${step.name}"` : `step ${i}`;
+                problems.push(
+                    `${rel} → ${where}: a multi-line \`run:\` with no \`shell:\`. `
+                    + 'This action runs on both ubuntu (CI) and windows (release), so the shell is never '
+                    + 'the runner default by luck. Add `shell: bash`.',
+                );
+            }
+        }
+    };
+    walk(dir);
+    return problems;
+};
+
+const problems = [...check(), ...checkActions()];
 if (problems.length > 0) {
-    console.error('[workflow-shells] FAIL — a windows step does not declare its shell:\n');
+    console.error('[workflow-shells] FAIL — a step does not declare its shell:\n');
     for (const p of problems) console.error('  • ' + p);
     console.error('\nSee scripts/check-workflow-shells.cjs for why this fails a release, not a PR.');
     process.exit(1);
 }
-console.log('[workflow-shells] OK — every multi-line run: in a windows job declares its shell.');
-module.exports = { check };
+console.log('[workflow-shells] OK — every multi-line run: in a windows job and in a composite action declares its shell.');
+module.exports = { check, checkActions };

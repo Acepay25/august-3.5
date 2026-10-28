@@ -13,8 +13,8 @@
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import type { LoggedTrade } from '../types';
-import { replayTrades, replaySummaryLine } from '../utils/planReplay';
+import type { LoggedTrade } from '../src/types';
+import { replayTrades, replaySummaryLine } from '../src/utils/planReplay';
 
 const args = process.argv.slice(2);
 const valueOf = (flag: string): string | undefined => {

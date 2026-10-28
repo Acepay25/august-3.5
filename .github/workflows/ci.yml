@@ -2,8 +2,9 @@
 # moved by whoever owns it, and these files build and sign what users install.
 name: CI
 
-# Fast gates on every push/PR. Release.yml assumes these passed on main
-# and only packages the Electron installer (plus a Playwright smoke).
+# The gate ladder lives in .github/actions/verify/action.yml. This workflow and
+# release.yml both run that ONE definition, so the two cannot drift apart — they
+# did: release skipped the docs gate and the skill-approval probe for a while.
 on:
   push:
     branches: [main]
@@ -15,7 +16,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 60
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
@@ -29,63 +30,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Type check
-        run: npm run typecheck
-
-      - name: Type check scripts
-        run: npm run typecheck:scripts
-
-      # tsc cannot see a doc line number. The flow docs carry hundreds of them
-      # (the gate prints the live count), and they have gone stale three times during this
-      # deletion, so the scan runs before anything that costs a build.
-      - name: Flow docs cite real lines
-        run: npm run check-flow-doc-anchors
-
-      # The six pure-logic contracts no browser probe can reach (planned R:R
-      # math, retry classification, harness marks, notebook pressure tiers,
-      # tool-pair compaction, AI-boundary coercion) — plain node, no suite.
-      - name: Contract checks
-        run: npm run check:contracts
-
-      # tsc excludes electron/*.cjs, so a syntax break in the desktop shell is
-      # invisible to every other gate
-      # here — and it only shows up when a user launches the packaged app.
-      - name: Electron shell parses
-        run: npm run typecheck:electron
-
-      - name: Lint
-        run: npm run lint
-
-      # The unit and end-to-end suites were removed on 2026-10-23, but the
-      # probes below drive real Chromium, so the browser install stays.
-      - name: Install Chromium for the probes
-        run: npx playwright install --with-deps chromium
-
-      - name: Production build
-        run: npm run build
-
-      # Verify the PRODUCTION bundle boots (the dev server cannot catch a prod-only
-      # TDZ/splash hang; v1.0.20 shipped one). Needs the chromium
-      # installed above.
-      - name: Boot probe (production bundle)
-        run: npm run boot-probe
-
-      # boot-probe asks only "does it start". This is the gate that can see the
-      # transcript — it counts rendered rows per conversation, presses every
-      # control on the Learn and Journal surfaces and asserts each one does
-      # something, and sweeps all four nav surfaces for pageerrors. A row
-      # dropped after the second one is invisible without it.
-      # Sequential here, so it is not running alongside a build — the one
-      # condition its own flake note warns about.
-      - name: Render probe (rendered rows, inert controls, zero pageerrors)
-        run: npm run render-probe
-
-      # The human-actuation path. `approveSkillDraft` and the queue's Apply were
-      # unit-green while NOTHING had ever pressed the button in a browser, so the
-      # read-back guard and the "it did not save" toasts were untested claims —
-      # and this probe existed and was still not wired to run. It drives the four
-      # draft outcomes (saved / name collision / duplicate / no folder) plus the
-      # queue Apply, and asserts the notebook BYTES after each click.
-      - name: Skill-approval probe (real clicks, notebook bytes after each)
-        run: npm run skill-approval-probe
-
+      - name: Verify
+        uses: ./.github/actions/verify

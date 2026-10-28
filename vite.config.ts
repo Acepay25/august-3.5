@@ -10,7 +10,7 @@ import {
   parseGeminiResponse,
   usesGoogleGeminiDiscovery,
   googleModelsUrl,
-} from './utils/googleGeminiFormat';
+} from './src/utils/googleGeminiFormat';
 import {
   anthropicThinkingFields,
   geminiThinkingParams,
@@ -445,7 +445,7 @@ export default defineConfig(() => {
     plugins: [sharedProviderPolicyEsmInterop(), react(), tailwindcss(), devProviderProxy()],
     resolve: {
       alias: {
-        '@': process.cwd(),
+        '@': `${process.cwd()}/src`,
       },
     },
     server: {
@@ -489,7 +489,7 @@ export default defineConfig(() => {
             //
             // react-virtuoso was re-added to this chunk by hand after that
             // boundary fix, which undid it for exactly one dependency: its
-            // ONLY importer app-wide is components/journal/TradeLog.tsx,
+            // ONLY importer app-wide is src/components/journal/TradeLog.tsx,
             // reached through the lazy Journal surface — so ~150 KB of a
             // screen that is not open at boot sat in the modulepreloaded
             // eager set. Recharts has the same react dependency and is not

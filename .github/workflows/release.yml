@@ -85,60 +85,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Cheap, and the same check Guards runs. It failed the last release only
-      # here, after lint, both probes and installer-smoke had passed.
-      - name: Workflow steps declare their shell
-        run: node scripts/check-workflow-shells.cjs
-
-      - name: Lint
-        run: npm run lint
-
-      # Same six pure-logic contracts ci.yml checks (R:R math, retry
-      # classification, harness marks, notebook pressure, tool-pair
-      # compaction, AI-boundary coercion) — a broken contract is a broken
-      # app wherever it runs, and this gate ships the app.
-      - name: Contract checks
-        run: npm run check:contracts
-
-      # Scripts/electron tooling types (tsconfig.scripts.json) — parity with
-      # ci.yml. `npm run build` only runs the APP tsc (tsconfig.app/), so
-      # without this a typecheck:scripts-only file could break unreleased.
-      - name: Typecheck scripts
-        run: npm run typecheck:scripts
-
-      # The packaged app is the only place an electron/*.cjs break surfaces,
-      # and this workflow is what puts it on users' machines — parse the shell
-      # before electron-builder runs.
-      - name: Electron shell parses
-        run: npm run typecheck:electron
-
-      - name: Build renderer (Vite)
-        run: npm run build
-
-      - name: Reject public source maps
-        shell: pwsh
-        run: |
-          if (Get-ChildItem -Recurse dist -Filter *.map -ErrorAction SilentlyContinue) { throw 'Source maps must not be included in release output' }
-
-      # The unit and end-to-end suites were removed on 2026-10-23; the probes
-      # that remain still drive real Chromium.
-      - name: Install Chromium for the probes
-        shell: pwsh
-        run: npx playwright install --with-deps chromium
-
-      # Prod-bundle boot probe (v1.0.20 splash-hang lesson): serves dist/ via
-      # vite preview and fails on any pageerror. Needs the chromium installed
-      # by the smoke step above.
-      - name: Boot probe (production bundle)
-        run: npm run boot-probe
-
-      # The only gate that measures what actually RENDERED rather than what
-      # started: per-conversation row counts in a real browser, every control on
-      # Learn and Journal pressed to prove none is inert, and zero pageerrors
-      # across all six surfaces. It runs before any packaging, so a renderer
-      # that drops rows cannot reach an installer from here.
-      - name: Render probe (rendered rows, inert controls, zero pageerrors)
-        run: npm run render-probe
+      # THE gate ladder — one definition, shared with ci.yml. It includes the
+      # docs gate, contracts, the build, the source-map rejection, the bundle
+      # ratchet and all three browser probes. Release used to re-implement the
+      # list by hand and had already drifted; it no longer does.
+      - name: Verify (the same ladder CI runs)
+        uses: ./.github/actions/verify
 
       # Packaged-Electron smoke (v1.0.20 / v1.0.25 lessons): the renderer-only
       # boot probe cannot catch prod-only failures that live inside the

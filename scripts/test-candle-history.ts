@@ -1,5 +1,5 @@
 
-import { fetchHybridData, HybridTimeframe } from '../services/analysis/HybridIntelligenceService';
+import { fetchHybridData, HybridTimeframe } from '../src/services/analysis/HybridIntelligenceService';
 
 const TIMEFRAMES: HybridTimeframe[] = ['15m', '1h', '4h', '1d'];
 

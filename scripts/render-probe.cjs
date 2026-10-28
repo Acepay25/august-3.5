@@ -1547,7 +1547,7 @@ async function main() {
             // still the sidebar's, and lives in the module that kept the live
             // pieces (components/shell/shellChrome.tsx).
             const navRailSrc = require('fs').readFileSync(
-                path.join(ROOT, 'components', 'shell', 'shellChrome.tsx'), 'utf8');
+                path.join(ROOT, 'src', 'components', 'shell', 'shellChrome.tsx'), 'utf8');
             const navRailExpandedPx = Number((navRailSrc.match(/NAV_RAIL_EXPANDED_PX = (\d+)/) || [])[1]) || 240;
             const colWidth = await page.evaluate(() => {
                 const el = document.querySelector('[data-testid="agents-rail"]');
@@ -2130,7 +2130,7 @@ async function main() {
                     ],
                 }];
                 localStorage.setItem(key, JSON.stringify(live));
-                const mod = await import('/services/infrastructure/ExportService.ts');
+                const mod = await import('/src/services/infrastructure/ExportService.ts');
                 const backup = await mod.exportPreferencesData();
                 const exported = JSON.stringify(backup[key] || null);
                 const report = await mod.importPreferencesData(backup);

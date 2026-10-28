@@ -47,7 +47,7 @@ function createSseParser(apiFormat) {
      * error:{message}}`, Responses `{type:'response.failed', response:{error}}`.
      * All three used to fall through the format handlers as "not a delta", so the
      * stream ended looking COMPLETE with no text — the renderer showed an empty
-     * answer for a rate limit (docs/AUDIT.md L-5). This is the one place that
+     * answer for a rate limit (the 2026-10-27 audit L-5). This is the one place that
      * recognises the shape, so no handler can forget it.
      */
     const errorFrom = (data, json) => {

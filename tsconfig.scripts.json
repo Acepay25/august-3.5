@@ -14,12 +14,12 @@
   // Naming both makes this a second view of the SAME program rather than a
   // narrower one. Nothing is excluded and no assertion is weakened. The durable
   // fix is to move that augmentation into an ambient .d.ts, where a global type
-  // does not depend on which module happened to be compiled — tracked as the
-  // follow-up in docs/plans/debate-deletion-status.md.
+  // does not depend on which module happened to be compiled — tracked in the
+  // plan register (docs/plan/open-items.md).
   "include": [
     "scripts/**/*.ts",
-    "vite-env.d.ts",
-    "services/providers/GenericProviderService.ts"
+    "src/vite-env.d.ts",
+    "src/services/providers/GenericProviderService.ts"
   ],
   "exclude": []
 }

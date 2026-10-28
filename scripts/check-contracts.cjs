@@ -6,18 +6,18 @@
  * probe can reach by construction, because they live below the render. Each one
  * added since the six had to answer why the six could not cover it:
  *
- *   1. utils/riskReward.ts            — the planned R:R the trader is graded on
- *   2. utils/apiErrorUtils.ts         — which failures deserve a retry
- *   3. utils/harnessMarks.ts          — the sentinel/clip dialect a model reads
- *   4. utils/memoryBudget.ts          — the pressure tiers that REFUSE growth
- *   5. services/providers/contextCompact.ts — tool pairs live or die together
- *   6. schemas/tradeAnalysis.ts       — lenient coercion at the AI boundary
- *   7. utils/skillFrontmatter.ts      — third-party keys survive a rewrite
- *   8. utils/memoryHints.ts           — the deterministic alias pre-read
- *   9. utils/memoryWriteFilters.ts    — what may never become a memory
+ *   1. src/utils/riskReward.ts        — the planned R:R the trader is graded on
+ *   2. src/utils/apiErrorUtils.ts     — which failures deserve a retry
+ *   3. src/utils/harnessMarks.ts      — the sentinel/clip dialect a model reads
+ *   4. src/utils/memoryBudget.ts      — the pressure tiers that REFUSE growth
+ *   5. src/services/providers/contextCompact.ts — tool pairs live or die together
+ *   6. src/schemas/tradeAnalysis.ts   — lenient coercion at the AI boundary
+ *   7. src/utils/skillFrontmatter.ts  — third-party keys survive a rewrite
+ *   8. src/utils/memoryHints.ts       — the deterministic alias pre-read
+ *   9. src/utils/memoryWriteFilters.ts — what may never become a memory
  *  10. skill import scan + body caps  — third-party text is screened
- *  11. utils/promptIndexBudget.ts     — one shared table, scaled to the window
- *  12. services/selfMod/* + utils/toolKinds.ts — the policy tables: what a
+ *  11. src/utils/promptIndexBudget.ts — one shared table, scaled to the window
+ *  12. src/services/selfMod/* + src/utils/toolKinds.ts — the policy tables: what a
  *      self-change cannot move, and what a goal can never grant
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
@@ -70,7 +70,7 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 
 // ─── 1. planned risk:reward — the number the trader is graded on ───────────
 (() => {
-    const rr = loadModule('utils/riskReward.ts');
+    const rr = loadModule('src/utils/riskReward.ts');
     // Long: entry 100, stop 95, targets 110/120 → nearest 110 → 10/5 = 2.
     ok('rr: plain long 2.0',
         rr.plannedRiskReward({ entry: 100, stopLoss: 95, takeProfits: [110, 120] }) === 2);
@@ -92,7 +92,7 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 
 // ─── 2. provider error classification — what deserves a retry ──────────────
 (() => {
-    const { parseAPIError, shouldRetry, getRetryDelay } = loadModule('utils/apiErrorUtils.ts');
+    const { parseAPIError, shouldRetry, getRetryDelay } = loadModule('src/utils/apiErrorUtils.ts');
     const rate = parseAPIError({ status: 429 }, 'prov');
     ok('err: 429 is rate_limit and retryable', rate.type === 'rate_limit' && shouldRetry(rate));
     ok('err: missing Retry-After falls back to 1s, not 30s', rate.retryAfterSeconds === 1,
@@ -118,7 +118,7 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 
 // ─── 3. harness marks — the dialect the model reads ────────────────────────
 (() => {
-    const hm = loadModule('utils/harnessMarks.ts');
+    const hm = loadModule('src/utils/harnessMarks.ts');
     const sentinel = hm.dataUnavailable('funding rate');
     ok('mark: sentinel round-trips', hm.isDataUnavailable(sentinel) && sentinel.startsWith(hm.DATA_UNAVAILABLE_PREFIX));
     ok('mark: ordinary text is not a sentinel', !hm.isDataUnavailable('DATA_UNAVAILABLE-ish prose'));
@@ -132,7 +132,7 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 
 // ─── 4. notebook pressure — the tiers that REFUSE growth ───────────────────
 (() => {
-    const mb = loadModule('utils/memoryBudget.ts');
+    const mb = loadModule('src/utils/memoryBudget.ts');
     const MB = 1024 * 1024;
     ok('budget: below soft is ok', mb.pressureForBytes(0) === 'ok' && mb.pressureForBytes(MB - 1) === 'ok');
     ok('budget: soft tier at 1MB', mb.pressureForBytes(MB) === 'soft');
@@ -147,7 +147,7 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 
 // ─── 5. contextCompaction — tool pairs live or die together ────────────────
 (() => {
-    const cc = loadModule('services/providers/contextCompact.ts');
+    const cc = loadModule('src/services/providers/contextCompact.ts');
     const big = (label) => `${label} ${'x'.repeat(4000)}`;
     // 14 messages: the 6-message protected tail (MIN_KEEP_MESSAGES) must leave
     // a compactable head, or nothing can be shortened by design.
@@ -189,7 +189,7 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 
 // ─── 6. tradeAnalysis coercion — the AI boundary is lenient but not blind ──
 (() => {
-    const { CoercedTradeAnalysisSchema } = loadModule('schemas/tradeAnalysis.ts');
+    const { CoercedTradeAnalysisSchema } = loadModule('src/schemas/tradeAnalysis.ts');
     const parsed = CoercedTradeAnalysisSchema.parse({
         coinName: 'BTCUSDT',
         direction: 'long',
@@ -215,7 +215,7 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 
 // ─── 7. skill frontmatter — third-party keys survive, the face is checked ──
 (() => {
-    const sf = loadModule('utils/skillFrontmatter.ts');
+    const sf = loadModule('src/utils/skillFrontmatter.ts');
     const fm = [
         'name: hermes-style-skill',
         'description: Does a thing. Use when X.',
@@ -286,7 +286,7 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 
 // ─── 8. memory hints — the deterministic pre-read, on every model ──────────
 (() => {
-    const mh = loadModule('utils/memoryHints.ts');
+    const mh = loadModule('src/utils/memoryHints.ts');
     const mem = [
         { slug: 'user-runs-bun', description: 'Package manager preference: bun.', body: 'The trader uses bun, not npm. Their scripts assume it.' },
         { slug: 'user-btc-scalps', description: 'Trades 15m BTC scalps in the London session.' },
@@ -333,7 +333,7 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 
 // ─── 9. memory write filters — what may never become a memory ──────────────
 (() => {
-    const mf = loadModule('utils/memoryWriteFilters.ts');
+    const mf = loadModule('src/utils/memoryWriteFilters.ts');
     ok('filter: an sk- key is refused', mf.filterMemoryWrite('my key is sk-abc123def4567890ab').refused !== null);
     ok('filter: a card number is refused', mf.filterMemoryWrite('card is 4111 1111 1111 1111').refused !== null);
     ok('filter: an SSN-labelled number is refused', mf.filterMemoryWrite('ssn: 123456789').refused !== null);
@@ -383,7 +383,7 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 
 // ─── 11. skill import scan + caps — third-party text is screened ───────────
 (() => {
-    const sf = loadModule('utils/skillFrontmatter.ts');
+    const sf = loadModule('src/utils/skillFrontmatter.ts');
     ok('scan: destructive filesystem commands refuse',
         sf.scanSkillText('then run rm -rf ~/notes to reset').some(f => f.severity === 'destructive'));
     ok('scan: piped shell download refuses',
@@ -462,7 +462,7 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 
 // ─── 10. the shared index budget — one table, scaled to the window ─────────
 (() => {
-    const pb = loadModule('utils/promptIndexBudget.ts');
+    const pb = loadModule('src/utils/promptIndexBudget.ts');
     const big = pb.indexBudgetFor(1_000_000);
     const small = pb.indexBudgetFor(8_000);
     ok('budget: big windows keep the pre-budget defaults',
@@ -484,9 +484,9 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 // The goal policy table joins it for the same reason: its dangerous shape is
 // reachable only cross-surface, which no probe in this repo can drive.
 (() => {
-    const hs = loadModule('utils/harnessSettings.ts');
-    const sm = loadModule('services/selfMod/SelfModificationService.ts');
-    const { SelfChangeSchema } = loadModule('schemas/selfChange.ts');
+    const hs = loadModule('src/utils/harnessSettings.ts');
+    const sm = loadModule('src/services/selfMod/SelfModificationService.ts');
+    const { SelfChangeSchema } = loadModule('src/schemas/selfChange.ts');
 
     ok('selfmod: with nothing stored, the agent may change nothing about itself',
         hs.getHarnessSettings().selfModificationMode === 'off');
@@ -535,7 +535,7 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     // list is not the trade seat's TRADE_TOOLS — and there the old code
     // returned an empty list, which every gate reads as "unrestricted". The
     // live probe cannot reach it: the write gate blocks the same-surface case.
-    const tk = loadModule('utils/toolKinds.ts');
+    const tk = loadModule('src/utils/toolKinds.ts');
     const REAL = ['get_order_book', 'get_trade_log', 'recall', 'skill_view', 'draw_on_chart'];
     const SEAT = ['get_order_book', 'get_trade_log'];
     const keep = tk.intersectGoalPolicy(SEAT, ['get_trade_log', 'recall'], REAL);

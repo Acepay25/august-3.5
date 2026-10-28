@@ -10,11 +10,11 @@
   },
   "type": "module",
   "main": "electron/main.cjs",
-  "description": "August Trading — team-debate trading analysis desktop app: runtime AI providers, hybrid market data, journal, and learning memory",
+  "description": "August Trading — a local-first AI trading work harness: one tool-driven seat, a reviewable journal, and a self-auditing learning loop.",
   "author": "August Trading",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Acepay25/august-trading.git"
+    "url": "https://github.com/Acepay25/august-3.5.git"
   },
   "scripts": {
     "dev": "vite",
@@ -23,7 +23,7 @@
     "probe:chip": "node scripts/chip-shot.cjs",
     "probe:census": "node scripts/surface-census.cjs",
     "probe:surfaces": "node scripts/surface-shots.cjs",
-    "lint": "eslint . --max-warnings 379",
+    "lint": "eslint . --max-warnings 375",
     "lint:loose": "eslint .",
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
@@ -34,12 +34,13 @@
     "electron:release": "node scripts/release-is-ci-only.cjs",
     "boot-probe": "node scripts/boot-probe.cjs",
     "render-probe": "node scripts/render-probe.cjs",
-    "check-flow-doc-anchors": "node scripts/check-flow-doc-anchors.cjs",
     "check:contracts": "node scripts/check-contracts.cjs",
     "skill-approval-probe": "node scripts/probe-skill-approval.cjs",
     "installer-smoke": "node scripts/installer-smoke.cjs",
     "verify:signature": "node scripts/verify-release-signature.cjs",
-    "replay:plans": "node scripts/replay-plans.cjs"
+    "replay:plans": "node scripts/replay-plans.cjs",
+    "check:docs": "node scripts/check-docs.cjs",
+    "hooks:install": "git config core.hooksPath .githooks"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^7.0.3",

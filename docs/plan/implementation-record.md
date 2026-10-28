@@ -21,8 +21,8 @@ does not mention is not claimed to be done.
 |---|---|---|---|
 | **E-11** | **The prompt contract test.** A new suite that asserts what is **sent** on the four model-call paths, not what is built. | `tests/promptContract.test.ts` (new) | `npx vitest run tests/promptContract.test.ts` → **16 tests, 16 pass** (2026-10-20). |
 | **E-60** | **The "one place to look" rule**, in one line, in `AGENTS.md`. | `AGENTS.md` § *The Plan* | Read back; the line names the working list, the evidence file, and the id a proposal must cite. |
-| **E-01a** (prompts thread) | **The harness contract reaches every live surface exactly once.** It is injected at the transport — `withDeskToolsSystemPrompt` (`services/analysis/DeskToolsService.ts:3782`, called from `:3827`) — not at each surface's composer. | `services/analysis/DeskToolsService.ts` | **Verified by outcome, not by diff:** `tests/promptContract.test.ts` asserts `HARNESS CONTRACT` appears exactly once in the sent system prompt on all four paths, and that the evaluation path — which composes the contract itself — does not get a second one at the transport. |
-| **E-09** (prompts thread) | **`analysis.lens` is gone from the registry.** The editor entry the trader could edit but the model never saw is deleted; the registry now holds **12** ids. | `constants/promptRegistry.ts:54-162` | **Verified by reading the file** (no `analysis.lens` entry) **and by the new gate**: `tests/promptContract.test.ts` now asserts that the three registry ids the registry itself says reach `analyzeTradingView` — `analysis.master`, `analysis.risk_rules`, `analysis.memory_enforcement` — actually appear **in the sent system prompt**. That is E-09's own verification, done the way the plan asked for it: not "a `getPrompt()` call site exists" but "the prompt reaches a sent request". |
+| **E-01a** (prompts thread) | **The harness contract reaches every live surface exactly once.** It is injected at the transport — `withDeskToolsSystemPrompt` (`src/services/analysis/DeskToolsService.ts:3782`, called from `:3827`) — not at each surface's composer. | `src/services/analysis/DeskToolsService.ts` | **Verified by outcome, not by diff:** `tests/promptContract.test.ts` asserts `HARNESS CONTRACT` appears exactly once in the sent system prompt on all four paths, and that the evaluation path — which composes the contract itself — does not get a second one at the transport. |
+| **E-09** (prompts thread) | **`analysis.lens` is gone from the registry.** The editor entry the trader could edit but the model never saw is deleted; the registry now holds **12** ids. | `src/constants/promptRegistry.ts:54-162` | **Verified by reading the file** (no `analysis.lens` entry) **and by the new gate**: `tests/promptContract.test.ts` now asserts that the three registry ids the registry itself says reach `analyzeTradingView` — `analysis.master`, `analysis.risk_rules`, `analysis.memory_enforcement` — actually appear **in the sent system prompt**. That is E-09's own verification, done the way the plan asked for it: not "a `getPrompt()` call site exists" but "the prompt reaches a sent request". |
 | **3.6 (docs restructure)** | **The plan corpus landed in `docs/plan/`** — `README.md`, `open-items.md`, `full-audit.md` and `audit/` (seven sources). `docs/plans/` now holds **one** file: `debate-deletion-status.md`, the dated history ledger the anchor gate scans. | `docs/plan/`; `docs/plans/debate-deletion-status.md` | **Verified by listing the tree** at `40443692`: `docs/plans/` = 1 file, `docs/plan/` = 4 entries + 7 audit sources. |
 | **Q14 (answered and executed)** | **18 plan documents deleted, not archived.** | `docs/plans/` | **Verified by listing `docs/plans/`**: only the dated ledger survives, as the anchor gate's scan list (`scripts/check-flow-doc-anchors.cjs:44`) requires. |
 | **Q10 (answered)** | **`docs/analysis/` is scratch, and the previous audit cannot be pruned.** The directory is untracked on purpose; the six previous reports were preserved on a branch — **that branch was deleted on 2026-10-23, so this is a dated record, not a standing fact.** | commit `56639b4b`; branch `archive/prior-audit-2026-10-18` | **Verified**: the branch resolves (`508b691a`) and carries **1 182** `docs/analysis/` entries — the six `.md` reports **including `06-independent-review-2026-10-18.md`**, plus the `data/` folder. Nothing in the other three checkpoint commits is missing from it, so `git gc --prune=now` can no longer destroy the only written record of the live-data findings. |
@@ -47,14 +47,14 @@ Every number here was taken with the command named, on the tip named.
 
 | figure | value | how it was measured | tip |
 |---|---|---|---|
-| **`App.tsx` unused declarations** | **11 locals + 6 imports = 17** | `npx eslint App.tsx -f json` → 17 `@typescript-eslint/no-unused-vars` messages | 2026-10-20, working tree |
+| **`src/App.tsx` unused declarations** | **11 locals + 6 imports = 17** | `npx eslint src/App.tsx -f json` → 17 `@typescript-eslint/no-unused-vars` messages | 2026-10-20, working tree |
 | the six unused **imports** | `Conversation`, `AIProvider`, `ChevronDownIcon`, `CloseIcon`, `ModelPicker`, `NavRail` | same | same |
 | the eleven unused **locals** | `providerCooldownRemainingMs`, `updateActiveConversation`, `newlyAddedInsightIds`, `leverageInput`, `isNavOverlay`, `closeNavOverlay`, `input`, `images`, `setLoadingMessage`, `openBotInTrade`, `openGroupInTrade` | same | same |
 | **the cost model's `netR` is no longer gross** | `meta.netR` is now net of the fee tier | `tests/skillStatisticsGate.test.ts:202,214` still assert the **pre-fee** figures (`-0.8`, `3`) and now read `-0.82` / `2.98` | 2026-10-20 |
 | **vitest census** | see `AGENTS.md`'s tree map | vitest's own summary block | see `AGENTS.md` |
 | the previous audit's preservation | **1 182** `docs/analysis/` entries on `archive/prior-audit-2026-10-18` — **the branch was deleted 2026-10-23**, so this measured a state that no longer exists | `git ls-tree -r --name-only archive/prior-audit-2026-10-18 -- docs/analysis` | 2026-10-20 |
 
-**A note on the `App.tsx` figure, because the plan quotes several.** The "28 unused LOCAL
+**A note on the `src/App.tsx` figure, because the plan quotes several.** The "28 unused LOCAL
 declarations" number is **not in `AGENTS.md`** at this tip — the `AGENTS.md` rewrite
 removed it. The number was re-measured rather than patched, because a figure that lives
 in three places and is measured in a fourth is a figure that will be wrong in one of them.
@@ -106,10 +106,10 @@ and the assertions are exact counts, so a removed block cannot pass.
 
 | path | the real function it drives | what it proves |
 |---|---|---|
-| **P1 chat** | `runChatSurfaceTurn` (`services/trade/chatSurfaceTurn.ts`) | the contract once, the DESK TOOLS block once, the mandate present, only offered tools named, the allow-list is exactly `CHAT_SURFACE_TOOLS`, a skill NAMED once |
-| **P2 dock** | the exported `TRADE_CHAT_SYSTEM_PROMPT` + `buildSkillsIndexForPrompt` (`services/trade/tradeChatContext.ts`), source-pinned to the panel's composer | the same, plus the mailbox tools are never named |
-| **P3 automation** | `runAutomationTurn` (`services/trade/automationTurn.ts`) | the same, plus the allow-list is exactly the Chat surface's minus the denied eight, and no notebook-writing tool is named |
-| **P4 evaluation** | `analyzeTradingView` (`services/providers/GenericAnalysisService.ts`) — the skill-evaluation path, called from `services/learning/SkillEvalScheduler.ts:285` | the contract is composed once and not doubled, the retrieved context rides in the **user** turn and not the system prompt, and the registry prompts that claim the path really reach the wire |
+| **P1 chat** | `runChatSurfaceTurn` (`src/services/trade/chatSurfaceTurn.ts`) | the contract once, the DESK TOOLS block once, the mandate present, only offered tools named, the allow-list is exactly `CHAT_SURFACE_TOOLS`, a skill NAMED once |
+| **P2 dock** | the exported `TRADE_CHAT_SYSTEM_PROMPT` + `buildSkillsIndexForPrompt` (`src/services/trade/tradeChatContext.ts`), source-pinned to the panel's composer | the same, plus the mailbox tools are never named |
+| **P3 automation** | `runAutomationTurn` (`src/services/trade/automationTurn.ts`) | the same, plus the allow-list is exactly the Chat surface's minus the denied eight, and no notebook-writing tool is named |
+| **P4 evaluation** | `analyzeTradingView` (`src/services/providers/GenericAnalysisService.ts`) — the skill-evaluation path, called from `src/services/learning/SkillEvalScheduler.ts:285` | the contract is composed once and not doubled, the retrieved context rides in the **user** turn and not the system prompt, and the registry prompts that claim the path really reach the wire |
 
 ---
 
@@ -121,12 +121,12 @@ with the reason.
 
 | the plan says | what was done | why |
 |---|---|---|
-| E-11: *"for each of the four model-call paths (P1 chat, P2 dock, P3 automation, **P4 bot**)"* | **P4 is the evaluation path** — `analyzeTradingView` (`services/providers/GenericAnalysisService.ts`), which the plan's own tool table (`audit/2026-10-19-01-system-and-data-flow.md:904`) calls *"P5 evaluation"*, and which is what the skill-evaluation scheduler actually calls (`services/learning/SkillEvalScheduler.ts:285`). | The plan's prose and the plan's own table disagree about the fourth path, and the table's version is the one a unit test can drive end to end. The bot path is a `streamQuickResponse` turn and carries no separate system prompt to audit. |
-| E-11: *"build the **real** system prompt through the real function"* | **The dock's composer is a `useCallback` inside a component** (`components/trade/TradeChatPanel.tsx:450`), so the test asserts the contract over the two **exported** blocks the panel concatenates and **source-pins the concatenation**. | A copy of the composition inside the test would be the second implementation this repo keeps paying for — and the source pin is what stops the test from passing on a panel that stopped using those blocks. |
+| E-11: *"for each of the four model-call paths (P1 chat, P2 dock, P3 automation, **P4 bot**)"* | **P4 is the evaluation path** — `analyzeTradingView` (`src/services/providers/GenericAnalysisService.ts`), which the plan's own tool table (`audit/2026-10-19-01-system-and-data-flow.md:904`) calls *"P5 evaluation"*, and which is what the skill-evaluation scheduler actually calls (`src/services/learning/SkillEvalScheduler.ts:285`). | The plan's prose and the plan's own table disagree about the fourth path, and the table's version is the one a unit test can drive end to end. The bot path is a `streamQuickResponse` turn and carries no separate system prompt to audit. |
+| E-11: *"build the **real** system prompt through the real function"* | **The dock's composer is a `useCallback` inside a component** (`src/components/trade/TradeChatPanel.tsx:450`), so the test asserts the contract over the two **exported** blocks the panel concatenates and **source-pins the concatenation**. | A copy of the composition inside the test would be the second implementation this repo keeps paying for — and the source pin is what stops the test from passing on a panel that stopped using those blocks. |
 | E-11: *"assert … the tool list matches the surface's allow-list"* | **The check is made on the surface's OWN text, never on the enriched prompt**, and the shared DESK TOOLS catalogue — which names every tool the executor has — is measured separately. | Reading the catalogue as the surface's vocabulary would make the check vacuous: every surface would "name" every tool. The measured split is what lets the check mean something. |
 | E-11: *"no `debate`/`moderator` vocabulary may appear on a live surface"* | **An exact equation, not a ban.** Two shared blocks still carry the residue of the debate deletion — the harness contract's *"The moderator's last block…"* and the DESK TOOLS catalogue's *"…or moderator verdict"*. The wire prompt's count must equal the surface's own count plus the shared blocks' measured contribution. | A blanket ban fails on the shared blocks and teaches the next reader nothing. The equation fails when a **surface** reintroduces the word, and it fails when a shared block's copy disappears — so the residue cannot hide a new one. |
 | E-11: *"four tests, one per surface"* | **Sixteen tests across the four paths**, because each path is checked on four axes (present / absent / tools / skills) and the axes are the contract. | One test per surface would have to assert all four axes in one breath, and the first failure would hide the other three. |
-| §3E's **E-49** — rank and filter the 30-slot skill index by trigger, status, audience and evidence | **NOT implemented here.** The contract test pins the index's **section vocabulary** and the "named once" property, and deliberately does **not** pin its order. | E-49 is not in this thread's items. The test was written so that E-49's re-ranking will not break it — the index is still "one line per skill, in the recognised heading", and which skills occupy the slots is E-49's business. **Worth knowing before E-49 lands:** `SkillIndexAudience = 'analyst' \| 'moderator'` still exists at `services/trade/tradeChatContext.ts:214` while `buildSkillsIndexForPrompt` takes no `audience` argument, and `MemoryRetrievalService` filters by audience for *retrieval* but the *index* does not. That is exactly the gap E-49 names. |
+| §3E's **E-49** — rank and filter the 30-slot skill index by trigger, status, audience and evidence | **NOT implemented here.** The contract test pins the index's **section vocabulary** and the "named once" property, and deliberately does **not** pin its order. | E-49 is not in this thread's items. The test was written so that E-49's re-ranking will not break it — the index is still "one line per skill, in the recognised heading", and which skills occupy the slots is E-49's business. **Worth knowing before E-49 lands:** `SkillIndexAudience = 'analyst' \| 'moderator'` still exists at `src/services/trade/tradeChatContext.ts:214` while `buildSkillsIndexForPrompt` takes no `audience` argument, and `MemoryRetrievalService` filters by audience for *retrieval* but the *index* does not. That is exactly the gap E-49 names. |
 | §3E's **E-48b** — the three-verdict review job for malformed skills | **NOT implemented here.** | Not in this thread's items. The contract test does not touch it. |
 
 ---
@@ -142,7 +142,7 @@ with the reason.
   real for the path it covers and silent for the rest** — the same shape of blind spot the
   plan keeps naming, and the same shape the anchor gate has.
 - **The F-01 shape is asserted for the surfaces, not for the pipeline.** The pipeline's
-  `enhancedPrompt` is assembled in `hooks/useAnalysisPipeline.ts:1088-1131` and is the
+  `enhancedPrompt` is assembled in `src/hooks/useAnalysisPipeline.ts:1088-1131` and is the
   subject of E-01; the contract test asserts that the four surfaces do not carry a
   retrieved blob, and that the evaluation path's retrieval rides in the user turn. **It
   does not assert what the pipeline sends** — that path was not driven here.
@@ -171,23 +171,23 @@ E-18 now makes possible. The decline half of E-42 is built; the log half is not.
 
 | item | what landed | where | how it was verified |
 |---|---|---|---|
-| **E-37** | Evidence floors raised: cluster 3→10, confirmed 5→20, veto 2→10. `MIN_SAMPLE_RETIRE` deliberately unchanged. | `services/learning/SkillMemoryService.ts` (constants) | Existing suites updated on purpose (fixtures raised to the new floors); **4918/4918** vitest tests green. |
-| **E-38** | A presented plan now carries a validity window from the app's own detector (scalp 20 min, swing 330 min), so `ENTRY_NOT_HIT` is writable at expiry. It also records the stop-distance percentage the detector reads. | `services/trade/proposedTrade.ts` (`buildTradePlan`, `applyTradeTypeToAnalysis`) | `tests/proposedTrade.test.ts` asserts both classes and windows. |
-| **E-40** | `decidedAt` beside the write `timestamp`; `decidedAtOf()` is the one fallback for legacy rows. Dashboards, learning sections and the recent-form brief order by decision time; the brief shows it. | `types/trade.ts`, `hooks/useTradeLogging.ts`, `utils/journalAnalytics.ts`, `utils/recentTradesBrief.ts`, the dashboard/learning sections | `tests/recentTradesBrief.test.ts` (decided Monday / logged Friday) + typecheck. |
-| **E-39** | `tradingDecision: high` for the two plan-capable chat homes and `automatedTradingDecision: max` for schedules; a composer pick still wins. `effectiveTemperature()` is the published format × thinking table, tested. | `services/providers/reasoningControls.ts`, `chatSurfaceTurn.ts`, `chatTurnRunner.ts`, `automationTurn.ts`, `shared/providerRequestPolicy.cjs` | `tests/reasoningControls.test.ts`, `tests/providerRequestPolicy.test.ts`, `tests/chatEffortDial.test.tsx`. |
-| **E-26b / E-14** | The Q4 default: `approval_rules_v1` and the five restore-only namespaces are on the RAW list; `trade_chat_active_v1` and `trade_declines_v1` too. A raw-string envelope carries plain values (usernames, session ids, flags) without quoting them. | `services/infrastructure/ExportService.ts` | Export suites incl. a native-shaped round trip of a plain username and a session id. |
+| **E-37** | Evidence floors raised: cluster 3→10, confirmed 5→20, veto 2→10. `MIN_SAMPLE_RETIRE` deliberately unchanged. | `src/services/learning/SkillMemoryService.ts` (constants) | Existing suites updated on purpose (fixtures raised to the new floors); **4918/4918** vitest tests green. |
+| **E-38** | A presented plan now carries a validity window from the app's own detector (scalp 20 min, swing 330 min), so `ENTRY_NOT_HIT` is writable at expiry. It also records the stop-distance percentage the detector reads. | `src/services/trade/proposedTrade.ts` (`buildTradePlan`, `applyTradeTypeToAnalysis`) | `tests/proposedTrade.test.ts` asserts both classes and windows. |
+| **E-40** | `decidedAt` beside the write `timestamp`; `decidedAtOf()` is the one fallback for legacy rows. Dashboards, learning sections and the recent-form brief order by decision time; the brief shows it. | `src/types/trade.ts`, `src/hooks/useTradeLogging.ts`, `src/utils/journalAnalytics.ts`, `src/utils/recentTradesBrief.ts`, the dashboard/learning sections | `tests/recentTradesBrief.test.ts` (decided Monday / logged Friday) + typecheck. |
+| **E-39** | `tradingDecision: high` for the two plan-capable chat homes and `automatedTradingDecision: max` for schedules; a composer pick still wins. `effectiveTemperature()` is the published format × thinking table, tested. | `src/services/providers/reasoningControls.ts`, `chatSurfaceTurn.ts`, `chatTurnRunner.ts`, `automationTurn.ts`, `shared/providerRequestPolicy.cjs` | `tests/reasoningControls.test.ts`, `tests/providerRequestPolicy.test.ts`, `tests/chatEffortDial.test.tsx`. |
+| **E-26b / E-14** | The Q4 default: `approval_rules_v1` and the five restore-only namespaces are on the RAW list; `trade_chat_active_v1` and `trade_declines_v1` too. A raw-string envelope carries plain values (usernames, session ids, flags) without quoting them. | `src/services/infrastructure/ExportService.ts` | Export suites incl. a native-shaped round trip of a plain username and a session id. |
 | **E-06** | Bundle ceiling 2,600 → **1,400 kB**, plus a stale-ceiling floor at 90 % so the ratchet must be lowered when the build shrinks. Measured entry: **1,389.30 kB**. | `.github/workflows/guards.yml` | Build + the ratchet shell logic run locally (`RATCHET_OK`). |
 | **W3.1** | The roster-deletion test: a clean store stays empty and a brand-new profile shows no Macro/Technical/Risk seats. | `tests/agentRosterService.test.ts`, `tests/agentsSurface.test.tsx` | Both suites green. |
-| **E-35** | The deterministic layer is wired at the ONE `present_trade` executor: a confirmed AVOID refuses the plan and writes `VetoLedgerService.recordVeto`; a candidate AVOID caps the tier; a fired predicate's `ceiling` is folded into the same gate stamp the journal records. | `services/trade/presentTradeTool.ts`, `services/trade/proposalGate.ts`, `types/analysis.ts` | `tests/planE35Enforcement.test.ts` drives the real presenter (6 tests) and proves the ledger write, the refusal, the candidate cap and the stamped ceiling. |
-| **E-43** | `netEdgeR` (net expectancy at the plan's own capped probability), a trader floor setting (default 0), a gate refusal, and a card that disables Log and quotes the number. The gate and the card read the SAME `buildTradePlan`. | `utils/netRiskReward.ts`, `services/trade/proposalGate.ts`, `services/trade/proposedTrade.ts`, `components/trade/panels/TradeProposalCard.tsx`, `App.tsx`, Settings → Analysis | `tests/planE03.test.ts`, `tests/proposalGate.test.ts`, `tests/proposalCard.test.tsx`. |
-| **E-41** | New-session default leverage is the trader's setting, **10×** out of the box; `LEGACY_LEVERAGE = 100` is used only for historical rows. The proposal card shows the isolated-liquidation buffer beside the stop. | `utils/harnessSettings.ts`, `utils/conversationUtils.ts`, `components/trade/panels/TradeProposalCard.tsx`, Settings → Analysis | `tests/harnessControlsSettings.test.tsx` + card test (5 % buffer at 10×, "past liquidation" at 100×). |
-| **E-18** | Automatic settlement with a 15 s Undo window; `shadow` (show, never record — the DEFAULT, per the plan's first month) and `confirm` modes; per-coin `deny`/`always` still win. Rows carry `resolutionSource`; a human correction stamps `correctedFrom`/`correctedAt` and `resolutionSource: correction`. | `utils/outcomeSettlement.ts`, `hooks/useWatchSideEffects.ts`, `hooks/useTradeLogging.ts`, `hooks/useTradeJournalActions.ts`, `types/trade.ts`, Settings → Analysis | `tests/planE18Settlement.test.ts` (table + real hook with fake timers), `tests/useTradeJournalActions.test.tsx`, `tests/harnessControlsSettings.test.tsx` (default = shadow). |
-| **E-42(a)** | `decline_trade`: a HOLD object with the reason, side and rejected levels, offered on Chat, the dock and schedules, bounded at 500, backed up. | `services/trade/declineLog.ts`, `services/analysis/DeskToolsService.ts`, the three allow-lists, `ExportService.ts` | `tests/planE42Decline.test.ts` (5 tests, incl. the allow-list refusal). |
-| **E-19** | ONE `TradePlan` object (`buildTradePlan`) produces the ratio, model claim, capped probability/band, cost, net edge and warnings. The card, the journal builder, the watch/drawings and the minEdge gate read it. | `services/trade/proposedTrade.ts`, `presentTradeTool.ts`, `TradeProposalCard.tsx` | `tests/planE19OnePlan.test.ts` asserts card/row/gate equality. |
-| **E-20** | A read-only replay harness: `utils/planReplay.ts` + `npm run replay:plans --input <export>`. It re-derives today's verdict through the real builder and reports drift; an unstamped row is counted as unstamped, not accused. The deterministic baseline is labelled as requiring the candidate log. | `utils/planReplay.ts`, `scripts/replay-plans.entry.ts`, `scripts/replay-plans.cjs` | Unit tests + a real sample run produced a report (`1/1 compared, 1 drifted`). |
+| **E-35** | The deterministic layer is wired at the ONE `present_trade` executor: a confirmed AVOID refuses the plan and writes `VetoLedgerService.recordVeto`; a candidate AVOID caps the tier; a fired predicate's `ceiling` is folded into the same gate stamp the journal records. | `src/services/trade/presentTradeTool.ts`, `src/services/trade/proposalGate.ts`, `src/types/analysis.ts` | `tests/planE35Enforcement.test.ts` drives the real presenter (6 tests) and proves the ledger write, the refusal, the candidate cap and the stamped ceiling. |
+| **E-43** | `netEdgeR` (net expectancy at the plan's own capped probability), a trader floor setting (default 0), a gate refusal, and a card that disables Log and quotes the number. The gate and the card read the SAME `buildTradePlan`. | `src/utils/netRiskReward.ts`, `src/services/trade/proposalGate.ts`, `src/services/trade/proposedTrade.ts`, `src/components/trade/panels/TradeProposalCard.tsx`, `src/App.tsx`, Settings → Analysis | `tests/planE03.test.ts`, `tests/proposalGate.test.ts`, `tests/proposalCard.test.tsx`. |
+| **E-41** | New-session default leverage is the trader's setting, **10×** out of the box; `LEGACY_LEVERAGE = 100` is used only for historical rows. The proposal card shows the isolated-liquidation buffer beside the stop. | `src/utils/harnessSettings.ts`, `src/utils/conversationUtils.ts`, `src/components/trade/panels/TradeProposalCard.tsx`, Settings → Analysis | `tests/harnessControlsSettings.test.tsx` + card test (5 % buffer at 10×, "past liquidation" at 100×). |
+| **E-18** | Automatic settlement with a 15 s Undo window; `shadow` (show, never record — the DEFAULT, per the plan's first month) and `confirm` modes; per-coin `deny`/`always` still win. Rows carry `resolutionSource`; a human correction stamps `correctedFrom`/`correctedAt` and `resolutionSource: correction`. | `src/utils/outcomeSettlement.ts`, `src/hooks/useWatchSideEffects.ts`, `src/hooks/useTradeLogging.ts`, `src/hooks/useTradeJournalActions.ts`, `src/types/trade.ts`, Settings → Analysis | `tests/planE18Settlement.test.ts` (table + real hook with fake timers), `tests/useTradeJournalActions.test.tsx`, `tests/harnessControlsSettings.test.tsx` (default = shadow). |
+| **E-42(a)** | `decline_trade`: a HOLD object with the reason, side and rejected levels, offered on Chat, the dock and schedules, bounded at 500, backed up. | `src/services/trade/declineLog.ts`, `src/services/analysis/DeskToolsService.ts`, the three allow-lists, `ExportService.ts` | `tests/planE42Decline.test.ts` (5 tests, incl. the allow-list refusal). |
+| **E-19** | ONE `TradePlan` object (`buildTradePlan`) produces the ratio, model claim, capped probability/band, cost, net edge and warnings. The card, the journal builder, the watch/drawings and the minEdge gate read it. | `src/services/trade/proposedTrade.ts`, `presentTradeTool.ts`, `TradeProposalCard.tsx` | `tests/planE19OnePlan.test.ts` asserts card/row/gate equality. |
+| **E-20** | A read-only replay harness: `src/utils/planReplay.ts` + `npm run replay:plans --input <export>`. It re-derives today's verdict through the real builder and reports drift; an unstamped row is counted as unstamped, not accused. The deterministic baseline is labelled as requiring the candidate log. | `src/utils/planReplay.ts`, `scripts/replay-plans.entry.ts`, `scripts/replay-plans.cjs` | Unit tests + a real sample run produced a report (`1/1 compared, 1 drifted`). |
 | **E-24** | Behavioural coverage for `electron/main.cjs`: protocol containment (real path, encoded traversal, foreign host, bad encoding), navigation/window-open policy, and the shell's hardening options. | `tests/planE24ElectronBehaviour.test.ts` | 7 tests against the real main process with Electron mocked. |
-| **E-23** | Version + checksum + a preserved sidecar on a corrupt or checksum-failing notebook; a list/restore API; a "Restore this copy" banner in the notebook UI. The main key is never overwritten. | `services/learning/MemoryFilesService.ts`, `components/learn/MemoryFilesManager.tsx`, `ExportService.ts` | `tests/memoryFilesService.test.ts` (sidecar, restore, refusal, checksum). |
-| **E-44** | The notebook is a v2 manifest plus per-category shards for `skills` and `trader-diary`; the v1 key becomes the manifest and migration source. The manifest is written LAST, so one full shard cannot take the whole notebook down. Every entry survives byte-identically across migration. | `services/learning/MemoryFilesService.ts`, `scripts/probe-skill-approval.cjs` (reads the shard), `ExportService.ts` | Sharding + migration tests; the full suite and the skill-approval probe (25/25) both pass. |
+| **E-23** | Version + checksum + a preserved sidecar on a corrupt or checksum-failing notebook; a list/restore API; a "Restore this copy" banner in the notebook UI. The main key is never overwritten. | `src/services/learning/MemoryFilesService.ts`, `src/components/learn/MemoryFilesManager.tsx`, `ExportService.ts` | `tests/memoryFilesService.test.ts` (sidecar, restore, refusal, checksum). |
+| **E-44** | The notebook is a v2 manifest plus per-category shards for `skills` and `trader-diary`; the v1 key becomes the manifest and migration source. The manifest is written LAST, so one full shard cannot take the whole notebook down. Every entry survives byte-identically across migration. | `src/services/learning/MemoryFilesService.ts`, `scripts/probe-skill-approval.cjs` (reads the shard), `ExportService.ts` | Sharding + migration tests; the full suite and the skill-approval probe (25/25) both pass. |
 
 ### The gates this pass ran, with their own figures
 
@@ -235,8 +235,8 @@ be a stored-data bug the line was hiding.
 | --- | --- | --- |
 | A tool round's output budget was `Math.min(caller, 4096)`, and thinking counts **inside** `max_tokens` on the DeepSeek, GLM, Anthropic and o-family routes. A seat told to decide at `high` (the E-39 default for `tradingDecision`) could spend the whole 4096 mid-thought and return a message with no call and no text; the loop read that as "chose not to call a tool" and ended the turn empty. | `DESK_ROUND_MAX_TOKENS = 8192` (`DeskToolsService.ts:241`), the same room `TASK_BUDGETS.chat` gives the answer, still clamped by a smaller caller budget. | `tests/deskToolThinkingCut.test.ts` — and measured red: setting the constant back to 4096 fails 3 checks |
 | Nothing re-asked. An empty round returned `endedWithToolCalls: false` with `finalText: ''`, and the continuation went out at the tier that had just failed. | One re-ask per turn at a stepped-down tier (`stepEffortDown`, now exported from `reasoningControls.ts`), triggered on the wire's own stop signal — `truncated` **or** `finishReason === 'unknown'`, because a gateway that sends no signal has not said it finished. If the whole turn produced nothing, the continuation gets the same step-down plus a harness turn asking for prose. | `tests/deskToolThinkingCut.test.ts` (4 cases) — measured red: disabling the repair fails all four |
-| Nothing bounded the outbound array. The desk loop grew its own request every round, and `chatSurfaceTurnMessages` mapped the **whole** stored conversation onto every send. | `services/providers/contextCompact.ts` — fit the array to the resolved window: oldest tool payloads to a marked head slice, then old prose, then whole tool rounds (never splitting a `tool_calls` block from its replies, which is what 400s the transcript). Applied at every round and at the continuation, and reported in the transcript through the tool-line channel — including the case where **nothing could be cut** (`CONTEXT FULL: … over a N-token ceiling`), because silence there reads as a healthy request right up to the provider refusal. | `tests/contextCompact.test.ts` (23 cases), `tests/deskToolThinkingCut.test.ts` (14) |
-| The window itself was a single optional field the trader could type, defaulting to 65,536 — and `loadProviderConfigs` **dropped it on every app start** while the save path kept writing it. `thinkingCapable`, `jsonSchemaCapable` and both pricing rates were dropped with it. | `utils/contextWindow.ts`: user override → a limit the provider stated in a rejection → the window `/models` reported for that model id → the owner's new **1,000,000** default. Discovery now captures per-model windows (`discoverProviderModelCatalog`, stored in `ProviderConfig.modelContextWindows`); the loader preserves every optional field with coercion; `Settings → Providers` shows the number in use and says which evidence produced it. | `tests/contextWindow.test.ts`, `tests/providerConfigService.test.ts` (5 new), `tests/modelCatalogRefresh.test.tsx` (2 new) |
+| Nothing bounded the outbound array. The desk loop grew its own request every round, and `chatSurfaceTurnMessages` mapped the **whole** stored conversation onto every send. | `src/services/providers/contextCompact.ts` — fit the array to the resolved window: oldest tool payloads to a marked head slice, then old prose, then whole tool rounds (never splitting a `tool_calls` block from its replies, which is what 400s the transcript). Applied at every round and at the continuation, and reported in the transcript through the tool-line channel — including the case where **nothing could be cut** (`CONTEXT FULL: … over a N-token ceiling`), because silence there reads as a healthy request right up to the provider refusal. | `tests/contextCompact.test.ts` (23 cases), `tests/deskToolThinkingCut.test.ts` (14) |
+| The window itself was a single optional field the trader could type, defaulting to 65,536 — and `loadProviderConfigs` **dropped it on every app start** while the save path kept writing it. `thinkingCapable`, `jsonSchemaCapable` and both pricing rates were dropped with it. | `src/utils/contextWindow.ts`: user override → a limit the provider stated in a rejection → the window `/models` reported for that model id → the owner's new **1,000,000** default. Discovery now captures per-model windows (`discoverProviderModelCatalog`, stored in `ProviderConfig.modelContextWindows`); the loader preserves every optional field with coercion; `Settings → Providers` shows the number in use and says which evidence produced it. | `tests/contextWindow.test.ts`, `tests/providerConfigService.test.ts` (5 new), `tests/modelCatalogRefresh.test.tsx` (2 new) |
 | An optimistic default is only safe if a wrong guess is survivable. | The transport (`sendChatRequest`, `sendChatTurn`, `streamChatRequest`) reads the limit out of a context-length rejection, records it as `measured`, compacts to it and retries **once** — never after a delta has been painted, and not at all when compaction has nothing to cut. A non-window 400 is not retried. | `tests/desktopProviderParity.test.ts` (4 new, over the Electron bridge) |
 
 **Why the default could move to 1M without inflating a prompt.** Every injection
@@ -293,7 +293,7 @@ and vLLM use:
   path exists. A seat that has never reported a window and has never been
   rejected still starts at 1M and learns its real limit on the first overflow,
   at the cost of one retried turn.
-- **The estimated token count is an estimate.** `utils/tokenEstimate.ts` biases
+- **The estimated token count is an estimate.** `src/utils/tokenEstimate.ts` biases
   high and cannot see the provider's chat template or the tool schemas; that is
   what `WIRE_FRAMING_SAFETY_TOKENS = 4096` is for, and it is a constant, not a
   measurement.
@@ -333,21 +333,21 @@ re-building a cost cap the app had already stopped shipping.
 
 | Row | The defect | What landed | Verified by |
 | --- | --- | --- | --- |
-| **O-55**, **O-47** | The A/B lane and the prompt fingerprint had three readers and no writer, so the profile card's control/live split and every `promptVersion` on a journal row were `undefined`. | `hooks/useAnalysisPipeline.ts:951` opens the lane per run and `:955` stamps the corpus; both `runStats` builders persist the pair (`:1278-1279`, `:1443-1444`), which is what `hooks/useTradeLogging.ts:428-429` copies onto the trade. The fingerprint is `promptCorpusVersion()` in `services/infrastructure/PromptOverrideService.ts` — it hashes the EDITED-corpus state, so it is stable across builds and moves the moment the trader edits a prompt. It deliberately does NOT hash `PROMPT_REGISTRY`: importing the registry into the run path grew the entry chunk by 18.7 kB and the bundle ratchet is not a thing to loosen. | `tests/promptOverrideService.test.ts`: the lane's three branches, the fingerprint's stability and variation, and two source pins that the writers are still called from the pipeline |
-| **O-60** | The desk mandate ordered the seat to call `get_chart_view`, and the Chat surface's allow-list refuses it — a duty the executor would not honour, which reads to the model as an obligation rather than an absence. | The mandate is composed from the offer set: `deskToolsMandateFor(offered)` (`services/analysis/DeskToolsService.ts:1686`), `withDeskToolsSystemPrompt(…, offeredTools)` (`:3979`), the offer list built at `:4087` from `mergedAllowed` before falling back to the definitions. A home with no chart is told there is NO CHART to read here and must cite the candles; a home with no market read at all is told to name no shape. | `tests/deskSystemPrompt.test.ts` — the invariant that every tool the mandate NAMES is a tool this turn can call — plus the updated source assertion in `tests/promptContract.test.ts` |
-| **O-62** | The prompt promised a *fresh* packet; the code served an 8-second cache and, on a failed fetch, a bare "packet unavailable". | The fence stamps its own age — `packetAgeNote()` at `services/trade/tradeChatContext.ts:90` says `Ns old`, and past a minute `… — STALE: this snapshot predates the last N minute(s); call get_market_packet or get_chart_view for a newer read before you state a price` (into the header at `:128`). A failed fetch writes the `DATA_UNAVAILABLE` sentinel (`:102`) whose text says the state is UNKNOWN rather than missing. The system prompt now claims an age-stamped packet, not a fresh one. | `tests/tradeChatContext.test.ts` (the age, the sentinel, and the prompt's own sentence about it) |
-| **O-65** | Nothing near a streaming transcript was a live region, so an arriving answer was never announced. | `role="log" aria-live="polite" aria-busy=…` on both homes' scroll containers — `components/trade/TradeChatPanel.tsx:1077`, `components/agents/AgentsView.tsx:1346` — each with an `aria-label` naming the conversation. Per-row live regions were rejected deliberately: one per message re-announces the whole transcript on every token. | `tests/tradeChatPanelHarness.test.tsx`, the surface-switch case in `tests/surfaceSwitch.test.tsx` |
-| **O-66** | Seven of eighteen dialogs rendered `role="dialog"` with no trap, no `aria-modal`, no restore. | Five modals now trap and are proven by mounting each one and asserting focus lands inside — `AutomationEditorModal`, `ThinkingModal`, `ImageViewerModal`, `NewBotDialog`, `NewGroupDialog` — plus the two the audit missed: the full-screen `LiveMarket` overlay (`components/market/LiveMarket.tsx:81`, and NOT when it is the embedded panel) and the update overlay's decidable phase (`components/shared/UpdateOverlay.tsx:140`, because `downloading` and `installing` contain nothing focusable and a trap there swallows Tab for minutes). The header's session popover stays a disclosure on purpose — `components/shared/Header.tsx:217` writes no `aria-modal` and Escape/outside-click dismiss it — and now carries `aria-controls` on its trigger. | `tests/useFocusTrap.test.tsx`: the five mounts, and a **population** gate that lexes every `.tsx` under `components/` plus `App.tsx` with the shared `jsxScan` and refuses any element that writes `aria-modal` without carrying the `useFocusTrap()` ref on that same tag. Reach is floored at the 18 measured sites, six named members must be in the set, two planted defects prove both finding branches fire, and a disclosure-only fixture proves it does not over-refuse. |
-| **O-53** | Four user-visible strings still named the deleted engine. | The editor's validation error is "Pick the model this run answers with." under a plain "Model" label (`components/automation/AutomationEditorModal.tsx:247`, `:508`); the journal's pre-merge badge reads `Ensemble (legacy)` (`components/journal/TradeLog.tsx:352`); the monthly card header says "Grade the panel — legacy debate rows only" (`components/journal/MonthlyReportCard.tsx:62`) and `services/learning/monthlyReport.ts` labels those columns legacy; `moderator` is out of the Settings search keywords. | grep over `components/**.tsx` — the two words survive only as code identifiers, in comments, and on these legacy-labelled rows |
-| **O-73** | "The desk home, which runs the longest jobs, has no Stop." | It has one, on both homes: `aria-label={busy ? 'Stop' : 'Send'}` at `components/trade/panels/ChatComposer.tsx:213` and the `(busy \|\| analysisRunning)` form at `components/agents/AgentsView.tsx:1515`. Recorded as verified rather than newly built — the row's premise is retired, and `ChatComposer.tsx:51-54` documents that a Stop which aborts only the chat turn is a lie. | read at the two cited lines |
-| **O-54**, **O-90**, **O-91**, **O-92** | Rows the code had already out-fixed. | The cost-cap setting is deleted at both ends (`debateCostCapUsd` has no declaration and no reader; the panel says so at `components/settings/SessionUsagePanel.tsx:132`); `surface-census.cjs` measures each surface at its own `ROOTS` entry (`:215`) and Settings at its dialog root; `ui-inspect.cjs` contains no `7` at all and reads the live switch population; the dead default `NavRail` import is gone (`App.tsx:129` imports only `AccountRow` and `NAV_RAIL_AUTO_COLLAPSE_PX`, both used — and `NAV_RAIL_EXPANDED_PX` is a third live export, imported at `components/agents/AgentsView.tsx:73`). | grep, plus `tests/deadControlsGuard.test.ts:145`, which pins that no `<NavRail` is ever rendered |
+| **O-55**, **O-47** | The A/B lane and the prompt fingerprint had three readers and no writer, so the profile card's control/live split and every `promptVersion` on a journal row were `undefined`. | `src/hooks/useAnalysisPipeline.ts:951` opens the lane per run and `:955` stamps the corpus; both `runStats` builders persist the pair (`:1278-1279`, `:1443-1444`), which is what `src/hooks/useTradeLogging.ts:428-429` copies onto the trade. The fingerprint is `promptCorpusVersion()` in `src/services/infrastructure/PromptOverrideService.ts` — it hashes the EDITED-corpus state, so it is stable across builds and moves the moment the trader edits a prompt. It deliberately does NOT hash `PROMPT_REGISTRY`: importing the registry into the run path grew the entry chunk by 18.7 kB and the bundle ratchet is not a thing to loosen. | `tests/promptOverrideService.test.ts`: the lane's three branches, the fingerprint's stability and variation, and two source pins that the writers are still called from the pipeline |
+| **O-60** | The desk mandate ordered the seat to call `get_chart_view`, and the Chat surface's allow-list refuses it — a duty the executor would not honour, which reads to the model as an obligation rather than an absence. | The mandate is composed from the offer set: `deskToolsMandateFor(offered)` (`src/services/analysis/DeskToolsService.ts:1686`), `withDeskToolsSystemPrompt(…, offeredTools)` (`:3979`), the offer list built at `:4087` from `mergedAllowed` before falling back to the definitions. A home with no chart is told there is NO CHART to read here and must cite the candles; a home with no market read at all is told to name no shape. | `tests/deskSystemPrompt.test.ts` — the invariant that every tool the mandate NAMES is a tool this turn can call — plus the updated source assertion in `tests/promptContract.test.ts` |
+| **O-62** | The prompt promised a *fresh* packet; the code served an 8-second cache and, on a failed fetch, a bare "packet unavailable". | The fence stamps its own age — `packetAgeNote()` at `src/services/trade/tradeChatContext.ts:90` says `Ns old`, and past a minute `… — STALE: this snapshot predates the last N minute(s); call get_market_packet or get_chart_view for a newer read before you state a price` (into the header at `:128`). A failed fetch writes the `DATA_UNAVAILABLE` sentinel (`:102`) whose text says the state is UNKNOWN rather than missing. The system prompt now claims an age-stamped packet, not a fresh one. | `tests/tradeChatContext.test.ts` (the age, the sentinel, and the prompt's own sentence about it) |
+| **O-65** | Nothing near a streaming transcript was a live region, so an arriving answer was never announced. | `role="log" aria-live="polite" aria-busy=…` on both homes' scroll containers — `src/components/trade/TradeChatPanel.tsx:1077`, `src/components/agents/AgentsView.tsx:1346` — each with an `aria-label` naming the conversation. Per-row live regions were rejected deliberately: one per message re-announces the whole transcript on every token. | `tests/tradeChatPanelHarness.test.tsx`, the surface-switch case in `tests/surfaceSwitch.test.tsx` |
+| **O-66** | Seven of eighteen dialogs rendered `role="dialog"` with no trap, no `aria-modal`, no restore. | Five modals now trap and are proven by mounting each one and asserting focus lands inside — `AutomationEditorModal`, `ThinkingModal`, `ImageViewerModal`, `NewBotDialog`, `NewGroupDialog` — plus the two the audit missed: the full-screen `LiveMarket` overlay (`src/components/market/LiveMarket.tsx:81`, and NOT when it is the embedded panel) and the update overlay's decidable phase (`src/components/shared/UpdateOverlay.tsx:140`, because `downloading` and `installing` contain nothing focusable and a trap there swallows Tab for minutes). The header's session popover stays a disclosure on purpose — `src/components/shared/Header.tsx:217` writes no `aria-modal` and Escape/outside-click dismiss it — and now carries `aria-controls` on its trigger. | `tests/useFocusTrap.test.tsx`: the five mounts, and a **population** gate that lexes every `.tsx` under `src/components/` plus `src/App.tsx` with the shared `jsxScan` and refuses any element that writes `aria-modal` without carrying the `useFocusTrap()` ref on that same tag. Reach is floored at the 18 measured sites, six named members must be in the set, two planted defects prove both finding branches fire, and a disclosure-only fixture proves it does not over-refuse. |
+| **O-53** | Four user-visible strings still named the deleted engine. | The editor's validation error is "Pick the model this run answers with." under a plain "Model" label (`src/components/automation/AutomationEditorModal.tsx:247`, `:508`); the journal's pre-merge badge reads `Ensemble (legacy)` (`src/components/journal/TradeLog.tsx:352`); the monthly card header says "Grade the panel — legacy debate rows only" (`src/components/journal/MonthlyReportCard.tsx:62`) and `src/services/learning/monthlyReport.ts` labels those columns legacy; `moderator` is out of the Settings search keywords. | grep over `src/components/**.tsx` — the two words survive only as code identifiers, in comments, and on these legacy-labelled rows |
+| **O-73** | "The desk home, which runs the longest jobs, has no Stop." | It has one, on both homes: `aria-label={busy ? 'Stop' : 'Send'}` at `src/components/trade/panels/ChatComposer.tsx:213` and the `(busy \|\| analysisRunning)` form at `src/components/agents/AgentsView.tsx:1515`. Recorded as verified rather than newly built — the row's premise is retired, and `ChatComposer.tsx:51-54` documents that a Stop which aborts only the chat turn is a lie. | read at the two cited lines |
+| **O-54**, **O-90**, **O-91**, **O-92** | Rows the code had already out-fixed. | The cost-cap setting is deleted at both ends (`debateCostCapUsd` has no declaration and no reader; the panel says so at `src/components/settings/SessionUsagePanel.tsx:132`); `surface-census.cjs` measures each surface at its own `ROOTS` entry (`:215`) and Settings at its dialog root; `ui-inspect.cjs` contains no `7` at all and reads the live switch population; the dead default `NavRail` import is gone (`src/App.tsx:129` imports only `AccountRow` and `NAV_RAIL_AUTO_COLLAPSE_PX`, both used — and `NAV_RAIL_EXPANDED_PX` is a third live export, imported at `src/components/agents/AgentsView.tsx:73`). | grep, plus `tests/deadControlsGuard.test.ts:145`, which pins that no `<NavRail` is ever rendered |
 
 ### Corrections to the register (the numbers were the point)
 
 - **O-69** — "17 call sites, 0 pass `action=`" was wrong on both halves. Measured
   today: **14** sites, and **1** passes `action=` (the journal's "Nothing is
-  classified yet" offers "Show all trades" — `components/journal/TradeLog.tsx:724`).
-  The prop exists and renders (`components/ui/EmptyState.tsx:14`, `:93-101`); what
+  classified yet" offers "Show all trades" — `src/components/journal/TradeLog.tsx:724`).
+  The prop exists and renders (`src/components/ui/EmptyState.tsx:14`, `:93-101`); what
   is missing is 13 decisions about what each empty state's next action actually
   IS, which is the trader's call, not a sweep.
 - **O-71** — 20 `fallback={null}` is now **17**, measured.
@@ -355,21 +355,21 @@ re-building a cost cap the app had already stopped shipping.
   and `ThinkingModal.tsx` both have **zero** production importers. Recorded as
   worse than the register said, and folded into **E-50**'s orphan census.
 - **O-129** — `debatePods.ts` comes off the list (deleted; it is one of the 25
-  files `git log --diff-filter=D` names under `services/providers/`) and
+  files `git log --diff-filter=D` names under `src/services/providers/`) and
   `ThinkingModal.tsx` goes on it. Every figure in the row predates the debate
   deletion, the roster deletion and the context-window pass, so the graph must be
   re-run before the E-50 batches are cut.
 - **O-75** — `'Logging in 15s'` moved from `:55` to
-  `hooks/useWatchSideEffects.ts:70`, and `tests/planE18Settlement.test.ts:101`
+  `src/hooks/useWatchSideEffects.ts:70`, and `tests/planE18Settlement.test.ts:101`
   pins that exact copy, so the countdown is a tested behavior rather than an
   accident. Still the trader's number to choose.
-- **O-59** — the definitions array is now `services/analysis/DeskToolsService.ts:871`,
+- **O-59** — the definitions array is now `src/services/analysis/DeskToolsService.ts:871`,
   spanning `:871-1485`, and carries **35** `name:` fields, not 39 (measured by
   brace depth over that span). The ~7,864-token figure is the audit's own estimate
   and has not been re-derived here.
 - **`docs/app-flow.md`** — the provider-directory census said "twenty-four files…
   the other fifteen". `git log --diff-filter=D --name-only --format= --
-  services/providers/` names **25**, of which 9 were provider clients, so the
+  src/services/providers/` names **25**, of which 9 were provider clients, so the
   sentence now says twenty-five and sixteen and enumerates the sixteen. The
   anchor gate's own census rule caught it; the paragraph is now the recipe's
   output rather than a remembered number.
@@ -404,11 +404,11 @@ keep their present controls until Phases 2 and 3 replace them.
 
 | File | What it is |
 | --- | --- |
-| `components/shared/ModelMenu.tsx` | new: the portaled panel. Provider row with the constant `API` badge (ruling D-C) that opens a right-hand provider panel on click **and** hover; the active provider's models only, ready providers only; `Vision` from `isVisionModel`, `free` from `isFreeModelId`, the star toggle, the shared free-only pref, one `Manage providers` row (not the reference's two names for one destination); a six-stop `role="slider"` whose `aria-valuetext` is the tier LABEL, never the index; Escape contained to the innermost panel; roving arrow-key focus with Home/End; focus returns to the trigger. |
-| `components/shared/effortScale.ts` | new: the ladder moved out of `EffortChip` (`EFFORT_CHOICES`, `effortChoiceOf`, plus `effortIndexOf` / `effortAtIndex` for the slider), re-exported from `EffortChip` so every existing importer is unchanged. One owner, because the trigger will print the tier and the slider will edit it. |
-| `utils/providerUtils.ts` | `STARRED_MODELS_KEY`, `readStarredModels`, `writeStarredModels` beside the free-only pref — the star list was a `localStorage` literal copied into two components. Same key, same bytes; a ModelChip star still sorts the panel's list. |
-| `components/shared/ModelChip.tsx` | the star read/write now goes through that owner. No behaviour change. |
-| `App.tsx` | unchanged. The dead `import ModelPicker` (O-130's G-7, one occurrence, nothing renders it) is **still there on purpose**: `App.tsx` is the file the flow docs cite by line number more than any other, and deleting one line near the top invalidates every one of them at once. Phase 2 rewrites this file's composer wiring anyway and re-anchors `docs/app-flow.md` as part of its own gate list, so the import goes out with the pass that can pay for the re-measurement. Verified: removing it here turned `App.tsx:2014` into a comment line and the anchor gate said so. |
+| `src/components/shared/ModelMenu.tsx` | new: the portaled panel. Provider row with the constant `API` badge (ruling D-C) that opens a right-hand provider panel on click **and** hover; the active provider's models only, ready providers only; `Vision` from `isVisionModel`, `free` from `isFreeModelId`, the star toggle, the shared free-only pref, one `Manage providers` row (not the reference's two names for one destination); a six-stop `role="slider"` whose `aria-valuetext` is the tier LABEL, never the index; Escape contained to the innermost panel; roving arrow-key focus with Home/End; focus returns to the trigger. |
+| `src/components/shared/effortScale.ts` | new: the ladder moved out of `EffortChip` (`EFFORT_CHOICES`, `effortChoiceOf`, plus `effortIndexOf` / `effortAtIndex` for the slider), re-exported from `EffortChip` so every existing importer is unchanged. One owner, because the trigger will print the tier and the slider will edit it. |
+| `src/utils/providerUtils.ts` | `STARRED_MODELS_KEY`, `readStarredModels`, `writeStarredModels` beside the free-only pref — the star list was a `localStorage` literal copied into two components. Same key, same bytes; a ModelChip star still sorts the panel's list. |
+| `src/components/shared/ModelChip.tsx` | the star read/write now goes through that owner. No behaviour change. |
+| `src/App.tsx` | unchanged. The dead `import ModelPicker` (O-130's G-7, one occurrence, nothing renders it) is **still there on purpose**: `src/App.tsx` is the file the flow docs cite by line number more than any other, and deleting one line near the top invalidates every one of them at once. Phase 2 rewrites this file's composer wiring anyway and re-anchors `docs/app-flow.md` as part of its own gate list, so the import goes out with the pass that can pay for the re-measurement. Verified: removing it here turned `src/App.tsx:2014` into a comment line and the anchor gate said so. |
 | `tests/modelMenu.test.tsx` | new: 15 tests, mounting the panel only. |
 
 ### The two gates that bound this work, and what they caught
@@ -475,12 +475,12 @@ for Phase 4 so the key hint is never shown before the chord exists.
 
 | File | What changed |
 | --- | --- |
-| `components/shared/ModelChip.tsx` | rewritten: it is now the trigger AND the anchor. The label reads `Provider · Model · High` (D-D) and the accessible name reads the same three things; the panel body is `ModelMenu`, portaled and anchored to the trigger's rect. The compact form (dock, 384px) truncates; the wide form (Chat surface) does not. |
-| `components/shared/EffortChip.tsx` | **deleted** (`git rm`). The tier is set on the slider in the model panel; keeping a second control for one value is the defect the proposal names (G-3). Its ladder had already moved to `effortScale.ts`, so nothing else moved with it. |
-| `components/trade/panels/ChatComposer.tsx` | the footer row under the card is gone; the control sits in the toolbar row inside `data-testid="composer-model-and-send"`, left of send, and `ml-auto` moved from the send button to that pair so send stays bottom-right when the row wraps. The disclaimer keeps its own line. |
-| `components/agents/AgentsView.tsx` | same move, and the bot rule now travels WITH the control: `modelPicker` is a render prop receiving `{ showEffort }`, because "a bot turn has no Effort section" needs `activeBot`, which only this surface has. `effortPicker` is deleted. |
-| `App.tsx` | `SessionEffortChip` became `SessionModelChip` (still module-scope, still the only thing that touches `chatStore` on that surface's mount — the latch bug in its comment is why), the injection passes `showEffort` through, and the Chat surface's inline `setSelectedChatModel(v); chatStore.setActiveSoloModel(v)` pair became one `changeChatSoloModel` callback — the two writes the dock's own callback performs, spelled once. |
-| `tests/chatEffortDial.test.tsx` | rewritten rather than deleted: the chip's radio-menu tests go (the panel's slider tests live in `tests/modelMenu.test.tsx`), and the five wiring pins that named `EffortChip`/`effortPicker`/`SessionEffortChip` now name the merged control — including `expect(fs.existsSync('components/shared/EffortChip.tsx')).toBe(false)`, so the deletion cannot be quietly undone. The transport pins (three wires, one shared rule) are untouched. |
+| `src/components/shared/ModelChip.tsx` | rewritten: it is now the trigger AND the anchor. The label reads `Provider · Model · High` (D-D) and the accessible name reads the same three things; the panel body is `ModelMenu`, portaled and anchored to the trigger's rect. The compact form (dock, 384px) truncates; the wide form (Chat surface) does not. |
+| `src/components/shared/EffortChip.tsx` | **deleted** (`git rm`). The tier is set on the slider in the model panel; keeping a second control for one value is the defect the proposal names (G-3). Its ladder had already moved to `effortScale.ts`, so nothing else moved with it. |
+| `src/components/trade/panels/ChatComposer.tsx` | the footer row under the card is gone; the control sits in the toolbar row inside `data-testid="composer-model-and-send"`, left of send, and `ml-auto` moved from the send button to that pair so send stays bottom-right when the row wraps. The disclaimer keeps its own line. |
+| `src/components/agents/AgentsView.tsx` | same move, and the bot rule now travels WITH the control: `modelPicker` is a render prop receiving `{ showEffort }`, because "a bot turn has no Effort section" needs `activeBot`, which only this surface has. `effortPicker` is deleted. |
+| `src/App.tsx` | `SessionEffortChip` became `SessionModelChip` (still module-scope, still the only thing that touches `chatStore` on that surface's mount — the latch bug in its comment is why), the injection passes `showEffort` through, and the Chat surface's inline `setSelectedChatModel(v); chatStore.setActiveSoloModel(v)` pair became one `changeChatSoloModel` callback — the two writes the dock's own callback performs, spelled once. |
+| `tests/chatEffortDial.test.tsx` | rewritten rather than deleted: the chip's radio-menu tests go (the panel's slider tests live in `tests/modelMenu.test.tsx`), and the five wiring pins that named `EffortChip`/`effortPicker`/`SessionEffortChip` now name the merged control — including `expect(fs.existsSync('src/components/shared/EffortChip.tsx')).toBe(false)`, so the deletion cannot be quietly undone. The transport pins (three wires, one shared rule) are untouched. |
 | `tests/agentsSurface.test.tsx` | the injected-picker test now renders through the render prop and asserts the picker lands INSIDE the send pair, and that `showEffort` arrives as a real boolean. |
 | `scripts/chip-shot.cjs` | rewritten for the new testids, and it now asserts behaviour rather than only pixels: the trigger must END in a tier word (D-D), starring must move a row to first, and the slider must expose `aria-valuemax=5` and a non-empty `aria-valuetext`. |
 | `scripts/render-probe.cjs` | new checks for the move (below). |
@@ -525,11 +525,11 @@ silently:
 | `npm run check-flow-doc-anchors` | **304 anchors verified, 0 unattributed**; cited-line quality 0/0 |
 
 The anchor count moved 303 → 305 → **304** during this pass, and both moves were
-measurements, not drift: Phase 2 shifted `App.tsx` by ~16 lines, so the tool
+measurements, not drift: Phase 2 shifted `src/App.tsx` by ~16 lines, so the tool
 re-resolved 36 citations; re-pointing the html's `:2365` onto the existing
 `{surface === 'trade' && (` anchor merged two distinct numbers into one, dropping
 the unique count by 1. Two citations that the gate CANNOT see were corrected while
-in there: `App.tsx:1217` claimed to be `latestChartVerdict(messages)` and is a
+in there: `src/App.tsx:1217` claimed to be `latestChartVerdict(messages)` and is a
 group-edit line (the real one is `:1229`), and `:303` claimed to be
 `moderatorConfig` (the real one is `:310`). A citation the gate cannot check is
 still a claim, and this one was false.
@@ -540,7 +540,7 @@ still a claim, and this one was false.
 implementation (Settings, the automation editor, the seat picker), so the shared
 free-only/star preferences still do not follow the trader everywhere, and `O-68`
 keeps its `ModelPicker`/`SymbolPicker`/`SelectMenu` half. The dead
-`import ModelPicker` in `App.tsx` is still there for the same reason as in Phase 1
+`import ModelPicker` in `src/App.tsx` is still there for the same reason as in Phase 1
 — it costs a doc re-anchor, and Phase 3 rewrites that file's picker anyway.
 `O-56`/`E-39`'s *default* tier is untouched: this makes the tier visible and
 settable beside the model, which is the UI half the proposal claims.
@@ -610,7 +610,7 @@ direction of the property it defends:
   subtract the shared constant, so an import nobody uses still fails.
 - `tests/dockChatParity.test.tsx` reads the `text-left` search pin from
   `ModelMenu.tsx`.
-- `components/shared/flyoutLayout.ts`'s own docblock named `ModelPicker` as one of
+- `src/components/shared/flyoutLayout.ts`'s own docblock named `ModelPicker` as one of
   the two positioners; it says `ModelMenu` now. A stale name lies after a move.
 
 ### Gates, measured on this tree
@@ -643,7 +643,7 @@ key is pressed and the value the next turn sends cannot disagree with what is on
 screen. The ladder wraps (`max → off`), because a one-way ramp would strand the
 dial at the top with no way back except opening the panel.
 
-**Why it is guarded, and what the guard is.** `components/shared/effortDial.ts`
+**Why it is guarded, and what the guard is.** `src/components/shared/effortDial.ts`
 is a refcount that `ModelChip` raises for as long as it SHOWS the tier, and the
 App-level handler asks it before acting. Not a boolean, because both chat homes
 can be mounted with one hidden — the surface that unmounts must not switch the
@@ -658,9 +658,9 @@ the slider's accessible name (`docs/ui-doctrine.md:48` asks for the second, not
 just the first), so a screen-reader user hears the chord that the sighted user
 reads off a keycap.
 
-**G-7, at last.** The dead `import ModelPicker` at `App.tsx:82` is gone. It was
+**G-7, at last.** The dead `import ModelPicker` at `src/App.tsx:82` is gone. It was
 deferred out of Phases 1–3 for the reason in §10 and §12 — one line near the top
-of `App.tsx` invalidates every line-anchored citation the flow docs hold against
+of `src/App.tsx` invalidates every line-anchored citation the flow docs hold against
 that file — and this phase pays for it deliberately, because Phase 4's own gate
 list is the doc re-anchor. 28 tokens re-resolved from the gate's report, cited-line
 quality back to 0 comment landings and 0 symbol misses, and the unique-anchor
@@ -676,7 +676,7 @@ offer, so the pinned evidence is:
   the hint is rendered beside the label AND inside `aria-label`; the refcount
   rises while a dial is on screen, stays down for a bot turn, and falls back to
   zero on unmount (twice, because a double release must not sink the count).
-- The same file pins the BINDING and its GUARD as one condition in `App.tsx`
+- The same file pins the BINDING and its GUARD as one condition in `src/App.tsx`
   (`… && e.shiftKey && !e.altKey && effortDialUp() && e.key.toLowerCase() === 'e'`)
   and the write as one call into `chatStore`. A chord bound but unguarded, or
   guarded but unbound, fails that pin.
@@ -716,7 +716,7 @@ fixed** — E-02 and E-03 landed in an earlier pass with their own suites
 (`tests/planE02.test.ts`, `tests/planE03.test.ts`, `tests/proposalGate.test.ts`)
 and the rows simply never moved. `O-19`'s own grep recipe
 (`takerFee|makerFee|feeRate|commission|costBps`) returned **0 files** when the
-row was written and returns `utils/netRiskReward.ts` now. Had I implemented
+row was written and returns `src/utils/netRiskReward.ts` now. Had I implemented
 "the cost model" from the register instead of checking, this pass would have
 built a second one — the exact defect class the plan's §Phase 0.2 warns about.
 
@@ -724,12 +724,12 @@ built a second one — the exact defect class the plan's §Phase 0.2 warns about
 
 - `O-03` — the canvas `measured_move` label printed its own `reward/risk`.
   It now measures with `plannedRiskReward` and prints through `fmtRiskReward`
-  (`services/trade/chartDrawings.ts:619`), so a drawn level and the card cannot
+  (`src/services/trade/chartDrawings.ts:619`), so a drawn level and the card cannot
   quote different ratios for one ticket once a ladder is out of order.
 - `O-04` — the pattern memory estimated a win from `analysis.takeProfit[0]`,
   which is **array order**. It now prefers a corrected exit (what filled) and
   otherwise takes `nearestTargetPrice`
-  (`services/learning/PatternMemorySynthesisService.ts:275`). Four new tests,
+  (`src/services/learning/PatternMemorySynthesisService.ts:275`). Four new tests,
   one of which is a parity pin against `plannedRiskReward` for the same plan.
 
 **A second defect fell out of the `O-04` fix, and it is the better find.** The
@@ -760,7 +760,7 @@ Every one measured on this tree, read from its own `*_EXIT=` marker:
 | `npm run typecheck` | ok, 0 errors |
 | `npm run lint` | **0 errors / 655 warnings** — unchanged from Phase 4, so the two fixes added no debt |
 | `npm run test` | **5065 tests in 495 files**, 0 failed, 0 skipped (5 more than Phase 4: the four `calculatePnlR` cases and the drawing-label case) |
-| `npm run build` | ok, entry **1376 KiB** — unchanged; `chartDrawings` reached `utils/riskReward` through a module already in the graph |
+| `npm run build` | ok, entry **1376 KiB** — unchanged; `chartDrawings` reached `src/utils/riskReward` through a module already in the graph |
 | `npm run boot-probe` | ok, zero pageerrors |
 | `npm run render-probe` | **117 checks, 0 failures**, zero pageerrors |
 | `npm run check-flow-doc-anchors` | ok, 304 anchors verified, 0 unattributed, cited-line quality 0/0 |
@@ -776,7 +776,7 @@ The turn's status line said that work happened, not what work: a turn read
 "Analyzing · 25s" whatever the desk was doing, and the one line that could have
 said more was taken by a rotating trader tip.
 
-**What landed.** `utils/turnStatus.ts` and `utils/toolKinds.ts` are new: the
+**What landed.** `src/utils/turnStatus.ts` and `src/utils/toolKinds.ts` are new: the
 **one** reader of the digest grammar the desk writes ("calling order book…" /
 "order book · detail") and the **one** vocabulary the desk's tools are named
 in. The running row now names the activity ("Reading the order book · 12s"),
@@ -799,18 +799,18 @@ warnings · `build` ok · `render-probe` ok, zero pageerrors ·
 and gaps **G-4**, **G-17**. **Ruling R-B** (the tier lands on the answer):
 yes.
 
-**What landed.** `types/provider.ts` now owns `ReasoningEffort` — the wire
+**What landed.** `src/types/provider.ts` now owns `ReasoningEffort` — the wire
 vocabulary — because a `Message` and a stored chat entry both carry the tier
 that produced them, and neither may depend on a service. The tier a turn ran
 under is resolved **once** (`resolveComposerEffort`), rides out of the executor
-on the outcome (`services/trade/toolTurn.ts`), and is written onto the run and
+on the outcome (`src/services/trade/toolTurn.ts`), and is written onto the run and
 the entry. The answer's row carries a `ThinkingTierChip` — a muted mark, not a
-control, labelled from the one ladder (`components/shared/effortScale.ts`).
+control, labelled from the one ladder (`src/components/shared/effortScale.ts`).
 
 **The dead lane is gone.** `Message.reasoningProcesses` — a field the deleted
 debate engine filled and nothing has written since — is removed from the type,
 and the legacy lane is folded into the live one through a single seam
-(`utils/traceText.ts`). `extractModeratorThinking` had no production callers
+(`src/utils/traceText.ts`). `extractModeratorThinking` had no production callers
 and is deleted rather than left as a second reader.
 
 **Gates.** `typecheck` ok · `vitest` 5100 in 497 · `lint` 0 errors / 656
@@ -832,10 +832,10 @@ trader reads a line of it.
 **A real miscount died here.** The old label read "Ran N commands", and N
 counted transcript LINES — the desk writes **two** lines per call (the call
 and its result), so every number the trader was told was double. The pairing
-moved to `utils/turnStatus.ts`, where the grammar already lived, so one paired
+moved to `src/utils/turnStatus.ts`, where the grammar already lived, so one paired
 row is one call.
 
-**One disclosure.** `components/shared/Disclosure.tsx` is new and it is the
+**One disclosure.** `src/components/shared/Disclosure.tsx` is new and it is the
 NATIVE one: the thinking row, the tool-output expander and the automation
 card's reasoning all render through it. The card's used to be a `<button>`
 plus a grid-collapse `<div>` — a second mechanism for the same kind of thing,
@@ -879,7 +879,7 @@ and gap **G-11**.
 The Chart AI dock had no jump-to-latest at all: a trader reading up the
 transcript had no way to return to the answer that was still arriving, while
 the Chat surface had a pill. So the control moved into ONE component
-(`components/shared/JumpToLatestFab.tsx`) and both surfaces mount it.
+(`src/components/shared/JumpToLatestFab.tsx`) and both surfaces mount it.
 
 **The ring is INDETERMINATE, by ruling R-E.** A desk turn has no denominator
 anyone could honestly draw — the model may call three tools or forty — so an
@@ -907,10 +907,10 @@ two agents were two names with no way to tell which was the macro reader and
 which was the risk one. The row now says what the agent is FOR — its title, or
 the first line of its description — because the role is what you choose by.
 
-**The orphan is closed.** `components/analysis/ThinkingModal.tsx` had a focus
+**The orphan is closed.** `src/components/analysis/ThinkingModal.tsx` had a focus
 trap, an `aria-modal`, a test and **no importer anywhere in the app**: a modal
 nobody had ever opened, reading as if the app had one. It is now
-`components/shared/DetailModal.tsx` — the one full-detail reader — and the
+`src/components/shared/DetailModal.tsx` — the one full-detail reader — and the
 agents surface mounts it for the agent's card: what it is for, how it thinks
 (model, notebook, skills), its standing instructions, and the trace of its last
 turn.
@@ -939,7 +939,7 @@ It is a **reader**: the allow-lists are code, not preferences, so a per-tool
 switch would be a promise the app does not keep. The switch above it is the
 only control, and the catalogue says what that switch turns on.
 
-The kind marks moved to `components/shared/toolKindIcons.tsx`, so the
+The kind marks moved to `src/components/shared/toolKindIcons.tsx`, so the
 catalogue and the transcript's rows draw the SAME mark for the same kind. The
 Settings' "Advanced" section now uses the shared disclosure too: one
 mechanism, one keyboard behaviour.
@@ -980,7 +980,7 @@ and supplied it to no one.
 
 **What landed.**
 
-- `types/provider.ts` now owns `WireAuditEntry` and `WireAuditRoute` — the
+- `src/types/provider.ts` now owns `WireAuditEntry` and `WireAuditRoute` — the
   wire vocabulary, beside `ReasoningEffort`. `reasoningControls.ts`
   RE-EXPORTS them, so every existing import keeps working and the shape lives
   in one place: the service owns the DECISION, the type owns the vocabulary,
@@ -990,7 +990,7 @@ and supplied it to no one.
 - Both homes write it (the dock's settle, the pipeline's settled `Message`)
   and both read it from the same field, so they cannot disagree about one
   turn.
-- `components/shared/WireAuditRow.tsx` draws it: a turn with no trace says
+- `src/components/shared/WireAuditRow.tsx` draws it: a turn with no trace says
   WHY, in the transport's own words; a turn with a trace shows the route that
   was applied, and the disclosure lists every call the turn made.
 
@@ -1036,7 +1036,7 @@ same chrome as before.
 
 **What landed.**
 
-- `components/shared/AnswerBody.tsx` (new) is the **ONE home for the answer's
+- `src/components/shared/AnswerBody.tsx` (new) is the **ONE home for the answer's
   voice**, and both conversation surfaces mount it. The model's answer is
   prose and wears the serif; the trader's own message stays in the UI sans —
   in the reference the human's bubble is interface, not prose.
@@ -1164,7 +1164,7 @@ future "make it all sentence case" sweep cannot half-apply it.
 **The memory vocabulary came home.** The list's date column and its section
 headings are vocabulary, and they were living in a component — with the
 Settings card importing them **from that component**. They now live in
-`services/learning/memoryTopics.ts`, beside the derivation they belong to, and
+`src/services/learning/memoryTopics.ts`, beside the derivation they belong to, and
 both surfaces read them from there.
 
 **Gates.** `typecheck` ok · `vitest` 5240 in 510 · `lint` 0 errors / 655
@@ -1194,7 +1194,7 @@ starved is corrected to what is actually broken: a process-global `controlLane`,
 resolves no overrides at all.
 
 **§2 — the deletion.** `formatHarnessNotesBlock` and `lessonsForClass` are gone from
-`services/learning/harnessLessons.ts`. The header now names the store's two real readers —
+`src/services/learning/harnessLessons.ts`. The header now names the store's two real readers —
 `registerWireRoutePins` (`harnessLessons.ts:142` → `reasoningControls.ts:216`), a live read that
 pins a provider class to thinking-off, and `HarnessLessonsBrowser`, a human surface — and states
 that there is no prompt reader. **The reviews' recommended remedy was rejected:** deleting the
@@ -1244,7 +1244,7 @@ trader sizes a position against — was unwatched.
 **Why the existing recorder could not be reused.** `tradingChartChatLevels.test.tsx` spies on
 `series.createPriceLine()`, which is how the dock's key-level cards paint. The verdict overlay uses
 a different mechanism entirely: `chart.addSeries(LineSeries, opts)` plus a two-point `setData()`
-across the loaded window (`components/trade/TradingChart.tsx:628-645`). A mock that records
+across the loaded window (`src/components/trade/TradingChart.tsx:628-645`). A mock that records
 price lines is blind to it by construction, so this file adds a recorder for added SERIES, keyed by
 the series definition it was created from, capturing both the options and the prices fed to it.
 
@@ -1262,7 +1262,7 @@ and a `thesis` and lower-cased `direction`; `TradeProposal` has neither field an
 `'Long'`. Caught by reading the interface rather than guessing it.)
 
 **Proved red, not merely green.** With the product temporarily mutated — `entry` and `sl` swapped
-in `services/trade/chartData.ts:70,72` — 3 of the 5 cases failed, then all 5 passed again once the
+in `src/services/trade/chartData.ts:70,72` — 3 of the 5 cases failed, then all 5 passed again once the
 file was restored. A test that has never been observed to fail is an assertion about the mock.
 
 **The mock caught two of its own bugs first.** `removeSeries` looked up an entry by a `series`
@@ -1275,11 +1275,11 @@ warnings under the 659 cap · `check-flow-doc-anchors` ok with the AGENTS.md cen
 5249/511 and the new file named in the census sentence, as the convention requires.
 
 **What this does NOT close.** The shapes a trader draws by hand, and the shapes `mark_trade_levels`
-writes into `services/trade/chartDrawings.ts`, reach the canvas through the drawing overlay rather
+writes into `src/services/trade/chartDrawings.ts`, reach the canvas through the drawing overlay rather
 than this effect; they remain asserted at the data level only (`tests/chartDrawings.test.ts:200`,
 `tests/drawingGeometry.test.ts`), not as drawn pixels. `render-probe` gained no new level assertion
 in this pass. §4, §3, §5 and §6 landed afterwards, in §29–§32; §1 landed as
-`services/learning/settlementReflection.ts`, awaited from `hooks/useTradeLogging.ts:525`.
+`src/services/learning/settlementReflection.ts`, awaited from `src/hooks/useTradeLogging.ts:525`.
 Nothing in E-57 remains open.
 
 ## 29. E-57 §4 — a failed turn is never a finished answer, in either home (2026-10-22)
@@ -1292,7 +1292,7 @@ looking like finished advice, and the part that never arrived was precisely the 
 the size. The Chat surface had no such bug — it appends its own system row — so the two homes
 rendered the same failed turn as different facts.
 
-**No new state.** `StoredChatEntry` already carries `interrupted` (`services/trade/chatSessions.ts:103`)
+**No new state.** `StoredChatEntry` already carries `interrupted` (`src/services/trade/chatSessions.ts:103`)
 and `sanitizeEntry` spreads the entry, so it persists without a migration and without a fourth
 status a reader would have to disambiguate. The stamp is now unconditional and adds
 `interrupted` when prose exists; `ChatTranscriptList` reserves `ChatFailureRow` for
@@ -1307,7 +1307,7 @@ the inert-control mode this repo already pins. It says the fact and lets the tra
 **Fixed on the way, and it matters more than the rendering.** The dock persisted the RAW provider
 message into the row; the Chat surface redacts. That field is written into the session and shipped
 in a backup, and a provider error can carry a credential-shaped token, so the dock now uses the
-canonical `sanitizeErrorText` (`utils/runStatus.ts:96`) like every other path.
+canonical `sanitizeErrorText` (`src/utils/runStatus.ts:96`) like every other path.
 
 **Red proof, twice.** Restoring the old branch condition made the keep-prose-and-name-the-failure
 case fail; reversing it made it pass. Separately, two assertions in this pass first failed on their
@@ -1351,28 +1351,28 @@ behind by prompts the app no longer ships, so two runs that sent identical bytes
 carry different `promptVersion` strings and split the A/B group on a number that named
 nothing the model was given.
 
-**The lane is now a value.** `PromptLane` (`services/infrastructure/PromptOverrideService.ts:32`)
+**The lane is now a value.** `PromptLane` (`src/services/infrastructure/PromptOverrideService.ts:32`)
 is returned by `beginPromptLane` (`:34`), taken by `getPrompt(id, fallback, lane)` (`:69`) and
 `promptCorpusVersion(lane)` (`:97`), and threaded from the run that decided it
-(`hooks/useAnalysisPipeline.ts:957` → `:963`). `endPromptLane` is deleted: a value needs no
+(`src/hooks/useAnalysisPipeline.ts:957` → `:963`). `endPromptLane` is deleted: a value needs no
 unwinding, so there is no call left to forget on a throwing path.
 
 **The filter, and why it is a separate list.** Registered ids come from
-`constants/promptIds.ts` — twelve bare strings — because importing `PROMPT_REGISTRY` into a run
+`src/constants/promptIds.ts` — twelve bare strings — because importing `PROMPT_REGISTRY` into a run
 path pulls every prompt's text with it (+18.7 kB, over the bundle ratchet, as that module's own
 history records). A test pins the two lists against each other, so an id added to the registry and
 not to the list fails the suite rather than silently vanishing from the fingerprint.
 
 **A visible number was on the same lie.** Settings' **Reset all (N)** counted stored keys, so it
 offered to reset prompts the app cannot send. It now filters against the registry the tab already
-renders (`components/settings/PromptManager.tsx:83`) — derived there rather than imported from the
+renders (`src/components/settings/PromptManager.tsx:83`) — derived there rather than imported from the
 new list, so the tab and its count cannot disagree.
 
 **The finding that changed this item's own premise, and is now O-140.** The plan said to thread
 the lane "at the measured call sites". Re-reading those sites showed the analysis prompts behind
-them are reached in production only from `services/learning/SkillEvalScheduler.ts:285`, that
-`analyzeTradingViewWithTransientRetry` (`hooks/useAnalysisPipeline.ts:249`) has no caller at all,
-and that `services/trade/**` contains ZERO `getPrompt` calls — the dock never resolves an override.
+them are reached in production only from `src/services/learning/SkillEvalScheduler.ts:285`, that
+`analyzeTradingViewWithTransientRetry` (`src/hooks/useAnalysisPipeline.ts:249`) has no caller at all,
+and that `src/services/trade/**` contains ZERO `getPrompt` calls — the dock never resolves an override.
 Threading the lane into a path the trader's run never takes would have produced plumbing that looks
 like wiring, so it was not done. What §3 fixed is real (no cross-run clobbering, no ghost
 fingerprint); what it exposed is that the dial measures a label, not a difference, and that is an
@@ -1397,14 +1397,14 @@ pass's call.
 
 **Proposal:** `docs/plan/closed-loop-fixes.md` (E-57). **Closes:** **O-141**. Ruling **(c)** is this item's shape.
 
-`validateRiskReward` (`services/validation/AccuracyValidationService.ts:206`) has owned the confidence-tier R:R
+`validateRiskReward` (`src/services/validation/AccuracyValidationService.ts:206`) has owned the confidence-tier R:R
 floor and the two ATR stop bands for a long time, `tests/planE02.test.ts` and `tests/accuracyValidation.test.ts`
 pin them, and the only production caller was `runValidationGate`
-(`services/validation/TradeValidationGate.ts:654`) — inside a module with **zero importers**. So a presented plan
+(`src/services/validation/TradeValidationGate.ts:654`) — inside a module with **zero importers**. So a presented plan
 was graded by a number nothing showed and nothing enforced: the card printed the ratio, the journal stored it,
 and no path ever asked whether the stop was inside the noise band the app itself computes.
 
-**The live call site.** `assessPlanShape` (`services/trade/proposalGate.ts:152`) is called from **every exit** of
+**The live call site.** `assessPlanShape` (`src/services/trade/proposalGate.ts:152`) is called from **every exit** of
 `runGateScan` (`:189`) — evaluated, aborted, null-fetch and thrown — with the ATR the scan actually brought back
 (`atrForGate :123`: 1h → 4h → 15m → 1d, the frame the gate already scores on, since `runProgrammaticGate`'s own
 exhaustion check and `inferRegime` read `indicators['1h']`). A plan whose tape never arrived is still caught for
@@ -1413,9 +1413,9 @@ the same `plannedRiskRewardSigned` call the card's printed ratio comes from, so 
 disagree about what "inverted" means.
 
 **The split ruling (c) asked for.** Sub-floor ratio, tight stop, wide stop, stop beyond 5 % of entry →
-`ProposalGate.warnings` → printed on the card (`components/trade/panels/TradeProposalCard.tsx:173`, the first
+`ProposalGate.warnings` → printed on the card (`src/components/trade/panels/TradeProposalCard.tsx:173`, the first
 caution always visible because a warning behind a toggle is a warning nobody reads, the rest through the one
-`Disclosure`) **and** recorded on the journal row (`services/trade/proposedTrade.ts:207`), so a caution the
+`Disclosure`) **and** recorded on the journal row (`src/services/trade/proposedTrade.ts:207`), so a caution the
 trader overrode is auditable after the fact and the Log button was never disabled. Inverted levels →
 `refusal`, stated **ahead of** the min-edge refusal, because grading an expectancy on levels that point the wrong
 way is a claim about arithmetic that does not exist. The refusal text deliberately does not quote
@@ -1446,7 +1446,7 @@ neither render nor survive minification — said here rather than glossed, becau
 one tip) ·
 entry chunk **1,383 kB** against the 1,400 ceiling by the `guards.yml` recipe (`$(wc -c)/1024`), and §5 costs no
 new module in the startup graph: `AccuracyValidationService` was already reachable through
-`HybridIntelligenceService`, which `hooks/useAnalysisPipeline.ts:19` imports statically ·
+`HybridIntelligenceService`, which `src/hooks/useAnalysisPipeline.ts:19` imports statically ·
 `check-flow-doc-anchors` **382** anchors, 0 unattributed, both quality ceilings 0 — ten citations into
 `proposalGate.ts`, `proposedTrade.ts` and `TradeProposalCard.tsx` (including the two `ensureStamp` rows in the
 flow docs) were re-derived from the `git diff -U0` hunk map rather than shifted by hand, two
@@ -1470,41 +1470,41 @@ construction, and the rendered text is pinned at the jsdom layer instead.
 item found while choosing its own verification.
 
 `runAutomationTurn` already returns `notices`, `failedTools`, `refusedPlans` and `plansPresented`
-(`services/trade/automationTurn.ts:290-311`). The hook turned them into a WARNING toast
-(`hooks/useAutomations.ts:566`) and stored nothing: `AutomationRun` had no field for a caveat, so the record of a
+(`src/services/trade/automationTurn.ts:290-311`). The hook turned them into a WARNING toast
+(`src/hooks/useAutomations.ts:566`) and stored nothing: `AutomationRun` had no field for a caveat, so the record of a
 run was silent about it the moment the toast expired. Worse, two of the three shapes had no prose to hide behind
 — an `error` or `skipped` row carries no message at all, and the card's analysis-shaped bubble rebuilds its text
 from the analysis object and drops the prose the turn wrote. And there was no ceiling on failure anywhere: a
 routine whose bot had left the roster fired, skipped, toasted and fired again, forever.
 
-**The caveats are fields now.** `AutomationRun.notices` / `.plans` (`types/automation.ts:102`, `:108`) are written
-at the ONE `finish` site (`hooks/useAutomations.ts:530`) from the delivery the pipeline already carries
-(`hooks/useAnalysisPipeline.ts:1308`, widened in place so no line in that heavily-cited file moved), and printed
-on the card in the open (`components/automation/AutomationRunCard.tsx:147`) — a test asserts the block sits
+**The caveats are fields now.** `AutomationRun.notices` / `.plans` (`src/types/automation.ts:102`, `:108`) are written
+at the ONE `finish` site (`src/hooks/useAutomations.ts:530`) from the delivery the pipeline already carries
+(`src/hooks/useAnalysisPipeline.ts:1308`, widened in place so no line in that heavily-cited file moved), and printed
+on the card in the open (`src/components/automation/AutomationRunCard.tsx:147`) — a test asserts the block sits
 outside any `<details>`, because a caveat behind a toggle is a caveat nobody reads before acting on the signal.
 The block is deliberately suppressed on the two bubble paths that already render `message.text` whole, and that
 is not tidiness: the turn writes its notices INTO that text on purpose, because the next scheduled run's history
 is built from these stored rows, so the model is told what failed last time. A card that showed both would print
 one sentence twice.
 
-**One breaker, both arms.** `settleRunStreak` (`hooks/useAutomations.ts:282`) is the only place that counts the
+**One breaker, both arms.** `settleRunStreak` (`src/hooks/useAutomations.ts:282`) is the only place that counts the
 streak, and the pipeline's `finish` and the bot routine's `finishMeta` both settle through it — two writers would
 be how one arm quietly stops counting. `MAX_CONSECUTIVE_AUTOMATION_FAILURES`
-(`services/automation/AutomationService.ts:127`) is 3, and a trip writes `enabled: false` plus a `disabledReason`
+(`src/services/automation/AutomationService.ts:127`) is 3, and a trip writes `enabled: false` plus a `disabledReason`
 into the config the boot reads, so the verdict survives a reload rather than living in React state. The schedule
-prints its own banner (`components/automation/AutomationView.tsx:121`) rather than letting `Off` mean two things,
-and only `toggleAutomationEnabled` (`hooks/useAutomations.ts:752`) clears the counter — the re-enable IS the human
+prints its own banner (`src/components/automation/AutomationView.tsx:121`) rather than letting `Off` mean two things,
+and only `toggleAutomationEnabled` (`src/hooks/useAutomations.ts:752`) clears the counter — the re-enable IS the human
 act ruling (d) asked for. A switch OFF writes no reason, so a manual pause and a breaker trip stay tellable apart.
 
 **Two items in this pass turned out to be already true, and are recorded rather than "fixed".** The quota reads
 `MAX_PLANS_PER_DAY` — plans per automation per local calendar day, ledger read at
-`services/automation/AutomationService.ts:144`, spent at `:157` — and the refusal receipt already prints "3 plans
-per day for this schedule" (`services/trade/automationTurn.ts:227`); no UI ever claimed symbols, so the semantics
+`src/services/automation/AutomationService.ts:144`, spent at `:157` — and the refusal receipt already prints "3 plans
+per day for this schedule" (`src/services/trade/automationTurn.ts:227`); no UI ever claimed symbols, so the semantics
 were left alone as the plan required. And no `model` field was added to the run: `message.modelsUsed` already
 names the model, the card now reads it (`AutomationRunCard.tsx:62`) and falls back to the raw id rather than
 saying nothing, so a second field would have been a second writer for one fact. `RAW_LOCAL_STORAGE_PREFIXES` was
 not touched — `automations_v1_` and `automation_runs_v1_` are already on it
-(`services/infrastructure/ExportService.ts:773-774`), which the new export → wipe → import test confirms carries
+(`src/services/infrastructure/ExportService.ts:773-774`), which the new export → wipe → import test confirms carries
 the new fields.
 
 **Proved red, four ways.** Dropping the two row fields → the record test fails. Never writing `enabled: false` →
@@ -1538,11 +1538,11 @@ remain are named below.
 **P2 — the `propose_skill` reason survives.** The tool's schema has required a
 `reason` since it was written and its handler never read it, so the human approving a
 draft was approving a rule whose stated evidence the app had thrown away. It now rides
-the whole chain: read at `services/analysis/DeskToolsService.ts:2687`, declared at
-`schemas/learning.ts:153` (clipped to 600 chars, the same budget every other clause
-carries), stamped by the ingest (`services/learning/SkillMemoryService.ts:2977`),
+the whole chain: read at `src/services/analysis/DeskToolsService.ts:2687`, declared at
+`src/schemas/learning.ts:153` (clipped to 600 chars, the same budget every other clause
+carries), stamped by the ingest (`src/services/learning/SkillMemoryService.ts:2977`),
 serialised into the skill's frontmatter (`:1325`) and parsed back (`:726`), and printed
-as its own line on the Coach card (`components/chat/CoachThreadPanel.tsx:143`).
+as its own line on the Coach card (`src/components/chat/CoachThreadPanel.tsx:143`).
 `timeframe` joined the schema (`:2688`) because the replay proof silently assumed `1h`
 without it; `source` deliberately did **not**, because it is learner-stamped provenance
 and a model may not claim it. Two adjacent lies on the same path went with it: a
@@ -1550,17 +1550,17 @@ proposal with no `steps` used to be coerced by `steps = [String(steps)]` into th
 one-element array `["undefined"]` — which satisfied `min(1)` and reached the draft as a
 real step — and now is refused (`:2668`); and `queueLearningProposal` returned the row
 it had just failed to store, so `write` now returns a boolean
-(`utils/learningQueue.ts:126`) and the caller yields `null` (`:156`), which is how
-`utils/skillDrafts.ts` already answered. `revise_skill`'s receipt
+(`src/utils/learningQueue.ts:126`) and the caller yields `null` (`:156`), which is how
+`src/utils/skillDrafts.ts` already answered. `revise_skill`'s receipt
 (`DeskToolsService.ts:2827`) stopped calling a failed write "already pending".
 
 **P10 — the skills index and the skill injection read one filter.** An unapproved
 skill was *named* to the model in the index and then refused by the injection, which
 reads to a model as a broken promise and to the trader as a flaky system. The fix is
 one projection, not a second filter: `skillIndexRow`
-(`services/learning/SkillMemoryService.ts:1020`) turns a library row into the index
+(`src/services/learning/SkillMemoryService.ts:1020`) turns a library row into the index
 row and carries `approved`, `skillIndexRows()` (`:1036`) is the only caller-facing
-builder, and `isIndexableSkill` (`services/trade/tradeChatContext.ts:277`) refuses a
+builder, and `isIndexableSkill` (`src/services/trade/tradeChatContext.ts:277`) refuses a
 row whose approval fact is false. `approved` is **optional** on the row type
 (`:238`), so a caller that passes no fact still fails *open* — deliberate, because the
 field is new, and the reason both surfaces must go through the one projection rather
@@ -1572,12 +1572,12 @@ fill — a test that re-implements the thing it audits cannot fail when the thin
 **P3 (the half that was not a ruling) — the detached skill evaluator gets an
 allow-list.** `SkillEvalScheduler.ts:285` reached `analyzeTradingView` with no
 `allowedTools`, and an absent list means *everything*
-(`services/analysis/DeskToolsService.ts:2490`), so a background job could call
+(`src/services/analysis/DeskToolsService.ts:2490`), so a background job could call
 `present_trade`, `decline_trade`, `propose_skill`, `forge_tool`, `write_memory_note`
 and every forged `custom_*` tool. It now passes `AUTOMATION_EVALUATION_TOOLS`
-(`services/trade/automationTurn.ts:73`), derived from the automation surface's own
+(`src/services/trade/automationTurn.ts:73`), derived from the automation surface's own
 list by dropping the two tools that write to the journal, and applied at
-`services/learning/SkillEvalScheduler.ts:301`.
+`src/services/learning/SkillEvalScheduler.ts:301`.
 
 **Proved red, five ways.** Disabling the index's approval check turned both
 negative assertions red (`tests/tradeChatContext.test.ts`, and the new wire-level
@@ -1623,7 +1623,7 @@ touches P4, P1 or P5's row-furniture half.
 — no timeout of their own — while every other transport path in the same file passes
 `withTimeoutSignal` (120 s) or `withStreamTimeoutSignal` (300 s). They now pass the one
 matching the call they make: the non-streaming request at
-`services/providers/GenericProviderService.ts:1432`, the streaming turn at `:1619`.
+`src/services/providers/GenericProviderService.ts:1432`, the streaming turn at `:1619`.
 The research corpus recorded this as one branch; a census of `signal: options?.signal`
 found a second uncapped one, so the fix is wider than the finding and the three rows that
 named it now say so — and narrower than it reads, because a third proxy branch was already
@@ -1644,7 +1644,7 @@ signal instead of combining with it, and it asserts the streaming path never ask
 
 **What this pass also found, and did NOT "fix".** P5 items 1 and 2 cannot be taken
 separately. `InterruptedRunNotice` returns `null` without at least one handler
-(`components/shared/InterruptedRunNotice.tsx:27`), and the Chat surface mounts
+(`src/components/shared/InterruptedRunNotice.tsx:27`), and the Chat surface mounts
 `ChatTranscriptRow` with only `row` — so adding `Message.interrupted` alone would render
 nothing at all. A flag whose only reader is suppressed by the component that reads it is
 a write-only field, which is the pattern P4 exists to delete. The pair needs the trader's
@@ -1685,18 +1685,18 @@ inspection (named below).
    `ingestCraftedSkillUnlocked` builds its own `SkillMeta` and had no `reason` slot, so
    a draft backed by a closed trade — which is exactly what a post-mortem produces —
    lost the evidence on the way to the notebook while the draft-backed path kept it.
-   Now stamped at `services/learning/SkillMemoryService.ts:2887`, the same clip as the
+   Now stamped at `src/services/learning/SkillMemoryService.ts:2887`, the same clip as the
    other writer. Pinned by extending the existing P0-1 case
    (`tests/skillApprovalRoundTrip.test.ts`), proved red by disabling the line.
 2. **The round-trip guard did not know the field existed.** `ROUND_TRIP_FIELDS`
-   (`services/learning/skillReview.ts:332`) is the list the byte-level serialize/parse
+   (`src/services/learning/skillReview.ts:332`) is the list the byte-level serialize/parse
    guard walks; `reason` was absent, so a frontmatter round trip could silently drop it
    and nothing would fail. Added beside `whyAccepted`.
 3. **The Skills label asserted a thing the gate denies.** After P10 the index and the
    injection both withhold an unapproved skill, while `skillAvailability` still answered
    `Enabled — this skill is injected into the seat prompt` from `skillEnabledFlag` alone
-   (`components/learn/SkillsCatalog.tsx:159`, fed at `:421`), and the skill reader's chip
-   and `SkillDetail`'s "Active" (`components/skills/SkillDetail.tsx:139`) did the same.
+   (`src/components/learn/SkillsCatalog.tsx:159`, fed at `:421`), and the skill reader's chip
+   and `SkillDetail`'s "Active" (`src/components/skills/SkillDetail.tsx:139`) did the same.
    The function's own header already states the rule — "a check on a rule that reaches
    no seat is a lie" — so this is not a new opinion, it is the module's contract
    applied to a fact it had not yet read. Both call `isApprovedSkill` (widened to
@@ -1708,7 +1708,7 @@ inspection (named below).
 4. **A third place names skills to a model.** `scan_setups` cross-references the skill
    list into a tool result, filtered only by retired-and-enabled — so a seat was told
    "skills: funding-exhaustion-long" and `recall` would answer with nothing. It applies
-   the approval fact now (`services/analysis/DeskToolsService.ts:3049`), with
+   the approval fact now (`src/services/analysis/DeskToolsService.ts:3049`), with
    `tests/scanSetupsTool.test.ts` mocking the library but keeping the REAL gate.
 5. **Three of my own tests were not capable of failing.** (a)
    `tests/automationToolTurn.test.ts` opened with `toEqual(AUTOMATION_TOOLS.filter(t =>
@@ -1725,7 +1725,7 @@ inspection (named below).
 **Not taken from the review, and why.** One reviewer reported the unattended path can
 "still reach every forged `custom_*` tool" — true of SCHEDULED runs (`automationTurn.ts`
 sets `executePanelTool`, which re-adds confirmed forged definitions at
-`services/analysis/DeskToolsService.ts:4265-4273`), and false of the evaluator this fix
+`src/services/analysis/DeskToolsService.ts:4265-4273`), and false of the evaluator this fix
 narrowed, because `analyzeTradingView` wires no executor. So the claim is a pre-existing
 property of the automation surface, not a hole in this change, and it is recorded rather
 than silently widened into a behaviour change for schedules. Another suggested routing
@@ -1766,15 +1766,15 @@ measurement that makes them open rather than vague.
    queue NO draft, so the very rows that reach that sentence have nothing waiting in the
    inbox. The wording now states the rule ("a skill reaches a seat only on a human
    approval") and the one switch that is real — Settings → *Starter playbook library*
-   (`components/settings/SessionUsagePanel.tsx:209-227`) — without promising a row that
-   may not exist. `components/learn/SkillsCatalog.tsx:163`.
+   (`src/components/settings/SessionUsagePanel.tsx:209-227`) — without promising a row that
+   may not exist. `src/components/learn/SkillsCatalog.tsx:163`.
 2. **`approvedBy: 'supervisor'` was called "nothing has approved this rule"** while the
    pill beside it read "auto-approved". Both sentences are true of the GATE and false of
    each other; the reason line now names who accepted it
-   (`components/skills/SkillDetail.tsx:151`), and `tests/skillLiveLabel.test.tsx` pins
+   (`src/components/skills/SkillDetail.tsx:151`), and `tests/skillLiveLabel.test.tsx` pins
    that the two do not contradict — proved red by changing the one string comparison.
 3. **A row signature omitted the new fact.** `describeRosterSync`
-   (`components/learn/SkillsCatalog.tsx:185`) lists every field that makes a roster row
+   (`src/components/learn/SkillsCatalog.tsx:185`) lists every field that makes a roster row
    what it is, and the refresh line it writes ("Refreshed — nothing changed") is only
    honest if that list is complete. `approved` was not in it, so flipping the starter
    shelf and pressing Refresh would move every `book-*.md` card from the check to the ban
@@ -1785,22 +1785,22 @@ measurement that makes them open rather than vague.
 
 **Checked and false.** The design reviewer's proposal to give a superseded skill its own
 `off` arm rests on "the matcher refuses it while the catalogue says Enabled".
-`skillMatchesSetup` does test `supersededBy` (`services/learning/SkillMemoryService.ts:1420`),
+`skillMatchesSetup` does test `supersededBy` (`src/services/learning/SkillMemoryService.ts:1420`),
 but the writer that supersedes a skill also retires and archives it — `stampStatusTransition(meta,
 'retired', 'superseded')`, `meta.status = 'retired'`, `enabled: false` (`:3458-3468`) — and
 `skillAvailability` already answers `Off` for a retired rule
-(`components/learn/SkillsCatalog.tsx:148`). An arm for the state alone would be a branch
+(`src/components/learn/SkillsCatalog.tsx:148`). An arm for the state alone would be a branch
 nothing can reach. The reviewer also asked for a count of skills awaiting approval; there
 is genuinely none (§35's finding 4 stands) — that is a product gap, not a text fix, and it
 is the owner's to weigh.
 
 **Still open, with the measurement.** `manualOnly` and a non-`all` `audience` are dropped by
-BOTH the index (`services/trade/tradeChatContext.ts:274-279`) and the retrieval
-(`services/learning/MemoryRetrievalService.ts:267`), yet the catalogue still calls such a
+BOTH the index (`src/services/trade/tradeChatContext.ts:274-279`) and the retrieval
+(`src/services/learning/MemoryRetrievalService.ts:267`), yet the catalogue still calls such a
 file "Enabled — injected": the same class of label lie, one arm short. It is left open
 because no writer in the tree sets either field (`grep "manualOnly: true"` and
-`"audience:"` across `services/` and `constants/` find only the parser and the serialiser) —
-so the population today is hand-edited or imported files. `components/learn/MemoryFilesManager.tsx:241`
+`"audience:"` across `src/services/` and `src/constants/` find only the parser and the serialiser) —
+so the population today is hand-edited or imported files. `src/components/learn/MemoryFilesManager.tsx:241`
 carries the same lie in a toast ("is now injected into every prompt") for a file the gate
 refuses. And `get_notebook_map` still lists unapproved skill files — deliberately: it
 answers what is IN the notebook, not what a seat is given.
@@ -1834,7 +1834,7 @@ empty page. `npm run skill-approval-probe` ran green beside it (25 PASS / 0 FAIL
 
 **One more writer asymmetry, from the benefit review.** `timeframe` and `source` were
 forwarded to the draft-backed ingest but never stamped by `ingestCraftedSkillUnlocked`
-(`services/learning/SkillMemoryService.ts:2887-2889`) — the same two-writers-of-one-format
+(`src/services/learning/SkillMemoryService.ts:2887-2889`) — the same two-writers-of-one-format
 class `792589ff` fixed for `reason`. Both are stamped now and the existing P0-1 case
 asserts them, so the closed-trade route and the chat route can no longer disagree about
 what a skill file contains.
@@ -1867,7 +1867,7 @@ errors / 655 warnings · anchors 410, 0 unattributed · live probe 14/14 against
 **Left for the owner, and it is not documentation.** A route-A skill file now reads `Off`
 with an honest why, and there is **no press in the app that approves it** — the only
 writers of `approvedBy: 'human'` are a draft approval and a queued rewrite
-(`services/learning/skillApproval.ts:71`, `services/learning/SkillMemoryService.ts:1108`),
+(`src/services/learning/skillApproval.ts:71`, `src/services/learning/SkillMemoryService.ts:1108`),
 and neither exists for a file the closed-trade loop minted. Honest `Off` with no lever is
 still a dead end; the small fix is one Approve press on the skill card beside Undo, which
 is a product decision, not a repair.
@@ -1878,13 +1878,13 @@ is a product decision, not a repair.
 
 **From the deepseek round-2 review, one real data defect, fixed.** The per-provider
 confidence-calibration store (`model_confidence_calibration`,
-`services/backtesting/ModelPerformanceService.ts:1226`) is counters-only — wins/total
+`src/services/backtesting/ModelPerformanceService.ts:1226`) is counters-only — wins/total
 with no entry log — so a trade that was re-settled, deleted or mirror-corrected after the
 fact never un-counted its sample, while the Brier summary on the profile read the buckets
 as live. The fix follows the pattern the reference calls "possibly stale, never wrong"
 and the repo already uses twice on the same file: rebuild at boot from the same trade log
 (`syncConfidenceCalibrationFromTradeLog`, called at
-`hooks/useUserProfileLoader.ts:448` beside `syncFromTradeLog` and
+`src/hooks/useUserProfileLoader.ts:448` beside `syncFromTradeLog` and
 `syncRollingWindowFromTradeLog`), sharing the ONE derivation with the incremental writer
 (`getTradeProviders` + `creditedWinForAnalyst` + the same `levelsCorrected` skip), so the
 two writers cannot disagree. A provider the log cannot reconstruct (the migrated legacy
@@ -1902,7 +1902,7 @@ reason is worse than one that fails.
 **Recorded, not built — the owner's call, from both deep reads:**
 
 - **A crashed scheduled run escapes the 3-strike breaker** (pi round-2, verified against
-  `hooks/useAutomations.ts:287-290`: the breaker counts only *settled* `error|skipped`
+  `src/hooks/useAutomations.ts:287-290`: the breaker counts only *settled* `error|skipped`
   rows, and a run that dies mid-call writes no row, so catch-up re-fires while the
   breaker stays blind — `pi` counts the death itself at `scheduler.ts:394-412`). The
   repair is to write the run row before the provider call and settle the orphan as a
@@ -1915,7 +1915,7 @@ reason is worse than one that fails.
   `(automationId, tickIso)` would close it.
 - **A provider-compat table** (pi's flag-shaped answer to per-provider wire quirks):
   three August branches qualify — the reasoning-capability regexes with no user override
-  (`services/providers/reasoningControls.ts:162-190`), the json_schema→json_object
+  (`src/services/providers/reasoningControls.ts:162-190`), the json_schema→json_object
   response-format ladder (`GenericProviderService.ts:536-566`), and the hardcoded
   `max_tokens` field. The four-format dispatch and the dev-proxy routing do NOT qualify.
   Deferred, exactly as the proposals document said.
@@ -1956,7 +1956,7 @@ seeded notebook came back empty. Measured, none of that holds: `MemoryTopicPanel
 pair with the other reported partners (`chatTranscriptImageStub`, `answerEffortTier`,
 `realProviderError`). The state was never missing.
 
-The resource is `components/shared/MarkdownContent.tsx`: `AnswerBody` routes the entry's
+The resource is `src/components/shared/MarkdownContent.tsx`: `AnswerBody` routes the entry's
 Summary and Details through it, and it is a `React.lazy` boundary — `lazy(() =>
 import('./MarkdownRenderer'))` inside a `<Suspense>` whose fallback is
 `MarkdownFallback`, which renders the raw markdown in a `<div>` with no parsing at all.

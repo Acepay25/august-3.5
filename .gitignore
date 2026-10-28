@@ -7,9 +7,11 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Build output
 node_modules/
 dist/
 dist-ssr/
+dist_electron/
 *.local
 
 # Editor directories and files
@@ -26,12 +28,11 @@ dist-ssr/
 # Environment variables (API keys)
 .env*
 !.env.example
-dist_electron/
 android/app/src/main/assets
 android/app/build
 ios/App/App/build
 
-# Build logs & debug artifacts (may contain secrets)
+# Build logs and debug artifacts (may contain secrets)
 build-log.txt
 push_error.txt
 push_log.txt
@@ -47,92 +48,57 @@ config/
 *.aab
 
 # Test output artifacts
-services/test_mem_output.txt
-services/test_output.txt
-tests/test_mem_output.txt
-tests/test_output.txt
-
-# Local agent tooling
-.zcode/
-.review/
-
-# Local source material (trading PDF library — referenced by name only,
-# never shipped; keeps copyrighted books out of the repo)
-Pdf's Strategies/
-
-# Tool artifacts
-.commandcode
-
-# Test artifacts
 playwright-report/
 test-results/
 blob-report/
 coverage/
 .nyc_output/
+services/test_mem_output.txt
+services/test_output.txt
+tests/test_mem_output.txt
+tests/test_output.txt
 
-# Regenerable hybrid-injection diagnostic dump
-hybrid-injection-dump.txt
+# Probe and gate scratch
+.probe-artifacts/
+.verify/
+.gate-*.log
 
-# Agent tool caches
+# Local agent tooling and caches
+.zcode/
+.zcodeignore
+.review/
 .eve/
 .agents/
 .cluster/
 .openclaw/
 .opencode/
+.freebuff/
+.workbuddy-ai/
+.aug/
+.flake-hunt/
+.openclaw-attachments/
+.agent/
+.hermes/
 HEARTBEAT.md
 IDENTITY.md
 SOUL.md
 TOOLS.md
 USER.md
-scripts/check_grids.cjs.bak
+.commandcode
 .commit-msg.txt
 .commit-msg*.txt
 
-# Local clutter (untracked 2026-09-13 dead-code purge):
+# Local source material (trading PDF library — never shipped; keeps
+# copyrighted books out of the repo)
+Pdf's Strategies/
+
+# Regenerable diagnostic dumps
+hybrid-injection-dump.txt
+hybrid-payload-dump.md
+
+# Local clutter from retired runs
 native_backup/
 delivery/
 
-# Root planning/audit markdown + one-shot artifacts (untracked 2026-09-16
-# hygiene purge — files stay on disk; run `git rm -r --cached` once to drop
-# them from the index). AGENTS.md and README.md remain tracked.
-.agent/
-.hermes/
-PROMPTS.md
-HARNESS_UPGRADE_PLAN.md
-plan.md
-DEBATE_FLOW_PLAN.md
-FAMILY_SYSTEM_PLAN.md
-MASTER_IMPROVEMENT_PLAN.md
-AUDIT_COMPONENTS_REPORT.md
-CONSOLIDATED_AUDIT.md
-FINAL_SWEEP_REPORT.md
-final-sweep-report.md
-performance-audit-report.md
-UI_UX_AUDIT_REPORT.md
-cleanup_final.ps1
-tests/test-rl.cjs
-tests/test-rl.ts
-tests/standalone-test-rl.ts
-
-# Scratch fixes / debug scripts (one-shot, not for CI)
-scripts/fix-imports.cjs
-scripts/fix-imports-v2.cjs
-hybrid-payload-dump.md
-
-# render-probe failure screenshots (diagnostic output, never committed)
-.probe-artifacts/
-
-# ZCode's own ignore file — a tool config that mirrors the gitignore pattern
-# list, not project source. It was showing up untracked in every worktree.
-.zcodeignore
-
-# Tool scratch dirs that show up in worktrees. Neither is project source.
-.freebuff/
-
-# Flake-hunt evidence: per-run vitest JSON, written so a failure survives long
-# enough to be read. Never committed — the whole point is that it is throwaway
-# evidence from a machine under load.
-.flake-hunt/
-
-# AI tool state debris
-.workbuddy-ai/
+# Superseded notes and design previews, kept on disk and out of the index
+.local-archive/

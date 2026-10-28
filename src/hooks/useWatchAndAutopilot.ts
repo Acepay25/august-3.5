@@ -1,0 +1,287 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { collectWatchedSignals, toggleWatchOnMessage } from '../utils/watchList';
+import { buildRiskBook, formatRiskBookBadge } from '../utils/riskBook';
+import { PriceAlertService } from '../services/ui/PriceAlertService';
+import { OutcomeAutopilotService, type AutopilotResolution } from '../services/ui/OutcomeAutopilotService';
+import { defaultLeverage } from '../utils/conversationUtils';
+import { TradeOutcome } from '../types';
+import type { Conversation, LoggedTrade, Message } from '../types';
+
+export interface UseWatchAndAutopilotArgs {
+    messages: Message[];
+    conversationHistory: Conversation[];
+    loggedTrades: LoggedTrade[];
+    activeConversationId: string | null;
+    activeConversation: Conversation | undefined;
+    updateMessages: (updater: (prev: Message[]) => Message[], conversationId?: string) => void;
+    messagesRef: React.MutableRefObject<Message[]>;
+    /** Stable send bridge — a fresh identity here would re-create chatContext
+     *  (and re-render every visible transcript row) per stream chunk. */
+    stableHandleSendMessage: (...args: any[]) => any;
+    handleLoadConversation: (id: string) => void;
+    setIsWatchListVisible: (open: boolean) => void;
+    /** Returns whether a row was written NOW (`false` = handed to the capture
+     *  modal; the caller must not report a logged trade). */
+    confirmAutopilotOutcome: (msg: Message, outcome: TradeOutcome.WIN | TradeOutcome.LOSS, pnlPercent?: number, slData?: any, resolved?: { at?: string; excursions?: { maePercent: number; mfePercent: number }; realizedR?: number }, conversationId?: string) => boolean;
+    confirmAutopilotEntryNotHit: (msg: Message, conversationId?: string) => void;
+    handleInitiateLogTrade: (messageId: string, outcome: TradeOutcome.WIN | TradeOutcome.LOSS) => void;
+    /** Latest-ref bridge: the pipeline's resolution callbacks read the
+     *  freshest confirm handler through this ref (assigned in the hook body). */
+    confirmAutopilotRef: React.MutableRefObject<(messageId: string) => void>;
+    toast: {
+        success: (title: string, message?: string) => void;
+    };
+}
+
+export interface UseWatchAndAutopilotResult {
+    autopilotResolutions: Record<string, AutopilotResolution>;
+    setAutopilotResolutions: React.Dispatch<React.SetStateAction<Record<string, AutopilotResolution>>>;
+    handleToggleWatch: (messageId: string, conversationId?: string | null) => void;
+    watchedSignals: ReturnType<typeof collectWatchedSignals>;
+    watchOpenR: string | undefined;
+    handleFollowUpTicket: (messageId: string, text: string) => void;
+    handleOpenWatchedSignal: (conversationId: string, messageId: string) => void;
+    handleConfirmAutopilot: (messageId: string) => void;
+    runWatchListAction: (
+        conversationId: string,
+        action: { type: 'log'; messageId: string; outcome: TradeOutcome.WIN | TradeOutcome.LOSS } | { type: 'autopilot'; messageId: string },
+    ) => void;
+    handleDismissAutopilot: (messageId: string) => void;
+}
+
+/**
+ * Watch list + outcome autopilot. Pinned signals derive from the
+ * conversation history; the autopilot effect diffs pending verdicts into
+ * the OutcomeAutopilotService (re-registering only on id/leverage change —
+ * register() re-arms the 60s detection loop, so re-registering every stream
+ * chunk would perpetually reset the timers). Resolutions surface in chat
+ * via chatContext for inline one-click confirmation; watch-list actions
+ * against another conversation defer until that conversation's messages
+ * are actually loaded.
+ */
+export const useWatchAndAutopilot = (args: UseWatchAndAutopilotArgs): UseWatchAndAutopilotResult => {
+    const {
+        messages, conversationHistory, loggedTrades,
+        activeConversationId, updateMessages, messagesRef,
+        stableHandleSendMessage, handleLoadConversation,
+        setIsWatchListVisible,
+        confirmAutopilotOutcome, confirmAutopilotEntryNotHit, handleInitiateLogTrade,
+        confirmAutopilotRef, toast,
+    } = args;
+
+    const pendingWatchActionRef = useRef<
+        | { type: 'log'; messageId: string; outcome: TradeOutcome.WIN | TradeOutcome.LOSS }
+        | { type: 'autopilot'; messageId: string }
+        | null
+    >(null);
+
+    const handleToggleWatch = useCallback((messageId: string, conversationId?: string | null) => {
+        const convId = conversationId || activeConversationId;
+        if (!convId) return;
+        updateMessages(prev => prev.map(m => {
+            if (m.id !== messageId) return m;
+            const nextWatch = !m.watched;
+            const updated = toggleWatchOnMessage(m, nextWatch);
+            if (updated.watched) {
+                toast.success('Pinned', 'This signal is on the Pinned list. Win/Loss and autopilot still work the same.');
+            }
+            return updated;
+        }), convId);
+    }, [activeConversationId, toast, updateMessages]);
+
+    const watchedSignals = useMemo(() => collectWatchedSignals(conversationHistory), [conversationHistory]);
+    const watchOpenR = useMemo(() => {
+        const book = buildRiskBook(watchedSignals, loggedTrades, (symbol) => PriceAlertService.getCurrentPrice(symbol));
+        return formatRiskBookBadge(book);
+    }, [watchedSignals, loggedTrades]);
+
+    const handleFollowUpTicket = useCallback((messageId: string, text: string) => {
+        const msg = messagesRef.current.find(m => m.id === messageId);
+        const analysis = msg?.analysis;
+        const ocr = (msg?.ocrCache?.texts || []).join('\n').slice(0, 800);
+        // Round-1 openings exist only on rows written before the ensemble debate
+        // was deleted, so the follow-up reads the stored transcript directly.
+        const openingsBySpeaker = new Map<string, string>();
+        for (const turn of (msg?.debateTurns || [])) {
+            if (!turn.text || turn.speaker === 'System' || turn.speaker === 'Moderator') continue;
+            if ((turn.round || 1) !== 1) continue;
+            openingsBySpeaker.set(turn.speaker, (openingsBySpeaker.get(turn.speaker) || '') + turn.text);
+        }
+        const openings = [...openingsBySpeaker.entries()]
+            .map(([name, opening]) => `${name}: ${opening.slice(0, 280)}`)
+            .join('\n');
+        const hidden = analysis
+            ? `Follow-up on ${analysis.coinName || 'setup'} ${analysis.direction} SL ${analysis.stopLoss || '—'}. Do not re-open the tape; answer the user only.\n${openings ? `Prior openings:\n${openings}\n` : ''}${ocr ? `OCR:\n${ocr}` : ''}`
+            : 'Follow-up on the latest ticket.';
+        stableHandleSendMessage(text, [], hidden, { followUpFromMessageId: messageId });
+    }, [stableHandleSendMessage]);
+
+    // Pre-read capture (handlePreReadCommit) was deleted in the audit purge:
+    // its only UI (the PreReadGate checkbox) never existed, so nothing ever
+    // wrote userPriorCall. The READ side (utils/preRead, useTradeLogging)
+    // stays for any historical rows carrying the field.
+
+    const handleOpenWatchedSignal = useCallback((conversationId: string, messageId: string) => {
+        handleLoadConversation(conversationId);
+        setIsWatchListVisible(false);
+    }, [handleLoadConversation, setIsWatchListVisible]);
+
+    // ─── Outcome autopilot ──────────────────────────────────────────────
+    const [autopilotResolutions, setAutopilotResolutions] = useState<Record<string, AutopilotResolution>>({});
+
+    // Diff ids instead of re-registering every message on every stream
+    // chunk — register() re-arms the 60s detection loop, so a re-register per
+    // chunk would perpetually reset the timers.
+    const autopilotRegisteredRef = useRef<Set<string>>(new Set());
+    /** The leverage each registered plan was armed with, so a conversation whose
+     *  leverage changed re-arms only ITS plans. */
+    const autopilotLeverageById = useRef<Map<string, number>>(new Map());
+
+    useEffect(() => {
+        const trackableIds = new Set<string>();
+        const register = (m: Message, leverage: number): void => {
+            const trackable = m.outcome === TradeOutcome.PENDING
+                && !!m.analysis
+                && m.analysis.direction !== 'Neutral'
+                && m.analysis.confidence !== 'Avoid'
+                && (m.analysis.direction === 'Long' || m.analysis.direction === 'Short')
+                && (m.analysis.entryPoints?.length ?? 0) > 0
+                && !!m.analysis.stopLoss;
+            if (!trackable) {
+                if (autopilotRegisteredRef.current.has(m.id)) {
+                    OutcomeAutopilotService.unregister(m.id);
+                    autopilotRegisteredRef.current.delete(m.id);
+                    autopilotLeverageById.current.delete(m.id);
+                }
+                return;
+            }
+            trackableIds.add(m.id);
+            const armedWith = autopilotLeverageById.current.get(m.id);
+            if (!autopilotRegisteredRef.current.has(m.id) || armedWith !== leverage) {
+                OutcomeAutopilotService.register(m.id, m.analysis!, leverage);
+                autopilotRegisteredRef.current.add(m.id);
+                autopilotLeverageById.current.set(m.id, leverage);
+            }
+        };
+
+        // EVERY accepted plan, not only the open thread's. The registration used to
+        // read `messages` (the conversation on screen) and unregister everything
+        // else on a switch, so a plan made in one thread stopped being watched the
+        // moment the trader looked at another (the 2026-10-27 audit §6). Plans live in
+        // conversations, and each conversation carries its own leverage.
+        for (const conv of conversationHistory) {
+            const leverage = conv.leverage || defaultLeverage();
+            // The ACTIVE thread is read from live `messages`: a streaming turn
+            // writes there first, and its own settle path decides the outcome.
+            const rows = conv.id === activeConversationId ? messages : (conv.messages ?? []);
+            for (const m of rows) register(m, leverage);
+        }
+        // Plans from a thread that is no longer in history at all.
+        for (const id of [...autopilotRegisteredRef.current]) {
+            if (!trackableIds.has(id)) {
+                OutcomeAutopilotService.unregister(id);
+                autopilotRegisteredRef.current.delete(id);
+                autopilotLeverageById.current.delete(id);
+            }
+        }
+    }, [messages, conversationHistory, activeConversationId]);
+
+    // Startup catch-up: once messages load, verify pending trades once
+    // (covers outcomes that resolved while the app was closed).
+    const autopilotCaughtUp = useRef(false);
+    useEffect(() => {
+        if (!autopilotCaughtUp.current && messages.length > 0) {
+            autopilotCaughtUp.current = true;
+            void OutcomeAutopilotService.checkNow();
+        }
+    }, [messages]);
+
+    const handleConfirmAutopilot = useCallback((messageId: string) => {
+        // Resolve from the WHOLE history, not only the active conversation: the
+        // autopilot detects outcomes for every registered thread, and a settle
+        // path that could only see the visible one dropped the off-thread
+        // outcome after the service had already spent its registration.
+        const activeMsg = messages.find(m => m.id === messageId);
+        const owner = activeMsg
+            ? { msg: activeMsg, conversationId: activeConversationId ?? undefined }
+            : conversationHistory
+                .map(c => ({ conversationId: c.id, msg: (c.messages ?? []).find(m => m.id === messageId) }))
+                .find(x => x.msg);
+        const msg = owner?.msg;
+        const conversationId = owner?.conversationId;
+        const resolution = OutcomeAutopilotService.getResolution(messageId);
+        if (!msg || !resolution || resolution.expiredOpen) return;
+        // A hand-off to the capture modal is NOT a logged trade. This used to
+        // mark the resolution processed and toast "Trade logged" BEFORE the
+        // write — so with auto-capture on, the trader was told a trade had been
+        // logged while the modal still waited for input, and cancelling it lost
+        // the outcome entirely (the resolution was already consumed and the
+        // watch row no longer offered Win/Loss). Only a written row is marked,
+        // cleared and announced; a deferred one stays pending and re-confirmable.
+        let loggedNow: boolean;
+        if (resolution.outcome === TradeOutcome.ENTRY_NOT_HIT) {
+            confirmAutopilotEntryNotHit(msg, conversationId);
+            loggedNow = true;
+        } else {
+            loggedNow = confirmAutopilotOutcome(msg, resolution.outcome, resolution.pnlPercent, resolution.slOptimizationData, {
+                at: resolution.detectedAt,
+                excursions: resolution.excursions,
+                realizedR: resolution.realizedR,
+            }, conversationId);
+        }
+        if (!loggedNow) return;
+        OutcomeAutopilotService.markProcessed(messageId);
+        setAutopilotResolutions(prev => {
+            const next = { ...prev };
+            delete next[messageId];
+            return next;
+        });
+        toast.success('Trade logged', `${resolution.outcome} confirmed via autopilot`);
+    }, [messages, conversationHistory, activeConversationId, confirmAutopilotOutcome, confirmAutopilotEntryNotHit, toast]);
+    confirmAutopilotRef.current = handleConfirmAutopilot;
+
+    const runWatchListAction = useCallback((
+        conversationId: string,
+        action: { type: 'log'; messageId: string; outcome: TradeOutcome.WIN | TradeOutcome.LOSS } | { type: 'autopilot'; messageId: string },
+    ) => {
+        if (conversationId !== activeConversationId) {
+            pendingWatchActionRef.current = action;
+            handleLoadConversation(conversationId);
+            setIsWatchListVisible(false);
+            return;
+        }
+        if (action.type === 'log') handleInitiateLogTrade(action.messageId, action.outcome);
+        else handleConfirmAutopilot(action.messageId);
+        setIsWatchListVisible(false);
+    }, [activeConversationId, handleConfirmAutopilot, handleInitiateLogTrade, handleLoadConversation, setIsWatchListVisible]);
+
+    useEffect(() => {
+        const pending = pendingWatchActionRef.current;
+        if (!pending) return;
+        if (!messages.some(m => m.id === pending.messageId)) return;
+        pendingWatchActionRef.current = null;
+        if (pending.type === 'log') handleInitiateLogTrade(pending.messageId, pending.outcome);
+        else handleConfirmAutopilot(pending.messageId);
+    }, [messages, handleInitiateLogTrade, handleConfirmAutopilot]);
+
+    const handleDismissAutopilot = useCallback((messageId: string) => {
+        OutcomeAutopilotService.dismiss(messageId);
+        setAutopilotResolutions(prev => {
+            const next = { ...prev };
+            delete next[messageId];
+            return next;
+        });
+    }, []);
+
+    return {
+        autopilotResolutions, setAutopilotResolutions,
+        handleToggleWatch,
+        watchedSignals,
+        watchOpenR,
+        handleFollowUpTicket,
+        handleOpenWatchedSignal,
+        handleConfirmAutopilot,
+        runWatchListAction,
+        handleDismissAutopilot,
+    };
+};
