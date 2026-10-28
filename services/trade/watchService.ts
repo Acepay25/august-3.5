@@ -1,10 +1,11 @@
 /**
  * watchService — the "watch or schedule" harness the MODEL drives: it arms
  * price watches and time wakes through the watch_price / wake_me desk tools,
- * and when a condition holds (or the deadline lapses) it emits to subscribers
- * — App.tsx queues the signal into chatStore (the thread that armed the watch
- * runs it as a model turn → the model alerts the user). Same singleton shape
- * as levelWatchService/PriceAlertService.
+ * and when a condition holds (or the deadline lapses) it queues the harness
+ * record into chatStore ITSELF (the thread that armed the watch runs it as a
+ * model turn → the model alerts the user); subscribers carry only the OS ping,
+ * so no record depends on a component being mounted. Same singleton shape as
+ * levelWatchService/PriceAlertService.
  *
  * CONTRACT: advisory only — it never trades, resolves or logs anything. It
  * wakes the model; the model decides what the alert says.
@@ -40,7 +41,7 @@ import { getActiveUsername } from '../../utils/activeUser';
 import { fetchMarkPrice } from './markPricePoll';
 import * as chatStore from './chatStore';
 import {
-    formatWatchFiredForModel, formatWatchesLapsedForModel,
+    formatWatchEvictedForModel, formatWatchFiredForModel, formatWatchesLapsedForModel,
     watchConditionHolds, watchExpired,
     type WatchFired, type WatchItem,
 } from './chartTriggers';
@@ -151,7 +152,10 @@ const loadWatches = (): void => {
                 }
             }
             if (lapsedWhileClosed.length > 0) {
-                recordLapses(lapsedWhileClosed.map(w => ({ watch: w, price: null, at: nowMs, expired: true })), []);
+                // The watches that SURVIVED this load are still armed; the
+                // record must count them or it tells the seat nothing is
+                // waiting when nine other waits are.
+                recordLapses(lapsedWhileClosed.map(w => ({ watch: w, price: null, at: nowMs, expired: true })), [...watches.values()]);
                 persist();
             }
         }
@@ -182,6 +186,13 @@ const syncClock = (): void => {
  *  The emit below is presentation only (the OS ping). */
 const recordWatch = (fired: WatchFired, remaining: WatchItem[]): void => {
     chatStore.queueHarnessSignal(formatWatchFiredForModel(fired, remaining.length), fired.watch.sid);
+};
+
+/** A watch dropped by the MAX_WATCHES ceiling is NOT a lapse: its deadline had
+ *  not passed. The arm receipt promised the seat a wake, so the eviction still
+ *  owes it a record — with the reason it actually died. */
+const recordEviction = (evicted: WatchItem, remaining: WatchItem[]): void => {
+    chatStore.queueHarnessSignal(formatWatchEvictedForModel(evicted, remaining.length), evicted.sid);
 };
 
 /** Simultaneous lapses become ONE record per session — N instruction blocks
@@ -277,20 +288,20 @@ export const arm = (w: WatchItem, liveMark: number | null = null): 'armed' | 're
         const mark = Number.isFinite(liveMark as number) ? liveMark : priceFor(w.symbol, Date.now());
         if (mark !== null && watchConditionHolds(w, mark, Date.now())) return 'refused';
     }
+    let evicted: WatchItem | null = null;
     if (watches.size >= MAX_WATCHES) {
         // Oldest first out — the newest ask is the one the user just made.
         const oldest = [...watches.values()].sort((a, b) => a.createdAt - b.createdAt)[0];
         if (oldest) {
             watches.delete(oldest.id);
-            // The evicted watch's promise dies here ("the harness will wake
-            // you", the arm receipt told the seat) — record it the way a
-            // lapse is recorded, or the seat waits forever for a wake that
-            // was silently dropped.
-            recordLapses([{ watch: oldest, price: null, at: Date.now(), expired: true }], []);
+            evicted = oldest;
         }
     }
     watches.set(w.id, w);
     persist();
+    // Recorded AFTER the arm so the count is the set the model will actually
+    // see next turn (the eviction freed one slot; the new watch took it).
+    if (evicted) recordEviction(evicted, [...watches.values()]);
     syncClock();
     // A TIME wake whose deadline has already passed (an app reopen after the
     // scheduled minute) still owes the model its turn, so this evaluation stays

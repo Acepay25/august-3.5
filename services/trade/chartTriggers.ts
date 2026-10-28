@@ -159,6 +159,12 @@ export const describeWatchesForModel = (watches: WatchItem[], nowMs = Date.now()
     ].join('\n');
 };
 
+/** A watch's OWN deadline — a price watch's expiry, a time wake's scheduled
+ *  minute. Never the moment the harness noticed: a watch that lapsed while the
+ *  app was shut is noticed on the next boot, and printing `fired.at` there
+ *  claimed a deadline as far from the real one as the app was closed. */
+const watchDeadline = (w: WatchItem): number => (w.kind === 'price' ? w.expiresAt : w.atMs);
+
 /** The trigger-fired signal text handed to the model when a watch completes —
  *  either because the condition held or because its deadline passed first.
  *  An EXPIRED watch closes the promise the note made ("check back in 30
@@ -174,7 +180,7 @@ export const formatWatchFiredForModel = (fired: WatchFired, armedCount: number):
             ? `${watch.symbol} ${watch.condition} ${watch.price}`
             : describeWatch(watch, fired.at);
         const event = [
-            `[HARNESS TRIGGER — a watch lapsed, not the user] Watch ${watch.id}: ${cond} never printed before its ${when} PHT deadline.`,
+            `[HARNESS TRIGGER — a watch lapsed, not the user] Watch ${watch.id}: ${cond} never printed before its ${phtClock(watchDeadline(watch))} PHT deadline.`,
             `The note you attached when arming it: "${watch.note}".`,
             armedCount > 0 ? `Still armed after this: ${armedCount} watch(es).` : 'No other watches are armed.',
         ].join(' ');
@@ -206,7 +212,7 @@ export const formatWatchesLapsedForModel = (fireds: WatchFired[], armedCount: nu
         const cond = w.kind === 'price'
             ? `${w.symbol} ${w.condition} ${w.price}`
             : `${w.symbol} scheduled re-check`;
-        return `- ${cond} [${w.id}] — note: "${w.note}" (deadline ${phtClock(f.at)} PHT)`;
+        return `- ${cond} [${w.id}] — note: "${w.note}" (deadline ${phtClock(watchDeadline(w))} PHT)`;
     });
     const event = [
         `[HARNESS TRIGGER — ${fireds.length} watch(es) lapsed, not the user] Their deadlines passed without the conditions ever holding:`,
@@ -215,4 +221,21 @@ export const formatWatchesLapsedForModel = (fireds: WatchFired[], armedCount: nu
     ].join('\n');
     return `${event}
 Close the loop in one short line per watch: tell the user each wait ended without its level printing. Do not run fresh analyses for these, and do not re-arm the same watches on your own.`;
+};
+
+/** An armed watch DROPPED to make room for a newer one — deliberately NOT
+ *  worded as a lapse: the deadline had not passed and the condition was never
+ *  tested again. The arm receipt promised the seat a wake, so the drop owes it
+ *  a record, and that record must say what actually happened. */
+export const formatWatchEvictedForModel = (watch: WatchItem, armedCount: number): string => {
+    const cond = watch.kind === 'price'
+        ? `${watch.symbol} ${watch.condition} ${watch.price}`
+        : `the scheduled ${watch.symbol} re-check at ${phtClock(watch.atMs)} PHT`;
+    const event = [
+        `[HARNESS TRIGGER — a watch was dropped, not the user] Watch ${watch.id}: ${cond} was evicted to make room for a newer watch before its ${phtClock(watchDeadline(watch))} PHT deadline. It will never fire.`,
+        `The note you attached when arming it: "${watch.note}".`,
+        armedCount > 0 ? `Still armed after this: ${armedCount} watch(es).` : 'No other watches are armed.',
+    ].join(' ');
+    return `${event}
+Close the loop in one short line: tell the user that wait was dropped without a result. Do not re-arm it on your own unless the user asks for it again.`;
 };

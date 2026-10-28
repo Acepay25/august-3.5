@@ -205,6 +205,12 @@ const WinRateDashboard: React.FC<WinRateDashboardProps> = ({ trades }) => {
                             <button
                                 key={preset.days}
                                 onClick={() => handlePresetClick(preset.days)}
+                                /* The selected range is state the screen already
+                                   draws (the cyan chip); a range that is only a
+                                   colour is invisible to a screen reader and to
+                                   any press-level check. */
+                                aria-pressed={!isCustomRange && selectedPreset === preset.days}
+                                aria-label={preset.days === 0 ? 'Show all-time performance' : `Show the last ${preset.days} days of performance`}
                                 className={`flex-1 sm:flex-none px-2 sm:px-3 py-1.5 text-ui-2xs sm:text-ui-xs font-bold uppercase tracking-wider rounded-control transition-colors duration-[150ms] ease-[var(--ease-snappy)] ${!isCustomRange && selectedPreset === preset.days
                                     ? 'bg-cyan-500 text-white shadow-md'
                                     : 'text-zinc-400 hover:text-white hover:bg-zinc-800'

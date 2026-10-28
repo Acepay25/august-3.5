@@ -27,12 +27,17 @@ import { settleMessageRow } from '../../utils/rowSettlement';
 export const mapRunFailureMessages = (prev: Message[], ctx: {
     /** The live-streaming casual-chat bubble id, if one was open. */
     casualMessageId?: string | null;
+    /** The run was CANCELLED by the trader. The one settlement rule says a
+     *  stopped row is interrupted, so the caller must say which it was — this
+     *  call site runs for both cancels and failures, and settling a Stop as
+     *  "completed" made a half-written answer read as a finished one. */
+    cancelled?: boolean;
 }): Message[] => prev.map(m => {
     // A live-streaming casual bubble must settle on cancel/error —
     // keep whatever text already arrived, drop the streaming flag.
     if (ctx.casualMessageId && m.id === ctx.casualMessageId) {
         if (!m.text.trim()) return null;
-        return settleMessageRow(m, 'completed');
+        return settleMessageRow(m, ctx.cancelled ? 'stopped' : 'completed');
     }
     return m;
 }).filter((m): m is Message => m !== null);

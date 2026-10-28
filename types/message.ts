@@ -186,6 +186,13 @@ export interface Message {
    *  Cleared when the stream settles — drives live markdown rendering and the
    *  Thinking row's running state (perceived speed). */
   isStreaming?: boolean;
+  /** The run ended before it finished — an explicit Stop, a failure mid-turn,
+   *  or a turn the app closed on. Written by `utils/rowSettlement.ts` (the one
+   *  rule both transcript homes use) and projected into `ChatRowView` /
+   *  `LiveEntry`, where the in-flow "Run stopped" notice reads it. Without
+   *  it, a half-written answer reads as a completed one that happened to be
+   *  short. */
+  interrupted?: boolean;
   /** Transient live desk-tool feed: speaker -> the RECENT tool lines, joined
    *  with newlines and capped, because it is what a bubble shows WHILE the
    *  answer is still coming. The settled trail is `toolEvents`. */

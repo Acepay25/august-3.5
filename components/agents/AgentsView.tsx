@@ -292,6 +292,10 @@ const chatRowFrom = (m: Message, username: string, deskName: string): ChatRowVie
         wireAudit: m.wireAudit,
         // A failed turn is a row of its own, not an answer.
         error: m.error,
+        // A run that stopped before it finished. Settled by
+        // `utils/rowSettlement.ts`; without this projection the in-flow
+        // "Run stopped" notice could never render on this surface.
+        interrupted: m.interrupted,
         actions: m.toolActions,
         workedMs: typeof m.runStats?.durationMs === 'number' ? m.runStats.durationMs : undefined,
         // The thinking tier this answer was produced under, so the row can
@@ -1454,16 +1458,31 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                                         const isUser = m.role === MessageRole.USER;
                                         const row = chatRowFrom(m, username, activeBot?.name ?? 'desk');
                                         const vCount = versionCount(m);
+                                        /* The prompt an interrupted answer was answering,
+                                           so the row's recovery card can prefill the
+                                           composer with what was actually asked. The
+                                           row builder sees one message; only this map
+                                           knows the turn before it. */
+                                        const askedPrompt = !isUser && i > 0 && thread[i - 1].role === MessageRole.USER
+                                            ? thread[i - 1].text
+                                            : '';
                                         return (
                                             <ChatTranscriptRow
                                                 key={m.id}
-                                                row={row}
+                                                row={askedPrompt ? { ...row, interruptedPrompt: askedPrompt } : row}
                                                 /* How many turns sit below this one — the
                                                    restore control is only drawn where
                                                    restoring would actually take something
                                                    away, so the LAST row never offers it. */
                                                 turnsAfter={thread.length - 1 - i}
                                                 onRevertTo={onRevertTo}
+                                                /* The recovery card needs at least one handler
+                                                   or it renders nothing; a prefill is the
+                                                   honest action here (re-asking from a row
+                                                   belongs to the dock's own retry). */
+                                                onEditPrompt={askedPrompt
+                                                    ? prompt => { setText(prompt); composerRef.current?.focus(); }
+                                                    : undefined}
                                                 onEditPromptMessage={onEditPromptMessage ? (id, text) => {
                                                     onEditPromptMessage(id, text);
                                                     /* The edited wording goes into the

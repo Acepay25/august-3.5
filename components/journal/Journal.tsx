@@ -235,6 +235,10 @@ const JournalInner: React.FC<JournalProps> = ({
                             type="button"
                             role="tab"
                             id={`journal-tab-${tab.id}`}
+                            /* The probe's tabbed sweep enters a view by testid
+                               (the Learn tabs' convention); the id alone is not
+                               queryable there. */
+                            data-testid={`journal-tab-${tab.id}`}
                             aria-selected={isActive}
                             aria-controls={`journal-panel-${activeTab}`}
                             tabIndex={isActive ? 0 : -1}

@@ -2279,12 +2279,21 @@ async function main() {
                     // to call "Toggle Global Memory" inert. Captured here, not
                     // inferred — the flip itself is the evidence, and a switch
                     // that does NOT flip still fails, as it should.
+                    //
+                    // aria-pressed is the SAME kind of fact and needs the same
+                    // read: the Journal's range presets (7D/30D/90D/All) re-filter
+                    // a canvas dashboard, so a working press can change no text,
+                    // no field, no hash and no overlay — the selected chip is the
+                    // only pixel that moves. A toggle whose pressed state does not
+                    // flip still fails, exactly as a switch's must.
                     const ownChecked = btn.getAttribute('aria-checked');
+                    const ownPressed = btn.getAttribute('aria-pressed');
                     btn.click();
                     return {
                         name: nameOf(btn),
                         before,
                         ownChecked,
+                        ownPressed,
                         // Reported with any finding, so a failure says what the
                         // control was rather than making the next reader guess.
                         ctx: `${btn.tagName.toLowerCase()}${btn.type ? `[type=${btn.type}]` : ''}`
@@ -2309,14 +2318,18 @@ async function main() {
                         overlay: !!document.querySelector(
                             '[role="dialog"], [role="alertdialog"], [data-testid="activity-drawer"]'),
                     };
-                    // The switch check: the pressed control's aria-checked
-                    // flipped. Only a control that HAD an aria-checked value is
-                    // eligible, so this reads exactly one component type.
+                    // The toggle check: the pressed control's aria-checked or
+                    // aria-pressed flipped. Only a control that HAD one of those
+                    // values is eligible, so this reads exactly the toggle type
+                    // and never a plain button.
                     let flipped = false;
-                    if (p.ownChecked !== null) {
+                    if (p.ownChecked !== null || p.ownPressed !== null) {
                         const again = [...main.querySelectorAll('button, [role="switch"]')]
                             .find(b => ((b.getAttribute('aria-label') || b.textContent || '').trim()) === p.name);
-                        flipped = !!again && again.getAttribute('aria-checked') !== p.ownChecked;
+                        if (again) {
+                            if (p.ownChecked !== null) flipped = again.getAttribute('aria-checked') !== p.ownChecked;
+                            if (!flipped && p.ownPressed !== null) flipped = again.getAttribute('aria-pressed') !== p.ownPressed;
+                        }
                     }
                     return {
                         moved: now.text !== p.before.text
@@ -2488,11 +2501,12 @@ async function main() {
             reflectionSeen.opened >= 2 && reflectionSeen.withNote === 1,
             `opened=${reflectionSeen.opened} withNote=${reflectionSeen.withNote}`);
 
-        // The Journal exposes exactly five controls (three section tabs + two
-        // export actions). The generic six-control vacuity floor is unmeetable
-        // here; five is the whole surface, and the sweep still asserts every
-        // one of them is non-inert.
-        await sweepSurface('Journal', 5);
+        // The Journal is a TWO-tab surface (History | Stats), and the History
+        // tab is where the trade ledger's filters, row actions and insight
+        // controls live — the screenshot of it is not "a header and two
+        // exports". Sweep both views at the generic cap; the sweep's per-view
+        // budget splits it, so neither tab can hide behind the other.
+        await sweepSurface('Journal', 12, ['journal-tab-analytics']);
 
         // ── The instrument picker, and the claim it makes ────────────────
         // A coin/timeframe control is only worth having if it MOVES THE CHART.

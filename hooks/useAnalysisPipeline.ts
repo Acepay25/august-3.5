@@ -1309,7 +1309,9 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // on a failed or stopped turn (docs/AUDIT.md L-4).
             throttledCasualStream.flush();
             // Settle a live-streaming casual bubble; every other row survives.
-            updateRequestMessages(prev => mapRunFailureMessages(prev, { casualMessageId }));
+            // `cancelled` rides through: a Stop is an interrupted row, not a
+            // completed one (the same rule the dock's settle path applies).
+            updateRequestMessages(prev => mapRunFailureMessages(prev, { casualMessageId, cancelled }));
 
             // User cancels / stale runs get no error bubbles. A deliberate
             // Stop (or a superseded run) is NOT a retryable failure —

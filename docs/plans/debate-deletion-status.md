@@ -61,8 +61,8 @@ The two row types do **not** share the tool transcript's fields, measured 2026-1
   (`chatTurnRunner.ts:720` appends the digest line and its id **in the same patch**,
   because the desk loop's `results` order does not match the rendered lines — pairing
   by index silently attaches the wrong payload).
-- canonical row = `Message` (`types/message.ts`): has `thoughtProcesses` `:257`,
-  `planId` `:350`, `toolActions?: ToolAction[]` `:355` — **no `tools`, no `toolIds`.**
+- canonical row = `Message` (`types/message.ts`): has `thoughtProcesses` `:174`,
+  `planId` `:315`, `toolActions?: ToolAction[]` `:328` — **no `tools`, no `toolIds`.**
 
 So an executor that emits one shared state object cannot serve both homes without
 either widening `Message` (a type change) or losing the chip/payload pairing on the
@@ -289,7 +289,7 @@ reading is expensive to undo.
   free seat was being told to match a chart it cannot see — it now takes a `where`
   argument and the dock's default is byte-identical (pinned as a control); and the
   slugs that travelled are recorded on the row (`Message.injectedSkills`,
-  `types/message.ts:345`) bounded to the 30 the index printed, so the record cannot
+  `types/message.ts:352`) bounded to the 30 the index printed, so the record cannot
   claim skills the model never saw. Tests: `tests/chatSurfacePrompt.test.ts` (10).
   Full suite: 496 files / 4922 tests, lint back on the 818/0 baseline after four
   `no-useless-assignment` errors from initialized-then-overwritten locals.
@@ -1593,7 +1593,7 @@ listed in a dependency array is a writer with no reader. `GlobalLearningService
 history card all still call it directly.
 
 **#21 — three sub-items, measured, none started.** `debateTurns` is declared at
-`types/message.ts:237` and `types/trade.ts:128`, written at
+`types/message.ts:244` and `types/trade.ts:128`, written at
 `hooks/useTradeLogging.ts:353` and `utils/watchList.ts:30`, and read by
 `hooks/useAnalysisPipeline.ts:919`,
 `hooks/useWatchAndAutopilot.ts:105`, `services/analysis/convictionDrift.ts:82`,
@@ -1691,7 +1691,7 @@ action and is actually two.
 Nothing produces a transcript any more: the only writes are copies
 (`hooks/useTradeLogging.ts:352`, `utils/watchList.ts:30`) and **no code sets
 `isDebating`** — the field is gone from the loader entirely. So the failure-path
-guard inside `classifyRunFailure` (`hooks/analysisPipeline/runOutcome.ts:48`) is unreachable and the three
+guard inside `classifyRunFailure` (`hooks/analysisPipeline/runOutcome.ts:53`) is unreachable and the three
 verdict-fallback parameters in `utils/analysisUtils.ts` (the final-verdict text,
 the level hit-odds legacy parse, the signal-card "why") only ever take their
 `analysis.strategy` / stored-`levelProbabilities` branch. That half is safe to
@@ -2279,8 +2279,8 @@ instead of implying the table is checked.
 found on the line it cites: the `index.tsx` mount chain (StrictMode :81, ErrorBoundary :81, ToastProvider :81 —
 the old `73-79` range proved nothing), `august_surface_v1`, `onSendBotTurn`, `onAnalyze`, `handleRunAnalysisFromChat`,
 `runFullAnalysis`, `runSeatTurn` at both :593 and :1082, `applyCasualStreamUpdate`, `notify`. Binding found another real
-defect: row 13 cited AgentsView.tsx:802 for `onAnalyze` while the await sat ten lines above it; the await is at
-**:802** today, so the row and the code now agree and the older line number is dropped rather than cited. Coverage now prints 14/53 with 22 pairs and a floor of 14, and 39 rows remain
+defect: row 13 cited the `try {` line for `onAnalyze` while the await sat ten lines below it; the await is at
+**:817** today, so the row cites that line and the older number is dropped rather than cited. Coverage now prints 14/53 with 22 pairs and a floor of 14, and 39 rows remain
 line-resolved only.
 
 **Coverage 14 became 23, and it cost the docs three more wrong numbers.** Binding a row to its symbol means reading the line, so ten more rows
@@ -2290,7 +2290,7 @@ file — a ternary arm — while the stamp was in hooks/useAnalysisPipeline.ts (
 SURFACE_ITEMS components/shell/SurfaceMenuList.tsx:44, the Enter branch at
 components/trade/panels/ChatComposer.tsx:155, systemPromptFor components/trade/TradeChatPanel.tsx:438 with
 TRADE_CHAT_SYSTEM_PROMPT components/trade/TradeChatPanel.tsx:512, useBotThread hooks/useAnalysisPipeline.ts:1098,
-entriesForSession services/trade/chatSessions.ts:639, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:140
+entriesForSession services/trade/chatSessions.ts:643, chatSurfaceSystemPrompt services/trade/chatSurfaceTurn.ts:140
 with CHAT_SURFACE_SYSTEM_PROMPT constants/prompts/chatPrompts.ts:40, MAX_PLANS_PER_RUN
 services/trade/automationTurn.ts:81, MAX_PLANS_PER_DAY services/automation/AutomationService.ts:113, notices
 services/trade/automationTurn.ts:156, latestChartVerdict services/trade/chartData.ts:95. The gate prints

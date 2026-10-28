@@ -574,6 +574,10 @@ export const liveEntryFromMessage = (m: Message): ProjectedChatEntry => {
         reasoning: trace.length > 0 ? trace : undefined,
         wireAudit: m.wireAudit,
         error: m.error,
+        // A Chat-surface run that stopped mid-turn keeps the fact when the row
+        // is read in the dock; without it the dock drew a finished-looking
+        // short answer and no recovery card.
+        interrupted: m.interrupted,
         actions: m.toolActions,
         // `proposal` is deliberately NOT projected. The dock keeps its card on the
         // RUNTIME entry only (`chatStore.LiveEntry`, not `StoredChatEntry`) so a

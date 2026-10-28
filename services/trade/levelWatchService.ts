@@ -2,8 +2,9 @@
  * levelWatchService — the harness side of "price reached a plan level, tell
  * Chart AI". Same shape as PriceAlertService/OutcomeAutopilotService: a
  * module singleton the trade surface arms from present_trade proposals and
- * ticks from the live mark-price feed; hits go to subscribers (TradeView
- * queues them into chatStore, which routes them to the dock as a model turn).
+ * ticks from the live mark-price feed; a hit queues its harness record into
+ * chatStore itself (routed to the dock thread that armed the plan) and notifies
+ * subscribers for the OS ping only — never through a component.
  *
  * CONTRACT (load-bearing): ADVISORY ONLY — this warns, it never resolves.
  * OutcomeAutopilotService owns SL/TP resolution and the post-mortem for
@@ -175,9 +176,8 @@ const persistFired = (): void => {
  *  on — Tier-0 #6 for this watch family). Each symbol is attempted at most
  *  once per PRICE_POLL_INTERVAL_MS (throttle counts attempts, not successes,
  *  so a dead endpoint can't hot-loop); a successful print runs the existing
- *  tick() crossing logic, which carries the subscriber routing (notify +
- *  queueHarnessSignal live on the subscribe path, so polled hits route the
- *  same as view-fed ones). */
+ *  tick() crossing logic, and the harness record is queued inside that logic,
+ *  so a polled hit routes exactly as a view-fed one does. */
 const pollStaleSymbols = (nowMs: number): void => {
     loadFired(); // a user switch mid-watch replaces `armed` (and may end the clock)
     if (armed.size === 0) { syncClock(); return; }
