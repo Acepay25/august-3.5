@@ -434,7 +434,10 @@ export const EXPORT_RAW_KEY_CAP_BYTES = 512 * 1024;
  *  A cap is a ceiling on what the BACKUP may carry, never on what the device keeps:
  *  an over-cap store is left out and named, and its live bytes are untouched. */
 const EXPORT_KEY_CAPS: ReadonlyArray<{ prefix: string; bytes: number }> = [
-    { prefix: 'trade_chat_sessions_v1', bytes: EXPORT_RAW_KEY_CAP_BYTES },
+    // The chat store's own file ceiling is 32 MiB on desktop; a backup must be
+    // able to carry what the store can hold (chat images are stripped first).
+    // The shared 512 KB raw-key cap is for small preference blobs, not this.
+    { prefix: 'trade_chat_sessions_v1', bytes: 32 * 1024 * 1024 },
     // The real tool output behind an expanded transcript row. A side store on
     // purpose: payloads inside `trade_chat_sessions_v1` entries would push the
     // transcripts themselves out of the 512 KB backup cap. Capped below the

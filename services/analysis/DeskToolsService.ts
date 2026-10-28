@@ -4852,6 +4852,13 @@ export async function runDeskToolLoop(params: {
         });
         for (const call of calls) {
             if (executeExtraTool) {
+                // A Stop must abort the extra lane too: a chart write or a
+                // mailbox send queued behind the signal must not run after the
+                // trader stopped the turn. The budget is the other gate below.
+                if (options?.signal?.aborted && call.name !== 'ask_user_input') {
+                    extraResults.push(rejectedResult(call, `${call.name} rejected: the turn was stopped before this action ran.`));
+                    continue;
+                }
                 // The extra lane (chart actions, mailbox, the human question) runs
                 // BEFORE the core executor, so the budget must be checked here or
                 // a chart write can still run past the turn's ceiling. The question

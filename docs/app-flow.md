@@ -475,7 +475,7 @@ in that module is the single owner of "not without a human".
 
 Stored automation data was left alone deliberately: `automations_v1_`,
 `automation_runs_v1_` and `automation_last_seen_v1_` stay allow-listed for restore
-(`services/infrastructure/ExportService.ts:775`) so a backup taken before the
+(`services/infrastructure/ExportService.ts:778`) so a backup taken before the
 removal still comes back without dropping keys it names.
 
 **The Agents surface is a launch list, not a roster form.** A row says what the
@@ -751,7 +751,7 @@ where the spec and the code disagreed):
   an import does.
 - **A fact read off a page is not the trader's memory** — the seat prompt
   already says a fenced result is data; the executor now stands behind that.
-  The turn loop marks a turn `untrustedSeen` (`DeskToolsService.ts:4935`) once
+  The turn loop marks a turn `untrustedSeen` (`DeskToolsService.ts:4942`) once
   a `web_search` or a forged HTTPS tool returns, and `remember` on such a turn
   refuses a fact whose DESCRIPTION is not in the trader's own message
   (`statedInTraderWords utils/memoryWriteFilters.ts:140`) — at least two shared
@@ -963,7 +963,7 @@ mailbox tools. The surface decides what is offered:
 - a panel seat adds the chart-action definitions only when its own allow-list
   names them.
 
-`streamChatWithDeskTools` (`DeskToolsService.ts:5161`) composes the mandate from
+`streamChatWithDeskTools` (`DeskToolsService.ts:5168`) composes the mandate from
 the tools the turn can actually call (`deskToolsMandateFor`) filters
 the definitions, and then runs `runDeskToolLoop`. `executeDeskTool`
 re-checks the allow-list at execution, so a prompt that names a
@@ -1142,7 +1142,7 @@ brings a snapshot back as a NEW revision, and exactly one goal is focused:
 `focusedGoal services/goals/GoalService.ts:72`
 The focused goal's `policy.allowedTools` is intersected with the seat's own list
 at the transport — `goalAllowedTools services/trade/chatSurfaceTurn.ts:382`
-› `effectiveAllowed services/analysis/DeskToolsService.ts:5296`, and the rule
+› `effectiveAllowed services/analysis/DeskToolsService.ts:5303`, and the rule
 itself is `intersectGoalPolicy utils/toolKinds.ts:188`
 so a goal can only NARROW what a seat may call, and no goal text can widen a
 policy. The intersection has one hard case: a goal authored on the Chat surface
@@ -1319,7 +1319,7 @@ it to `NO_TOOLS_ALLOWED` rather than grant anything.
 | 69 | run → prompt lane + corpus version | `beginPromptLane services/infrastructure/PromptOverrideService.ts:34` → `promptCorpusVersion :97` → `runStats.promptLane`/`promptVersion` |
 | 70 | Settings → tool catalogue | `DESK_TOOL_DEFINITIONS services/analysis/DeskToolsService.ts:1012` + `toolLabel :859` → `DeskToolCatalogue`, grouped by `toolKinds` |
 | 71 | skills index → skill_view → the body or one bundled file | `case 'skill_view' services/analysis/DeskToolsService.ts:3039` — L1 body + bundled list, L2 one flat-named file (`..` refused); `${SKILL_DIR}`/`${SESSION_ID}` substitute, Hermes aliases accepted |
-| 72 | message → focused goal → a narrower toolset | `focusedGoal services/goals/GoalService.ts:72` · `goalMatchesMessage :278` → `goalAllowedTools services/trade/chatSurfaceTurn.ts:382` → `intersectGoalPolicy utils/toolKinds.ts:188` › `effectiveAllowed services/analysis/DeskToolsService.ts:5303`, an intersection — a goal may only narrow the seat, and narrowing to nothing leaves it `NO_TOOLS_ALLOWED utils/toolKinds.ts:171` rather than the whole desk |
+| 72 | message → focused goal → a narrower toolset | `focusedGoal services/goals/GoalService.ts:72` · `goalMatchesMessage :278` → `goalAllowedTools services/trade/chatSurfaceTurn.ts:382` → `intersectGoalPolicy utils/toolKinds.ts:188` › `effectiveAllowed services/analysis/DeskToolsService.ts:5310`, an intersection — a goal may only narrow the seat, and narrowing to nothing leaves it `NO_TOOLS_ALLOWED utils/toolKinds.ts:171` rather than the whole desk |
 | 73 | seat → goal edit → snapshot → undo | `case 'update_goal' services/analysis/DeskToolsService.ts:3338` → `updateGoal services/goals/GoalService.ts:164` keeps the previous snapshot → `case 'restore_goal' services/analysis/DeskToolsService.ts:3382` → `restoreGoal services/goals/GoalService.ts:202` |
 | 74 | seat → self-change → ledger → outcomes | `case 'propose_self_change' services/analysis/DeskToolsService.ts:3258` → `proposeKnobChange services/selfMod/SelfModificationService.ts:259` / `proposePromptOverride services/selfMod/SelfModificationService.ts:305` → `writeSelfChange services/selfMod/SelfChangeLedger.ts:100` → `settleSelfChanges services/selfMod/SelfModificationService.ts:452`, run from `settleSelfChanges services/learning/SkillMemoryService.ts:4055` |
 | 75 | rail Goals tab → focus / undo → the header chip | `focusGoal services/goals/GoalService.ts:230` and `revertSelfChange services/selfMod/SelfModificationService.ts:378` pressed from `GoalRailPanel components/agents/GoalRailPanel.tsx:333` → `ActiveGoalChip components/agents/ActiveGoalChip.tsx:27` names it, and its own press releases it |
