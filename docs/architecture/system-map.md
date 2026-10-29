@@ -929,6 +929,15 @@ that fact beside the commit that cut the phantom readers, so the next
 cleanup cannot delete the store on the theory that nothing reads it. Settings
 still lists the lessons, for a person.
 
+**The chart scan studies every bar, not a sample.** `scan_chart_skills` pulls the chart's full 1000-bar history;
+`src/services/learning/chartTapeStudy.ts › buildTapeStudy` buckets every bar by PHT hour (forward move, signed drift,
+up share, excursions), finds the ≥10% up/down swing legs with the state before each one (prior return, volume, range
+compression, gap, RSI), and measures candle anatomy and run lengths. `src/services/learning/chartScanSkills.ts › buildChartDigest`
+adds regimes, pivots, gaps, RSI and the book detectors, then fits `CHART_DIGEST_MAX_CHARS` — when the cap binds the raw
+tail is dropped and NAMED, never the study. Candidates are created directly through
+`src/services/learning/SkillMemoryService.ts › ingestCraftedSkillFromDraft` (no approval inbox) and stay hypotheses until
+the evidence fold moves them.
+
 ### G.4 The desk tools are one catalogue with surface allow-lists
 
 The catalogue is `DESK_TOOL_DEFINITIONS`

@@ -12,6 +12,16 @@
 /** PHT is UTC+8 year-round (no DST since 1978) — safe as a constant. */
 export const PHT_LABEL = 'PHT';
 export const PHT_ZONE = 'Asia/Manila';
+const PHT_OFFSET_HOURS = 8;
+
+/** Hour-of-day (0–23) in Philippine time from epoch ms. Arithmetic, not a
+ *  formatter: the chart-scan study buckets a 1000-bar tape and a per-bar
+ *  Intl call would cost seconds. The offset is the same constant the label
+ *  helpers above rely on. */
+export const phtHourOf = (ms: number): number => {
+    const d = new Date(ms);
+    return (d.getUTCHours() + PHT_OFFSET_HOURS) % 24;
+};
 
 const clockFmt = new Intl.DateTimeFormat('en-GB', {
     timeZone: PHT_ZONE, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',

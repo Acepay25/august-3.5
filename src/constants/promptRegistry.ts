@@ -153,8 +153,8 @@ export const PROMPT_REGISTRY: PromptRegistryEntry[] = [
     {
         id: 'learning.chart_scan',
         name: 'Chart-history skill scan',
-        description: 'The model reads a digest of the ENTIRE candle history of a chart (regimes, swings, gaps, every setup detector with historical win-rates) and drafts 1–3 IF/THEN skills from how the chart actually moved.',
-        usage: ['scan_chart_skills desk tool + "Scan → skills" in the Chart AI composer (drafts go to the Inbox for approval)'],
+        description: 'The model reads a study of EVERY candle in a chart (hour-by-hour movement in PHT, the ≥10% up/down swing legs and what preceded them, candle anatomy, regimes, gaps, every setup detector with historical win-rates) and creates 1–3 pattern-first candidate skills.',
+        usage: ['scan_chart_skills desk tool + "Scan → skills" in the Chart AI composer (candidates are created directly; evidence sets their status)'],
         // IMPORTED, not restated. The predicate grammar is part of this prompt
         // and comes from its evaluator (already interpolated into the
         // constant).

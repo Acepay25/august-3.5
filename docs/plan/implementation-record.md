@@ -2402,3 +2402,61 @@ live settlement above.
   candle, not the whole prompt.
 - Nothing reads resolutions yet: no skill fold, no calibration, no base rate. That is the scoped
   next phase.
+
+## 49. The chart scan studies every candle (2026-10-30)
+
+**Owner ask.** `scan_chart_skills` must actually look at all the candles, study how the price moved, answer
+"if we could turn back time, when was the best time to trade", and especially find the big moves (>10% up —
+a long entry if you were in at that time; the mirror for shorts). Create skills for that — pattern-first,
+not a generic IF/THEN rule.
+
+**What was wrong.** The scan already FETCHED 1000 bars, but the model only saw a digest: regime segments,
+14 pivots, gap counts, RSI counts, top-10 detector win-rates and the LAST 40 raw rows. There was no
+time-of-day read and no list of the actual big moves, and the candidate write still went to the approval
+inbox — contradicting the 2026-10-29 direct-write ruling.
+
+**What landed.**
+- `services/learning/chartTapeStudy.ts` — pure full-tape studies. Every bar is sampled with a 12-bar
+  forward horizon and bucketed by hour of the TRADER's clock (PHT): mean |move|, signed drift, up share,
+  mean favourable/adverse excursion. Swing legs are found as the lowest (or highest) close in a 24-bar
+  window followed by ≥10% in the opposite direction — non-overlapping, entry at the extreme — and each leg
+  records the state BEFORE it: prior 6-bar return, volume ratio (3/20), range compression (6/24), gap and
+  RSI. Candle anatomy (up-bar share, body/range, top-third closes, expansion bars) and run lengths are
+  measured too. `phtHourOf` joined `utils/timezone.ts` for the bucket arithmetic.
+- `services/learning/chartScanSkills.ts` — the digest now leads with the full-tape study, states that
+  EVERY bar was analysed and that only the final 20 raw rows are a subset, and fits a
+  `CHART_DIGEST_MAX_CHARS` budget that drops the raw tail (never the study) and NAMES what it dropped.
+  The prompt is pattern-first: repetition is required (≥3 similar events or a stable hour bucket), a
+  single spectacular leg is not a rule, IF/THEN is only the compact trigger summary.
+- DIRECT CANDIDATE WRITES: `gateEvidenceBackedDraft` gained an optional `createCandidate` sink and a
+  `created` result; the scan passes a sink that calls `ingestCraftedSkillFromDraft`. The approval inbox is
+  no longer part of this source. The other draft sources (book drafts, pass mining, self-improvement,
+  session review) still queue — the change is scoped, and a contract control pins that.
+- Surfaces: the tool description, the ChatComposer "Scan → skills" prompt, the prompt-registry entry and the
+  chat mandate all now say full-tape/hour/leg study and direct candidates, not "pending approval".
+
+**Live measurements (real Binance 1h, 1000 bars, 2026-10-30).**
+
+| Tape | Digest | Samples | ≥10% legs | Facts found |
+|---|---|---|---|---|
+| BTCUSDT 1h | 4,895 chars | 988 | 0 up / 0 down | largest up **+7.5%**, largest down −4.3% (reported below threshold); most movement 13:00 PHT (1.10%), 11:00 (1.07%), 12:00 (1.07%) |
+| DOGEUSDT 1h | 5,160 chars | 988 | 1 up / 1 down | up +10.1% at **21:00 PHT**, vol 0.6×, range 0.65× compressed, RSI 38 · down −10.7% at **11:00 PHT**, prior 6 +3.4%, RSI 72 |
+
+Both digests are inside the 14k cap. The study itself runs in ~175–211 ms per 1000 bars (no model call).
+A quiet tape reports its largest leg below the threshold instead of "no big moves" with no scale, and a
+down leg prints as −10.7%, never +10.7% (pinned by contract).
+
+**Verification.** Contract 21 (13 cases): PHT hour mapping; per-hour drift/up-share from every sampled
+bar; a 10%+ up leg starting at the lowest close with finite antecedents and non-overlap; the explicit
+down mirror; the below-threshold largest; run lengths; the section names; the down-leg sign; the digest
+budget dropping the tail by name; a 1000-bar digest that states the full-tape claim and stays under the
+cap with ≤16 leg lines; the prompt's pattern-first/PHT/turn-back-time text; and the source pin that the
+scan creates directly (control: `bookSkillDrafts` still queues). `typecheck` · `check:contracts` **245** ·
+`check:boundaries` (533 files, 2,282 edges) · `check:docs` (338 symbol citations) · `lint` **375/375** ·
+`build` · `boot-probe` · `render-probe` · `skill-approval-probe` **28 PASS / 0 FAIL**.
+
+**Residues.** The 10% threshold and 24-bar window are constants (the digest always names the largest leg
+when nothing qualifies). Hours are PHT only. Time-of-day numbers are descriptive forward-close statistics
+— no significance test and no costs are attached, so the model is told to require repetition rather than
+treat a 1.1% mean move as an edge. The scan still needs one AI provider call; with none it returns
+unavailable. The skills it creates are candidates like any other model write — evidence alone moves them.

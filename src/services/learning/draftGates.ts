@@ -161,6 +161,9 @@ export const buildSyntheticTrade = (ev: ScoredEvidence): LoggedTrade => {
 
 export type EvidenceGateResult =
     | { action: 'queued'; crafted: CraftedSkill }
+    /** A direct-write source (the chart scan, owner ruling 2026-10-29) asked
+     *  the sink to store the candidate and it did. Same gate, no inbox row. */
+    | { action: 'created'; crafted: CraftedSkill }
     | { action: 'merged'; target: string; reason: string }
     /** A refusal. NEVER-JUDGED short-circuits (cooldown tombstone, pending
      *  duplicate, no evidence cluster, or a pre-judgment deterministic
@@ -190,6 +193,11 @@ export interface EvidenceGateInput {
     /** The bot-memory context the worth gate reads. Defaults to the
      *  cluster's post-mortem text. */
     botContext?: string;
+    /** Where a create verdict lands. Absent = the approval inbox (the
+     *  long-standing behavior every non-chat source still relies on). A
+     *  direct-write caller passes a sink that ingests the candidate; the
+     *  result then says `created` instead of `queued`. */
+    createCandidate?: (crafted: CraftedSkill) => Promise<boolean>;
 }
 
 /** Evidence tier — the FULL worth gate. Merge verdicts fold the cluster's
@@ -238,10 +246,18 @@ export const gateEvidenceBackedDraft = async (input: EvidenceGateInput): Promise
                     description: crafted.description || defaultDescription(crafted) || undefined,
                     prediction: decision.prediction ?? defaultPrediction({ coin, family }),
                 };
-                // The receipt must match the queue. `queueSkillDraft` returns null
-                // when the bytes did not reach storage (it reads the store back);
-                // reporting 'queued' anyway told the model a proposal was waiting
-                // that the human could never see (the 2026-10-27 audit S-6).
+                // The receipt must match the sink. `queueSkillDraft` returns
+                // null when the bytes did not reach storage (it reads the
+                // store back), and a direct sink reports its own failure — a
+                // 'queued'/'created' answer over a write that never landed
+                // told the model a proposal existed that nobody could see
+                // (the 2026-10-27 audit S-6).
+                if (input.createCandidate) {
+                    if (!(await input.createCandidate(gated))) {
+                        return { action: 'skipped', judged: false, reason: 'the candidate could not be stored, so nothing was created' };
+                    }
+                    return { action: 'created', crafted: gated };
+                }
                 if (!queueSkillDraft({ tradeId, coin, crafted: gated }, username)) {
                     return { action: 'skipped', judged: false, reason: 'the draft could not be stored, so nothing was queued' };
                 }
@@ -253,9 +269,16 @@ export const gateEvidenceBackedDraft = async (input: EvidenceGateInput): Promise
         }
     } catch { /* the gate must never break the calling flow — fall back */ }
     // Gate unavailable (no provider / parse failure): deterministic bar, then
-    // the human inbox decides. This keeps drafts flowing when offline.
+    // the sink (direct sources) or the human inbox decides. This keeps drafts
+    // flowing when offline.
     const det = deterministicDraftGate({ crafted, tradeId, username, coin, direction, family });
     if (!det.ok) return { action: 'skipped', judged: det.judged, reason: det.reason };
+    if (input.createCandidate) {
+        if (!(await input.createCandidate(det.crafted))) {
+            return { action: 'skipped', judged: false, reason: 'the candidate could not be stored, so nothing was created' };
+        }
+        return { action: 'created', crafted: det.crafted };
+    }
     if (!queueSkillDraft({ tradeId, coin, crafted: det.crafted }, username)) {
         return { action: 'skipped', judged: false, reason: 'the draft could not be stored, so nothing was queued' };
     }

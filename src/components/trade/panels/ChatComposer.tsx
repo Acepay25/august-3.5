@@ -28,7 +28,7 @@ import * as chatStore from '../../../services/trade/chatStore';
  *  reads the WHOLE tape via the scan_chart_skills desk tool and drafts skills
  *  that wait for approval in the Inbox. Exported because the shell's
  *  screener-prefill listener drops the same prompt into the draft. */
-export const SCAN_SKILLS_PROMPT = 'Scan the full candle history of this chart with scan_chart_skills: study how the price actually moved (regimes, swings, gaps) and which entries have historically worked, then draft your best IF/THEN skill candidates from what the tape proves. Tell me what you found and what is waiting in the Inbox.';
+export const SCAN_SKILLS_PROMPT = 'Scan every candle of this chart with scan_chart_skills: study the hour-by-hour movement, the ≥10% up and down legs and what preceded them — if we could turn back time, when should we have been in? Create your best pattern candidates from what the tape proves (not generic IF/THEN rules), and tell me what you created and which times and moves support it.';
 
 interface ChatComposerProps {
     /** The chart the chat talks about (workspace row + model picker). */

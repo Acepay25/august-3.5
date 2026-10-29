@@ -1814,12 +1814,12 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'scan_chart_skills',
             description:
-                'Study the ENTIRE candle history of a chart (up to 1000 bars — the full set the chart loads) and draft new IF/THEN skills from '
-                + 'how the price actually moved: regime segments, swing structure, gap classes, and every strategy-book detector aggregated over all '
-                + 'history with first-touch win-rates. The drafted skills are evidence-scored against the same candles and enter the APPROVAL INBOX '
-                + 'as pending drafts — nothing reaches the skill library until a human (or the supervisor) approves. Use when the user asks you to '
-                + 'learn the chart, "build skills from this coin", or wants patterns/entries the tape itself reveals. Slow (one model call + a full '
-                + 'history scan) — never call it twice in the same turn.',
+                'Study EVERY candle of a chart (up to 1000 bars) and create skill CANDIDATES from how it actually moves: the hour-by-hour movement '
+                + 'table in the trader\'s clock (PHT), the ≥10% up/down swing legs with the state that preceded them — the "if we could turn back time, '
+                + 'when should I have been in" read — candle anatomy and run lengths, regime segments, pivots, gaps, and every strategy-book detector '
+                + 'aggregated over all history with first-touch win-rates. Candidates are created DIRECTLY (no approval queue) and are hypotheses until '
+                + 'evidence changes their status. Use when the user asks you to learn the chart, "build skills from this coin", or wants the times and '
+                + 'patterns the tape itself reveals. Slow (one model call + a full history study) — never call it twice in the same turn.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -4249,10 +4249,12 @@ ${body}`);
                         + 'where the switch is if they want this; do not ask again in this run.';
                     break;
                 }
-                // The eighth learner: the model reads the WHOLE tape (a digest
-                // of up to 1000 candles + historical detector win-rates) and
-                // drafts IF/THEN skills. Every craft passes through the shared
-                // draftGates into the approval inbox — nothing is auto-applied.
+                // The eighth learner: the model reads a study of the WHOLE
+                // tape (every bar bucketed by hour, the ≥10% swing legs with
+                // their antecedents, candle anatomy, detector win-rates) and
+                // creates pattern-first candidates DIRECTLY. The shared
+                // draftGates still judge each craft; the chip records the
+                // write, and only the evidence fold changes a candidate.
                 const sym = asSymbol(call.arguments.symbol, fallback);
                 const ivl = asString(call.arguments.interval) || context.chartInterval || '15m';
                 const { getActiveUsername } = await import('../../utils/activeUser');

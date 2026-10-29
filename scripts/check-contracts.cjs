@@ -36,6 +36,9 @@
  *  20. the signal loop — the resolver's fill/stop/target order (stop-first on
  *      an unknowable bar), costs in R, no lookahead, the append-only ledger,
  *      OKX parsing and the Binance cross-check
+ *  21. the chart tape study — hour-of-day edge, ≥10% swing legs with their
+ *      antecedents, candle anatomy, the digest budget, and the scan's direct
+ *      candidate write (no approval queue)
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -1103,6 +1106,146 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         && svc.shadowGrounding(['made_up_tool']).verdict === 'missing'
         && svc.shadowGrounding(['the 1h support at 64200']).verdict === 'cited'
         && svc.shadowGrounding([]).verdict === 'uncited');
+})();
+
+// ─── 21. the chart tape study: every bar, hours, big legs, direct write ────
+(() => {
+    const tz = loadModule('src/utils/timezone.ts');
+    const study = loadModule('src/services/learning/chartTapeStudy.ts');
+    const scan = loadModule('src/services/learning/chartScanSkills.ts');
+    const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    const BASE = Date.UTC(2026, 0, 1, 0, 0);
+    const STEP = 3600_000;
+    const barAt = (i, close, volume = 100) => ({
+        time: BASE + (i - 8) * STEP, open: close, high: close * 1.004, low: close * 0.996,
+        close, volume,
+    });
+
+    ok('phtHourOf: UTC 00:00 is 08:00 PHT and UTC 16:00 is 00:00 PHT',
+        tz.phtHourOf(Date.UTC(2026, 0, 1, 0, 0)) === 8
+        && tz.phtHourOf(Date.UTC(2026, 0, 1, 16, 0)) === 0);
+
+    // Every transition step is keyed by the START bar's PHT hour.
+    const hourBars = [];
+    let px = 100;
+    for (let i = 0; i < 24 * 4; i += 1) {
+        hourBars.push(barAt(i, px));
+        const pht = i % 24;
+        px *= pht === 3 ? 1.01 : pht === 15 ? 0.99 : 1.0001;
+    }
+    const { hours, samples } = study.studyHours(hourBars, 1);
+    const h3 = hours[3];
+    const h15 = hours[15];
+    ok('tape study: hour-of-day drift and up-share come from every sampled bar',
+        samples === hourBars.length - 1
+        && Math.abs(h3.meanDrift - 0.01) < 1e-9 && h3.upShare === 1
+        && Math.abs(h15.meanDrift + 0.01) < 1e-9 && h15.upShare === 0,
+        JSON.stringify({ h3, h15, samples }));
+
+    const flat = (i, close) => ({
+        time: BASE + i * 300_000, open: close, high: close * 1.001, low: close * 0.999,
+        close, volume: i >= 18 && i <= 25 ? 300 : 100,
+    });
+    // 24 flat bars, a 2-bar dip (the entry the study should find), then a rise
+    // that crosses +10% from the dip.
+    const upTape = [];
+    for (let i = 0; i < 24; i += 1) upTape.push(flat(i, 100));
+    upTape.push(flat(24, 99), flat(25, 99));
+    const rise = [100.5, 102, 103.5, 105, 106.5, 108, 109.5];
+    rise.forEach((close, i) => upTape.push(flat(26 + i, close)));
+    for (let i = 0; i < 6; i += 1) upTape.push(flat(33 + i, 109.5));
+    const up = study.findBigMoves(upTape, 'up', 0.10, 24);
+    ok('tape study: a 10%+ rise is one up leg starting at the lowest close, non-overlapping',
+        up.moves.length >= 1
+        && up.moves[0].movePct >= 0.10
+        && up.moves[0].startPrice === 99
+        && up.moves[0].bars >= 6 && up.moves[0].bars <= 10
+        && Number.isFinite(up.moves[0].volumeRatio)
+        && Number.isFinite(up.moves[0].rangeCompression)
+        && up.moves.every((m, i) => i === 0 || m.startTime > up.moves[i - 1].endTime),
+        JSON.stringify(up.moves.slice(0, 2)));
+
+    // The mirror, built explicitly (a multiplicative mirror changes the
+    // PERCENTAGE, so transforming prices would not test the same leg).
+    const downTape = [];
+    for (let i = 0; i < 24; i += 1) downTape.push(flat(i, 200));
+    downTape.push(flat(24, 202), flat(25, 202));
+    const fall = [201, 199, 197.5, 196, 194.5, 192.5, 180.5];
+    fall.forEach((close, i) => downTape.push(flat(26 + i, close)));
+    for (let i = 0; i < 6; i += 1) downTape.push(flat(33 + i, 180.5));
+    const down = study.findBigMoves(downTape, 'down', 0.10, 24);
+    ok('tape study: the mirror finds a down leg for shorts',
+        down.moves.length >= 1 && down.moves[0].movePct >= 0.10 && down.moves[0].startPrice === 202,
+        JSON.stringify(down.moves.slice(0, 2)));
+
+    const quietTape = [];
+    for (let i = 0; i < 30; i += 1) quietTape.push(flat(i, 100));
+    for (let i = 1; i <= 6; i += 1) quietTape.push(flat(29 + i, 100 + i * 0.66));
+    const quiet = study.findBigMoves(quietTape, 'up', 0.10, 24);
+    ok('tape study: a quiet tape reports its largest leg below the threshold, never "no moves" with no scale',
+        quiet.moves.length === 0 && quiet.largest !== null
+        && quiet.largest.movePct > 0.03 && quiet.largest.movePct < 0.10,
+        JSON.stringify(quiet.largest && quiet.largest.movePct));
+
+    const runTape = [];
+    for (let i = 0; i < 12; i += 1) runTape.push(flat(i, 100 + (i % 6 < 3 ? i : 12 - i)));
+    const runs = study.studyRuns(runTape);
+    ok('tape study: consecutive-run lengths are measured, not guessed',
+        runs.up.count > 0 && runs.down.count > 0 && runs.up.max >= 2,
+        JSON.stringify(runs));
+
+    const full = study.buildTapeStudy(upTape, { horizon: 12, window: 24, threshold: 0.10 });
+    const text = study.formatTapeStudy(full);
+    ok('tape study: the text names every section and the threshold',
+        /TIME OF DAY/.test(text.timeOfDay) && /PHT/.test(text.timeOfDay)
+        && /BIG MOVES ≥10%/.test(text.bigMoves) && /CANDLE ANATOMY/.test(text.anatomy)
+        && /RUNS/.test(text.anatomy));
+    const downStudy = study.buildTapeStudy(downTape, { horizon: 12, window: 24, threshold: 0.10 });
+    const downText = study.formatTapeStudy(downStudy);
+    ok('tape study: a down leg prints as a drop, never as a plus',
+        /down #1 [^\n]*−\d+\.\d+% in/.test(downText.bigMoves)
+        && !/down #1 [^\n]*\+\d+\.\d+% in/.test(downText.bigMoves), downText.bigMoves);
+
+    const tiny = scan.fitDigestSections([
+        { key: 'header', priority: 1, text: 'HEADER' },
+        { key: 'time-of-day', priority: 2, text: 'TIME' },
+        { key: 'last-20-raw-bars', priority: 9, text: 'X'.repeat(80) },
+    ], 30);
+    ok('digest budget: the study survives, the raw tail is dropped and NAMED',
+        tiny.includes('HEADER') && tiny.includes('TIME') && !tiny.includes('XXX')
+        && /DROPPED/.test(tiny) && /last-20-raw-bars/.test(tiny), tiny);
+
+    const big = [];
+    for (let i = 0; i < 1000; i += 1) {
+        const c = i < 500 ? 100 : 100 + (i - 500) * 0.03;
+        big.push({
+            time: BASE + i * 300_000, open: c, high: c * 1.01, low: c * 0.99, close: c,
+            volume: 100 + (i % 50) * 3,
+        });
+    }
+    const digest = scan.buildChartDigest(big, 'BTCUSDT', '5m');
+    ok('digest: the header claims the full tape and the study sections are present',
+        digest.digest.includes('EVERY candle was analysed')
+        && digest.digest.includes('TIME OF DAY')
+        && digest.digest.includes('BIG MOVES')
+        && digest.digest.includes('CANDLE ANATOMY')
+        && digest.study.bars === 1000 && digest.study.samples === 1000 - digest.study.horizon);
+    ok('digest: a 1000-bar study fits the prompt budget',
+        digest.digest.length <= scan.CHART_DIGEST_MAX_CHARS,
+        `${digest.digest.length} chars vs cap ${scan.CHART_DIGEST_MAX_CHARS}`);
+    ok('digest: the study text is bounded (measured on the worst synthetic tape)',
+        digest.digest.split('\n').filter(l => l.startsWith('up #') || l.startsWith('down #')).length <= 16,
+        `${digest.digest.split('\n').filter(l => l.startsWith('up #') || l.startsWith('down #')).length} leg lines`);
+
+    const prompt = scan.CHART_SCAN_FALLBACK_PROMPT;
+    ok('scan prompt: pattern-first, PHT, every-bar and NOT a generic rule',
+        /PATTERN-FIRST/.test(prompt) && /EVERY bar/.test(prompt) && /PHT/.test(prompt)
+        && /not a generic IF\/THEN rule/.test(prompt) && /turn back time/.test(prompt));
+    ok('scan: candidates are created directly, never queued for approval',
+        !/queueSkillDraft/.test(read('src/services/learning/chartScanSkills.ts'))
+        && /ingestCraftedSkillFromDraft/.test(read('src/services/learning/chartScanSkills.ts')));
+    ok('scan control: the other draft sources still queue (the direct write is scoped, not global)',
+        /queueSkillDraft/.test(read('src/services/learning/bookSkillDrafts.ts')));
 })();
 
 // ─── report ────────────────────────────────────────────────────────────────
