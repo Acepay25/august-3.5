@@ -36,20 +36,15 @@ export function useAppSettings() {
     // Confidence Calibration
 
     // AI Learning - Knowledge base.
-    // WRITE-ONLY BY CONSTRUCTION, and it is the SECOND copy of that name:
-    // the store this state mirrors (`UserSettings.insightKnowledgeBase`) is
-    // loaded once per profile (`useUserProfileLoader.ts:432`) and persisted
-    // right back (`useProfilePersistence.ts:98`), so the round trip can only
-    // ever re-write what it read. Nothing at runtime feeds it — the real store
-    // is `GlobalMemory.insightKnowledgeBase`, maintained per write by
-    // `AlgorithmicMemoryService.ts:135-149` and read into prompts by
-    // `utils/memoryUtils.buildGlobalMemoryIndex:52`. Its single consumer
-    // (`useAnalysisPipeline.ts:162,316`) destructures it and lists it in a
-    // dependency array without ever reading the value, so the only honest
-    // description of this state is "carried, not used". Deleting it means
-    // unwinding App.tsx:304,823,1568,2463 plus the four hook call sites, so it
-    // stays documented rather than quietly half-removed. See
-    // docs/architecture/learning-loop.md.
+    // CARRIED AND PERSISTED, never written by this app. The state is loaded
+    // once per profile (`useUserProfileLoader`) and saved right back
+    // (`useProfilePersistence`), so the round trip can only re-write what it
+    // read. It stays because the stored field and the SQLite column are part
+    // of a profile backup: restoring an old profile brings its entries back.
+    // The live reader is `utils/memoryUtils.buildGlobalMemoryIndex`, which
+    // renders `GlobalMemory.insightKnowledgeBase.insights` — a DIFFERENT field
+    // that happens to share the name; nothing appends to either any more.
+    // The analysis pipeline no longer takes this state as a prop.
     const [insightKnowledgeBase, setInsightKnowledgeBase] = useState<InsightKnowledgeBase | undefined>(undefined);
 
     // Summarization settings

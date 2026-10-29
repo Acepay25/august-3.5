@@ -2,7 +2,7 @@
 /**
  * check-contracts — the minimal regression layer that survived the suite's
  * removal (owner ruling, 2026-10-23). The old tree held ~530 test files; this
- * is deliberately NOT that. It pins the twelve PURE-LOGIC contracts no browser
+ * is deliberately NOT that. It pins the pure-logic contracts no browser
  * probe can reach by construction, because they live below the render. Each one
  * added since the six had to answer why the six could not cover it:
  *
@@ -31,6 +31,8 @@
  *  17. src/utils/tradeSource.ts — a legacy journal row defaults to 'manual'
  *  18. src/utils/notebookReviewGate.ts + skillSupervisionGate.ts — when a
  *      notebook review is due, and which drafts an automatic pass may judge
+ *  19. the insight store — rendered by the memory index and readable from a
+ *      backup, but never created or carried by the analysis pipeline
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -891,6 +893,19 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         sg.shouldDeferSupervision({ tradeId: 'trade:1' }, false) === false);
 })();
 
+// ─── 19. the insight store: rendered, never created or carried ─────────────
+(() => {
+    const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    ok('insight store: the analysis pipeline no longer names it',
+        !/insightKnowledgeBase/.test(read('src/hooks/useAnalysisPipeline.ts')));
+    ok('insight store: algorithmic memory neither creates nor assigns it',
+        !/insightKnowledgeBase\s*=/.test(read('src/services/learning/AlgorithmicMemoryService.ts')));
+    ok('insight store: the memory index still renders stored entries',
+        /globalMemory\.insightKnowledgeBase\?\.insights/.test(read('src/utils/memoryUtils.ts')));
+    ok('insight store: the SQLite column still round-trips for backup restore',
+        /insightKnowledgeBase/.test(read('src/services/infrastructure/SqliteService.ts')));
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
@@ -898,4 +913,4 @@ if (failures.length) {
     console.error('CONTRACT CHECK FAIL — a pinned contract broke; fix the module, not this file.');
     process.exit(1);
 }
-console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing), the desk tool budget and the skill outcome correction all hold.');
+console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing), the desk tool budget, the skill outcome correction, the startup call gates and the insight store pin all hold.');

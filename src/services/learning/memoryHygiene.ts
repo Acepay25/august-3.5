@@ -12,11 +12,11 @@
  *  - consolidation — nothing consolidates, and nothing is adding either.
  *    `pruneOutdatedInsights` / `aggregateSimilarInsights`
  *    (services/learning/MemoryConsolidationService.ts) have no caller anywhere;
- *    `updateGlobalMemoryAlgorithmically` only creates an empty
- *    `insightKnowledgeBase` when the profile has none
- *    (AlgorithmicMemoryService.ts:38-43); and no file appends to
+ *    `updateGlobalMemoryAlgorithmically` no longer creates or grows
+ *    `insightKnowledgeBase`, and no file appends to
  *    `GlobalMemory.insightKnowledgeBase.insights`. The store is carried and
- *    written back verbatim, so a scheduled prune would walk a list nobody grows.
+ *    written back verbatim for profiles that already have entries, so a
+ *    scheduled prune would walk a list nobody grows.
  *    Wiring either half is an open decision (P4 in
  *    docs/research/TRADING-IMPROVEMENTS.md) — see docs/architecture/learning-loop.md.
  *

@@ -3,7 +3,6 @@ import {
     Message, MessageRole, TradeOutcome, LoggedTrade, ImageMetadata,
     DebateTurn, Conversation, TradeAnalysis, TradeSummary,
     GlobalMemory, CustomInstructionsMap, CustomInstruction,
-    InsightKnowledgeBase,
     PatternMemoryGateView,
 } from '../types';
 
@@ -153,7 +152,6 @@ export interface UseAnalysisPipelineParams {
     loggedTrades: LoggedTrade[];
     tradeSummaries: TradeSummary[];
     globalMemory: GlobalMemory | undefined;
-    insightKnowledgeBase: InsightKnowledgeBase | undefined;
 
     // From market data:
     currentHybridData: HybridDataPacket | null;
@@ -280,7 +278,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
         moderatorConfig, moderatorModel,
         memoryConfig,
         finalTradeSummary, loggedTrades, tradeSummaries,
-        globalMemory, insightKnowledgeBase,
+        globalMemory,
         currentHybridData, setCurrentHybridData,
         setHybridConnectionStatus,
         isAnalysisInProgress, setIsAnalysisInProgress,
@@ -1405,7 +1403,7 @@ export function useAnalysisPipeline(params: UseAnalysisPipelineParams) {
             // sees a replaced controller and skips this cleanup — the new run
             // owns the state from there on.
         }
-    }, [loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, memoryConfig, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, customInstructions, isHybridIntelligenceEnabled, selectedChatModel, loggedTrades, insightKnowledgeBase, tradeSummaries, isStrategiesEnabled, confirmDialog, toast, setLoadingFor, setSteeringFor, steeringFor, syncProgressFlag]);
+    }, [loadingMessage, finalTradeSummary, activeFrameworks, isRateLimited, providerConfigs, isDeepAnalysis, selectedOcrModel, updateMessages, moderatorConfig, moderatorModel, memoryConfig, activeConversationId, activeConversation, isAnalysisInProgress, globalMemory, isGlobalMemoryEnabled, customInstructions, isHybridIntelligenceEnabled, selectedChatModel, loggedTrades, tradeSummaries, isStrategiesEnabled, confirmDialog, toast, setLoadingFor, setSteeringFor, steeringFor, syncProgressFlag]);
 
     // ─── Cancel Analysis ───────────────────────────────────────────────────
     /**

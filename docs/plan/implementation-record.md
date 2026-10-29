@@ -2288,3 +2288,37 @@ automatic. `typecheck` · `check:contracts` **200** · `build` · `boot-probe` �
 **Residues.** The inbox-open manual pass can spend up to `MAX_ITEMS_PER_PASS` (12) calls and bypasses
 the hourly window budget (it is a human action). The review cooldown is a preference, not data; a
 failed review still stamps the 15 minutes so a retry waits for the next material change.
+
+## 47. The insight store stops being created and carried (2026-10-29)
+
+**Owner ruling.** Stop carrying `insightKnowledgeBase` in the pipeline prop and stop writing it;
+leave the stored column readable so backup restore keeps working; report anything that blocks full
+removal.
+
+**What changed.**
+- `AlgorithmicMemoryService.updateGlobalMemoryAlgorithmically` no longer seeds an empty
+  `insightKnowledgeBase` on a memory object that lacks one. Nothing else in `src/` assigns it.
+- `useAnalysisPipeline` no longer imports the type, declares the prop, destructures it or lists it
+  in the main effect's dependency array; `App` no longer passes it into the hook.
+- Comments re-anchored to symbols: `types/learning.ts` › `TradeInsight`, `useAppSettings`, and
+  `memoryHygiene` no longer claim a writer or a pipeline consumer that do not exist.
+
+**What blocks full removal (reported, not worked around).** The field has one live reader:
+`utils/memoryUtils.buildGlobalMemoryIndex` renders `GlobalMemory.insightKnowledgeBase.insights`
+into the LAYER 3 memory index, which `GenericAnalysisService.analyzeTradingView` injects through
+`constructOptimizedContext` (800-token cap). A profile that already carries entries still has them
+shown to the model, so the type, the reader and the stored field stay. Deleting the field outright
+would also delete what the SQLite column and `useProfilePersistence` restore from a backup — the
+thing the ruling asked to keep readable. So: writer gone, pipeline copy gone, renderer and backup
+round-trip intact.
+
+**Verification.** Contract 19 is a source pin with a red-at-HEAD control: the pipeline file named the
+field 3 times at `1b43e5a7` and 0 times now; `AlgorithmicMemoryService` had 1 assignment and has 0;
+`memoryUtils` still reads `?.insights`; `SqliteService` still round-trips the column.
+`typecheck` · `check:contracts` **204** · `lint` **375/379** · `build` · `boot-probe` ·
+`render-probe`.
+
+**Residues.** Old profiles keep whatever entries they had (not purged; no migration). The
+`useAppSettings` state and its persistence round-trip remain — they are the backup path, not a
+runtime input. `docs/research/TRADING-IMPROVEMENTS.md` P4 (wire or delete the consolidation half)
+is still an open decision.

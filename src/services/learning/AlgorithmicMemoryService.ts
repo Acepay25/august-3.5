@@ -5,8 +5,10 @@
 import { GlobalMemory, LoggedTrade, TradeOutcome } from '../../types';
 // The two consolidation steps are no longer imported here: their only caller
 // was the recurring-mistake block that went with the post-mortem, so
-// `GlobalMemory.insightKnowledgeBase` no longer grows. The store and its
-// readers stay for profiles that already have entries.
+// `GlobalMemory.insightKnowledgeBase` no longer grows — and this function no
+// longer creates it on profiles that have none. The field and its one reader
+// (`utils/memoryUtils.buildGlobalMemoryIndex`) stay for profiles that already
+// carry entries, and the SQLite column stays readable for backup restore.
 
 /**
  * Updates Global Memory algorithmically without AI.
@@ -33,14 +35,6 @@ export const updateGlobalMemoryAlgorithmically = (
         globalCorrections: [],
         lastUpdated: new Date().toISOString()
     };
-
-    // Ensure strict type safety for optional property (backwards compatibility)
-    if (!memory.insightKnowledgeBase) {
-        memory.insightKnowledgeBase = {
-            insights: [],
-            lastUpdated: new Date().toISOString()
-        };
-    }
 
     // 2. Update Total Trades
     memory.totalTradesAnalyzed += recentTrades.length;

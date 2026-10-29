@@ -818,7 +818,7 @@ const App: React.FC = () => {
         moderatorModel: moderatorConfig.selectedModel || '',
         memoryConfig,
         finalTradeSummary, loggedTrades, tradeSummaries,
-        globalMemory, insightKnowledgeBase,
+        globalMemory,
         currentHybridData, setCurrentHybridData,
         setLatestMonteCarloResult, setLatestBacktestResult,
         setPerAIMonteCarloResults, setCurrentSlOptimization,

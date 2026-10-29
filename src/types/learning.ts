@@ -37,8 +37,10 @@ export interface TradingWeaknesses {
 }
 
 /**
- * A single insight extracted from a post-mortem analysis
- * Used by AlgorithmicMemoryService (GlobalMemory.insightKnowledgeBase)
+ * A single insight extracted from a post-mortem analysis.
+ * Rendered by `utils/memoryUtils.buildGlobalMemoryIndex` for profiles that
+ * already carry entries. Nothing appends to the store any more: the
+ * post-mortem detectors that wrote it were deleted.
  */
 export interface TradeInsight {
   id: string;
