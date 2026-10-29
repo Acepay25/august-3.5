@@ -1,5 +1,10 @@
 # The learning loop
 
+> **Current focus (2026-10-29).** This page describes the **trade-settled** loop. Under the owner's
+> current focus it is **infrastructure, not the primary learning loop**: August cannot execute, so
+> P&L and settlement are not the product line. The accuracy loop is **signal → price outcome**; see
+> [focus.md](../product/focus.md). This page will be rewritten when the signal ledger lands.
+
 How a closed trade becomes a lesson the next plan reads. Every stage below is cited by symbol;
 `npm run check:docs` verifies the citations still exist. The product reason for the loop is in
 [the goal](../product/goal.md).
