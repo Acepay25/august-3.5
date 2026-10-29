@@ -2483,8 +2483,19 @@ async function main() {
             };
             const details = [];
             for (let attempt = 0; attempt < 6; attempt += 1) {
-                const rows = Array.from(document.querySelectorAll('button'))
-                    .filter(b => /(?:BTCUSDT|ETHUSDT|SOLUSDT)\.md/.test(b.textContent || ''));
+                // The row is the coin-named button in the History panel. It
+                // used to read `<COIN>.md`; the 2026-10-29 refactor made the
+                // label the coin alone, so matching `.md` found nothing and
+                // reported "opened=0" on a screen that was rendering fine.
+                // The `·` is the row's metadata line; filter chips carry the
+                // coin alone, so they cannot match.
+                // No word boundary after the coin: textContent concatenates the
+                // coin span and the outcome badge ("BTCUSDTWIN"), so `\b` never
+                // matched. The `·` is the row's metadata line; a filter chip
+                // carries the coin alone and cannot match.
+                const rows = Array.from(document.querySelectorAll('#journal-panel-log button'))
+                    .filter(b => /^(?:BTCUSDT|ETHUSDT|SOLUSDT)/.test((b.textContent || '').trim())
+                        && (b.textContent || '').includes('·'));
                 const row = rows[attempt];
                 if (!row) break;
                 row.click();
