@@ -44,6 +44,9 @@
  *  23. the skill format — one trigger (`when`) + steps, no if/then pair in
  *      the craft, the file, the index row or the tool schemas; legacy files
  *      migrate `ifCondition` into `when` on read
+ *  24. the journal-rules store — `when` + `action` rows, the legacy shape
+ *      normalized on read AND write, and the prompt line printed in the new
+ *      vocabulary
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -1404,6 +1407,60 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     }
 })();
 
+// ─── 24. the journal-rules store: when + action, normalized on read/write ──
+(() => {
+    const lf = loadModule('src/utils/learningRuleFormat.ts');
+    const idx = loadModule('src/utils/learningRulesIndex.ts');
+    const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+
+    const legacy = [{
+        id: 'lr-1',
+        ifCondition: 'funding positive for 8 sessions while the low was swept',
+        thenAction: 'go long only after the reclaim close',
+        sourceTradeId: 't1',
+        outcome: 'LOSS',
+        coin: 'BTC',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        useCount: 2,
+        status: 'candidate',
+    }];
+    const first = lf.normalizeLearningRules(legacy);
+    ok('rules: a legacy row becomes when + action with its metadata intact',
+        first.migrated === true && first.rules.length === 1
+        && first.rules[0].when === legacy[0].ifCondition
+        && first.rules[0].action === legacy[0].thenAction
+        && first.rules[0].outcome === 'LOSS' && first.rules[0].useCount === 2
+        && !('ifCondition' in first.rules[0]) && !('thenAction' in first.rules[0]),
+        JSON.stringify(first.rules[0]));
+
+    const again = lf.normalizeLearningRules(first.rules);
+    ok('rules: normalization is idempotent — a converted row cannot churn the store',
+        again.migrated === false && JSON.stringify(again.rules) === JSON.stringify(first.rules));
+
+    const broken = lf.normalizeLearningRules([
+        { ifCondition: 'a trigger with no action', thenAction: '' },
+        { when: 'a trigger', action: 'an action' },
+    ]);
+    ok('rules: a row that cannot be printed is dropped, a complete row survives',
+        broken.migrated === true && broken.rules.length === 1
+        && broken.rules[0].when === 'a trigger');
+
+    const line = idx.buildLearningRulesIndex(first.rules, 6);
+    ok('rules: the prompt line prints When → do, never IF/THEN',
+        /When funding positive for 8 sessions while the low was swept → go long only after the reclaim close/.test(line)
+        && /learned from a loss/.test(line) && !/\bIF\b/.test(line),
+        line);
+    ok('rules: no rows → no prompt block', idx.buildLearningRulesIndex([], 6) === '');
+
+    const storageSrc = read('src/services/infrastructure/StorageService.ts');
+    ok('rules: the store normalizes on read AND write (restores heal too)',
+        (storageSrc.match(/normalizeLearningRules\(/g) || []).length >= 2);
+    ok('rules: the writer emits when + action and never the old pair',
+        /\bwhen,\s*\n\s*action,/.test(read('src/services/learning/learningRules.ts'))
+        && !/\bifCondition:\s/.test(read('src/services/learning/learningRules.ts'))
+        && !/\bthenAction:\s/.test(read('src/services/learning/learningRules.ts')));
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
@@ -1411,4 +1468,4 @@ if (failures.length) {
     console.error('CONTRACT CHECK FAIL — a pinned contract broke; fix the module, not this file.');
     process.exit(1);
 }
-console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing), the desk tool budget, the skill outcome correction, the startup call gates, the insight store pin, the signal loop (resolver order, costs, ledger, venue data), the chart tape study, the signal accuracy fold and the skill format all hold.');
+console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing), the desk tool budget, the skill outcome correction, the startup call gates, the insight store pin, the signal loop (resolver order, costs, ledger, venue data), the chart tape study, the signal accuracy fold, the skill format and the journal-rules store all hold.');

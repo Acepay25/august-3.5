@@ -104,14 +104,16 @@ export interface GlobalMemory {
 }
 
 /**
- * A learning rule extracted from post-mortem analysis
+ * A journal rule — one trigger + one action, the flat lesson index beside skills.
+ * Legacy rows stored `ifCondition`/`thenAction`; `utils/learningRuleFormat`
+ * migrates them on read and write.
  */
 export interface LearningRule {
   id: string;
-  ifCondition: string;              // The condition part of the rule
-  thenAction: string;               // The action/consequence part
+  when: string;                     // The trigger
+  action: string;                   // What to do when it fires
   sourceTradeId: string;            // Trade ID this rule came from
-  outcome: 'WIN' | 'LOSS';          // Outcome of the source trade
+  outcome?: 'WIN' | 'LOSS';         // Outcome of the source trade, when known
   coin?: string;                    // Specific coin (optional)
   pattern?: string;                 // Pattern family (optional)
   direction?: 'Long' | 'Short';     // Trade direction (optional)

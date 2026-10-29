@@ -2561,3 +2561,43 @@ trigger+body rewrite lands in the notebook bytes).
 - A rewrite now snapshots and restores `when`/body; a legacy `previousVersion` carrying only the old
   keys is read through `ifCondition` for revert, but its `thenAction` is not restored as a field
   (it lives in the body).
+
+## 52. The journal-rules store moves to when + action (2026-10-30)
+
+**Owner ask.** Migrate the rules store to the new format.
+
+**What it is.** The flat journal-lesson index beside skills (`learning_rules_v2_<user>`): one trigger
++ one action per row, learned from a settled trade's post-mortem and printed into both chat homes as
+"Rules learned from this journal" (up to six lines, memory switch gated). It is NOT the skills
+library — a rule can exist where the skill gate refused or merged the candidate.
+
+**What changed.**
+- `LearningRule` now carries `when` (trigger) and `action` (what to do); `outcome` is optional so a
+  legacy row with no recorded win/loss prints without a source claim.
+- `utils/learningRuleFormat.ts` — the pure, idempotent normalizer: a row with `ifCondition`/
+  `thenAction` becomes `when`/`action` with its id, trade, coin, outcome, counts and status intact; a
+  row that cannot be printed (no trigger or no action) is dropped. Re-running it on converted rows
+  reports `migrated: false` and returns identical bytes.
+- `StorageService.loadLearningRules` normalizes on READ and persists the converted store once; the
+  pre-multi-user key migration goes through the same normalizer. `saveLearningRules` normalizes at
+  the WRITE edge, which is where the profile loader seeds rows from an old profile or backup.
+- `learningRules.recordLearningRulesFromPostMortem` writes `when`/`action` and dedupes on them.
+- `learningRulesIndex` prints `- BTC · When … → … · learned from a loss`; no `IF`/`THEN` token.
+- The post-mortem TEXT keeps its `IF … THEN …` sentence (that is prose in the journal note), and the
+  parser maps it into the rule's `when`/`action` and the skill candidate's `when` + body.
+
+**Verification.** Contract 24: a legacy row converts with metadata intact and no old keys; the
+normalizer is idempotent; an unprintable row is dropped while a complete one survives; the prompt
+line prints When → do and no `IF`; no rows → no block; the store normalizes on read and write; the
+writer emits `when`/`action` and never the pair. A node harness against the REAL `StorageService`
+proves both edges on stored bytes: a legacy `learning_rules_v2_rules-user` value loads converted and
+is rewritten on disk, a second read does not churn it, and a legacy profile/backup seed passed to
+`saveLearningRules` is converted at write. Ladder: `typecheck` · `check:contracts` **275** · `lint`
+**375/375** · `check:boundaries` · `check:docs` · `build` · `boot-probe` · `render-probe` ·
+`skill-approval-probe` **28/28**.
+
+**Residues.** Old rows are kept as rows, not archived — the migration rewrites their fields in place
+(`ifCondition`/`thenAction` keys are not preserved in this store; they were app-owned, unlike
+third-party skill frontmatter). The settlement reflection's post-mortem prose still uses the words
+"IF/THEN" and is parsed into the new shapes; renaming that prompt is a separate change. The rules
+store remains a deliberate second view of a journal lesson beside skills.

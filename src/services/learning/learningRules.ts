@@ -4,9 +4,9 @@
  * The reader (`utils/learningRulesIndex.ts`) was wired in both homes, but
  * nothing on the live settlement path constructed a `LearningRule`: the store
  * only carried legacy rows, so a new trader's prompt block was always empty.
- * The clauses are already parsed from the post-mortem that becomes a skill
- * draft (`ingestIfThenFromTrade`); this records the SAME clauses as rules, so
- * the two views of one journal lesson cannot disagree about what was learned.
+ * The clause is already parsed from the post-mortem that becomes a skill
+ * draft; this records the SAME lesson as a rule (`when` + `action`), so the
+ * two views of one journal lesson cannot disagree about what was learned.
  *
  * The store is per-user (`learning_rules_v2_<user>`) and is read back by the
  * prompt index. It is bounded: a rule repeated by a later trade bumps its
@@ -33,12 +33,12 @@ export const recordLearningRulesFromPostMortem = (
         const rules = [...store.rules];
         let written = 0;
         for (const clause of clauses.slice(0, 3)) {
-            const ifCondition = clause.ifCondition.trim();
-            const thenAction = clause.thenAction.trim();
-            if (!ifCondition || !thenAction) continue;
+            const when = clause.ifCondition.trim();
+            const action = clause.thenAction.trim();
+            if (!when || !action) continue;
             const same = rules.find(r =>
-                r.ifCondition.trim().toLowerCase() === ifCondition.toLowerCase()
-                && r.thenAction.trim().toLowerCase() === thenAction.toLowerCase());
+                r.when.trim().toLowerCase() === when.toLowerCase()
+                && r.action.trim().toLowerCase() === action.toLowerCase());
             if (same) {
                 // Re-ingesting the same trade is idempotent; a different trade
                 // reaching the same rule is the recurrence the count records.
@@ -49,8 +49,8 @@ export const recordLearningRulesFromPostMortem = (
             }
             rules.push({
                 id: `lr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-                ifCondition,
-                thenAction,
+                when,
+                action,
                 sourceTradeId: trade.id,
                 outcome: trade.outcome === TradeOutcome.WIN ? 'WIN' : 'LOSS',
                 ...(trade.analysis?.coinName ? { coin: trade.analysis.coinName } : {}),

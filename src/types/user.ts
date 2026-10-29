@@ -47,5 +47,5 @@ export interface UserProfile {
   // AI Learning Features
   tradingWeaknesses?: TradingWeaknesses;       // Mistake pattern analysis
   insightKnowledgeBase?: InsightKnowledgeBase; // Post-mortem insights
-  learningRules?: { rules: LearningRule[]; lastUpdated: string }; // IF/THEN rules from post-mortems
+  learningRules?: { rules: LearningRule[]; lastUpdated: string }; // journal rules (when → action) from post-mortems
 }

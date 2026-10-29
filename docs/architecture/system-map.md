@@ -818,7 +818,9 @@ craft, the file, the index row or the tool schemas. `parseSkillMarkdown` maps a 
 `ifCondition` front-matter key into `when` on read and the old keys survive as unknown frontmatter,
 so old files keep every byte; `serializeSkill` writes `when:`. The draft gates check the trigger
 (`validateTrigger`), coverage compares triggers, and `propose_skill`/`revise_skill` ask for
-`when` + `steps` (revisions may carry a full `procedure` body).
+`when` + `steps` (revisions may carry a full `procedure` body). The journal-rules store
+(`learning_rules_v2_<user>`) shares that vocabulary (`when` + `action`) and normalizes legacy rows on
+both read and write, so a restored backup heals on first load.
 
 **The SKILL.md port, 2026-10-24** (same design pass as G.2's memory loop):
 

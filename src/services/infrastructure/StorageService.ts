@@ -13,6 +13,7 @@
 
 import * as dbService from './dbService';
 import { UserProfile, LoggedTrade, LearningRule } from '../../types';
+import { normalizeLearningRules } from '../../utils/learningRuleFormat';
 
 export enum StorageKey {
     LEARNING_RULES = 'learning_rules_v2',
@@ -106,7 +107,15 @@ class UnifiedStorageService {
         const scoped = this.scopedKey(StorageKey.LEARNING_RULES);
         const stored = this.loadSetting<{ rules: LearningRule[]; lastUpdated: string; version?: number } | null>(scoped, null);
         if (stored) {
-            return { version: stored.version ?? 2, rules: stored.rules ?? [], lastUpdated: stored.lastUpdated };
+            // Pre-2026-10-30 rows carry ifCondition/thenAction; normalize on
+            // read and persist the converted store once, so a profile/backup
+            // restore of old bytes heals on first load.
+            const normalized = normalizeLearningRules(stored.rules);
+            const lastUpdated = stored.lastUpdated || new Date().toISOString();
+            if (normalized.migrated) {
+                this.saveSetting(scoped, { version: 2, rules: normalized.rules, lastUpdated });
+            }
+            return { version: 2, rules: normalized.rules, lastUpdated };
         }
 
         // Legacy (pre-multi-user) key — migrate ONCE: the legacy value is
@@ -114,9 +123,10 @@ class UnifiedStorageService {
         // stale snapshot of the first user's pre-upgrade rules.
         const legacy = this.loadSetting<{ rules?: LearningRule[]; lastUpdated?: string } | null>(StorageKey.LEARNING_RULES, null);
         if (legacy && (legacy.rules?.length || legacy.lastUpdated)) {
+            const normalized = normalizeLearningRules(legacy.rules);
             const migrated = {
                 version: 2,
-                rules: legacy.rules ?? [],
+                rules: normalized.rules,
                 lastUpdated: legacy.lastUpdated ?? new Date().toISOString(),
             };
             this.saveSetting(scoped, migrated);
@@ -131,10 +141,17 @@ class UnifiedStorageService {
     }
 
     /**
-     * Save Learning Rules (per active user)
+     * Save Learning Rules (per active user). Normalizes at the write edge too,
+     * because the profile loader can seed this store from a backup whose rows
+     * predate the `when`/`action` shape.
      */
     saveLearningRules(data: { rules: LearningRule[]; lastUpdated: string; version: number }): void {
-        this.saveSetting(this.scopedKey(StorageKey.LEARNING_RULES), data);
+        const normalized = normalizeLearningRules(data.rules);
+        this.saveSetting(this.scopedKey(StorageKey.LEARNING_RULES), {
+            version: 2,
+            rules: normalized.rules,
+            lastUpdated: data.lastUpdated,
+        });
     }
 
     /**
