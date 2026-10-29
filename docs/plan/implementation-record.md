@@ -2094,3 +2094,75 @@ the compaction notice was a transcript line, not a message the model receives.
   restored text in `messages` will not find it, by construction.
 
 **Commits.** `4b73a02e` (notice), `0719314b` (bounded restoration + contract cases).
+
+## 42. Three integrity fixes: boundaries, corrected outcomes, import provenance (2026-10-29)
+
+**Trigger.** The ThinkRail deep dive named a module-boundary gate, a per-project trust
+grant, and the correction→learning gap left open from the first pass.
+
+### 1. Import boundaries (`79d0bfd5`)
+
+One real inversion existed: `chatTurnRunner` (a service) value-imported `intervalSeconds`
+from `TradingChart` (a component), so the chart and lightweight-charts were bundled into a
+path that never draws one. The timeframe vocabulary now lives in
+`src/utils/chartIntervals.ts`, and `scripts/check-boundaries.cjs` reads every `import`,
+`export … from`, dynamic `import()` and `require()` with the TypeScript parser against a
+nine-rule table: types/schemas stay vocabulary, utils never import a component, services
+and hooks may take component TYPES but never values, `shared/` and `electron/` never
+import `src/`.
+
+The gate self-tests its collector on all six shapes before reading the tree, and fails
+below a 400-file population floor — a broken scan reports `0 violations` forever
+otherwise. Measured at the commit: **523 files, 2,242 relative edges, 9 rules**. It runs in
+the one Verify action (CI and release), and is in the command list and gate table.
+
+**Residues.** Type-only imports stay legal by design. The scanner resolves relative
+specifiers only: a string-built `require`, a bundler alias, or an edge the table does not
+name is invisible. The table is the boundary definition, not a proof of runtime cycles.
+
+### 2. Corrected outcomes (`975a638c`)
+
+The gap was real: `correctedFrom` had one writer and no learning reader, so a corrected
+trade left the skill that counted it on the old class forever. A WIN↔LOSS correction now
+moves the skills that named the trade — followed skills through W/L, the 12-outcome
+window tail, the streak and the regime split; control skills through the control counters.
+The R sums are deliberately untouched (the journal corrects classification and PnL
+separately), the arithmetic is a pure util (`src/utils/skillLedgerCorrection.ts`), a repair
+floors at zero, a trade outside the window moves only lifetime counters, and an
+injected-and-ignored skill is reported as never having counted. The hook toasts the repair
+or its failure.
+
+**Residues.** Only WIN↔LOSS transitions are reconciled; a row entering or leaving the
+settled classes was never folded and is not invented here. The per-bot learning fold and
+the strategy×regime matrix are not reconciled (they are separate records). A control trade
+whose id has already fallen out of the 20-id tail cannot be identified as control. The
+streak is read from the 12-outcome window, so a longer unbroken streak clips to 12 when a
+rewrite touches it. Evidence decay is not replayed — the correction moves the current
+counters by one unit, which is what the flip means. Status is not re-evaluated. The toast
+path is pinned by contract, not by a browser probe: no probe seeds a skill AND a corrected
+trade.
+
+### 3. Import provenance (`69033a74`)
+
+The library's origin line falls back to `"seeded"` when frontmatter has no `source`, so
+every imported file was labelled with a provenance it did not have. The import path now
+stamps `source: imported` into the head's frontmatter — text-level, so an author's body,
+key order and comments are never reserialized — and an author-declared source wins. CRLF
+keeps its line ending. Contract 7 carries the four cases.
+
+**The trust grant itself was not built, and that is the audit result.** ThinkRail's grant
+protects an **auto-load** surface: a cloned repo's `.pi/` settings, skills and MCP servers
+load without a per-file choice. August has no such surface. A skill arrives only when the
+trader picks a file or a URL, the destructive/exfiltration scan refuses at import, and
+model-authored content goes through the human approval inbox. A per-project grant here
+would be a toggle that removes nothing. What was missing was not enforcement but the truth
+on the label; that is what landed.
+
+**Residues.** `source: imported` is a label, not an enforcement. Bundled support files are
+not stamped (they are not skills). An author-declared source wins even when it is false.
+
+**Gates.** `typecheck` · `check:contracts` **169** (contract 14 + four contract-7 cases) ·
+`check:boundaries` (523 files / 2,242 edges) · `check:docs` · `build` · `boot-probe` ·
+`render-probe` · `lint` · workflow-shells · the probe-script parse and lint steps.
+
+**Commits.** `79d0bfd5` (boundaries), `975a638c` (correction), `69033a74` (provenance).
