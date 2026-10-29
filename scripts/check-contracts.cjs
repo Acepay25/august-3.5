@@ -22,6 +22,8 @@
  *  13. src/services/analysis/DeskToolsService.ts — the desk tool budget (O-17):
  *      the initial set is a real subset, a restricted seat has nothing to load,
  *      a text-protocol turn never defers, and the catalogue covers the rest
+ *  14. src/utils/skillLedgerCorrection.ts — correcting a settled outcome moves
+ *      the W/L record, the window tail and the regime split; the R sums stay
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -656,6 +658,71 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         initialChars * 2 < totalChars, `${initialChars}/${totalChars}`);
 })();
 
+// ─── 14. correcting a settled outcome in a skill ledger ────────────────────
+// A correction flips WIN ↔ LOSS; the R sums stay (the journal corrects the
+// classification and the PnL separately), so the record moves by exactly one
+// unit in the counters, one slot in the window, one bucket in the regime
+// split. A repair that would go negative floors at zero.
+(() => {
+    const { applyOutcomeCorrection } = loadModule('src/utils/skillLedgerCorrection.ts');
+    const ledger = () => ({
+        wins: 3, losses: 5, consecutiveLosses: 0, recentOutcomes: 'WWLLLW',
+        controlWins: 4, controlLosses: 2, regimeStats: { trend: { w: 2, l: 3 } },
+    });
+
+    const toLoss = ledger();
+    const applied = applyOutcomeCorrection(toLoss,
+        { kind: 'followed', from: 'WIN', to: 'LOSS', indexFromEnd: 1, regime: 'trend' });
+    ok('correction: WIN→LOSS moves one win to a loss', toLoss.wins === 2 && toLoss.losses === 6,
+        `${toLoss.wins}/${toLoss.losses}`);
+    ok('correction: the newest tail slot flips and the streak grows',
+        toLoss.recentOutcomes === 'WWLLLL' && toLoss.consecutiveLosses === 4,
+        `${toLoss.recentOutcomes} streak=${toLoss.consecutiveLosses}`);
+    ok('correction: the regime split moves with it',
+        toLoss.regimeStats.trend.w === 1 && toLoss.regimeStats.trend.l === 4,
+        JSON.stringify(toLoss.regimeStats));
+    ok('correction: the tail rewrite is reported', applied.tailUpdated === true);
+
+    const toWin = {
+        wins: 2, losses: 6, consecutiveLosses: 4, recentOutcomes: 'LLLWWL',
+    };
+    applyOutcomeCorrection(toWin, { kind: 'followed', from: 'LOSS', to: 'WIN', indexFromEnd: 1 });
+    ok('correction: LOSS→WIN resets the trailing streak',
+        toWin.wins === 3 && toWin.losses === 5
+        && toWin.recentOutcomes === 'LLLWWW' && toWin.consecutiveLosses === 0,
+        `${toWin.recentOutcomes} streak=${toWin.consecutiveLosses}`);
+
+    const outside = {
+        wins: 3, losses: 5, consecutiveLosses: 2, recentOutcomes: 'WWWWWWWWWWWW',
+    };
+    const outRes = applyOutcomeCorrection(outside,
+        { kind: 'followed', from: 'WIN', to: 'LOSS', indexFromEnd: 13 });
+    ok('correction: outside the 12-outcome window moves only the lifetime counters',
+        outside.wins === 2 && outside.losses === 6
+        && outside.recentOutcomes === 'WWWWWWWWWWWW' && outside.consecutiveLosses === 2
+        && outRes.tailUpdated === false);
+
+    const control = {
+        wins: 3, losses: 5, consecutiveLosses: 0, recentOutcomes: 'WWL',
+        controlWins: 4, controlLosses: 2,
+    };
+    applyOutcomeCorrection(control, { kind: 'control', from: 'LOSS', to: 'WIN', indexFromEnd: 1 });
+    ok('correction: a control trade moves only the control counters',
+        control.controlWins === 5 && control.controlLosses === 1
+        && control.wins === 3 && control.losses === 5 && control.recentOutcomes === 'WWL',
+        JSON.stringify(control));
+
+    const floor = { wins: 0, losses: 0, consecutiveLosses: 0, recentOutcomes: '' };
+    applyOutcomeCorrection(floor, { kind: 'followed', from: 'WIN', to: 'LOSS', indexFromEnd: 1 });
+    ok('correction: a repair never pushes a record negative',
+        floor.wins === 0 && floor.losses === 1);
+
+    const same = { wins: 1, losses: 1, consecutiveLosses: 0, recentOutcomes: 'WL' };
+    const sameRes = applyOutcomeCorrection(same, { kind: 'followed', from: 'WIN', to: 'WIN', indexFromEnd: 1 });
+    ok('correction: an unchanged class moves nothing',
+        same.wins === 1 && same.losses === 1 && sameRes.tailUpdated === false);
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
@@ -663,4 +730,4 @@ if (failures.length) {
     console.error('CONTRACT CHECK FAIL — a pinned contract broke; fix the module, not this file.');
     process.exit(1);
 }
-console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing) and the desk tool budget all hold.');
+console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing), the desk tool budget and the skill outcome correction all hold.');

@@ -9,7 +9,9 @@ import { recalculateAnalysisMetrics } from '../utils/analysisUtils';
 import { sanitizeErrorText } from '../utils/runStatus';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
 import type { ConfirmOptions } from '../components/shared/ConfirmDialog';
-import type { LoggedTrade, TradeOutcome, TradeSummary } from '../types';
+import { reconcileSkillsAfterOutcomeCorrection } from '../services/learning/SkillMemoryService';
+import { TradeOutcome } from '../types';
+import type { LoggedTrade, TradeSummary } from '../types';
 import type { ProviderConfig } from '../types/provider';
 
 export interface UseTradeJournalActionsArgs {
@@ -389,8 +391,41 @@ export const useTradeJournalActions = (args: UseTradeJournalActionsArgs): UseTra
             void updateThinkingOutcome(tradeId, outcome, id, activeUsernameRef.current || 'default', { pnlAmount: trade.pnlAmount, pnlPercent: trade.pnlPercent }).catch(err => {
                 console.warn('[TradeLog] Failed to update thinking outcome:', err);
             });
+            // The settlement pass folded this trade into the skills that carried
+            // it. The row and the fold must not disagree: move the record to the
+            // corrected class, and say so — a silent repair is a second opinion
+            // the trader cannot see. Only WIN↔LOSS corrections were ever folded;
+            // the service owns that guard.
+            if (trade.outcome !== outcome) {
+                const corrected: LoggedTrade = {
+                    ...trade,
+                    outcome,
+                    correctedFrom: trade.outcome,
+                    correctedAt,
+                    resolutionSource: 'correction' as const,
+                    outcomeResolvedAt: correctedAt,
+                };
+                void reconcileSkillsAfterOutcomeCorrection(corrected, activeUsernameRef.current || 'default')
+                    .then(result => {
+                        if (result.reconciled.length > 0) {
+                            toast.success(
+                                'Skill record corrected',
+                                `${result.reconciled.length} skill${result.reconciled.length === 1 ? '' : 's'} updated to the corrected outcome.`,
+                            );
+                        }
+                    })
+                    .catch(err => {
+                        // A repair that never lands is a lost learning event;
+                        // surface it like every other notebook write.
+                        console.error('[TradeLog] Skill record correction failed:', err);
+                        toast.error?.(
+                            'Skill record not corrected',
+                            err instanceof Error ? err.message : 'The notebook write failed.',
+                        );
+                    });
+            }
         }
-    }, [setLoggedTrades, loggedTradesRef, activeUsernameRef]);
+    }, [setLoggedTrades, loggedTradesRef, activeUsernameRef, toast]);
 
     // Fill in / correct PnL from the journal card (autopilot-logged trades
     // only carry the leveraged percent, so the dollar figure needs a manual

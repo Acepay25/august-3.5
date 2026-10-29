@@ -32,6 +32,7 @@ import { parsePrice } from '../../utils/analysisUtils';
 import { formatCraftedSkillBody, refineSkillFromLosses } from './SkillCraftService';
 import { recordLearningRulesFromPostMortem } from './learningRules';
 import { captureUnknownFrontmatter, declaredCompatibility, hasUseWhenTrigger, skillBodyCaps, skillRunsHere, type SkillRuntime } from '../../utils/skillFrontmatter';
+import { applyOutcomeCorrection, type CorrectionOutcome } from '../../utils/skillLedgerCorrection';
 import { DESK_TOOL_NAMES } from '../../utils/toolKinds';
 import {
     recordWorthGateApproval,
@@ -2404,6 +2405,78 @@ export const applySkillEvidence = async (
         }
     }
 };
+
+export interface SkillCorrectionReconciliation {
+    /** Slugs whose record moved to the corrected outcome. */
+    reconciled: string[];
+    /** Skills that named the trade but could not be reconciled, with the why. */
+    skipped: Array<{ slug: string; reason: string }>;
+}
+
+const reconcileSkillsAfterOutcomeCorrectionUnlocked = async (
+    corrected: LoggedTrade,
+    username: string,
+): Promise<SkillCorrectionReconciliation> => {
+    const result: SkillCorrectionReconciliation = { reconciled: [], skipped: [] };
+    const from = corrected.correctedFrom;
+    const to = corrected.outcome;
+    const settled = (outcome: TradeOutcome | undefined): outcome is TradeOutcome.WIN | TradeOutcome.LOSS =>
+        outcome === TradeOutcome.WIN || outcome === TradeOutcome.LOSS;
+    // A correction between two SETTLED classes is the case this owns. A row
+    // that enters or leaves WIN/LOSS was never folded (the evidence pass skips
+    // it), so its arithmetic is a different operation and is not invented here.
+    if (!settled(from) || !settled(to) || from === to) return result;
+    const fromClass: CorrectionOutcome = from === TradeOutcome.WIN ? 'WIN' : 'LOSS';
+    const toClass: CorrectionOutcome = to === TradeOutcome.WIN ? 'WIN' : 'LOSS';
+
+    for (const file of getMemoryFiles().files.filter(isSkillFile)) {
+        const meta = parseSkillMarkdown(file.content);
+        if (!meta) continue;
+        const followed = meta.tradeIds.includes(corrected.id);
+        const control = meta.controlIds?.includes(corrected.id) ?? false;
+        if (!followed && !control) {
+            if (meta.overriddenIds?.includes(corrected.id)) {
+                result.skipped.push({
+                    slug: file.name.replace(/\.md$/i, ''),
+                    reason: 'the skill was injected and ignored; its outcome never counted',
+                });
+            }
+            continue;
+        }
+        const indexFromEnd = followed
+            ? meta.tradeIds.length - meta.tradeIds.indexOf(corrected.id)
+            : 1;
+        applyOutcomeCorrection(meta, {
+            kind: followed ? 'followed' : 'control',
+            from: fromClass,
+            to: toClass,
+            indexFromEnd,
+            regime: followed ? corrected.marketRegime : undefined,
+        });
+        meta.modifiedAt = new Date().toISOString();
+        await updateMemoryFileUnlocked(file.id, {
+            content: serializeSkill(meta, titleFromMeta(meta)),
+            enabled: skillEnabledFlag(meta),
+        }, username);
+        result.reconciled.push(file.name.replace(/\.md$/i, ''));
+    }
+    return result;
+};
+
+/**
+ * Move the skills that counted a trade to its corrected outcome.
+ *
+ * The trade row keeps the correction (`correctedFrom`/`correctedAt`); this
+ * updates the durable FOLD that was made from the old class. It moves the
+ * win/loss counters, the recent-outcomes tail, the streak and the regime
+ * split — never the R sums, which the correction does not change — and it
+ * never queues a proposal or refines a rule: a repair is not a learning pass.
+ */
+export const reconcileSkillsAfterOutcomeCorrection = async (
+    corrected: LoggedTrade,
+    username: string,
+): Promise<SkillCorrectionReconciliation> =>
+    withNotebookWriteLock(() => reconcileSkillsAfterOutcomeCorrectionUnlocked(corrected, username));
 
 /** Age of the freshest recorded evidence in days (Infinity when unknown). */
 const evidenceAgeDays = (meta: SkillMeta): number => {
