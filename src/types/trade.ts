@@ -25,8 +25,16 @@ export interface BenchmarkAlpha {
   unavailableReason?: string;
 }
 
+/** Where the row came from. Staged for the signal fold: `imported` history is
+ *  user behaviour and must never confirm a playbook; `signal` is reserved for
+ *  the ledger. Absent on legacy rows — a reader defaults it to `manual`. */
+export type TradeSource = 'manual' | 'imported' | 'signal';
+
 export interface LoggedTrade {
   id: string;
+  /** Provenance of the row. Optional for legacy rows; every reader defaults
+   *  an absent value to 'manual' (see `normalizeTradeSource`). */
+  source?: TradeSource;
   analysis: TradeAnalysis;
   /** Pattern-memory gate outcome at analysis time (journal badge). */
   patternMemoryGate?: PatternMemoryGateView;

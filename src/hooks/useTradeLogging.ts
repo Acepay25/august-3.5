@@ -362,6 +362,10 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
 
         const loggedTrade: LoggedTrade = {
             id: message.id,
+            // Every row this path writes is the trader's own log. Imported
+            // history and tape-resolved signals use their own writers when
+            // they land; a legacy row reads as manual.
+            source: 'manual',
             // Labelled here, at the row, because this is the one place every
             // journal row passes through — a presented plan, a prose chip or a
             // manual log all arrive here. The verdict finalizer used to stamp it
@@ -777,6 +781,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         // Log the trade
         const loggedTrade: LoggedTrade = {
             id: candidate.message.id,
+            source: 'manual',
             analysis: withDetectedTradeType(candidate.message.analysis),
             outcome: TradeOutcome.ENTRY_NOT_HIT,
             timestamp: new Date().toISOString(),

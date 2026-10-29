@@ -28,6 +28,7 @@
  *      and observed-never-instructions, against a real localStorage shim
  *  16. src/services/trade/tradeChatContext.ts — the skills index: confirmed
  *      under APPLY, candidates a count, never a usable name
+ *  17. src/utils/tradeSource.ts — a legacy journal row defaults to 'manual'
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -855,6 +856,18 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         && /candidate hypothesis/.test(onlyCandidates)
         && !onlyCandidates.includes('cand-x'),
         onlyCandidates);
+})();
+
+// ─── 17. trade provenance defaults ─────────────────────────────────────────
+(() => {
+    const ts = loadModule('src/utils/tradeSource.ts');
+    ok('trade source: a legacy row (no field) is manual',
+        ts.normalizeTradeSource({}) === 'manual');
+    ok('trade source: an explicit source is preserved',
+        ts.normalizeTradeSource({ source: 'imported' }) === 'imported'
+        && ts.withTradeSource({ source: 'signal' }).source === 'signal');
+    ok('trade source: normalization keeps the row and stamps manual',
+        JSON.stringify(ts.withTradeSource({ id: 't1' })) === JSON.stringify({ id: 't1', source: 'manual' }));
 })();
 
 // ─── report ────────────────────────────────────────────────────────────────

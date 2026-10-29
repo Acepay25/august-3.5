@@ -19,6 +19,7 @@ import { setSqliteDb, runExclusiveWrite, WritePermit } from './SqliteServiceHelp
 import { getAllThinkingRecordsByUser, saveThinkingBatch } from './ThinkingStoreService';
 import { LEGACY_LEVERAGE } from '../../utils/conversationUtils';
 import { parsePrice } from '../../utils/analysisUtils';
+import { withTradeSource } from '../../utils/tradeSource';
 
 /**
  * Parse a stored JSON blob defensively. A single corrupt cell (e.g. from an
@@ -407,7 +408,7 @@ export const sqliteGetUserProfile = async (username: string): Promise<UserProfil
         // Ensure tradeType is restored cleanly if missing
         const tradeType = row.tradeType || meta.tradeType || undefined;
 
-        return {
+        return withTradeSource({
             id: row.id,
             timestamp: row.timestamp,
             outcome: row.outcome,
@@ -419,7 +420,7 @@ export const sqliteGetUserProfile = async (username: string): Promise<UserProfil
             slOptimizationData: safeParseJson(row.slOptimizationData, undefined),
             tradeType,
             ...meta // Spread metadata to restore extended fields
-        };
+        });
     });
 
     // Get conversations

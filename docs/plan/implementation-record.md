@@ -2237,3 +2237,22 @@ live capture above confirms it on the real prompt path. `typecheck` · `check:co
 **Residue.** The analysis-path retrieval can still show a candidate with a `prior` flag as context
 (labeled 0W/0L), not under APPLY; the index itself no longer names candidates, so finding one is a
 deliberate `get_notebook_map`/`recall` act.
+
+## 45. Trade provenance: a staged `source` field (2026-10-29)
+
+**Owner ruling.** Add `source ('manual' | 'imported' | 'signal')` to every journal row, default
+existing rows to `manual`, with no behavior change yet.
+
+**What landed.** `types/trade.ts` › `TradeSource`; `utils/tradeSource.ts` › `normalizeTradeSource`
+and `withTradeSource`; both load paths (the profile/web loader and `SqliteService`) normalize a
+legacy row to `manual`; both row-construction sites in `useTradeLogging` stamp `manual`. The SQLite
+per-trade metadata column already carries extended fields, so `source` round-trips in the row JSON;
+there is deliberately no indexed `source` column yet.
+
+**Verification.** Contract 17: an absent field reads `manual`, an explicit source survives, and
+normalization keeps the row. `typecheck` · `check:contracts` **193** · `build` · `boot-probe` ·
+`render-probe`.
+
+**Residue.** Nothing reads `source` yet — that is the ruling. The first consumers will be the signal
+fold (`imported` never confirms a playbook; `signal` is the ledger) and the trade-history importer if
+it is ever unfrozen.

@@ -46,6 +46,7 @@ import { createNewConversation, LEGACY_LEVERAGE } from '../utils/conversationUti
 import { recalculateAnalysisMetrics } from '../utils/analysisUtils';
 import { settleMessageRow } from '../utils/rowSettlement';
 import { getFirstReadyProvider } from '../utils/providerUtils';
+import { withTradeSource } from '../utils/tradeSource';
 import { DEFAULT_FRAMEWORKS } from '../constants/models';
 import { MAX_TRADE_SUMMARIES } from './useTradeLogging';
 import type { Message, Conversation, LoggedTrade, CustomInstruction, CustomInstructionsMap, TradeSummary, UserProfile } from '../types';
@@ -416,7 +417,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                 const convs = correctedConvs.length > 0 ? correctedConvs : [createNewConversation()];
                 setConversationHistory(convs);
 
-                const loadedTrades = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || LEGACY_LEVERAGE }));
+                const loadedTrades = (profile.tradeLog || []).map(t => withTradeSource({ ...t, leverage: t.leverage || LEGACY_LEVERAGE }));
                 setLoggedTrades(loadedTrades);
                 syncConfluenceFromTradeLog(loadedTrades);
 
@@ -472,7 +473,7 @@ export const useUserProfileLoader = (args: UseUserProfileLoaderArgs): UseUserPro
                     }
                 }
 
-                const tradeLogData = (profile.tradeLog || []).map(t => ({ ...t, leverage: t.leverage || LEGACY_LEVERAGE }));
+                const tradeLogData = (profile.tradeLog || []).map(t => withTradeSource({ ...t, leverage: t.leverage || LEGACY_LEVERAGE }));
                 syncFromTradeLog(tradeLogData);
                 syncRollingWindowFromTradeLog(tradeLogData);
                 // The confidence buckets are counters with no entry log, so a
