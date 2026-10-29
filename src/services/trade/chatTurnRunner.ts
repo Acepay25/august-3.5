@@ -71,7 +71,7 @@ import {
 } from './chatPanel';
 import { createPanelMailbox, formatDmEventLine } from '../analysis/PanelMailbox';
 import type { ChartSnapshot } from '../../components/trade/TradingChart';
-import { intervalSeconds } from '../../components/trade/TradingChart';
+import { intervalSeconds } from '../../utils/chartIntervals';
 import type { AgentBot } from '../agents/agentRoster';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import { isVisionModel } from '../../utils/modelUtils';

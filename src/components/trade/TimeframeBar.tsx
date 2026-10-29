@@ -11,12 +11,8 @@ import React, { useRef, useState } from 'react';
 import { Check, ChevronDown, Settings } from '../shared/Icons';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { shouldOpenUpward } from '../../utils/popoverPlacement';
-import {
-    CHART_INTERVALS,
-    readTfBarSelection,
-    writeTfBarSelection,
-    type ChartInterval,
-} from './TradingChart';
+import { readTfBarSelection, writeTfBarSelection } from './TradingChart';
+import { CHART_INTERVALS, type ChartInterval } from '../../utils/chartIntervals';
 
 export interface TimeframeBarProps {
     interval: ChartInterval;

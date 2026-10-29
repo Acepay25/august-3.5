@@ -17,7 +17,7 @@
 import React, { useEffect, useState } from 'react';
 import { fetchKlines } from '../../services/analysis/KlineService';
 import { biasChips, type BiasChip } from '../../services/trade/regime';
-import { toKlineInterval, type ChartInterval } from './TradingChart';
+import { toKlineInterval, type ChartInterval } from '../../utils/chartIntervals';
 
 /** Matches the chart's REST refresh cadence — the regime moves slower than
  *  price, and the kline cache already absorbs most of this traffic. */

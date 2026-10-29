@@ -35,6 +35,7 @@
     "boot-probe": "node scripts/boot-probe.cjs",
     "render-probe": "node scripts/render-probe.cjs",
     "check:contracts": "node scripts/check-contracts.cjs",
+    "check:boundaries": "node scripts/check-boundaries.cjs",
     "skill-approval-probe": "node scripts/probe-skill-approval.cjs",
     "installer-smoke": "node scripts/installer-smoke.cjs",
     "verify:signature": "node scripts/verify-release-signature.cjs",

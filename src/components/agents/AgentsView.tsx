@@ -51,7 +51,7 @@ import AgentDetailCard from './AgentDetailCard';
 import { formatModelDisplayName } from '../../utils/providerUtils';
 import SymbolPicker from '../trade/SymbolPicker';
 import TimeframeBar from '../trade/TimeframeBar';
-import type { ChartInterval } from '../trade/TradingChart';
+import type { ChartInterval } from '../../utils/chartIntervals';
 import { useSymbolUniverse } from '../../hooks/useSymbolUniverse';
 import { MENU_W, RowMenu, type RowMenuItem } from './RowMenu';
 import GoalRailPanel from './GoalRailPanel';

@@ -54,6 +54,15 @@ runs:
       shell: bash
       run: npm run check:contracts
 
+    # The import edges no compiler can see: a service reaching into a
+    # component at runtime, a util reaching up, or a cjs root reaching src.
+    # Type-only imports are erased and stay legal where the rule says so; the
+    # script's own reach control runs before the tree, and its population
+    # floor fails a scan that collapsed.
+    - name: Import boundaries
+      shell: bash
+      run: npm run check:boundaries
+
     # The probe scripts are the gates; a syntax error in one is otherwise
     # invisible until a machine runs it and silently reports nothing.
     - name: Probe and tooling scripts parse
