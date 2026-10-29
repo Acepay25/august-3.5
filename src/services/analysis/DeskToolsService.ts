@@ -838,6 +838,7 @@ const TOOL_LABELS: Record<string, string> = {
     propose_strategy: 'strategy plan',
     revise_skill: 'skill revision',
     recall: 'notebook recall',
+    load_tools: 'tool catalogue',
     get_setup_history_stats: 'setup history',
     get_trade_log: 'trade log',
     run_screener: 'screener',
@@ -977,6 +978,13 @@ const rawToolDigest = (name: string, content: string): string => {
             const s = Array.isArray(parsed.support) ? parsed.support.length : 0;
             const v = parsed.vwap && typeof parsed.vwap === 'object' ? ' · VWAP' : '';
             return `${r} resistance · ${s} support${v}`;
+        }
+        if (name === 'load_tools') {
+            const loaded = Array.isArray(parsed.loaded) ? parsed.loaded.length : 0;
+            const unknown = Array.isArray(parsed.unknown) ? parsed.unknown.length : 0;
+            return unknown > 0
+                ? `${loaded} loaded · ${unknown} unknown`
+                : `${loaded} tool${loaded === 1 ? '' : 's'} loaded`;
         }
     } catch {
         // Not JSON — fall through to the generic line.
@@ -1854,6 +1862,91 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
 ];
 
 /**
+ * The tools every desk turn carries on the wire.
+ *
+ * The full catalog is 52k characters of JSON schema — ~13k tokens — re-sent on
+ * every round of a turn (up to 8). Most of it serves calls a turn rarely makes
+ * (goal authoring, skill proposals, the self-change ledger). These are the
+ * tools a turn actually reaches for: the market reads every answer is grounded
+ * in, the notebook lookup, web search, the human question, and the stored-result
+ * reader. Everything else is one `load_tools` call away, listed by name and one
+ * line in the catalogue the system prompt carries.
+ *
+ * A tool added here is paid for on EVERY round; a tool left out costs one round
+ * only when a turn needs it. `check:contracts` pins that every name is real.
+ */
+export const INITIAL_DESK_TOOL_NAMES: readonly string[] = [
+    'get_market_packet',
+    'get_chart_view',
+    'get_all_timeframes',
+    'get_indicators',
+    'get_derivatives',
+    'get_order_book',
+    'get_price_snapshot',
+    'get_key_levels',
+    'get_session_context',
+    'read_tool_output',
+    'recall',
+    'web_search',
+    'ask_user_input',
+];
+
+/** The schema-on-demand tool. NOT a desk capability: it is not in
+ *  DESK_TOOL_DEFINITIONS, so Settings' catalogue and the seat allow-lists do
+ *  not carry it; the loop offers it itself when a turn has deferred tools. */
+export const LOAD_TOOLS_DEFINITION: DeskToolDefinition = {
+    type: 'function',
+    function: {
+        name: 'load_tools',
+        description:
+            'Load tools that are not on this turn yet. Pass exact names from the TOOL CATALOGUE block in your instructions; their schemas arrive on the next round, then you can call them. Load several at once when a question needs them.',
+        parameters: {
+            type: 'object',
+            properties: {
+                names: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Exact tool names from the TOOL CATALOGUE block.',
+                },
+            },
+            required: ['names'],
+            additionalProperties: false,
+        },
+    },
+};
+
+/** The catalogue line for one deferred tool: its exact name and a bounded
+ *  description. The name is what `load_tools` takes; the line exists so the
+ *  seat knows the tool is there at all. */
+const catalogueLine = (def: DeskToolDefinition): string => {
+    const desc = def.function.description.replace(/\s+/g, ' ').trim();
+    const bounded = desc.length > 110 ? `${desc.slice(0, 110).replace(/\s+\S*$/, '')}…` : desc;
+    return `- ${def.function.name}: ${bounded}`;
+};
+
+/** The deferred names a turn may load, gated by the seat's own allow-list.
+ *  ONE rule, read by the prompt composer and the loop's executor. */
+export const loadableDeskToolNamesFor = (
+    nativeTools: boolean,
+    allowedTools?: readonly string[],
+): string[] => nativeTools
+    ? DESK_TOOL_DEFINITIONS
+        .map(d => d.function.name)
+        .filter(name => !INITIAL_DESK_TOOL_NAMES.includes(name) && seatAllows(allowedTools, name))
+    : [];
+
+/** Build the catalogue for the deferred names THIS turn can load. Pure and
+ *  exported: the loop and the contract check read the same function. */
+export const buildDeskToolCatalogue = (names: readonly string[]): string => {
+    const byName = new Map(DESK_TOOL_DEFINITIONS.map(d => [d.function.name, d]));
+    return names
+        .map(name => byName.get(name))
+        .filter((def): def is DeskToolDefinition => Boolean(def))
+        .map(catalogueLine)
+        .join('\n');
+};
+
+/**
  * Chart-action tools — everything the user can do on the trade chart, the
  * model can do too. These reach the model ONLY when the caller wires an
  * executor (executePanelTool): the Chart AI panel owns the live canvas, so
@@ -2047,7 +2140,7 @@ export const CHART_ACTION_TOOL_DEFS: DeskToolDefinition[] = [
  *
  * Pass `undefined` for "everything is offered" (the dock, the analysis send).
  */
-export const deskToolsMandateFor = (offered?: readonly string[]): string => {
+export const deskToolsMandateFor = (offered?: readonly string[], deferred = false): string => {
     const has = (name: string): boolean => offered === undefined || offered.includes(name);
     const canViewChart = has('get_chart_view');
     const canDraw = has('draw_on_chart') || has('mark_trade_levels');
@@ -2091,6 +2184,7 @@ export const deskToolsMandateFor = (offered?: readonly string[]): string => {
 
     return `
 **DESK TOOLS (available anytime on this turn)**
+${deferred ? 'ONLY THE CORE TOOLS ARE LOADED. The TOOL CATALOGUE at the end lists the rest; call `load_tools` with exact names before you rely on one, and load several at once when the question needs them. A tool you have not loaded cannot be called this round.' : ''}
 You can call live tools before you speak, on any question where a fresh fact would change the answer.
 Use them for: news/macro catalysts, funding/OI crowding, order-book walls, liquidations, BTC context on alts, session timing, or a fresh price print.
 The chart symbol is only the DEFAULT: the per-symbol market tools accept a \`symbol\` argument, so when the user asks about another coin ("what about eth, can we trade there?") pull that coin directly — get_market_packet or get_all_timeframes with symbol ETHUSDT gives the full multi-timeframe read without anyone switching charts. run_screener is the exception: it scans the whole futures universe and takes no symbol.
@@ -4624,6 +4718,15 @@ export async function runDeskToolLoop(params: {
      *  with when it was answered, because the promise the notice makes is the
      *  cache's promise and that one expires. */
     const answeredThisTurn = new Map<string, number>();
+    /** Tool schemas loaded on demand this turn. Reset with the turn: a new
+     *  question pays for the tools it actually needs, not the last one's. */
+    const loadedToolNames = new Set<string>();
+    const initialDeskDefs = DESK_TOOL_DEFINITIONS.filter(d => INITIAL_DESK_TOOL_NAMES.includes(d.function.name));
+    /** Deferred names THIS seat may call. A restricted seat with a narrow list
+     *  can have nothing to defer, and then no catalogue/loader is offered at
+     *  all — every definition fits, and a load round would be pure cost. */
+    const loadableDeskToolNames = loadableDeskToolNamesFor(nativeTools, allowedTools);
+    const canLoadTools = loadableDeskToolNames.length > 0;
     let finalText = '';
     let reasoning = '';
 
@@ -4640,11 +4743,20 @@ export async function runDeskToolLoop(params: {
     let repairEffort: ReasoningEffort | undefined;
     for (let round = 0; round < MAX_DESK_TOOL_ROUNDS; round++) {
         const forgedDefs = confirmedForgedToolDefinitions();
+        const deskDefs = canLoadTools
+            ? [
+                ...initialDeskDefs,
+                ...DESK_TOOL_DEFINITIONS.filter(d => loadedToolNames.has(d.function.name)),
+                LOAD_TOOLS_DEFINITION,
+            ]
+            : DESK_TOOL_DEFINITIONS;
         const allDefs = forgedDefs.length > 0
-            ? (extraToolDefs.length > 0 ? [...DESK_TOOL_DEFINITIONS, ...forgedDefs, ...extraToolDefs] : [...DESK_TOOL_DEFINITIONS, ...forgedDefs])
-            : (extraToolDefs.length > 0 ? [...DESK_TOOL_DEFINITIONS, ...extraToolDefs] : DESK_TOOL_DEFINITIONS);
+            ? (extraToolDefs.length > 0 ? [...deskDefs, ...forgedDefs, ...extraToolDefs] : [...deskDefs, ...forgedDefs])
+            : (extraToolDefs.length > 0 ? [...deskDefs, ...extraToolDefs] : deskDefs);
         const effectiveTools = nativeTools
-            ? allDefs.filter(d => seatAllows(allowedTools, d.function.name))
+            // `load_tools` is the one name the seat's allow-list must not filter
+            // out: it is the mechanism by which the rest of the list arrives.
+            ? allDefs.filter(d => d.function.name === 'load_tools' || seatAllows(allowedTools, d.function.name))
             : undefined;
         // A stop click must end the loop BETWEEN rounds — never fire one
         // more request on an already-dead signal.
@@ -4888,6 +5000,10 @@ export async function runDeskToolLoop(params: {
         // executor at all (the gate used to live only in the core executor,
         // and custom_* routed around it).
         const forgedResults: DeskToolResult[] = [];
+        /** Answers to `load_tools` calls. The schemas themselves ride the NEXT
+         *  round's request; this result only acknowledges and names what was
+         *  unknown, so the seat does not re-ask blind. */
+        const loadResults: DeskToolResult[] = [];
         const builtInCalls: DeskToolCall[] = [];
         // THE BUDGET IS ENFORCED FROM HERE DOWN, not merely announced: past
         // DESK_TURN_BUDGET_MS no NEW lookup runs — forged or built-in — each
@@ -4897,6 +5013,32 @@ export async function runDeskToolLoop(params: {
         // wrap-up notice asked for (the 2026-10-27 audit L-9).
         const overBudget = budgetExceeded();
         for (const call of coreCalls) {
+            if (call.name === 'load_tools') {
+                const raw = call.arguments?.names;
+                const requested = Array.isArray(raw) ? raw.filter((n): n is string => typeof n === 'string') : [];
+                const loaded: string[] = [];
+                const unknown: string[] = [];
+                for (const name of requested) {
+                    // Only a catalogued name THIS seat can call is loadable — the
+                    // catalogue is the offer, and the seat allow-list still owns
+                    // the permission.
+                    if (!loadableDeskToolNames.includes(name)) { unknown.push(name); continue; }
+                    loadedToolNames.add(name);
+                    if (!loaded.includes(name)) loaded.push(name);
+                }
+                loadResults.push({
+                    toolCallId: call.id,
+                    name: 'load_tools',
+                    ok: true,
+                    content: JSON.stringify({
+                        loaded,
+                        ...(unknown.length > 0
+                            ? { unknown, note: 'Names must come from the TOOL CATALOGUE block.' }
+                            : {}),
+                    }),
+                });
+                continue;
+            }
             if (!call.name.startsWith('custom_')) { builtInCalls.push(call); continue; }
             if (!seatAllows(allowedTools, call.name)) {
                 forgedResults.push(rejectedResult(call, `${call.name} rejected: this tool is not available on this seat.`));
@@ -4943,7 +5085,7 @@ export async function runDeskToolLoop(params: {
                 onSlowCall: label => onToolProgress?.(`${label} · still working…`),
             })
             : [];
-        const results = [...replays, ...extraResults, ...forgedResults, ...coreResults];
+        const results = [...replays, ...extraResults, ...forgedResults, ...loadResults, ...coreResults];
         if (forgedResults.length > 0 || coreResults.some(r => UNTRUSTED_RESULT_TOOLS.has(r.name))) {
             untrustedSeen = true;
         }
@@ -5141,8 +5283,9 @@ export function withDeskToolsSystemPrompt(
     messages: ChatMessage[],
     nativeTools: boolean,
     offeredTools?: readonly string[],
+    catalogue?: string,
 ): ChatMessage[] {
-    const block = `${deskToolsMandateFor(offeredTools)}${nativeTools ? '' : TEXT_TOOL_FALLBACK_PROMPT}`;
+    const block = `${deskToolsMandateFor(offeredTools, Boolean(catalogue))}${nativeTools ? '' : TEXT_TOOL_FALLBACK_PROMPT}${catalogue ? `\n\n**TOOL CATALOGUE (call load_tools with these names)**\n${catalogue}` : ''}`;
     const out = messages.map(m => ({ ...m }));
     const sysIdx = out.findIndex(m => m.role === 'system');
     if (sysIdx >= 0) {
@@ -5153,6 +5296,15 @@ export function withDeskToolsSystemPrompt(
             out[sysIdx] = {
                 ...out[sysIdx],
                 content: `${contract}${prevText}\n\n${block}`.trim(),
+            };
+        } else if (catalogue && !prevText.includes('TOOL CATALOGUE')) {
+            // The caller pre-composed a desk mandate (the analysis path uses the
+            // static DESK_TOOLS_PROMPT). It cannot know which tools THIS turn
+            // deferred, so the catalogue is appended here — without it the seat
+            // sees the core schemas and has no way to name the rest.
+            out[sysIdx] = {
+                ...out[sysIdx],
+                content: `${prevText}\n\n**TOOL CATALOGUE (call load_tools with these names)**\nOnly the core tools are loaded on this turn. Call \`load_tools\` with exact names from this list before you rely on one.\n${catalogue}`,
             };
         }
         return out;
@@ -5313,7 +5465,9 @@ export async function* streamChatWithDeskTools(
         : effectiveAllowed && effectiveAllowed.length > 0
             ? effectiveAllowed
             : allToolNames;
-    const enriched = withDeskToolsSystemPrompt(outbound, nativeTools, offeredToolNames);
+    const loadableDeskToolNames = loadableDeskToolNamesFor(nativeTools, effectiveAllowed);
+    const toolCatalogue = loadableDeskToolNames.length > 0 ? buildDeskToolCatalogue(loadableDeskToolNames) : undefined;
+    const enriched = withDeskToolsSystemPrompt(outbound, nativeTools, offeredToolNames, toolCatalogue);
     // Discoverability: the capability block rides EVERY seat turn so models
     // learn they can DM; the inbox notice (unread count + read first)
     // appends only when mail is actually waiting.

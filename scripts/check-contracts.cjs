@@ -19,6 +19,9 @@
  *  11. src/utils/promptIndexBudget.ts — one shared table, scaled to the window
  *  12. src/services/selfMod/* + src/utils/toolKinds.ts — the policy tables: what a
  *      self-change cannot move, and what a goal can never grant
+ *  13. src/services/analysis/DeskToolsService.ts — the desk tool budget (O-17):
+ *      the initial set is a real subset, a restricted seat has nothing to load,
+ *      a text-protocol turn never defers, and the catalogue covers the rest
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -556,6 +559,42 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         JSON.stringify(tk.intersectGoalPolicy(SEAT, ['made_up_tool'], REAL)) === JSON.stringify(['']));
 })();
 
+// ─── 13. the desk tool budget (O-17) ───────────────────────────────────────
+// On a native-tool provider the 42 schema definitions are re-sent on EVERY
+// round of a turn, so most now sit behind `load_tools`. The failure this pins
+// is silent: a name that drifts out of the definitions leaves the tool on
+// neither the wire nor the catalogue, and no browser probe can see a schema it
+// never renders. Bundled, not text-scanned — DeskToolsService loads cleanly in
+// node, and a real subset check beats a regex over source.
+(() => {
+    const desk = loadModule('src/services/analysis/DeskToolsService.ts');
+    const defs = desk.DESK_TOOL_DEFINITIONS.map(d => d.function.name);
+    const initial = [...desk.INITIAL_DESK_TOOL_NAMES];
+    const loadable = desk.loadableDeskToolNamesFor(true, undefined);
+    const narrow = desk.loadableDeskToolNamesFor(true, ['get_market_packet']);
+    const text = desk.loadableDeskToolNamesFor(false, undefined);
+    const catalogue = desk.buildDeskToolCatalogue(loadable);
+    const initialChars = desk.DESK_TOOL_DEFINITIONS
+        .filter(d => initial.includes(d.function.name))
+        .reduce((n, d) => n + JSON.stringify(d).length, 0);
+    const totalChars = desk.DESK_TOOL_DEFINITIONS.reduce((n, d) => n + JSON.stringify(d).length, 0);
+
+    ok('desk budget: every initial name is a real desk tool', initial.every(n => defs.includes(n)));
+    ok('desk budget: the initial set carries no duplicate', new Set(initial).size === initial.length);
+    ok('desk budget: the loader is not itself a desk tool', !defs.includes('load_tools'));
+    ok('desk budget: a native unrestricted turn defers exactly the rest',
+        loadable.length === defs.length - initial.length, `${loadable.length} vs ${defs.length - initial.length}`);
+    ok('desk budget: the catalogue covers every deferrable tool exactly once',
+        catalogue.split('\n').length === loadable.length
+        && loadable.every(n => catalogue.includes(`- ${n}:`)));
+    ok('desk budget: the catalogue never offers the loader itself', !catalogue.includes('load_tools'));
+    ok('desk budget: a seat restricted to initial tools has nothing to load',
+        narrow.length === 0, JSON.stringify(narrow));
+    ok('desk budget: a text-protocol turn never defers', text.length === 0);
+    ok('desk budget: the initial set is a minority of the schema bytes',
+        initialChars * 2 < totalChars, `${initialChars}/${totalChars}`);
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
@@ -563,4 +602,4 @@ if (failures.length) {
     console.error('CONTRACT CHECK FAIL — a pinned contract broke; fix the module, not this file.');
     process.exit(1);
 }
-console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget and both policy tables (self-modification, goal tool narrowing) all hold.');
+console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing) and the desk tool budget all hold.');
