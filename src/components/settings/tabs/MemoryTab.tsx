@@ -26,10 +26,7 @@ const MemoryTab: React.FC<{ tab: MemoryTabProps }> = ({ tab: props }) => {
 
     return (
         <div className="space-y-5 animate-fade-in" data-testid="memory-tab">
-            <SettingsPageHeader
-                title="Memory"
-                description="What August remembers about you, and the notebook it works from."
-            />
+            <SettingsPageHeader title="Memory" />
 
             <ProfileMemoryCard
                 memoryModel={model}
