@@ -3,6 +3,11 @@
 August Trading is a **local-first trading work harness for one trader** — the owner. It is not a
 chat window with a chart attached, and it is not an execution terminal.
 
+> **Current focus (owner, 2026-10-29).** The harness cannot place orders yet, so P&L and settlement
+> are accounting, not the product line. Until execution exists, every change must improve **market
+> analysis, accuracy or signals**. See [focus.md](focus.md), which outranks this page when they
+> disagree.
+
 ## What it does
 
 The work runs in a loop, and every surface exists to serve one step of it:
@@ -52,6 +57,12 @@ Steps 1 and 2 exist. Step 3 is wired but starved by the size of the outcome corp
 idle by data, not by bug. Step 4 is the open work. `docs/plan/open-items.md` is the register of what
 is missing, and the highest-leverage item is not code: whether an outcome needs a human click (see
 `docs/plan/decisions.md`).
+
+**The current build order is not this loop.** Until execution exists, the learning loop that
+matters is **signal → price outcome**: a signal is recorded, the tape resolves it against its target
+and invalidation, and the measured result feeds the next signal. The journal loop above remains the
+trader's own record and the loop August will need when it can execute; it is not what the next
+feature should serve. See [focus.md](focus.md).
 
 ## Who this is for
 

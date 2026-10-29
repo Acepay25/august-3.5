@@ -4,6 +4,7 @@
 
 | Read | For |
 |---|---|
+| [docs/product/focus.md](docs/product/focus.md) | **the current focus**: analysis, accuracy and signals; P&L is not the product line |
 | [docs/product/goal.md](docs/product/goal.md) | what this is, who it's for, the loop, the non-goals |
 | [docs/product/ux/](docs/product/ux/) | what the trader sees: [charter](docs/product/ux/charter.md), [surfaces](docs/product/ux/surfaces.md), [voice](docs/product/ux/voice.md) |
 | [docs/engineering/gates.md](docs/engineering/gates.md) | what proves a change, and what each gate cannot see |
@@ -20,6 +21,20 @@ and live market data through a bounded set of tools.
 **The agent proposes. Deterministic code checks. The trader decides.** The app places no trades, has
 no exchange account access and no API trading key. Full statement:
 [docs/product/goal.md](docs/product/goal.md).
+
+## Current focus (owner, 2026-10-29)
+
+August is a **trading harness, not a P&L tracker**. It cannot place an order, so P&L, settlement and
+win/loss displays are accounting, not the product line. Until execution exists, every enhancement
+must improve one of three things:
+
+1. **Market analysis** — structure, liquidity, derivatives, sessions, catalysts.
+2. **Accuracy** — numbers and claims that are verifiable, grounded, or refused when thin.
+3. **Signals** — a decision with direction, trigger, invalidation, targets and evidence.
+
+Point the learning loop at **signals and price outcomes**, not only at logged trades. Do not make
+P&L, settlement or the session guard a priority; do not add order placement or exchange keys
+without an owner ruling. Full statement: [docs/product/focus.md](docs/product/focus.md).
 
 ## Commands
 

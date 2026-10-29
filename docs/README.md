@@ -6,16 +6,18 @@ One reading path. Everything else is evidence, kept where it belongs.
 
 1. [AGENTS.md](../AGENTS.md) — how to work here: commands, gates, git rules. Most agents load it
    automatically.
-2. [product/goal.md](product/goal.md) — what this is, who it's for, the loop, the non-goals.
-3. [product/ux/](product/ux/) — what the trader sees: the [charter](product/ux/charter.md), the
+2. [product/focus.md](product/focus.md) — **the current focus**: analysis, accuracy and signals;
+   P&L is not the product line until execution exists.
+3. [product/goal.md](product/goal.md) — what this is, who it's for, the loop, the non-goals.
+4. [product/ux/](product/ux/) — what the trader sees: the [charter](product/ux/charter.md), the
    [four surfaces](product/ux/surfaces.md), the [voice](product/ux/voice.md).
-4. [engineering/gates.md](engineering/gates.md) — how a change is proven, and what each gate cannot
+5. [engineering/gates.md](engineering/gates.md) — how a change is proven, and what each gate cannot
    see. [engineering/conventions.md](engineering/conventions.md) — code style and the canonical
    single-source modules.
-5. [plan/open-items.md](plan/open-items.md) — what is open to build, each row mapped to the proposal
+6. [plan/open-items.md](plan/open-items.md) — what is open to build, each row mapped to the proposal
    that covers it. Read [plan/decisions.md](plan/decisions.md) before proposing anything that needs
    the owner.
-6. [architecture/system-map.md](architecture/system-map.md) — how the code implements the flow.
+7. [architecture/system-map.md](architecture/system-map.md) — how the code implements the flow.
    [architecture/learning-loop.md](architecture/learning-loop.md) is the memory loop in depth.
 
 Read [plan/implementation-record.md](plan/implementation-record.md) only to check whether something
@@ -26,7 +28,7 @@ claim.
 
 | Directory | What lives here | Read when |
 |---|---|---|
-| `product/` | the goal and the UX: charter, surfaces, voice | designing anything the trader sees |
+| `product/` | the current focus, the goal, and the UX: charter, surfaces, voice | designing anything the trader sees |
 | `architecture/` | the system map and the learning loop | changing a call path, a store, or a prompt |
 | `engineering/` | gates, code conventions, the canonical modules | before writing code or claiming a change |
 | `plan/` | the working register, decisions, roadmap, what landed, and the audit evidence | choosing what to build next |
