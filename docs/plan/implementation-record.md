@@ -2634,3 +2634,58 @@ reads it (that is the compatibility arm, tested). `AlgorithmicSummaryService` st
 `IF/THEN Rule:` patterns when summarising an old note. No live model call was made for this change — the
 prompt/schema/parser/renderer are contract-tested, and the next settled trade is the first live note in
 the new shape.
+
+## 54. Settings → Memory is the reference's memory page (2026-10-30)
+
+**Owner ask.** Focus on the UI: how memory is shown today, with the target being the reference's
+Settings → Memory page (switches, named topics grouped by section, a row opens the entry's own page).
+
+**What it looked like before.** Two surfaces, neither matching: Settings → Memory was a header, a
+boxed "Notebook" group (a link to the Learning browser and the memory model) and the assistant-memory
+entries as inline-expanding rows with kind chips, per-row Edit/Delete, a checkbox for auto-learning,
+and a "recently deleted" drawer. Learning → Memory already showed the NOTEBOOK as grouped topic rows
+with a right-panel detail — the content surface. The Settings page showed storage-shaped rows, not a
+memory page.
+
+**What landed (Settings → Memory).**
+- The switch stack: **Generate memory from chats** (the trader-learning auto-distiller) and
+  **Include sensitive topics in memory** (`harnessSettings.sensitiveMemoryEnabled`, default OFF — the
+  same flag the write path already refuses sensitive facts on). Both are the real settings, not props.
+- **Export memory**: a Markdown download of every entry (label, updated ISO stamp, summary, details,
+  provenance), grouped one section per category. The notebook is named as a separate export.
+- **One section per category, and the model can create them**: a row's section is its own `section`
+  label (the model names it on `remember`, free-form — "Trading", "Risk", "Instruments", …) and
+  falls back to its `subject` for rows written before the field. Custom sections sort first, then the
+  fallback sections; a new name in `remember.section` becomes a new section with no registry. The
+  always-loaded memory index prints up to six existing section names so the model reuses a spelling
+  before inventing one. Three columns — label (`memoryEntryLabel`), one-line summary (`description`),
+  updated stamp — with the reference's wider group gaps and row heights.
+- A row opens the entry's own page: back, title, Delete, "Last updated <day, year>", **Summary**
+  (`description`), **Details** (`body`), provenance chips, Edit. Edit keeps the store's version
+  conflict handling; Delete is the existing soft delete with the 30-day undo drawer on the list.
+- "Notebook files" remains one door to the Learning browser; the memory model row appears when one is
+  configured. Hover reveals the row's pencil and trash, like the reference.
+
+**Deliberately not copied.** "Import memory from other AI providers" has no August implementation, so
+it is not shown (a button that cannot work is a lie). The reference's "Tell Claude what to change"
+line is that app's global composer, not part of Settings → Memory; August's chat lives on its own
+surfaces.
+
+**Verification.** Contract 26: the export's categories, custom-first order, the section normalizer and
+fallback/order rules, an entry's label/summary/
+details/updated stamp, the PHT-dated filename, the empty document, both switch labels wired to their
+real settings, grouping by `subjectOf`, the export calling the real download helper, and the notebook
+door. `render-probe` now seeds five entries (one per category plus a model-created "Trading"), opens
+Settings → Memory and asserts custom-first category groups, all five rows, both switches with their
+own `aria-checked` state, the export control, a row opening the detail with title/Summary/Details, and
+Back returning to the list. Ladder:
+`typecheck` · `check:contracts` **298** · `lint` **375/375** · `check:boundaries` · `check:docs` ·
+`build` · `boot-probe` · `render-probe` · `skill-approval-probe` **28/28**.
+
+**Residues.** The page shows the ASSISTANT memory store; the notebook remains the Learning surface's
+browser (a link, not a copy). The sensitive default is OFF (the reference's default is ON); that is the
+app's existing stance, now visible here. The row's updated column is relative for recent entries and a
+date for older ones, exactly as the reference's own column behaves; the detail page names the day.
+Sections are labels, not a registry: the model can create a near-duplicate ("Trading" vs "Trading
+Style"), and the index's six-name list is guidance, not enforcement. Existing rows keep their subject
+fallback until a write names a section.

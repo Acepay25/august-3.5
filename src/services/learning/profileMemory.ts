@@ -26,6 +26,7 @@
 import { getActiveUsername } from '../../utils/activeUser';
 import { filterMemoryWrite } from '../../utils/memoryWriteFilters';
 import { getHarnessSettings } from '../../utils/harnessSettings';
+import { memorySectionOf, normalizeMemorySection, orderMemorySections } from './memorySections';
 
 export type ProfileMemoryKind = 'user' | 'feedback' | 'project' | 'reference';
 
@@ -67,6 +68,10 @@ export interface ProfileMemoryEntry {
      *  Absent on legacy rows, where `subjectOf()` derives it from `kind` rather
      *  than pretending the record has no subject. */
     subject?: 'profile' | 'preference' | 'topic' | 'area' | 'person';
+    /** The display section on Settings → Memory ("Trading", "Risk", …). The
+     *  model names it on write; a new name creates a new section. Absent on
+     *  legacy rows, where the page falls back to `subject`. */
+    section?: string;
     /** The conversation this was written in. Provenance the trader can act on:
      *  "which session did it learn this in" has an answer, and a fact the model
      *  cannot place is a fact the trader cannot audit. */
@@ -206,6 +211,9 @@ export const rememberProfileMemory = (input: {
     aliases?: string[];
     /** What the fact is about; derived from `kind` when omitted. */
     subject?: ProfileMemoryEntry['subject'];
+    /** The display section; omitted keeps an existing row's section and falls
+     *  back to the subject for a new one. */
+    section?: string;
     /** The conversation the write happened in, stamped by the caller that knows. */
     sourceSession?: string;
     /** Absorbed-line history, written by the consolidation merge. An ordinary
@@ -220,6 +228,7 @@ export const rememberProfileMemory = (input: {
     const slug = input.slug?.trim() ? slugify(input.slug) : slugify(input.name || input.description);
     const now = new Date().toISOString();
     const subjectField = normalizeSubject(input.subject);
+    const sectionField = normalizeMemorySection(input.section);
     const all = readAll(user);
     const idx = all.findIndex(e => e.slug === (slug || ''));
     if (idx >= 0 && typeof input.ifVersion === 'number' && (all[idx].version ?? 1) !== input.ifVersion) {
@@ -249,6 +258,7 @@ ${input.body}`);
         ...(sensitive ? { sensitive: true } : {}),
         ...(input.aliases ? { aliases: input.aliases.map(a => a.trim()).filter(Boolean).slice(0, 8) } : {}),
         ...(subjectField ? { subject: subjectField } : {}),
+        ...(sectionField ? { section: sectionField } : {}),
         ...(input.sourceSession?.trim() ? { sourceSession: input.sourceSession.trim().slice(0, 80) } : {}),
         // Absorbed history is the merge's, not the caller's: an explicit list
         // wins, and an ordinary edit keeps what the row already carried. Without
@@ -449,6 +459,10 @@ export const buildProfileMemoryIndex = (username?: string, maxLines = INDEX_MAX_
         .filter(e => !e.sensitive && e.tag !== 'observed' && e.tag !== 'inferred');
     if (visible.length === 0) return '';
     const newest = visible.slice(-maxLines);
+    const sections = orderMemorySections(visible.map(memorySectionOf));
+    const sectionLine = sections.length
+        ? `SECTIONS (display groups; reuse one, or pass a concise new name like "Trading" or "Risk"): ${sections.slice(0, 6).map(s => s.slice(0, 20)).join(' · ')}`
+        : '';
     const lines = newest.map(e => {
         const tagMark = e.tag === 'observed' ? ' ·observed' : e.tag === 'inferred' ? ' ·inferred' : '';
         const aliasSource = (e.aliases ?? []).map(a => a.trim()).filter(Boolean);
@@ -461,7 +475,8 @@ export const buildProfileMemoryIndex = (username?: string, maxLines = INDEX_MAX_
     });
     const dropped = visible.length - newest.length;
     return [
-        `## Your memory about this user — ${visible.length} entr${visible.length === 1 ? 'y' : 'ies'}. These are collaboration facts (who they are, how they want you to work, ongoing context), NOT trading lessons. When one matters, pull its full body with read_memory(slug). If this session teaches you something durable about the USER, save it with remember (update an existing slug rather than duplicating).`,
+        `## Your memory about this user — ${visible.length} entr${visible.length === 1 ? 'y' : 'ies'}. These are collaboration facts (who they are, how they want you to work, their trading habits and ongoing context); market lessons belong in the notebook. When one matters, pull its full body with read_memory(slug). If this session teaches you something durable about the USER, save it with remember (update an existing slug rather than duplicating), and pass the section it belongs in.`,
+        sectionLine,
         ...lines,
         dropped > 0 ? `…${dropped} older entr${dropped === 1 ? 'y' : 'ies'} not listed — read_memory with slug "all" shows every entry.` : '',
     ].filter(Boolean).join('\n');

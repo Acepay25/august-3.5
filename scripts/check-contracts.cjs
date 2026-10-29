@@ -49,6 +49,8 @@
  *      vocabulary
  *  25. the post-mortem clause — written as "When …, do …", parsed into
  *      {when, action}, with the legacy IF/THEN prose still readable
+ *  26. the memory page's export — one Markdown document, one section per
+ *      category, and the page's toggles wired to real settings
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -1527,6 +1529,72 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         && !/ingestIfThenFromTrade/.test(read('src/services/learning/SkillMemoryService.ts')));
 })();
 
+// ─── 26. the memory page: categories, export and real switches ─────────────
+(() => {
+    const me = loadModule('src/services/learning/memoryExport.ts');
+    const sec = loadModule('src/services/learning/memorySections.ts');
+    const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    const entry = (slug, description, kind, subject, body, updatedAt) => ({
+        slug, description, kind, subject, body,
+        createdAt: updatedAt, updatedAt, tag: 'stated', version: 1,
+    });
+    const entries = [
+        entry('august-signals', 'Building a signal-first harness', 'project', 'area',
+            '**Why:** the harness must grade its own calls.\n**How to apply:** emit and settle.', '2026-10-29T10:00:00.000Z'),
+        { ...entry('trading-plan', 'Follows a weekly trading plan', 'reference', 'topic',
+            'Reviews the plan every Sunday.', '2026-10-30T10:00:00.000Z'), section: 'Trading' },
+        entry('risk-style', 'Sizes risk at 0.5% per trade', 'feedback', 'preference',
+            '**Why:** survives a losing streak.', '2026-10-28T10:00:00.000Z'),
+        entry('trader-profile', 'Runs a small perp account from Manila', 'user', 'profile',
+            'Most active around the London open.', '2026-10-27T10:00:00.000Z'),
+        entry('session-timing', 'Most active around the London open', 'reference', 'topic',
+            'Watches the first hour of London.', '2026-10-26T10:00:00.000Z'),
+    ];
+    const md = me.memoryExportMarkdown(entries, Date.UTC(2026, 9, 30, 0, 0));
+    ok('memory export: one section per category, custom categories first',
+        md.indexOf('## Trading') > -1
+        && md.indexOf('## Trading') < md.indexOf('## Preferences')
+        && md.indexOf('## Preferences') < md.indexOf('## Profile')
+        && md.indexOf('## Profile') < md.indexOf('## Topics')
+        && md.indexOf('## Topics') < md.indexOf('## Areas'), md.slice(0, 300));
+    ok('memory sections: a model-created name is normalized and preserved',
+        sec.normalizeMemorySection('risk_management') === 'Risk Management'
+        && sec.normalizeMemorySection('Trading') === 'Trading'
+        && sec.normalizeMemorySection('  ') === null);
+    ok('memory sections: a row falls back to its subject when it has no section',
+        sec.memorySectionOf({ section: 'Risk', kind: 'feedback' }) === 'Risk'
+        && sec.memorySectionOf({ kind: 'feedback' }) === 'Preferences'
+        && sec.memorySectionOf({ kind: 'project' }) === 'Areas');
+    ok('memory sections: custom categories come before the defaults',
+        sec.orderMemorySections(['Topics', 'Trading', 'Risk', 'Preferences']).join(',')
+        === 'Risk,Trading,Preferences,Topics');
+    ok('memory export: an entry carries its label, summary, details and provenance',
+        md.includes('### August Signals') && md.includes('**Summary:** Building a signal-first harness')
+        && md.includes('**Why:** the harness must grade its own calls.')
+        && md.includes('2026-10-29T10:00:00.000Z'), md);
+    ok('memory export: the filename is dated on the trader clock',
+        me.memoryExportFilename(Date.UTC(2026, 9, 30, 0, 0)) === 'august-memory-2026-10-30.md');
+    ok('memory export: an empty store exports an honest empty document',
+        /No memories yet\./.test(me.memoryExportMarkdown([], Date.now())));
+
+    const card = read('src/components/settings/ProfileMemoryCard.tsx');
+    ok('memory page: the two switches are the reference labels',
+        /Generate memory from chats/.test(card) && /Include sensitive topics in memory/.test(card));
+    ok('memory page: the sensitive switch writes the real setting',
+        /saveHarnessSettings\(\{ sensitiveMemoryEnabled: next \}\)/.test(card)
+        && /getHarnessSettings\(\)\.sensitiveMemoryEnabled/.test(card));
+    ok('memory page: entries are grouped by the section label, including new ones',
+        /memorySectionOf\(entry\)/.test(card) && /memorySectionSlug\(label\)/.test(card)
+        && /memory-group-/.test(card));
+    ok('memory tool: the model can name a new section',
+        /section: \{ type: 'string', description: 'The display section/.test(read('src/services/analysis/DeskToolsService.ts'))
+        && /section: fact\.data\.section/.test(read('src/services/learning/traderLearner.ts')));
+    ok('memory page: export is a real download, not a dead button',
+        /exportTextAsFile\(memoryExportMarkdown\(entries\)/.test(card));
+    ok('memory page: the notebook is one door, not a second browser',
+        /onOpenNotebook/.test(read('src/components/settings/tabs/MemoryTab.tsx')));
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
@@ -1534,4 +1602,4 @@ if (failures.length) {
     console.error('CONTRACT CHECK FAIL — a pinned contract broke; fix the module, not this file.');
     process.exit(1);
 }
-console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing), the desk tool budget, the skill outcome correction, the startup call gates, the insight store pin, the signal loop (resolver order, costs, ledger, venue data), the chart tape study, the signal accuracy fold, the skill format, the journal-rules store and the post-mortem clause all hold.');
+console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing), the desk tool budget, the skill outcome correction, the startup call gates, the insight store pin, the signal loop (resolver order, costs, ledger, venue data), the chart tape study, the signal accuracy fold, the skill format, the journal-rules store, the post-mortem clause and the memory page export all hold.');

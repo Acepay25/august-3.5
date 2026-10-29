@@ -804,6 +804,15 @@ where the spec and the code disagreed):
   undo the chip style allows: a button that forgets the slug, fires the
   `august-profile-memory` refresh event, and flips to Undone.
 
+### G.2.1 The memory page (Settings → Memory)
+
+The settings page reads the assistant-memory store the way the reference's memory page does: switches
+(auto-learning, sensitive-topic storage), an Export Markdown action, and the entries as named topics
+grouped by category from each entry's own `section` label (the model names it on write; a new name
+creates a new section) with `subject` as the fallback, and a row opening its own page
+(Summary, Details, Delete, Edit). The notebook is a separate store and stays one door away on the
+Learning surface. `memoryExport.ts` owns the export bytes; `ProfileMemoryCard.tsx` owns the page.
+
 ### G.3 Skills are files with a lifecycle
 
 A skill is a markdown file in `skills/`, parsed by `parseSkillMarkdown`

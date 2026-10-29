@@ -2161,6 +2161,79 @@ async function main() {
                 restoreProbe.failed === 0 && !restoreProbe.chatSkipped && !restoreProbe.chatFailed,
                 JSON.stringify(restoreProbe));
 
+            // ── Settings → Memory: the Claude-shaped page ─────────────────
+            // Seed four entries, one per subject, then prove the page groups
+            // them, opens an entry's own page, and offers the two real
+            // switches. A memory page that renders empty passes every
+            // component test there is.
+            await page.evaluate(() => {
+                const user = localStorage.getItem('last_active_user') || 'Probe User';
+                const at = (d) => new Date(Date.UTC(2026, 9, d, 4, 0)).toISOString();
+                localStorage.setItem(`profile_memory_v1_${user}`, JSON.stringify([
+                    { slug: 'risk-style', description: 'Sizes risk at 0.5% per trade', kind: 'feedback', subject: 'preference',
+                        body: 'Keeps the account alive through a losing streak.', createdAt: at(20), updatedAt: at(28), tag: 'stated', version: 1 },
+                    { slug: 'trader-profile', description: 'Runs a small perp account from Manila', kind: 'user', subject: 'profile',
+                        body: 'Trades the London open around a day job.', createdAt: at(18), updatedAt: at(27), tag: 'stated', version: 1 },
+                    { slug: 'session-timing', description: 'Most active around the London open', kind: 'reference', subject: 'topic',
+                        body: 'Watches the first hour of London.', createdAt: at(16), updatedAt: at(26), tag: 'stated', version: 1 },
+                    { slug: 'august-signals', description: 'Building a signal-first harness', kind: 'project', subject: 'area', section: 'Trading',
+                        body: 'Every call is graded against the tape.', createdAt: at(14), updatedAt: at(29), tag: 'stated', version: 1 },
+                    { slug: 'area-work', description: 'Keeps the review notes in the notebook', kind: 'project', subject: 'area',
+                        body: 'The notebook is the record.', createdAt: at(12), updatedAt: at(25), tag: 'stated', version: 1 },
+                ]));
+            });
+            const memoryClicked = await page.evaluate(() => {
+                const btn = [...document.querySelectorAll('button')]
+                    .find(b => (b.textContent || '').trim() === 'Memory');
+                if (!btn) return null;
+                btn.click();
+                return 'clicked';
+            });
+            check('Settings → Memory opens from the nav', memoryClicked === 'clicked', `${memoryClicked}`);
+            const memoryTab = await pollFor(async () => (
+                await page.locator('[data-testid="memory-tab"]').count() === 1
+            ) ? 1 : null);
+            check('the Memory page mounts', memoryTab === 1, `${memoryTab}`);
+            if (memoryTab === 1) {
+                const groups = await page.evaluate(() => ['trading', 'preferences', 'profile', 'topics', 'areas']
+                    .filter(g => document.querySelector(`[data-testid="memory-group-${g}"]`)));
+                check('memories are grouped by category, custom categories first',
+                    groups.join(',') === 'trading,preferences,profile,topics,areas', groups.join(','));
+                const rows = await page.evaluate(() => ['risk-style', 'trader-profile', 'session-timing', 'august-signals', 'area-work']
+                    .filter(s => document.querySelector(`[data-testid="memory-entry-${s}"]`)));
+                check('every seeded memory draws a row under its category', rows.length === 5, rows.join(','));
+                const switches = await page.evaluate(() => [
+                    document.querySelector('[data-testid="trader-learning-toggle"] [role="switch"]')?.getAttribute('aria-checked') ?? null,
+                    document.querySelector('[data-testid="memory-sensitive-toggle"] [role="switch"]')?.getAttribute('aria-checked') ?? null,
+                ]);
+                check('the two real switches are mounted with their own state',
+                    switches.length === 2 && switches.every(v => v === 'true' || v === 'false'), JSON.stringify(switches));
+                check('the export control is present', await page.locator('[data-testid="memory-export"]').count() === 1);
+
+                const opened = await page.evaluate(() => {
+                    const row = document.querySelector('[data-testid="memory-entry-august-signals"] button');
+                    if (!row) return null;
+                    row.click();
+                    return 'clicked';
+                });
+                check('a memory row opens its own page', opened === 'clicked', `${opened}`);
+                const detail = await pollFor(async () => {
+                    const el = await page.locator('[data-testid="memory-detail"]').first().innerText().catch(() => '');
+                    return /August Signals/.test(el) && /Summary/i.test(el) && /Details/i.test(el) && /graded against the tape/.test(el)
+                        ? el : null;
+                });
+                check('the entry page shows its title, Summary and Details', !!detail,
+                    String(detail).slice(0, 140));
+                const back = await page.evaluate(() => {
+                    const b = document.querySelector('[data-testid="memory-back"]');
+                    if (!b) return null;
+                    b.click();
+                    return 'clicked';
+                });
+                check('and the page returns to the list', back === 'clicked'
+                    && await page.locator('[data-testid="memory-entry-august-signals"]').count() === 1, `${back}`);
+            }
+
             await page.evaluate(() => { window.location.hash = ''; });
         }
 

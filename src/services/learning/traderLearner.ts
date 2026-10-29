@@ -66,6 +66,9 @@ const LearnedFactSchema = z.object({
     description: z.string().min(10).max(160),
     kind: z.string(),
     body: z.string().min(10).max(1_000),
+    /** The display category. Free-form so the learner can create trading
+     *  categories the fixed subject set does not name. */
+    section: z.string().min(2).max(40).optional(),
 });
 
 export type LearnedFact = z.infer<typeof LearnedFactSchema>;
@@ -77,8 +80,9 @@ const LEARNER_PROMPT = (transcript: string, existingIndex: string): string => [
     '- Only durable facts: explicitly stated, or clearly repeated. One-off price talk is NOT a fact.',
     '- Facts about the TRADER, never market lessons (those live in the skill system) and never any keys/codes.',
     '- Update-not-duplicate: skip a fact whose slug+description already exists below unless it genuinely changed.',
+    '- Every fact carries a `section`: reuse one from the SECTIONS line in ALREADY KNOWN when it fits, or create a concise trading category (e.g. Trading, Risk, Instruments, Psychology, Process, Session). Reuse the same spelling for the same kind of fact.',
     '- 0 to 3 facts per pass. Fewer, better.',
-    'Return ONLY a JSON array of {"name":"short kebab-name","description":"one line ≤140 chars","kind":"user|feedback|project|reference","body":"the fact (markdown)"} — [] when nothing durable surfaced.',
+    'Return ONLY a JSON array of {"name":"short kebab-name","description":"one line ≤140 chars","kind":"user|feedback|project|reference","section":"Trading|Risk|Instruments|Psychology|Process|Session|<a new concise category>","body":"the fact (markdown)"} — [] when nothing durable surfaced.',
     '',
     existingIndex ? `ALREADY KNOWN:\n${existingIndex}` : 'ALREADY KNOWN: (nothing yet)',
     '',
@@ -147,6 +151,7 @@ ${fact.data.body}`);
                 body: fact.data.body,
                 source: 'auto',
                 tag: 'observed',
+                ...(fact.data.section ? { section: fact.data.section } : {}),
                 ...(verdict.sensitive ? { sensitive: true } : {}),
             }, { username });
             if (saved.ok && !('conflict' in saved.result) && saved.result.persisted !== false) written += 1;

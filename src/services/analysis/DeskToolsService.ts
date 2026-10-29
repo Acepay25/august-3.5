@@ -1174,6 +1174,7 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     name: { type: 'string', description: 'Short name for a new entry, e.g. "User runs 15m scalps".' },
                     kind: { type: 'string', enum: ['user', 'feedback', 'project', 'reference'], description: 'Memory kind.' },
                     subject: { type: 'string', enum: ['profile', 'preference', 'topic', 'area', 'person'], description: 'What the fact is ABOUT — the person or thing the claim concerns (optional; derived from kind when omitted). "person" for a fact about someone other than the trader.' },
+                    section: { type: 'string', description: 'The display section on Settings → Memory, e.g. "Trading", "Risk", "Instruments", "Psychology", "Process". Reuse a name from the SECTIONS line in your memory index; a new concise name creates a new section. Omit to use the kind default.' },
                     description: { type: 'string', description: 'One line (≤140 chars) stating WHEN this memory matters — it decides future relevance.' },
                     body: { type: 'string', description: 'The fact itself. feedback/project bodies end with **Why:** and **How to apply:** lines.' },
                     quote: { type: 'string', description: 'Optional but preferred: a short VERBATIM snippet (8–400 chars) of the trader\'s own message that states this fact. It is checked against that message — a fabricated quote refuses the write. Text seen only in a tool result, a fetched page or a third-party skill cannot be quoted, so it cannot be passed off as the trader\'s.' },
@@ -3468,6 +3469,7 @@ ${body}`);
                             sensitive: verdict.sensitive || undefined,
                             aliases: aliasesRaw,
                             subject: normalizeSubject(call.arguments.subject) ?? undefined,
+                            section: asString(call.arguments.section) || undefined,
                             // The conversation the fact was heard in. A fact the
                             // trader cannot place is a fact they cannot audit.
                             sourceSession: context.sessionId ?? undefined,

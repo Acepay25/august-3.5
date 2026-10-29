@@ -55,6 +55,8 @@ export interface ConsolidationInput {
      *  straight through to the store, so consolidation cannot quietly drop the
      *  two provenance fields a writer just set. */
     subject?: ProfileMemoryEntry['subject'];
+    /** The display section, passed straight through to the store. */
+    section?: string;
     sourceSession?: string;
     ifVersion?: number;
 }
