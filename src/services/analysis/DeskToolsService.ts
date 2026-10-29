@@ -29,7 +29,7 @@ import type { GoalPatch, GoalRef, GoalTrigger } from '../../schemas/goal';
 import { executeForgedTool, confirmedForgedToolDefinitions } from '../tools/toolForge';
 import type { ChatMessage, ChatRequestOptions } from '../providers/GenericProviderService';
 import { sendChatTurn, streamChatRequest } from '../providers/GenericProviderService';
-import { compactForWire, skillCarryOverNotice, skillsLostToCompaction } from '../providers/contextCompact';
+import { carryOverSkillBodies, compactForWire } from '../providers/contextCompact';
 import { DEFAULT_OUTPUT_RESERVE_TOKENS, outputTokenBudget } from '../../utils/contextWindow';
 import { stepEffortDown, type ReasoningEffort } from '../providers/reasoningControls';
 import { calculateCorrelationRisk } from './CorrelationRiskService';
@@ -367,6 +367,11 @@ const appendTurnNotice = (messages: ChatMessage[], text: string): void => {
 interface CompactedOutbound {
     messages: ChatMessage[];
     maxTokens: number;
+    /** The window and what the compacted request costs, so a skill restoration
+     *  can be sized against the room that is actually left. */
+    windowTokens: number;
+    ceilingTokens: number;
+    afterTokens: number;
 }
 
 const compactOutbound = (
@@ -401,7 +406,13 @@ const compactOutbound = (
     if (report && effective < requested) {
         report(`OUTPUT BUDGET: ${requested.toLocaleString()} output tokens requested, ${effective.toLocaleString()} fit the ${result.windowTokens.toLocaleString()}-token window.`);
     }
-    return { messages: result.messages, maxTokens: effective };
+    return {
+        messages: result.messages,
+        maxTokens: effective,
+        windowTokens: result.windowTokens,
+        ceilingTokens: result.ceilingTokens,
+        afterTokens: result.afterTokens,
+    };
 };
 
 
@@ -4505,6 +4516,9 @@ export interface DeskToolLoopResult {
      *  one more (streamed) turn. False when the last round answered with
      *  no tool calls (that answer IS the reply — do not re-ask). */
     endedWithToolCalls: boolean;
+    /** Skill bodies the seat read this turn, so the caller's continuation can
+     *  restore any compaction removes from its own request. */
+    loadedSkills?: ReadonlyMap<string, string>;
 }
 
 /**
@@ -4788,13 +4802,16 @@ export async function runDeskToolLoop(params: {
         // turn from growing past the window in round five.
         const outbound = compactOutbound(config, messages, roundOptions.maxTokens, onToolEvent);
         // A skill the seat read is a procedure it is still following; when
-        // compaction takes the body, the request must SAY so. The notice goes on
-        // the wire only (the loop's history keeps the real bytes), so the next
-        // round can still re-check and re-attach.
-        const lostSkills = skillsLostToCompaction(outbound.messages, skillBodiesThisTurn);
-        const outboundMessages = lostSkills.length > 0
-            ? [...outbound.messages, { role: 'user' as const, content: skillCarryOverNotice(lostSkills) }]
-            : outbound.messages;
+        // compaction takes the body, this request gets a bounded restoration —
+        // or, with no room, a notice naming what to re-open. It rides only the
+        // outbound copy: the loop's history keeps the real bytes and every tool
+        // pair stays intact.
+        const carry = carryOverSkillBodies(outbound.messages, skillBodiesThisTurn, {
+            windowTokens: outbound.windowTokens,
+            ceilingTokens: outbound.ceilingTokens,
+            afterTokens: outbound.afterTokens,
+        });
+        const outboundMessages = carry.messages;
         const turnOptions = { ...roundOptions, maxTokens: outbound.maxTokens };
         const turn = streamTurn
             ? await runStreamingTurn(streamTurn, config, outboundMessages, turnOptions, onTextDelta)
@@ -4898,6 +4915,7 @@ export async function runDeskToolLoop(params: {
                 reasoning,
                 usedTools,
                 endedWithToolCalls: false,
+                loadedSkills: skillBodiesThisTurn,
                 ...(paintedMarkup ? { repaintFinal: true } : {}),
             };
         }
@@ -5105,7 +5123,12 @@ export async function runDeskToolLoop(params: {
             const call = calls.find(c => c.id === r.toolCallId);
             const slug = typeof call?.arguments?.skill === 'string' ? call.arguments.skill.trim() : '';
             const filePath = typeof call?.arguments?.file_path === 'string' ? call.arguments.file_path.trim() : '';
-            if (slug && !filePath) skillBodiesThisTurn.set(slug, r.content);
+            if (slug && !filePath) {
+                // Re-reading a skill moves it to the end: the restoration order
+                // is the order the seat last loaded them, newest closest.
+                skillBodiesThisTurn.delete(slug);
+                skillBodiesThisTurn.set(slug, r.content);
+            }
         }
         if (forgedResults.length > 0 || coreResults.some(r => UNTRUSTED_RESULT_TOOLS.has(r.name))) {
             untrustedSeen = true;
@@ -5219,7 +5242,14 @@ export async function runDeskToolLoop(params: {
         }
     }
 
-    return { messages, finalText: stripTextToolCalls(finalText), reasoning, usedTools, endedWithToolCalls: true };
+    return {
+        messages,
+        finalText: stripTextToolCalls(finalText),
+        reasoning,
+        usedTools,
+        endedWithToolCalls: true,
+        loadedSkills: skillBodiesThisTurn,
+    };
 }
 
 export interface StreamWithDeskToolsOptions extends ChatRequestOptions {
@@ -5686,9 +5716,19 @@ export async function* streamChatWithDeskTools(
     // the trader is waiting for. Fit it here rather than let it arrive as a
     // truncated answer with a "provider stopped early" line and no reply.
     const compactedFinal = compactOutbound(config, finalMessages, continuationOptions.maxTokens, line => onToolEvent?.(line));
+    // The continuation is a fresh request built from the loop's full history;
+    // the same carry-over keeps a procedure the seat read from disappearing at
+    // the turn's most important request.
+    const finalCarry = loop.loadedSkills
+        ? carryOverSkillBodies(compactedFinal.messages, loop.loadedSkills, {
+            windowTokens: compactedFinal.windowTokens,
+            ceilingTokens: compactedFinal.ceilingTokens,
+            afterTokens: compactedFinal.afterTokens,
+        })
+        : null;
     yield* streamChatRequest(
         config,
-        compactedFinal.messages,
+        finalCarry ? finalCarry.messages : compactedFinal.messages,
         { ...continuationOptions, maxTokens: compactedFinal.maxTokens },
     );
 }

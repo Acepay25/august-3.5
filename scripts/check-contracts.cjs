@@ -209,6 +209,46 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     ok('skill carry-over: the notice is harness-authored and names the skill and its remedy',
         carryNotice.startsWith('HARNESS NOTE') && carryNotice.includes('reclaim-setup') && carryNotice.includes('skill_view'),
         carryNotice.slice(0, 90));
+
+    // Phase 2 — the bounded restoration. The compacted request has a ceiling
+    // and a cost; the restoration may not push it back over either budget.
+    const restore = cc.carryOverSkillBodies([{ role: 'user', content: 'q' }], bodies, {
+        windowTokens: 200_000, ceilingTokens: 150_000, afterTokens: 10_000,
+    });
+    ok('skill carry-over: a fitting body is restored under a harness preamble',
+        restore.carried.length === 1
+        && restore.messages.at(-1).content.startsWith('HARNESS NOTE')
+        && restore.messages.at(-1).content.includes(body)
+        && restore.messages.at(-1).content.includes('### skill: reclaim-setup'));
+
+    const huge = `PROCEDURE ${'step '.repeat(20_000)}`;
+    const clippedCarry = cc.carryOverSkillBodies([{ role: 'user', content: 'q' }],
+        new Map([['big-skill', huge]]),
+        { windowTokens: 200_000, ceilingTokens: 150_000, afterTokens: 0 });
+    ok('skill carry-over: an oversized body is truncated and marked',
+        clippedCarry.truncated.includes('big-skill')
+        && clippedCarry.messages.at(-1).content.includes('…[truncated skill big-skill:'),
+        JSON.stringify(clippedCarry.truncated));
+
+    const noRoom = cc.carryOverSkillBodies([{ role: 'user', content: 'q' }], bodies,
+        { windowTokens: 10_000, ceilingTokens: 10_000, afterTokens: 9_700 });
+    ok('skill carry-over: no headroom falls back to the notice, not an over-budget request',
+        noRoom.carried.length === 0 && noRoom.skipped.includes('reclaim-setup')
+        && noRoom.messages.at(-1).content.includes('skill_view'));
+
+    const two = cc.carryOverSkillBodies([{ role: 'user', content: 'q' }], new Map([
+        ['first', 'A'.repeat(2_400)],
+        ['second', 'B'.repeat(2_400)],
+    ]), { windowTokens: 10_000, ceilingTokens: 10_000, afterTokens: 9_000 });
+    ok('skill carry-over: the budget stops at the second skill and names it',
+        two.carried.length === 1 && two.skipped.includes('second')
+        && two.messages.at(-1).content.includes('Not restored for budget'),
+        `carried=${JSON.stringify(two.carried)} skipped=${JSON.stringify(two.skipped)}`);
+
+    const presentCarry = cc.carryOverSkillBodies(present, bodies,
+        { windowTokens: 200_000, ceilingTokens: 150_000, afterTokens: 0 });
+    ok('skill carry-over: nothing is added when the body is still on the wire',
+        presentCarry.messages.length === 1 && presentCarry.carried.length === 0);
 })();
 
 // ─── 6. tradeAnalysis coercion — the AI boundary is lenient but not blind ──

@@ -358,6 +358,124 @@ export const skillCarryOverNotice = (slugs: readonly string[]): string =>
         + 'Re-open each with skill_view before you rely on its details — the skills index in your instructions is a trigger line, not the procedure.',
     );
 
+// A restoration is a SECOND copy of something the seat already paid for once:
+// it buys continuity, not discovery, so it is capped per skill, in total, and
+// as a share of the window (the numbers ThinkRail's carry-over settled on).
+const SKILL_CARRYOVER_SKILL_TOKENS = 5_000;
+const SKILL_CARRYOVER_TOTAL_TOKENS = 25_000;
+const SKILL_CARRYOVER_WINDOW_SHARE = 0.1;
+/** Below this there is no room for a useful procedure; the notice is the honest
+ *  output rather than a 40-character stub. */
+const SKILL_CARRYOVER_MIN_TOKENS = 512;
+/** Only to find a cut point before the block is re-measured with the real
+ *  estimator; the estimator's bias is corrected by the second check. */
+const CARRYOVER_CHARS_PER_TOKEN = 4;
+
+export interface SkillCarryOverOptions {
+    /** The model's window, and what the COMPACTED request already costs, so a
+     *  restoration cannot push the request back over its ceiling. */
+    windowTokens: number;
+    ceilingTokens: number;
+    afterTokens: number;
+}
+
+export interface SkillCarryOverResult {
+    messages: ChatMessage[];
+    /** Slugs restored in full or in part, in the order they were written. */
+    carried: string[];
+    /** Slugs restored with a clip note. */
+    truncated: string[];
+    /** Slugs that did not fit; the notice names them. */
+    skipped: string[];
+}
+
+const clipBodyForBudget = (slug: string, body: string, tokens: number): string => {
+    const head = headSlice(body, Math.max(0, Math.floor(tokens * CARRYOVER_CHARS_PER_TOKEN)));
+    return `${head}\n${clipNote({
+        source: `skill ${slug}`,
+        kept: head.length,
+        total: body.length,
+        guidance: 'call skill_view for this skill if the missing part matters',
+    })}`;
+};
+
+/**
+ * Re-attach the full text of skills compaction removed, bounded.
+ *
+ * The body the seat read is still in the loop's own message array — compaction
+ * only rewrote the outbound copy — so this is a restoration, not a re-read.
+ * Order is the read order (`skill_view` moves a re-read slug to the end), so
+ * the most recently loaded procedure sits closest to the current request.
+ */
+export const carryOverSkillBodies = (
+    messages: readonly ChatMessage[],
+    bodies: LoadedSkillBodies,
+    opts: SkillCarryOverOptions,
+): SkillCarryOverResult => {
+    const lost = skillsLostToCompaction(messages, bodies);
+    if (lost.length === 0) return { messages: [...messages], carried: [], truncated: [], skipped: [] };
+
+    const windowBudget = Math.min(
+        SKILL_CARRYOVER_TOTAL_TOKENS,
+        Math.floor(Math.max(0, opts.windowTokens) * SKILL_CARRYOVER_WINDOW_SHARE),
+    );
+    const headroom = Math.max(0, opts.ceilingTokens - opts.afterTokens);
+    const budget = Math.min(windowBudget, headroom);
+
+    const blocks: string[] = [];
+    const carried: string[] = [];
+    const truncated: string[] = [];
+    const skipped: string[] = [];
+    let used = 0;
+
+    for (const slug of lost) {
+        const body = bodies.get(slug) ?? '';
+        const remaining = budget - used;
+        const perSkill = Math.min(SKILL_CARRYOVER_SKILL_TOKENS, remaining);
+        if (body.length === 0 || perSkill < SKILL_CARRYOVER_MIN_TOKENS) {
+            skipped.push(slug);
+            continue;
+        }
+        let block = `### skill: ${slug}\n${body}`;
+        let wasTruncated = false;
+        if (block.length > perSkill * CARRYOVER_CHARS_PER_TOKEN) {
+            block = `### skill: ${slug}\n${clipBodyForBudget(slug, body, perSkill)}`;
+            wasTruncated = true;
+        }
+        if (estimateTokens(block) > perSkill) {
+            // The clip note and the heading are real bytes; cut once more so the
+            // per-skill promise holds under the estimator that sizes the request.
+            block = `### skill: ${slug}\n${clipBodyForBudget(slug, body, Math.max(0, perSkill - 80))}`;
+            wasTruncated = true;
+        }
+        const blockTokens = estimateTokens(block);
+        if (blockTokens > remaining) {
+            skipped.push(slug);
+            continue;
+        }
+        used += blockTokens;
+        blocks.push(block);
+        carried.push(slug);
+        if (wasTruncated) truncated.push(slug);
+    }
+
+    const preamble = harnessTurn(
+        'CONTEXT COMPACTION removed the full text of skills you loaded earlier in this turn. '
+        + 'They are restored below, most recently loaded last. Keep applying the ones that bear on the current work; '
+        + 'if one is marked truncated, call skill_view before relying on the missing part.'
+        + (skipped.length > 0
+            ? ` Not restored for budget: ${skipped.map(s => `"${s}"`).join(', ')} — call skill_view for those before relying on them.`
+            : ''),
+    );
+    const content = blocks.length > 0 ? `${preamble}\n\n${blocks.join('\n\n')}` : skillCarryOverNotice(skipped);
+    return {
+        messages: [...messages, { role: 'user', content }],
+        carried,
+        truncated,
+        skipped,
+    };
+};
+
 // ─── The wire-facing entry point ────────────────────────────────────────────
 
 export interface WireCompactResult extends CompactResult {
