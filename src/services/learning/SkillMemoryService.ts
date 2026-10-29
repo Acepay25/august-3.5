@@ -23,7 +23,7 @@ import {
     withNotebookWriteLock,
 } from './MemoryFilesService';
 import { getBots } from '../agents/agentRoster';
-import { formatSkillProcedure, parseIfThenClauses, skillHitRate } from '../../utils/ifThenSkill';
+import { formatSkillProcedure, parseLessonClauses, skillHitRate } from '../../utils/lessonClause';
 import { maybePinWinningPromptLane } from '../../utils/promptVersionStats';
 import { CraftedSkill } from '../../schemas/learning';
 import type { SkillIndexRow } from '../trade/tradeChatContext';
@@ -682,7 +682,7 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
         // `[ \t]*`, NOT `\s*`: \s matches newlines, so an EMPTY value
         // (`tradeIds: ` with no ids) let the separator swallow the line
         // break and `(.+)` then captured the NEXT field. A zero-evidence
-        // skill born by ingestIfThenFromTrade parsed its tradeIds as
+        // skill born by ingestLessonFromTrade parsed its tradeIds as
         // ['evidenceCount: 0'] and then deduped its first real evidence
         // pass against a phantom id. Horizontal-only keeps the match on
         // its own line.
@@ -2958,10 +2958,10 @@ const maybeUpsertSkillUnlocked = async (
     // raw post-mortem produces now — validated ≠ persisted was a silent
     // mismatch before. The ACTION still comes from the prose clause; it lives
     // in the body, not in a skill field.
-    const parsed = parseIfThenClauses(trade.postMortem ?? '')[0];
-    const whenText = (preferredClause?.when || parsed?.ifCondition || '').trim();
-    const procedure = whenText && parsed?.thenAction
-        ? formatSkillProcedure({ ifCondition: whenText, thenAction: parsed.thenAction })
+    const parsed = parseLessonClauses(trade.postMortem ?? '')[0];
+    const whenText = (preferredClause?.when || parsed?.when || '').trim();
+    const procedure = whenText && parsed?.action
+        ? formatSkillProcedure({ when: whenText, action: parsed.action })
         : '';
     // Never silently re-create a retired twin. An archive match drafts
     // a REVIVAL review card instead of a fresh skill — the graveyard is how
@@ -3361,10 +3361,10 @@ function skillCoverageReader(): CoverReader<SkillMeta> {
     };
 }
 
-const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: string): Promise<void> => {
+const ingestLessonFromTradeUnlocked = async (trade: LoggedTrade, username: string): Promise<void> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return;
     if (!tradeAdmitsTechnicalStrategyRule(trade)) return;
-    const clauses = parseIfThenClauses(trade.postMortem ?? '');
+    const clauses = parseLessonClauses(trade.postMortem ?? '');
     if (clauses.length === 0) return;
     // The prompt index has read this store since M-5, but nothing wrote it.
     // Record the same clauses that become skill drafts, before the draft
@@ -3382,7 +3382,7 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
     for (const clause of clauses) {
         const existing = getMemoryFiles().files.filter(isSkillFile).find(f => {
             const meta = parseSkillMarkdown(f.content);
-            return meta?.when?.toLowerCase() === clause.ifCondition.toLowerCase();
+            return meta?.when?.toLowerCase() === clause.when.toLowerCase();
         });
         if (existing) {
             const meta = parseSkillMarkdown(existing.content);
@@ -3394,7 +3394,7 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
                 countTradeOutcome(meta, trade.outcome === TradeOutcome.WIN, trade.realizedR, { netR: trade.netR, stopDistancePct: tradeStopDistancePct(trade) });
                 meta.tradeIds = [...meta.tradeIds, trade.id];
             }
-            meta.when = clause.ifCondition;
+            meta.when = clause.when;
             meta.modifiedAt = new Date().toISOString();
             meta.body = formatSkillProcedure(clause);
             meta.status = deriveStatus(meta);
@@ -3416,14 +3416,14 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
         // (maybeUpsertSkill, ingestCraftedSkill) already apply.
         const coin = trade.analysis?.coinName;
         const family = trade.analysis?.detectedPatternFamily;
-        const triggerFail = validateTrigger({ when: clause.ifCondition });
+        const triggerFail = validateTrigger({ when: clause.when });
         if (triggerFail) continue;
-        if (coveredByLiveSkillWith({ when: clause.ifCondition }, skillCoverageReader(), coin, setupDir, family)) continue;
-        if (findArchiveTwin(username, clause.ifCondition)) {
-            queueRevivalProposal(username, findArchiveTwin(username, clause.ifCondition)!);
+        if (coveredByLiveSkillWith({ when: clause.when }, skillCoverageReader(), coin, setupDir, family)) continue;
+        if (findArchiveTwin(username, clause.when)) {
+            queueRevivalProposal(username, findArchiveTwin(username, clause.when)!);
             continue;
         }
-        if (checkLibraryCapAtGate({ kind, wins: 0, losses: 0, when: clause.ifCondition }, username) === 'skip') {
+        if (checkLibraryCapAtGate({ kind, wins: 0, losses: 0, when: clause.when }, username) === 'skip') {
             continue;
         }
 
@@ -3456,7 +3456,7 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
             // injection this skill could never earn evidence — the loop would
             // deadlock. 'gated' is accurate: the checks above are the gate.
             prior: 'gated',
-            when: clause.ifCondition,
+            when: clause.when,
             prediction: defaultPrediction({
                 coin,
                 family,
@@ -3465,7 +3465,7 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
             body: formatSkillProcedure(clause),
         };
         meta.status = deriveStatus(meta);
-        const slug = slugifyName([coin, kind, clause.ifCondition.slice(0, 40)].filter(Boolean).join(' '))
+        const slug = slugifyName([coin, kind, clause.when.slice(0, 40)].filter(Boolean).join(' '))
             || 'trigger';
         // Contain the write. createMemoryFileUnlocked refuses a new skill once
         // the notebook hits the trigger tier, and this function is awaited by
@@ -3482,8 +3482,8 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
 };
 
 /** Serialized public API — see withNotebookWriteLock in MemoryFilesService. */
-export const ingestIfThenFromTrade = (trade: LoggedTrade, username: string): Promise<void> =>
-    withNotebookWriteLock(() => ingestIfThenFromTradeUnlocked(trade, username));
+export const ingestLessonFromTrade = (trade: LoggedTrade, username: string): Promise<void> =>
+    withNotebookWriteLock(() => ingestLessonFromTradeUnlocked(trade, username));
 
 /**
  * Disable retired skills and merge exact-duplicate triggers — duplicates by
@@ -3996,7 +3996,7 @@ export const syncClosedTradeToNotebook = async (
     await appendDiaryEntry(trade, username);
     await syncRecurringMistakes(allTrades, username);
     await applySkillEvidence(trade, username, allTrades);
-    await ingestIfThenFromTrade(trade, username);
+    await ingestLessonFromTrade(trade, username);
     // Family × regime scoreboard (strategyRegimeMatrix): fire-and-forget —
     // the matrix is telemetry, never allowed to break settlement.
     void import('./strategyRegimeMatrix')

@@ -127,7 +127,7 @@ export interface LearningRule {
 
 /**
  * Why a closed trade failed or succeeded. Only SETUP_EDGE_FAILURE may
- * write a technical IF/THEN into LearningRules / skills.
+ * write a technical lesson into LearningRules / skills.
  */
 export type RootCauseClass = 'SETUP_EDGE_FAILURE' | 'EXECUTION_ERROR' | 'MACRO_SHOCK' | 'UNCLEAR';
 

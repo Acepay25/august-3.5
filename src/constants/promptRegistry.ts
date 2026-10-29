@@ -163,11 +163,11 @@ export const PROMPT_REGISTRY: PromptRegistryEntry[] = [
     {
         id: 'learning.settlement_reflection',
         name: 'Closed-trade reflection (post-mortem at settlement)',
-        description: 'When a trade closes, the memory model writes the row\'s post-mortem from the facts the settlement path already measured — the R it earned, the cost, the excursion, the benchmark, the regime and what the pre-trade gate said. Its IF/THEN line is what turns into a skill DRAFT for the trader to approve.',
-        usage: ['Every closed WIN/LOSS trade (E-57 §1; the leg `craftSkillFromPostMortem` and the diary/IF-THEN readers have been waiting on)'],
+        description: 'When a trade closes, the memory model writes the row\'s post-mortem from the facts the settlement path already measured — the R it earned, the cost, the excursion, the benchmark, the regime and what the pre-trade gate said. Its `When …, do …` line is what turns into a skill DRAFT for the trader to approve.',
+        usage: ['Every closed WIN/LOSS trade (E-57 §1; the leg `craftSkillFromPostMortem` and the diary/lesson readers have been waiting on)'],
         // IMPORTED, not restated: the note-shape contract (a plain `Lesson:`
-        // line and one IF/THEN sentence) is read back by
-        // `extractLessonFromPostMortem` and `parseIfThenClauses`, so an override
+        // line and one When/do sentence) is read back by
+        // `extractLessonFromPostMortem` and `parseLessonClauses`, so an override
         // that drops it costs the notebook its lesson — and the Settings diff
         // has to show the truth about what runs.
         fallback: SETTLEMENT_REFLECTION_FALLBACK,

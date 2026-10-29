@@ -4,7 +4,7 @@ import { getQuickResponse } from '../providers/GenericProviderService';
 import { extractAndParseJson } from '../../utils/jsonUtils';
 import { CraftedSkill, parseCraftedSkill } from '../../schemas/learning';
 import { getPrompt } from '../infrastructure/PromptOverrideService';
-import { parseIfThenClauses } from '../../utils/ifThenSkill';
+import { parseLessonClauses } from '../../utils/lessonClause';
 import { tradeAdmitsTechnicalStrategyRule } from '../../utils/rootCause';
 import { PREDICATE_GRAMMAR_HINT } from '../analysis/skillPredicate';
 
@@ -81,7 +81,7 @@ Output ONLY JSON:
 
 export const formatCraftedSkillBody = (skill: CraftedSkill): string => {
     // The bold core is kept EXACTLY as it was, because it is a vocabulary and
-    // not a style: `utils/ifThenSkill.ts:formatSkillProcedure` writes the same
+    // not a style: `utils/lessonClause.ts:formatSkillProcedure` writes the same
     // `**What I do:**` line, and fixtures seed bodies in this shape. Replacing
     // it would have broken the convention rather than improved it.
     //
@@ -139,13 +139,13 @@ export const craftSkillFromPostMortem = async (
     const pm = trade.postMortem || '';
     if (pm.length < 40) return null;
     if (!tradeAdmitsTechnicalStrategyRule(trade)) return null;
-    const clauses = parseIfThenClauses(pm);
+    const clauses = parseLessonClauses(pm);
     const details = [
         `Coin: ${trade.analysis?.coinName || '?'}`,
         `Direction: ${trade.analysis?.direction || '?'}`,
         `Family: ${trade.analysis?.detectedPatternFamily || '?'}`,
         `Outcome: ${trade.outcome}`,
-        clauses[0] ? `Extracted trigger: ${clauses[0].ifCondition}` : '',
+        clauses[0] ? `Extracted trigger: ${clauses[0].when}` : '',
     ].filter(Boolean).join('\n');
     const prompt = `${getPrompt('learning.skill_craft', SKILL_CRAFT_FALLBACK)}
 

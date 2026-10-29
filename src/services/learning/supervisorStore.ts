@@ -16,7 +16,7 @@ export type SupervisorPhase =
     | 'idle'
     | 'reviewing'   // reading the item + its context
     | 'verifying'   // checking against catalog/graveyard/evidence
-    | 'enhancing'   // rewriting IF/THEN + description
+    | 'enhancing'   // rewriting the trigger + description
     | 'deciding'    // applying the verdict
     | 'learning';   // trader-profile distill (Part of the same oversight UI)
 

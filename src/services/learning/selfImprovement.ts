@@ -26,7 +26,7 @@ import { LoggedTrade } from '../../types/trade';
 import { TradeOutcome } from '../../types/enums';
 import { listSkills, type SkillMeta } from './SkillMemoryService';
 import { extractLessonFromPostMortem } from './MemoryFilesService';
-import { parseIfThenClauses } from '../../utils/ifThenSkill';
+import { parseLessonClauses } from '../../utils/lessonClause';
 import { queueSkillDraft } from '../../utils/skillDrafts';
 import { queueLearningProposal } from '../../utils/learningQueue';
 import type { CraftedSkill } from '../../schemas/learning';
@@ -71,7 +71,7 @@ export const extractEpisodes = (trades: LoggedTrade[], now = Date.now()): Learni
             rootCauseClass: t.rootCauseClass ?? undefined,
             outcome: t.outcome === TradeOutcome.WIN ? 'win' : 'loss',
             keyLesson: extractLessonFromPostMortem(t.postMortem ?? ''),
-            clause: (parseIfThenClauses(t.postMortem ?? '')[0] ?? {}).ifCondition ?? '',
+            clause: (parseLessonClauses(t.postMortem ?? '')[0] ?? {}).when ?? '',
         });
     }
     return out;

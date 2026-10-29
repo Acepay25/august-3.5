@@ -22,6 +22,6 @@ export const TASK_BUDGETS = {
    *  channel; 2048 died mid-reasoning so the user saw a truncated scratchpad
    *  instead of an answer (a market read is not a casual reply). */
   chat: 8192,
-  /** Post-mortem report (WIN/LOSS/ENTRY_NOT_HIT sections + IF/THEN rule). */
+  /** Post-mortem report (WIN/LOSS/ENTRY_NOT_HIT sections + the When/do clause). */
   postMortem: 8192,
 } as const;

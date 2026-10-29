@@ -47,6 +47,8 @@
  *  24. the journal-rules store — `when` + `action` rows, the legacy shape
  *      normalized on read AND write, and the prompt line printed in the new
  *      vocabulary
+ *  25. the post-mortem clause — written as "When …, do …", parsed into
+ *      {when, action}, with the legacy IF/THEN prose still readable
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -1461,6 +1463,70 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         && !/\bthenAction:\s/.test(read('src/services/learning/learningRules.ts')));
 })();
 
+// ─── 25. the post-mortem clause: When …, do … (legacy IF/THEN readable) ────
+(() => {
+    const lc = loadModule('src/utils/lessonClause.ts');
+    const schema = loadModule('src/schemas/learning.ts');
+    const reflection = loadModule('src/services/learning/settlementReflection.ts');
+    const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+
+    const current = lc.parseLessonClauses('When the daily low is swept, do wait for the 1h reclaim close.');
+    ok('lesson clause: the current sentence parses into when + action',
+        current.length === 1
+        && current[0].when === 'the daily low is swept'
+        && current[0].action === 'wait for the 1h reclaim close',
+        JSON.stringify(current));
+    const legacy = lc.parseLessonClauses('IF the daily low is swept THEN wait for the 1h reclaim close.');
+    ok('lesson clause: a legacy IF/THEN note still yields the same shape',
+        legacy.length === 1 && legacy[0].when === 'the daily low is swept'
+        && legacy[0].action === 'wait for the 1h reclaim close',
+        JSON.stringify(legacy));
+    ok('lesson clause: a placeholder side is dropped',
+        lc.parseLessonClauses('When not applicable, do be more careful.').length === 0);
+
+    const body = lc.formatSkillProcedure({ when: 'the sweep holds', action: 'enter on the reclaim' });
+    ok('lesson clause: the procedure body writes When / What I do, no IF/THEN',
+        /\*\*When:\*\* the sweep holds/.test(body) && /\*\*What I do:\*\* enter on the reclaim/.test(body)
+        && !/\bIF\b|\bTHEN\b/.test(body), body);
+
+    const note = reflection.renderPostMortem({
+        whatHappened: 'The plan met its stop after a sweep.',
+        lesson: 'Size the stop to the sweep, not the entry.',
+        when: 'the daily low is swept',
+        action: 'wait for the 1h reclaim close',
+    }, 'mock-model');
+    ok('reflection: the written note is When …, do … and never IF/THEN',
+        note.includes('When the daily low is swept, do wait for the 1h reclaim close.')
+        && !/\bIF\b|\bTHEN\b/.test(note), note);
+
+    const parsedNew = schema.parseSettlementReflection({
+        whatHappened: 'The plan met its stop after a sweep.',
+        lesson: 'Size the stop to the sweep, not the entry.',
+        when: 'the daily low is swept',
+        action: 'wait for the 1h reclaim close',
+    });
+    ok('reflection: the schema accepts when/action',
+        !!parsedNew && parsedNew.when === 'the daily low is swept' && parsedNew.action === 'wait for the 1h reclaim close');
+    ok('reflection: a legacy-shaped answer no longer parses',
+        schema.parseSettlementReflection({
+            whatHappened: 'The plan met its stop after a sweep.',
+            lesson: 'Size the stop to the sweep, not the entry.',
+            ifCondition: 'the daily low is swept',
+            thenAction: 'wait for the 1h reclaim close',
+        }) === null);
+
+    const prompt = reflection.SETTLEMENT_REFLECTION_FALLBACK;
+    ok('reflection prompt: asks for when/action and no old pair',
+        /"when":/.test(prompt) && /"action":/.test(prompt)
+        && !/ifCondition|thenAction/.test(prompt));
+    ok('parser: the old module is gone and nothing imports it',
+        !fs.existsSync(path.join(ROOT, 'src/utils/ifThenSkill.ts'))
+        && !/utils\/ifThenSkill/.test(read('src/services/learning/SkillMemoryService.ts')));
+    ok('parser: the notebook ingest is named for the lesson, not the pair',
+        /ingestLessonFromTrade/.test(read('src/services/learning/SkillMemoryService.ts'))
+        && !/ingestIfThenFromTrade/.test(read('src/services/learning/SkillMemoryService.ts')));
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
@@ -1468,4 +1534,4 @@ if (failures.length) {
     console.error('CONTRACT CHECK FAIL — a pinned contract broke; fix the module, not this file.');
     process.exit(1);
 }
-console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing), the desk tool budget, the skill outcome correction, the startup call gates, the insight store pin, the signal loop (resolver order, costs, ledger, venue data), the chart tape study, the signal accuracy fold, the skill format and the journal-rules store all hold.');
+console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing), the desk tool budget, the skill outcome correction, the startup call gates, the insight store pin, the signal loop (resolver order, costs, ledger, venue data), the chart tape study, the signal accuracy fold, the skill format, the journal-rules store and the post-mortem clause all hold.');

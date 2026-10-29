@@ -120,7 +120,7 @@ const causeId = (cause: RootCauseClass): string => `cause:${cause}`;
 
 /**
  * Build the in-memory graph for this setup from notebook files, skills,
- * closed trades, and IF/THEN rules.
+ * closed trades, and journal rules.
  */
 export const buildMemoryGraph = (
     query?: MemoryRetrievalQuery,
@@ -217,7 +217,7 @@ export const buildMemoryGraph = (
         }
     }
 
-    // Legacy IF/THEN rules are no longer graph nodes: lessons
+    // Legacy rules are no longer graph nodes: lessons
     // live in skills. The rules store remains read-only history for outcome
     // attribution only.
     return graph;

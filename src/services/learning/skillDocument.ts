@@ -77,7 +77,7 @@ const list = (): Record<keyof Omit<SkillSections, 'other'>, string[]> => ({
  *
  * A body written before this module only has the bold lines, and one written
  * now has BOTH (the bold core is a shared vocabulary — see
- * `utils/ifThenSkill.ts` and `syncSkillRuleLine`). Reading both means the card
+ * `utils/lessonClause.ts`). Reading both means the card
  * projector works on every skill in a notebook written since the format
  * changed, which is the whole point: an unreadable legacy file is a silent
  * regression, not a migration task.

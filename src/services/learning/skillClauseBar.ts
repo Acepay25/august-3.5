@@ -4,7 +4,7 @@
  * `draftGates.ts` imports `listSkills` / `skillStrictlyMatchesSetup` from
  * SkillMemoryService, so SkillMemoryService cannot import draftGates back
  * without closing a runtime cycle — the TDZ class that crashed v1.0.20. The
- * eighth intake source (`ingestIfThenFromTrade`, inside SkillMemoryService)
+ * eighth intake source (`ingestLessonFromTrade`, inside SkillMemoryService)
  * needs the same bar the other seven pass, so the pure half lives here and the
  * two notebook-bound helpers arrive as INJECTED readers.
  *

@@ -373,7 +373,7 @@ for a row that carries a post-mortem from before then. `src/services/learning/se
 **E-57 §1 gave the leg its writer back** — `services/learning/settlementReflection.ts`
 runs ONE bounded call (`TASK_BUDGETS.postMortem`, tier `postMortem`, called from
 `src/hooks/useTradeLogging.ts › useTradeLogging` and awaited BEFORE `syncClosedTradeToNotebook`, because
-that function marks the trade settled and then folds the diary entry and the IF/THEN
+that function marks the trade settled and then folds the diary entry and the lesson
 draft out of the row's post-mortem text), and it writes nothing on a failure, a decline
 or a malformed answer, so a gap stays a gap and never becomes an invented lesson. A
 trader's own note always wins; the row now also says which model wrote the note
@@ -407,8 +407,8 @@ the history with it.
 
 The chain from `draftGates` to the injected skill is unchanged and still runs; it
 starts at the review passes, at the chat's `propose_skill` tool, and since E-57 §1
-at a settled position again — the reflection's IF/THEN line is what
-`ingestIfThenFromTrade` turns into a draft awaiting the trader's approval.
+at a settled position again — the reflection's `When …, do …` line is what
+`ingestLessonFromTrade` turns into a draft awaiting the trader's approval.
 
 Corollary that is easy to miss: `GlobalMemory.aiPatternMemory` and
 `insightKnowledgeBase` are **frozen stores** (see G), and

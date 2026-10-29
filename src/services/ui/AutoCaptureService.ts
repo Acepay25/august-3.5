@@ -810,7 +810,7 @@ ${historicalSection}
 1. What changed between entry and the ACTUAL EXIT (${referenceSource})?
 2. Warning signs the AI might have missed BEFORE the exit?
 3. Key learnings for future similar setups?
-4. Rule adjustment (IF/THEN) for the playbook?
+4. Rule adjustment (When …, do …) for the playbook?
 ═══════════════════════════════════════════════════════════════
 `;
 };

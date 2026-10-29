@@ -242,7 +242,7 @@ export const parseCraftedSkill = (raw: unknown): CraftedSkill | null => {
  * and no more:
  *  - `extractLessonFromPostMortem` (services/learning/MemoryFilesService.ts:1017)
  *    needs a `Lesson:` line whose capture is at least 10 characters;
- *  - `parseIfThenClauses` (utils/ifThenSkill.ts:12) needs both sides of the
+ *  - `parseLessonClauses` (utils/lessonClause.ts) needs both sides of the
  *    clause and slices each at 240 — so the caps here ARE the reader's caps.
  *    A boundary wider than the reader would promise a clause the reader then
  *    truncates, which is the drift this repo keeps finding.
@@ -258,8 +258,8 @@ const sliced = (max: number) => (v: unknown) => (typeof v === 'string' ? v.slice
 export const SettlementReflectionSchema = z.object({
   whatHappened: z.preprocess(sliced(1200), z.string().min(20)),
   lesson: z.preprocess(sliced(400), z.string().min(10)),
-  ifCondition: z.preprocess(sliced(240), z.string().min(CLAUSE_MIN_LENGTH)),
-  thenAction: z.preprocess(sliced(240), z.string().min(CLAUSE_MIN_LENGTH)),
+  when: z.preprocess(sliced(240), z.string().min(CLAUSE_MIN_LENGTH)),
+  action: z.preprocess(sliced(240), z.string().min(CLAUSE_MIN_LENGTH)),
   // The honest "no transferable lesson here" answer. Optional so a model that
   // simply answers the four fields still parses; when it is set the caller
   // writes NOTHING, because a gap in the notebook is true and a invented lesson

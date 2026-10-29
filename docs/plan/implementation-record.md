@@ -2601,3 +2601,36 @@ is rewritten on disk, a second read does not churn it, and a legacy profile/back
 third-party skill frontmatter). The settlement reflection's post-mortem prose still uses the words
 "IF/THEN" and is parsed into the new shapes; renaming that prompt is a separate change. The rules
 store remains a deliberate second view of a journal lesson beside skills.
+
+## 53. The post-mortem writes When …, do … (2026-10-30)
+
+**Owner ask.** Apply the parser change for the residue — the settlement reflection's note was the last
+place a model was asked for, and a note stored, an `IF … THEN …` pair.
+
+**What changed.**
+- The reflection prompt now asks for `{"when", "action"}` (was `ifCondition`/`thenAction`), and the
+  rules line names them. `SettlementReflectionSchema` requires `when`/`action`.
+- `renderPostMortem` writes `When <trigger>, do <action>.` instead of `IF … THEN …`.
+- `utils/ifThenSkill.ts` is gone. `utils/lessonClause.ts` is the one parser/formatter:
+  `parseLessonClauses` returns `{when, action}`; it reads the current `When …, do …` sentence first and
+  STILL reads the legacy `IF … THEN …` and `When …, then …` forms, because post-mortems written before
+  today are stored text. `formatSkillProcedure` writes the `**When:**` / `**What I do:**` body.
+- `ingestIfThenFromTrade` → `ingestLessonFromTrade`; every consumer (skill candidate ingestion, the
+  journal-rules writer, the craft service, self-improvement, the review/format comments) uses the new
+  clause shape directly — the previous intermediate mapping (`clause.ifCondition → when`) is gone.
+- The old `AlgorithmicSummaryService` legacy-note reader is untouched: it parses historical post-mortem
+  text for a summary and is not a writer.
+
+**Verification.** Contract 25: the current sentence parses into `{when, action}`; a legacy IF/THEN note
+still yields the same shape; a placeholder side is dropped; the procedure body has no IF/THEN tokens;
+`renderPostMortem` writes `When …, do …`; the schema accepts the new fields and REFUSES a legacy-shaped
+answer; the prompt asks for `when`/`action`; the old module is deleted and nothing imports it; the
+notebook ingest is named for the lesson. Ladder: `typecheck` · `check:contracts` **285** · `lint`
+**375/375** · `check:boundaries` · `check:docs` · `build` · `boot-probe` · `render-probe` ·
+`skill-approval-probe` **28/28**.
+
+**Residues.** Stored post-mortems written before today keep their `IF … THEN …` sentence; the parser
+reads it (that is the compatibility arm, tested). `AlgorithmicSummaryService` still matches the legacy
+`IF/THEN Rule:` patterns when summarising an old note. No live model call was made for this change — the
+prompt/schema/parser/renderer are contract-tested, and the next settled trade is the first live note in
+the new shape.

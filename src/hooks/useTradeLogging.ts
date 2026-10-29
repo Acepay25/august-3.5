@@ -196,7 +196,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
 
         // Auto-learn from LOSS now lands in the SKILLS system:
         // syncClosedTradeToNotebook (called below by the caller) already runs
-        // ingestIfThenFromTrade + the skill-worth gate — evidence-counted,
+        // ingestLessonFromTrade + the skill-worth gate — evidence-counted,
         // enforceable, one representation. The parallel rules store is no
         // longer written; it remains read-only history for outcome
         // attribution (applyOutcomeToRules).
@@ -521,7 +521,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
         // E-57 §1 — the reflection runs FIRST, and the notebook is handed the
         // row it wrote. The ordering is not a preference:
         // `syncClosedTradeToNotebook` marks the trade settled, then folds the
-        // diary entry and the IF/THEN skill draft from `trade.postMortem`, so a
+        // diary entry and the lesson skill draft from `trade.postMortem`, so a
         // reflection that ran afterwards would land on a row the notebook had
         // already recorded as having nothing to say.
         //
@@ -550,7 +550,7 @@ export const useTradeLogging = (params: UseTradeLoggingParams) => {
             } catch (err) {
                 // The service is written never to throw, but this leg owns the
                 // notebook sync BELOW it: an escaping error must cost the
-                // reflection, never the diary and the IF/THEN draft.
+                // reflection, never the diary and the lesson draft.
                 console.warn('[TraderNotebook] settlement reflection failed:', err);
             }
             await syncClosedTradeToNotebook(

@@ -293,7 +293,7 @@ const normDescription = (value: string): string =>
  * written one — the `serializeSkill` fallback chain, in every shape the
  * round trip can produce.
  *
- * The chain is: the IF/THEN pair, else the body's first 24 words, else the
+ * The chain is: the trigger, else the body's first 24 words, else the
  * title. The body's first 24 words are computed over BOTH the parsed body
  * (which keeps the `# Title` line) and the instruction body (which does not),
  * because the writer saw one and the parser sees the other — and a skill that
@@ -517,9 +517,9 @@ const reviewSkillFile = (file: MemoryFile, options: SkillReviewOptions = {}): Sk
     let evidence = 'Every format check passes.';
     if (!hasStructuredTrigger && descriptionIsFallback) {
         verdict = 'dormant';
-        evidence = 'Names no setup it applies to: it has no IF/THEN trigger and its description is the generated fallback, so it will not fire.'
+        evidence = 'Names no setup it applies to: it has no trigger and its description is the generated fallback, so it will not fire.'
             + ' It still lists, and it still occupies one of the 30 index slots in file order.';
-        reasons.push('no IF/THEN trigger, and the description is the generated fallback rather than an authored one');
+        reasons.push('no trigger, and the description is the generated fallback rather than an authored one');
         reasons.push('it lists, it occupies one of the 30 index slots in file order, and it will not fire');
     } else if (card.droppedChars > 0) {
         verdict = 'clipped';

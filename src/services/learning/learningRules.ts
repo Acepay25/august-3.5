@@ -1,5 +1,5 @@
 /**
- * learningRules — the writer for the journal's IF/THEN rule store.
+ * learningRules — the writer for the journal's when/action rule store.
  *
  * The reader (`utils/learningRulesIndex.ts`) was wired in both homes, but
  * nothing on the live settlement path constructed a `LearningRule`: the store
@@ -16,14 +16,14 @@
 import type { LearningRule } from '../../types/learning';
 import type { LoggedTrade } from '../../types/trade';
 import { TradeOutcome } from '../../types/enums';
-import type { IfThenClause } from '../../utils/ifThenSkill';
+import type { LessonClause } from '../../utils/lessonClause';
 import { storageService } from '../infrastructure/StorageService';
 
 const MAX_LEARNING_RULES = 200;
 
 export const recordLearningRulesFromPostMortem = (
     trade: LoggedTrade,
-    clauses: readonly IfThenClause[],
+    clauses: readonly LessonClause[],
 ): number => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return 0;
     if (clauses.length === 0) return 0;
@@ -33,8 +33,8 @@ export const recordLearningRulesFromPostMortem = (
         const rules = [...store.rules];
         let written = 0;
         for (const clause of clauses.slice(0, 3)) {
-            const when = clause.ifCondition.trim();
-            const action = clause.thenAction.trim();
+            const when = clause.when.trim();
+            const action = clause.action.trim();
             if (!when || !action) continue;
             const same = rules.find(r =>
                 r.when.trim().toLowerCase() === when.toLowerCase()

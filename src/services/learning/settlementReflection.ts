@@ -7,9 +7,9 @@
  * legacy rows and a screenshot upload path. So the leg that turns a closed trade
  * into a notebook lesson has been running on empty text for as long as it has
  * existed: `craftSkillFromPostMortem` (`services/learning/SkillCraftService.ts:144`)
- * returns `null` whenever `postMortem.length < 40`, and `ingestIfThenFromTrade`
- * (`services/learning/SkillMemoryService.ts:3000`) gets zero clauses from
- * `parseIfThenClauses('')`. `services/agents/botLearning.ts:234` still calls the
+ * returns `null` whenever `postMortem.length < 40`, and `ingestLessonFromTrade`
+ * (services/learning/SkillMemoryService.ts) gets zero clauses from
+ * `parseLessonClauses('')`. `services/agents/botLearning.ts:234` still calls the
  * crafter on every closed bot trade and has never once received a skill.
  *
  * **Why one call is allowed.** `docs/plan/README.md` rule 8 said no proposal in
@@ -57,13 +57,13 @@ Answer ONLY JSON:
 {
   "whatHappened": "2-4 sentences on how this plan met its outcome, in terms of the numbers given",
   "lesson": "one transferable sentence — what to do differently next time, starting with the thing the trader controls",
-  "ifCondition": "the trigger, as a condition the trader can check BEFORE entering (no price you invented)",
-  "thenAction": "the mechanical action that trigger should change"
+  "when": "the trigger, as a condition the trader can check BEFORE entering (no price you invented)",
+  "action": "the mechanical action that trigger should change"
 }
 
 Rules:
 - Quote only numbers that are in the record. If a fact is missing, name the absence instead of filling it.
-- "ifCondition"/"thenAction" must be checkable and mechanical — a level, a condition, a regime, a size. Not "be more careful", not "trust the feeling".
+- "when"/"action" must be checkable and mechanical — a level, a condition, a regime, a size. Not "be more careful", not "trust the feeling".
 - A GROSS R that turns NET-negative after fees is a lesson about the stop distance or the entry, not about the direction.
 - An outcome that beat its own benchmark is not evidence of skill; a trade that lost while the benchmark rose is not evidence of error. Say which you were told.
 - If the record does not support a transferable lesson — an entry that never filled, a one-off execution slip, a row with almost no facts — output {"noLesson": true} and nothing else. A gap in the notebook is better than a rule that was never earned.`;
@@ -95,7 +95,7 @@ export interface ReflectionResult {
     /** The row to hand on: the trade as logged, plus the reflection when one was
      *  written. The caller MUST pass this — not its own copy — into
      *  `syncClosedTradeToNotebook`, because that function folds the diary entry
-     *  and the IF/THEN draft from the row's post-mortem text. */
+     *  and the lesson draft from the row's post-mortem text. */
     trade: LoggedTrade;
     wrote: boolean;
     reason: ReflectionSkipReason | 'written';
@@ -204,8 +204,10 @@ export const reflectionPacket = (trade: LoggedTrade, injectedSkills?: string[]):
  *  cosmetic: the `Lesson:` line is what `extractLessonFromPostMortem`
  *  (services/learning/MemoryFilesService.ts:1017) captures — it must be a plain
  *  line, not a heading or a whole-line bold, because that reader SKIPS wrapped
- *  lines as titles — and the IF/THEN sentence is what `parseIfThenClauses`
- *  (utils/ifThenSkill.ts:12) splits into a skill draft.
+ *  lines as titles — and the `When …, do …` sentence is what `parseLessonClauses`
+ *  (utils/lessonClause.ts) splits into a skill draft. The legacy `IF … THEN …`
+ *  form is still parsed, because post-mortems written before 2026-10-30 are
+ *  stored text.
  *
  *  Plain prose, no markdown heading, and the first line names the app as the
  *  author: this text is read back by the diary, the pattern-memory synthesis and
@@ -218,7 +220,7 @@ export const renderPostMortem = (r: SettlementReflection, model?: string): strin
     '',
     `Lesson: ${r.lesson.trim()}`,
     '',
-    `IF ${r.ifCondition.trim()} THEN ${r.thenAction.trim()}.`,
+    `When ${r.when.trim()}, do ${r.action.trim()}.`,
 ].join('\n');
 
 /** Extract → sanitize → schema, in the order every AI boundary in this app
@@ -247,7 +249,7 @@ export const reflectOnClosedTrade = async (
     // post-mortem exists", so the two readers cannot disagree about whether the
     // row has been reflected on.
     if ((trade.postMortem ?? '').trim().length >= 40) return skip('already-written');
-    // Only rows the notebook can act on: `ingestIfThenFromTradeUnlocked` returns
+    // Only rows the notebook can act on: `ingestLessonFromTradeUnlocked` returns
     // for anything but WIN/LOSS, so an ENTRY_NOT_HIT reflection would be a call
     // whose output cannot become a draft.
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return skip('not-a-lesson-row');
