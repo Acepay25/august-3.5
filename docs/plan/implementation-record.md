@@ -2460,3 +2460,51 @@ when nothing qualifies). Hours are PHT only. Time-of-day numbers are descriptive
 — no significance test and no costs are attached, so the model is told to require repetition rather than
 treat a 1.1% mean move as an edge. The scan still needs one AI provider call; with none it returns
 unavailable. The skills it creates are candidates like any other model write — evidence alone moves them.
+
+## 50. Signal accuracy: the base rate and the feedback leg (2026-10-30)
+
+**Scope.** The next phase the last report left open: read resolved signals and measure them honestly —
+hit rate against what the same levels would have done entered at a random time — then feed that back
+into the next emission. This is the accuracy fold, NOT the skill evidence fold (b3), which stays frozen.
+
+**What landed.**
+- `services/signals/signalAccuracy.ts` — `baseRateFor` simulates the SAME risk/reward percentages and
+  the SAME time-to-expiry entered at every bar's close of the same tape, through the same
+  `resolveSignal` (so same-bar both-hit is still stop-first). `scoreSignals` returns fills, hit rate,
+  mean base, lift, expectancy, ambiguity and a THIN flag below `MIN_ACCURACY_FILLS` (20).
+- Settlement stores the baseline on the resolution (`SignalResolution.base`: samples, hit rate,
+  horizon bars, risk/reward pct). Resolutions written before this fold simply have no `base`; the feed
+  says "no same-levels baseline yet", never 0%.
+- The feed's summary gained a **vs base** stat: `hit rate vs base · lift ±N pts · N=fills`, with
+  `thin` below the floor. The footnote now says a hit rate means nothing without the baseline.
+- THE FEEDBACK LEG: `signalScorecard(coin)` reads this coin's resolved calls and the `emit_signal`
+  receipt carries it. The model makes its next call with the last ones' graded record in front of it;
+  the receipt's note says a `thin` scorecard is not an edge to claim.
+
+**Live receipt (real OKX tape, synthetic bracket, 2026-10-30).**
+```
+RESOLUTION {"status":"expired","grossR":-0.2293,"feeR":0.1400,"outcomeR":-0.3693,
+            "crossCheck":"disagree","primarySource":"okx",
+            "base":{"samples":299,"hitRate":0.1940,"horizonBars":35,
+                    "riskPct":0.010000,"rewardPct":0.010000}}
+```
+299 same-levels entries on that tape hit target-before-stop 19.4% of the time; the emitted call
+expired at −0.37R after costs. The Binance cross-check **disagreed** on this run (the previous run
+agreed on identical mechanics) — the venue provenance is recorded, not smoothed over.
+
+**Verification.** Contract 22 (8 cases): a trending tape produces a high base; a tape whose bars
+contain both levels produces a ZERO base (stop-first); no distance → no baseline; score = hit rate vs
+mean base with lift and `thin`; a resolution without a stored baseline is unmeasured, not 0%;
+`summariseSignals` carries the pair; and two source pins (the baseline is computed at settlement; the
+emission receipt carries the scorecard). `typecheck` · `check:contracts` **253** · `lint`
+**375/375** · `check:boundaries` (534 files, 2,286 edges) · `check:docs` · `build` · `boot-probe` ·
+`render-probe` (the "vs base" row is asserted rendered on the seeded card) · `skill-approval-probe`
+**28 PASS**.
+
+**Residues.** The baseline enters at each bar's close (immediate fill) — a signal that waits for a
+pullback is compared against an always-in trader, the harder baseline. Base rates are gross hit rates
+(costs are applied to the signal's R, not the base). A per-signal base of 299 samples is descriptive;
+the THIN floor applies to the number of resolved SIGNALS, not the simulation sample. Calibration by
+stated probability is not possible yet — signals carry no probability, and the gate's cap is not a
+calibrated forecast. The skill evidence fold (b3: resolved signals confirming/denying playbooks) is not
+built, per the standing ruling.

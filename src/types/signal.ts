@@ -69,6 +69,17 @@ export interface SignalGroundingShadow {
     missing: string[];
 }
 
+/** The same bracket geometry entered at every bar of the same tape — the
+ *  baseline the signal's hit rate is measured against. `hitRate` uses the
+ *  resolver's fill definition (won / (won + lost + expired)). */
+export interface SignalBaseRate {
+    samples: number;
+    hitRate: number;
+    horizonBars: number;
+    riskPct: number;
+    rewardPct: number;
+}
+
 export interface SignalResolution {
     status: Exclude<SignalStatus, 'open'>;
     at: number;
@@ -96,6 +107,10 @@ export interface SignalResolution {
      *  fallback is named rather than silently substituting, and it always
      *  carries `crossCheck: 'unavailable'` because no second source saw it. */
     primarySource: 'okx' | 'binance';
+    /** What the SAME levels would have done entering at every bar of the same
+     *  tape. Absent on resolutions written before the accuracy fold shipped and
+     *  when the tape was too short to sample. */
+    base?: SignalBaseRate;
 }
 
 export type SignalEvent =
@@ -128,6 +143,11 @@ export interface SignalSummary {
     expectancyR: number | null;
     /** ambiguous / fills. Null when nothing has filled. */
     ambiguityRate: number | null;
+    /** Mean of each resolved signal's own same-levels base rate. Null until at
+     *  least one resolution carries a base (added 2026-10-30). */
+    baseRate: number | null;
+    /** hitRate − baseRate, in probability points. Null when either side is. */
+    lift: number | null;
     /** The shadow gate's two sides, resolved: the mean R of emissions it would
      *  have refused vs the ones it passed. Each is null until that side has a
      *  resolved fill — an empty side is not a zero. */

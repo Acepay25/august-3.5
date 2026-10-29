@@ -2549,6 +2549,7 @@ async function main() {
                 grossR: 3, feeR: 0.14, outcomeR: 2.86,
                 usedBarTimes: [at + 5 * 60 * 1000], path: 'bar', ambiguous: false,
                 crossCheck: 'agree', primarySource: 'okx',
+                base: { samples: 299, hitRate: 0.35, horizonBars: 12, riskPct: 0.01, rewardPct: 0.03 },
             };
             localStorage.setItem(key, JSON.stringify([
                 { v: 1, type: 'emit', at, id: signal.id, signal },
@@ -2580,6 +2581,11 @@ async function main() {
                 check('the card names the venue cross-check rather than assuming it',
                     /cross-checked OKX\/Binance/.test(cardText), cardText.slice(0, 200));
             }
+            const feedText = await page.evaluate(() =>
+                document.querySelector('[data-testid="signal-feed"]')?.textContent || '');
+            check('the feed states the hit rate against the same-levels base rate',
+                /vs base/i.test(feedText) && /35\.0%/.test(feedText) && /thin/i.test(feedText),
+                feedText.slice(0, 220));
         }
         // Back to History for the generic sweep below.
         await page.evaluate(() => document.querySelector('#journal-tab-log')?.click());

@@ -13,6 +13,7 @@ import type { SignalRow, SignalStatus, SignalSummary } from '../../types/signal'
 import { readSignals } from '../../services/signals/signalLedger';
 import { settleDueSignals } from '../../services/signals/signalService';
 import { summariseSignals, SIGNAL_SLIPPAGE_RATE, SIGNAL_TAKER_FEE_RATE } from '../../services/signals/signalResolver';
+import { MIN_ACCURACY_FILLS } from '../../services/signals/signalAccuracy';
 import { getActiveUsername } from '../../utils/activeUser';
 import { phtClock, phtDayKey } from '../../utils/timezone';
 import { RefreshIcon } from '../shared/Icons';
@@ -185,6 +186,7 @@ const SignalFeed: React.FC<SignalFeedProps> = ({ user }) => {
     }, [activeUser, load]);
 
     const summary = useMemo(() => summariseSignals(rows), [rows]);
+    const fills = summary.won + summary.lost + summary.expired;
     const costPct = ((SIGNAL_TAKER_FEE_RATE + SIGNAL_SLIPPAGE_RATE) * 2 * 100).toFixed(2);
 
     return (
@@ -224,6 +226,15 @@ const SignalFeed: React.FC<SignalFeedProps> = ({ user }) => {
                             sub="after fees, per filled call"
                         />
                         <Stat
+                            label="vs base"
+                            value={summary.baseRate === null || summary.hitRate === null
+                                ? '—'
+                                : `${pct(summary.hitRate)} vs ${pct(summary.baseRate)}`}
+                            sub={summary.lift === null
+                                ? 'no same-levels baseline yet'
+                                : `lift ${summary.lift >= 0 ? '+' : ''}${(summary.lift * 100).toFixed(1)} pts · N=${fills}${fills < MIN_ACCURACY_FILLS ? ' · thin' : ''}`}
+                        />
+                        <Stat
                             label="Ambiguity"
                             value={pct(summary.ambiguityRate)}
                             sub="same-bar both-hit, settled stop-first"
@@ -257,8 +268,9 @@ const SignalFeed: React.FC<SignalFeedProps> = ({ user }) => {
 
                 <p className="text-ui-2xs text-zinc-600">
                     Settlement: closed OKX 5m candles, Binance cross-check on the bars that decided the call, 1m drill-down only for a
-                    bar that contains both levels. Costs charged in R: {costPct}% round trip (taker fee + assumed slippage). A signal
-                    whose tape is unavailable stays open; it is never read as &quot;no entry&quot;.
+                    bar that contains both levels. Costs charged in R: {costPct}% round trip (taker fee + assumed slippage). The base rate
+                    is the SAME levels entered at every bar of the same tape — a hit rate means nothing without it. A signal whose tape is
+                    unavailable stays open; it is never read as &quot;no entry&quot;.
                 </p>
             </div>
         </div>

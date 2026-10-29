@@ -39,6 +39,8 @@
  *  21. the chart tape study — hour-of-day edge, ≥10% swing legs with their
  *      antecedents, candle anatomy, the digest budget, and the scan's direct
  *      candidate write (no approval queue)
+ *  22. signal accuracy — the same-levels base rate, hit-rate lift, the thin
+ *      sample floor, and the feedback carried into the next emission
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -1248,6 +1250,74 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         /queueSkillDraft/.test(read('src/services/learning/bookSkillDrafts.ts')));
 })();
 
+// ─── 22. signal accuracy: base rate, lift, thin, feedback ──────────────────
+(() => {
+    const acc = loadModule('src/services/signals/signalAccuracy.ts');
+    const rv = loadModule('src/services/signals/signalResolver.ts');
+    const BAR = rv.SIGNAL_BAR_MS;
+    const T0 = 2_000_000_000_000;
+    const bar = (i, close, high, low) => ({ time: T0 + i * BAR, open: close, high, low, close });
+    const sig = { direction: 'long', entry: 100, stop: 99, target: 101, emittedAt: T0, expiresAt: T0 + 12 * BAR };
+
+    const rising = [];
+    let c = 100;
+    for (let i = 0; i < 80; i += 1) {
+        rising.push(bar(i, c, c * 1.002, c * 0.998));
+        c *= 1.01;
+    }
+    const upBase = acc.baseRateFor(sig, rising);
+    ok('accuracy: a trending tape gives a high same-levels base rate',
+        !!upBase && upBase.samples > 0 && upBase.hitRate >= 0.9,
+        JSON.stringify(upBase));
+
+    const chop = [];
+    for (let i = 0; i < 80; i += 1) chop.push(bar(i, 100, 102, 98));
+    const chopBase = acc.baseRateFor(sig, chop);
+    ok('accuracy: a bar containing both levels gives a ZERO base (stop-first)',
+        !!chopBase && chopBase.samples > 0 && chopBase.hitRate === 0,
+        JSON.stringify(chopBase));
+
+    ok('accuracy: no risk distance → no baseline, never a fabricated 0',
+        acc.baseRateFor({ ...sig, stop: 100 }, rising) === null
+        && acc.baseRateFor(sig, [bar(0, 100, 101, 99)]) === null);
+
+    const mkRow = (status, r, base) => ({
+        signal: {
+            id: `x-${Math.random()}`, coin: 'BTCUSDT', direction: 'long', entry: 100, stop: 99,
+            target: 101, emittedAt: T0, expiresAt: T0 + BAR, evidenceRefs: [], dataHash: '',
+            provider: '', model: '', promptVersion: '', source: 'signal', thesis: '',
+        },
+        status,
+        resolution: {
+            status, at: T0, grossR: r, feeR: 0.14, outcomeR: r, usedBarTimes: [], path: 'bar',
+            ambiguous: false, crossCheck: 'agree', primarySource: 'okx',
+            ...(base !== undefined ? { base: { samples: 50, hitRate: base, horizonBars: 12, riskPct: 0.01, rewardPct: 0.01 } } : {}),
+        },
+    });
+    const scored = acc.scoreSignals([
+        mkRow('won', 2, 0.4), mkRow('lost', -1, 0.4), mkRow('won', 2, 0.4), mkRow('lost', -1, 0.4),
+    ]);
+    ok('accuracy: hit rate is vs the mean base, and lift is the difference',
+        scored.fills === 4 && scored.hitRate === 0.5 && scored.baseRate === 0.4
+        && Math.abs(scored.lift - 0.1) < 1e-9 && scored.thin === true,
+        JSON.stringify(scored));
+    const noBase = acc.scoreSignals([mkRow('won', 2)]);
+    ok('accuracy: a resolution without a stored baseline is not 0% — it is unmeasured',
+        noBase.baseRate === null && noBase.lift === null && noBase.fills === 1);
+
+    const summaries = rv.summariseSignals([mkRow('won', 2, 0.4), mkRow('lost', -1, 0.4)]);
+    ok('accuracy: the feed summary carries the base and the lift',
+        summaries.baseRate === 0.4 && summaries.hitRate === 0.5
+        && Math.abs(summaries.lift - 0.1) < 1e-9, JSON.stringify(summaries));
+
+    const serviceSrc = fs.readFileSync(path.join(ROOT, 'src/services/signals/signalService.ts'), 'utf8');
+    const deskSrc = fs.readFileSync(path.join(ROOT, 'src/services/analysis/DeskToolsService.ts'), 'utf8');
+    ok('accuracy: the baseline is computed at settlement, where the tape already is',
+        /baseRateFor\(signal, primary\)/.test(serviceSrc));
+    ok('accuracy: the next emission receipt carries the scorecard (the feedback leg)',
+        /scorecard: signalScorecard\(s\.coin\)/.test(deskSrc));
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
@@ -1255,4 +1325,4 @@ if (failures.length) {
     console.error('CONTRACT CHECK FAIL — a pinned contract broke; fix the module, not this file.');
     process.exit(1);
 }
-console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing), the desk tool budget, the skill outcome correction, the startup call gates, the insight store pin and the signal loop (resolver order, costs, ledger, venue data) all hold.');
+console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing), the desk tool budget, the skill outcome correction, the startup call gates, the insight store pin, the signal loop (resolver order, costs, ledger, venue data), the chart tape study and the signal accuracy fold all hold.');

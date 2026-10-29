@@ -437,8 +437,14 @@ emission and CLOSED by the expiry; a bar containing both levels drills into 1m a
 STOP-FIRST when the order is still unknowable (`ambiguous: true`); a call that never touches its
 entry is `never_triggered`, not a loss; every fill is charged a named round-trip cost
 (`SIGNAL_TAKER_FEE_RATE` + `SIGNAL_SLIPPAGE_RATE` per side). A tape that does not reach back to the
-emission leaves the signal open and says so — never "no entry". Nothing consumes resolutions yet;
-the accuracy fold is the next phase by owner scope.
+emission leaves the signal open and says so — never "no entry".
+
+The accuracy fold rides the resolution: `signalAccuracy.baseRateFor` re-enters the SAME bracket at
+every bar of the same tape through the same resolver, so the stored `base` is what those levels did at
+a random time. The feed shows hit rate vs base with the lift and a THIN flag under
+`MIN_ACCURACY_FILLS`, and the next `emit_signal` receipt carries this coin's `signalScorecard` — the
+measurement goes back into the call, not only into a dashboard. The skill evidence fold (b3) does not
+read resolutions yet.
 
 ---
 

@@ -58,6 +58,7 @@ and feed the measurement back into the next signal.
 **Phase 1 shipped 2026-10-29:** the `emit_signal` desk tool, an append-only signal ledger
 (`signal_ledger_v1:<user>`, backed up), a deterministic resolver (closed OKX 5m candles, Binance
 cross-check, stop-first on an unknowable bar, costs in R), two shadow checks (the programmatic gate
-and an evidence check — neither blocks), and Journal → Signals. **Still open:** the learning fold
-that turns resolved signals into a measured base rate and feeds the next signal; nothing consumes
-resolutions yet, by scope.
+and an evidence check — neither blocks), and Journal → Signals. **Phase 2 shipped 2026-10-30:** every
+resolution carries the same-levels base rate, the feed shows hit rate vs base with a thin-sample floor,
+and the next `emit_signal` receipt carries the coin's scorecard. **Still open:** the skill evidence
+fold (b3) — resolved signals do not yet confirm or deny playbooks.

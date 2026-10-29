@@ -272,10 +272,13 @@ export const summariseSignals = (rows: readonly SignalRow[]): SignalSummary => {
         hitRate: null,
         expectancyR: null,
         ambiguityRate: null,
+        baseRate: null,
+        lift: null,
         shadowRefusedR: null,
         shadowPassedR: null,
     };
     const fillRs: number[] = [];
+    const baseRates: number[] = [];
     let ambiguous = 0;
     const refusedRs: number[] = [];
     const passedRs: number[] = [];
@@ -288,6 +291,8 @@ export const summariseSignals = (rows: readonly SignalRow[]): SignalSummary => {
         const r = row.resolution?.outcomeR;
         if (typeof r !== 'number' || !Number.isFinite(r)) continue;
         fillRs.push(r);
+        const base = row.resolution?.base?.hitRate;
+        if (typeof base === 'number' && Number.isFinite(base)) baseRates.push(base);
         if (row.resolution?.ambiguous) ambiguous += 1;
         if (row.gate?.status === 'refused') refusedRs.push(r);
         else if (row.gate?.status === 'pass') passedRs.push(r);
@@ -300,6 +305,8 @@ export const summariseSignals = (rows: readonly SignalRow[]): SignalSummary => {
         out.ambiguityRate = ambiguous / fills;
     }
     out.expectancyR = mean(fillRs);
+    out.baseRate = mean(baseRates);
+    out.lift = out.hitRate !== null && out.baseRate !== null ? out.hitRate - out.baseRate : null;
     out.shadowRefusedR = mean(refusedRs);
     out.shadowPassedR = mean(passedRs);
     return out;

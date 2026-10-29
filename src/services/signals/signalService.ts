@@ -36,6 +36,7 @@ import {
 } from './signalMarketData';
 import { getActiveUsername } from '../../utils/activeUser';
 import { DESK_TOOL_NAMES } from '../../utils/toolKinds';
+import { baseRateFor, scoreSignals, type SignalScorecard } from './signalAccuracy';
 
 /** Bump when the emit_signal description or parameter semantics change. The
  *  value is stored on every emission, so a later accuracy comparison can tell
@@ -192,6 +193,13 @@ export interface SettleOutcome {
     skipped: { id: string; reason: string }[];
 }
 
+/** What the desk's resolved calls on this coin actually did, against the
+ *  same-levels base rate. The emission receipt carries it so the NEXT call is
+ *  made knowing how the last ones were graded. `thin` means the sample is too
+ *  small to read — say so instead of claiming an edge. */
+export const signalScorecard = (coin?: string, user: string = getActiveUsername()): SignalScorecard =>
+    scoreSignals(readSignals(user).filter(r => !coin || r.signal.coin === coin));
+
 let lastSettleAttempt = 0;
 
 /**
@@ -259,11 +267,16 @@ export const settleDueSignals = async (
         const crossCheck = primarySource === 'okx'
             ? crossCheckBars(primary, cross, draft.usedBarTimes)
             : 'unavailable';
+        // The baseline is computed where the tape already is. A resolution
+        // written before this fold shipped simply has no `base` — the feed
+        // says "no baseline", never 0.
+        const base = baseRateFor(signal, primary) ?? undefined;
         const resolution: SignalResolution = {
             ...draft,
             at: Date.now(),
             crossCheck,
             primarySource,
+            ...(base ? { base } : {}),
         };
         const wrote = recordSignalResolution(signal.id, resolution, user);
         if (wrote.ok) out.resolved += 1;

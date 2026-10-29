@@ -3344,7 +3344,7 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                 // The harness's own call, recorded on the trader's ledger. The
                 // shadow gate and the evidence check never block this write.
                 try {
-                    const { emitSignal } = await import('../signals/signalService');
+                    const { emitSignal, signalScorecard } = await import('../signals/signalService');
                     const outcome = emitSignal(call.arguments, {
                         defaultSymbol: context.defaultSymbol ?? fallback,
                         markAtEmit: (context.getLiveMarkPrice?.() ?? context.liveMarkPrice) ?? null,
@@ -3372,7 +3372,10 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                             rr: risk > 0 ? Number((Math.abs(s.target - s.entry) / risk).toFixed(2)) : null,
                             expiresAt: new Date(s.expiresAt).toISOString(),
                             promptVersion: s.promptVersion,
-                            note: 'Recorded in Journal → Signals. It settles itself against the tape after expiry; do not call it a trade and do not promise an outcome.',
+                            // The feedback leg: this coin's resolved calls vs
+                            // the same-levels base rate. `thin` is not an edge.
+                            scorecard: signalScorecard(s.coin),
+                            note: 'Recorded in Journal → Signals. It settles itself against the tape after expiry; do not call it a trade and do not promise an outcome. If scorecard.thin is true, the sample is too small to read — say that instead of claiming an edge.',
                         }),
                         symbol: s.coin,
                     };
