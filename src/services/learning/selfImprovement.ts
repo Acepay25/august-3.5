@@ -186,7 +186,7 @@ export const classifyDistillAction = (
     const ftok = meaningful(f.fp);
     let best: { slug: string; n: number } | null = null;
     for (const s of skills) {
-        const n = overlap(ftok, meaningful(s.meta.ifCondition));
+        const n = overlap(ftok, meaningful(s.meta.when));
         if (!best || n > best.n) best = { slug: s.slug, n };
     }
     if (!best || best.n === 0) return { type: 'create', fp: f.fp, reason: `no covering skill (${f.count} occurrences, ${f.rootCauseClass ?? 'unknown cause'})` };
@@ -196,7 +196,7 @@ export const classifyDistillAction = (
 
 /** Deterministic draft substrate for the 'create' action (no LLM needed —
  *  the lesson text + setup produce the artifact the inbox will review). */
-export const craftDraftFromEpisode = (e: LearningEpisode, fp: string): CraftedSkill => {
+export const craftDraftFromEpisode = (e: LearningEpisode, _fp: string): CraftedSkill => {
     const when = e.clause || [e.coin, e.family].filter(Boolean).join(' ') || 'the replayed setup';
     const avoid = e.outcome === 'loss';
     return {
@@ -208,8 +208,6 @@ export const craftDraftFromEpisode = (e: LearningEpisode, fp: string): CraftedSk
         validate: 'setup matches the fingerprint context',
         output: avoid ? 'skip the trade' : 'execute per the plan',
         approval: 'never auto-size',
-        ifCondition: (e.clause || e.keyLesson || `${e.coin} ${e.family} ${fp}`).slice(0, 80),
-        thenAction: avoid ? 'skip until the thesis confirms' : 'enter when the confirm candle closes',
     };
 };
 
@@ -347,7 +345,7 @@ export const measureFingerprints = async (
         // skill then) still gets linked once a skill appears — so a skill
         // created by a later distill can be held accountable.
         if (!cur.skillSlug && !cur.resolvedAt) {
-            const link = skills.find(s => overlap(meaningful(f.fp), meaningful(s.meta.ifCondition)) >= 2);
+            const link = skills.find(s => overlap(meaningful(f.fp), meaningful(s.meta.when)) >= 2);
             if (link) {
                 cur.skillSlug = link.slug;
                 cur.linkedAt = new Date().toISOString();

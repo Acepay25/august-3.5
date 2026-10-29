@@ -214,10 +214,10 @@ export interface SkillIndexRow {
     kind?: string;
     /** What the skill is + when it applies — the activation key. Per the
      *  Agent-Skills guidance, a specific "what + when" line is what lets the
-     *  model decide to USE a skill; the IF/THEN is the rule once activated. */
+     *  model decide to USE a skill. */
     description?: string;
-    ifCondition?: string;
-    thenAction?: string;
+    /** The skill's one trigger sentence (its own `when`). */
+    when?: string;
     /** Which seat may see this skill — mirrors `SkillMeta.audience`. The
      *  retrieval filters on it (`MemoryRetrievalService.rankedMatchedSkills`);
      *  the index did not, so a moderator-only rule could be named to an
@@ -282,11 +282,7 @@ export const isIndexableSkill = (row: SkillIndexRow, audience: SkillIndexAudienc
 
 /** A skill the seat cannot apply without a trigger is a name, not a rule. */
 const hasUsableTrigger = (row: SkillIndexRow): boolean =>
-    Boolean(
-        (row.description || '').trim()
-        || (row.ifCondition || '').trim()
-        || (row.thenAction || '').trim(),
-    );
+    Boolean((row.description || '').trim() || (row.when || '').trim());
 
 /** confirmed before candidate; anything else (an old status word) last. */
 const statusRank = (status?: string): number => {
@@ -345,7 +341,7 @@ export const rankSkillIndexRows = (
  * to know what exists AND when each one applies. Pure — the panel loads the
  * library and passes rows in (kept out of this module so the prompt builder
  * stays network-free). Each line leads with the activation description
- * (what/when), then the IF/THEN rule.
+ * (what/when), then the skill's trigger sentence.
  */
 /** The library index a seat reads. `where` names the thing a skill must match:
  *  the dock looks at a chart, the Agents surface looks at nothing, and a heading
@@ -369,17 +365,14 @@ export const buildSkillsIndexForPrompt = (
     const candidates = eligible.filter(r => r.status !== 'confirmed');
     const shown = confirmed.slice(0, max);
     const lines = shown.map(r => {
-        const rule = [
-            r.ifCondition ? `IF ${r.ifCondition}` : '',
-            r.thenAction ? `THEN ${r.thenAction}` : '',
-        ].filter(Boolean).join(' → ');
+        const rule = r.when ? `When ${r.when}` : '';
         const desc = (r.description || '').trim();
         const kindTag = r.kind ? `${r.kind === 'avoid' ? 'avoid' : 'repeat'} · ` : '';
         return `- ${r.slug} — ${kindTag}${desc || rule || '(see recall)'}${desc && rule ? ` · ${rule}` : ''}`;
     });
     const candidateCount = candidates.length;
     const header = confirmed.length > 0
-        ? `## Skills library — ${confirmed.length} confirmed skill${confirmed.length === 1 ? '' : 's'}. Each line is WHEN to use it; the IF/THEN is the rule. APPLY any that match ${where} before answering; cite the slug you used, and open the full body with skill_view before acting on it.`
+        ? `## Skills library — ${confirmed.length} confirmed skill${confirmed.length === 1 ? '' : 's'}. Each line is WHEN to use it; the body is the procedure. APPLY any that match ${where} before answering; cite the slug you used, and open the full body with skill_view before acting on it.`
         : `## Skills library — no confirmed skills.${candidateCount > 0 ? ` ${candidateCount} candidate hypothes${candidateCount === 1 ? 'is exists' : 'es exist'} (unproven; NOT rules and NOT applied).` : ''}`;
     return [
         header,

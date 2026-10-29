@@ -11,7 +11,7 @@
  * an existing skill instead of minting a twin.
  *
  *  • Deterministic tier (no scored outcome available): tombstone cooldown,
- *    pending-duplicate skip, live-library coverage skip, IF/THEN sanity, and
+ *    pending-duplicate skip, live-library coverage skip, trigger sanity, and
  *    a scoped default prediction attached when the source didn't craft one.
  *  • Evidence tier (a real or synthetic closed trade exists): the FULL worth
  *    gate (evaluateSkillWorth — catalog, memory, graveyard, evidence aware).
@@ -34,7 +34,7 @@ import { defaultDescription } from '../../utils/skillDescription';
 import { evaluateSkillWorth, validateCraftedSkill } from './skillWorthGate';
 import { listSkills, skillStrictlyMatchesSetup, maybeMergeSkill, type SkillMeta } from './SkillMemoryService';
 import {
-    validateIfThen,
+    validateTrigger,
     coveredByLiveSkill as coveredByLiveSkillWith,
     type CoverReader,
 } from './skillClauseBar';
@@ -47,7 +47,7 @@ const liveReader: CoverReader<SkillMeta> = {
     strictMatches: (meta, setup) => skillStrictlyMatchesSetup(meta, setup),
 };
 
-export { validateIfThen };
+export { validateTrigger };
 
 /** Does an enabled live skill already cover this setup? Structural match on
  *  coin/direction/family when the source knows them, keyword overlap on the
@@ -92,8 +92,8 @@ export const deterministicDraftGate = (input: DeterministicGateInput): DraftGate
     if (coveredByLiveSkill(crafted, coin, direction, family)) {
         return { ok: false, reason: 'an existing skill already covers this setup', judged: true };
     }
-    const ifThenFail = validateIfThen(crafted);
-    if (ifThenFail) return { ok: false, reason: ifThenFail, judged: true };
+    const triggerFail = validateTrigger(crafted);
+    if (triggerFail) return { ok: false, reason: triggerFail, judged: true };
     return {
         ok: true,
         crafted: {
@@ -171,7 +171,7 @@ export type EvidenceGateResult =
      *  later pass is ALLOWED to retry it. A refusal that carries
      *  `judged: true` is a verdict — the gate LOOKED at the idea and said
      *  no (worth-gate skip, merge-without-target, post-LLM validate
-     *  failure, covered setup, malformed IF/THEN). Thesis-scanning
+     *  failure, covered setup, malformed trigger). Thesis-scanning
      *  callers fingerprint judged rejects instead of re-running the full
      *  extraction+scoring+LLM-gate cycle on them forever. (A flag rather
      *  than a 'rejected' action member so existing consumers that narrow
@@ -239,10 +239,9 @@ export const gateEvidenceBackedDraft = async (input: EvidenceGateInput): Promise
                 const gated: CraftedSkill = {
                     ...crafted,
                     kind: decision.kind ?? crafted.kind,
-                    ifCondition: (decision.ifCondition || '').trim() || crafted.ifCondition,
-                    thenAction: (decision.thenAction || '').trim() || crafted.thenAction,
-                    // `when` is untouched by the gate, so a synthesized
-                    // description keeps matching the craft the model wrote.
+                    // The worth gate may TIGHTEN the trigger; it never invents
+                    // one, so an empty decision keeps the craft's own sentence.
+                    when: (decision.when || '').trim() || crafted.when,
                     description: crafted.description || defaultDescription(crafted) || undefined,
                     prediction: decision.prediction ?? defaultPrediction({ coin, family }),
                 };

@@ -1,7 +1,7 @@
 /**
  * skillPredicate — a machine-checkable trigger condition on a skill.
  *
- * A skill's `ifCondition` is prose, so a seat can read it loosely or ignore it.
+ * A skill's `when` is prose, so a seat can read it loosely or ignore it.
  * A predicate states the same claim in a language code can evaluate against the
  * tape, which turns "this setup is live right now" into a fact rather than an
  * opinion.

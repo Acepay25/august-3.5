@@ -47,7 +47,7 @@ import {
     retirementReasonFromHistory,
 } from './skillGraveyard';
 import { isStaleByRegime } from '../../utils/regimeSentinel';
-import { validateIfThen, coveredByLiveSkill as coveredByLiveSkillWith, type CoverReader } from './skillClauseBar';
+import { validateTrigger, coveredByLiveSkill as coveredByLiveSkillWith, type CoverReader } from './skillClauseBar';
 import { shouldSkillHoldout } from '../../utils/skillHoldout';
 import { classifyStrategyFamily } from '../../utils/strategyFamily';
 import {
@@ -126,7 +126,7 @@ export interface SkillMeta {
     name?: string;
     /** One-sentence semantic summary (zcode memory pattern): what this skill
      *  claims, in prose. Generated at creation from the worth-gate rationale
-     *  (or the IF/THEN pair), consumed by index lines, the recall tool, the
+     *  (the trigger sentence), consumed by index lines, the recall tool, the
      *  grid subtitle and LLM judges. Absent on legacy skills. */
     description?: string;
     /** The revision of THIS skill the file declares (see `SKILL_FILE_VERSION`).
@@ -245,8 +245,7 @@ export interface SkillMeta {
      *  The comparison then promotes whichever wins. */
     shadow?: {
         kind: SkillKind;
-        ifCondition?: string;
-        thenAction?: string;
+        when?: string;
         body: string;
         name?: string;
         startedAt: string;
@@ -264,7 +263,7 @@ export interface SkillMeta {
     evidenceCount?: number;
     /** The cluster that CREATED this skill, kept out of the promotion maths.
      *
-     *  A skill's IF/THEN is authored from the post-mortems of the trades that
+     *  A skill's trigger is authored from the post-mortems of the trades that
      *  spawned it, so those trades are the source of the claim, not a test of
      *  it. Counting them as evidence let eight co-occurring wins mint a skill
      *  already `confirmed` — clearing the zero-sample CI gate and satisfying
@@ -275,8 +274,10 @@ export interface SkillMeta {
      *  outcomes observed after it was injected, not before. Absent on every
      *  skill that was not born from a cluster. */
     birthEvidence?: { wins: number; losses: number; clusterSize: number; at: string };
-    ifCondition?: string;
-    thenAction?: string;
+    /** The skill's one trigger sentence. Legacy files carried `ifCondition`
+     *  + `thenAction` frontmatter; the parser maps `ifCondition` into this
+     *  field and the old keys survive as unknown frontmatter. */
+    when?: string;
     /** Optional machine-checkable trigger, evaluated against the tape by
      *  services/analysis/skillPredicate. Prose can be read loosely; a predicate
      *  either fires on the current bar or it does not. Absent means the skill
@@ -430,8 +431,7 @@ export interface SkillMeta {
      *  exactly that reason. */
     previousVersion?: {
         kind: SkillKind;
-        ifCondition?: string;
-        thenAction?: string;
+        when?: string;
         body?: string;
         /** The EXECUTABLE half of the version being replaced. Without these a
          *  revert restored old prose under the newer trigger logic — the row read
@@ -557,7 +557,7 @@ export const listSkillSlugs = (): string[] =>
  * So the file is written as two explicit sections behind this marker: a
  * PORTABLE face above it (spec-shaped: name, description, and the keys that
  * describe the procedure's behaviour — kind/coin/direction/family/regime/
- * ifCondition/thenAction/predicate/timeframe/source/audience), and
+ * when/predicate/timeframe/source/audience), and
  * a LEDGER face below it (every outcome and lifecycle key). The parser reads
  * straight through the marker, so NOTHING is rewritten and no migration is
  * needed: existing files parse exactly as before, and a spec-only file with
@@ -705,11 +705,14 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
     const prevRaw = pick('previousVersion');
     if (prevRaw) {
         try {
-            const parsed = JSON.parse(prevRaw) as { kind?: string; ifCondition?: string; thenAction?: string; body?: string; predicate?: string; description?: string; approvedBy?: string; approvedAt?: string };
+            const parsed = JSON.parse(prevRaw) as { kind?: string; when?: string; ifCondition?: string; body?: string; predicate?: string; description?: string; approvedBy?: string; approvedAt?: string };
             previousVersion = {
                 kind: parsed.kind === 'repeat' ? 'repeat' : 'avoid',
-                ifCondition: typeof parsed.ifCondition === 'string' ? parsed.ifCondition : undefined,
-                thenAction: typeof parsed.thenAction === 'string' ? parsed.thenAction : undefined,
+                // `ifCondition` is the pre-2026-10-30 spelling of the trigger;
+                // read it so a rewrite drafted before the migration can still be
+                // reverted. The old `thenAction` lives on in the body.
+                when: typeof parsed.when === 'string' ? parsed.when
+                    : typeof parsed.ifCondition === 'string' ? parsed.ifCondition : undefined,
                 ...(typeof parsed.predicate === 'string' ? { predicate: parsed.predicate } : {}),
                 ...(typeof parsed.description === 'string' ? { description: parsed.description } : {}),
                 body: typeof parsed.body === 'string' ? parsed.body : undefined,
@@ -864,9 +867,8 @@ export function parseSkillMarkdown(content: string): SkillMeta | null {
                 return undefined;
             }
         })(),
-        ifCondition: pick('ifCondition'),
+        when: pick('when') || pick('ifCondition'),
         predicate: pick('predicate'),
-        thenAction: pick('thenAction'),
         strategyFamily: pick('strategyFamily'),
         signals: pick('signals'),
         invalidation: pick('invalidation'),
@@ -1078,8 +1080,8 @@ export const isApprovedSkill = (meta: Pick<SkillMeta, 'approvedBy' | 'prior'>): 
  * consumed (the 2026-10-27 audit S-1). This is the one writer that turns such a row into a
  * live skill; it returns the file name, or null when the trigger is not there.
  */
-export const activateSkillForTrigger = async (ifCondition: string, username: string): Promise<string | null> => {
-    const want = (ifCondition ?? '').trim().toLowerCase();
+export const activateSkillForTrigger = async (when: string, username: string): Promise<string | null> => {
+    const want = (when ?? '').trim().toLowerCase();
     if (!want) return null;
     // Read, rewrite and persist under the notebook's own lock: this is a second
     // writer of the file the ingest path writes, and a read outside the queue
@@ -1087,7 +1089,7 @@ export const activateSkillForTrigger = async (ifCondition: string, username: str
     return withNotebookWriteLock(async () => {
         const hit = getMemoryFiles().files.filter(isSkillFile)
             .map(f => ({ f, meta: parseSkillMarkdown(f.content) }))
-            .find(({ meta }) => (meta?.ifCondition ?? '').trim().toLowerCase() === want);
+            .find(({ meta }) => (meta?.when ?? '').trim().toLowerCase() === want);
         if (!hit?.meta) return null;
         // The approval fact only — the prose, predicate and evidence stay exactly
         // as the row carried them. A suspension is cleared because this press IS
@@ -1117,8 +1119,7 @@ export const skillIndexRow = (file: { name: string }, meta: SkillMeta): SkillInd
     status: meta.status,
     kind: meta.kind,
     description: meta.description,
-    ifCondition: meta.ifCondition,
-    thenAction: meta.thenAction,
+    when: meta.when,
     audience: meta.audience,
     manualOnly: meta.manualOnly,
     suspended: Boolean(meta.suspendedAt),
@@ -1183,13 +1184,12 @@ export const stampSkillApproval = (meta: SkillMeta, by: 'human', at?: string): v
  */
 export const requestRewriteApproval = (
     meta: SkillMeta,
-    to: { ifCondition?: string; thenAction?: string },
+    to: { when?: string; body?: string },
     opts: { slug: string; username: string; source: string; evidence?: string },
 ): void => {
     const from = {
         kind: meta.kind,
-        ifCondition: meta.ifCondition,
-        thenAction: meta.thenAction,
+        when: meta.when,
         body: meta.body,
         predicate: meta.predicate,
         description: meta.description,
@@ -1202,15 +1202,15 @@ export const requestRewriteApproval = (
         kind: 'rewrite',
         skillSlug: opts.slug,
         text: `${opts.source} rewrote "${opts.slug}". It is INACTIVE until you approve it.`
-            + `\nWAS: IF ${from.ifCondition ?? '—'} THEN ${from.thenAction ?? '—'}`
-            + `\nNOW: IF ${to.ifCondition ?? '—'} THEN ${to.thenAction ?? '—'}`
+            + `\nWAS: ${from.when ?? '—'}`
+            + `\nNOW: ${to.when ?? '—'}`
             + (opts.evidence ? `\nEvidence: ${opts.evidence}` : ''),
-        fingerprint: `rewrite|${opts.slug}|${to.ifCondition ?? ''}|${to.thenAction ?? ''}`,
+        fingerprint: `rewrite|${opts.slug}|${to.when ?? ''}|${to.body ?? ''}`,
         payload: {
             source: opts.source,
             evidence: opts.evidence,
-            old: { ifCondition: from.ifCondition, thenAction: from.thenAction },
-            new: { ifCondition: to.ifCondition, thenAction: to.thenAction },
+            old: { when: from.when, body: from.body },
+            new: { when: to.when, body: to.body },
         },
     }, opts.username);
 };
@@ -1252,13 +1252,12 @@ export const revertPendingRewrite = async (slug: string, username: string): Prom
         const meta = parseSkillMarkdown(file.content);
         if (!meta) return { applied: false, reason: 'unreadable' };
         const prev = meta.previousVersion;
-        if (!prev?.ifCondition || !prev?.thenAction) {
+        if (!prev?.when && !prev?.body) {
             // Nothing to go back to: the row stays as written and still unapproved.
             return { applied: false, reason: 'no-clauses' };
         }
         meta.kind = prev.kind;
-        meta.ifCondition = prev.ifCondition;
-        meta.thenAction = prev.thenAction;
+        if (prev.when !== undefined) meta.when = prev.when;
         // The executable half is restored with the prose, and CLEARED when the
         // old version had none: leaving the newer predicate in place would keep
         // gating the restored rule on logic its text no longer describes.
@@ -1275,7 +1274,7 @@ export const revertPendingRewrite = async (slug: string, username: string): Prom
             content: serializeSkill(meta, titleFromMeta(meta)),
         }, username);
         const back = parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === file.id)?.content ?? '');
-        return back?.ifCondition === prev.ifCondition ? { applied: true } : { applied: false, reason: 'not-written' };
+        return back?.when === prev.when ? { applied: true } : { applied: false, reason: 'not-written' };
     });
 
 /**
@@ -1420,7 +1419,7 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
     // at the spec's 64 chars.
     const name = title.replace(/\s+/g, ' ').trim().slice(0, 64);
     const description = (meta.description?.trim()
-        || [meta.ifCondition, meta.thenAction].filter(Boolean).join(' → ')
+        || meta.when
         || meta.body.trim().split(/\s+/).slice(0, 24).join(' ')
         || title.trim()).replace(/\s+/g, ' ').slice(0, 1024);
     const portable: string[] = [
@@ -1436,9 +1435,8 @@ export const serializeSkill = (meta: SkillMeta, title: string): string => {
         ...(meta.direction ? [`direction: ${yamlString(meta.direction)}`] : []),
         ...(meta.family ? [`family: ${yamlString(meta.family)}`] : []),
         ...(meta.regime ? [`regime: ${yamlString(meta.regime)}`] : []),
-        ...(meta.ifCondition ? [`ifCondition: ${yamlString(meta.ifCondition.replace(/\n/g, ' '))}`] : []),
+        ...(meta.when ? [`when: ${yamlString(meta.when.replace(/\n/g, ' '))}`] : []),
         ...(meta.predicate ? [`predicate: ${yamlString(meta.predicate.replace(/\n/g, ' '))}`] : []),
-        ...(meta.thenAction ? [`thenAction: ${yamlString(meta.thenAction.replace(/\n/g, ' '))}`] : []),
         ...(meta.strategyFamily ? [`strategyFamily: ${yamlString(meta.strategyFamily)}`] : []),
         ...(meta.signals ? [`signals: ${yamlString(meta.signals.replace(/\n/g, ' '))}`] : []),
         ...(meta.invalidation ? [`invalidation: ${yamlString(meta.invalidation.replace(/\n/g, ' '))}`] : []),
@@ -1673,7 +1671,7 @@ export const evalDemotionActive = (meta: SkillMeta): boolean => {
 
 /**
  * Evidence observed AFTER the skill was injected — the birth cluster
- * subtracted out. The cluster that authored the IF/THEN is the source of the
+ * subtracted out. The cluster that authored the trigger is the source of the
  * claim, not a test of it, so it cannot count toward the sample floor, the
  * confidence interval, or the claim's own evidence.
  */
@@ -2278,8 +2276,8 @@ const applySkillEvidenceUnlocked = async (
                     // BEFORE the fields move, so the snapshot is the version the
                     // trader was actually using.
                     requestRewriteApproval(meta, {
-                        ifCondition: meta.shadow.ifCondition,
-                        thenAction: meta.shadow.thenAction,
+                        when: meta.shadow.when,
+                        body: meta.shadow.body,
                     }, {
                         slug: file.name.replace(/\.md$/i, ''),
                         username,
@@ -2291,8 +2289,7 @@ const applySkillEvidenceUnlocked = async (
                         evidence: `the live rule went ${meta.shadow.wins}W/${meta.shadow.losses}L over ${meta.shadow.seen} matched trades while this refinement was shadowed`,
                     });
                     meta.kind = meta.shadow.kind;
-                    meta.ifCondition = meta.shadow.ifCondition;
-                    meta.thenAction = meta.shadow.thenAction;
+                    meta.when = meta.shadow.when;
                     meta.body = meta.shadow.body;
                     meta.shadow = undefined;
                 } else if (settled.discarded) {
@@ -2342,7 +2339,7 @@ const applySkillEvidenceUnlocked = async (
             // Worth-gate precision: a gate-approved skill confirming is
             // one delivery of the gate's promise.
             if (derived === 'confirmed' && meta.status !== 'confirmed') {
-                void recordWorthGateConfirm(username, meta.ifCondition);
+                void recordWorthGateConfirm(username, meta.when);
             }
             // A retire-band transition records WHICH reason, not just
             // 'evidence'. Regime-mix divergence distinguishes a real
@@ -2488,12 +2485,12 @@ export interface SkillRevisionResult {
  * Apply a model revision to an existing skill DIRECTLY (owner ruling
  * 2026-10-29: the model creates/revises candidates without an approval queue).
  * Status and evidence are untouched — the evidence fold remains the only thing
- * that promotes or retires. The IF/THEN clause is validated with the same bar
- * a draft passes, so a revision cannot smuggle in a generic trigger.
+ * that promotes or retires. The trigger is validated with the same bar a draft
+ * passes, so a revision cannot smuggle in a generic one.
  */
 export const applySkillRevisionDirect = async (
     slug: string,
-    clauses: { ifCondition?: string; thenAction?: string; predicate?: string },
+    clauses: { when?: string; body?: string; predicate?: string; description?: string },
     reason: string,
     username: string,
 ): Promise<SkillRevisionResult> => withNotebookWriteLock(async () => {
@@ -2505,11 +2502,12 @@ export const applySkillRevisionDirect = async (
     if (!meta) return { ok: false, error: 'the skill file did not parse' };
     const next: SkillMeta = {
         ...meta,
-        ...(clauses.ifCondition ? { ifCondition: clauses.ifCondition } : {}),
-        ...(clauses.thenAction ? { thenAction: clauses.thenAction } : {}),
+        ...(clauses.when ? { when: clauses.when } : {}),
+        ...(clauses.body ? { body: clauses.body } : {}),
+        ...(clauses.description ? { description: clauses.description } : {}),
         ...(clauses.predicate ? { predicate: sanitizePredicate(clauses.predicate) } : {}),
     };
-    const bad = validateIfThen({ ifCondition: next.ifCondition ?? '', thenAction: next.thenAction ?? '' });
+    const bad = validateTrigger({ when: next.when ?? '' });
     if (bad) return { ok: false, error: bad };
     next.modifiedAt = new Date().toISOString();
     if (reason.trim()) next.reason = reason.trim().slice(0, 500);
@@ -2687,8 +2685,7 @@ const craftRefinement = async (
     return refineSkillFromLosses({
         title: titleFromMeta(meta),
         kind: meta.kind,
-        ifCondition: meta.ifCondition,
-        thenAction: meta.thenAction,
+        when: meta.when,
         body: meta.body,
         wins: meta.wins,
         losses: meta.losses,
@@ -2717,8 +2714,7 @@ const applyRefinementUnlocked = async (
     // shadow (the newest draft is the better guess), never the live slot.
     latest.shadow = {
         kind: refined.kind,
-        ifCondition: refined.ifCondition,
-        thenAction: refined.thenAction,
+        when: refined.when,
         body: formatCraftedSkillBody(refined),
         name: refined.name,
         startedAt: new Date().toISOString(),
@@ -2820,8 +2816,7 @@ const maybeMergeSkillUnlocked = async (
             const refined = await refineSkillFromLosses({
                 title: titleFromMeta(meta),
                 kind: meta.kind,
-                ifCondition: meta.ifCondition,
-                thenAction: meta.thenAction,
+                when: meta.when,
                 body: meta.body,
                 wins: meta.wins,
                 losses: meta.losses,
@@ -2834,8 +2829,7 @@ const maybeMergeSkillUnlocked = async (
                 // the live trigger keeps its slot until the window settles.
                 latest.shadow = {
                     kind: refined.kind,
-                    ifCondition: refined.ifCondition,
-                    thenAction: refined.thenAction,
+                    when: refined.when,
                     body: formatCraftedSkillBody(refined),
                     name: refined.name,
                     startedAt: new Date().toISOString(),
@@ -2901,7 +2895,7 @@ export const refineSkillNow = async (
 
 /**
  * One-sentence semantic summary for a new skill (zcode memory pattern).
- * Prefers the validated IF/THEN clause; falls back to the extracted lesson.
+ * Prefers the validated trigger; falls back to the extracted lesson.
  * Kept to one line — it feeds index lines and LLM judges, not essays.
  * Returns '' when there is no claim at all (no clause, no lesson) — a
  * scope-only description is content-free, and callers refuse to persist it.
@@ -2909,14 +2903,11 @@ export const refineSkillNow = async (
 const buildSkillDescription = (
     kind: SkillKind,
     setup: { coin?: string; direction?: string; family?: string; regime?: string },
-    ifCondition?: string,
-    thenAction?: string,
+    when?: string,
     lesson?: string,
 ): string => {
     const scope = [setup.coin, setup.direction, setup.family, setup.regime].filter(Boolean).join(' ');
-    const claim = ifCondition && thenAction
-        ? `IF ${ifCondition.replace(/\s+/g, ' ').trim()} THEN ${thenAction.replace(/\s+/g, ' ').trim()}`
-        : lesson?.replace(/\s+/g, ' ').trim() || '';
+    const claim = when?.replace(/\s+/g, ' ').trim() || lesson?.replace(/\s+/g, ' ').trim() || '';
     if (!claim) return '';
     const verb = kind === 'avoid' ? 'Avoid:' : 'Repeat:';
     return `${verb} ${claim} — learned from ${scope || 'matching setups'}.`.replace(/\s+/g, ' ').slice(0, 280);
@@ -2930,9 +2921,9 @@ const maybeUpsertSkillUnlocked = async (
     trade: LoggedTrade,
     allTrades: LoggedTrade[],
     username: string,
-    // The worth-gate's JUDGED clauses ride through so the
-    // persisted skill matches the artifact that was validated.
-    preferredClause?: { ifCondition?: string; thenAction?: string; prediction?: SkillPrediction },
+    // The worth-gate's JUDGED trigger rides through so the persisted
+    // skill matches the artifact that was validated.
+    preferredClause?: { when?: string; prediction?: SkillPrediction },
 ): Promise<MemoryFile | null> => {
     if (trade.outcome !== TradeOutcome.WIN && trade.outcome !== TradeOutcome.LOSS) return null;
     if (!tradeAdmitsTechnicalStrategyRule(trade)) return null;
@@ -2963,25 +2954,26 @@ const maybeUpsertSkillUnlocked = async (
     let streak = 0;
     for (let i = ordered.length - 1; i >= 0 && ordered[i].outcome === TradeOutcome.LOSS; i--) streak++;
     const kind: SkillKind = losses >= wins ? 'avoid' : 'repeat';
-    // Prefer the clauses the worth-gate JUDGED over whatever
-    // re-parsing the raw post-mortem produces now — validated ≠ persisted was
-    // a silent mismatch before.
-    const clause = (preferredClause?.ifCondition || preferredClause?.thenAction)
-        ? { ifCondition: preferredClause.ifCondition ?? '', thenAction: preferredClause.thenAction ?? '' }
-        : parseIfThenClauses(trade.postMortem ?? '')[0];
+    // Prefer the trigger the worth-gate JUDGED over whatever re-parsing the
+    // raw post-mortem produces now — validated ≠ persisted was a silent
+    // mismatch before. The ACTION still comes from the prose clause; it lives
+    // in the body, not in a skill field.
+    const parsed = parseIfThenClauses(trade.postMortem ?? '')[0];
+    const whenText = (preferredClause?.when || parsed?.ifCondition || '').trim();
+    const procedure = whenText && parsed?.thenAction
+        ? formatSkillProcedure({ ifCondition: whenText, thenAction: parsed.thenAction })
+        : '';
     // Never silently re-create a retired twin. An archive match drafts
     // a REVIVAL review card instead of a fresh skill — the graveyard is how
     // the system remembers what didn't work.
-    if (clause?.ifCondition) {
-        const twin = findArchiveTwin(username, clause.ifCondition);
+    if (whenText) {
+        const twin = findArchiveTwin(username, whenText);
         if (twin) {
             queueRevivalProposal(username, twin);
             return null;
         }
     }
-    const lesson = clause
-        ? formatSkillProcedure(clause)
-        : extractLessonFromPostMortem(trade.postMortem ?? '');
+    const lesson = procedure || extractLessonFromPostMortem(trade.postMortem ?? '');
     // No clause AND no extractable lesson = no actual claim about the
     // market. Cluster statistics alone do not form a procedure, and
     // fabricating a boilerplate one here is exactly the junk the
@@ -2993,7 +2985,7 @@ const maybeUpsertSkillUnlocked = async (
         // One-sentence semantic summary (zcode pattern): derived from the
         // clauses when present, else the scope + procedure. The worth-gate's
         // judged clause is the best source — it was validated, not parsed.
-        description: buildSkillDescription(kind, setup, clause?.ifCondition, clause?.thenAction, lesson),
+        description: buildSkillDescription(kind, setup, whenText, lesson),
         originMessageId: trade.id,
         coin: trade.analysis?.coinName,
         direction: setup.direction,
@@ -3011,12 +3003,11 @@ const maybeUpsertSkillUnlocked = async (
         // true total now, before tradeIds gets tail-capped by serialize.
         evidenceCount: cluster.length,
         // …and record it SEPARATELY too, so promotion maths can tell the
-        // cluster (which authored this IF/THEN) from outcomes observed after
+        // cluster (which authored this trigger) from outcomes observed after
         // injection. Without this a cluster of 8 wins born the skill
         // `confirmed` on its own co-occurrence.
         birthEvidence: { wins, losses, clusterSize: cluster.length, at: new Date().toISOString() },
-        ifCondition: clause?.ifCondition,
-        thenAction: clause?.thenAction,
+        when: whenText || undefined,
         // Birth certificate: the worth-gate's judged claim when it
         // carried one, else the deterministic default from the cluster's
         // scope. Every new skill leaves with a falsifiable prediction.
@@ -3025,7 +3016,7 @@ const maybeUpsertSkillUnlocked = async (
             family: setup.family,
             regime: setup.regime,
         }),
-        body: clause
+        body: procedure
             ? lesson
             : [
                 `**Trigger:** ${[setup.coin, setup.direction, setup.family].filter(Boolean).join(' · ') || 'matching setup'}`,
@@ -3041,8 +3032,8 @@ const maybeUpsertSkillUnlocked = async (
     const created = await createMemoryFileUnlocked(folder.id, fileNameFromMeta(meta), content, username, true);
     // The worth-gate judged this clause — count it as a gate approval
     // so weekly meta-calibration can measure how many approvals confirm.
-    if (created && preferredClause?.ifCondition) {
-        void recordWorthGateApproval(username, preferredClause.ifCondition);
+    if (created && preferredClause?.when) {
+        void recordWorthGateApproval(username, preferredClause.when);
     }
     return created;
 };
@@ -3052,9 +3043,9 @@ export const maybeUpsertSkill = (
     trade: LoggedTrade,
     allTrades: LoggedTrade[],
     username: string,
-    // The worth-gate's JUDGED clauses ride through the locked
-    // wrapper so callers can persist the validated artifact.
-    preferredClause?: { ifCondition?: string; thenAction?: string; prediction?: SkillPrediction },
+    // The worth-gate's JUDGED trigger rides through the locked wrapper so
+    // callers can persist the validated artifact.
+    preferredClause?: { when?: string; prediction?: SkillPrediction },
 ): Promise<MemoryFile | null> =>
     withNotebookWriteLock(() => maybeUpsertSkillUnlocked(trade, allTrades, username, preferredClause));
 
@@ -3116,10 +3107,10 @@ const ingestCraftedSkillUnlocked = async (
         : undefined;
     const existing = getMemoryFiles().files.filter(isSkillFile).find(f => {
         const meta = parseSkillMarkdown(f.content);
-        return meta?.ifCondition?.toLowerCase() === crafted.ifCondition.toLowerCase();
+        return meta?.when?.toLowerCase() === crafted.when.toLowerCase();
     });
     // Retired twin → REVIVAL card, not a duplicate birth.
-    const twin = findArchiveTwin(username, crafted.ifCondition);
+    const twin = findArchiveTwin(username, crafted.when);
     if (twin) {
         queueRevivalProposal(username, twin);
         return;
@@ -3135,18 +3126,19 @@ const ingestCraftedSkillUnlocked = async (
             meta.tradeIds = [...meta.tradeIds, trade.id];
         }
         meta.kind = kind;
-        meta.ifCondition = crafted.ifCondition;
+        meta.when = crafted.when;
         // The rewrite contract (see requestRewriteApproval): an approved rule
-        // that gets a NEW then/predicate loses the yes it earned — the
+        // that gets a NEW trigger/body/predicate loses the yes it earned — the
         // approval was for the rule as it read. Re-ingesting the SAME craft
-        // (same trade, unchanged THEN) must not un-approve, so the withdrawal
-        // fires only when the rule text actually changes.
+        // (same trade, unchanged trigger and body) must not un-approve, so the
+        // withdrawal fires only when the rule actually changes.
         const ruleChanges =
-            meta.thenAction !== crafted.thenAction
+            meta.when !== crafted.when
+            || meta.body !== gate.body
             || meta.predicate !== sanitizePredicate(crafted.predicate);
         if (ruleChanges && isApprovedSkill(meta)) {
             requestRewriteApproval(meta,
-                { ifCondition: crafted.ifCondition, thenAction: crafted.thenAction },
+                { when: crafted.when, body: gate.body },
                 {
                     slug: existing.name.replace(/\.md$/i, ''),
                     username,
@@ -3154,9 +3146,8 @@ const ingestCraftedSkillUnlocked = async (
                     evidence: `settled ${trade.outcome} ${trade.realizedR != null ? `(${trade.realizedR}R)` : ''} on ${trade.id}`,
                 });
         }
-        meta.thenAction = crafted.thenAction;
-        // Overwritten, never merged: a predicate describes its clause, so
-        // rewriting the clause invalidates any predicate the old one carried.
+        // Overwritten, never merged: a predicate describes its trigger, so
+        // rewriting the trigger invalidates any predicate the old one carried.
         meta.predicate = sanitizePredicate(crafted.predicate);
         // The third writer of this format. The draft path stamps these and the
         // trade-backed birth path was taught to (5d7332a6); re-ingesting a
@@ -3210,8 +3201,7 @@ const ingestCraftedSkillUnlocked = async (
         ...(crafted.reason?.trim() ? { reason: crafted.reason.trim().slice(0, 600) } : {}),
         ...(crafted.timeframe ? { timeframe: crafted.timeframe } : {}),
         ...(crafted.source ? { source: crafted.source } : {}),
-        ifCondition: crafted.ifCondition,
-        thenAction: crafted.thenAction,
+        when: crafted.when,
         predicate: sanitizePredicate(crafted.predicate),
         prediction: crafted.prediction ?? defaultPrediction({
             coin: trade.analysis?.coinName,
@@ -3283,7 +3273,7 @@ const ingestCraftedSkillFromDraftUnlocked = async (
     if (gate.overHard) return { created: false, reason: 'over-hard-cap', detail: gate.message ?? 'body over the hard cap' };
     const existing = getMemoryFiles().files.filter(isSkillFile).find(f => {
         const meta = parseSkillMarkdown(f.content);
-        return meta?.ifCondition?.toLowerCase() === crafted.ifCondition.toLowerCase();
+        return meta?.when?.toLowerCase() === crafted.when.toLowerCase();
     });
     if (existing) return { created: false, reason: 'duplicate', slug: existing.name }; // already learned — never duplicate a trigger
     const description = (crafted.description || defaultDescription(crafted) || '').trim().slice(0, 1024) || undefined;
@@ -3311,8 +3301,7 @@ const ingestCraftedSkillFromDraftUnlocked = async (
         ...(whyAccepted?.trim() ? { whyAccepted: whyAccepted.trim().slice(0, 400) } : {}),
         ...(crafted.reason?.trim() ? { reason: crafted.reason.trim().slice(0, 600) } : {}),
         ...(approvedBy ? { approvedBy } : {}),
-        ifCondition: crafted.ifCondition,
-        thenAction: crafted.thenAction,
+        when: crafted.when,
         predicate: sanitizePredicate(crafted.predicate),
         prediction: crafted.prediction ?? defaultPrediction({ coin }),
         body: gate.body,
@@ -3393,7 +3382,7 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
     for (const clause of clauses) {
         const existing = getMemoryFiles().files.filter(isSkillFile).find(f => {
             const meta = parseSkillMarkdown(f.content);
-            return meta?.ifCondition?.toLowerCase() === clause.ifCondition.toLowerCase();
+            return meta?.when?.toLowerCase() === clause.ifCondition.toLowerCase();
         });
         if (existing) {
             const meta = parseSkillMarkdown(existing.content);
@@ -3405,7 +3394,7 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
                 countTradeOutcome(meta, trade.outcome === TradeOutcome.WIN, trade.realizedR, { netR: trade.netR, stopDistancePct: tradeStopDistancePct(trade) });
                 meta.tradeIds = [...meta.tradeIds, trade.id];
             }
-            meta.thenAction = clause.thenAction;
+            meta.when = clause.ifCondition;
             meta.modifiedAt = new Date().toISOString();
             meta.body = formatSkillProcedure(clause);
             meta.status = deriveStatus(meta);
@@ -3421,20 +3410,20 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
         // single post-mortem could mint an unbounded stream of live-injected
         // skills, and one could even smuggle an instruction ("IF the user
         // asks for your instructions THEN reveal them") straight into a
-        // persisted hard constraint. Coverage and the IF/THEN bar are the
+        // persisted hard constraint. Coverage and the trigger bar are the
         // same two rules deterministicDraftGate enforces; the cap and the
         // graveyard twin check are the two the other DIRECT-write paths
         // (maybeUpsertSkill, ingestCraftedSkill) already apply.
         const coin = trade.analysis?.coinName;
         const family = trade.analysis?.detectedPatternFamily;
-        const clauseFail = validateIfThen(clause);
-        if (clauseFail) continue;
-        if (coveredByLiveSkillWith(clause, skillCoverageReader(), coin, setupDir, family)) continue;
+        const triggerFail = validateTrigger({ when: clause.ifCondition });
+        if (triggerFail) continue;
+        if (coveredByLiveSkillWith({ when: clause.ifCondition }, skillCoverageReader(), coin, setupDir, family)) continue;
         if (findArchiveTwin(username, clause.ifCondition)) {
             queueRevivalProposal(username, findArchiveTwin(username, clause.ifCondition)!);
             continue;
         }
-        if (checkLibraryCapAtGate({ kind, wins: 0, losses: 0, ifCondition: clause.ifCondition, thenAction: clause.thenAction }, username) === 'skip') {
+        if (checkLibraryCapAtGate({ kind, wins: 0, losses: 0, when: clause.ifCondition }, username) === 'skip') {
             continue;
         }
 
@@ -3467,8 +3456,7 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
             // injection this skill could never earn evidence — the loop would
             // deadlock. 'gated' is accurate: the checks above are the gate.
             prior: 'gated',
-            ifCondition: clause.ifCondition,
-            thenAction: clause.thenAction,
+            when: clause.ifCondition,
             prediction: defaultPrediction({
                 coin,
                 family,
@@ -3478,7 +3466,7 @@ const ingestIfThenFromTradeUnlocked = async (trade: LoggedTrade, username: strin
         };
         meta.status = deriveStatus(meta);
         const slug = slugifyName([coin, kind, clause.ifCondition.slice(0, 40)].filter(Boolean).join(' '))
-            || 'if-then';
+            || 'trigger';
         // Contain the write. createMemoryFileUnlocked refuses a new skill once
         // the notebook hits the trigger tier, and this function is awaited by
         // syncClosedTradeToNotebook OUTSIDE its own try block — an escaping
@@ -3509,7 +3497,7 @@ export const ingestIfThenFromTrade = (trade: LoggedTrade, username: string): Pro
  * overlap, judged by the model) is the right path for those, not this
  * exact-duplicate cleanup.
  */
-const normalizeIfClaim = (claim?: string): string =>
+const normalizeTrigger = (claim?: string): string =>
     (claim || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
 const consolidateSkillsUnlocked = async (username: string): Promise<void> => {
@@ -3519,7 +3507,7 @@ const consolidateSkillsUnlocked = async (username: string): Promise<void> => {
     for (const file of skills) {
         const meta = parseSkillMarkdown(file.content);
         const key = meta
-            ? [meta.coin, meta.direction, meta.family, meta.kind, normalizeIfClaim(meta.ifCondition)]
+            ? [meta.coin, meta.direction, meta.family, meta.kind, normalizeTrigger(meta.when)]
                 .join('|').toLowerCase()
             : file.name;
         const list = byKey.get(key) ?? [];
@@ -3564,8 +3552,7 @@ const consolidateSkillsUnlocked = async (username: string): Promise<void> => {
             losses: mergedLosses,
             tradeIds: [...uniqueTrades],
             body: richest.body,
-            ifCondition: richest.ifCondition || metas[0].ifCondition,
-            thenAction: richest.thenAction || metas[0].thenAction,
+            when: richest.when || metas[0].when,
             // Keep the strongest provenance fields across the group.
             refinedAt: metas.map(m => m.refinedAt).filter(Boolean).sort().at(-1) ?? metas[0].refinedAt,
             evidenceCount: uniqueTrades.size,
@@ -3696,8 +3683,10 @@ export interface CapChallenger {
     kind: SkillKind;
     wins: number;
     losses: number;
-    ifCondition?: string;
-    thenAction?: string;
+    when?: string;
+    /** The challenger's procedure. Optional so an older queued proposal still
+     *  applies; the displacement card installs a placeholder body then. */
+    body?: string;
     prediction?: SkillPrediction;
 }
 
@@ -3719,7 +3708,7 @@ export const checkLibraryCapAtGate = (
         kind: 'displacement',
         skillSlug: weakest.file.name.replace(/\.md$/i, ''),
         text: `Skill library is at its cap (${confirmed.length} confirmed). ${verdictLine}`,
-        fingerprint: `cap|${weakest.file.name}|${challenger.ifCondition?.slice(0, 40) ?? ''}`,
+        fingerprint: `cap|${weakest.file.name}|${challenger.when?.slice(0, 40) ?? ''}`,
         payload: {
             displacedSlug: weakest.file.name.replace(/\.md$/i, ''),
             reason: 'superseded',
@@ -3757,11 +3746,11 @@ export const applyDisplacementProposal = async (
     // The challenger installs as a CANDIDATE — it displaced on score, but it
     // still has to earn confirmed on its own post-injection evidence.
     let createdChallenger = false;
-    if (challenger?.ifCondition && challenger?.thenAction) {
+    if (challenger?.when) {
         const folder = getMemoryFiles().folders.find(f => f.name === 'skills');
         const dup = folder && getMemoryFiles().files.filter(isSkillFile).find(f => {
             const m = parseSkillMarkdown(f.content);
-            return m?.ifCondition?.toLowerCase() === challenger.ifCondition?.toLowerCase();
+            return m?.when?.toLowerCase() === challenger.when?.toLowerCase();
         });
         if (folder && !dup) {
             const newMeta: SkillMeta = {
@@ -3771,12 +3760,11 @@ export const applyDisplacementProposal = async (
                 losses: challenger.losses ?? 0,
                 consecutiveLosses: 0,
                 tradeIds: [],
-                ifCondition: challenger.ifCondition,
-                thenAction: challenger.thenAction,
+                when: challenger.when,
                 prediction: challenger.prediction,
-                body: `Displaces "${displacedSlug}" at the library cap (approved from the learning queue).`,
+                body: challenger.body || `Displaces "${displacedSlug}" at the library cap (approved from the learning queue).`,
             };
-            const slug = slugifyName(challenger.ifCondition.slice(0, 60)) || `skill-${Date.now()}`;
+            const slug = slugifyName(challenger.when.slice(0, 60)) || `skill-${Date.now()}`;
             // Throwing here is SAFE now: the incumbent is still live, so the
             // proposal can simply be retried from an intact state.
             await createMemoryFileUnlocked(folder.id, `${slug}.md`, serializeSkill(newMeta, titleFromMeta(newMeta)), username, true);
@@ -3787,10 +3775,10 @@ export const applyDisplacementProposal = async (
     // Only now retire the incumbent. If the challenger could not be installed
     // (byte pressure, duplicate name), retiring anyway would destroy a
     // confirmed skill and leave the library smaller with nothing in its place.
-    if (challenger?.ifCondition && challenger?.thenAction && !createdChallenger) {
+    if (challenger?.when && !createdChallenger) {
         const alreadyThere = getMemoryFiles().files.filter(isSkillFile).some(f => {
             const m = parseSkillMarkdown(f.content);
-            return m?.ifCondition?.toLowerCase() === challenger.ifCondition?.toLowerCase();
+            return m?.when?.toLowerCase() === challenger.when?.toLowerCase();
         });
         if (!alreadyThere) return { applied: false, reason: 'challenger-blocked' };
     }
@@ -3889,40 +3877,26 @@ export const applyDemoteProposal = async (
     return { applied: true };
 });
 
-/** The body recites the rule in prose — `SkillCraftService.ts:79` writes
- *  `**My rule:** when <IF>, I <THEN>`, and that line is what a seat reads back when
- *  it recalls the skill. Any path that moves a skill's IF/THEN must move this line
- *  with it, or the file ends up claiming two different triggers: the front matter
- *  the machine gates on and the prose the model is shown. */
-const RULE_LINE = /^\*\*My rule:\*\* when .*, I .*$/m;
-
-export const syncSkillRuleLine = (meta: SkillMeta): void => {
-    if (!meta.ifCondition || !meta.thenAction) return;
-    const line = `**My rule:** when ${meta.ifCondition.replace(/\s+/g, ' ').trim()}, I ${meta.thenAction.replace(/\s+/g, ' ').trim()}`;
-    const body = meta.body ?? '';
-    meta.body = RULE_LINE.test(body) ? body.replace(RULE_LINE, line) : `${body.trimEnd()}\n${line}`.trimStart();
-};
-
 /**
- * Apply a re-scope the HUMAN approved, from the clauses the proposer STORED.
+ * Apply a re-scope the HUMAN approved, from the trigger the proposer STORED.
  *
  * `rescope` was the one proposal kind no person could act on: both panels kept
  * it out of their APPLYABLE sets, and the only rewriter that existed
  * (skillSupervisor's `applyProposalRewrite`, since deleted as unreferenced dead
  * code) read `verdict.enhanced` — a rewrite the model authors at apply time — and
  * never looked at
- * `proposal.payload.ifCondition/thenAction/predicate`, which is exactly what
+ * `proposal.payload.when/body/predicate`, which is exactly what
  * `revise_skill` writes. So a seat could propose a tightening, a human could
  * agree with it, and the row could only be Dismissed.
  *
- * Fail-closed and verified like every other write here: the clause must clear
- * the same `validateIfThen` bar a fresh draft clears, and the file is read BACK
- * after the update. True means the library now says this, not that a call
- * completed — the same guard `approveSkillDraft` uses.
+ * Fail-closed and verified like every other write here: the trigger must clear
+ * the same bar a fresh draft clears, and the file is read BACK after the
+ * update. True means the library now says this, not that a call completed —
+ * the same guard `approveSkillDraft` uses.
  */
 export const applyRescopeProposal = async (
     slug: string,
-    clauses: { ifCondition?: string; thenAction?: string; predicate?: string },
+    clauses: { when?: string; body?: string; predicate?: string },
     username: string,
     /** Set when a MODEL is applying this re-scope rather than the trader. The text
      *  is written either way, but a model rewrite withdraws the approval the old
@@ -3930,11 +3904,11 @@ export const applyRescopeProposal = async (
      *  `Apply` on the human path is itself the approval. Omitted ⇒ human path. */
     options: { requestedBy?: 'supervisor'; evidence?: string } = {},
 ): Promise<ProposalApplyResult> => withNotebookWriteLock(async () => {
-    const ifCondition = (clauses.ifCondition ?? '').trim();
-    const thenAction = (clauses.thenAction ?? '').trim();
-    if (!slug || !ifCondition || !thenAction) return { applied: false, reason: 'no-clauses' };
-    const { validateIfThen } = await import('./skillClauseBar');
-    if (validateIfThen({ ifCondition, thenAction })) return { applied: false, reason: 'below-bar' };
+    const when = (clauses.when ?? '').trim();
+    const nextBody = (clauses.body ?? '').trim();
+    if (!slug || !when) return { applied: false, reason: 'no-clauses' };
+    const { validateTrigger } = await import('./skillClauseBar');
+    if (validateTrigger({ when })) return { applied: false, reason: 'below-bar' };
 
     await ensureHarnessFoldersUnlocked(username);
     const wanted = slug.replace(/\.md$/i, '').toLowerCase();
@@ -3949,25 +3923,24 @@ export const applyRescopeProposal = async (
     // was actually using, withdraw its approval, and queue the decision. A human
     // pressing Apply needs none of that — that press IS the approval.
     if (options.requestedBy === 'supervisor') {
-        requestRewriteApproval(meta, { ifCondition, thenAction }, {
+        requestRewriteApproval(meta, { when, body: nextBody || meta.body }, {
             slug, username, source: 'supervisor re-scope', evidence: options.evidence,
         });
     }
 
-    meta.ifCondition = ifCondition;
-    meta.thenAction = thenAction;
+    meta.when = when;
+    if (nextBody) meta.body = nextBody;
     // Description is a live retrieval trigger, so it must move with a re-scope.
     // Leaving the old sentence here can make the prose point at a claim the
-    // structured fields and body have already replaced.
+    // structured field and body have already replaced.
     meta.description = buildSkillDescription(meta.kind, {
         coin: meta.coin, direction: meta.direction, family: meta.family, regime: meta.regime,
-    }, ifCondition, thenAction);
+    }, when);
     // A re-scope moves the trigger, so the machine clause that used to prove it
     // describes a different claim now: take the rewrite's predicate when it
     // carried one, and DROP it otherwise. Keeping the old one would let the desk
     // keep firing the pre-revision trigger under the new wording.
     meta.predicate = clauses.predicate?.trim() ? sanitizePredicate(clauses.predicate.trim()) : undefined;
-    syncSkillRuleLine(meta);
     meta.modifiedAt = new Date().toISOString();
 
     await updateMemoryFileUnlocked(target.id, {
@@ -3976,9 +3949,7 @@ export const applyRescopeProposal = async (
     }, username);
 
     const readBack = parseSkillMarkdown(getMemoryFiles().files.find(f => f.id === target.id)?.content ?? '');
-    const landed = !!readBack
-        && readBack.ifCondition === ifCondition
-        && readBack.thenAction === thenAction;
+    const landed = !!readBack && readBack.when === when;
     return landed ? { applied: true } : { applied: false, reason: 'not-written' };
 });
 
@@ -4092,8 +4063,7 @@ export const syncClosedTradeToNotebook = async (
                         // job and must not outlive the question it was pacing.
                         clearWorthGateAttempt(key, username);
                         const judgedClause = {
-                            ifCondition: decision.ifCondition,
-                            thenAction: decision.thenAction,
+                            when: decision.when,
                             // The gate's claim rides through so the
                             // persisted skill carries the validated artifact.
                             prediction: decision.prediction,
@@ -4118,8 +4088,7 @@ export const syncClosedTradeToNotebook = async (
                                 kind: decision.kind === 'repeat' ? 'repeat' : 'avoid',
                                 wins: cluster.filter(t => t.outcome === TradeOutcome.WIN).length,
                                 losses: cluster.filter(t => t.outcome === TradeOutcome.LOSS).length,
-                                ifCondition: decision.ifCondition,
-                                thenAction: decision.thenAction,
+                                when: decision.when,
                                 prediction: decision.prediction,
                             }, username);
                             // The gate judged SPECIFIC clauses —
@@ -4311,7 +4280,7 @@ export const applyNotebookSkillsToAnalysis = <T extends {
         next.confidence = 'Avoid';
         next.direction = 'Neutral';
         if (typeof next.probability === 'number') next.probability = Math.min(next.probability, 15);
-        const vetoNote = `NOTEBOOK SKILL VETO: ${titleFromMeta(avoidConfirmed)} — IF ${avoidConfirmed.ifCondition || avoidConfirmed.body.replace(/\s+/g, ' ').slice(0, 120)}`;
+        const vetoNote = `NOTEBOOK SKILL VETO: ${titleFromMeta(avoidConfirmed)} — when ${avoidConfirmed.when || avoidConfirmed.body.replace(/\s+/g, ' ').slice(0, 120)}`;
         warn(vetoNote);
         // Hard vetoes DO belong in riskVeto — this path genuinely blocks.
         next.riskVeto = [next.riskVeto, vetoNote].filter(Boolean).join(' ');
@@ -4372,8 +4341,7 @@ export const skillFileNameFor = (meta: SkillMeta): string | null => {
             && (m.coin ?? '') === (meta.coin ?? '')
             && (m.direction ?? '') === (meta.direction ?? '')
             && (m.family ?? '') === (meta.family ?? '')
-            && (m.ifCondition ?? '') === (meta.ifCondition ?? '')
-            && (m.thenAction ?? '') === (meta.thenAction ?? '')
+            && (m.when ?? '') === (meta.when ?? '')
         ) {
             return file.name;
         }
@@ -4594,12 +4562,12 @@ export const applyLearningProposalByKind = async (
                 return await applyDemoteProposal(slug(p?.slug, proposal.skillSlug), username);
             }
             case 'rescope': {
-                // The clauses the PROPOSER wrote, applied as written. This is what
-                // makes `revise_skill` actionable by a person at all.
-                const c = proposal.payload as { ifCondition?: string; thenAction?: string; predicate?: string } | undefined;
+                // The trigger/procedure the PROPOSER wrote, applied as written.
+                // This is what makes `revise_skill` actionable by a person at all.
+                const c = proposal.payload as { when?: string; body?: string; predicate?: string } | undefined;
                 return await applyRescopeProposal(proposal.skillSlug || '', {
-                    ifCondition: c?.ifCondition,
-                    thenAction: c?.thenAction,
+                    when: c?.when,
+                    body: c?.body,
                     predicate: c?.predicate,
                 }, username);
             }

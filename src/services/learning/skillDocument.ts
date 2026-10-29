@@ -90,7 +90,7 @@ const BOLD_LABELS: Array<[RegExp, keyof Omit<SkillSections, 'other'>]> = [
 ];
 
 /** Labels that OPEN the procedure block. `**What I do:**` is the one the craft
- *  writes (it is shared vocabulary with `syncSkillRuleLine` and the enforcement
+ *  writes (it is shared vocabulary with the enforcement
  *  reader); `**Procedure:**` / `**Steps:**` are the ones a hand-edited or
  *  imported skill uses. A body whose procedure line is not recognised here does
  *  not lose its heading status — it falls through to `whenToUse` and the card
@@ -172,7 +172,7 @@ const stripBullet = (line: string): string => line.replace(/^[-*]\s*/, '').repla
  */
 export const projectSkillCard = (
     body: string,
-    opts: { ifCondition?: string; thenAction?: string; budget?: number } = {},
+    opts: { when?: string; budget?: number } = {},
 ): SkillCard => {
     const budget = opts.budget ?? 700;
     const whole = (body || '').trim();
@@ -189,8 +189,7 @@ export const projectSkillCard = (
     const lines: CardLine[] = [];
     const add = (text: string, block?: string, heading = false): void => { lines.push({ text, block, heading }); };
 
-    if (opts.ifCondition && opts.thenAction) add(`IF ${opts.ifCondition} THEN ${opts.thenAction}`);
-    const when = s.whenToUse.map(stripBullet)[0];
+    const when = s.whenToUse.map(stripBullet)[0] ?? opts.when;
     if (when) add(`When: ${when}`);
     const not = s.whenNot.map(stripBullet)[0];
     if (not) add(`NOT when: ${not}`);

@@ -48,7 +48,7 @@ export interface MetaCalibrationRatios {
 export interface MetaCalibrationData {
     worthGateApproved: number;
     worthGateConfirmed: number;
-    /** Normalized ifConditions of gate-approved skills still awaiting their
+    /** Normalized triggers of gate-approved skills still awaiting their
      *  first 'confirmed' transition (the pending half of the precision). */
     pendingGateWatch: string[];
     refinements: number;
@@ -119,9 +119,9 @@ const write = async (username: string, data: MetaCalibrationData): Promise<void>
     } catch { /* meta-calibration must never break its callers */ }
 };
 
-/** Normalize a trigger for watch matching (same shape as draftTriggerKey's IF part). */
-const normCondition = (ifCondition: string | undefined): string =>
-    (ifCondition || '').trim().toLowerCase().replace(/\s+/g, ' ');
+/** Normalize a trigger for watch matching (same shape as draftTriggerKey's part). */
+const normTrigger = (when: string | undefined): string =>
+    (when || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
 /**
  * Every recorder below is a read→mutate→write on the per-user blob. They fire
@@ -131,12 +131,12 @@ const normCondition = (ifCondition: string | undefined): string =>
  * counters and watch entries (the same lost-credit class as the injection
  * log, serialized in MemoryInjectionService).
  */
-export const recordWorthGateApproval = async (username: string, ifCondition?: string): Promise<void> => {
+export const recordWorthGateApproval = async (username: string, when?: string): Promise<void> => {
     try {
         await withSerializedPref(keyFor(username), async () => {
             const d = await read(username);
             d.worthGateApproved += 1;
-            const key = normCondition(ifCondition);
+            const key = normTrigger(when);
             if (key && !d.pendingGateWatch.includes(key)) {
                 d.pendingGateWatch = [...d.pendingGateWatch, key].slice(-WATCH_CAP);
             }
@@ -147,11 +147,11 @@ export const recordWorthGateApproval = async (username: string, ifCondition?: st
 };
 
 /** A gate-approved skill just reached 'confirmed' for the first time. */
-export const recordWorthGateConfirm = async (username: string, ifCondition?: string): Promise<void> => {
+export const recordWorthGateConfirm = async (username: string, when?: string): Promise<void> => {
     try {
         await withSerializedPref(keyFor(username), async () => {
             const d = await read(username);
-            const key = normCondition(ifCondition);
+            const key = normTrigger(when);
             const idx = key ? d.pendingGateWatch.indexOf(key) : -1;
             if (idx >= 0) {
                 d.pendingGateWatch.splice(idx, 1);

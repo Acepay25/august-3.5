@@ -36,7 +36,7 @@ export const VersionHistoryDashboard: React.FC = () => {
     // is left is real, measured data, stacked in one scroll.
     const [signals, setSignals] = useState<ReinforcementSignal[]>([]);
     const [calibration, setCalibration] = useState<ConfidenceCalibration | undefined>(undefined);
-    const [rules, setRules] = useState<Array<{ file: { name: string }; meta: { kind: string; status: string; wins: number; losses: number; ifCondition?: string; thenAction?: string } }>>([]);
+    const [rules, setRules] = useState<Array<{ file: { name: string }; meta: { kind: string; status: string; wins: number; losses: number; when?: string } }>>([]);
     const [insights, setInsights] = useState<any[]>([]);
     const [providerStats, setProviderStats] = useState<Record<string, { count: number; avgQuality: number }>>({});
 
@@ -231,8 +231,8 @@ export const VersionHistoryDashboard: React.FC = () => {
                                             <span className="text-zinc-400 font-bold uppercase">{rules[selectedRuleIndex]?.meta.kind}</span> {' '}
                                             [{rules[selectedRuleIndex]?.meta.status} · {rules[selectedRuleIndex]?.meta.wins}W/{rules[selectedRuleIndex]?.meta.losses}L]
                                             <br />
-                                            {rules[selectedRuleIndex]?.meta.ifCondition
-                                                ? `IF ${rules[selectedRuleIndex]?.meta.ifCondition} THEN ${rules[selectedRuleIndex]?.meta.thenAction}`
+                                            {rules[selectedRuleIndex]?.meta.when
+                                                ? `When ${rules[selectedRuleIndex]?.meta.when}`
                                                 : rules[selectedRuleIndex]?.file.name.replace(/\.md$/i, '')}
                                         </p>
                                     </div>

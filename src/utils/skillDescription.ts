@@ -22,13 +22,10 @@
 interface DescriptionSource {
     when: string;
     whenNot?: string[];
-    ifCondition?: string;
-    thenAction?: string;
 }
 
 export const defaultDescription = (crafted: DescriptionSource): string => {
-    const trigger = crafted.when?.trim()
-        || [crafted.ifCondition, crafted.thenAction].filter(Boolean).join(' → ');
+    const trigger = crafted.when?.trim();
     if (!trigger) return '';
     const exclusion = crafted.whenNot?.map(w => w?.trim()).find(Boolean)?.replace(/\.+$/, '');
     return `Use this skill whenever ${trigger.replace(/\.+$/, '')}.`

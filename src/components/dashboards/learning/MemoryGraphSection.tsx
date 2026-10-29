@@ -90,7 +90,7 @@ export const MemoryGraphSection: React.FC<MemoryGraphSectionProps> = ({
                     : <div className="space-y-1.5">
                         {notebookSkills.slice(0, 10).map(s => (
                             <div key={s.file.id} className="rounded-control border border-white/5 bg-zinc-950/50 px-2.5 py-1.5 text-ui-dense">
-                                <span className="text-zinc-500 font-mono">{s.meta.kind}</span> <span className="text-zinc-300">{s.meta.ifCondition || s.file.name.replace(/\.md$/i, '')}</span>
+                                <span className="text-zinc-500 font-mono">{s.meta.kind}</span> <span className="text-zinc-300">{s.meta.when || s.file.name.replace(/\.md$/i, '')}</span>
                                 <span className="text-zinc-500"> · {Math.round(s.meta.wins)}/{Math.round(s.meta.losses)} · {s.meta.status}</span>
                             </div>
                         ))}

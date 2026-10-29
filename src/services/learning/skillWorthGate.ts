@@ -13,8 +13,9 @@ const WorthDecisionSchema = z.object({
     reason: z.string().min(10).max(400),
     confidence: z.number().min(0).max(1),
     kind: z.enum(['avoid', 'repeat']).optional(),
-    ifCondition: z.string().optional(),
-    thenAction: z.string().optional(),
+    /** The tightened trigger sentence. Optional: an empty value keeps the
+     *  craft's own `when`. */
+    when: z.string().optional(),
     mergeTarget: z.string().optional(),
     // Birth certificate: a create verdict must pre-register the
     // falsifiable claim the eval scheduler will test. Unknown at the schema
@@ -31,7 +32,7 @@ export type SkillWorthDecision = z.infer<typeof WorthDecisionSchema> & {
 // install a prompt this call site never sends.
 export const SKILL_WORTH_FALLBACK = `You judge whether a new trading skill is worth creating.
 
-A skill is a mechanical IF/THEN procedure (price, candle close, level, volume, regime) — not a vague lesson.
+A skill is a mechanical procedure: one trigger sentence (its "when") and executable steps (price, candle close, level, volume, regime) — not a vague lesson.
 Look at:
 - the existing skill catalog (name, kind, W/L, trigger)
 - the bot's own memory (system + durable notes)
@@ -44,7 +45,7 @@ Decide:
 - skip — too generic, too few samples, or contradicted by history
 
 Rules:
-- IF/THEN must be specific and mechanical (min 12 chars each)
+- The trigger must be specific and mechanical (min 12 chars)
 - Do not create if an enabled skill already matches this setup (hits>=2)
 - "avoid" only when the cluster is losing; "repeat" only when winning
 - A create verdict MUST carry a prediction: the falsifiable claim the skill
@@ -54,21 +55,19 @@ Rules:
   without a prediction is rejected.
 
 Output ONLY JSON:
-{"verdict":"create|merge|skip","reason":"why (20-200 chars)","confidence":0.0-1.0,"kind":"avoid|repeat","ifCondition":"mechanical IF without the word IF","thenAction":"mechanical THEN without the word THEN","mergeTarget":"slug of existing skill if merge","prediction":{"expectedLiftPts":10,"horizonTrades":10,"scope":{"coin":"BTC","family":"sweep","regime":"chop"}}}`;
+{"verdict":"create|merge|skip","reason":"why (20-200 chars)","confidence":0.0-1.0,"kind":"avoid|repeat","when":"the concrete trigger sentence (no prefix word)","mergeTarget":"slug of existing skill if merge","prediction":{"expectedLiftPts":10,"horizonTrades":10,"scope":{"coin":"BTC","family":"sweep","regime":"chop"}}}`;
 
 export const validateCraftedSkill = (candidate: SkillWorthDecision, clusterWins: number, clusterLosses: number): string | null => {
     if (candidate.verdict !== 'create' && candidate.verdict !== 'merge') return null;
-    const ic = (candidate.ifCondition || '').trim();
-    const ta = (candidate.thenAction || '').trim();
-    if (!ic || ic.length < 12) return 'IF too short or missing';
-    if (!ta || ta.length < 12) return 'THEN too short or missing';
+    const when = (candidate.when || '').trim();
+    if (!when || when.length < 12) return 'trigger too short or missing';
     // Fail-closed birth certificate: a create verdict whose craft
     // output lacks a valid prediction is rejected outright.
     if (candidate.verdict === 'create' && !sanitizePrediction(candidate.prediction)) {
         return 'create without a falsifiable prediction';
     }
     const generic = /^(follow trend|use risk management|be careful|manage risk|trade carefully)/i;
-    if (generic.test(ic)) return 'IF is generic';
+    if (generic.test(when)) return 'trigger is generic';
     const sample = clusterWins + clusterLosses;
     if (sample >= 5) {
         const winRate = clusterWins / sample;
@@ -89,7 +88,7 @@ export const evaluateSkillWorth = async (
         .map(f => {
             const meta = parseSkillMarkdown(f.content);
             if (!meta) return null;
-            const trigger = meta.ifCondition || meta.body.split('\n')[0]?.slice(0, 80) || f.name;
+            const trigger = meta.when || meta.body.split('\n')[0]?.slice(0, 80) || f.name;
             return `- ${f.name.replace(/\.md$/i, '')} · ${meta.kind} · ${meta.status} · ${meta.wins}W/${meta.losses}L — IF ${trigger.slice(0, 80)}`;
         })
         .filter(Boolean)

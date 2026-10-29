@@ -209,7 +209,7 @@ const SkillDetail: React.FC<{
                 timeframe: meta.timeframe || '1h',
                 text: skillProofText({
                     title: skill.name, description: meta.description,
-                    family: meta.family, ifCondition: meta.ifCondition, thenAction: meta.thenAction,
+                    family: meta.family, when: meta.when,
                 }),
             });
             setProofResult(res);
@@ -348,7 +348,7 @@ const SkillDetail: React.FC<{
                         wide
                     />
                 )}
-                <MetaField label="Trigger" value={meta?.ifCondition || '—'} wide />
+                <MetaField label="Trigger" value={meta?.when || '—'} wide />
             </div>
 
             {/* Provenance: where this belief came from. */}
@@ -367,16 +367,10 @@ const SkillDetail: React.FC<{
                     <p className="text-zinc-500">
                         Refined {new Date(meta.refinedAt!).toLocaleString()} after {meta.consecutiveLosses === 0 ? 'consecutive losses' : `${meta.consecutiveLosses} consecutive losses`}
                     </p>
-                    {meta.previousVersion.ifCondition !== meta.ifCondition && (
+                    {meta.previousVersion.when !== meta.when && (
                         <div>
-                            <p className="text-zinc-600 line-through">IF {meta.previousVersion.ifCondition || '—'}</p>
-                            <p className="text-zinc-200">IF {meta.ifCondition || '—'}</p>
-                        </div>
-                    )}
-                    {meta.previousVersion.thenAction !== meta.thenAction && (
-                        <div>
-                            <p className="text-zinc-600 line-through">THEN {meta.previousVersion.thenAction || '—'}</p>
-                            <p className="text-zinc-200">THEN {meta.thenAction || '—'}</p>
+                            <p className="text-zinc-600 line-through">When {meta.previousVersion.when || '—'}</p>
+                            <p className="text-zinc-200">When {meta.when || '—'}</p>
                         </div>
                     )}
                 </div>

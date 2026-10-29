@@ -34,16 +34,16 @@ export const APPLYABLE_PROPOSAL_KINDS: readonly LearningProposalKind[] = [
 /** Does THIS row carry what its actuation path needs?
  *
  * A per-row question, not a per-kind one: the regime/recurrence pass queues a
- * `rescope` with no clause payload at all (`SkillMemoryService.ts:1622`, while
+ * `rescope` with no trigger payload at all (`SkillMemoryService.ts:1622`, while
  * `revise_skill` at `DeskToolsService.ts:2364` writes one). Offering Apply on the
- * clause-less row means a press that can only answer "nothing to apply" — so those
+ * trigger-less row means a press that can only answer "nothing to apply" — so those
  * rows show Dismiss only, exactly as they did before A2, and the button that IS
  * shown promises something real. */
 export const isApplyableProposal = (p: LearningProposal): boolean => {
     if (!APPLYABLE_PROPOSAL_KINDS.includes(p.kind)) return false;
     if (p.kind !== 'rescope') return true;
-    const c = p.payload as { ifCondition?: string; thenAction?: string } | undefined;
-    return Boolean(c?.ifCondition?.trim() && c?.thenAction?.trim());
+    const c = p.payload as { when?: string } | undefined;
+    return Boolean(c?.when?.trim());
 };
 
 /** Why an apply wrote nothing. Named by the writer that refused, not guessed by

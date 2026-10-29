@@ -15,7 +15,7 @@
 export const KNOWN_SKILL_FRONTMATTER_KEYS: ReadonlySet<string> = new Set([
     // the portable face
     'name', 'description', 'version', 'kind', 'coin', 'timeframe', 'source',
-    'direction', 'family', 'regime', 'ifCondition', 'predicate', 'thenAction',
+    'direction', 'family', 'regime', 'when', 'predicate',
     'strategyFamily', 'signals', 'invalidation', 'horizon', 'sizing', 'prior',
     'audience', 'compatibility',
     // provenance

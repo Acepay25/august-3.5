@@ -113,7 +113,7 @@ export const generalizeSkillClusterUnlocked = async (
     const evidenceCount = rows.reduce(
         (s, r) => s + Math.max(r.meta.evidenceCount ?? 0, r.meta.tradeIds.length), 0,
     );
-    // The generalized skill's IF/THEN is copied from its sources, so the
+    // The generalized skill's trigger is copied from its sources, so the
     // evidence that produced those sources is ITS source material too. It must
     // be carried or the generalized twin is born `confirmed` on evidence that
     // predates it existing. Sums across distinct coin skills — unlike the
@@ -150,9 +150,8 @@ export const generalizeSkillClusterUnlocked = async (
         ...(birthClusterSize > 0
             ? [{ birthEvidence: { wins: birthWins, losses: birthLosses, clusterSize: birthClusterSize, at: now } }]
             : []),
-        ifCondition: richest.meta.ifCondition,
-        thenAction: richest.meta.thenAction,
-        description: `Generalized across ${candidate.coins.join(', ')}: ${richest.meta.description ?? richest.meta.thenAction ?? scope.family}`,
+        when: richest.meta.when,
+        description: `Generalized across ${candidate.coins.join(', ')}: ${richest.meta.description ?? richest.meta.when ?? scope.family}`,
         body: richest.meta.body,
         lastEvidenceAt: richest.meta.lastEvidenceAt,
         modifiedAt: now,

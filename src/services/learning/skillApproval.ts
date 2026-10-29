@@ -37,13 +37,13 @@ export type SkillApprovalResult =
 /** Case-insensitive trigger match — the same comparison the ingest path uses
  *  to refuse a duplicate, so "already learned" means the same thing on both
  *  sides of the write. */
-const findSkill = (ifCondition: string): { name: string; meta: Parameters<typeof isApprovedSkill>[0] } | null => {
-    const want = ifCondition.trim().toLowerCase();
-    const hit = listSkills().find(s => (s.meta.ifCondition ?? '').trim().toLowerCase() === want);
+const findSkill = (when: string): { name: string; meta: Parameters<typeof isApprovedSkill>[0] } | null => {
+    const want = when.trim().toLowerCase();
+    const hit = listSkills().find(s => (s.meta.when ?? '').trim().toLowerCase() === want);
     return hit ? { name: hit.file.name, meta: hit.meta } : null;
 };
 
-const findByTrigger = (ifCondition: string): string | null => findSkill(ifCondition)?.name ?? null;
+const findByTrigger = (when: string): string | null => findSkill(when)?.name ?? null;
 
 /**
  * Approve one draft. `trades` is the journal, used the way the old inline
@@ -58,7 +58,7 @@ export const approveSkillDraft = async (
     trades: LoggedTrade[] = [],
 ): Promise<SkillApprovalResult> => {
     const user = username || 'default';
-    const trigger = draft.crafted.ifCondition;
+    const trigger = draft.crafted.when;
     const alreadyThere = findByTrigger(trigger);
 
     const trade = trades.find(t => t.id === draft.tradeId);

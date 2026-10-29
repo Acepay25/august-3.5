@@ -12,8 +12,8 @@
  *   · the digest also carries regime segments, swing pivots, gap classes, RSI
  *     extremes, and every book detector aggregated across all history with
  *     first-touch win-rates from `scanHistorySetups`;
- *   · the session model turns that into 1–3 PATTERN-FIRST skills. The IF/THEN
- *     clause is the compact trigger summary, not the whole finding.
+ *   · the session model turns that into 1–3 skills in the proper format: one
+ *     trigger sentence (`when`) and a procedure (`steps`), pattern-first.
  *
  * Each candidate is evidence-scored against the same candles (detector hits
  * become synthetic closed trades through `buildSyntheticTrade`) and runs the
@@ -84,13 +84,13 @@ export interface ChartScanInput {
 // instead of restating it — the two copies were a silent-drift hazard.
 export const CHART_SCAN_FALLBACK_PROMPT = `You are a trading-pattern researcher. You receive a machine-built study of an ENTIRE chart's candle history. The digest was computed over EVERY bar, not a sample: the time-of-day table samples each bar against a fixed forward horizon in the trader's clock (PHT, UTC+8); the BIG MOVES table lists swing legs of at least 10% (entry at the lowest/highest close in a 24-bar window) with the state BEFORE each leg; the anatomy/runs lines describe how the candles actually behave. Only the raw candle rows at the end are a subset — never claim to have read a bar that is not shown.
 
-Your job is PATTERN-FIRST: work out how this coin on this timeframe moves and when a trader should have been in. Then create candidate skills that describe those patterns. A skill is not a generic IF/THEN rule; the IF/THEN clause is only the compact, checkable summary of a pattern the tape supports.
+Your job is PATTERN-FIRST: work out how this coin on this timeframe moves and when a trader should have been in. Then create candidate skills that describe those patterns. A skill is not a generic rule; its "when" is the one checkable trigger sentence and its "steps" are the procedure.
 
 Rules:
 - Ground every skill in the digest's numbers. Cite the observed counts, the hour(s) and the move sizes inside "when".
 - Require repetition: do not build a rule from ONE leg. Use ≥3 similar events, or a stable hour bucket with a clear drift/up-share and enough samples. If the tape shows one spectacular move and nothing repeatable, say so and draft nothing for it.
 - The big-move question is "if we could turn back time, what should we have been doing at that time": use the START time (PHT hour), the preceding return, volume ratio, range compression, gap and RSI. If the up legs cluster at an hour with compression and volume expansion beforehand, that is the pattern to describe; the mirror applies to down legs for shorts.
-- "ifCondition" must state concrete checkable conditions (levels, candle anatomy, indicator state, time window, context). "thenAction" must be an executable entry/exit or an explicit avoid, with invalidation and the time window. "steps" must read as a procedure a trader can follow, not a mood.
+- "when" must state concrete checkable conditions (levels, candle anatomy, indicator state, time window, context). "steps" must read as a procedure a trader can follow — entry/exit or an explicit avoid, with invalidation and the time window — not a mood.
 - kind "repeat" = a pattern the tape shows working; kind "avoid" = a trap the tape shows losing.
 - Name each skill specifically (coin + timeframe + pattern/time), never generically.
 - Inventing a pattern the digest does not support is worse than drafting none. If nothing qualifies, return an empty array.
@@ -244,7 +244,7 @@ export const buildChartDigest = (
 /** Which aggregated detector does this craft describe? Keyword overlap between
  *  the model's IF clause and the detector's keywords/id. */
 const matchStat = (crafted: CraftedSkill, stats: HistoricalSetupStat[]): HistoricalSetupStat | null => {
-    const hay = `${crafted.name} ${crafted.when} ${crafted.description ?? ''} ${crafted.ifCondition}`.toLowerCase();
+    const hay = `${crafted.name} ${crafted.when} ${crafted.description ?? ''} ${crafted.steps.join(' ')}`.toLowerCase();
     let best: HistoricalSetupStat | null = null;
     let bestScore = 0;
     for (const s of stats) {

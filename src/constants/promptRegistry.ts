@@ -121,7 +121,7 @@ export const PROMPT_REGISTRY: PromptRegistryEntry[] = [
         // this text is only the Settings diff base, while the call-site constant
         // is what actually runs — a stale copy here makes every override diff lie.
         id: 'learning.skill_craft',
-        name: 'Skill craft (IF/THEN → procedure)',
+        name: 'Skill craft (trigger → procedure)',
         description: 'After a post-mortem, the memory model turns the lesson into a skill: description, when, inputs, steps, pitfalls, verification, validate, return, approval.',
         usage: ['Post-mortem skill draft (inbox Approve to save)'],
         // IMPORTED, not restated. The predicate grammar is part of this prompt

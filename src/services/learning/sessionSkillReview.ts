@@ -189,10 +189,6 @@ export const craftedSkillFromThesis = (thesis: DiscussedThesis, outcome: ThesisO
     validate: 'Levels and direction match the discussed setup before acting.',
     output: `${thesis.direction} plan with a defined stop and target.`,
     approval: 'Human-approved draft from a session review — not yet in the live library.',
-    ifCondition: `IF ${thesis.symbol} ${thesis.direction.toLowerCase()} setup near ${thesis.entry} with stop ${thesis.stopLoss} THEN ${outcome === 'win' ? 'take it as a repeat' : 'skip or demand more confirmation'}`,
-    thenAction: outcome === 'win'
-        ? `Enter the ${thesis.direction.toLowerCase()} (this exact plan won in a past session).`
-        : `Avoid the ${thesis.direction.toLowerCase()} (this exact plan lost in a past session).`,
 });
 
 /**

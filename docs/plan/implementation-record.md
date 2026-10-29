@@ -2508,3 +2508,56 @@ the THIN floor applies to the number of resolved SIGNALS, not the simulation sam
 stated probability is not possible yet — signals carry no probability, and the gate's cap is not a
 calibrated forecast. The skill evidence fold (b3: resolved signals confirming/denying playbooks) is not
 built, per the standing ruling.
+
+## 51. Skills lose the IF/THEN pair (2026-10-30)
+
+**Owner ask.** Drop the if-condition and then-action fields completely. Not every skill is purely
+pattern-based — it can be, but not all; let the model generate skills using the proper format.
+
+**The format now.** A skill is a **trigger + a procedure**: `when` (one checkable trigger sentence),
+`steps`/body (the procedure), `description` (the activation key), and the optional `predicate`.
+There is no `ifCondition`/`thenAction` pair anywhere in the skill entity.
+
+**What changed (one coherent cut).**
+- Schema: `CraftedSkillSchema` no longer declares the pair; `parseCraftedSkill` strips it from any
+  old payload.
+- Storage: `SkillMeta` carries `when?` instead of `ifCondition?/thenAction?`; `serializeSkill` writes
+  `when:` and never the pair. `parseSkillMarkdown` maps a legacy `ifCondition` key into `when` on
+  read; the old keys are no longer KNOWN frontmatter, so they ride through as unknown keys and no
+  file loses bytes. The shadow/previousVersion snapshots carry `when` + body.
+- Gates: `validateIfThen` → `validateTrigger` (specific, non-generic); coverage, draft trigger keys,
+  duplicate detection, tombstones, activation, consolidation, the library-cap challenger, skill
+  generalization/graveyard/import dedupe and the contradiction sweep all compare triggers.
+- Tools: `propose_skill` dropped `if_condition`/`then_action` (required fields are now
+  name/kind/when/steps/reason); `revise_skill` replaces them with `when` and `procedure` (the body),
+  applying directly. The desk executor, prompts, chips and mandate text follow.
+- Builders: session review, pass mining, self-improvement, book seeds (their triggers moved from
+  `ifCondition` to `when`), the chart scan and the worth gate produce no pair. The worth gate may
+  tighten `when` only.
+- UI: SkillDetail shows "Trigger", the refine diff shows `When`; Coach draft cards show "When …"
+  plus the step count; the version-history, memory-graph and trader-profile cards read `when`; the
+  skill-proof text is built from the trigger.
+- Chat surface: the skills index line is description + "When …"; the scan chip and prompts no longer
+  promise IF/THEN drafts or Inbox approval (candidates are created directly).
+
+**Verification.** Contract 23: a trigger+steps craft parses; legacy IF/THEN input is not carried onto
+the craft; a craft without `when`/`steps` is refused; the trigger bar refuses generic/short; the
+written file carries `when:` and no pair; it round-trips; a legacy file migrates `ifCondition` into
+`when`; the index row exposes `when` only; `propose_skill` has no old fields; six draft builders
+write no pair. Full ladder: `typecheck` · `check:contracts` **268** · `check:boundaries` ·
+`check:docs` · `lint` **375/375** · `build` · `boot-probe` · `render-probe` ·
+`skill-approval-probe` **28/28** (its fixtures now carry `when`/body; the rescope test proves a
+trigger+body rewrite lands in the notebook bytes).
+
+**Residues, named.**
+- `LearningRule` (`learning_rules_v2_<user>`) and the settlement reflection's post-mortem note are
+  NOT skills; they still carry their own IF/THEN clause shape (`parseIfThenClauses` feeds the
+  reflection's skill candidate by mapping the clause into `when` + body). Migrating that legacy
+  rules store is a separate ruling.
+- `bookSkillDrafts` call sites still pass their two old strings as `_`-prefixed unused arguments
+  (the book's source table); they never reach the craft.
+- Existing files keep their `ifCondition:`/`thenAction:` lines as unknown frontmatter until a
+  rewrite; the app reads `when` (migrated from the old key) and ignores the pair.
+- A rewrite now snapshots and restores `when`/body; a legacy `previousVersion` carrying only the old
+  keys is read through `ifCondition` for revert, but its `thenAction` is not restored as a field
+  (it lives in the body).

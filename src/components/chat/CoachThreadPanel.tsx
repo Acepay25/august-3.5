@@ -106,8 +106,7 @@ const DraftCard: React.FC<{
             const text = skillProofText({
                 title: d.crafted.name,
                 description: d.crafted.description,
-                ifCondition: d.crafted.ifCondition,
-                thenAction: d.crafted.thenAction,
+                when: d.crafted.when,
             });
             const key = `${d.coin}|${timeframe}|${text}`;
             const cached = proofCache.get(key);
@@ -136,8 +135,8 @@ const DraftCard: React.FC<{
                         <span className="ml-auto shrink-0 text-ui-dense text-zinc-500">{timeAgo(d.createdAt)}</span>
                     </div>
                     <p className="mt-1 text-ui-sm leading-relaxed text-zinc-400">
-                        <span className="font-semibold text-zinc-300">If</span> {d.crafted.ifCondition}
-                        <span className="font-semibold text-zinc-300"> → then</span> {d.crafted.thenAction}
+                        <span className="font-semibold text-zinc-300">When</span> {d.crafted.when}
+                        <span className="text-zinc-500"> · {d.crafted.steps.length} step{d.crafted.steps.length === 1 ? '' : 's'}</span>
                     </p>
                     {d.crafted.reason && (
                         <p className="mt-1 text-ui-sm leading-relaxed text-zinc-500" data-testid={`coach-draft-reason-${d.id}`}>

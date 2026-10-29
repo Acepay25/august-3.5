@@ -56,14 +56,12 @@ const DEFAULT_SKILL_ARGS = {
     validate: 'Confirm the open high held twice on closing prices',
     output: 'A short with a defined stop above the session-open high',
     approval: 'A human approves this draft in the Coach inbox before it is applied',
-    if_condition: 'us session open high held twice on closing prices',
-    then_action: 'short a reclaim failure with the stop above that high',
     reason: 'the last three ETH longs taken at the open all stopped out',
 };
 
 /** The scripted call, or null when this request must get a plain reply.
  *  `MOCK_SKILL_ARGS` overrides the payload as a JSON object, which is how a
- *  caller tests the rejection paths (e.g. a 6-character if_condition). */
+ *  caller tests the rejection paths (e.g. a too-short trigger). */
 function toolScenario(body) {
     // A request-scoped arming marker: the render probe sends one message
     // containing PROBE_TOOL_ROUND. A second mock instance with MOCK_TOOL_CALL=1 was

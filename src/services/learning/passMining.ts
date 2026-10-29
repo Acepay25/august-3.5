@@ -264,11 +264,9 @@ export const runPassMiningSweep = async (
             validate: 'The pass cluster stays vindicated (price reaches the would-be stop).',
             output: 'Skip the setup',
             approval: 'Always — pass-mined skills are drafts until the user approves them.',
-            ifCondition: `${coin} ${dir.toLowerCase()} setup in the ${fam} family without fresh confirmation`,
-            thenAction: 'stand aside — passed setups like this reached the stop first in every logged case',
         };
         // The cluster already carries a scoped default prediction; the gate
-        // adds tombstone/duplicate/coverage/IF-THEN checks. Judged once —
+        // adds tombstone/duplicate/coverage/trigger checks. Judged once —
         // a skip (covered by a live skill, or rejected recently) still marks
         // the cluster drafted so the weekly sweep never re-nags it.
         const { queueSkillDraft } = await import('../../utils/skillDrafts');

@@ -153,9 +153,8 @@ export const buildEvidenceSkillLines = (
         // skills reach a seat. `/slug` invocation is unaffected.
         if (meta.manualOnly) continue;
         if (!skillMatchesSetup(meta, setup)) continue;
-        const rule = meta.ifCondition
-            ? `IF ${meta.ifCondition} THEN ${meta.thenAction}`
-            : meta.body.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').slice(0, 100) || file.name;
+        const rule = meta.when
+            || meta.body.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').slice(0, 100) || file.name;
         out.push(`- ${meta.kind === 'avoid' ? 'AVOID' : 'REPEAT'} [skills/${file.name} · ${meta.status} · ${Math.round(meta.wins)}W/${Math.round(meta.losses)}L · ${evidenceFreshness(meta)}] ${rule}`);
         if (out.length >= max) break;
     }

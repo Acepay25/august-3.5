@@ -76,8 +76,6 @@ const SupervisorVerdictSchema = z.object({
         name: z.string().min(2).max(80).optional(),
         kind: z.enum(['repeat', 'avoid']).optional(),
         when: z.string().min(8).max(300).optional(),
-        ifCondition: z.string().min(12).max(300).optional(),
-        thenAction: z.string().min(12).max(300).optional(),
         description: z.string().min(10).max(1024).optional(),
         prediction: z.unknown().optional(),
     }).partial().optional(),
@@ -92,7 +90,7 @@ const catalogIndex = (): string => {
         return listSkills()
             .filter(({ meta }) => meta.status !== 'retired')
             .slice(0, 12)
-            .map(({ file, meta }) => `- ${file.name.replace(/\.md$/i, '')} · ${meta.kind} · ${meta.status} · ${meta.wins}W/${meta.losses}L — IF ${(meta.ifCondition || '').slice(0, 90)}`)
+            .map(({ file, meta }) => `- ${file.name.replace(/\.md$/i, '')} · ${meta.kind} · ${meta.status} · ${meta.wins}W/${meta.losses}L — when ${(meta.when || '').slice(0, 90)}`)
             .join('\n') || '(no skills yet)';
     } catch {
         return '(no skills yet)';
@@ -119,11 +117,11 @@ ${evidence.extra || ''}
 
 Decide:
 - "approve" — specific, mechanical, not covered, prediction (if any) is falsifiable
-- "enhance" — worth keeping but needs a sharper IF / activation description / prediction; return "enhanced" with the corrected fields (only the fields you change)
+- "enhance" — worth keeping but needs a sharper trigger / activation description / prediction; return "enhanced" with the corrected fields (only the fields you change)
 - "reject" — duplicate, graveyard twin, generic, unverifiable, or contradicted by evidence
 
 Output ONLY JSON:
-{"action":"approve|enhance|reject","reason":"why (20-300 chars)","enhanced":{"name?","kind?","when?","ifCondition?","thenAction?","description?","prediction?"}}`;
+{"action":"approve|enhance|reject","reason":"why (20-300 chars)","enhanced":{"name?","kind?","when?","description?","prediction?"}}`;
 
 // ─── The streamed call ──────────────────────────────────────────────────────
 
@@ -187,8 +185,8 @@ const applySkillDecision = async (
     // no longer consumes the draft and tombstones its trigger key — that was the
     // model retiring the trader's own proposal without asking. Both record the
     // verdict in the triage ledger so a pass does not re-read the same item forever.
-    const suggestion = verdict.action === 'enhance' && verdict.enhanced?.ifCondition
-        ? ` I would write it as: IF ${verdict.enhanced.ifCondition}`
+    const suggestion = verdict.action === 'enhance' && verdict.enhanced?.when
+        ? ` I would write it as: ${verdict.enhanced.when}`
         : '';
     const note = `${verdict.reason}${suggestion} (triaged — nothing was created or removed; your inbox is unchanged).`;
     // The LEDGER stores the DECISION verb, so `triageNote` answers "what did the
@@ -347,14 +345,14 @@ const MECHANICAL_PROPOSALS = new Set(['displacement', 'revival', 'demote']);
 /** The clause text a PROPOSER stored on its own row. `revise_skill` writes
  *  exactly this (`DeskToolsService.ts:2364`), so a re-scope often arrives with
  *  the rewrite already in it — the wording the seat judged the skill needs. */
-type StoredClauses = { ifCondition?: string; thenAction?: string; predicate?: string };
+type StoredClauses = { when?: string; body?: string; predicate?: string };
 
 const storedClausesOf = (
     proposal: ReturnType<typeof listLearningProposals>[number],
 ): StoredClauses | null => {
     if (proposal.kind !== 'rescope') return null;
     const c = proposal.payload as StoredClauses | undefined;
-    return c?.ifCondition && c?.thenAction ? c : null;
+    return c?.when ? c : null;
 };
 
 const superviseLearningProposal = async (
@@ -384,14 +382,14 @@ const superviseLearningProposal = async (
         {
             graveyard: '(n/a — judge whether the proposed ladder move is justified by the evidence quoted in the proposal)',
             memory: buildProfileMemoryIndex(username) || '(none)',
-            extra: (affected ? `AFFECTED SKILL: ${affected.file.name} · ${affected.meta.status} · ${affected.meta.wins}W/${affected.meta.losses}L — IF ${(affected.meta.ifCondition || '').slice(0, 120)}` : '(affected skill not found)')
+            extra: (affected ? `AFFECTED SKILL: ${affected.file.name} · ${affected.meta.status} · ${affected.meta.wins}W/${affected.meta.losses}L — when ${(affected.meta.when || '').slice(0, 120)}` : '(affected skill not found)')
                 + (carriesClauses
                     // Telling a judge to "enhance" here would make it write a
                     // re-wording that this path then ignores — the silently-dropped
                     // half of the A2 bug. Say what actually happens.
-                    ? '\nThis proposal ALREADY CARRIES its re-written IF/THEN clauses (in the payload above) and they are applied verbatim — your own rewrite cannot override them. Judge the stored clauses on their merits: "approve" installs them as written, "reject" dismisses the proposal.'
+                    ? '\nThis proposal ALREADY CARRIES its re-written trigger (in the payload above) and it is applied verbatim — your own rewrite cannot override it. Judge the stored trigger on its merits: "approve" installs it as written, "reject" dismisses the proposal.'
                     : needsRewrite
-                        ? '\nThis proposal asks to RE-SCOPE or RESOLVE the affected skill. "approve" does nothing here: either "enhance" with the corrected ifCondition + thenAction (mechanical, specific — the rewrite applies verbatim), or "reject" if the claim is not justified.'
+                        ? '\nThis proposal asks to RE-SCOPE or RESOLVE the affected skill. "approve" does nothing here: either "enhance" with the corrected trigger (mechanical, specific — the rewrite applies verbatim), or "reject" if the claim is not justified.'
                         : ''),
         },
     ), config);
@@ -418,10 +416,10 @@ const superviseLearningProposal = async (
     // model's to make alone. The queue row keeps its text, its payload and its
     // buttons, which is where the decision now lives.
     const carried = storedClausesOf(proposal);
-    const suggestion = verdict.action === 'enhance' && verdict.enhanced?.ifCondition
-        ? ` I would write: IF ${verdict.enhanced.ifCondition} THEN ${verdict.enhanced.thenAction ?? '…'}`
+    const suggestion = verdict.action === 'enhance' && verdict.enhanced?.when
+        ? ` I would write: ${verdict.enhanced.when}`
         : carried
-            ? ` It already carries clauses: IF ${carried.ifCondition} THEN ${carried.thenAction ?? '…'}`
+            ? ` It already carries a trigger: ${carried.when}`
             : '';
     writeTriage(username, proposal.id, JSON.stringify({
         verdict: verdict.action === 'enhance' ? 'enhanced' : 'approved',
@@ -739,8 +737,8 @@ export const overrideApproveSkill = async (
         // path had nothing to point at, and "Reject — undo this" was a no-op.
         if (result.created) {
             const created = getMemoryFiles().files.filter(isSkillFile).find(f =>
-                (parseSkillMarkdown(f.content)?.ifCondition ?? '').toLowerCase()
-                === (draft.crafted.ifCondition ?? '').toLowerCase());
+                (parseSkillMarkdown(f.content)?.when ?? '').toLowerCase()
+                === (draft.crafted.when ?? '').toLowerCase());
             const decision = ev?.decision;
             if (created && decision) {
                 store.setDecision(eventId, {

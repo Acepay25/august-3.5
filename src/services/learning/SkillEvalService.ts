@@ -112,7 +112,7 @@ const outcomeOf = (t: LoggedTrade): SkillEvalPair['actualOutcome'] =>
  *  from each trade's persisted `marketRegime` so a skill scoped to one
  *  regime is audited on that regime's trades only. */
 export const selectEvalTrades = (meta: SkillMeta, trades: LoggedTrade[]): LoggedTrade[] => {
-    // The skill's own training trades are excluded: its IF/THEN was authored
+    // The skill's own training trades are excluded: its trigger was authored
     // FROM those post-mortems, so re-benchmarking them measures how well it
     // fits its own source material, not whether it generalizes.
     //

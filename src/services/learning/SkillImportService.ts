@@ -4,7 +4,7 @@
  * the harness's skills folder so the models can USE them in debates.
  *
  * Validation is strict but honest: a file must parse as a skill
- * (serializeSkill frontmatter shape — kind, status, ifCondition/… via
+ * (serializeSkill frontmatter shape — kind, status, when/… via
  * parseSkillMarkdown). Files that fail validation are reported, never
  * silently dropped. Names never overwrite: a colliding slug gets -2, -3…
  */
@@ -222,12 +222,12 @@ export const importSkillFiles = async (files: Array<SkillFileRead & { content: s
         // silent). Skills WITHOUT a trigger condition dedupe on the
         // normalized title (the first `# heading`), so frontmatter-less
         // bodies can't be imported repeatedly under shuffled names.
-        const triggerKey = (meta.ifCondition ?? `#title:${(meta.body.match(/^#\s+(.+)$/m)?.[1] ?? file.name).trim().toLowerCase()}`).toLowerCase();
+        const triggerKey = (meta.when ?? `#title:${(meta.body.match(/^#\s+(.+)$/m)?.[1] ?? file.name).trim().toLowerCase()}`).toLowerCase();
         const dup = getMemoryFiles().files.filter(f => f.name.toLowerCase().endsWith('.md'))
             .some(f => {
                 const other = parseSkillMarkdown(f.content);
                 if (!other) return false;
-                const otherKey = (other.ifCondition ?? `#title:${(other.body.match(/^#\s+(.+)$/m)?.[1] ?? f.name).trim().toLowerCase()}`).toLowerCase();
+                const otherKey = (other.when ?? `#title:${(other.body.match(/^#\s+(.+)$/m)?.[1] ?? f.name).trim().toLowerCase()}`).toLowerCase();
                 return otherKey === triggerKey;
             });
         if (dup) {

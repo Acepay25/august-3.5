@@ -29,9 +29,9 @@ observed — an empty section is how a skill degrades back into a rule.
 
 KIND:
 - avoid — the trade lost or the lesson is "do not take this"
-- repeat — the trade won and the lesson is "take this only when the IF holds"
+- repeat — the trade won and the lesson is "take this only when the trigger holds"
 
-IF/THEN must be mechanical (price, candle close, level, volume, regime). No vibes.
+The trigger and steps must be mechanical (price, candle close, level, volume, regime). No vibes.
 
 DESCRIPTION — the activation key. Retrieval scores this string against the
 live setup to decide whether the skill loads at all, so it carries the
@@ -65,11 +65,9 @@ Output ONLY JSON:
   "verification": "how the agent confirms the procedure worked",
   "examples": [{"input": "the setup as it appeared", "output": "what this procedure says to do"}],
   "relatedSkills": ["slug of a skill this one overlaps or contradicts"],
-  "validate": "how to know the IF still holds",
+  "validate": "how to know the trigger still holds",
   "output": "what the next ticket should do",
   "approval": "when a human must confirm (size, new coin, conflicting skill)",
-  "ifCondition": "IF clause without the word IF",
-  "thenAction": "THEN clause without the word THEN",
   "strategy": {
     "entry": "price / zone / condition to enter",
     "invalidation": "what voids the setup",
@@ -84,10 +82,8 @@ Output ONLY JSON:
 export const formatCraftedSkillBody = (skill: CraftedSkill): string => {
     // The bold core is kept EXACTLY as it was, because it is a vocabulary and
     // not a style: `utils/ifThenSkill.ts:formatSkillProcedure` writes the same
-    // `**What I do:**` line, `syncSkillRuleLine` rewrites the `**My rule:**`
-    // line and a test pins that the two are byte-identical, and a dozen
-    // fixtures seed bodies in this shape. Replacing it would have broken the
-    // convention rather than improved it.
+    // `**What I do:**` line, and fixtures seed bodies in this shape. Replacing
+    // it would have broken the convention rather than improved it.
     //
     // What the core could not express is appended as sections — when NOT to
     // reach for this, the failure that was actually seen, and how to confirm
@@ -119,7 +115,6 @@ export const formatCraftedSkillBody = (skill: CraftedSkill): string => {
         ] : []),
         `**What I hand back:** ${skill.output}`,
         `**When I ask a human:** ${skill.approval}`,
-        `**My rule:** when ${skill.ifCondition}, I ${skill.thenAction}`,
         '',
         ...section('When NOT to use', bullets(skill.whenNot ?? [])),
         '',
@@ -150,7 +145,7 @@ export const craftSkillFromPostMortem = async (
         `Direction: ${trade.analysis?.direction || '?'}`,
         `Family: ${trade.analysis?.detectedPatternFamily || '?'}`,
         `Outcome: ${trade.outcome}`,
-        clauses[0] ? `Extracted IF/THEN: IF ${clauses[0].ifCondition} THEN ${clauses[0].thenAction}` : '',
+        clauses[0] ? `Extracted trigger: ${clauses[0].ifCondition}` : '',
     ].filter(Boolean).join('\n');
     const prompt = `${getPrompt('learning.skill_craft', SKILL_CRAFT_FALLBACK)}
 
@@ -190,11 +185,9 @@ Output ONLY JSON with the same shape:
   "when": "tightened trigger in one sentence",
   "inputs": ["coin", "direction", "timeframe or family"],
   "steps": ["step 1", "step 2", "step 3"],
-  "validate": "how to know the IF still holds",
+  "validate": "how to know the trigger still holds",
   "output": "what the next ticket should do",
   "approval": "when a human must confirm",
-  "ifCondition": "tightened IF clause without the word IF",
-  "thenAction": "corrected THEN clause without the word THEN",
   "strategy": {
     "entry": "price / zone / condition to enter",
     "invalidation": "what voids the setup",
@@ -214,7 +207,7 @@ Output ONLY JSON with the same shape:
  * existing skill untouched).
  */
 export const refineSkillFromLosses = async (
-    skill: { title: string; kind: 'avoid' | 'repeat'; ifCondition?: string; thenAction?: string; body: string; wins: number; losses: number },
+    skill: { title: string; kind: 'avoid' | 'repeat'; when?: string; body: string; wins: number; losses: number },
     losingTrades: LoggedTrade[],
     config: ProviderConfig,
 ): Promise<CraftedSkill | null> => {
@@ -228,8 +221,7 @@ export const refineSkillFromLosses = async (
     const prompt = `${getPrompt('learning.skill_refine', SKILL_REFINE_FALLBACK)}
 
 CURRENT SKILL (${skill.title}, ${skill.kind}, record ${skill.wins}W/${skill.losses}L):
-IF ${skill.ifCondition || '(unwritten)'}
-THEN ${skill.thenAction || '(unwritten)'}
+WHEN ${skill.when || '(unwritten)'}
 
 ${skill.body.slice(0, 2000)}
 

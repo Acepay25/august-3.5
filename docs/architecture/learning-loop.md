@@ -15,7 +15,7 @@ How a closed trade becomes a lesson the next plan reads. Every stage below is ci
 
 `hooks/useTradeLogging.ts` calls `syncClosedTradeToNotebook` (`services/learning/SkillMemoryService.ts`).
 That one call appends the diary entry, syncs recurring mistakes, applies skill evidence (W/L,
-`controlIds`, `overriddenIds`, status), ingests deterministic IF/THEN clauses, and — when a cluster
+`controlIds`, `overriddenIds`, status), ingests the lesson's trigger, and — when a cluster
 is large enough and no skill covers it — asks `evaluateSkillWorth` (`services/learning/skillWorthGate.ts`)
 whether the cluster is worth a draft.
 
@@ -42,7 +42,7 @@ Seven sources mint skill drafts. `gateEvidenceBackedDraft` and `deterministicDra
 - nothing enters without a **falsifiable prediction**;
 - nothing **duplicates** a live skill — a covered setup strengthens the existing tally instead;
 - the evidence tier runs the full worth gate; the deterministic tier handles drafts with no scored
-  outcome yet (tombstone cooldown, pending-duplicate skip, IF/THEN sanity).
+  outcome yet (tombstone cooldown, pending-duplicate skip, trigger sanity).
 
 Any gate failure falls back to the deterministic tier. The human inbox remains the backstop.
 

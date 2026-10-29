@@ -118,15 +118,15 @@ const readTombstones = (username?: string): SkillDraftTombstone[] => {
     }
 };
 
-/** Stable trigger identity of a draft: coin + kind + IF condition. */
+/** Stable trigger identity of a draft: coin + kind + the trigger sentence. */
 export const draftTriggerKey = (
     coin: string | undefined,
-    crafted: Pick<SkillDraft['crafted'], 'kind' | 'ifCondition'>,
+    crafted: Pick<SkillDraft['crafted'], 'kind' | 'when'>,
 ): string =>
     [
         (coin || '').toUpperCase().replace(/USDT?$/, ''),
         crafted?.kind ?? '',
-        crafted?.ifCondition ?? '',
+        crafted?.when ?? '',
     ].join('|').toLowerCase();
 
 export const isDraftTombstoned = (

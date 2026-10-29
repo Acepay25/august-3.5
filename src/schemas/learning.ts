@@ -106,7 +106,7 @@ export const parseStrategySearchResults = (raw: unknown): ValidatedStrategySearc
 };
 
 /**
- * The one clause-length bar, declared HERE because `services/learning/
+ * The one trigger-length bar, declared HERE because `services/learning/
  * skillClauseBar.ts` imports its types from this file — a constant the other
  * way round would close the edge schemas → services that `utils/` is explicitly
  * forbidden to make.
@@ -138,8 +138,6 @@ export const CraftedSkillSchema = z.object({
   validate: z.string().min(4),
   output: z.string().min(4),
   approval: z.string().min(4),
-  ifCondition: z.string().min(CLAUSE_MIN_LENGTH),
-  thenAction: z.string().min(CLAUSE_MIN_LENGTH),
   // Optional machine-checkable trigger. Length-capped here and validated where
   // it is STORED (services/learning/SkillMemoryService → sanitizePredicate),
   // because the field whitelist lives with the evaluator and a boundary that
@@ -159,7 +157,7 @@ export const CraftedSkillSchema = z.object({
   // post-mortem/verdict authors stay valid.
   timeframe: z.string().max(12).optional(),
   source: z.string().max(24).optional(),
-  // STRUCTURED STRATEGY — beyond the IF/THEN rule.
+  // STRUCTURED STRATEGY — the plan beside the procedure.
   //
   // A skill used to be only a trigger and an action, so "create a strategy"
   // had nowhere to land: the entry, stop, target, sizing and invalidation the

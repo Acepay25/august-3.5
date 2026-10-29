@@ -16,18 +16,15 @@
 import type { CraftedSkill } from '../../schemas/learning';
 import { CLAUSE_MIN_LENGTH } from '../../schemas/learning';
 
-export const GENERIC_IF_RE = /^(follow trend|use risk management|be careful|manage risk|trade carefully)/i;
+export const GENERIC_TRIGGER_RE = /^(follow trend|use risk management|be careful|manage risk|trade carefully)/i;
 
-/** The same IF/THEN bar validateCraftedSkill applies to worth-gate creates.
- *  The length is `CLAUSE_MIN_LENGTH`, imported from the schema that also
- *  enforces it — the two used to disagree (8 here, 12 there), which let a
- *  clause parse, queue as a draft, and then be refused by this gate. */
-export const validateIfThen = (crafted: Pick<CraftedSkill, 'ifCondition' | 'thenAction'>): string | null => {
-    const ic = (crafted.ifCondition || '').trim();
-    const ta = (crafted.thenAction || '').trim();
-    if (!ic || ic.length < CLAUSE_MIN_LENGTH) return `IF condition too short (under ${CLAUSE_MIN_LENGTH}) or missing`;
-    if (!ta || ta.length < CLAUSE_MIN_LENGTH) return `THEN action too short (under ${CLAUSE_MIN_LENGTH}) or missing`;
-    if (GENERIC_IF_RE.test(ic)) return 'IF condition is generic';
+/** The trigger bar every draft passes. `when` is the skill's one trigger
+ *  sentence — there is no separate IF/THEN pair any more, so this is the only
+ *  prose that has to be specific enough to be checkable. */
+export const validateTrigger = (crafted: Pick<CraftedSkill, 'when'>): string | null => {
+    const when = (crafted.when || '').trim();
+    if (!when || when.length < CLAUSE_MIN_LENGTH) return `trigger too short (under ${CLAUSE_MIN_LENGTH}) or missing`;
+    if (GENERIC_TRIGGER_RE.test(when)) return 'trigger is generic';
     return null;
 };
 
@@ -53,7 +50,7 @@ export interface CoverableMeta {
     direction?: string;
     family?: string;
     regime?: string;
-    ifCondition?: string;
+    when?: string;
     status?: string;
     supersededBy?: string;
 }
@@ -67,9 +64,9 @@ export interface CoverReader<M extends CoverableMeta = CoverableMeta> {
 
 /** Does an enabled live skill already cover this setup? Structural match on
  *  coin/direction/family when the source knows them, keyword overlap on the
- *  IF condition for coinless pattern drafts (the book seeds). */
+ *  trigger for coinless pattern drafts (the book seeds). */
 export const coveredByLiveSkill = <M extends CoverableMeta>(
-    crafted: Pick<CraftedSkill, 'ifCondition'>,
+    crafted: Pick<CraftedSkill, 'when'>,
     reader: CoverReader<M>,
     coin?: string,
     direction?: string,
@@ -77,10 +74,10 @@ export const coveredByLiveSkill = <M extends CoverableMeta>(
 ): boolean => {
     try {
         const dir = direction && direction !== 'Neutral' ? direction
-            : /\b(long|buy)\b/i.test(crafted.ifCondition) ? 'Long'
-                : /\b(short|sell|fade)\b/i.test(crafted.ifCondition) ? 'Short'
+            : /\b(long|buy)\b/i.test(crafted.when) ? 'Long'
+                : /\b(short|sell|fade)\b/i.test(crafted.when) ? 'Short'
                     : undefined;
-        const words = salientWords(crafted.ifCondition);
+        const words = salientWords(crafted.when);
         return reader.listLive().some((meta) => {
             if (meta.status === 'retired' || meta.supersededBy) return false;
             // COIN AGREEMENT IS A PREREQUISITE FOR COVERAGE — checked FIRST,
@@ -94,7 +91,7 @@ export const coveredByLiveSkill = <M extends CoverableMeta>(
             if (coin && meta.coin && normCoin(coin) !== normCoin(meta.coin)) return false;
             if (reader.strictMatches(meta, { coin, direction: dir, family })) return true;
             if (words.length >= 3) {
-                const hay = `${meta.ifCondition || ''}`.toLowerCase();
+                const hay = `${meta.when || ''}`.toLowerCase();
                 if (words.filter(w => hay.includes(w)).length >= 2) return true;
             }
             return false;

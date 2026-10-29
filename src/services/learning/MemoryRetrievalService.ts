@@ -11,7 +11,7 @@
  *    as the human-facing record. See docs/architecture/learning-loop.md.
  *  - Recurring-mistakes lines escalate into skills: once a skill owns a
  *    coin+direction cluster, the raw warning line goes quiet.
- *  - IF/THEN rules live INSIDE skills (candidate → confirmed by evidence);
+ *  - skill procedures live INSIDE skills (candidate → confirmed by evidence);
  *    there is no separate rules injection path.
  *  - Similar-trade history is verdict-stage material (and `recall` tool).
  *
@@ -510,9 +510,8 @@ const skillIndexLine = (name: string, meta: SkillMeta, status?: SkillMeta['statu
                 guidance: `the full text is in skills/${name}`,
             })}`
             : meta.description)
-        : meta.ifCondition
-            ? `IF ${meta.ifCondition} THEN ${meta.thenAction}`
-            : meta.body.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').slice(0, 100) || name;
+        : meta.when
+            || meta.body.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').slice(0, 100) || name;
     const unprovenLabel = meta.prior === 'book'
         ? 'book prior — no local record yet'
         : meta.prior === 'gated'
@@ -564,8 +563,7 @@ const matchedSkillBlock = (
     // the app's ONE marker voice (harnessMarks) rather than a bare "…" the
     // model would read as the procedure simply ending.
     const card = projectSkillCard(body, {
-        ifCondition: match.meta.ifCondition,
-        thenAction: match.meta.thenAction,
+        when: match.meta.when,
         budget: SKILL_BLOCK_MAX,
     });
     const slug = normalizeSkillSlug(match.file.name);
@@ -1099,8 +1097,7 @@ ${shown}`);
             // procedure), and the omission is marked in the app's one clipping
             // voice, with numbers.
             const card = projectSkillCard(body, {
-                ifCondition: m.meta.ifCondition,
-                thenAction: m.meta.thenAction,
+                when: m.meta.when,
                 budget: RECALL_SKILL_BODY_MAX,
             });
             const shown = card.clipped

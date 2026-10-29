@@ -101,7 +101,7 @@ export const collectApprovalItems = (
             id: draft.id,
             kind: 'skill',
             title: draft.crafted.name,
-            detail: `IF ${draft.crafted.ifCondition} THEN ${draft.crafted.thenAction}`,
+            detail: `When ${draft.crafted.when}`,
             messageId: draft.tradeId,
             coin: draft.coin,
         });

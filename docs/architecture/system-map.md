@@ -812,6 +812,14 @@ evidence counts, `netR`/`grossR`, r-sample and provenance. `listSkills` is the o
 `enabled` is derived — suspension is `enabled: false` plus `meta.suspendedAt`,
 never a fourth status.
 
+**The skill format is one trigger + a procedure (2026-10-30).** A skill carries `when` (its one
+checkable trigger sentence) and a body of steps; it has **no** `ifCondition`/`thenAction` pair in the
+craft, the file, the index row or the tool schemas. `parseSkillMarkdown` maps a legacy
+`ifCondition` front-matter key into `when` on read and the old keys survive as unknown frontmatter,
+so old files keep every byte; `serializeSkill` writes `when:`. The draft gates check the trigger
+(`validateTrigger`), coverage compares triggers, and `propose_skill`/`revise_skill` ask for
+`when` + `steps` (revisions may carry a full `procedure` body).
+
 **The SKILL.md port, 2026-10-24** (same design pass as G.2's memory loop):
 
 - **Third-party frontmatter survives every rewrite.** `captureUnknownFrontmatter`

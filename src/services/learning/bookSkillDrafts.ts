@@ -3,7 +3,7 @@
  * candidate skills the human approves.
  *
  * Each entry is the machine-checkable core of one book's playbook, written as
- * an IF/THEN skill. They are queued as PENDING DRAFTS (the same inbox the
+ * a skill (one trigger + steps). They are queued as PENDING DRAFTS (the same inbox the
  * post-mortem crafts use). One-time and idempotent: a localStorage flag guards
  * the seeding, so approving or dismissing a draft is never undone by a later
  * boot, and user edits are never clobbered.
@@ -44,15 +44,17 @@ const D = (
     validate: string,
     output: string,
     approval: string,
-    ifCondition: string,
-    thenAction: string,
+    // Book text kept at the call site for the source table; the skill object
+    // carries the procedure (when + steps) and no clause pair.
+    _ifCondition: string,
+    _thenAction: string,
 ): BookDraft => ({
     slug,
     source,
     crafted: {
         name, kind, when,
         inputs: ['candles', 'range/levels', 'indicators as noted'],
-        steps, validate, output, approval, ifCondition, thenAction,
+        steps, validate, output, approval,
     },
 });
 
@@ -174,7 +176,7 @@ export const BOOK_SKILL_DRAFTS: BookDraft[] = [
  *
  * Each draft passes the deterministic gate before queueing: a rejected
  * trigger's tombstone cooldown, pending-duplicate skip, live-library
- * coverage skip, IF/THEN sanity, and a falsifiable default prediction
+ * coverage skip, trigger sanity, and a falsifiable default prediction
  * attached when the entry has none. Deliberately NO LLM worth gate here —
  * seeding runs on every profile load and must not fire a dozen provider
  * calls; these are pre-curated and stay human-gated in the inbox.

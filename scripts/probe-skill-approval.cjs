@@ -61,7 +61,7 @@ async function waitForServer(url, timeoutMs = 90000) {
     return false;
 }
 
-/** A crafted skill shaped exactly like `CraftedSkill`, clauses over the bar. */
+/** A crafted skill shaped exactly like `CraftedSkill`: one trigger + steps. */
 const craft = (over = {}) => ({
     name: 'Funding exhaustion long',
     kind: 'repeat',
@@ -71,13 +71,11 @@ const craft = (over = {}) => ({
     validate: 'Confirm the sweep on the live chart before acting',
     output: 'A long entry with a stop under the liquidity low',
     approval: 'A human approves this draft before it is ever applied',
-    ifCondition: 'funding positive 8 sessions and the daily low was swept',
-    thenAction: 'go long only after a 1h close back above the swept level',
     ...over,
 });
 
 const draftRow = (id, crafted, tradeId) => ({
-    id, tradeId: tradeId || `chat:${crafted.kind}|${crafted.ifCondition}`,
+    id, tradeId: tradeId || `chat:${crafted.kind}|${crafted.when}`,
     coin: 'BTC', crafted, createdAt: new Date().toISOString(),
 });
 
@@ -382,7 +380,7 @@ async function readToast(page) {
         await freshSession(page);
         {
             await approveOne('sk-col-1', craft());
-            const r = await approveOne('sk-col-2', craft({ ifCondition: 'a completely different trigger clause entirely' }));
+            const r = await approveOne('sk-col-2', craft({ when: 'a completely different trigger clause entirely' }));
             // Asserted by the NEW file's name, not by a count: the app pre-seeds
             // twelve book-*.md skills, so a length check proves nothing.
             check('2-collision: second file written as funding-exhaustion-long-2.md',
@@ -435,7 +433,7 @@ async function readToast(page) {
                 };
             });
             await page.evaluate(() => localStorage.setItem('probe_block_notebook', '1'));
-            const r = await approveOne('sk-writefail', craft({ ifCondition: 'a trigger whose write will be forced to fail' }));
+            const r = await approveOne('sk-writefail', craft({ when: 'a trigger whose write will be forced to fail' }));
             check('4-writefail: toast says Not saved, not Skill saved',
                 /Not saved/.test(r.toast) && !/Skill saved/.test(r.toast), r.toast);
             check('4-writefail: the draft SURVIVES the failed write',
@@ -474,11 +472,15 @@ async function readToast(page) {
             await approveOne('sk-rescope-seed', craft());
             const lived = await readSkillContent(page, 'funding-exhaustion-long.md');
             check('5-rescope: prerequisite skill is live with the original clause',
-                lived.includes('funding positive 8 sessions and the daily low was swept'), lived.length);
+                lived.includes('funding runs positive for many sessions while price stalls at swept lows'), lived.length);
 
             const NEW = {
-                ifCondition: 'funding positive 14 sessions and the daily low was swept',
-                thenAction: 'go long only after a 4h close back above the swept level',
+                when: 'funding positive 14 sessions and the daily low was swept',
+                body: [
+                    '**When:** funding positive 14 sessions and the daily low was swept.',
+                    '**What I do:** wait for a 4h close back above the swept level, then enter with the stop under the wick.',
+                    '**Invalidates:** a close back under the swept level.',
+                ].join(String.fromCharCode(10)),
                 predicate: 'close > open',
             };
             const row = {
@@ -493,10 +495,10 @@ async function readToast(page) {
             check('5-rescope: the Coach thread offered Apply for a rescope', clicked);
             await sleep(2500);
             const bytes = await readSkillContent(page, 'funding-exhaustion-long.md');
-            check('5-rescope: the notebook now carries the proposed clause',
-                bytes.includes(NEW.ifCondition) && bytes.includes(NEW.thenAction), bytes.length);
-            check('5-rescope: the old clause is gone from the file, prose line included',
-                !bytes.includes('funding positive 8 sessions'), { stale: bytes.includes('funding positive 8 sessions') });
+            check('5-rescope: the notebook now carries the proposed trigger',
+                bytes.includes(NEW.when), bytes.length);
+            check('5-rescope: the old trigger is gone from the file, prose line included',
+                !bytes.includes('funding runs positive for many sessions'), { stale: bytes.includes('funding runs positive for many sessions') });
             check('5-rescope: one skill, not a second file',
                 (await readSkillFiles(page)).files.filter(f => f.includes('funding-exhaustion-long')).length === 1);
             check('5-rescope: the proposal row was consumed',
@@ -508,7 +510,7 @@ async function readToast(page) {
                 id: 'lp-probe-rescope-2', kind: 'rescope', skillSlug: 'funding-exhaustion-long',
                 text: 'Vague tightening.', fingerprint: 'model-revision:funding-exhaustion-long:vague',
                 createdAt: new Date().toISOString(),
-                payload: { source: 'model:desk', ifCondition: 'be careful', thenAction: 'manage risk' },
+                payload: { source: 'model:desk', when: 'be careful' },
             };
             const queueNow = await readProposals(page);
             await seedProposals(page, [...queueNow, bad]);
@@ -530,7 +532,7 @@ async function readToast(page) {
             check('5b-refusal: the refused proposal is still queued',
                 (await readProposals(page)).some(p => p.id === bad.id));
             check('5b-refusal: the skill bytes did not change',
-                (await readSkillContent(page, 'funding-exhaustion-long.md')).includes(NEW.ifCondition));
+                (await readSkillContent(page, 'funding-exhaustion-long.md')).includes(NEW.when));
             await shot(page, 'rescope');
         }
         await shot(page, 'final');

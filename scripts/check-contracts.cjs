@@ -41,6 +41,9 @@
  *      candidate write (no approval queue)
  *  22. signal accuracy — the same-levels base rate, hit-rate lift, the thin
  *      sample floor, and the feedback carried into the next emission
+ *  23. the skill format — one trigger (`when`) + steps, no if/then pair in
+ *      the craft, the file, the index row or the tool schemas; legacy files
+ *      migrate `ifCondition` into `when` on read
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -849,8 +852,7 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     const row = (slug, status) => ({
         slug, status, kind: 'repeat',
         description: `${slug} setup`,
-        ifCondition: `IF ${slug} triggers`,
-        thenAction: `THEN act on ${slug}`,
+        when: `${slug} triggers with a measured condition`,
     });
     const text = tc.buildSkillsIndexForPrompt(
         [row('confirmed-a', 'confirmed'), row('cand-b', 'candidate'), row('cand-c', 'candidate')],
@@ -1242,7 +1244,8 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     const prompt = scan.CHART_SCAN_FALLBACK_PROMPT;
     ok('scan prompt: pattern-first, PHT, every-bar and NOT a generic rule',
         /PATTERN-FIRST/.test(prompt) && /EVERY bar/.test(prompt) && /PHT/.test(prompt)
-        && /not a generic IF\/THEN rule/.test(prompt) && /turn back time/.test(prompt));
+        && /not a generic rule/.test(prompt) && /one checkable trigger sentence/.test(prompt)
+        && /turn back time/.test(prompt));
     ok('scan: candidates are created directly, never queued for approval',
         !/queueSkillDraft/.test(read('src/services/learning/chartScanSkills.ts'))
         && /ingestCraftedSkillFromDraft/.test(read('src/services/learning/chartScanSkills.ts')));
@@ -1318,6 +1321,89 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         /scorecard: signalScorecard\(s\.coin\)/.test(deskSrc));
 })();
 
+// ─── 23. the skill format: one trigger + steps, no IF/THEN pair ────────────
+(() => {
+    const schema = loadModule('src/schemas/learning.ts');
+    const bar = loadModule('src/services/learning/skillClauseBar.ts');
+    const skills = loadModule('src/services/learning/SkillMemoryService.ts');
+    const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+
+    const proper = {
+        name: 'Funding exhaustion long',
+        kind: 'repeat',
+        when: 'funding has been positive for eight sessions while price stalls at a swept low',
+        inputs: [],
+        steps: ['Confirm the streak', 'Wait for a reclaim close', 'Enter with the stop under the wick'],
+        validate: 'The sweep is still visible on the live chart',
+        output: 'A long entry with a defined stop',
+        approval: 'A human confirms before sizing',
+    };
+    const parsed = schema.parseCraftedSkill(proper);
+    ok('skill format: a trigger + steps craft parses without any IF/THEN pair',
+        !!parsed && parsed.when === proper.when && parsed.steps.length === 3,
+        JSON.stringify(parsed));
+    const legacyInput = schema.parseCraftedSkill({
+        ...proper,
+        ifCondition: 'a legacy IF clause long enough',
+        thenAction: 'a legacy THEN action long enough',
+    });
+    ok('skill format: legacy IF/THEN fields are not carried onto the craft',
+        !!legacyInput && !('ifCondition' in legacyInput) && !('thenAction' in legacyInput),
+        JSON.stringify(legacyInput && Object.keys(legacyInput)));
+    ok('skill format: a craft without when or steps is refused',
+        schema.parseCraftedSkill({ ...proper, when: undefined }) === null
+        && schema.parseCraftedSkill({ ...proper, steps: [] }) === null);
+
+    ok('skill format: the trigger bar refuses generic and short sentences',
+        bar.validateTrigger({ when: 'be careful' }) !== null
+        && bar.validateTrigger({ when: 'short' }) !== null
+        && bar.validateTrigger({ when: 'funding positive 8 sessions and the low was swept' }) === null);
+
+    const meta = {
+        status: 'candidate', kind: 'repeat', wins: 0, losses: 0, consecutiveLosses: 0,
+        tradeIds: [], when: proper.when, description: 'Funding exhaustion long',
+        body: '**When:** funding has been positive...\n**What I do:** wait for the reclaim.',
+    };
+    const file = skills.serializeSkill(meta, 'Funding exhaustion long');
+    ok('skill format: the written file carries when: and never the old pair',
+        /\bwhen:/.test(file) && !/\bifCondition\s*:/.test(file) && !/\bthenAction\s*:/.test(file), file.slice(0, 220));
+    const back = skills.parseSkillMarkdown(file);
+    ok('skill format: the file round-trips its trigger', !!back && back.when === proper.when, back && back.when);
+
+    const legacyFile = [
+        '---',
+        'name: legacy-skill',
+        'description: a legacy skill',
+        'kind: repeat',
+        'ifCondition: "funding positive 8 sessions and the low was swept"',
+        'thenAction: "go long after the reclaim close"',
+        '---',
+        '**When:** funding positive 8 sessions and the low was swept.',
+    ].join('\n');
+    const migrated = skills.parseSkillMarkdown(legacyFile);
+    ok('skill format: a legacy file migrates its IF condition into the trigger on read',
+        !!migrated && migrated.when === 'funding positive 8 sessions and the low was swept',
+        migrated && migrated.when);
+    const migratedIndex = skills.skillIndexRow({ name: 'legacy-skill.md' }, migrated);
+    ok('skill format: the index row exposes the trigger, not the old pair',
+        migratedIndex.when === migrated.when
+        && !('ifCondition' in migratedIndex) && !('thenAction' in migratedIndex));
+
+    ok('skill format: the propose_skill tool no longer asks for the pair',
+        !/if_condition|then_action/.test(read('src/services/analysis/DeskToolsService.ts')));
+    for (const builder of [
+        'src/services/learning/chartScanSkills.ts',
+        'src/services/learning/sessionSkillReview.ts',
+        'src/services/learning/passMining.ts',
+        'src/services/learning/selfImprovement.ts',
+        'src/services/learning/seedStrategies.ts',
+        'src/services/learning/bookSkillDrafts.ts',
+    ]) {
+        ok(`skill format: ${builder.split('/').pop()} writes no clause pair`,
+            !/\bifCondition\s*:|\bthenAction\s*:/.test(read(builder)), builder);
+    }
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
@@ -1325,4 +1411,4 @@ if (failures.length) {
     console.error('CONTRACT CHECK FAIL — a pinned contract broke; fix the module, not this file.');
     process.exit(1);
 }
-console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing), the desk tool budget, the skill outcome correction, the startup call gates, the insight store pin, the signal loop (resolver order, costs, ledger, venue data), the chart tape study and the signal accuracy fold all hold.');
+console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing), the desk tool budget, the skill outcome correction, the startup call gates, the insight store pin, the signal loop (resolver order, costs, ledger, venue data), the chart tape study, the signal accuracy fold and the skill format all hold.');

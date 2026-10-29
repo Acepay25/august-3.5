@@ -5,7 +5,7 @@
  * it, so a freshly-minted (or chat-authored) skill reads unproven for weeks.
  * This closes that gap the same way the chart scan scores its candidates:
  * pull the coin's real candle history, run the strategy-book detectors over
- * the WHOLE tape (scanHistorySetups), match the skill's own IF/THEN clauses
+ * the WHOLE tape (scanHistorySetups), match the skill's own trigger
  * to the detector they describe, and report what that behavior WOULD have
  * done (first-touch 1.5×ATR vs 1×ATR win-rate + excursions).
  *
@@ -60,8 +60,8 @@ export const matchDetector = (text: string, stats: HistoricalSetupStat[]): Histo
 
 /** A skill's searchable text: the clauses + activation key + family. */
 export const skillProofText = (parts: {
-    ifCondition?: string; thenAction?: string; description?: string; family?: string; title?: string;
-}): string => [parts.title, parts.description, parts.family, parts.ifCondition, parts.thenAction]
+    when?: string; description?: string; family?: string; title?: string;
+}): string => [parts.title, parts.description, parts.family, parts.when]
     .filter(Boolean).join(' ');
 
 export async function proofSkillOnHistory(args: {

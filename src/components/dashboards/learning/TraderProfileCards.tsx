@@ -110,7 +110,7 @@ export const TraderProfileCards: React.FC<TraderProfileCardsProps> = ({
             <StatCard
                 title="Learned Skills"
                 items={notebookSkills.slice(0, 5).map(({ meta, file }) => ({
-                    name: `${meta.kind === 'avoid' ? 'Avoid' : 'Repeat'}: ${meta.ifCondition || file.name.replace(/\.md$/i, '')}`.slice(0, 90),
+                    name: `${meta.kind === 'avoid' ? 'Avoid' : 'Repeat'}: ${meta.when || file.name.replace(/\.md$/i, '')}`.slice(0, 90),
                     value: `${Math.round(meta.wins)}W/${Math.round(meta.losses)}L`,
                     subtext: meta.status,
                     color: meta.status === 'confirmed' ? 'text-emerald-400' : meta.status === 'retired' ? 'text-zinc-600' : 'text-cyan-300',
@@ -227,7 +227,7 @@ export const TraderProfileCards: React.FC<TraderProfileCardsProps> = ({
                                 : 'text-white',
                     };
                 })}
-                emptyText="Closed trades with an IF/THEN become skills"
+                emptyText="Closed trades with a lesson become skills"
             />
             <StatCard
                 title="Model calibration (Brier)"

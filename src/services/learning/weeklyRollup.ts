@@ -68,7 +68,7 @@ const sample = (meta: SkillMeta): number => meta.wins + meta.losses;
 
 /** First-person distillation of a skill into a belief body. */
 const beliefBodyFromSkill = (meta: SkillMeta): string => {
-    const action = (meta.thenAction || meta.description || '').replace(/\s+/g, ' ').trim();
+    const action = (meta.description || '').replace(/\s+/g, ' ').trim();
     if (action) return action;
     const title = [meta.kind === 'avoid' ? 'Avoid' : 'Repeat', meta.coin, meta.direction, meta.family]
         .filter(Boolean).join(' ');

@@ -115,7 +115,7 @@ export interface SkillReviewChecks {
     descriptionIsFallback: boolean;
     /** HINT: the description appears to NAME a trigger ("whenever …"). */
     descriptionNamesTrigger: boolean;
-    /** The skill carries a structured trigger (`ifCondition` / `thenAction`). */
+    /** The skill carries a structured trigger (`when`). */
     hasStructuredTrigger: boolean;
     /** The portable/ledger split marker is present in the file. */
     ledgerSplitIntact: boolean;
@@ -306,7 +306,7 @@ const derivedDescriptions = (meta: SkillMeta, content: string): string[] => {
         const norm = normDescription(value);
         if (norm) out.add(norm);
     };
-    const trigger = [meta.ifCondition, meta.thenAction].filter(Boolean).join(' → ');
+    const trigger = (meta.when ?? '').trim();
     if (trigger) add(trigger);
     for (const body of [meta.body ?? '', skillBody(content)]) {
         const words = body.trim().split(/\s+/).filter(Boolean).slice(0, 24).join(' ');
@@ -327,7 +327,7 @@ const TRIGGER_HINT_RE = /\b(when|whenever|after|before|upon|following|if)\b/i;
  *  separately from the body, so the body legitimately grows a heading. */
 const ROUND_TRIP_FIELDS: Array<keyof SkillMeta> = [
     'status', 'kind', 'coin', 'direction', 'family', 'regime',
-    'ifCondition', 'thenAction', 'predicate', 'strategyFamily', 'signals',
+    'when', 'predicate', 'strategyFamily', 'signals',
     'invalidation', 'horizon', 'sizing', 'prior', 'audience', 'manualOnly',
     'approvedBy', 'approvedAt', 'whyAccepted', 'reason', 'originBotId', 'originMessageId',
     'description', 'version', 'wins', 'losses', 'consecutiveLosses',
@@ -457,8 +457,7 @@ const reviewSkillFile = (file: MemoryFile, options: SkillReviewOptions = {}): Sk
     // ── everything that parses ──
     const body = skillBody(content);
     const card = projectSkillCard(body, {
-        ifCondition: meta.ifCondition,
-        thenAction: meta.thenAction,
+        when: meta.when,
         budget: SKILL_REVIEW_RECALL_BUDGET,
     });
     const sections = parseSkillBody(body);
@@ -466,7 +465,7 @@ const reviewSkillFile = (file: MemoryFile, options: SkillReviewOptions = {}): Sk
     const described = (meta.description ?? '').trim();
     const descriptionIsFallback = described.length === 0
         || derived.includes(normDescription(described));
-    const hasStructuredTrigger = Boolean(meta.ifCondition || meta.thenAction);
+    const hasStructuredTrigger = Boolean(meta.when);
     const failures = roundTripFailures(meta);
     const ledgerSplitIntact = content.includes(LEDGER_MARKER);
     const resolvedName = skillFileNameFor(meta);

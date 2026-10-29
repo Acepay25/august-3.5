@@ -17,8 +17,7 @@ import { queueLearningProposal } from './learningQueue';
 
 export interface SkillForSweep {
     slug: string;
-    ifCondition: string;
-    thenAction: string;
+    when: string;
     kind: 'avoid' | 'repeat';
 }
 
@@ -52,15 +51,15 @@ export const findContradictingPairs = (skills: SkillForSweep[]): ContradictingPa
         for (let j = i + 1; j < skills.length; j++) {
             const a = skills[i];
             const b = skills[j];
-            const ta = meaningfulTokens(a.ifCondition);
-            const tb = meaningfulTokens(b.ifCondition);
+            const ta = meaningfulTokens(a.when);
+            const tb = meaningfulTokens(b.when);
             const overlap = ta.filter(t => tb.includes(t)).length;
             if (overlap < 2) continue;
             const conflict = a.kind !== b.kind
                 ? ('opposite-kind' as const)
                 : (() => {
-                    const da = directionOf(a.ifCondition);
-                    const db = directionOf(b.ifCondition);
+                    const da = directionOf(a.when);
+                    const db = directionOf(b.when);
                     return da && db && da !== db ? ('opposite-direction' as const) : null;
                 })();
             if (conflict) pairs.push({ a, b, overlap, conflict });
@@ -94,8 +93,7 @@ export const runContradictionSweep = (username: string): ContradictionSweepResul
         .filter(({ meta }) => meta.status !== 'retired' && !meta.supersededBy && (meta.wins + meta.losses) > 0)
         .map(({ file, meta }) => ({
             slug: file.name.replace(/\.md$/i, ''),
-            ifCondition: meta.ifCondition ?? '',
-            thenAction: meta.thenAction ?? '',
+            when: meta.when ?? '',
             kind: meta.kind,
         }));
     const pairs = findContradictingPairs(skills);

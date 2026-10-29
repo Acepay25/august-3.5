@@ -1361,9 +1361,9 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'propose_skill',
             description:
-                'Create a NEW trading skill (an evidence-gated IF/THEN procedure) DIRECTLY as a CANDIDATE — '
+                'Create a NEW trading skill (an evidence-gated procedure) DIRECTLY as a CANDIDATE — '
                 + 'no approval queue. Use when you spot a repeatable edge the notebook has no skill for. '
-                + 'Provide the full procedure: when it triggers, the steps, how to validate, the IF/THEN pair. '
+                + 'Provide the full procedure: the one trigger sentence, the steps, how to validate. '
                 + 'Also write the activation description: what the skill does, then "Use this skill whenever '
                 + '<trigger phrases>." It is a HYPOTHESIS: only the evidence fold can promote or retire it. '
                 + 'Do not narrate this write in your reply.',
@@ -1374,18 +1374,16 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     kind: { type: 'string', enum: ['repeat', 'avoid'], description: 'repeat = an edge to take, avoid = a trap to dodge' },
                     description: { type: 'string', description: 'The activation key retrieval scores: what the skill does, then "Use this skill whenever <trigger phrases>. Do NOT use for <one brief exclusion>." Under 1024 chars.' },
                     coin: { type: 'string', description: 'Coin scope (e.g. BTC) or empty for any market' },
-                    when: { type: 'string', description: 'The situation this skill triggers on (prose)' },
+                    when: { type: 'string', description: 'The ONE trigger sentence: the concrete, measurable situation this skill fires on' },
                     steps: { type: 'string', description: 'JSON array of the procedure steps' },
                     validate: { type: 'string', description: 'How to confirm the setup before acting' },
                     output: { type: 'string', description: 'What the skill produces (decision/level/size guidance)' },
                     approval: { type: 'string', description: 'What must be true for the skill to apply' },
-                    if_condition: { type: 'string', description: 'The IF clause (one sentence, measurable)' },
-                    then_action: { type: 'string', description: 'The THEN clause (one sentence, actionable)' },
                     reason: { type: 'string', description: 'Evidence from THIS session that motivates the skill — kept on the skill and shown in the chat chip' },
                     timeframe: { type: 'string', description: 'The timeframe the pattern was observed on (15m / 1h / 4h). Carried onto the skill; the replay proof assumes 1h without it.' },
-                    predicate: { type: 'string', description: PREDICATE_GRAMMAR_HINT + ' Author one whenever the IF clause reduces to candle math — it is what lets the desk check the trigger in code instead of trusting a seat to read the prose. Omit it when the condition is not reducible; a fabricated clause is worse than none.' },
+                    predicate: { type: 'string', description: PREDICATE_GRAMMAR_HINT + ' Author one whenever the trigger reduces to candle math — it is what lets the desk check the trigger in code instead of trusting a seat to read the prose. Omit it when the condition is not reducible; a fabricated clause is worse than none.' },
                 },
-                required: ['name', 'kind', 'when', 'steps', 'if_condition', 'then_action', 'reason'],
+                required: ['name', 'kind', 'when', 'steps', 'reason'],
                 // `source` is deliberately NOT a property: it is learner-stamped
                 // provenance (scan / post-mortem / chat), not something a model
                 // may claim. Every other field this handler reads is listed, so
@@ -1430,22 +1428,21 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'revise_skill',
             description:
-                'Revise an existing skill DIRECTLY (narrow its trigger, sharpen its action, fix a wrong '
-                + 'clause) — no approval queue. Status and evidence are untouched: only the evidence fold '
-                + 'promotes or retires. Find skill slugs with get_notebook_map or the recall tool. Do not '
-                + 'narrate this write in your reply.',
+                'Revise an existing skill DIRECTLY (narrow its trigger, sharpen its procedure) — no '
+                + 'approval queue. Status and evidence are untouched: only the evidence fold promotes or '
+                + 'retires. Find skill slugs with get_notebook_map or the recall tool. Do not narrate this '
+                + 'write in your reply.',
             parameters: {
                 type: 'object',
                 properties: {
                     skill_slug: { type: 'string', description: 'The skill file slug, e.g. "btc-momentum-continuation"' },
-                    if_condition: { type: 'string', description: 'The revised IF clause' },
-                    then_action: { type: 'string', description: 'The revised THEN clause' },
-                    // Rewriting the IF invalidates the machine-checkable form
-                    // that described the OLD one (SkillMemoryService overwrites
-                    // it on the refinement path), so a revision that does not
-                    // restate it silently disarms the gate. This is display
-                    // only — a human still applies it.
-                    predicate: { type: 'string', description: PREDICATE_GRAMMAR_HINT + ' Restate it whenever you change if_condition: the stored trigger describes the old clause.' },
+                    when: { type: 'string', description: 'The revised ONE trigger sentence (omit to keep it)' },
+                    procedure: { type: 'string', description: 'The revised procedure/body in markdown (omit to keep it). Include the steps, validation, invalidation and the failure modes.' },
+                    // Rewriting the trigger invalidates the machine-checkable
+                    // form that described the OLD one (SkillMemoryService
+                    // overwrites it on the refinement path), so a revision that
+                    // does not restate it silently disarms the gate.
+                    predicate: { type: 'string', description: PREDICATE_GRAMMAR_HINT + ' Restate it whenever you change `when`: the stored predicate describes the old trigger.' },
                     reason: { type: 'string', description: 'Why the current clauses are wrong or blunted — cite evidence' },
                 },
                 required: ['skill_slug', 'reason'],
@@ -1757,7 +1754,7 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'recall',
             description:
-                'Search your own trading notebook - lessons learned, IF/THEN rules, similar past trades, and your doctrine for a setup. Use when you suspect prior experience with this coin/setup or need your own loss history before arguing a stance.',
+                'Search your own trading notebook - lessons learned, skill procedures, similar past trades, and your doctrine for a setup. Use when you suspect prior experience with this coin/setup or need your own loss history before arguing a stance.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -3825,8 +3822,6 @@ ${body}`);
                         validate: asString(call.arguments.validate, 'Confirm on the live chart before acting.'),
                         output: asString(call.arguments.output, 'A concrete actionable read of the setup.'),
                         approval: asString(call.arguments.approval, 'Evidence sets the status; no human approval is required.'),
-                        ifCondition: asString(call.arguments.if_condition),
-                        thenAction: asString(call.arguments.then_action),
                         predicate: asString(call.arguments.predicate) || undefined,
                         // Required by the tool schema and, until this read, never
                         // seen again: the human was asked to approve a rule whose
@@ -3836,12 +3831,11 @@ ${body}`);
                         timeframe: asString(call.arguments.timeframe) || undefined,
                     });
                     if (!crafted) {
-                        return rejectedResult(call, 'propose_skill rejected: the proposal is missing required fields (name, when, steps, if_condition, then_action).');
+                        return rejectedResult(call, 'propose_skill rejected: the proposal is missing required fields (name, when, steps).');
                     }
                     const { skillBodyCaps, hasUseWhenTrigger } = await import('../../utils/skillFrontmatter');
                     const authoredBody = [
                         crafted.when, ...crafted.steps, crafted.validate, crafted.output,
-                        crafted.ifCondition, crafted.thenAction,
                     ].join('\n');
                     const caps = skillBodyCaps(authoredBody);
                     if (caps.overHard) {
@@ -3855,7 +3849,7 @@ ${body}`);
                     }
                     // The same quality bar every other draft source passes:
                     // tombstone cooldown, duplicate skip, live-skill coverage
-                    // skip, IF/THEN sanity, and a falsifiable prediction.
+                    // skip, trigger sanity, and a falsifiable prediction.
                     const { deterministicDraftGate } = await import('../../services/learning/draftGates');
                     const { draftTriggerKey } = await import('../../utils/skillDrafts');
                     const username = getActiveUsername();
@@ -3866,7 +3860,7 @@ ${body}`);
                     // instead of replacing the first.
                     const tradeId = `chat:${draftTriggerKey(
                         asString(call.arguments.coin) || undefined,
-                        { kind: crafted.kind, ifCondition: crafted.ifCondition },
+                        { kind: crafted.kind, when: crafted.when },
                     )}`;
                     const gate = deterministicDraftGate({
                         crafted,
@@ -3978,8 +3972,8 @@ ${body}`);
                             : `revise_skill rejected: no skill "${slug}". Call get_notebook_map or recall first for the exact slug.`);
                     }
                     const clauses = {
-                        ifCondition: asString(call.arguments.if_condition) || undefined,
-                        thenAction: asString(call.arguments.then_action) || undefined,
+                        when: asString(call.arguments.when) || undefined,
+                        body: asString(call.arguments.procedure) || undefined,
                         predicate: asString(call.arguments.predicate) || undefined,
                     };
                     const { applySkillRevisionDirect } = await import('../learning/SkillMemoryService');
@@ -4201,7 +4195,7 @@ ${body}`);
                 }
                 const { scanSetups } = await import('../trade/setupScan');
                 const setups = scanSetups(klines.map(k => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close, volume: k.volume })));
-                let skillIndex: Array<{ slug: string; status?: string; ifCondition?: string; enabled: boolean }> = [];
+                let skillIndex: Array<{ slug: string; status?: string; when?: string; enabled: boolean }> = [];
                 try {
                     const { listSkills, isApprovedSkill } = await import('../learning/SkillMemoryService');
                     // `enabled`, not just status: this index is prompt-bound,
@@ -4211,7 +4205,7 @@ ${body}`);
                     skillIndex = listSkills().map(({ file, meta }) => ({
                         slug: file.name.replace(/\.md$/i, ''),
                         status: meta.status,
-                        ifCondition: meta.ifCondition,
+                        when: meta.when,
                         enabled: file.enabled,
                         // And the same gate the injection and the skills index
                         // read (P10): a rule nothing has approved cannot be
@@ -4229,7 +4223,7 @@ ${body}`);
                     ...setups.map(s => {
                         const kw = s.keywords.map(k => k.toLowerCase());
                         const matched = skillIndex.filter(sk => {
-                            const hay = `${sk.slug} ${sk.ifCondition ?? ''}`.toLowerCase();
+                            const hay = `${sk.slug} ${sk.when ?? ''}`.toLowerCase();
                             return kw.some(k => hay.includes(k));
                         }).slice(0, 3);
                         return `- ${s.title} [${s.side.toUpperCase()}] (${s.barsAgo === 0 ? 'current bar' : `${s.barsAgo} bars ago`}) — ${s.evidence.join('; ')}${matched.length > 0 ? ` | skills: ${matched.map(m => `${m.slug} (${m.status ?? 'candidate'})`).join(', ')}` : ''}`;

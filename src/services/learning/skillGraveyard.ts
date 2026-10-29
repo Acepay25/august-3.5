@@ -273,7 +273,7 @@ const tokenSet = (s: string | undefined): string[] =>
 export interface ArchiveTwinMatch {
     slug: string;
     /** Normalized trigger of the archived twin (for the card text). */
-    ifCondition: string;
+    when: string;
     reason: RetirementReason;
     sampleN: number;
     /** Exact (norm) or token-set match. */
@@ -287,11 +287,11 @@ export interface ArchiveTwinMatch {
  */
 export function findArchiveTwin(
     username: string,
-    ifCondition: string | undefined,
+    when: string | undefined,
 ): ArchiveTwinMatch | null {
-    const norm = normTrigger(ifCondition);
+    const norm = normTrigger(when);
     if (!norm) return null;
-    const tokens = tokenSet(ifCondition);
+    const tokens = tokenSet(when);
     const archive = getMemoryFiles().folders.find(f => f.name === ARCHIVE_FOLDER_NAME);
     // No archive folder ⇒ there is no retired twin to find. (isSkillFile is
     // folder-based — archive files are NOT skill files — so the folder IS the
@@ -302,12 +302,12 @@ export function findArchiveTwin(
         if (!file.name.endsWith('.md')) continue;
         const meta = parseArchivedSkill(file.content);
         if (!meta) continue;
-        const metaNorm = normTrigger(meta.ifCondition);
+        const metaNorm = normTrigger(meta.when);
         if (metaNorm === norm) {
             return twinMatch(file.name, meta, 'exact');
         }
         if (tokens.length >= 2) {
-            const metaTokens = tokenSet(meta.ifCondition);
+            const metaTokens = tokenSet(meta.when);
             if (metaTokens.length >= 2 && metaTokens.join(' ') === tokens.join(' ')) {
                 return twinMatch(file.name, meta, 'tokens');
             }
@@ -324,7 +324,7 @@ function twinMatch(
     const last = meta.history?.[meta.history.length - 1];
     return {
         slug: slug.replace(/\.md$/i, ''),
-        ifCondition: meta.ifCondition ?? '',
+        when: meta.when ?? '',
         // An idle-archived skill keeps its status and so leaves no history row;
         // reading only the history would mislabel it 'insufficient-evidence'
         // and hand back the wrong re-entry rule.
@@ -347,7 +347,7 @@ export function queueRevivalProposal(
         kind: 'revival',
         skillSlug: twin.slug,
         text: `"${twin.slug}" was tried and retired: ${twin.reason} after N=${twin.sampleN} — ${rule} Re-create it anyway?`,
-        fingerprint: `revival|${twin.slug}|${twin.ifCondition}`,
+        fingerprint: `revival|${twin.slug}|${twin.when}`,
         payload: { slug: twin.slug, reason: twin.reason, sampleN: twin.sampleN },
     }, username);
 }
