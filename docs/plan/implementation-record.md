@@ -2021,3 +2021,40 @@ eslint 0 errors / 652 warnings (three fewer: the duplicated body extractors took
 sixteen flow-doc citations (`app-flow.md`, `app-flow.html`, the debate-deletion ledger)
 whose lines this section shifted — the anchor gate caught ten of them and the rest were
 the same symbols cited a second time.
+
+## 40. The prompt budget: cache the stable block, defer the rest (2026-10-29)
+
+**Trigger.** The Vibe-Trading/mcode-stack comparison named the same two items the
+register already carried: O-58 (no prompt caching) and O-17 (the live prompt is
+mandate plus every tool schema). Both were re-measured against the tree before
+anything was written.
+
+**What landed**
+
+| item | what landed | where | how it was verified |
+|---|---|---|---|
+| **O-58** | **One Anthropic cache breakpoint on the system block**, owned by the shared wire policy and used by all three builders (renderer, dev proxy, Electron main). The usage reader is normalized across the families that disagree about whether the cache is inside the prompt count: Anthropic's `input_tokens` excludes cache reads/writes, OpenAI's and the Responses API's counts include them; `promptTokens` now means the whole prompt and `cachedPromptTokens` the reported subset, summed into Settings → Session Usage. | `shared/providerRequestPolicy.cjs` › `anthropicCachedSystem`; `src/services/providers/GenericProviderService.ts` › `messagesCall`; `electron/main.cjs` (messages branch); `vite.config.ts` (messages branch); `src/utils/tokenUsage.ts` › `extractTokenUsage`; `src/utils/sessionUsage.ts`; `src/components/settings/SessionUsagePanel.tsx` | `npm run typecheck`, `typecheck:electron`, `check:contracts` (147), `build`, `boot-probe`. The shared helper was asserted directly: `anthropicCachedSystem('x')` → `[{type:'text',cache_control:{type:'ephemeral'}}]`, `''` → `undefined`. **Not verified:** a live provider's cache-hit rate — that needs a real key and a real bill. |
+| **O-17** | **13 tools stay resident; the other 29 are one `load_tools` call away.** Measured over the wire: all 42 definitions are 39,903 JSON chars ≈ 10.0k tokens and were re-sent on every round (up to 8). Round 1 now carries 10,055 chars of initial schemas + a 3,643-char catalogue = 13,698 chars ≈ 3.4k tokens, **66% below the full set**. | `src/services/analysis/DeskToolsService.ts` › `INITIAL_DESK_TOOL_NAMES`, `loadableDeskToolNamesFor`, `buildDeskToolCatalogue`, `LOAD_TOOLS_DEFINITION`, the round loop's `deskDefs` + `loadResults`; `src/utils/toolKinds.ts` (`tool catalogue` label) | `check:contracts` #13 (the budget: initial ⊆ real tools, loader not a desk tool, native unrestricted defers exactly the rest, catalogue covers each once, restricted seat loads nothing, text protocol never defers, initial is a minority of bytes). **End-to-end**: a scratch SSE provider scripted one `load_tools(['run_monte_carlo'])` call — round 1 sent 14 tools (13 + loader), round 2 carried the loaded schema and still withheld `propose_skill`, the load receipt reached the transcript, and the turn ended on "done" (10/10). |
+
+**Residues, named**
+
+- The cache breakpoint is Anthropic-only on the wire. OpenAI-compatible and Gemini
+  prefix caching is implicit; the stable system/tool order is what lets it hit, and
+  `compactForWire` rewrites old history under pressure, which invalidates the prefix
+  from the rewritten message on. Designing compaction around the cache is its own item.
+- A turn that needs a deferred tool spends one round loading it. The 13 that stay
+  resident are the market reads and the notebook lookup; a turn that reaches for goal
+  authoring or skill proposals pays a round it did not pay before.
+- Text-protocol formats (`messages`, `responses`) never defer — they never sent
+  schemas. Their discovery story is unchanged.
+- The correction→learning gap is **not** covered here: `correctedFrom` still has one
+  writer and no learning reader, and a correct retraction is a ledger replay (evidence
+  decay is stateful, shadow windows may already have settled), not a subtraction. It
+  needs its own spec and a ruling on whether a correction rewrites history or applies
+  forward.
+- `render-probe` was red at `d91030ed` before any of this: the refactor dropped `.md`
+  from the Journal row label and the probe still matched it. Repaired in `0794ec08`;
+  it is a gate repair, not part of O-17/O-58.
+
+**Commits.** `67edfd7` (caching), `363f75c1` (Vite interop export — the build is red
+without it), `0794ec08` (probe repair), `ac779c5e` (deferred schemas + contract #13).
