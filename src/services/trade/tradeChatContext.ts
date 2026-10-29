@@ -361,7 +361,13 @@ export const buildSkillsIndexForPrompt = (
     // Ranked and filtered BEFORE the window is cut — see rankSkillIndexRows.
     const eligible = rankSkillIndexRows(rows, audience);
     if (eligible.length === 0) return '';
-    const shown = eligible.slice(0, max);
+    // A candidate is a HYPOTHESIS, not a rule: it is not listed under APPLY,
+    // it is never counted as a skill the seat may use, and it costs one line
+    // (a count) instead of a slot. Only the evidence fold promotes a skill to
+    // confirmed; until then the model must not be told to apply it.
+    const confirmed = eligible.filter(r => r.status === 'confirmed');
+    const candidates = eligible.filter(r => r.status !== 'confirmed');
+    const shown = confirmed.slice(0, max);
     const lines = shown.map(r => {
         const rule = [
             r.ifCondition ? `IF ${r.ifCondition}` : '',
@@ -369,14 +375,21 @@ export const buildSkillsIndexForPrompt = (
         ].filter(Boolean).join(' → ');
         const desc = (r.description || '').trim();
         const kindTag = r.kind ? `${r.kind === 'avoid' ? 'avoid' : 'repeat'} · ` : '';
-        return `- ${r.slug}${r.status ? ` [${r.status}]` : ''} — ${kindTag}${desc || rule || '(see recall)'}${desc && rule ? ` · ${rule}` : ''}`;
+        return `- ${r.slug} — ${kindTag}${desc || rule || '(see recall)'}${desc && rule ? ` · ${rule}` : ''}`;
     });
+    const candidateCount = candidates.length;
+    const header = confirmed.length > 0
+        ? `## Skills library — ${confirmed.length} confirmed skill${confirmed.length === 1 ? '' : 's'}. Each line is WHEN to use it; the IF/THEN is the rule. APPLY any that match ${where} before answering; cite the slug you used, and open the full body with skill_view before acting on it.`
+        : `## Skills library — no confirmed skills.${candidateCount > 0 ? ` ${candidateCount} candidate hypothes${candidateCount === 1 ? 'is exists' : 'es exist'} (unproven; NOT rules and NOT applied).` : ''}`;
     return [
-        `## Skills library — ${eligible.length} skill${eligible.length === 1 ? '' : 's'}. Each line is WHEN to use it; the IF/THEN is the rule. APPLY any that match ${where} before answering; cite the slug you used, and open the full body with skill_view before acting on it.`,
+        header,
         ...lines,
         // The honest count: what this seat may use, minus what it was shown.
         // Skills that were filtered out (retired, dormant, manual-only, another
         // seat's) are not counted — they are not this seat's to pull.
-        eligible.length > max ? `…and ${eligible.length - max} more — skill_view reads any one of them by slug.` : '',
+        confirmed.length > max ? `…and ${confirmed.length - max} more confirmed — skill_view reads any one of them by slug.` : '',
+        confirmed.length > 0 && candidateCount > 0
+            ? `- ${candidateCount} candidate hypothes${candidateCount === 1 ? 'is' : 'es'} (unproven; not rules, not applied — inspect with get_notebook_map or recall only if the question needs one).`
+            : '',
     ].filter(Boolean).join('\n');
 };

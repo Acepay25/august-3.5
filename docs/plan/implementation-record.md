@@ -2208,3 +2208,32 @@ forged tool can make network calls). A revision preserves the skill's status, so
 changed rule keeps its old evidence until the next fold. The chip and amendment-Undo UI are built and
 type-checked but were not clicked in a browser probe; the write behaviors above were harness-verified,
 not live-app-verified.
+
+## 44. Candidate semantics and the index cap (2026-10-29)
+
+**What changed.** The skills index names only **confirmed** skills under "APPLY"; candidates are a
+single counted line of **hypotheses** (unproven, not rules, not applied). `memoryHints` receives
+confirmed slugs only, and the row's `injectedSkills` records only what the index named. A candidate
+still exists and is inspectable through `get_notebook_map`/`recall`; it is just not advertised as
+usable.
+
+**Live re-capture (same probe profile, same recorder).**
+
+| Measurement | Before | After |
+|---|---|---|
+| System prompt | 16,875 chars | **13,579 chars** (−3,296, −19.5%) |
+| Skills section | 3,406 chars, 12 candidate rows | **145 chars, one hypothesis line** |
+| `skill_view` hints in the user turn | 2 | **0** |
+| Tools offered | 22 | 22 |
+
+The user-message size moved from 14,333 to 16,658 chars in the same capture; that block is the live
+market packet and varies with the tape, so it is not a comparison of this change.
+
+**Verification.** Contract 16: a confirmed skill is named under APPLY; a candidate is never named
+as usable; candidates collapse to a count; with no confirmed skills there is no APPLY at all. The
+live capture above confirms it on the real prompt path. `typecheck` · `check:contracts` **190** ·
+`build` · `boot-probe` · `render-probe`.
+
+**Residue.** The analysis-path retrieval can still show a candidate with a `prior` flag as context
+(labeled 0W/0L), not under APPLY; the index itself no longer names candidates, so finding one is a
+deliberate `get_notebook_map`/`recall` act.

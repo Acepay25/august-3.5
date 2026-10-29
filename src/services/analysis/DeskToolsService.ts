@@ -5554,7 +5554,10 @@ export async function* streamChatWithDeskTools(
                     slug: e.slug, description: e.description, aliases: e.aliases,
                     sensitive: e.sensitive, body: e.body,
                 })),
-                skillIndexRows().map(r => r.slug),
+                // A candidate hypothes is not a rule: memoryHints must never
+                // tell the seat to open one as if its description were a task
+                // match. Only confirmed skills are named here.
+                skillIndexRows().filter(r => r.status === 'confirmed').map(r => r.slug),
             );
             if (hints.length > 0 && last) {
                 outbound = messages.slice(0, -1).concat([{

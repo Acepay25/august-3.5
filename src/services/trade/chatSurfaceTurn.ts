@@ -132,7 +132,11 @@ export const surfacePromptWith = (mandate: string, where: string, opts: { memory
         // names exactly the skills the model was shown. Ranking it twice (here
         // and inside the builder) is idempotent — the sort is stable.
         const ranked = rankSkillIndexRows(rows);
-        skills = ranked.slice(0, budget.skills).map(r => r.slug);
+        // Only confirmed skills are named as usable (and recorded as injected).
+        // Candidates are hypotheses: the builder collapses them to a count and
+        // memoryHints must never recommend one.
+        const confirmed = ranked.filter(r => r.status === 'confirmed');
+        skills = confirmed.slice(0, budget.skills).map(r => r.slug);
         skillsBlock = buildSkillsIndexForPrompt(rows, budget.skills, where);
     } catch {
         skills = [];

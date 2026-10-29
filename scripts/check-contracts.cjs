@@ -26,6 +26,8 @@
  *      the W/L record, the window tail and the regime split; the R sums stay
  *  15. src/services/learning/profileMemory.ts — soft delete/undo, stale writes
  *      and observed-never-instructions, against a real localStorage shim
+ *  16. src/services/trade/tradeChatContext.ts — the skills index: confirmed
+ *      under APPLY, candidates a count, never a usable name
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -826,6 +828,33 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     const sameRes = applyOutcomeCorrection(same, { kind: 'followed', from: 'WIN', to: 'WIN', indexFromEnd: 1 });
     ok('correction: an unchanged class moves nothing',
         same.wins === 1 && same.losses === 1 && sameRes.tailUpdated === false);
+})();
+
+// ─── 16. skills index: confirmed APPLY, candidates are a count ─────────────
+(() => {
+    const tc = loadModule('src/services/trade/tradeChatContext.ts');
+    const row = (slug, status) => ({
+        slug, status, kind: 'repeat',
+        description: `${slug} setup`,
+        ifCondition: `IF ${slug} triggers`,
+        thenAction: `THEN act on ${slug}`,
+    });
+    const text = tc.buildSkillsIndexForPrompt(
+        [row('confirmed-a', 'confirmed'), row('cand-b', 'candidate'), row('cand-c', 'candidate')],
+        30,
+        'this chart',
+    );
+    ok('index: a confirmed skill is named under APPLY',
+        /APPLY/.test(text) && text.includes('confirmed-a'), text);
+    ok('index: a candidate is never listed as usable',
+        !text.includes('cand-b') && !text.includes('cand-c'));
+    ok('index: candidates collapse to a count', /2 candidate hypotheses/.test(text), text);
+    const onlyCandidates = tc.buildSkillsIndexForPrompt([row('cand-x', 'candidate')], 30);
+    ok('index: no confirmed → no APPLY, only a hypothesis count',
+        !/APPLY/.test(onlyCandidates)
+        && /candidate hypothesis/.test(onlyCandidates)
+        && !onlyCandidates.includes('cand-x'),
+        onlyCandidates);
 })();
 
 // ─── report ────────────────────────────────────────────────────────────────
