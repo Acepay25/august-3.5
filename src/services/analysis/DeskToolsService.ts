@@ -29,7 +29,7 @@ import type { GoalPatch, GoalRef, GoalTrigger } from '../../schemas/goal';
 import { executeForgedTool, confirmedForgedToolDefinitions } from '../tools/toolForge';
 import type { ChatMessage, ChatRequestOptions } from '../providers/GenericProviderService';
 import { sendChatTurn, streamChatRequest } from '../providers/GenericProviderService';
-import { compactForWire } from '../providers/contextCompact';
+import { compactForWire, skillCarryOverNotice, skillsLostToCompaction } from '../providers/contextCompact';
 import { DEFAULT_OUTPUT_RESERVE_TOKENS, outputTokenBudget } from '../../utils/contextWindow';
 import { stepEffortDown, type ReasoningEffort } from '../providers/reasoningControls';
 import { calculateCorrelationRisk } from './CorrelationRiskService';
@@ -4721,6 +4721,10 @@ export async function runDeskToolLoop(params: {
     /** Tool schemas loaded on demand this turn. Reset with the turn: a new
      *  question pays for the tools it actually needs, not the last one's. */
     const loadedToolNames = new Set<string>();
+    /** Skill bodies the seat READ this turn, keyed by slug. A `skill_view`
+     *  result is a tool payload — the first thing compaction shortens — so the
+     *  loop keeps its own copy to test the outbound request against. */
+    const skillBodiesThisTurn = new Map<string, string>();
     const initialDeskDefs = DESK_TOOL_DEFINITIONS.filter(d => INITIAL_DESK_TOOL_NAMES.includes(d.function.name));
     /** Deferred names THIS seat may call. A restricted seat with a narrow list
      *  can have nothing to defer, and then no catalogue/loader is offered at
@@ -4783,10 +4787,18 @@ export async function runDeskToolLoop(params: {
         // Compacting here rather than once at entry is what stops an eight-round
         // turn from growing past the window in round five.
         const outbound = compactOutbound(config, messages, roundOptions.maxTokens, onToolEvent);
+        // A skill the seat read is a procedure it is still following; when
+        // compaction takes the body, the request must SAY so. The notice goes on
+        // the wire only (the loop's history keeps the real bytes), so the next
+        // round can still re-check and re-attach.
+        const lostSkills = skillsLostToCompaction(outbound.messages, skillBodiesThisTurn);
+        const outboundMessages = lostSkills.length > 0
+            ? [...outbound.messages, { role: 'user' as const, content: skillCarryOverNotice(lostSkills) }]
+            : outbound.messages;
         const turnOptions = { ...roundOptions, maxTokens: outbound.maxTokens };
         const turn = streamTurn
-            ? await runStreamingTurn(streamTurn, config, outbound.messages, turnOptions, onTextDelta)
-            : await sendTurn(config, outbound.messages, turnOptions);
+            ? await runStreamingTurn(streamTurn, config, outboundMessages, turnOptions, onTextDelta)
+            : await sendTurn(config, outboundMessages, turnOptions);
         reasoning = [reasoning, turn.reasoning].filter(Boolean).join('\n');
         finalText = turn.text || '';
 
@@ -5086,6 +5098,15 @@ export async function runDeskToolLoop(params: {
             })
             : [];
         const results = [...replays, ...extraResults, ...forgedResults, ...loadResults, ...coreResults];
+        // What the seat actually read this turn. A bundled-file read is not the
+        // procedure, so it never overwrites the body for that slug.
+        for (const r of results) {
+            if (r.name !== 'skill_view' || !r.ok) continue;
+            const call = calls.find(c => c.id === r.toolCallId);
+            const slug = typeof call?.arguments?.skill === 'string' ? call.arguments.skill.trim() : '';
+            const filePath = typeof call?.arguments?.file_path === 'string' ? call.arguments.file_path.trim() : '';
+            if (slug && !filePath) skillBodiesThisTurn.set(slug, r.content);
+        }
         if (forgedResults.length > 0 || coreResults.some(r => UNTRUSTED_RESULT_TOOLS.has(r.name))) {
             untrustedSeen = true;
         }

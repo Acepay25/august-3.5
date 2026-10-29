@@ -188,6 +188,27 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     const same = cc.compactMessages({ messages: msgs, ceilingTokens: 1_000_000 });
     ok('compact: a fitting transcript passes through untouched',
         same.changed === false && same.messages.length === msgs.length);
+
+    // ── Skill carry-over ──────────────────────────────────────────────────
+    // A skill body is a tool payload, so compaction is exactly when it can
+    // silently leave the request. The map is the loop's own record of what it
+    // read; no map entry means no claim, and a stub is not the body.
+    const body = `PROCEDURE ${'step '.repeat(600)}`;
+    const bodies = new Map([['reclaim-setup', body]]);
+    const present = [{ role: 'tool', tool_call_id: 'c9', content: body }];
+    ok('skill carry-over: a body still on the wire is not claimed lost',
+        cc.skillsLostToCompaction(present, bodies).length === 0,
+        JSON.stringify(cc.skillsLostToCompaction(present, bodies)));
+    const shortened = [{ role: 'tool', tool_call_id: 'c9', content: body.slice(0, 400) }];
+    const lost = cc.skillsLostToCompaction(shortened, bodies);
+    ok('skill carry-over: a shortened body is named',
+        JSON.stringify(lost) === JSON.stringify(['reclaim-setup']), JSON.stringify(lost));
+    ok('skill carry-over: no map entry, no claim',
+        cc.skillsLostToCompaction(shortened, new Map()).length === 0);
+    const carryNotice = cc.skillCarryOverNotice(lost);
+    ok('skill carry-over: the notice is harness-authored and names the skill and its remedy',
+        carryNotice.startsWith('HARNESS NOTE') && carryNotice.includes('reclaim-setup') && carryNotice.includes('skill_view'),
+        carryNotice.slice(0, 90));
 })();
 
 // ─── 6. tradeAnalysis coercion — the AI boundary is lenient but not blind ──

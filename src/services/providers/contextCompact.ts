@@ -57,7 +57,7 @@
 import type { ChatMessage, ContentPart } from './GenericProviderService';
 import type { ProviderConfig } from '../../types/provider';
 import { estimateTokens } from '../../utils/tokenEstimate';
-import { clipNote, findArtifactIdIn } from '../../utils/harnessMarks';
+import { clipNote, findArtifactIdIn, harnessTurn } from '../../utils/harnessMarks';
 import {
     DEFAULT_OUTPUT_RESERVE_TOKENS,
     MIN_KEEP_MESSAGES,
@@ -322,6 +322,41 @@ const compactNotice = (actions: CompactAction[], before: number, after: number):
     return `COMPACTED FOR THE CONTEXT WINDOW: ${parts.join(', ')} — ${before.toLocaleString()} → ${after.toLocaleString()} estimated tokens. `
         + 'What was cut is missing from THIS request, not from your journal; re-run the lookup if the seat needs it.';
 };
+
+// ─── Skill carry-over ───────────────────────────────────────────────────────
+
+/** Skill bodies the loop loaded with `skill_view` this turn, keyed by slug. */
+export type LoadedSkillBodies = ReadonlyMap<string, string>;
+
+/**
+ * The skills whose FULL body is no longer in the outbound array.
+ *
+ * A `skill_view` result is a tool payload, and tool payloads are the first
+ * thing compaction shortens: the seat that read the procedure before the cut
+ * is left with a head slice and a clip note, or nothing at all. Exact
+ * containment is the test — the body the tool returned is what the seat was
+ * following, and a stub is deliberately not the body. A skill the loop never
+ * read is not in the map and is never claimed.
+ */
+export const skillsLostToCompaction = (
+    messages: readonly ChatMessage[],
+    bodies: LoadedSkillBodies,
+): string[] => {
+    if (bodies.size === 0) return [];
+    const texts = messages.map(m => textOf(m.content));
+    return [...bodies.entries()]
+        .filter(([, body]) => body.length > 0 && !texts.some(text => text.includes(body)))
+        .map(([slug]) => slug);
+};
+
+/** The model-visible line naming what compaction took. Harness-authored, so a
+ *  seat can tell it from the trader's own words. */
+export const skillCarryOverNotice = (slugs: readonly string[]): string =>
+    harnessTurn(
+        `CONTEXT COMPACTION removed the full text of skill${slugs.length === 1 ? '' : 's'} `
+        + `${slugs.map(s => `"${s}"`).join(', ')} that you loaded earlier in this turn. `
+        + 'Re-open each with skill_view before you rely on its details — the skills index in your instructions is a trigger line, not the procedure.',
+    );
 
 // ─── The wire-facing entry point ────────────────────────────────────────────
 
