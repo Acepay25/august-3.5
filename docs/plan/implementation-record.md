@@ -2058,3 +2058,39 @@ anything was written.
 
 **Commits.** `67edfd7` (caching), `363f75c1` (Vite interop export — the build is red
 without it), `0794ec08` (probe repair), `ac779c5e` (deferred schemas + contract #13).
+
+## 41. Skill carry-over: what compaction takes, the request puts back (2026-10-29)
+
+**Trigger.** The ThinkRail deep dive surfaced a bug class August shares: a `skill_view`
+result is a tool payload, compaction shortens tool payloads first, and nothing told the
+seat that the procedure it had been following was now a head slice. The system prompt's
+skills index survived (it is the mandate, never compacted), but the body did not — and
+the compaction notice was a transcript line, not a message the model receives.
+
+**What landed**
+
+| phase | what landed | where | how it was verified |
+|---|---|---|---|
+| **1 — name it** | When the compacted request no longer contains the full body of a skill the loop read this turn, the request gets a harness-authored notice naming each lost skill and the remedy (`skill_view`). The loop records only bodies it actually executed (`skill_view` with no `file_path`; a bundled-file read never overwrites the body). The notice rides the outbound copy only, so tool pairs stay intact. | `src/services/providers/contextCompact.ts` › `skillsLostToCompaction`, `skillCarryOverNotice`; `src/services/analysis/DeskToolsService.ts` (the round loop) | `check:contracts` contract 5 (four cases: present body not claimed, stub named, empty map claims nothing, the notice is harness-authored with the remedy) |
+| **2 — restore it** | The body itself is restored, bounded four ways: **5k tokens per skill**, **25k total**, **10% of the model window**, and the headroom the compacted request actually left (`ceiling − after`). An oversized body is cut with `clipNote` and marked truncated; a skill that does not fit is named in the preamble as "not restored for budget"; below 512 tokens of room the phase-1 notice is the fallback. Re-reading a skill moves it to the end, so the newest procedure is closest to the request. The same function runs on the continuation request via `loadedSkills` on the loop result. | `src/services/providers/contextCompact.ts` › `carryOverSkillBodies`; `src/services/analysis/DeskToolsService.ts` › `CompactedOutbound`, both loop returns, the continuation | `check:contracts` contract 5 (five more cases: verbatim restoration, truncation, no-room fallback, the total budget stopping at a second skill, no-op when the body is on the wire); `typecheck`; `build`; `boot-probe`; `render-probe`; the scratch SSE load_tools harness still passes 10/10 |
+
+**Residues, named**
+
+- The map is **per turn**. A body read in an earlier turn and compacted out of the
+  caller's history is not in it; the index + `skill_view` remain the path, and the
+  notice does not fire for it. Extending the map to history would require parsing
+  stored tool calls, which the stored transcript does not carry.
+- It is **skill-specific by design**. A large `read_tool_output` page or a strategy
+  document gets the ordinary clip note, not restoration; generalizing would need a
+  carry flag on the tool definition, and that is a different decision.
+- The budget is the app's **estimate** (`estimateTokens`, biased high), and the
+  restoration is skipped rather than sent over the ceiling. A model window small
+  enough to leave under 512 tokens gets the notice only.
+- The restored text is **what the seat read**, not a fresh read of the notebook. If a
+  skill were revised mid-turn, the carry would restore the earlier body; the seat is
+  told the restoration exists and can re-open.
+- The carry adds a `user` turn after tool results on the **outbound copy only**. The
+  loop's own array keeps the real bytes and the pairing; a reviewer looking for the
+  restored text in `messages` will not find it, by construction.
+
+**Commits.** `4b73a02e` (notice), `0719314b` (bounded restoration + contract cases).
