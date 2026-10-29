@@ -303,6 +303,26 @@ export const skillBodyCaps = (body: string): { lines: number; chars: number; ove
 /** A description that tells the model WHEN to use the skill — the trigger —
  *  in the same spirit as the spec's "Use when / Don't use for". Warned on at
  *  authoring, never blocking. */
+/**
+ * Stamp the provenance of a skill the user imported, unless the author
+ * already declared one.
+ *
+ * Text-level on purpose: the import path must not reserialize a third-party
+ * skill — its body, key order and comments belong to its author. A missing
+ * `source` currently renders as "seeded" in the skills library, which is a
+ * false label for a file that arrived from outside; `imported` is the truth,
+ * and the author's own value (when present) always wins.
+ */
+export const stampImportedSource = (content: string, source = 'imported'): string => {
+    const match = /^---(\r?\n)([\s\S]*?)\r?\n---/.exec(content);
+    if (!match) return content;
+    if (/^\s*source\s*:/m.test(match[2])) return content;
+    const nl = match[1];
+    const closingAt = match.index + match[0].length - 3;
+    const insertAt = closingAt - nl.length;
+    return `${content.slice(0, insertAt)}${nl}source: ${source}${content.slice(insertAt)}`;
+};
+
 export const hasUseWhenTrigger = (description: string): boolean =>
     /\b(?:use when|use this when|when|if|whenever|for|during|before|after)\b/i.test(description);
 

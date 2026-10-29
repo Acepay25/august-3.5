@@ -348,6 +348,19 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         && sf.skillRunsHere({ fallbackForTools: ['web_search'] }, 'web', ['web_search']) === false);
     ok('fm: fallbackForToolsets gates nothing (August names no toolsets)',
         sf.skillRunsHere({ fallbackForToolsets: ['anything'] }, 'web', ['web_search']) === true);
+    // Import provenance: a file that arrived from outside must not read as
+    // "seeded" in the library, and the author's own source always wins.
+    const stamped = sf.stampImportedSource('---\nname: x\ndescription: d\n---\nbody');
+    ok('fm: an imported skill with no source is stamped as imported',
+        stamped === '---\nname: x\ndescription: d\nsource: imported\n---\nbody', JSON.stringify(stamped));
+    const authorSource = sf.stampImportedSource('---\nname: x\nsource: shared\n---\nbody');
+    ok('fm: an author-declared source is never overwritten',
+        authorSource.includes('source: shared') && !authorSource.includes('source: imported'));
+    const crlfSource = sf.stampImportedSource('---\r\nname: x\r\n---\r\nbody');
+    ok('fm: CRLF frontmatter keeps its line ending',
+        crlfSource === '---\r\nname: x\r\nsource: imported\r\n---\r\nbody', JSON.stringify(crlfSource));
+    ok('fm: a file with no frontmatter is untouched',
+        sf.stampImportedSource('body only') === 'body only');
 })();
 
 // ─── 8. memory hints — the deterministic pre-read, on every model ──────────

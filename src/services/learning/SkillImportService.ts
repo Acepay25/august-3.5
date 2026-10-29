@@ -10,7 +10,7 @@
  */
 
 import { parseSkillMarkdown } from './SkillMemoryService';
-import { skillFaceIssues, skillBodyCaps, hasUseWhenTrigger, scanSkillText, declaredCompatibility, inertDeclaredKeys, skillSupportRefs, resolveSiblingUrl, SKILL_SUPPORT_REF_MAX } from '../../utils/skillFrontmatter';
+import { skillFaceIssues, skillBodyCaps, hasUseWhenTrigger, scanSkillText, declaredCompatibility, inertDeclaredKeys, skillSupportRefs, resolveSiblingUrl, stampImportedSource, SKILL_SUPPORT_REF_MAX } from '../../utils/skillFrontmatter';
 import { createMemoryFile, getMemoryFiles } from './MemoryFilesService';
 import { getActiveUsername } from '../../utils/activeUser';
 import { slugifyName } from './MemoryFilesService';
@@ -158,7 +158,7 @@ export const importSkillFiles = async (files: Array<SkillFileRead & { content: s
         // (the 2026-10-27 audit S-5).
         const storedSlug = skillStored.replace(/\.md$/i, '');
         try {
-            await createMemoryFile(folderId, skillStored, skillEntry.file.content, username, false);
+            await createMemoryFile(folderId, skillStored, stampImportedSource(skillEntry.file.content), username, false);
             result.imported.push(skillEntry.file.relPath ?? skillEntry.file.name);
         } catch (err) {
             result.failed.push({ name: skillEntry.file.name, reason: err instanceof Error ? err.message : String(err) });
@@ -235,7 +235,7 @@ export const importSkillFiles = async (files: Array<SkillFileRead & { content: s
             continue;
         }
         try {
-            await createMemoryFile(folderId, uniqueName(file.name), file.content, username, false);
+            await createMemoryFile(folderId, uniqueName(file.name), stampImportedSource(file.content), username, false);
             result.imported.push(file.name);
         } catch (err) {
             result.failed.push({ name: file.name, reason: err instanceof Error ? err.message : String(err) });
