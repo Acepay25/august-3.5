@@ -176,6 +176,15 @@ interface SupervisorStreamProps {
 
 const SupervisorStream: React.FC<SupervisorStreamProps> = ({ onClose }) => {
     const snap = useSyncExternalStore(supervisorStore.subscribe, supervisorStore.getSnapshot, supervisorStore.getSnapshot);
+    // Opening the inbox is the defer trigger for book-seeded drafts: automatic
+    // passes skip them, and this manual pass takes them once. The triage cache
+    // makes later mounts cheap — nothing already judged is paid for twice.
+    const openedOnce = React.useRef(false);
+    React.useEffect(() => {
+        if (openedOnce.current) return;
+        openedOnce.current = true;
+        void runSupervisorNow();
+    }, []);
     // Read through the same subscription: the spend only changes when a pass
     // runs, and every pass notifies this store.
     const spend = getSupervisionSpend();

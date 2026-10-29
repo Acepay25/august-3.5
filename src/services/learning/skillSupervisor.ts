@@ -26,6 +26,7 @@ import { streamChatRequest, type ChatMessage } from '../providers/GenericProvide
 import { TASK_BUDGETS } from '../providers/taskBudgets';
 import { effortForTask } from '../providers/reasoningControls';
 import { extractAndParseJson } from '../../utils/jsonUtils';
+import { shouldDeferSupervision } from '../../utils/skillSupervisionGate';
 import { z } from 'zod';
 import { getActiveUsername } from '../../utils/activeUser';
 import { formatModelDisplayName } from '../../utils/providerUtils';
@@ -534,6 +535,10 @@ export const runSupervisorPass = async (username = getActiveUsername(), opts: { 
         };
         for (const draft of listSkillDrafts(username)) {
             if (controller.signal.aborted || spent()) break;
+            // Book-seeded drafts are speculative shelf items. An automatic pass
+            // must not spend one model call per book at startup (the live capture
+            // showed 12); they wait for the inbox, whose mount runs a MANUAL pass.
+            if (shouldDeferSupervision(draft, Boolean(opts.manual))) continue;
             // Already triaged: the model said what it would say, and the draft is
             // still waiting on the human. Re-reading it would spend a call to repeat
             // itself — the one cost auto-triage does not get to pay freely.

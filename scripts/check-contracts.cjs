@@ -29,6 +29,8 @@
  *  16. src/services/trade/tradeChatContext.ts — the skills index: confirmed
  *      under APPLY, candidates a count, never a usable name
  *  17. src/utils/tradeSource.ts — a legacy journal row defaults to 'manual'
+ *  18. src/utils/notebookReviewGate.ts + skillSupervisionGate.ts — when a
+ *      notebook review is due, and which drafts an automatic pass may judge
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -868,6 +870,25 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         && ts.withTradeSource({ source: 'signal' }).source === 'signal');
     ok('trade source: normalization keeps the row and stamps manual',
         JSON.stringify(ts.withTradeSource({ id: 't1' })) === JSON.stringify({ id: 't1', source: 'manual' }));
+})();
+
+// ─── 18. startup model-call gates ──────────────────────────────────────────
+(() => {
+    const rv = loadModule('src/utils/notebookReviewGate.ts');
+    ok('review gate: no prior review → due', rv.notebookReviewDue(null, 'sig', 1_000, 60_000) === true);
+    ok('review gate: the same index signature is never material',
+        rv.notebookReviewDue({ at: 0, signature: 'sig' }, 'sig', 10_000_000, 60_000) === false);
+    ok('review gate: a changed index inside the cooldown waits',
+        rv.notebookReviewDue({ at: 1_000, signature: 'old' }, 'new', 2_000, 60_000) === false);
+    ok('review gate: a changed index after the cooldown is due',
+        rv.notebookReviewDue({ at: 1_000, signature: 'old' }, 'new', 61_000, 60_000) === true);
+    const sg = loadModule('src/utils/skillSupervisionGate.ts');
+    ok('supervision: an automatic pass defers book drafts',
+        sg.shouldDeferSupervision({ tradeId: 'book:x' }, false) === true);
+    ok('supervision: a manual pass takes book drafts',
+        sg.shouldDeferSupervision({ tradeId: 'book:x' }, true) === false);
+    ok('supervision: other sources stay automatic',
+        sg.shouldDeferSupervision({ tradeId: 'trade:1' }, false) === false);
 })();
 
 // ─── report ────────────────────────────────────────────────────────────────

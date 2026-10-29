@@ -19,6 +19,8 @@
 import { ProviderConfig } from '../../types/provider';
 import { getQuickResponse } from '../providers/GenericAnalysisService';
 import { sanitizeAIResponse } from '../../utils/sanitizers';
+import { getPreferenceObject, setPreferenceObject } from '../infrastructure/PreferencesService';
+import { NOTEBOOK_REVIEW_COOLDOWN_MS, notebookReviewDue, type NotebookReviewState } from '../../utils/notebookReviewGate';
 import {
     createMemoryFileUnlocked,
     getMemoryFiles,
@@ -41,6 +43,24 @@ Write markdown the trader will open as suggestions.md. No JSON. No chain-of-thou
 
 let inFlight: Promise<boolean> | null = null;
 
+/** A notebook write burst is not a reason to buy another review. The gate is
+ *  "material change": a different index signature AND the cooldown elapsed.
+ *  Startup seeding writes several files; without this the app paid for a
+ *  review per batch (two in the live capture). */
+const REVIEW_STATE_KEY = (user: string): string => `memory_review_v1:${user}`;
+const REVIEW_COOLDOWN_MS = NOTEBOOK_REVIEW_COOLDOWN_MS;
+
+/** FNV-1a over the rendered index — cheap, stable, and only compared to its
+ *  previous value (it is not a security hash). */
+const indexSignature = (text: string): string => {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i += 1) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(16);
+};
+
 export const runNotebookReview = async (
     username: string,
     config: ProviderConfig | null | undefined,
@@ -51,6 +71,15 @@ export const runNotebookReview = async (
     const work = (async (): Promise<boolean> => {
         const index = getMemoryFilesIndex();
         if (!index || index.includes('empty notebook')) return false;
+        const signature = indexSignature(index);
+        const stateKey = REVIEW_STATE_KEY(username);
+        const prior = await getPreferenceObject<NotebookReviewState>(stateKey);
+        const now = Date.now();
+        if (!notebookReviewDue(prior, signature, now, REVIEW_COOLDOWN_MS)) return false;
+        // Stamp BEFORE the call: a burst of writes in the same minute must not
+        // each buy a review, and a failed call is retried by a later material
+        // change after the cooldown rather than immediately.
+        await setPreferenceObject(stateKey, { at: now, signature });
         const raw = await getQuickResponse(
             config,
             `CURRENT NOTEBOOK:\n${index}\n\nWrite suggestions.md for this trader.`,

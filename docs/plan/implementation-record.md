@@ -2256,3 +2256,35 @@ normalization keeps the row. `typecheck` · `check:contracts` **193** · `build`
 **Residue.** Nothing reads `source` yet — that is the ruling. The first consumers will be the signal
 fold (`imported` never confirms a playbook; `signal` is the ledger) and the trade-history importer if
 it is ever unfrozen.
+
+## 46. Startup model-call gates (2026-10-29)
+
+**What changed.**
+- **Notebook review**: a review now runs only on a **material change** — a different index signature
+  AND a 15-minute cooldown. The state is `memory_review_v1:<user>` in Preferences; it is stamped
+  before the call, so a burst of writes buys one review. Pure rule:
+  `utils/notebookReviewGate.ts` › `notebookReviewDue`.
+- **Book-draft supervision**: an automatic supervisor pass skips `book:` drafts; they are deferred to
+  a **manual** pass, which the inbox mount (`SupervisorStream`) runs once. Pure rule:
+  `utils/skillSupervisionGate.ts` › `shouldDeferSupervision`.
+
+**Fresh-profile measurement (same probe/recorder).**
+
+| Call | Before | After (startup) |
+|---|---|---|
+| Notebook reviews | 2 | **1** |
+| Supervisor book judgments | 12 | **0** |
+| Chat turn | 1 | 1 |
+| **Total startup requests** | **15** | **2** |
+
+Opening the inbox still spends the 12 book judgments — that is the deferral target, not a
+regression. The generic recorder used for measurement does not settle the probe's chat row; the
+real `render-probe` (its own mock) passes after the change.
+
+**Verification.** Contract 18: no prior review → due; same signature never; changed inside the
+cooldown waits; changed after it is due; auto defers `book:`; manual takes it; other sources stay
+automatic. `typecheck` · `check:contracts` **200** · `build` · `boot-probe` · `render-probe` · `lint`.
+
+**Residues.** The inbox-open manual pass can spend up to `MAX_ITEMS_PER_PASS` (12) calls and bypasses
+the hourly window budget (it is a human action). The review cooldown is a preference, not data; a
+failed review still stamps the 15 minutes so a retry waits for the next material change.
