@@ -34,6 +34,7 @@ const SHARED_POLICY_EXPORTS = [
   'claudeThinkingBudgetTokens',
   'anthropicShouldSendThinking',
   'anthropicThinkingFields',
+  'anthropicCachedSystem',
   'geminiThinkingParams',
   'isPrivateOrLoopbackHost',
   'httpAllowedForHost',
