@@ -91,6 +91,9 @@ export const CHAT_SURFACE_TOOLS = [
     // A skip is a decision; the Agents surface must be able to leave the HOLD
     // record it was told to consider.
     'decline_trade',
+    // The signal ledger is the desk's own call record; the Agents home grades
+    // its reads the same way the chart dock does.
+    'emit_signal',
     // Anything that can be clipped must be able to be re-read.
     'read_tool_output',
 ];

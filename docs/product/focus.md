@@ -54,3 +54,10 @@ with a lifecycle, no **price-based record** of whether yesterday's calls were ri
 **measured base rate** shown beside a claim. The journal measures the trader's decisions; nothing
 measures the harness's. That is the work: make the signal the unit, measure it against the tape,
 and feed the measurement back into the next signal.
+
+**Phase 1 shipped 2026-10-29:** the `emit_signal` desk tool, an append-only signal ledger
+(`signal_ledger_v1:<user>`, backed up), a deterministic resolver (closed OKX 5m candles, Binance
+cross-check, stop-first on an unknowable bar, costs in R), two shadow checks (the programmatic gate
+and an evidence check — neither blocks), and Journal → Signals. **Still open:** the learning fold
+that turns resolved signals into a measured base rate and feeds the next signal; nothing consumes
+resolutions yet, by scope.

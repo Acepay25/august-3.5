@@ -5,7 +5,8 @@ import WinRateDashboard from '../dashboards/WinRateDashboard';
 import EquityCurveDashboard from '../dashboards/EquityCurveDashboard';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { MonthlyReportCard } from './MonthlyReportCard';
-import {HistoryIcon, ChartBarIcon, FileSpreadsheet, FileText} from '../shared/Icons';
+import SignalFeed from './SignalFeed';
+import {HistoryIcon, ChartBarIcon, FileSpreadsheet, FileText, TargetIcon} from '../shared/Icons';
 
 import { exportTradesCSV, exportTradesHTML } from '../../utils/reportExport';
 import { LoggedTrade, TradeOutcome } from '../../types';
@@ -50,7 +51,7 @@ interface JournalProps {
 }
 
 // Tab configuration
-type TabId = 'log' | 'analytics';
+type TabId = 'log' | 'signals' | 'analytics';
 
 interface TabConfig {
     id: TabId;
@@ -63,10 +64,11 @@ interface TabConfig {
  *  merge; 'models' and 'reasoning' were deleted outright on 2026-10-07 —
  *  a stale hash or old bookmark lands on the trades, never a blank panel. */
 const resolveTab = (tab: string): TabId =>
-    tab === 'analytics' ? (tab as TabId) : 'log';
+    tab === 'analytics' ? 'analytics' : tab === 'signals' ? 'signals' : 'log';
 
 const TABS: TabConfig[] = [
     { id: 'log', label: 'History', icon: <HistoryIcon className="w-4 h-4 shrink-0" aria-hidden="true" /> },
+    { id: 'signals', label: 'Signals', icon: <TargetIcon className="w-4 h-4 shrink-0" aria-hidden="true" /> },
     { id: 'analytics', label: 'Stats', icon: <ChartBarIcon className="w-4 h-4 shrink-0" aria-hidden="true" /> },
 ];
 
@@ -186,6 +188,8 @@ const JournalInner: React.FC<JournalProps> = ({
                 username={activeUsername}
                 onDocumentOpenChange={setDocumentOpen}
             />
+        ) : activeTab === 'signals' ? (
+            <SignalFeed user={activeUsername} />
         ) : activeTab === 'analytics' ? (
             <div className="h-full overflow-y-auto">
                 <div className="p-6 sm:p-8 space-y-8">

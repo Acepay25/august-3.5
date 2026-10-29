@@ -33,6 +33,9 @@
  *      notebook review is due, and which drafts an automatic pass may judge
  *  19. the insight store — rendered by the memory index and readable from a
  *      backup, but never created or carried by the analysis pipeline
+ *  20. the signal loop — the resolver's fill/stop/target order (stop-first on
+ *      an unknowable bar), costs in R, no lookahead, the append-only ledger,
+ *      OKX parsing and the Binance cross-check
  *
  * Plain node, no vitest, no jsdom, no network: each module is bundled from
  * TypeScript with esbuild (already a vite dependency) into a temp file and
@@ -906,6 +909,202 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         /insightKnowledgeBase/.test(read('src/services/infrastructure/SqliteService.ts')));
 })();
 
+// ─── 20. the signal loop: resolver order, costs, ledger, venue data ────────
+(() => {
+    const rv = loadModule('src/services/signals/signalResolver.ts');
+    const T0 = 1_000_000_000_000;
+    const BAR = rv.SIGNAL_BAR_MS;
+    const base = {
+        direction: 'long', entry: 100, stop: 99, target: 103,
+        emittedAt: T0, expiresAt: T0 + 3 * BAR,
+    };
+    const bar = (i, o, h, l, c) => ({ time: T0 + i * BAR, open: o, high: h, low: l, close: c });
+
+    ok('signal: a long needs stop < entry < target',
+        rv.bracketError({ entry: 100, stop: 101, target: 105 }, 'long') !== null
+        && rv.bracketError({ entry: 100, stop: 99, target: 95 }, 'long') !== null
+        && rv.bracketError({ entry: 100, stop: 99, target: 103 }, 'long') === null);
+    ok('signal: a short needs target < entry < stop',
+        rv.bracketError({ entry: 100, stop: 101, target: 95 }, 'short') === null
+        && rv.bracketError({ entry: 100, stop: 99, target: 95 }, 'short') !== null);
+
+    const feeR = rv.roundTripCostR({ entry: 100, stop: 99 });
+    ok('signal: round-trip costs are entry × 2 × (fee+slip) over risk',
+        Math.abs(feeR - 0.14) < 1e-9, String(feeR));
+
+    const win = rv.resolveSignal(base, [
+        bar(0, 101, 101, 100, 102),
+        bar(1, 102, 103.5, 101, 103.2),
+        bar(2, 103, 103.4, 102.5, 103),
+    ], [], T0 + 3 * BAR);
+    ok('signal: the target hit first is a win at the planned R:R',
+        win && win.status === 'won' && Math.abs(win.grossR - 3) < 1e-9
+        && Math.abs(win.outcomeR - 2.86) < 1e-9 && win.ambiguous === false,
+        JSON.stringify(win));
+
+    const loss = rv.resolveSignal(base, [
+        bar(0, 101, 101, 100, 100.4),
+        bar(1, 100.4, 100.6, 98.9, 99.2),
+    ], [], T0 + 3 * BAR);
+    ok('signal: the stop hit first is −1R before costs',
+        loss && loss.status === 'lost' && loss.grossR === -1
+        && Math.abs(loss.outcomeR + 1.14) < 1e-9);
+
+    const bothNoDrill = rv.resolveSignal(base, [
+        bar(0, 101, 101, 100, 102),
+        bar(1, 102, 104, 98, 100),
+    ], [], T0 + 3 * BAR);
+    ok('signal: a bar containing both levels settles STOP-FIRST and says it was ambiguous',
+        bothNoDrill && bothNoDrill.status === 'lost' && bothNoDrill.ambiguous === true
+        && bothNoDrill.path === 'bar');
+
+    const minutes = [];
+    for (let i = 0; i < 5; i++) {
+        minutes.push({
+            time: T0 + BAR + i * rv.SIGNAL_DRILL_BAR_MS,
+            open: 102, high: i === 3 ? 104 : 102.5, low: i === 1 ? 98 : 101.5, close: 102,
+        });
+    }
+    const drilled = rv.resolveSignal(base, [
+        bar(0, 101, 101, 100, 102),
+        bar(1, 102, 104, 98, 100),
+    ], minutes, T0 + 3 * BAR);
+    ok('signal: a 1m drill-down orders the bar — stop at minute 1 beats target at minute 3',
+        drilled && drilled.status === 'lost' && drilled.path === '1m' && drilled.ambiguous === false);
+
+    const sameMinute = minutes.map(m => ({ ...m }));
+    sameMinute[1] = { ...sameMinute[1], high: 104, low: 98 };
+    const stillAmbiguous = rv.resolveSignal(base, [
+        bar(0, 101, 101, 100, 102),
+        bar(1, 102, 104, 98, 100),
+    ], sameMinute, T0 + 3 * BAR);
+    ok('signal: a 1m bar containing both is still unknowable — stop-first, ambiguous',
+        stillAmbiguous && stillAmbiguous.status === 'lost' && stillAmbiguous.ambiguous === true
+        && stillAmbiguous.path === '1m');
+
+    const expired = rv.resolveSignal({ ...base, expiresAt: T0 + 2 * BAR }, [
+        bar(0, 101, 101, 100, 100.6),
+        bar(1, 100.6, 102, 100.4, 101),
+        bar(2, 101, 120, 80, 119),
+    ], [], T0 + 3 * BAR);
+    ok('signal: at expiry the open call is marked to the last closed bar',
+        expired && expired.status === 'expired' && Math.abs(expired.grossR - 1) < 1e-9
+        && Math.abs(expired.outcomeR - 0.86) < 1e-9,
+        JSON.stringify(expired));
+    ok('signal: a bar closing after expiry is NEVER read (no lookahead)',
+        expired && !expired.usedBarTimes.includes(T0 + 2 * BAR));
+
+    const never = rv.resolveSignal(base, [
+        bar(0, 101.5, 101.6, 101.1, 101.4),
+        bar(1, 101.4, 102, 101.2, 101.8),
+        bar(2, 101.8, 102.2, 101.5, 102),
+    ], [], T0 + 3 * BAR);
+    ok('signal: no entry touch is its own outcome, not a loss, and costs nothing',
+        never && never.status === 'never_triggered' && never.outcomeR === 0 && never.feeR === 0);
+
+    ok('signal: nothing has closed yet → still open, never a resolution',
+        rv.resolveSignal(base, [bar(-1, 90, 120, 80, 100)], [], T0 + 60_000) === null
+        && rv.resolveSignal(base, [bar(0, 101, 101, 100, 100.5)], [], T0 + 60_000) === null);
+
+    const preEmission = rv.resolveSignal(base, [
+        bar(-1, 101, 120, 80, 119),
+        bar(0, 101, 101, 100, 100.5),
+        bar(1, 100.5, 102, 100.2, 101.5),
+        bar(2, 101.5, 102, 101.2, 101.8),
+    ], [], T0 + 3 * BAR);
+    ok('signal: a bar that OPENED before emission cannot fill or settle it',
+        preEmission && preEmission.status === 'expired' && Math.abs(preEmission.grossR - 1.8) < 1e-9,
+        JSON.stringify(preEmission));
+
+    const rows = [
+        { signal: { id: 'a', emittedAt: 1, expiresAt: 2, direction: 'long', entry: 1, stop: 0.9, target: 1.2, coin: 'X', evidenceRefs: [], dataHash: '', provider: '', model: '', promptVersion: '', source: 'signal', thesis: '' }, status: 'won', resolution: { outcomeR: 2, ambiguous: false }, gate: { status: 'pass' } },
+        { signal: { id: 'b', emittedAt: 1, expiresAt: 2, direction: 'long', entry: 1, stop: 0.9, target: 1.2, coin: 'X', evidenceRefs: [], dataHash: '', provider: '', model: '', promptVersion: '', source: 'signal', thesis: '' }, status: 'lost', resolution: { outcomeR: -1, ambiguous: true }, gate: { status: 'refused' } },
+        { signal: { id: 'c', emittedAt: 1, expiresAt: 2, direction: 'long', entry: 1, stop: 0.9, target: 1.2, coin: 'X', evidenceRefs: [], dataHash: '', provider: '', model: '', promptVersion: '', source: 'signal', thesis: '' }, status: 'never_triggered' },
+    ];
+    const sum = rv.summariseSignals(rows);
+    ok('signal: the summary excludes no-entry calls from the hit rate but reports them',
+        sum.hitRate === 0.5 && sum.neverTriggered === 1 && sum.expectancyR === 0.5
+        && sum.ambiguityRate === 0.5);
+    ok('signal: shadow-gate sides are means over their own resolved rows',
+        sum.shadowPassedR === 2 && sum.shadowRefusedR === -1);
+
+    // ── the ledger ──
+    const store = new Map();
+    global.localStorage = {
+        getItem: k => (store.has(k) ? store.get(k) : null),
+        setItem: (k, v) => store.set(k, String(v)),
+        removeItem: k => store.delete(k),
+        clear: () => store.clear(),
+    };
+    global.window = global;
+    localStorage.setItem('last_active_user', 'ledger-user');
+    const ledger = loadModule('src/services/signals/signalLedger.ts');
+    ledger.__clearSignalLedgerForTests('ledger-user');
+    const mkSignal = (id, emittedAt) => ({
+        id, coin: 'BTCUSDT', direction: 'long', entry: 100, stop: 99, target: 103,
+        emittedAt, expiresAt: emittedAt + BAR, evidenceRefs: ['get_market_packet'],
+        dataHash: 'deadbeef', provider: 'p', model: 'm', promptVersion: 'v1',
+        source: 'signal', thesis: 'a call',
+    });
+    const w1 = ledger.appendSignalEvent({ v: 1, type: 'emit', at: T0, id: 's1', signal: mkSignal('s1', T0) }, 'ledger-user');
+    const w2 = ledger.appendSignalEvent({ v: 1, type: 'resolve', at: T0 + 1, id: 's1', resolution: { status: 'won', at: T0 + 1, grossR: 3, feeR: 0.14, outcomeR: 2.86, usedBarTimes: [], path: 'bar', ambiguous: false, crossCheck: 'agree', primarySource: 'okx' } }, 'ledger-user');
+    const w3 = ledger.appendSignalEvent({ v: 1, type: 'resolve', at: T0 + 2, id: 's1', resolution: { status: 'lost', at: T0 + 2, grossR: -1, feeR: 0.14, outcomeR: -1.14, usedBarTimes: [], path: 'bar', ambiguous: false, crossCheck: 'agree', primarySource: 'okx' } }, 'ledger-user');
+    const folded = ledger.readSignals('ledger-user');
+    ok('ledger: emission then resolution folds into one row',
+        w1.ok && w2.ok && folded.length === 1 && folded[0].status === 'won');
+    ok('ledger: a second resolution is refused — history is not rewritten',
+        w3.ok === false && /already resolved/.test(w3.error));
+    const stored = ledger.readSignalEvents('ledger-user');
+    let pruned = stored;
+    for (let i = 0; i < ledger.MAX_SIGNALS + 1; i++) {
+        pruned = ledger.pruneLedgerEvents([...pruned, { v: 1, type: 'emit', at: T0 + i, id: `bulk-${i}`, signal: mkSignal(`bulk-${i}`, T0 + i) }]);
+    }
+    ok('ledger: the cap drops whole oldest signals, never an isolated event',
+        new Set(pruned.map(e => e.id)).size === ledger.MAX_SIGNALS
+        && pruned.every(e => e.id !== 's1')
+        && pruned.filter(e => e.id === `bulk-${ledger.MAX_SIGNALS}`).length === 1);
+
+    // ── venue data ──
+    const md = loadModule('src/services/signals/signalMarketData.ts');
+    ok('venue: BTCUSDT maps to the OKX instrument, an unknown quote does not',
+        md.okxInstId('BTCUSDT') === 'BTC-USDT' && md.okxInstId('ETH-USDC') === 'ETH-USDC'
+        && md.okxInstId('BTCTRY') === null);
+    const parsed = md.parseOkxCandles({
+        code: '0',
+        data: [
+            ['100060', '2', '3', '1', '2.5', '1', '1', '1', '0'],
+            ['100000', '1', '2', '0.5', '1.5', '1', '1', '1', '1'],
+        ],
+    });
+    ok('venue: OKX parsing keeps closed bars only, ascending',
+        parsed.length === 1 && parsed[0].time === 100000 && parsed[0].close === 1.5);
+    const primary = [{ time: 100000, open: 1, high: 2, low: 0.5, close: 1.5 }];
+    ok('venue: the cross-check agrees, disagrees, or is unavailable — never a silent pass',
+        md.crossCheckBars(primary, [{ time: 100000, open: 1, high: 2, low: 0.5, close: 1.5 }], [100000]) === 'agree'
+        && md.crossCheckBars(primary, [{ time: 100000, open: 1, high: 2.1, low: 0.5, close: 1.5 }], [100000]) === 'disagree'
+        && md.crossCheckBars(primary, null, [100000]) === 'unavailable'
+        && md.crossCheckBars(primary, [{ time: 99999, open: 1, high: 2, low: 0.5, close: 1.5 }], [100000]) === 'unavailable');
+    ok('venue: a tape starting after emission cannot settle it',
+        md.tapeCoversEmission([{ time: 100001, open: 1, high: 2, low: 0.5, close: 1.5 }], 100000) === false
+        && md.tapeCoversEmission([{ time: 99999, open: 1, high: 2, low: 0.5, close: 1.5 }], 100000) === true);
+
+    // ── emission gates (validation only; the shadow gate is fire-and-forget) ──
+    const svc = loadModule('src/services/signals/signalService.ts');
+    const badBracket = svc.emitSignal({ coin: 'BTCUSDT', direction: 'long', entry: 100, stop: 101, target: 105, expiresInMinutes: 60, thesis: 'a real thesis', evidence: ['get_market_packet'] });
+    ok('emit: an inverted plan is refused before anything is written',
+        badBracket.ok === false && /long needs/.test(badBracket.error));
+    const badExpiry = svc.emitSignal({ coin: 'BTCUSDT', direction: 'long', entry: 100, stop: 99, target: 103, expiresInMinutes: 5, thesis: 'a real thesis', evidence: ['get_market_packet'] });
+    ok('emit: an expiry outside 15–1440 minutes is refused', badExpiry.ok === false && /between 15/.test(badExpiry.error));
+    const noEvidence = svc.emitSignal({ coin: 'BTCUSDT', direction: 'long', entry: 100, stop: 99, target: 103, expiresInMinutes: 60, thesis: 'a real thesis', evidence: [] });
+    ok('emit: evidence cannot be empty', noEvidence.ok === false && /evidence is required/.test(noEvidence.error));
+    ok('emit: tool-like evidence refs must be real desk tools; prose is a citation',
+        svc.shadowGrounding(['get_market_packet']).verdict === 'cited'
+        && svc.shadowGrounding(['get_market_packet']).missing.length === 0
+        && svc.shadowGrounding(['made_up_tool']).verdict === 'missing'
+        && svc.shadowGrounding(['the 1h support at 64200']).verdict === 'cited'
+        && svc.shadowGrounding([]).verdict === 'uncited');
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
@@ -913,4 +1112,4 @@ if (failures.length) {
     console.error('CONTRACT CHECK FAIL — a pinned contract broke; fix the module, not this file.');
     process.exit(1);
 }
-console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing), the desk tool budget, the skill outcome correction, the startup call gates and the insight store pin all hold.');
+console.log('CONTRACT CHECK OK — risk/reward math, retry classification, harness marks, notebook pressure, tool-pair compaction, AI-boundary coercion, the skill/memory authoring screens, the shared index budget, both policy tables (self-modification, goal tool narrowing), the desk tool budget, the skill outcome correction, the startup call gates, the insight store pin and the signal loop (resolver order, costs, ledger, venue data) all hold.');

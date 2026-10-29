@@ -349,7 +349,7 @@ section D states exactly.
 flowchart TD
     P["draft producers — sessionSkillReview · passMining · selfImprovement · bookSkillDrafts · chartScanSkills · botLearning · the propose_skill desk tool"] --> GT["two-tier evidence gate — draftGates.ts"]
     GT --> IN["skill drafts inbox — skillDrafts.ts"]
-    IN --> HU{"HUMAN approval — approveSkillDraft skillApproval.ts, reads the library back"}
+    IN --> HU{"direct writes — candidates land in the library, evidence sets their status; the inbox is an activity log with Undo"}
     HU --> NB["notebook — memory_files_v1_&lt;user&gt;, tiers memoryBudget.ts: refuse growth, never evict"]
     NB --> INJ["injected into the next prompt — resolveInvokedSkills useAnalysisPipeline"]
     INJ -->|closes the loop| C3["stage 3, prompt assembly"]
@@ -414,6 +414,31 @@ Corollary that is easy to miss: `GlobalMemory.aiPatternMemory` and
 `insightKnowledgeBase` are **frozen stores** (see G), and
 `MistakePatternService` / `JobQueueService`, which warned about a recurring setup
 before the next entry, no longer exist.
+
+### D.1 The signal loop (phase 1, 2026-10-29)
+
+```mermaid
+flowchart LR
+    T["desk tool emit_signal"] --> V["signalService.emitSignal — bracket, expiry, evidence, tape hash"]
+    V --> L["signalLedger — signal_ledger_v1:&lt;user&gt;, append-only, 150 signals / 200 KiB, in backups"]
+    V -. shadow, never blocks .-> G1["programmatic gate — GateKeeperService"]
+    V -. shadow, never blocks .-> G2["evidence check — tool-like refs must be real desk tools"]
+    L --> S["signalService.settleDueSignals — bounded pass"]
+    S --> O["OKX 5m closed candles (primary)"]
+    S --> B["Binance 5m (cross-check on the deciding bars)"]
+    O --> R["signalResolver.resolveSignal — stop-first on an unknowable bar, costs in R, no lookahead"]
+    B --> R
+    R --> L2["resolve event appended — never rewritten"]
+    L --> UI["Journal → Signals — SignalFeed + SignalCard"]
+```
+
+The resolver's rules are the honesty contract: a bar counts only if it OPENED at or after the
+emission and CLOSED by the expiry; a bar containing both levels drills into 1m and settles
+STOP-FIRST when the order is still unknowable (`ambiguous: true`); a call that never touches its
+entry is `never_triggered`, not a loss; every fill is charged a named round-trip cost
+(`SIGNAL_TAKER_FEE_RATE` + `SIGNAL_SLIPPAGE_RATE` per side). A tape that does not reach back to the
+emission leaves the signal open and says so — never "no entry". Nothing consumes resolutions yet;
+the accuracy fold is the next phase by owner scope.
 
 ---
 

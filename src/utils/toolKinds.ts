@@ -202,6 +202,7 @@ export const DESK_TOOL_NAMES: readonly string[] = [
     'get_btc_context', 'recall', 'get_setup_history_stats', 'web_search', 'scan_setups',
     'get_trade_log',
     'project_future_price',
+    'emit_signal',
     'get_indicators',
     'recall_chat',
     'run_screener', 'run_monte_carlo',

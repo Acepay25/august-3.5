@@ -72,7 +72,7 @@ import { PREDICATE_GRAMMAR_HINT } from './skillPredicate';
  */
 export const toolActionFromResult = (name: string, ok: boolean, content: string, speaker: string): ToolAction | null => {
     const isProposal = name === 'forge_tool' || name === 'amend_memory' || name === 'propose_skill' || name === 'revise_skill' || name === 'write_memory_note'
-        || name === 'remember' || name === 'forget' || name === 'propose_strategy';
+        || name === 'remember' || name === 'forget' || name === 'propose_strategy' || name === 'emit_signal';
     const isCustom = name.startsWith('custom_');
     if (!isProposal && !isCustom) return null;
     const at = new Date().toISOString();
@@ -82,7 +82,8 @@ export const toolActionFromResult = (name: string, ok: boolean, content: string,
                 : tool === 'revise_skill' ? 'revised'
                     : tool === 'amend_memory' ? 'amended'
                         : tool === 'forget' ? 'removed'
-                            : tool === 'remember' ? 'saved' : 'created');
+                            : tool === 'emit_signal' ? 'emitted'
+                                : tool === 'remember' ? 'saved' : 'created');
     if (!ok) {
         return { at, speaker, tool: name, ok: false, verb: verbFor(name), label: 'rejected', review: '' };
     }
@@ -91,7 +92,11 @@ export const toolActionFromResult = (name: string, ok: boolean, content: string,
     let verb = verbFor(name);
     try {
         const parsed = JSON.parse(content) as Record<string, unknown>;
-        if (name === 'forge_tool') {
+        if (name === 'emit_signal') {
+            label = `${parsed.coin ?? 'signal'} ${String(parsed.direction ?? '').toLowerCase()} · ${parsed.rr ?? '?'}R`;
+            review = 'Journal → Signals (recorded — settles against the tape)';
+            verb = 'emitted';
+        } else if (name === 'forge_tool') {
             label = String(parsed.id ?? parsed.name ?? 'tool');
             review = 'Settings → Skills → Forged tools';
             verb = 'proposed';
@@ -134,7 +139,7 @@ export const toolActionFromResult = (name: string, ok: boolean, content: string,
 /** Proposals + custom tools, for the loop's per-result classification. */
 const isActionableToolResult = (r: DeskToolResult): boolean =>
     r.name === 'forge_tool' || r.name === 'amend_memory' || r.name === 'propose_skill' || r.name === 'revise_skill' || r.name === 'write_memory_note'
-        || r.name === 'propose_strategy'
+        || r.name === 'propose_strategy' || r.name === 'emit_signal'
     || r.name === 'remember' || r.name === 'forget'
     || r.name.startsWith('custom_');
 
@@ -864,6 +869,7 @@ const TOOL_LABELS: Record<string, string> = {
     run_monte_carlo: 'monte carlo',
     recall_chat: 'session search',
     project_future_price: 'price projection',
+    emit_signal: 'signal',
     send_message: 'direct message',
     read_message: 'read inbox',
     list_goals: 'goal list',
@@ -1891,6 +1897,29 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
             },
         },
     },
+    {
+        type: 'function',
+        function: {
+            name: 'emit_signal',
+            description:
+                'Emit a SIGNAL: a direction, entry, stop, target and expiry that the harness records and later settles against the tape (OKX candles with a Binance cross-check). Use this when you have an actionable call worth grading — every emission is scored on outcome R after fees, so emit on a real read, not on every chart. This places no trade and creates no journal row; the trader sees it in Journal → Signals.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    coin: { type: 'string', description: 'Instrument, e.g. BTCUSDT (default: the chart symbol).' },
+                    direction: { type: 'string', enum: ['Long', 'Short'] },
+                    entry: { type: 'number', description: 'Entry price.' },
+                    stop: { type: 'number', description: 'Stop price (below entry for Long, above for Short).' },
+                    target: { type: 'number', description: 'Target price.' },
+                    expiresInMinutes: { type: 'number', description: 'How long the call stays live: 15-1440 minutes.' },
+                    thesis: { type: 'string', description: 'One sentence on what the call rests on.' },
+                    evidence: { type: 'array', items: { type: 'string' }, description: 'The readings, levels or tool results behind it (1-8).' },
+                },
+                required: ['direction', 'entry', 'stop', 'target', 'expiresInMinutes', 'thesis', 'evidence'],
+                additionalProperties: false,
+            },
+        },
+    },
 ];
 
 /**
@@ -1920,6 +1949,7 @@ export const INITIAL_DESK_TOOL_NAMES: readonly string[] = [
     'read_tool_output',
     'recall',
     'web_search',
+    'emit_signal',
     'ask_user_input',
 ];
 
@@ -2843,6 +2873,12 @@ export interface DeskToolContext {
      *  on a turn that just read a page, is the injection path the prompt alone
      *  cannot close. Set by the turn loop, never by a caller. */
     untrustedSeen?: boolean;
+    /** The provider/model serving THIS turn, for the provenance a written
+     *  record carries (the signal ledger). This is the REQUESTED model; a
+     *  provider-side substitution is not visible here, so a record without
+     *  this reads 'unknown' rather than guessing. */
+    modelName?: string;
+    providerId?: string;
 }
 
 /** Tools whose RESULT is text this app did not write and the trader did not
@@ -3303,6 +3339,46 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                 content = `# ${row.slug}\n\n${substitute(skill.meta.body)}`
                     + (bundled.length ? `\n\n## Bundled files (open one with file_path)\n${bundled.map(b => `- ${b}`).join('\n')}` : '');
                 break;
+            }
+            case 'emit_signal': {
+                // The harness's own call, recorded on the trader's ledger. The
+                // shadow gate and the evidence check never block this write.
+                try {
+                    const { emitSignal } = await import('../signals/signalService');
+                    const outcome = emitSignal(call.arguments, {
+                        defaultSymbol: context.defaultSymbol ?? fallback,
+                        markAtEmit: (context.getLiveMarkPrice?.() ?? context.liveMarkPrice) ?? null,
+                        formingCandle: (context.getFormingCandle?.() ?? context.formingCandle) ?? null,
+                        model: context.modelName,
+                        provider: context.providerId,
+                    });
+                    if (!outcome.ok) {
+                        return rejectedResult(call, `emit_signal rejected: ${outcome.error}`);
+                    }
+                    const s = outcome.signal;
+                    const risk = Math.abs(s.entry - s.stop);
+                    return {
+                        toolCallId: call.id,
+                        name: call.name,
+                        ok: true,
+                        content: JSON.stringify({
+                            recorded: true,
+                            id: s.id,
+                            coin: s.coin,
+                            direction: s.direction,
+                            entry: s.entry,
+                            stop: s.stop,
+                            target: s.target,
+                            rr: risk > 0 ? Number((Math.abs(s.target - s.entry) / risk).toFixed(2)) : null,
+                            expiresAt: new Date(s.expiresAt).toISOString(),
+                            promptVersion: s.promptVersion,
+                            note: 'Recorded in Journal → Signals. It settles itself against the tape after expiry; do not call it a trade and do not promise an outcome.',
+                        }),
+                        symbol: s.coin,
+                    };
+                } catch (e) {
+                    return rejectedResult(call, `emit_signal rejected: ${e instanceof Error ? e.message : String(e)}`);
+                }
             }
             case 'remember': {
                 // The collaboration memory (this environment's MEMORY.md analogue):
@@ -5254,6 +5330,8 @@ export async function runDeskToolLoop(params: {
                 memoryEnabled,
                 lastUserMessage,
                 untrustedSeen,
+                modelName: config.selectedModel,
+                providerId: config.id,
                 onSlowCall: label => onToolProgress?.(`${label} · still working…`),
             })
             : [];

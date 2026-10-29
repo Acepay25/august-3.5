@@ -2322,3 +2322,83 @@ field 3 times at `1b43e5a7` and 0 times now; `AlgorithmicMemoryService` had 1 as
 `useAppSettings` state and its persistence round-trip remain — they are the backup path, not a
 runtime input. `docs/research/TRADING-IMPROVEMENTS.md` P4 (wire or delete the consolidation half)
 is still an open decision.
+
+## 48. Phase 1 of the signal loop (2026-10-29)
+
+**Scope (owner).** An append-only signal ledger, a deterministic resolver, a minimal `emit_signal`,
+a Signal Card + Feed, and both gates in SHADOW. Nothing consumes resolved signals yet.
+
+**What landed.**
+- `types/signal.ts` — the ledger vocabulary. A signal is a direction, entry/stop/target, expiry,
+  evidence refs, a tape hash, requested provider/model and the emit prompt revision; a resolution
+  carries gross R, the named round-trip cost, net R, the bars it read, the path, ambiguity, and the
+  venue provenance (`primarySource`, `crossCheck`).
+- `services/signals/signalLedger.ts` — one localStorage namespace per user
+  (`signal_ledger_v1:<user>`), append-only events (`emit`/`gate`/`ground`/`resolve`). A second
+  resolution for one id is REFUSED, so history cannot be rewritten. The cap drops whole oldest
+  signals (150 or 200 KiB), never an isolated event. Registered on both `ExportService` lists and
+  capped for backup (256 KiB) — a restore carries the calls, not just the journal.
+- `services/signals/signalResolver.ts` — closed-candle settlement. Entry touch fills; the first stop
+  or target after that decides; a bar with both drills into 1m and settles STOP-FIRST when the order
+  is still unknowable (`ambiguous: true`). At expiry the open call is marked to the last closed bar.
+  A call with no entry touch is `never_triggered` (R 0, no cost), not a loss. No lookahead: a bar
+  must OPEN at/after emission and CLOSE by expiry. Costs: `SIGNAL_TAKER_FEE_RATE` 5 bps +
+  `SIGNAL_SLIPPAGE_RATE` 2 bps per side, charged in R against the stop distance.
+- `services/signals/signalMarketData.ts` — OKX 5m closed candles are primary (public, keyless), 1m
+  is the drill-down, Binance 5m is the cross-check on the bars that DECIDED the call (10 bps
+  tolerance; a missing bar reads `unavailable`, never `agree`). A tape that starts after the
+  emission cannot settle the call — it stays open and the feed says why.
+- `services/signals/signalService.ts` — `emitSignal` validates coin/bracket/expiry/evidence before
+  writing; the two shadows never block: the programmatic gate (`GateKeeperService`) runs
+  fire-and-forget and is appended as a `gate` event, and the evidence check is local and synchronous
+  (`ground` event: tool-like refs must name real desk tools; prose refs are citations).
+  `settleDueSignals` fetches at most 4 open signals per pass (60 s cooldown; the feed's button
+  forces) so a UI mount cannot fan out one series per signal ever emitted.
+- Desk tool: `emit_signal` is in `DESK_TOOL_DEFINITIONS` and the INITIAL set (14 tools now; its
+  schema is 1,296 chars, initial set 11,351 of 42,726). The executor maps the turn's `liveMarkPrice`
+  / forming candle onto the tape hash and takes `modelName`/`providerId` from the loop (the REQUESTED
+  model; a provider-side substitution is not visible here, so an absent value reads `unknown`).
+  The transcript gets a chip ("BTCUSDT long · 3R — Journal → Signals"); the Agents surface carries
+  the tool, a detached skill evaluator does not (`UNATTENDED_DENY`).
+- UI: Journal gains a **Signals** tab (`SignalFeed` + `SignalCard`) — summary strip (hit rate,
+  expectancy after costs, ambiguity rate, emitted/open/no-entry, shadow-gate sides), the card's
+  levels and outcome, and a settle button. The empty state explains what a signal is.
+
+**Live settlement receipt (real tape, synthetic bracket).** Anchored to the OKX 5m bar closed
+2026-10-29 11:10 UTC (BTC-USDT close 80,210.7), entry 80,210.7 / stop 79,408.6 / target 81,012.8,
+expiry one minute before the run:
+
+```
+SETTLE RESULT {"attempted":1,"resolved":1,"skipped":[]}
+RESOLUTION {"status":"expired","grossR":0.1379,"feeR":0.1400,"outcomeR":-0.0021,
+            "path":"bar","ambiguous":false,"crossCheck":"agree","primarySource":"okx"}
+```
+
+35 closed 5m bars were read; the Binance cross-check agreed on every deciding bar. That is the
+honest shape of a 1 %-stop call: the 0.14 % round trip nearly cancels a +0.14 R drift.
+
+**Verification.** Contract 20 (26 cases): bracket rules, cost math, target-first win, stop-first
+loss, both-hit stop-first without a drill, 1m drill ordering, a 1m bar with both still ambiguous,
+expiry mark-to-market, post-expiry and pre-emission bars excluded, never-triggered at zero cost,
+the summary's fill/never-triggered split and per-side gate means, ledger append/fold/duplicate-
+resolution refusal/cap, OKX parse (closed only, ascending), cross-check agree/disagree/unavailable,
+tape coverage, and the emission refusals (inverted bracket, expiry range, empty evidence) plus the
+evidence shadow. `typecheck` · `check:contracts` **230** · `check:boundaries` (532 files, 2,278
+edges) · `check:docs` · `lint` **375/379** · `build` · `boot-probe` · `render-probe` (5 new rows:
+Signals tab reachable, feed mounts, seeded card drawn, outcome after costs stated, venue
+cross-check named). Plus two node harnesses: the desk tool writing ledger bytes through the real
+executor (provenance, tape hash, cited/missing evidence, inverted bracket writes nothing), and the
+live settlement above.
+
+**Residues (none of them hidden in the UI).**
+- Resolution starts at the first FULL 5m bar after emission; a fill in the emission bar's remaining
+  seconds is not counted. Conservative by the no-lookahead rule.
+- OKX `/market/candles` is 300 bars (25 h). Signals older than that stay open with a named reason;
+  no history pagination yet.
+- Settlement is a feed-mount pass (4 signals, 60 s cooldown), not a background timer. An app left
+  open past an expiry settles on the next Signals visit.
+- The gate shadow costs one `fetchGateInputData` scan (5 public reads) per emission, in the
+  background. The evidence shadow is local; `dataHash` fingerprints the app-known mark/forming
+  candle, not the whole prompt.
+- Nothing reads resolutions yet: no skill fold, no calibration, no base rate. That is the scoped
+  next phase.

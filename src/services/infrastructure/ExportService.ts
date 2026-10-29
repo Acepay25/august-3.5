@@ -407,6 +407,11 @@ const RAW_LOCAL_STORAGE_PREFIXES: readonly string[] = [
     // model has already read and said about each queue item, so a triage-only pass
     // does not re-review it forever. Raw localStorage owner.
     'supervisor_triaged_v1',
+    // The signal ledger (services/signals/signalLedger.ts): emitted calls and
+    // their resolutions, `signal_ledger_v1:<user>`. Raw owner like the rest —
+    // leaving it out would make a restored profile forget every call the desk
+    // was graded on while the journal came back.
+    'signal_ledger_v1',
 ];
 
 /** The cap for a SMALL raw-localStorage store. The notebook's own hard ceiling is
@@ -455,6 +460,10 @@ const EXPORT_KEY_CAPS: ReadonlyArray<{ prefix: string; bytes: number }> = [
     { prefix: 'trade_session_model_v1', bytes: 1024 * 1024 },
     { prefix: 'desk_tools_forged_v1', bytes: 256 * 1024 },
     { prefix: 'trading_checklist_v1', bytes: 64 * 1024 },
+    // The ledger's own store cap is 200 KiB (`LEDGER_BYTE_CAP`); the backup cap
+    // sits just above it so a normally-pruned store is never left out, and a
+    // corrupt oversized one is named rather than silently truncated.
+    { prefix: 'signal_ledger_v1', bytes: 256 * 1024 },
 ];
 
 /** The placeholder that replaces an image payload in an EXPORT COPY. Text, order
@@ -811,6 +820,10 @@ const RESTORABLE_PREFERENCE_KEY_PREFIXES: readonly string[] = [
     'trader_learning_v1',
     'trader_learner_counter_v1',
     'supervisor_auto_v1',
+    // The signal ledger — emitted calls and their resolutions. Scoped
+    // `signal_ledger_v1:<user>`; without this prefix a restore would return the
+    // journal but drop the calls the desk was graded on.
+    'signal_ledger_v1',
     // The supervisor's own throttle stamp (skillSupervisor.ts, LAST_RUN_KEY).
     // Was in NEITHER list: the export sweep found it in localStorage and wrote
     // it into every backup, then import dropped it as un-allow-listed — a key

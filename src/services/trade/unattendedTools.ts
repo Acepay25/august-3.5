@@ -25,6 +25,9 @@ export const UNATTENDED_DENY = [
     // Nor reshape the harness it runs in. Reading the change ledger is allowed;
     // moving a knob or a prompt is not, in a run nobody is watching.
     'propose_self_change', 'revert_self_change',
+    // A signal is a call on the trader's ledger; a detached skill evaluator
+    // judges skills, it does not put calls on the record.
+    'emit_signal',
 ];
 
 export const DETACHED_EVAL_TOOLS: string[] = CHAT_SURFACE_TOOLS.filter(

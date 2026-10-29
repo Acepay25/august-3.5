@@ -2527,9 +2527,67 @@ async function main() {
             reflectionSeen.opened >= 2 && reflectionSeen.withNote === 1,
             `opened=${reflectionSeen.opened} withNote=${reflectionSeen.withNote}`);
 
-        // The Journal is a TWO-tab surface (History | Stats), and the History
-        // tab is where the trade ledger's filters, row actions and insight
-        // controls live — the screenshot of it is not "a header and two
+        // ── Journal → Signals: the desk's own call record ─────────────────
+        // The feed is a rendered LIST, so no other gate can see it. Seed one
+        // emitted-and-resolved call into the ledger and assert the card draws
+        // the settled outcome in R — a feed that mounts empty passes every
+        // component-level check there is.
+        const signalKey = await page.evaluate(() => {
+            const user = localStorage.getItem('last_active_user') || 'default';
+            const at = Date.now() - 60 * 60 * 1000;
+            const key = `signal_ledger_v1:${user}`;
+            const signal = {
+                id: 'sig-probe-1', coin: 'BTCUSDT', direction: 'long',
+                entry: 100, stop: 99, target: 103,
+                emittedAt: at, expiresAt: at + 15 * 60 * 1000,
+                evidenceRefs: ['get_market_packet', 'the 1h shelf at 99.5k'],
+                dataHash: 'deadbeef', provider: 'mock', model: 'mock-mini', promptVersion: 'emit-signal-v1',
+                source: 'signal', thesis: 'Reclaim of the 1h shelf; stop under the sweep.',
+            };
+            const resolution = {
+                status: 'won', at: at + 16 * 60 * 1000,
+                grossR: 3, feeR: 0.14, outcomeR: 2.86,
+                usedBarTimes: [at + 5 * 60 * 1000], path: 'bar', ambiguous: false,
+                crossCheck: 'agree', primarySource: 'okx',
+            };
+            localStorage.setItem(key, JSON.stringify([
+                { v: 1, type: 'emit', at, id: signal.id, signal },
+                { v: 1, type: 'ground', at, id: signal.id, grounding: { at, verdict: 'cited', missing: [] } },
+                { v: 1, type: 'gate', at: at + 1000, id: signal.id, gate: { status: 'pass', at: at + 1000, confidenceCap: 0.85, reason: 'probe' } },
+                { v: 1, type: 'resolve', at: at + 16 * 60 * 1000, id: signal.id, resolution },
+            ]));
+            return key;
+        });
+        const signalsTab = await page.evaluate(() => {
+            const tab = document.querySelector('#journal-tab-signals');
+            if (tab) tab.click();
+            return !!tab;
+        });
+        check('the Signals tab is reachable from the Journal', signalsTab === true,
+            signalsTab ? `seeded ${signalKey}` : 'no #journal-tab-signals control');
+        const signalFeed = page.locator('[data-testid="signal-feed"]');
+        const feedMounted = await pollFor(async () => (await signalFeed.count()) === 1);
+        check('Journal → Signals mounts the feed', feedMounted === true, `${feedMounted}`);
+        if (feedMounted) {
+            const card = page.locator('[data-testid="signal-card"]');
+            await pollFor(async () => (await card.count()) >= 1);
+            const cards = await card.count();
+            check('the feed draws the seeded signal as a card', cards === 1, `${cards} cards`);
+            if (cards === 1) {
+                const cardText = await card.first().innerText();
+                check('the card states the settled outcome after costs',
+                    /won/i.test(cardText) && /\+2\.86R/.test(cardText), cardText.slice(0, 160));
+                check('the card names the venue cross-check rather than assuming it',
+                    /cross-checked OKX\/Binance/.test(cardText), cardText.slice(0, 200));
+            }
+        }
+        // Back to History for the generic sweep below.
+        await page.evaluate(() => document.querySelector('#journal-tab-log')?.click());
+        await sleep(400);
+
+        // The Journal is a THREE-tab surface (History | Signals | Stats), and
+        // the History tab is where the trade ledger's filters, row actions and
+        // insight controls live — the screenshot of it is not "a header and two
         // exports". Sweep both views at the generic cap; the sweep's per-view
         // budget splits it, so neither tab can hide behind the other.
         await sweepSurface('Journal', 12, ['journal-tab-analytics']);
