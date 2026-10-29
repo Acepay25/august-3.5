@@ -1544,6 +1544,17 @@ const HARNESS_REGENERATED_FILES: ReadonlySet<string> = new Set([
 const isHarnessRegeneratedFile = (folderName: string, fileName: string): boolean =>
     HARNESS_REGENERATED_FILES.has(`${folderName}/${fileName}`);
 
+/** Is this file rebuilt wholesale by a harness pass (profile memory, pattern
+ *  memory, doctrine, recurring mistakes, suggestions)? Model notes are
+ *  autoManaged too — for the prune pass — but they are NOT regenerated, so the
+ *  amendment path must not confuse the two. */
+export const isHarnessRegeneratedTarget = (
+    file: Pick<MemoryFile, 'folderId' | 'name'>,
+): boolean => {
+    const folder = memoryCache.folders.find(f => f.id === file.folderId);
+    return !!folder && isHarnessRegeneratedFile(folder.name, file.name);
+};
+
 export const writeModelNoteUnlocked = async (note: ModelNote, username: string): Promise<MemoryFile> => {
     let cleanFolder = slugifyName(note.folder) || 'lessons';
     if (cleanFolder === 'skills') cleanFolder = 'lessons';

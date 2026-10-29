@@ -13,6 +13,7 @@ import {
     listAmendments,
     approveAmendment,
     rejectAmendment,
+    undoAmendment,
 } from '../../services/learning/memoryAmendments';
 import { getActiveUsername } from '../../utils/activeUser';
 import { phtStamp } from '../../utils/timezone';
@@ -22,6 +23,7 @@ const StatusBadge: React.FC<{ a: MemoryAmendment }> = ({ a }) => {
         pending: 'bg-amber-950/60 text-amber-400',
         approved: 'bg-emerald-950/60 text-emerald-400',
         rejected: 'bg-zinc-900 text-zinc-600 line-through',
+        undone: 'bg-zinc-900 text-zinc-500',
     };
     return (
         <span className={`rounded-control px-1.5 py-0.5 text-ui-xs font-bold uppercase tracking-wider ${map[a.status]}`}>
@@ -71,6 +73,18 @@ export const AmendmentsInbox: React.FC = () => {
             setSaveError(quota
                 ? 'Storage is full, so this was not saved. The proposal is still pending — free space or delete old backups, then try again.'
                 : 'This could not be saved. The failure is recorded on the Memory health card; check it before assuming the change stuck.');
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    const undo = async (a: MemoryAmendment): Promise<void> => {
+        setBusyId(a.id);
+        setSaveError(null);
+        try {
+            const r = await undoAmendment(a.id, getActiveUsername());
+            if (!r.ok) setSaveError(r.error ?? 'That correction could not be undone.');
+            refresh();
         } finally {
             setBusyId(null);
         }
@@ -131,7 +145,14 @@ export const AmendmentsInbox: React.FC = () => {
                             <div key={a.id} className="flex items-center gap-2 text-ui-dense text-zinc-500">
                                 <StatusBadge a={a} />
                                 <code className="text-zinc-400">{a.fileName}</code>
-                                <span className="truncate text-zinc-600" title={a.reason}>{a.reason}</span>
+                                <span className="min-w-0 flex-1 truncate text-zinc-600" title={a.reason}>{a.reason}</span>
+                                {a.status === 'approved' && typeof a.previousContent === 'string' && (
+                                    <button type="button" disabled={busyId === a.id} onClick={() => { void undo(a); }}
+                                        data-testid={`undo-amendment-${a.id}`}
+                                        className="shrink-0 rounded-control border border-zinc-800 px-2 py-0.5 text-ui-2xs font-semibold text-zinc-300 hover:border-white/25 hover:text-zinc-100 disabled:opacity-40">
+                                        Undo
+                                    </button>
+                                )}
                             </div>
                         ))}
                     </div>

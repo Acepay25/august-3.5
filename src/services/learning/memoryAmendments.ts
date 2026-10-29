@@ -3,18 +3,18 @@
  *
  * writeModelNote can only CREATE/APPEND, so a wrong model-authored note
  * accumulates forever. This module gives models a second, gated path:
- * PROPOSE an amendment (edit or supersede an existing notebook file),
- * stored as a pending diff. A human approves or rejects it in
- * Settings → Memory; nothing in the notebook changes on proposal.
+ * apply an amendment (edit or supersede an existing notebook file) DIRECTLY
+ * (owner ruling 2026-10-29: no human approval gate). Every applied row keeps
+ * the previous and applied bytes, so the log can undo it.
  *
- * Provenance is mandatory: who proposed, when, why, and exactly what
- * changes. Rejected proposals are kept ( tombstoned ) so a model cannot
- * re-propose the same correction forever.
+ * Provenance is mandatory: who wrote, when, why, and exactly what changed.
+ * Rejected rows are kept (tombstoned) so the same correction's history is
+ * visible.
  */
 
 import { MemoryFile } from '../../types/learning';
 import { bytesOf } from '../../utils/memoryBudget';
-import { clearMemoryWriteFailure, recordMemoryWriteFailure } from './MemoryFilesService';
+import { clearMemoryWriteFailure, isHarnessRegeneratedTarget, recordMemoryWriteFailure } from './MemoryFilesService';
 
 export interface MemoryAmendment {
     id: string;
@@ -28,11 +28,18 @@ export interface MemoryAmendment {
     reason: string;
     /** Which provider/model proposed it (provenance). */
     proposedBy: string;
-    status: 'pending' | 'approved' | 'rejected';
+    status: 'pending' | 'approved' | 'rejected' | 'undone';
     createdAt: string;
     /** Resolution metadata. */
     resolvedAt?: string;
-    resolvedBy?: 'user';
+    resolvedBy?: 'user' | 'model';
+    /** Direct-write history: the file before and after this correction, so the
+     *  activity log can undo it without a second store. */
+    previousContent?: string;
+    appliedContent?: string;
+    appliedAt?: string;
+    undoneAt?: string;
+    sourceTurnId?: string;
 }
 
 const KEY_PREFIX = 'memory_amendments_v1';
@@ -106,7 +113,9 @@ export const validateAmendment = (input: {
     if (input.proposedContent.length > 8000) errors.push('proposedContent exceeds 8000 chars');
     if (!(input.reason ?? '').trim()) errors.push('reason is required');
     if (!input.targetFile) errors.push('target file not found');
-    else if (input.targetFile.autoManaged) errors.push('auto-managed files (diary/profile/rules) cannot be amended — they are harness-owned');
+    // Model notes are autoManaged (the prune pass uses that flag) but are NOT
+    // rebuilt by the harness. Only a genuinely regenerated file is refused.
+    else if (isHarnessRegeneratedTarget(input.targetFile)) errors.push('harness-regenerated files (profile memory, pattern memory, doctrine, recurring mistakes, suggestions) cannot be amended — they are rebuilt by the harness');
     else if (input.proposedContent === input.targetFile.content) errors.push('proposed content is identical to the current content');
     return { ok: errors.length === 0, errors };
 };
@@ -182,6 +191,82 @@ ${a.proposedContent}`
             : a.proposedContent;
         try {
             await updateMemoryFileUnlocked(a.fileId, { content: next }, username);
+            return { ok: true };
+        } catch (e) {
+            return { ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
+    });
+};
+
+/**
+ * Apply a correction immediately — the direct-write path (owner ruling
+ * 2026-10-29: no human approval gate on memory writes). The row is the activity
+ * log: it records the before/after bytes so Undo can restore them.
+ */
+export const applyAmendmentNow = async (
+    input: {
+        fileId: string;
+        kind: 'edit' | 'supersede';
+        proposedContent: string;
+        reason: string;
+        proposedBy: string;
+        sourceTurnId?: string;
+    },
+    resolveFile: (id: string) => MemoryFile | null,
+    username: string,
+): Promise<{ ok: boolean; amendment?: MemoryAmendment; error?: string }> => {
+    const amendment = proposeAmendment(
+        input.fileId,
+        input.kind,
+        input.proposedContent,
+        input.reason,
+        input.proposedBy,
+        resolveFile,
+    );
+    amendment.sourceTurnId = input.sourceTurnId;
+    const target = resolveFile(input.fileId);
+    const previousContent = target?.content ?? '';
+    const applied = await applyAmendmentContent(amendment, username);
+    if (!applied.ok) {
+        amendment.status = 'rejected';
+        amendment.resolvedAt = nowIso();
+        amendment.resolvedBy = 'model';
+        save(load().map(a => a.id === amendment.id ? amendment : a));
+        return { ok: false, amendment, error: applied.error };
+    }
+    amendment.status = 'approved';
+    amendment.resolvedAt = nowIso();
+    amendment.appliedAt = amendment.resolvedAt;
+    amendment.resolvedBy = 'model';
+    amendment.previousContent = previousContent;
+    amendment.appliedContent = resolveFile(input.fileId)?.content ?? '';
+    save(load().map(a => a.id === amendment.id ? amendment : a));
+    return { ok: true, amendment };
+};
+
+/** Undo one applied correction. Refuses when the note changed after it landed —
+ *  restoring a stale snapshot would silently erase the newer edit. */
+export const undoAmendment = async (
+    id: string,
+    username: string,
+): Promise<{ ok: boolean; error?: string }> => {
+    const items = load();
+    const a = items.find(x => x.id === id);
+    if (!a || a.status !== 'approved' || typeof a.previousContent !== 'string') {
+        return { ok: false, error: 'that correction is not undoable' };
+    }
+    const { getMemoryFiles, updateMemoryFileUnlocked, withNotebookWriteLock } = await import('./MemoryFilesService');
+    return withNotebookWriteLock(async () => {
+        const file = getMemoryFiles().files.find(f => f.id === a.fileId);
+        if (!file) return { ok: false, error: 'the note no longer exists' };
+        if (a.appliedContent !== undefined && file.content !== a.appliedContent) {
+            return { ok: false, error: 'the note changed after this correction, so undo was refused' };
+        }
+        try {
+            await updateMemoryFileUnlocked(a.fileId, { content: a.previousContent as string }, username);
+            a.status = 'undone';
+            a.undoneAt = nowIso();
+            save(load().map(x => x.id === a.id ? a : x));
             return { ok: true };
         } catch (e) {
             return { ok: false, error: e instanceof Error ? e.message : String(e) };

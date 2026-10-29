@@ -41,6 +41,8 @@ export interface ProfileMemoryEntry {
     /** Provenance: who wrote it — the model via remember(), the automatic
      *  trader learner ('auto'), or a human edit. Absent on legacy rows. */
     source?: 'model' | 'auto' | 'user';
+    /** The two-author vocabulary the trader can audit: who wrote the row. */
+    author?: 'trader' | 'model';
     createdAt: string;
     updatedAt: string;
     /** Optimistic-lock counter, incremented on every write. Absent on legacy
@@ -69,6 +71,12 @@ export interface ProfileMemoryEntry {
      *  "which session did it learn this in" has an answer, and a fact the model
      *  cannot place is a fact the trader cannot audit. */
     sourceSession?: string;
+    /** The exact tool call / turn that produced the write. */
+    sourceTurnId?: string;
+    /** Soft delete: the row leaves every reader but stays restorable for 30
+     *  days. `deletedBy` says whose hand removed it. */
+    deletedAt?: string;
+    deletedBy?: 'trader' | 'model';
     /** The row as it read BEFORE this edit — "now X, previously Y". One
      *  generation deep; the history is provenance, not a version store. */
     previous?: { body: string; description: string; updatedAt: string };
@@ -158,7 +166,13 @@ const writeAll = (user: string, entries: ProfileMemoryEntry[]): void => {
 
 /** All entries for the active user, oldest first. */
 export const listProfileMemories = (username?: string): ProfileMemoryEntry[] =>
-    readAll(username || getActiveUsername());
+    readAll(username || getActiveUsername()).filter(e => !e.deletedAt);
+
+/** Soft-deleted rows, newest first — the undo list behind the 30-day window. */
+export const listDeletedProfileMemories = (username?: string): ProfileMemoryEntry[] =>
+    readAll(username || getActiveUsername())
+        .filter(e => Boolean(e.deletedAt))
+        .sort((a, b) => String(b.deletedAt).localeCompare(String(a.deletedAt)));
 
 export const getProfileMemory = (slug: string, username?: string): ProfileMemoryEntry | undefined =>
     listProfileMemories(username).find(e => e.slug === slug);
@@ -183,6 +197,8 @@ export const rememberProfileMemory = (input: {
     /** Provenance of the fact — only 'stated' is writable by the chat agent;
      *  'observed'/'inferred' come from separate system paths. */
     tag?: ProfileMemoryEntry['tag'];
+    author?: ProfileMemoryEntry['author'];
+    sourceTurnId?: string;
     /** Sensitive-category flag (the caller decides, from the user's setting,
      *  whether a detected sensitive write is refused or flagged). */
     sensitive?: boolean;
@@ -224,6 +240,12 @@ ${input.body}`);
         body: input.body.trim().slice(0, MAX_BODY_CHARS),
         ...(input.source ? { source: input.source } : {}),
         ...(input.tag ? { tag: input.tag } : {}),
+        ...(input.author ? { author: input.author } : {}),
+        ...(input.sourceTurnId?.trim() ? { sourceTurnId: input.sourceTurnId.trim().slice(0, 120) } : {}),
+        // Re-saving a soft-deleted slug revives it; the merge below overrides
+        // the old tombstone with these two cleared fields.
+        deletedAt: undefined,
+        deletedBy: undefined,
         ...(sensitive ? { sensitive: true } : {}),
         ...(input.aliases ? { aliases: input.aliases.map(a => a.trim()).filter(Boolean).slice(0, 8) } : {}),
         ...(subjectField ? { subject: subjectField } : {}),
@@ -253,7 +275,7 @@ ${input.body}`);
             error: 'this fact is in a sensitive category and sensitive memory is off — nothing was written',
         };
     }
-    if (created && all.length >= MAX_ENTRIES) {
+    if (created && all.filter(e => !e.deletedAt).length >= MAX_ENTRIES) {
         // The ceiling refuses instead of evicting. `rememberWithConsolidation`
         // frees room first (merge the two oldest non-sensitive rows) and is the
         // path the `remember` tool takes; a caller that skips it gets this
@@ -287,6 +309,8 @@ export interface ForgetResult {
      *  were already merged away, and a forget that could not say so would be
      *  silently erasing more of the trader's record than it names. */
     carried: string[];
+    /** The 30-day undo deadline, when the delete succeeded. */
+    undoUntil?: string;
 }
 
 /**
@@ -304,21 +328,28 @@ export interface ForgetResult {
  * `ForgetResult` would otherwise report success on a forget that deleted
  * nothing.
  */
-export const forgetProfileMemory = (slug: string, username?: string): ForgetResult => {
+export const forgetProfileMemory = (
+    slug: string,
+    username?: string,
+    by: 'trader' | 'model' = 'trader',
+): ForgetResult => {
     const user = username || getActiveUsername();
     const all = readAll(user);
-    const target = all.find(e => e.slug === slug);
+    const target = all.find(e => e.slug === slug && !e.deletedAt);
     if (!target) return { gone: false, removed: [], carried: [] };
     const doomed = new Set<string>([slug]);
     for (let grew = true; grew;) {
         grew = false;
         for (const e of all) {
-            if (doomed.has(e.slug)) continue;
+            if (e.deletedAt || doomed.has(e.slug)) continue;
             const src = e.derivedFrom ?? [];
             if (src.length > 0 && src.every(s => doomed.has(s))) { doomed.add(e.slug); grew = true; }
         }
     }
-    const next = all.filter(e => !doomed.has(e.slug));
+    const deletedAt = new Date().toISOString();
+    const next = all.map(e => doomed.has(e.slug) && !e.deletedAt
+        ? { ...e, deletedAt, deletedBy: by, updatedAt: deletedAt, version: (e.version ?? 1) + 1 }
+        : e);
     try {
         writeAll(user, next);
     } catch {
@@ -326,9 +357,41 @@ export const forgetProfileMemory = (slug: string, username?: string): ForgetResu
     }
     return {
         gone: true,
-        removed: [slug, ...all.filter(e => doomed.has(e.slug) && e.slug !== slug).map(e => e.slug)],
+        removed: [slug, ...all.filter(e => doomed.has(e.slug) && e.slug !== slug && !e.deletedAt).map(e => e.slug)],
         carried: target.derivedFrom ?? [],
+        undoUntil: new Date(Date.now() + 30 * 86_400_000).toISOString(),
     };
+};
+
+/** Undo a soft delete. False when the slug is not currently deleted. */
+export const restoreProfileMemory = (slug: string, username?: string): boolean => {
+    const user = username || getActiveUsername();
+    const all = readAll(user);
+    const idx = all.findIndex(e => e.slug === slug && Boolean(e.deletedAt));
+    if (idx < 0) return false;
+    const restored = { ...all[idx] };
+    delete restored.deletedAt;
+    delete restored.deletedBy;
+    all[idx] = restored;
+    try {
+        writeAll(user, all);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+/** The undo window is a hard 30 days; a cleanup pass may call this. */
+export const purgeDeletedProfileMemories = (username?: string, days = 30): number => {
+    const user = username || getActiveUsername();
+    const all = readAll(user);
+    const cutoff = Date.now() - Math.max(1, days) * 86_400_000;
+    const next = all.filter(e => !e.deletedAt || Date.parse(e.deletedAt) >= cutoff);
+    const removed = all.length - next.length;
+    if (removed > 0) {
+        try { writeAll(user, next); } catch { return 0; }
+    }
+    return removed;
 };
 
 /**
@@ -379,7 +442,11 @@ export const buildProfileMemoryIndex = (username?: string, maxLines = INDEX_MAX_
     // into every turn, including turns that have nothing to do with health,
     // money or identity. It stays readable by explicit slug when the trader
     // asks; it is not advertised to every future prompt.
-    const visible = listProfileMemories(username).filter(e => !e.sensitive);
+    // Observed/inferred rows are CONTEXT, not instructions: they never ride the
+    // always-on index. A reader that wants them asks by slug (read_memory), and
+    // the row itself carries its tag.
+    const visible = listProfileMemories(username)
+        .filter(e => !e.sensitive && e.tag !== 'observed' && e.tag !== 'inferred');
     if (visible.length === 0) return '';
     const newest = visible.slice(-maxLines);
     const lines = newest.map(e => {

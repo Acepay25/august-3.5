@@ -76,7 +76,13 @@ export const toolActionFromResult = (name: string, ok: boolean, content: string,
     const isCustom = name.startsWith('custom_');
     if (!isProposal && !isCustom) return null;
     const at = new Date().toISOString();
-    const verbFor = (tool: string): string => (tool === 'forge_tool' || tool === 'propose_skill' || tool === 'revise_skill' || tool === 'propose_strategy' ? 'proposed' : tool === 'amend_memory' ? 'amended' : tool === 'forget' ? 'removed' : tool === 'remember' ? 'saved' : 'created');
+    const verbFor = (tool: string): string => (
+        tool === 'forge_tool' || tool === 'propose_strategy' ? 'proposed'
+            : tool === 'propose_skill' ? 'created'
+                : tool === 'revise_skill' ? 'revised'
+                    : tool === 'amend_memory' ? 'amended'
+                        : tool === 'forget' ? 'removed'
+                            : tool === 'remember' ? 'saved' : 'created');
     if (!ok) {
         return { at, speaker, tool: name, ok: false, verb: verbFor(name), label: 'rejected', review: '' };
     }
@@ -90,12 +96,12 @@ export const toolActionFromResult = (name: string, ok: boolean, content: string,
             review = 'Settings → Skills → Forged tools';
             verb = 'proposed';
         } else if (name === 'amend_memory') {
-            label = `notebook/${parsed.id ?? 'amendment'}`;
-            review = 'Settings → Memory';
+            label = `notebook/${parsed.file ?? parsed.id ?? 'amendment'}`;
+            review = 'Learning → Approvals (log · Undo available)';
             verb = 'amended';
         } else if (name === 'propose_skill') {
             label = String(parsed.skill ?? 'skill');
-            review = 'the Coach inbox';
+            review = 'Settings → Skills (candidate — evidence sets its status)';
         } else if (name === 'propose_strategy') {
             // A plan is saved as a draft file, so the trader should be told
             // WHERE it went — otherwise a model can quietly fill the notebook.
@@ -103,10 +109,12 @@ export const toolActionFromResult = (name: string, ok: boolean, content: string,
             review = 'Settings → Skills → Trade plans (draft — nothing acts on it until you activate it)';
         } else if (name === 'revise_skill') {
             label = String(parsed.skill ?? 'skill');
-            review = 'Settings → Skills';
+            review = 'Settings → Skills (rewritten directly)';
         } else if (name === 'write_memory_note') {
-            label = String(parsed.file ?? 'note');
-            review = 'Settings → Memory';
+            label = `${String(parsed.where ?? parsed.file ?? 'note')}${parsed.tag === 'observed' ? ' · observed' : ''}`;
+            review = parsed.tag === 'observed'
+                ? 'Settings → Memory (context only — never a rule)'
+                : 'Settings → Memory';
         } else if (name === 'remember') {
             label = `${parsed.kind ?? 'memory'}/${parsed.slug ?? 'entry'}`;
             review = 'your memory index';
@@ -1034,9 +1042,10 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'amend_memory',
             description:
-                'Propose a CORRECTION to an existing Trader Notebook file (not skills, not diary) when you know its content is wrong or outdated. ' +
-                'Lands as a pending amendment a human must approve — the notebook does not change until then. ' +
-                'Use write access sparingly; prefer this over writing a duplicate contradicting note.',
+                'Apply a CORRECTION to an existing Trader Notebook file (not skills, not diary) DIRECTLY — no approval queue. ' +
+                'The log keeps the before/after and Undo. A correction to rules/ or profile/ needs `quote` — a verbatim ' +
+                'snippet of the trader’s own message — and is refused without one. Use sparingly; prefer this over a ' +
+                'duplicate contradicting note. Do not narrate this write in your reply.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1044,6 +1053,8 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     kind: { type: 'string', enum: ['edit', 'supersede'], description: 'edit = replace the whole file content; supersede = append a correcting section' },
                     proposed_content: { type: 'string', description: 'The corrected markdown content (edit) or the correcting section (supersede)' },
                     reason: { type: 'string', description: 'Why the current content is wrong — cite the evidence' },
+                    quote: { type: 'string', description: 'A verbatim snippet (8–400 chars) of the trader’s message stating the correction. Required for rules/ and profile/.' },
+                    if_version: { type: 'number', description: 'The target file’s version (updatedAt) the correction was based on. A mismatch returns the current content and writes nothing.' },
                 },
                 required: ['file_name', 'kind', 'proposed_content', 'reason'],
                 additionalProperties: false,
@@ -1084,14 +1095,20 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                 'Write or APPEND a durable lesson/knowledge note into your own Trader Notebook '
                 + '(folder + file name you choose, markdown content). Use when the market just taught '
                 + 'you something worth remembering across sessions — a repeatable pattern, a mistake to '
-                + 'avoid, an invalidation rule. Never write into diary/distilled (harness-owned). '
-                + 'This is a DIRECT write: it lands immediately in Settings → Memory.',
+                + 'avoid, an invalidation rule. DIRECT write: it lands immediately; the chat shows a chip. '
+                + 'STATEMENT RULE: anything saved into rules/ or profile/, or any note the trader stated, '
+                + 'needs `quote` — a verbatim snippet of the trader’s own message. Without a valid quote the '
+                + 'write is routed to reflections/ as [observed n=N] context, never a rule; `n` is required '
+                + 'for that route. Never narrate this write in your reply.',
             parameters: {
                 type: 'object',
                 properties: {
-                    folder: { type: 'string', description: 'Notebook folder, e.g. "lessons" or "market-conditions"' },
+                    folder: { type: 'string', description: 'Notebook folder, e.g. "lessons", "rules", "market-conditions" or "profile"' },
                     file_name: { type: 'string', description: 'File stem, e.g. "btc-funding-exhaustion" (no .md needed)' },
                     content: { type: 'string', description: 'Markdown content — a timeless statement, not a session log' },
+                    quote: { type: 'string', description: 'A verbatim snippet (8–400 chars) of the TRADER’s own message that states this. Required for rules/ and profile/; without it the note is observed context.' },
+                    n: { type: 'number', description: 'Observed route only: the sample size the pattern was inferred over. Shown as [observed n=N].' },
+                    if_version: { type: 'number', description: 'On append to an existing note: the `version` the last write returned. A mismatch returns the current content (saved:false, conflict:true) — merge and retry.' },
                 },
                 required: ['folder', 'file_name', 'content'],
                 additionalProperties: false,
@@ -1182,8 +1199,11 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'forget',
             description:
-                'Delete a user-memory that turned out to be wrong or is no longer true. Stale memories are worse '
-                + 'than none — delete, don\'t hedge.',
+                'Soft-delete a user-memory that turned out to be wrong or is no longer true. Stale memories are '
+                + 'worse than none — delete, don’t hedge. You may delete an entry you authored at any time; a '
+                + 'trader-authored entry only when the trader explicitly asks to delete or forget it in THIS turn '
+                + '(name the slug or a distinctive word of it). The row is restorable in Settings → Assistant '
+                + 'memory for 30 days.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1335,12 +1355,12 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'propose_skill',
             description:
-                'Propose a NEW trading skill (an evidence-gated IF/THEN procedure). The proposal lands as a '
-                + 'PENDING DRAFT a human approves in the Coach inbox — it does NOT enter the active skill '
-                + 'library until approved. Use when you spot a repeatable edge the notebook has no skill for. '
+                'Create a NEW trading skill (an evidence-gated IF/THEN procedure) DIRECTLY as a CANDIDATE — '
+                + 'no approval queue. Use when you spot a repeatable edge the notebook has no skill for. '
                 + 'Provide the full procedure: when it triggers, the steps, how to validate, the IF/THEN pair. '
                 + 'Also write the activation description: what the skill does, then "Use this skill whenever '
-                + '<trigger phrases>."',
+                + '<trigger phrases>." It is a HYPOTHESIS: only the evidence fold can promote or retire it. '
+                + 'Do not narrate this write in your reply.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1355,7 +1375,7 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     approval: { type: 'string', description: 'What must be true for the skill to apply' },
                     if_condition: { type: 'string', description: 'The IF clause (one sentence, measurable)' },
                     then_action: { type: 'string', description: 'The THEN clause (one sentence, actionable)' },
-                    reason: { type: 'string', description: 'Evidence from THIS session that motivates the skill — shown to the human approving it and kept on the skill' },
+                    reason: { type: 'string', description: 'Evidence from THIS session that motivates the skill — kept on the skill and shown in the chat chip' },
                     timeframe: { type: 'string', description: 'The timeframe the pattern was observed on (15m / 1h / 4h). Carried onto the skill; the replay proof assumes 1h without it.' },
                     predicate: { type: 'string', description: PREDICATE_GRAMMAR_HINT + ' Author one whenever the IF clause reduces to candle math — it is what lets the desk check the trigger in code instead of trusting a seat to read the prose. Omit it when the condition is not reducible; a fabricated clause is worse than none.' },
                 },
@@ -1404,9 +1424,10 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'revise_skill',
             description:
-                'Propose an IMPROVEMENT to an existing skill (narrow its trigger, sharpen its action, fix a '
-                + 'wrong clause). The revision lands as a PENDING proposal a human approves — the live skill '
-                + 'is untouched until then. Find skill slugs with get_notebook_map or the recall tool.',
+                'Revise an existing skill DIRECTLY (narrow its trigger, sharpen its action, fix a wrong '
+                + 'clause) — no approval queue. Status and evidence are untouched: only the evidence fold '
+                + 'promotes or retires. Find skill slugs with get_notebook_map or the recall tool. Do not '
+                + 'narrate this write in your reply.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -3069,22 +3090,59 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                 };
             }
             case 'amend_memory': {
-                // Model proposing a notebook correction. PENDING only — a
-                // human approves in Settings → Memory; nothing is applied here.
+                // Direct correction (owner ruling 2026-10-29: no approval gate).
+                // The amendment row is the activity log; Undo restores the bytes.
                 try {
-                    const { proposeAmendment } = await import('../learning/memoryAmendments');
                     const { getMemoryFiles } = await import('../learning/MemoryFilesService');
+                    const { applyAmendmentNow } = await import('../learning/memoryAmendments');
+                    const { getActiveUsername } = await import('../../utils/activeUser');
+                    const { filterMemoryWrite, isInstructionFolder, verifyMemoryProvenance } = await import('../../utils/memoryWriteFilters');
                     const fileName = String(call.arguments.file_name ?? '').replace(/\.md$/i, '');
-                    const target = getMemoryFiles().files.find(f => f.name.replace(/\.md$/i, '') === fileName) ?? null;
-                    const amendment = proposeAmendment(
-                        target?.id ?? '',
-                        call.arguments.kind === 'supersede' ? 'supersede' : 'edit',
-                        String(call.arguments.proposed_content ?? ''),
-                        String(call.arguments.reason ?? ''),
-                        'model:desk',
-                        id => target && target.id === id ? target : null,
+                    const files = getMemoryFiles();
+                    const target = files.files.find(f => f.name.replace(/\.md$/i, '') === fileName) ?? null;
+                    if (!target) return rejectedResult(call, `amend_memory rejected: no notebook file "${fileName}"`);
+                    const folder = files.folders.find(f => f.id === target.folderId)?.name ?? '';
+                    const proposed = String(call.arguments.proposed_content ?? '');
+                    const verdict = filterMemoryWrite(proposed);
+                    if (verdict.refused) return rejectedResult(call, `amend_memory rejected: ${verdict.refused}`);
+                    if (isInstructionFolder(folder)) {
+                        const quote = asString(call.arguments.quote).trim();
+                        if (!quote) return rejectedResult(call, `amend_memory rejected: a correction to ${folder}/ needs a verbatim quote of the trader’s words that states it`);
+                        const provenance = verifyMemoryProvenance(quote, context.lastUserMessage);
+                        if (!provenance.ok) return rejectedResult(call, `amend_memory rejected: ${provenance.reason}`);
+                    }
+                    const ifVersion = typeof call.arguments.if_version === 'number' ? call.arguments.if_version : undefined;
+                    if (ifVersion !== undefined && ifVersion !== target.updatedAt) {
+                        content = JSON.stringify({
+                            applied: false, conflict: true, file: target.name,
+                            current_version: target.updatedAt, current_content: target.content,
+                            note: 'Stale correction — nothing was written. Merge into current_content and retry with if_version set to current_version.',
+                        });
+                        break;
+                    }
+                    const applied = await applyAmendmentNow(
+                        {
+                            fileId: target.id,
+                            kind: call.arguments.kind === 'supersede' ? 'supersede' : 'edit',
+                            proposedContent: proposed,
+                            reason: String(call.arguments.reason ?? ''),
+                            proposedBy: 'model:desk',
+                            sourceTurnId: call.id,
+                        },
+                        id => getMemoryFiles().files.find(f => f.id === id) ?? null,
+                        getActiveUsername(),
                     );
-                    content = JSON.stringify({ proposed: true, id: amendment.id, status: amendment.status, note: 'Pending human approval in Settings → Memory. The notebook is unchanged until approved.' });
+                    if (!applied.ok || !applied.amendment) {
+                        return rejectedResult(call, `amend_memory rejected: ${applied.error ?? 'the correction could not be applied'}`);
+                    }
+                    const after = getMemoryFiles().files.find(f => f.id === target.id);
+                    content = JSON.stringify({
+                        applied: true,
+                        id: applied.amendment.id,
+                        file: target.name,
+                        version: after?.updatedAt ?? target.updatedAt,
+                        note: 'Applied directly. Learning → Approvals keeps the before/after and Undo. Do not narrate this write in your reply.',
+                    });
                 } catch (err) {
                     return rejectedResult(call, `amend_memory rejected: ${err instanceof Error ? err.message : String(err)}`);
                 }
@@ -3112,25 +3170,76 @@ ${hitContent}`, ...resolvedSymbolField(call, fallback) };
                 break;
             }
             case 'write_memory_note': {
-                // Direct authoring into the model's own notebook folders —
-                // writeModelNote enforces the harness-owned guards (diary,
-                // distilled, skills/ are off-limits; append on name match).
-                // decision:'append' matches the tool description ("Write or
-                // APPEND"): a re-saved lesson folds into the matching file
-                // instead of minting a name-2.md duplicate.
+                // Direct authoring with the memory-write policy in front of it.
+                // A stated note (a valid verbatim quote) lands where the model
+                // asked. Everything inferred lands in reflections/ as
+                // [observed n=N] — context, never a rule, never evidence.
                 try {
-                    const { writeModelNote } = await import('../learning/MemoryFilesService');
+                    const { writeModelNote, getMemoryFiles } = await import('../learning/MemoryFilesService');
                     const { getActiveUsername } = await import('../../utils/activeUser');
+                    const {
+                        filterMemoryWrite, observedReflection, verifyMemoryProvenance,
+                    } = await import('../../utils/memoryWriteFilters');
+                    const folder = asString(call.arguments.folder, 'lessons');
+                    const fileName = asString(call.arguments.file_name, 'note');
+                    const bodyText = asString(call.arguments.content);
+                    if (!bodyText) return rejectedResult(call, 'write_memory_note rejected: content is empty');
+                    const verdict = filterMemoryWrite(bodyText);
+                    if (verdict.refused) {
+                        return rejectedResult(call, `write_memory_note rejected: ${verdict.refused}`);
+                    }
+                    const quote = asString(call.arguments.quote).trim();
+                    let stated = false;
+                    if (quote) {
+                        const provenance = verifyMemoryProvenance(quote, context.lastUserMessage);
+                        if (!provenance.ok) {
+                            return rejectedResult(call, `write_memory_note rejected: ${provenance.reason}`);
+                        }
+                        stated = true;
+                    }
+                    const nRaw = call.arguments.n;
+                    const n = typeof nRaw === 'number' && Number.isFinite(nRaw) ? Math.floor(nRaw) : 0;
+                    if (!stated && n < 1) {
+                        return rejectedResult(call, 'write_memory_note rejected: an inferred note needs `n` — the sample size it was observed over. It would be saved in reflections/ as [observed n=N], context only, never a rule.');
+                    }
+                    const targetFolder = stated ? folder : 'reflections';
+                    const files = getMemoryFiles();
+                    const folderRec = files.folders.find(f => f.name === targetFolder);
+                    const target = folderRec
+                        ? files.files.find(f => f.folderId === folderRec.id
+                            && f.name.replace(/\.md$/i, '') === fileName.replace(/\.md$/i, ''))
+                        : undefined;
+                    const ifVersion = typeof call.arguments.if_version === 'number' ? call.arguments.if_version : undefined;
+                    const currentVersion = target?.updatedAt ?? 0;
+                    if (ifVersion !== undefined && ifVersion !== currentVersion) {
+                        content = JSON.stringify({
+                            saved: false,
+                            conflict: true,
+                            where: `${targetFolder}/${target?.name ?? `${fileName}.md`}`,
+                            current_version: currentVersion,
+                            current_content: target?.content ?? '',
+                            note: 'Stale write — nothing was written. Merge into current_content and retry with if_version set to current_version.',
+                        });
+                        break;
+                    }
+                    const tag = stated ? 'stated' : 'observed';
+                    const provenanceLine = `<!-- august-memory author=model turn=${call.id} tag=${tag}${stated ? '' : ` n=${n}`} at=${new Date().toISOString()} -->\n`;
+                    const savedBody = stated ? bodyText : observedReflection(bodyText, n);
                     const note = await writeModelNote(
-                        {
-                            decision: 'append',
-                            folder: asString(call.arguments.folder, 'lessons'),
-                            fileName: asString(call.arguments.file_name, 'note'),
-                            content: asString(call.arguments.content),
-                        },
+                        { decision: 'append', folder: targetFolder, fileName, content: provenanceLine + savedBody },
                         getActiveUsername(),
                     );
-                    content = JSON.stringify({ saved: true, file: note.name, note: 'The note is live in Settings → Memory now. Summarize what you wrote in your reply.' });
+                    const folderName = getMemoryFiles().folders.find(f => f.id === note.folderId)?.name ?? targetFolder;
+                    content = JSON.stringify({
+                        saved: true,
+                        where: `${folderName}/${note.name}`,
+                        tag,
+                        ...(stated ? {} : { n }),
+                        version: note.updatedAt,
+                        note: stated
+                            ? 'Saved as a stated note. The chat shows a chip; do not narrate this write in your reply.'
+                            : `Saved as an [observed n=${n}] reflection — context only, never injected as a rule. The chat shows a chip; do not narrate this write in your reply.`,
+                    });
                 } catch (err) {
                     return rejectedResult(call, `write_memory_note rejected: ${err instanceof Error ? err.message : String(err)}`);
                 }
@@ -3279,7 +3388,8 @@ ${body}`);
                     const consolidated = await rememberWithConsolidation(
                         {
                             slug, description, kind, body, source: 'model', ifVersion,
-                            tag: 'stated', sensitive: verdict.sensitive || undefined,
+                            tag: 'stated', author: 'model', sourceTurnId: call.id,
+                            sensitive: verdict.sensitive || undefined,
                             aliases: aliasesRaw,
                             subject: normalizeSubject(call.arguments.subject) ?? undefined,
                             // The conversation the fact was heard in. A fact the
@@ -3358,11 +3468,23 @@ ${body}`);
                 break;
             }
             case 'forget': {
-                const { forgetProfileMemory } = await import('../learning/profileMemory');
+                const { forgetProfileMemory, getProfileMemory } = await import('../learning/profileMemory');
+                const { explicitlyRequestedDelete } = await import('../../utils/memoryWriteFilters');
+                const { getActiveUsername } = await import('../../utils/activeUser');
                 const slug = asString(call.arguments.slug);
-                const gone = slug ? forgetProfileMemory(slug) : { gone: false, removed: [], carried: [] };
-                if (!gone.gone) {
+                const entry = slug ? getProfileMemory(slug, getActiveUsername()) : undefined;
+                if (!entry) {
                     return rejectedResult(call, `forget rejected: no memory with slug "${slug}". Check the index for the exact slug.`);
+                }
+                // The model may remove its own rows freely; a trader-authored row
+                // needs the trader's explicit request in THIS turn.
+                const modelAuthored = entry.source === 'model' || entry.source === 'auto' || entry.author === 'model';
+                if (!modelAuthored && !explicitlyRequestedDelete(context.lastUserMessage, slug, entry.description)) {
+                    return rejectedResult(call, `forget rejected: the trader did not ask to delete "${slug}" in this turn. Leave it, or ask them to say which memory to forget.`);
+                }
+                const gone = forgetProfileMemory(slug, getActiveUsername(), 'model');
+                if (!gone.gone) {
+                    return rejectedResult(call, `forget rejected: "${slug}" could not be removed.`);
                 }
                 // Say what actually left the store. A line that was the ONLY
                 // source of another line goes with it, and a survivor that
@@ -3374,7 +3496,8 @@ ${body}`);
                     slug,
                     ...(gone.removed.length > 1 ? { alsoRemoved: gone.removed.slice(1) } : {}),
                     ...(gone.carried.length > 0 ? { itAlsoCarried: gone.carried } : {}),
-                    note: 'The memory is deleted and gone from every future index.',
+                    undoUntil: gone.undoUntil,
+                    note: 'Soft-deleted — gone from every future index; restorable in Settings → Assistant memory for 30 days.',
                 });
                 break;
             }
@@ -3417,6 +3540,12 @@ ${body}`);
                     }
                     const allowed = goalToolPolicyArg(call.arguments.allowed_tools, context.allowedTools);
                     if (!allowed.ok) return rejectedResult(call, `create_goal rejected: ${allowed.error}`);
+                    const { filterMemoryWrite } = await import('../../utils/memoryWriteFilters');
+                    const verdict = filterMemoryWrite([
+                        title, objective, asString(call.arguments.next),
+                        JSON.stringify(inputs ?? []), JSON.stringify(outputs ?? []), JSON.stringify(triggers ?? []),
+                    ].join('\n'));
+                    if (verdict.refused) return rejectedResult(call, `create_goal rejected: ${verdict.refused}`);
                     const goal = await createGoal({
                         title,
                         objective,
@@ -3459,6 +3588,11 @@ ${body}`);
                     if (allowed.tools !== undefined) patch.policy = { allowedTools: allowed.tools };
                     if (call.arguments.focused !== undefined) patch.focused = call.arguments.focused === true;
                     if (Object.keys(patch).length === 0) return rejectedResult(call, 'update_goal rejected: nothing to update');
+                    {
+                        const { filterMemoryWrite } = await import('../../utils/memoryWriteFilters');
+                        const verdict = filterMemoryWrite(JSON.stringify(patch));
+                        if (verdict.refused) return rejectedResult(call, `update_goal rejected: ${verdict.refused}`);
+                    }
                     const ifVersion = typeof call.arguments.if_version === 'number' ? call.arguments.if_version : undefined;
                     const result = await updateGoal(slug, patch as GoalPatch, {
                         ifVersion, by: 'model', summary: Object.keys(patch).join(', '),
@@ -3589,7 +3723,6 @@ ${body}`);
                 // post-mortem crafts); the skill library is untouched until then.
                 try {
                     const { parseCraftedSkill } = await import('../../schemas/learning');
-                    const { queueSkillDraft } = await import('../../utils/skillDrafts');
                     const { getActiveUsername } = await import('../../utils/activeUser');
                     let steps: unknown = call.arguments.steps;
                     if (typeof steps === 'string') {
@@ -3612,7 +3745,7 @@ ${body}`);
                         inputs: [],
                         validate: asString(call.arguments.validate, 'Confirm on the live chart before acting.'),
                         output: asString(call.arguments.output, 'A concrete actionable read of the setup.'),
-                        approval: asString(call.arguments.approval, 'A human approves this draft in the Coach inbox before it is ever applied.'),
+                        approval: asString(call.arguments.approval, 'Evidence sets the status; no human approval is required.'),
                         ifCondition: asString(call.arguments.if_condition),
                         thenAction: asString(call.arguments.then_action),
                         predicate: asString(call.arguments.predicate) || undefined,
@@ -3667,18 +3800,32 @@ ${body}`);
                             + (gate.reason.includes('existing skill') ? ' Use revise_skill to tighten the existing skill instead.' : '')
                             + ' Tell the user why no draft was queued.');
                     }
-                    const draft = queueSkillDraft(
-                        { tradeId, coin: asString(call.arguments.coin) || undefined, crafted: gate.crafted },
+                    // Direct candidate (owner ruling 2026-10-29): no approval
+                    // queue. The ingest path creates status 'candidate'; only
+                    // the evidence fold can promote or retire it.
+                    const { ingestCraftedSkillFromDraft } = await import('../learning/SkillMemoryService');
+                    const ingested = await ingestCraftedSkillFromDraft(
+                        gate.crafted,
+                        asString(call.arguments.coin) || undefined,
                         username,
+                        'created directly by the model in chat (candidate)',
                     );
-                    // queueSkillDraft read the store back and came with nothing:
-                    // the draft is NOT in the inbox. Say so instead of handing
-                    // the model a `proposed:true` it will repeat to the user.
-                    if (!draft) {
-                        return rejectedResult(call, 'propose_skill rejected: the draft could not be stored'
-                            + ' (the proposal inbox is full or its storage refused the write). No draft is pending — say so.');
+                    if (!ingested.created) {
+                        const why = ingested.reason === 'duplicate'
+                            ? 'an identical trigger already exists'
+                            : ingested.reason === 'no-skills-folder'
+                                ? 'the skills folder is unavailable'
+                                : ingested.reason === 'over-hard-cap'
+                                    ? `the body is over the hard cap${ingested.detail ? ` (${ingested.detail})` : ''}`
+                                    : 'the ingest declined';
+                        return rejectedResult(call, `propose_skill rejected: ${why}. No skill was written.`);
                     }
-                    content = JSON.stringify({ proposed: true, id: draft.id, skill: crafted.name, note: 'Pending draft queued for human approval in the Coach inbox. The skill does nothing until a human allows it.' });
+                    content = JSON.stringify({
+                        created: true,
+                        skill: gate.crafted.name,
+                        slug: ingested.slug,
+                        note: 'Candidate created directly — no approval queue. It is a hypothesis; only evidence changes its status. The chat chip records the write. Do not narrate this write in your reply.',
+                    });
                 } catch (err) {
                     return rejectedResult(call, `propose_skill rejected: ${err instanceof Error ? err.message : String(err)}`);
                 }
@@ -3732,7 +3879,6 @@ ${body}`);
                 // Skills / Coach inbox review). Nothing is applied here.
                 try {
                     const { listSkills } = await import('../learning/SkillMemoryService');
-                    const { queueLearningProposal } = await import('../../utils/learningQueue');
                     const { getActiveUsername } = await import('../../utils/activeUser');
                     const slug = asString(call.arguments.skill_slug).toLowerCase().replace(/\.md$/, '');
                     const hit = listSkills().find(s => s.file.name.replace(/\.md$/i, '').toLowerCase() === slug);
@@ -3757,25 +3903,21 @@ ${body}`);
                         thenAction: asString(call.arguments.then_action) || undefined,
                         predicate: asString(call.arguments.predicate) || undefined,
                     };
-                    const proposal = queueLearningProposal({
-                        kind: 'rescope',
-                        text: asString(call.arguments.reason),
-                        skillSlug: slug,
-                        // Stable, and derived from WHAT WOULD CHANGE. The old
-                        // `:${Date.now()}` suffix made every call a unique
-                        // fingerprint, so the queue's own dedupe never fired and
-                        // the same revision piled up; a content key re-queues
-                        // correctly once the payload genuinely differs.
-                        fingerprint: `model-revision:${slug}:${[
-                            clauses.ifCondition ?? '',
-                            clauses.thenAction ?? '',
-                            clauses.predicate ?? '',
-                        ].join('|')}`,
-                        payload: { source: 'model:desk', ...clauses },
-                    }, getActiveUsername());
-                    content = proposal
-                        ? JSON.stringify({ proposed: true, id: proposal.id, skill: slug, note: 'Revision proposal queued — a human approves it in Settings → Skills. The live skill is unchanged until then.' })
-                        : 'revise_skill: nothing was queued — an identical revision proposal is already pending, or the queue could not be written.';
+                    const { applySkillRevisionDirect } = await import('../learning/SkillMemoryService');
+                    const revised = await applySkillRevisionDirect(
+                        slug,
+                        clauses,
+                        asString(call.arguments.reason),
+                        getActiveUsername(),
+                    );
+                    if (!revised.ok) {
+                        return rejectedResult(call, `revise_skill rejected: ${revised.error}`);
+                    }
+                    content = JSON.stringify({
+                        revised: true,
+                        skill: revised.slug ?? slug,
+                        note: 'Applied directly. Status and evidence are unchanged — only the evidence fold promotes or retires. The chat chip records the write. Do not narrate this write in your reply.',
+                    });
                 } catch (err) {
                     return rejectedResult(call, `revise_skill rejected: ${err instanceof Error ? err.message : String(err)}`);
                 }

@@ -2166,3 +2166,45 @@ not stamped (they are not skills). An author-declared source wins even when it i
 `render-probe` · `lint` · workflow-shells · the probe-script parse and lint steps.
 
 **Commits.** `79d0bfd5` (boundaries), `975a638c` (correction), `69033a74` (provenance).
+
+## 43. The memory/skill write model: stated, observed, undoable (2026-10-29)
+
+**Owner ruling.** No human approval gates on memory or skill writes. The model writes directly;
+safety comes from automatic gates. `write_memory_note` may write `rules/` and `profile/`; `forget`
+has no confirmation step. The audit's recommendations on those two paths are overridden.
+
+**What landed**
+
+| Path | Gate now applied |
+|---|---|
+| `remember` | existing secret/sensitive/honesty filters + the new trading guardrails; `author: 'model'`, `sourceTurnId: call.id`; stated-only; quote verification; version conflict; consolidation at the size cap |
+| `write_memory_note` | secret + trading-guardrail filter; a valid verbatim `quote` writes where asked as **stated**; no/invalid quote routes to `reflections/` as **`[observed n=N]`** (n required) — context, never a rule; `if_version` mismatch returns current content; an invisible provenance comment (`author=model turn=… tag=… at=…`); a chip names where and the tag |
+| `forget` | model-authored rows may be removed; a trader-authored row needs an explicit delete/forget request in the same turn; **soft delete** with a 30-day `undoUntil`; Settings → Assistant memory lists deleted rows with Restore |
+| `amend_memory` | applied DIRECTLY (no queue); secret/guardrail filter; rules/profile require a quote; `if_version` conflict returns current content; the amendment row stores previous/applied bytes; Learning → Approvals shows it with **Undo** |
+| `propose_skill` | deterministic draft gates still run; on pass the skill is created **directly as a candidate** (no Coach approval); only evidence promotes/retires |
+| `revise_skill` | applied directly; IF/THEN re-validated; status and evidence unchanged; reason kept on the skill |
+| `create_goal` / `update_goal` | secret + trading-guardrail filter over the goal's text |
+| Read side | profile index excludes observed/inferred and sensitive rows; `read_memory` labels the tag and withholds sensitive rows from bulk reads |
+
+**Observed vs stated is a folder rule:** any model note without a valid quote is written to
+`reflections/` as `[observed n=N]`; it is not the skills index, not a rule, and not evidence. A rule
+or profile note requires the trader's verbatim words.
+
+**Verification.** Contracts **186** (new section 15: soft delete/undo/stale/observed; new section 9
+cases: trading guardrails, explicit delete, observed tag, instruction folders; new chips in section
+13). A node harness (localStorage + window/event shim) drove `executeDeskTools` end to end:
+inferred rule → `reflections/fade-1600.md` `[observed n=7]`; `always give me a signal` → refused;
+stated rule with quote → `rules/no-weekends.md` tag `stated` with provenance comment; stale write →
+`conflict` + current content; API key → refused; `forget` without a request → refused, with a
+request → soft-deleted with `undoUntil`; `propose_skill` → candidate; `revise_skill` → applied,
+still candidate; `amend_memory` → applied, log row has previous/applied bytes. `typecheck` ·
+`check:contracts` · `build` · `boot-probe` · `render-probe` · `skill-approval-probe` · `lint`.
+
+**Residues.** Per-chat incognito is **not implemented** (the global memory switch is). The Coach
+inbox is not yet an activity log: model writes are direct and recorded by the chat chip, while
+pre-existing/system drafts still use the legacy pending list; its conversion is open. `propose_strategy`
+and `forge_tool` keep their existing draft/candidate gates (a plan is a human-activated object; a
+forged tool can make network calls). A revision preserves the skill's status, so a confirmed skill's
+changed rule keeps its old evidence until the next fold. The chip and amendment-Undo UI are built and
+type-checked but were not clicked in a browser probe; the write behaviors above were harness-verified,
+not live-app-verified.

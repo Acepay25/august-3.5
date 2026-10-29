@@ -18,8 +18,8 @@
 import React, { useEffect, useState } from 'react';
 import { Trash2 } from '../shared/Icons';
 import {
-    listProfileMemories, forgetProfileMemory, rememberProfileMemory,
-    type ProfileMemoryEntry,
+    listProfileMemories, listDeletedProfileMemories, forgetProfileMemory, rememberProfileMemory,
+    restoreProfileMemory, type ProfileMemoryEntry,
 } from '../../services/learning/profileMemory';
 import {
     isTraderLearningEnabled, setTraderLearningEnabled,
@@ -41,6 +41,7 @@ const updatedLabelOf = (entry: ProfileMemoryEntry): string => {
 
 const ProfileMemoryCard: React.FC = () => {
     const [entries, setEntries] = useState<ProfileMemoryEntry[]>([]);
+    const [deleted, setDeleted] = useState<ProfileMemoryEntry[]>([]);
     const [learning, setLearning] = useState(true);
     const [forgetNote, setForgetNote] = useState('');
     // N-3: the trader can CORRECT what the app remembers, not only delete it.
@@ -76,7 +77,14 @@ const ProfileMemoryCard: React.FC = () => {
 
     const refresh = (): void => {
         setEntries([...listProfileMemories()].reverse());
+        setDeleted(listDeletedProfileMemories());
         setLearning(isTraderLearningEnabled());
+    };
+
+    const restoreOne = (slug: string): void => {
+        const ok = restoreProfileMemory(slug);
+        setForgetNote(ok ? `Restored "${slug}".` : `"${slug}" could not be restored.`);
+        refresh();
     };
 
     /** Forget the named line, and say what ACTUALLY left. A row whose only
@@ -219,6 +227,26 @@ const ProfileMemoryCard: React.FC = () => {
                         </li>
                     ))}
                 </ul>
+            )}
+            {deleted.length > 0 && (
+                <details className="mt-3 rounded-control border border-zinc-800/80 bg-zinc-950/30 px-2.5 py-2" data-testid="profile-memory-deleted">
+                    <summary className="cursor-pointer text-ui-dense text-zinc-500">
+                        Recently deleted ({deleted.length}) · 30-day undo
+                    </summary>
+                    <ul className="mt-2 border-t border-zinc-800/80">
+                        {deleted.map(e => (
+                            <li key={e.slug} className="flex items-center gap-2 border-b border-zinc-800/60 py-1.5 last:border-0">
+                                <span className="min-w-0 flex-1 truncate text-ui-dense text-zinc-400" title={e.description}>{e.description}</span>
+                                <span className="shrink-0 text-ui-xs text-zinc-600">{String(e.deletedAt).slice(0, 10)}</span>
+                                <button type="button" onClick={() => restoreOne(e.slug)}
+                                    aria-label={`Restore memory ${e.slug}`} title="Restore"
+                                    className="shrink-0 rounded-control border border-zinc-800 px-2 py-1 text-ui-2xs font-semibold text-zinc-300 transition-colors hover:border-white/25 hover:text-zinc-100">
+                                    Restore
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </details>
             )}
             {forgetNote && (
                 <p role="status" data-testid="profile-memory-forget-note"

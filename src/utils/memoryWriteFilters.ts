@@ -54,6 +54,80 @@ const HONESTY_PATTERNS: RegExp[] = [
     /(?:^|\n)\s*(?:you\s+(?:should|must|ought|need\s+to)|i\s+(?:recommend|suggest)|my\s+advice)\b/i,
 ];
 
+/**
+ * Trading guardrails, judged by EFFECT rather than wording.
+ *
+ * A memory that tells the harness to suppress stops/invalidation, force a
+ * signal, disable grounding or the quality gate, or ignore its own rules is not
+ * a preference — it removes the checks the app exists to keep. The patterns
+ * name the protected object, not a magic sentence, so "never set a stop",
+ * "skip invalidation" and "always give me a signal" all land. The trader's own
+ * risk preferences (size, leverage, timeframes, "max 1% risk") do not name a
+ * protected object and pass.
+ */
+const TRADING_GUARDRAIL_PATTERNS: Array<{ re: RegExp; what: string }> = [
+    {
+        re: /(?:never|don't|do\s+not|stop|avoid|refuse\s+to)\s+(?:use|set|place|mention|show|disclose|warn(?:\s+me)?\s+about|require)\s+(?:a\s+|any\s+|the\s+)?(?:stop[- ]?loss|stop|invalidation|risk\s+disclosure|risk\s+warning)/i,
+        what: 'asks to suppress a stop, invalidation or risk disclosure',
+    },
+    {
+        re: /(?:no|without|skip|omit|remove|disable|hide|suppress|drop)\s+(?:a\s+|the\s+|any\s+)?(?:stop[- ]?loss|stop|invalidation|risk\s+disclosure|risk\s+warning)/i,
+        what: 'asks to omit a stop, invalidation or risk disclosure',
+    },
+    {
+        re: /(?:always|must|never\s+fail\s+to|you\s+must|make\s+sure\s+you)\s+(?:give|send|produce|emit|show|hand|return)\s+(?:me\s+)?(?:a\s+|the\s+)?(?:signal|trade|setup|call|entry)/i,
+        what: 'forces a signal/trade instead of allowing “no signal”',
+    },
+    {
+        re: /(?:never|don't|do\s+not|forbid|disallow|refuse)\s+(?:say|tell\s+me|respond\s+with|produce|emit|give\s+me)\s+["']?(?:no[- ]signal|no\s+trade|nothing|stand\s+aside)/i,
+        what: 'forbids a “no signal” / no-trade answer',
+    },
+    {
+        re: /(?:disable|turn\s+off|ignore|bypass|skip|remove|suppress)\s+(?:the\s+)?(?:figure\s+grounding|grounding|quality\s+gate|signal\s+gate|validation\s+gate|risk\s+checks?)/i,
+        what: 'asks to disable grounding or the quality gate',
+    },
+    {
+        re: /(?:ignore|override|bypass|disregard|forget)\s+(?:your|the)\s+(?:trading\s+)?(?:rules|risk\s+rules|guardrails|constraints|instructions)/i,
+        what: 'asks the model to ignore its rules',
+    },
+];
+
+/** True when a folder holds instructions the model may not author from its own
+ *  inference. `profile/` and `rules/` are the two the ruling names. */
+export const isInstructionFolder = (folder: string): boolean => {
+    const name = (folder || '').trim().toLowerCase().split(/[/\\]/).filter(Boolean).pop() ?? '';
+    return name === 'rules' || name === 'profile';
+};
+
+/** The observed tag with the sample size it was inferred over, on the first
+ *  line so a reader can never mistake it for a stated rule. */
+export const observedReflection = (content: string, n: number): string =>
+    `[observed n=${Math.max(1, Math.floor(Number.isFinite(n) ? n : 1))}]\n${content.trim()}`;
+
+/**
+ * Did the trader ask, in THIS turn, to delete or edit the named memory?
+ *
+ * The model may delete or edit only on an explicit request in the same turn, or
+ * to supersede an entry it authored. This is the first half; the caller checks
+ * `entry.source === 'model'` for the second. A bare "delete" without the slug
+ * or a distinctive word of the entry is not consent to remove a different fact.
+ */
+export const explicitlyRequestedDelete = (
+    traderText: string | undefined,
+    slug: string,
+    description = '',
+): boolean => {
+    if (typeof traderText !== 'string' || !traderText.trim()) return false;
+    const text = traderText.toLowerCase();
+    if (!/\b(delete|forget|remove|drop|erase|clear)\b/.test(text)) return false;
+    const keys = [slug, description]
+        .flatMap(s => (s || '').toLowerCase().split(/[^a-z0-9]+/))
+        .filter(w => w.length >= 4)
+        .slice(0, 6);
+    if (keys.length === 0) return slug.trim().length > 0 && text.includes(slug.toLowerCase());
+    return keys.some(w => text.includes(w));
+};
+
 const SENSITIVE_PATTERNS: RegExp[] = [
     /\b(?:hiv|cancer|diagnos[ie]s|medications?|therap(?:y|ies)|antidepressants?)\b/i,
     /\b(?:bank accounts?|salaries?|salary|debts?|mortgage|credit scores?|tax (?:returns?|debts?))\b/i,
@@ -71,6 +145,14 @@ export interface FilterVerdict {
 export const filterMemoryWrite = (text: string): FilterVerdict => {
     for (const { re, what } of SECRET_PATTERNS) {
         if (re.test(text)) return { refused: `looks like ${what} — secrets are never stored`, sensitive: false };
+    }
+    for (const { re, what } of TRADING_GUARDRAIL_PATTERNS) {
+        if (re.test(text)) {
+            return {
+                refused: `asks the harness to drop a safeguard (${what}) — that is not a memory this app keeps`,
+                sensitive: false,
+            };
+        }
     }
     for (const re of HONESTY_PATTERNS) {
         if (re.test(text)) {

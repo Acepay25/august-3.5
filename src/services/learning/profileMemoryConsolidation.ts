@@ -47,6 +47,8 @@ export interface ConsolidationInput {
     body: string;
     source?: ProfileMemoryEntry['source'];
     tag?: ProfileMemoryEntry['tag'];
+    author?: ProfileMemoryEntry['author'];
+    sourceTurnId?: string;
     sensitive?: boolean;
     aliases?: string[];
     /** What the fact is about, and the session it was written in — passed

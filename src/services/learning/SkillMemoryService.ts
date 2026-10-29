@@ -2478,6 +2478,48 @@ export const reconcileSkillsAfterOutcomeCorrection = async (
 ): Promise<SkillCorrectionReconciliation> =>
     withNotebookWriteLock(() => reconcileSkillsAfterOutcomeCorrectionUnlocked(corrected, username));
 
+export interface SkillRevisionResult {
+    ok: boolean;
+    slug?: string;
+    error?: string;
+}
+
+/**
+ * Apply a model revision to an existing skill DIRECTLY (owner ruling
+ * 2026-10-29: the model creates/revises candidates without an approval queue).
+ * Status and evidence are untouched — the evidence fold remains the only thing
+ * that promotes or retires. The IF/THEN clause is validated with the same bar
+ * a draft passes, so a revision cannot smuggle in a generic trigger.
+ */
+export const applySkillRevisionDirect = async (
+    slug: string,
+    clauses: { ifCondition?: string; thenAction?: string; predicate?: string },
+    reason: string,
+    username: string,
+): Promise<SkillRevisionResult> => withNotebookWriteLock(async () => {
+    const file = getMemoryFiles().files.filter(isSkillFile).find(
+        f => f.name.replace(/\.md$/i, '').toLowerCase() === slug.toLowerCase(),
+    );
+    if (!file) return { ok: false, error: `no skill "${slug}"` };
+    const meta = parseSkillMarkdown(file.content);
+    if (!meta) return { ok: false, error: 'the skill file did not parse' };
+    const next: SkillMeta = {
+        ...meta,
+        ...(clauses.ifCondition ? { ifCondition: clauses.ifCondition } : {}),
+        ...(clauses.thenAction ? { thenAction: clauses.thenAction } : {}),
+        ...(clauses.predicate ? { predicate: sanitizePredicate(clauses.predicate) } : {}),
+    };
+    const bad = validateIfThen({ ifCondition: next.ifCondition ?? '', thenAction: next.thenAction ?? '' });
+    if (bad) return { ok: false, error: bad };
+    next.modifiedAt = new Date().toISOString();
+    if (reason.trim()) next.reason = reason.trim().slice(0, 500);
+    await updateMemoryFileUnlocked(file.id, {
+        content: serializeSkill(next, titleFromMeta(next)),
+        enabled: skillEnabledFlag(next),
+    }, username);
+    return { ok: true, slug: file.name.replace(/\.md$/i, '') };
+});
+
 /** Age of the freshest recorded evidence in days (Infinity when unknown). */
 const evidenceAgeDays = (meta: SkillMeta): number => {
     if (!meta.lastEvidenceAt) return Infinity;
