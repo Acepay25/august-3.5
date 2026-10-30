@@ -1648,6 +1648,25 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         !prot.signalProtectionVerdict([], { coin: 'BTC', direction: 'long', now }).blocked);
 })();
 
+// ─── 28. the repo bridge's path sandbox ────────────────────────────────────
+(() => {
+    const { resolveRepoPath } = require(path.join(ROOT, 'shared/repoSandbox.cjs'));
+    const root = path.join(ROOT, 'sandbox-probe');
+    const good = resolveRepoPath(root, 'src/components/App.tsx');
+    ok('repo sandbox: a src path resolves inside the root', good.ok && good.rel === 'src/components/App.tsx');
+    ok('repo sandbox: a .. escape is refused', !resolveRepoPath(root, '../outside.ts').ok);
+    ok('repo sandbox: absolute and drive paths are refused',
+        !resolveRepoPath(root, '/etc/passwd').ok && !resolveRepoPath(root, 'C:/Windows/win.ini').ok);
+    ok('repo sandbox: dependency, build and git trees are refused',
+        !resolveRepoPath(root, 'node_modules/x/index.js').ok
+        && !resolveRepoPath(root, 'dist/x.js').ok
+        && !resolveRepoPath(root, '.git/config').ok);
+    ok('repo sandbox: environment and binary files are refused',
+        !resolveRepoPath(root, '.env.local').ok
+        && !resolveRepoPath(root, 'public/favicon.ico').ok);
+    ok('repo sandbox: no configured root is refused', !resolveRepoPath('', 'src/app.ts').ok);
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);

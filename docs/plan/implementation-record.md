@@ -2761,3 +2761,26 @@ the append.
 **Verification.** Contracts 27: the kill gate kills a whole-tape trigger, and reports invalid /
 insufficient rather than pass; the protections block on cooldown, let it expire, trip the drawdown
 breaker and the low-profit rule, and block nothing on an empty history. `check:contracts` **310**.
+
+## 57. The rename reaches installed apps, and the model can edit the harness (2026-10-30)
+
+**Upgrade path.** `productName` moved to "August Trading Harness", but `appId` stays
+`com.august35.tradingapp` on purpose: NSIS keys the install and its upgrade path on the appId,
+so changing it would strand every existing install as a separate app. The userData folder follows
+the product name, so [electron/main.cjs](file:///C:/Dev/august-3.5/electron/main.cjs) carries BOTH
+previous folders (`August Trading`, then `August 3.5`, newest first) into the new one on the first
+packaged boot, stamped per folder and never clobbering new files. The GitHub publish target is
+unchanged, so `update:check` still finds the release.
+
+**Repo bridge (dev only).** The model can read and replace files in August's own checkout when the
+desktop app runs from source with `AUGUSTTRADING_REPO` set: `repo_read` (or list the root),
+`repo_edit` (full new content; refuses empty), `repo_apply` (runs `npm run typecheck` and returns
+its tail). Main enforces ONE sandbox (`shared/repoSandbox.cjs`): repo-relative only, no drive/absolute
+paths, no `..` escape, and no `node_modules`/`.git`/`dist`/`.env`/binary files. Every write copies
+the previous bytes to `.august-checkpoints/<timestamp>/<path>` (gitignored) before an atomic
+replacement, and the dev server applies the save; typecheck is the apply gate. Packaged builds report
+the bridge unavailable rather than pretending — the installed app has no dev server to apply edits.
+
+**Verification.** Contract 28 pins the sandbox: in-repo paths pass; `..`, absolute/drive paths,
+dependency/build/git trees, `.env` and binaries are refused; no root refuses everything.
+`node --check` on main/preload, typecheck and contracts **316**.

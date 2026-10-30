@@ -49,6 +49,23 @@ export default tseslint.config(
     },
   },
   {
+    // The repo bridge's path sandbox is a Node CommonJS module loaded by the
+    // Electron main process (and required directly by the contract gate).
+    files: ['shared/repoSandbox.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: {
+        require: 'readonly',
+        module: 'readonly',
+        __dirname: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      'no-undef': 'off',
+    },
+  },
+  {
     rules: {
       // Relax rules that would produce too many errors initially.
       //

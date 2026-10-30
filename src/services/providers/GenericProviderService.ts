@@ -100,6 +100,15 @@ interface ElectronProviderBridge {
     /** safeStorage (OS keychain) encrypt/decrypt for API keys at rest. */
     encryptSecret?: (plaintext: string) => Promise<string | null>;
     decryptSecret?: (payload: string) => Promise<string | null>;
+    /** Repo bridge (preload `repo`) — the model's read/edit/apply access to
+     *  August's own checkout. DEV ONLY; main enforces the sandbox. */
+    repo?: {
+        info: () => Promise<{ ok: true; available: boolean; root?: string; reason?: string } | { ok: false; error: string }>;
+        list: (rel?: string) => Promise<{ ok: boolean; path?: string; entries?: Array<{ path: string; dir: boolean }>; error?: string }>;
+        read: (rel: string) => Promise<{ ok: boolean; path?: string; content?: string; error?: string }>;
+        write: (rel: string, content: string) => Promise<{ ok: boolean; path?: string; checkpoint?: string; error?: string }>;
+        apply: () => Promise<{ ok: boolean; code?: number; output?: string; error?: string }>;
+    };
 }
 
 declare global {

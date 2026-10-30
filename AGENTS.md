@@ -132,3 +132,6 @@ staging, the merge protocol and the release path — are in [CONTRIBUTING.md](CO
 
 No API keys are needed at build or runtime; providers are configured in-app (Settings → AI setup)
 and encrypted at rest on desktop. Optional: `PORT` for `electron:dev` (default 3000).
+Optional: `AUGUSTTRADING_REPO=<checkout>` (desktop dev only) enables the model's `repo_read` /
+`repo_edit` / `repo_apply` tools against that checkout; writes are sandboxed, checkpointed under
+`.august-checkpoints/`, and gated by `npm run typecheck`.

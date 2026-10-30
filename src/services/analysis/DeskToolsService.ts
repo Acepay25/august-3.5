@@ -1918,6 +1918,47 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
             },
         },
     },
+    {
+        type: 'function',
+        function: {
+            name: 'repo_read',
+            description:
+                'Read a file from August\'s OWN source checkout. DEV ONLY: available when the desktop app runs from source with AUGUSTTRADING_REPO set. Omit path to list the repo root. Sandboxed to the repo — node_modules, .git, dist, .env and binaries are refused. Read before repo_edit.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: { type: 'string', description: 'Repo-relative path, e.g. src/services/signals/signalService.ts. Omit to list the root.' },
+                },
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'repo_edit',
+            description:
+                'Replace ONE text file in August\'s OWN source checkout with the full new content (DEV ONLY, AUGUSTTRADING_REPO). Read the file first. Every write checkpoints the previous bytes under .august-checkpoints, and the dev server applies the change on save; call repo_apply to prove typecheck before telling the trader it works. Use this when the trader asks you to change how August itself behaves.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: { type: 'string', description: 'Repo-relative file path to replace.' },
+                    content: { type: 'string', description: 'The COMPLETE new file content (not a diff; empty content is refused).' },
+                },
+                required: ['path', 'content'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'repo_apply',
+            description:
+                'Typecheck the current source of August\'s checkout (DEV ONLY). This is the gate for repo_edit: it returns ok plus the tail of the compiler output. A failed typecheck means the edit is not done — fix it, do not report success.',
+            parameters: { type: 'object', properties: {}, additionalProperties: false },
+        },
+    },
 ];
 
 /**
@@ -3583,6 +3624,47 @@ ${body}`);
                     undoUntil: gone.undoUntil,
                     note: 'Soft-deleted — gone from every future index; restorable in Settings → Assistant memory for 30 days.',
                 });
+                break;
+            }
+            case 'repo_read': {
+                const api = window.electronAPI?.repo;
+                if (!api) return rejectedResult(call, 'repo_read is a desktop dev tool — this surface has no repo bridge');
+                const info = await api.info();
+                if (!info.ok || !info.available) {
+                    return rejectedResult(call, `repo_read unavailable: ${info.ok ? (info.reason ?? 'disabled') : info.error}`);
+                }
+                const target = asString(call.arguments.path);
+                const res = target ? await api.read(target) : await api.list('');
+                content = JSON.stringify(res);
+                break;
+            }
+            case 'repo_edit': {
+                const api = window.electronAPI?.repo;
+                if (!api) return rejectedResult(call, 'repo_edit is a desktop dev tool — this surface has no repo bridge');
+                const info = await api.info();
+                if (!info.ok || !info.available) {
+                    return rejectedResult(call, `repo_edit unavailable: ${info.ok ? (info.reason ?? 'disabled') : info.error}`);
+                }
+                const rel = asString(call.arguments.path);
+                const text = typeof call.arguments.content === 'string' ? call.arguments.content : '';
+                if (!rel) return rejectedResult(call, 'repo_edit needs a repo-relative path');
+                if (text.trim().length === 0) {
+                    return rejectedResult(call, 'repo_edit needs the full new file content — read the file first; empty content is refused');
+                }
+                const res = await api.write(rel, text);
+                content = JSON.stringify(res.ok
+                    ? { ...res, note: 'Saved; the dev server applies it on save. Call repo_apply and do not report success until typecheck passes.' }
+                    : res);
+                break;
+            }
+            case 'repo_apply': {
+                const api = window.electronAPI?.repo;
+                if (!api) return rejectedResult(call, 'repo_apply is a desktop dev tool — this surface has no repo bridge');
+                const info = await api.info();
+                if (!info.ok || !info.available) {
+                    return rejectedResult(call, `repo_apply unavailable: ${info.ok ? (info.reason ?? 'disabled') : info.error}`);
+                }
+                content = JSON.stringify(await api.apply());
                 break;
             }
             case 'list_goals': {

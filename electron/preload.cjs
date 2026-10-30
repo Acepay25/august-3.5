@@ -21,6 +21,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     isElectron: true,
     platform: process.platform,
 
+    // Repo bridge — source read/edit/apply, DEV ONLY (AUGUSTTRADING_REPO).
+    // Every path is sandboxed in main; the renderer never sees fs or a shell.
+    repo: {
+        info: () => ipcRenderer.invoke('repo:info'),
+        list: (rel) => ipcRenderer.invoke('repo:list', rel),
+        read: (rel) => ipcRenderer.invoke('repo:read', rel),
+        write: (rel, content) => ipcRenderer.invoke('repo:write', rel, content),
+        apply: () => ipcRenderer.invoke('repo:apply'),
+    },
+
     // Auto-update
     checkForUpdates: () => ipcRenderer.invoke('update:check'),
     downloadUpdate: () => ipcRenderer.invoke('update:download'),

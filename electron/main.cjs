@@ -3,7 +3,101 @@ const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 const { autoUpdater } = require('electron-updater');
+const { spawn } = require('child_process');
+const { resolveRepoPath } = require('../shared/repoSandbox.cjs');
 const { createSseParser } = require('./sseParser.cjs');
+
+// ── REPO BRIDGE (dev only) ──────────────────────────────────────────────────
+// The model may read and edit THIS checkout when the app runs from source and
+// the owner names it with AUGUSTTRADING_REPO. A packaged build has no dev
+// server to apply edits, so it reports the tool as unavailable rather than
+// pretending. Every path goes through shared/repoSandbox.cjs; every write
+// leaves a copy under .august-checkpoints so any change is one undo away.
+const AUGUSTTRADING_REPO = process.env.AUGUSTTRADING_REPO
+    ? path.resolve(process.env.AUGUSTTRADING_REPO)
+    : null;
+const repoReady = () => Boolean(AUGUSTTRADING_REPO) && !app.isPackaged;
+const REPO_READ_CAP = 200 * 1024;
+const REPO_LIST_CAP = 200;
+
+function setupRepoBridge() {
+    const refused = { ok: false, error: 'Refused — the request did not come from the app window.' };
+    const unavailable = { ok: false, error: 'source editing is a dev-mode tool: launch with AUGUSTTRADING_REPO pointing at the checkout' };
+
+    trustedHandle('repo:info', () => {
+        if (app.isPackaged) return { ok: true, available: false, reason: 'source editing is a dev-mode tool' };
+        if (!AUGUSTTRADING_REPO) return { ok: true, available: false, reason: 'AUGUSTTRADING_REPO is not set' };
+        return { ok: true, available: true, root: AUGUSTTRADING_REPO };
+    }, refused);
+
+    trustedHandle('repo:list', (_event, rel) => {
+        if (!repoReady()) return unavailable;
+        const atRoot = rel == null || rel === '' || rel === '.' || rel === '/';
+        const r = atRoot ? { ok: true, abs: AUGUSTTRADING_REPO, rel: '' } : resolveRepoPath(AUGUSTTRADING_REPO, rel);
+        if (!r.ok) return r;
+        try {
+            const entries = fs.readdirSync(r.abs, { withFileTypes: true })
+                .filter(e => !e.name.startsWith('.env'))
+                .slice(0, REPO_LIST_CAP)
+                .map(e => ({ path: `${r.rel ? `${r.rel}/` : ''}${e.name}`, dir: e.isDirectory() }));
+            return { ok: true, path: r.rel, entries };
+        } catch (err) {
+            return { ok: false, error: `list failed: ${err.message}` };
+        }
+    }, refused);
+
+    trustedHandle('repo:read', (_event, rel) => {
+        if (!repoReady()) return unavailable;
+        const r = resolveRepoPath(AUGUSTTRADING_REPO, rel);
+        if (!r.ok) return r;
+        try {
+            if (fs.statSync(r.abs).size > REPO_READ_CAP) return { ok: false, error: 'file is larger than 200 KB' };
+            return { ok: true, path: r.rel, content: fs.readFileSync(r.abs, 'utf8') };
+        } catch (err) {
+            return { ok: false, error: `read failed: ${err.message}` };
+        }
+    }, refused);
+
+    trustedHandle('repo:write', (_event, rel, content) => {
+        if (!repoReady()) return unavailable;
+        const r = resolveRepoPath(AUGUSTTRADING_REPO, rel);
+        if (!r.ok) return r;
+        const text = typeof content === 'string' ? content : '';
+        if (Buffer.byteLength(text, 'utf8') > REPO_READ_CAP) return { ok: false, error: 'content is larger than 200 KB' };
+        try {
+            const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const checkpoint = path.join(AUGUSTTRADING_REPO, '.august-checkpoints', stamp, r.rel);
+            fs.mkdirSync(path.dirname(checkpoint), { recursive: true });
+            if (fs.existsSync(r.abs)) fs.copyFileSync(r.abs, checkpoint);
+            fs.mkdirSync(path.dirname(r.abs), { recursive: true });
+            const tmp = `${r.abs}.august-tmp`;
+            fs.writeFileSync(tmp, text, 'utf8');
+            fs.renameSync(tmp, r.abs);
+            return { ok: true, path: r.rel, checkpoint: path.relative(AUGUSTTRADING_REPO, checkpoint).replace(/\\/g, '/') };
+        } catch (err) {
+            return { ok: false, error: `write failed: ${err.message}` };
+        }
+    }, refused);
+
+    trustedHandle('repo:apply', () => {
+        if (!repoReady()) return unavailable;
+        return new Promise((resolve) => {
+            const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+            // shell only where npm is a .cmd shim; the argv is fixed (no input),
+            // so this cannot be steered by a tool argument.
+            const child = spawn(npm, ['run', 'typecheck'], {
+                cwd: AUGUSTTRADING_REPO, shell: process.platform === 'win32', windowsHide: true,
+            });
+            let output = '';
+            const take = (chunk) => { output = `${output}${chunk.toString()}`.slice(-8000); };
+            child.stdout.on('data', take);
+            child.stderr.on('data', take);
+            const timer = setTimeout(() => { try { child.kill(); } catch { /* already gone */ } }, 180_000);
+            child.on('error', (err) => { clearTimeout(timer); resolve({ ok: false, error: err.message }); });
+            child.on('close', (code) => { clearTimeout(timer); resolve({ ok: code === 0, code, output: output.trim() }); });
+        });
+    }, refused);
+}
 // Shared provider wire-request policy — the SAME module the renderer and the
 // vite dev proxy use (thinking gate + effort-scaled budget + messages
 // temperature, Gemini thinking params, HTTPS/private-LAN URL host rules).
@@ -1464,6 +1558,7 @@ app.whenReady().then(() => {
     blockSmokeNetwork();
     createWindow();
     setupAutoUpdater();
+    setupRepoBridge();
 
     // Check for updates on startup (production only, non-blocking). The
     // installer-smoke probe sets AUGUST_SMOKE_TEST=1 to skip this entirely:

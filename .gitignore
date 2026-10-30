@@ -60,6 +60,7 @@ tests/test_output.txt
 
 # Probe and gate scratch
 .probe-artifacts/
+.august-checkpoints/
 .verify/
 .gate-*.log
 
