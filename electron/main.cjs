@@ -16,24 +16,79 @@ const { createSseParser } = require('./sseParser.cjs');
 const AUGUSTTRADING_REPO = process.env.AUGUSTTRADING_REPO
     ? path.resolve(process.env.AUGUSTTRADING_REPO)
     : null;
-const repoReady = () => Boolean(AUGUSTTRADING_REPO) && !app.isPackaged;
+const AUGUSTTRADING_CLONE_URL = process.env.AUGUSTTRADING_CLONE_URL
+    ? String(process.env.AUGUSTTRADING_CLONE_URL).trim()
+    : '';
+// The active checkout: the owner's env path in dev, or the self-hosted clone
+// the app installs for itself on first use (userData/harness-src). Mutable
+// because setupSession() switches it at runtime and the window reloads onto
+// the build that checkout produces.
+let activeRepoRoot = AUGUSTTRADING_REPO;
+const repoReady = () => Boolean(activeRepoRoot);
 const REPO_READ_CAP = 200 * 1024;
 const REPO_LIST_CAP = 200;
+const bundledDist = path.resolve(__dirname, '../dist');
+/** The build the window serves: the checkout's dist when it has one, else the
+ *  installer's own. Resolved per request so a completed setup/apply needs only
+ *  a reload, not a re-registration of the app:// protocol. */
+const persistedRoot = () => {
+    try {
+        const p = path.join(app.getPath('userData'), 'harness-src');
+        return fs.existsSync(path.join(p, 'package.json')) ? p : null;
+    } catch { return null; }
+};
+const currentRepoRoot = () => activeRepoRoot || persistedRoot();
+const repoDist = () => {
+    const root = currentRepoRoot();
+    if (!root) return bundledDist;
+    const dist = path.join(root, 'dist');
+    return fs.existsSync(path.join(dist, 'index.html')) ? dist : bundledDist;
+};
+
+/** Run one command in the checkout, resolving with the tail of its output. */
+const runInRepo = (cmd, args, timeoutMs = 300_000) => new Promise((resolve) => {
+    const child = spawn(cmd, args, {
+        cwd: activeRepoRoot,
+        shell: process.platform === 'win32' && /\.cmd$/i.test(cmd),
+        windowsHide: true,
+    });
+    let output = '';
+    const take = (chunk) => { output = `${output}${chunk.toString()}`.slice(-8000); };
+    child.stdout.on('data', take);
+    child.stderr.on('data', take);
+    const timer = setTimeout(() => { try { child.kill(); } catch { /* gone */ } }, timeoutMs);
+    child.on('error', (err) => { clearTimeout(timer); resolve({ ok: false, error: err.message, output }); });
+    child.on('close', (code) => { clearTimeout(timer); resolve({ ok: code === 0, code, output: output.trim() }); });
+});
+const npmCmd = () => (process.platform === 'win32' ? 'npm.cmd' : 'npm');
 
 function setupRepoBridge() {
+    // A self-hosted checkout installed by a previous session stays active.
+    if (!activeRepoRoot) activeRepoRoot = persistedRoot();
     const refused = { ok: false, error: 'Refused — the request did not come from the app window.' };
-    const unavailable = { ok: false, error: 'source editing is a dev-mode tool: launch with AUGUSTTRADING_REPO pointing at the checkout' };
+    const unavailable = { ok: false, error: 'no checkout is active: in dev set AUGUSTTRADING_REPO; in the installed app run repo_setup once (owner sets AUGUSTTRADING_CLONE_URL)' };
 
     trustedHandle('repo:info', () => {
-        if (app.isPackaged) return { ok: true, available: false, reason: 'source editing is a dev-mode tool' };
-        if (!AUGUSTTRADING_REPO) return { ok: true, available: false, reason: 'AUGUSTTRADING_REPO is not set' };
-        return { ok: true, available: true, root: AUGUSTTRADING_REPO };
+        if (!activeRepoRoot) {
+            return {
+                ok: true, available: false, mode: 'bundled',
+                reason: app.isPackaged
+                    ? 'no self-hosted checkout yet — run repo_setup once (AUGUSTTRADING_CLONE_URL must be set)'
+                    : 'AUGUSTTRADING_REPO is not set',
+                cloneUrlConfigured: Boolean(AUGUSTTRADING_CLONE_URL),
+            };
+        }
+        return {
+            ok: true, available: true, root: activeRepoRoot,
+            mode: app.isPackaged ? 'self-hosted' : 'dev',
+            serving: repoDist() === bundledDist ? 'bundled' : 'checkout',
+        };
     }, refused);
 
     trustedHandle('repo:list', (_event, rel) => {
         if (!repoReady()) return unavailable;
         const atRoot = rel == null || rel === '' || rel === '.' || rel === '/';
-        const r = atRoot ? { ok: true, abs: AUGUSTTRADING_REPO, rel: '' } : resolveRepoPath(AUGUSTTRADING_REPO, rel);
+        const r = atRoot ? { ok: true, abs: activeRepoRoot, rel: '' } : resolveRepoPath(activeRepoRoot, rel);
         if (!r.ok) return r;
         try {
             const entries = fs.readdirSync(r.abs, { withFileTypes: true })
@@ -48,7 +103,7 @@ function setupRepoBridge() {
 
     trustedHandle('repo:read', (_event, rel) => {
         if (!repoReady()) return unavailable;
-        const r = resolveRepoPath(AUGUSTTRADING_REPO, rel);
+        const r = resolveRepoPath(activeRepoRoot, rel);
         if (!r.ok) return r;
         try {
             if (fs.statSync(r.abs).size > REPO_READ_CAP) return { ok: false, error: 'file is larger than 200 KB' };
@@ -60,43 +115,84 @@ function setupRepoBridge() {
 
     trustedHandle('repo:write', (_event, rel, content) => {
         if (!repoReady()) return unavailable;
-        const r = resolveRepoPath(AUGUSTTRADING_REPO, rel);
+        const r = resolveRepoPath(activeRepoRoot, rel);
         if (!r.ok) return r;
         const text = typeof content === 'string' ? content : '';
         if (Buffer.byteLength(text, 'utf8') > REPO_READ_CAP) return { ok: false, error: 'content is larger than 200 KB' };
         try {
             const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const checkpoint = path.join(AUGUSTTRADING_REPO, '.august-checkpoints', stamp, r.rel);
+            const checkpoint = path.join(activeRepoRoot, '.august-checkpoints', stamp, r.rel);
             fs.mkdirSync(path.dirname(checkpoint), { recursive: true });
             if (fs.existsSync(r.abs)) fs.copyFileSync(r.abs, checkpoint);
             fs.mkdirSync(path.dirname(r.abs), { recursive: true });
             const tmp = `${r.abs}.august-tmp`;
             fs.writeFileSync(tmp, text, 'utf8');
             fs.renameSync(tmp, r.abs);
-            return { ok: true, path: r.rel, checkpoint: path.relative(AUGUSTTRADING_REPO, checkpoint).replace(/\\/g, '/') };
+            return { ok: true, path: r.rel, checkpoint: path.relative(activeRepoRoot, checkpoint).replace(/\\/g, '/') };
         } catch (err) {
             return { ok: false, error: `write failed: ${err.message}` };
         }
     }, refused);
 
-    trustedHandle('repo:apply', () => {
+    // Dev: the Vite server already applied the save, so apply is the typecheck
+    // gate. Installed self-host: the window serves the checkout's dist, so
+    // apply must BUILD, then reload onto the bytes it just produced. A failed
+    // build changes nothing — the previous dist keeps serving.
+    trustedHandle('repo:apply', async () => {
         if (!repoReady()) return unavailable;
-        return new Promise((resolve) => {
-            const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-            // shell only where npm is a .cmd shim; the argv is fixed (no input),
-            // so this cannot be steered by a tool argument.
-            const child = spawn(npm, ['run', 'typecheck'], {
-                cwd: AUGUSTTRADING_REPO, shell: process.platform === 'win32', windowsHide: true,
-            });
-            let output = '';
-            const take = (chunk) => { output = `${output}${chunk.toString()}`.slice(-8000); };
-            child.stdout.on('data', take);
-            child.stderr.on('data', take);
-            const timer = setTimeout(() => { try { child.kill(); } catch { /* already gone */ } }, 180_000);
-            child.on('error', (err) => { clearTimeout(timer); resolve({ ok: false, error: err.message }); });
-            child.on('close', (code) => { clearTimeout(timer); resolve({ ok: code === 0, code, output: output.trim() }); });
-        });
+        const script = app.isPackaged ? 'build' : 'typecheck';
+        const res = await runInRepo(npmCmd(), ['run', script], 300_000);
+        if (!res.ok) return res;
+        if (app.isPackaged && mainWindow) {
+            try { mainWindow.reload(); } catch { /* window may be gone */ }
+        }
+        return { ...res, script, applied: app.isPackaged ? 'built and reloaded' : 'typechecked; the dev server already applied the save' };
     }, refused);
+
+    // First-run self-host (the Hermes shape): clone the OWNER-CONFIGURED repo
+    // into userData, install, build, and switch the window onto that build.
+    // No model-supplied URL: the tool takes no arguments, so a seat cannot
+    // point the installer at an arbitrary repository.
+    const setupSelfHosted = async () => {
+        if (!app.isPackaged) {
+            return { ok: false, error: 'repo_setup is for the installed app; in dev point AUGUSTTRADING_REPO at your checkout' };
+        }
+        if (!AUGUSTTRADING_CLONE_URL) {
+            return { ok: false, error: 'AUGUSTTRADING_CLONE_URL is not set on this machine — the owner must name the repository to clone' };
+        }
+        const target = path.join(app.getPath('userData'), 'harness-src');
+        if (!fs.existsSync(path.join(target, 'package.json'))) {
+            activeRepoRoot = target;
+            const clone = await runInRepo('git', ['clone', '--depth', '1', AUGUSTTRADING_CLONE_URL, target], 600_000);
+            if (!clone.ok) { activeRepoRoot = null; return { ...clone, step: 'clone' }; }
+        }
+        activeRepoRoot = target;
+        const install = await runInRepo(npmCmd(), ['install', '--no-audit', '--no-fund'], 900_000);
+        if (!install.ok) return { ...install, step: 'install', root: target };
+        const build = await runInRepo(npmCmd(), ['run', 'build'], 600_000);
+        if (!build.ok) return { ...build, step: 'build', root: target };
+        if (mainWindow) { try { mainWindow.reload(); } catch { /* window may be gone */ } }
+        return {
+            ok: true, root: target, step: 'done',
+            note: 'Self-hosted checkout installed and built; the window now serves that build. The repo tools edit this checkout, not the installer bundle.',
+        };
+    };
+    // One setup at a time: the boot auto-start and a model call must never run
+    // two installs into the same target.
+    let setupRunning = false;
+    const runSetupOnce = async () => {
+        if (setupRunning) return { ok: false, error: 'self-host setup is already running' };
+        setupRunning = true;
+        try { return await setupSelfHosted(); } finally { setupRunning = false; }
+    };
+    trustedHandle('repo:setup', () => runSetupOnce(), refused);
+
+    // Installed app + owner-configured clone URL + no checkout yet: install
+    // the self-hosted build in the background. The bundled app keeps running
+    // until the build lands, then the window reloads onto it.
+    if (app.isPackaged && !activeRepoRoot && AUGUSTTRADING_CLONE_URL) {
+        setTimeout(() => { void runSetupOnce(); }, 4000);
+    }
 }
 // Shared provider wire-request policy — the SAME module the renderer and the
 // vite dev proxy use (thinking gate + effort-scaled budget + messages
@@ -1102,8 +1198,10 @@ let appProtocolRegistered = false;
 function registerAppProtocol() {
     if (appProtocolRegistered || isDev) return;
     appProtocolRegistered = true;
-    const distPath = path.resolve(__dirname, '../dist');
     protocol.handle('app', (request) => {
+        // Per-request root: after a self-host setup or a successful packaged
+        // build, a reload serves the checkout's dist without re-registering.
+        const distPath = repoDist();
         const url = new URL(request.url);
         if (url.protocol !== 'app:' || url.hostname !== '.') {
             return new Response('Not found', { status: 404 });

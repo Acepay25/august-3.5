@@ -135,3 +135,6 @@ and encrypted at rest on desktop. Optional: `PORT` for `electron:dev` (default 3
 Optional: `AUGUSTTRADING_REPO=<checkout>` (desktop dev only) enables the model's `repo_read` /
 `repo_edit` / `repo_apply` tools against that checkout; writes are sandboxed, checkpointed under
 `.august-checkpoints/`, and gated by `npm run typecheck`.
+Optional: `AUGUSTTRADING_CLONE_URL=<git-url>` makes the INSTALLED app self-hosted: first boot clones
+it into `<userData>/harness-src`, installs, builds, and serves that build; `repo_apply` then builds
+and reloads. Needs git + npm + network; without it the app runs the installer bundle.

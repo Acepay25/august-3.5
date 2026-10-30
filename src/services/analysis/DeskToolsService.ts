@@ -1923,7 +1923,7 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'repo_read',
             description:
-                'Read a file from August\'s OWN source checkout. DEV ONLY: available when the desktop app runs from source with AUGUSTTRADING_REPO set. Omit path to list the repo root. Sandboxed to the repo — node_modules, .git, dist, .env and binaries are refused. Read before repo_edit.',
+                'Read a file from August\'s OWN checkout — the dev checkout (AUGUSTTRADING_REPO) or the installed app\'s self-hosted clone. Omit path to list the root; repo_read with no checkout returns repo:info. Sandboxed to the repo — node_modules, .git, dist, .env and binaries are refused. Read before repo_edit.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1938,7 +1938,7 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'repo_edit',
             description:
-                'Replace ONE text file in August\'s OWN source checkout with the full new content (DEV ONLY, AUGUSTTRADING_REPO). Read the file first. Every write checkpoints the previous bytes under .august-checkpoints, and the dev server applies the change on save; call repo_apply to prove typecheck before telling the trader it works. Use this when the trader asks you to change how August itself behaves.',
+                'Replace ONE text file in August\'s OWN checkout with the full new content (the dev checkout, or the installed app\'s self-hosted clone). Read the file first. Every write checkpoints the previous bytes under .august-checkpoints; call repo_apply to typecheck (dev) or build and reload (installed) before telling the trader it works. Use this when the trader asks you to change how August itself behaves.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1955,7 +1955,16 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
         function: {
             name: 'repo_apply',
             description:
-                'Typecheck the current source of August\'s checkout (DEV ONLY). This is the gate for repo_edit: it returns ok plus the tail of the compiler output. A failed typecheck means the edit is not done — fix it, do not report success.',
+                'Apply and prove the current source of August\'s checkout. In dev it runs the typecheck gate; in the installed self-hosted app it runs the build and reloads the window onto it. Returns ok plus the tail of the output. A failure means the edit is not applied — fix it, do not report success.',
+            parameters: { type: 'object', properties: {}, additionalProperties: false },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'repo_setup',
+            description:
+                'INSTALLED APP ONLY, one time: clone the owner-configured August repository (AUGUSTTRADING_CLONE_URL) into the app data folder, install dependencies, build it, and switch the window onto that build. This is what makes the app self-hosted like a Hermes install. Takes minutes. It takes NO arguments — the URL is configured by the owner, never by the model.',
             parameters: { type: 'object', properties: {}, additionalProperties: false },
         },
     },
@@ -3665,6 +3674,12 @@ ${body}`);
                     return rejectedResult(call, `repo_apply unavailable: ${info.ok ? (info.reason ?? 'disabled') : info.error}`);
                 }
                 content = JSON.stringify(await api.apply());
+                break;
+            }
+            case 'repo_setup': {
+                const api = window.electronAPI?.repo;
+                if (!api) return rejectedResult(call, 'repo_setup is an installed-app tool — this surface has no repo bridge');
+                content = JSON.stringify(await api.setup());
                 break;
             }
             case 'list_goals': {

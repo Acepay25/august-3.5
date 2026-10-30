@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         read: (rel) => ipcRenderer.invoke('repo:read', rel),
         write: (rel, content) => ipcRenderer.invoke('repo:write', rel, content),
         apply: () => ipcRenderer.invoke('repo:apply'),
+        setup: () => ipcRenderer.invoke('repo:setup'),
     },
 
     // Auto-update

@@ -107,7 +107,8 @@ interface ElectronProviderBridge {
         list: (rel?: string) => Promise<{ ok: boolean; path?: string; entries?: Array<{ path: string; dir: boolean }>; error?: string }>;
         read: (rel: string) => Promise<{ ok: boolean; path?: string; content?: string; error?: string }>;
         write: (rel: string, content: string) => Promise<{ ok: boolean; path?: string; checkpoint?: string; error?: string }>;
-        apply: () => Promise<{ ok: boolean; code?: number; output?: string; error?: string }>;
+        apply: () => Promise<{ ok: boolean; code?: number; output?: string; error?: string; applied?: string }>;
+        setup: () => Promise<{ ok: boolean; root?: string; step?: string; note?: string; output?: string; error?: string }>;
     };
 }
 

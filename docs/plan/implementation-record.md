@@ -2784,3 +2784,31 @@ the bridge unavailable rather than pretending — the installed app has no dev s
 **Verification.** Contract 28 pins the sandbox: in-repo paths pass; `..`, absolute/drive paths,
 dependency/build/git trees, `.env` and binaries are refused; no root refuses everything.
 `node --check` on main/preload, typecheck and contracts **316**.
+
+## 58. The installed app can run a checkout it clones for itself (2026-10-30)
+
+**Owner ask.** "Implement like how Hermes does": the installed app should clone the repo and run
+that repo, so the model edits real code and the edit reaches the running app.
+
+**What landed (Option B, opt-in by environment).**
+- `AUGUSTTRADING_CLONE_URL` names the repository. When the packaged app boots without a checkout
+  and the variable is set, it clones into `<userData>/harness-src` (depth 1), runs `npm install`,
+  then `npm run build`; the `app://` protocol resolves the served root **per request**, so the
+  window reloads onto the checkout's `dist` and later launches serve it directly (the root is
+  re-discovered from `<userData>/harness-src` at boot).
+- `repo_setup` is the same flow as a tool (no arguments — the URL is owner-configured, never
+  model-supplied), for a machine where the auto-start was skipped. One setup at a time.
+- `repo_apply` changes meaning by mode: dev runs `typecheck` (the Vite server already applied the
+  save); the installed self-hosted app runs `build` and reloads onto the bytes it produced. A failed
+  build changes nothing — the previous `dist` keeps serving.
+- Unchanged: the repo sandbox, the per-write checkpoint, and the dev path (`AUGUSTTRADING_REPO`).
+
+**Operational cost, stated up front.** The self-hosted app needs **git, npm and network** on the
+trader's machine, a first-run install/build measured in minutes, and `node_modules` on disk. A
+private repository needs credentials available to git. Without the variable the app runs the
+installer bundle exactly as before.
+
+**Security.** The clone URL comes from the environment, not from a tool argument, so a seat cannot
+point the installer at an arbitrary repository; `npm install` still runs that repository's scripts.
+Once built, model-edited code runs with the app's privileges — this is the Hermes trade the owner
+asked for, which is why it is opt-in and sandboxed to the checkout.
