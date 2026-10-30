@@ -107,7 +107,7 @@
   },
   "build": {
     "artifactName": "August-Trading-Harness-Setup-${version}.${ext}",
-    "appId": "com.augusttradingharness.app",
+    "appId": "com.august35.tradingapp",
     "productName": "August Trading Harness",
     "directories": {
       "output": "dist_electron"
@@ -129,7 +129,7 @@
       "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "August Trading"
+      "shortcutName": "August Trading Harness"
     },
     "publish": {
       "provider": "github",
