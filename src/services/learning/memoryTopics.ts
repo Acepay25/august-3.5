@@ -114,6 +114,15 @@ export const memoryEntryLabel = (name: string): string => {
     return titleWords(withoutExt) || 'Untitled';
 };
 
+/** What a stored memory row is CALLED: the short title the writer saved, else
+ *  the humanized slug. A slug is an identity chosen for stability, not a name —
+ *  once a fact is described in a whole sentence the slug outgrows the column —
+ *  so a titled row shows the title and a legacy row keeps the derivation. */
+export const memoryEntryTitle = (entry: { slug: string; title?: string }): string => {
+    const title = (entry.title ?? '').trim();
+    return title || memoryEntryLabel(entry.slug);
+};
+
 /**
  * The DISPLAY name of a notebook SECTION — the folder the entries live in.
  *

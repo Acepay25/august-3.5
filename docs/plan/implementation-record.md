@@ -2658,12 +2658,20 @@ memory page.
   falls back to its `subject` for rows written before the field. Custom sections sort first, then the
   fallback sections; a new name in `remember.section` becomes a new section with no registry. The
   always-loaded memory index prints up to six existing section names so the model reuses a spelling
-  before inventing one. Three columns — label (`memoryEntryLabel`), one-line summary (`description`),
-  updated stamp — on the reference's rhythm: a hairline rule above each category, 16px from the rule
-  to the heading, a 47px heading-to-first-row gap, 50px rows separated by hairlines, a 200px label
-  column and a 300px updated column. The page title is the reference's modest 18px with no kicker
-  and no rule, so the page opens on the switches. Hover raises the row pill and the bare pencil/trash,
-  as the reference does.
+  before inventing one. Three columns — label (`memoryEntryTitle`), one-line summary (`description`),
+  updated stamp — in the reference's column: the page is NOT full-bleed (it was, flush against the
+  sidebar with rules 922px wide); it is a full-width column inset 40px from the pane edge, matching the
+  reference's 30px inset at a 1600px window. Rhythm, measured in the live app: a hairline rule above
+  each category, 16px from the rule to the heading, a 45px heading-to-first-row gap, 49px rows
+  separated by hairlines, 14px row text, a 200px label column and a 300px updated column. The page
+  title is the reference's modest 18px with no kicker and no rule. Hover raises the row pill and the
+  bare pencil/trash, which overlay the row's right edge instead of reserving a column (reserving one
+  pulled the updated stamp 40px left of the reference).
+- **Short titles**: `remember.name` used to exist only to derive a slug, so a fact described in a
+  whole sentence produced a slug that ellipsized in the label column. The name is now stored as
+  `title` (≤60 chars, 2–5 words) on the entry, the learner stores its humanized `name`, and the row
+  label, the detail title and the export heading all use `memoryEntryTitle` — the stored title, else
+  the humanized slug for legacy rows. An edit that omits the title keeps the existing one.
 - A row opens the entry's own page, which REPLACES the page title (the back link leads): title, Delete,
   then labelled blocks — "Last updated" above the day, **Summary** (`description`), **Details**
   (`body`) — then provenance chips and Edit. Edit keeps the store's version conflict handling; Delete
@@ -2677,14 +2685,18 @@ line is that app's global composer, not part of Settings → Memory; August's ch
 surfaces.
 
 **Verification.** Contract 26: the export's categories, custom-first order, the section normalizer and
-fallback/order rules, an entry's label/summary/
-details/updated stamp, the PHT-dated filename, the empty document, both switch labels wired to their
-real settings, grouping by `subjectOf`, the export calling the real download helper, and the notebook
-door. `render-probe` now seeds five entries (one per category plus a model-created "Trading"), opens
-Settings → Memory and asserts custom-first category groups, all five rows, both switches with their
-own `aria-checked` state, the export control, a row opening the detail with title/Summary/Details, and
-Back returning to the list. Ladder:
-`typecheck` · `check:contracts` **298** · `lint` **375/375** · `check:boundaries` · `check:docs` ·
+fallback/order rules, an entry's title/summary/details/updated stamp, the PHT-dated filename, the empty
+document, both switch labels wired to their real settings, grouping by `subjectOf`, the export calling
+the real download helper, the notebook door, `memoryEntryTitle` preferring a stored title and falling
+back to the humanized slug, the export heading using that title, and both model write paths storing it.
+`render-probe` seeds five entries (one per category plus a model-created "Trading"), one with a long
+slug and a short title, opens Settings → Memory and asserts custom-first category groups, all five
+rows, the long slug rendering its short title, both switches with their own `aria-checked` state, the
+export control, a row opening the detail with title/Summary/Details, and Back returning to the list.
+Layout was measured in the live app (Playwright against the dev server at 1600×1000, reading
+`getBoundingClientRect` rather than a screenshot): pane inset 40px, title 18px/600, 45px
+heading→row, 49px rows, updated column 300px. Ladder:
+`typecheck` · `check:contracts` **301** · `lint` **375/375** · `check:boundaries` · `check:docs` ·
 `build` · `boot-probe` · `render-probe` · `skill-approval-probe` **28/28**.
 
 **Residues.** The page shows the ASSISTANT memory store; the notebook remains the Learning surface's

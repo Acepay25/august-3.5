@@ -41,7 +41,7 @@ export type SettingsTab = 'profile' | 'general' | 'models' | 'journal' | 'instru
 
 /** Tabs whose embedded manager owns the whole scroll container (their own
  *  padding, their own sticky headers) — the workspace adds none. */
-const FULL_BLEED_TABS: SettingsTab[] = ['prompts', 'memory', 'instructions', 'strategies'];
+const FULL_BLEED_TABS: SettingsTab[] = ['prompts', 'instructions', 'strategies'];
 
 interface SettingsMenuProps {
     isVisible: boolean;
@@ -434,9 +434,15 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                         <div className={`flex-1 min-h-0 overflow-y-auto bg-zinc-900 custom-scrollbar ${
                             FULL_BLEED_TABS.includes(activeTab)
                                 ? ''
-                                : activeTab === 'models' || activeTab === 'journal'
-                                    ? 'px-6 py-8 lg:px-10 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-5xl'
-                                    : 'px-6 py-8 lg:px-10 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-3xl'
+                                : activeTab === 'memory'
+                                    // The reference's memory page is a full-width
+                                    // column inset from the pane edge, not a
+                                    // centered reading measure — rules and rows
+                                    // run the whole column.
+                                    ? 'px-8 py-8 lg:px-10 [&>*]:w-full'
+                                    : activeTab === 'models' || activeTab === 'journal'
+                                        ? 'px-6 py-8 lg:px-10 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-5xl'
+                                        : 'px-6 py-8 lg:px-10 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-3xl'
                         }`}>
 
                             {/* TAB 0: Trading Journal — Hub & Quick Launcher */}

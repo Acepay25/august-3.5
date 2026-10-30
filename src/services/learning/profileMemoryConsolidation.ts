@@ -42,6 +42,8 @@ export type RememberWithConsolidationResult =
 export interface ConsolidationInput {
     slug?: string;
     name?: string;
+    /** The row's display name, passed straight through to the store. */
+    title?: string;
     description: string;
     kind: ProfileMemoryKind;
     body: string;

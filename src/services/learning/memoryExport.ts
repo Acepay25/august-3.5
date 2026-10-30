@@ -11,7 +11,7 @@
  */
 
 import type { ProfileMemoryEntry } from './profileMemory';
-import { memoryEntryLabel } from './memoryTopics';
+import { memoryEntryTitle } from './memoryTopics';
 import { memorySectionOf, orderMemorySections } from './memorySections';
 import { phtDayKey } from '../../utils/timezone';
 
@@ -57,7 +57,7 @@ export const memoryExportMarkdown = (
                 entry.sensitive ? 'sensitive' : '',
                 entry.source === 'auto' ? 'auto' : '',
             ].filter(Boolean).join(' · ');
-            lines.push(`### ${memoryEntryLabel(entry.slug)}`);
+            lines.push(`### ${memoryEntryTitle(entry)}`);
             lines.push('');
             lines.push(`_Updated ${updatedIso(entry)} · ${provenance}_`);
             lines.push('');

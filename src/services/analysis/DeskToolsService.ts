@@ -1171,7 +1171,7 @@ export const DESK_TOOL_DEFINITIONS: DeskToolDefinition[] = [
                     slug: { type: 'string', description: 'Existing entry slug to UPDATE, or omit to create (a kebab-case slug is derived from name).' },
                     if_version: { type: 'number', description: 'On UPDATE only: the version the index/read last showed you. A mismatch returns the current content (saved:false, conflict:true) — merge and retry in the same turn.' },
                     aliases: { type: 'array', items: { type: 'string' }, description: 'Optional extra match words for recall (e.g. ["bun"]). Max 8.' },
-                    name: { type: 'string', description: 'Short name for a new entry, e.g. "User runs 15m scalps".' },
+                    name: { type: 'string', description: 'Short display title for the entry, 2–5 words, e.g. "User runs 15m scalps" — shown as the row label. On create it also derives the slug.' },
                     kind: { type: 'string', enum: ['user', 'feedback', 'project', 'reference'], description: 'Memory kind.' },
                     subject: { type: 'string', enum: ['profile', 'preference', 'topic', 'area', 'person'], description: 'What the fact is ABOUT — the person or thing the claim concerns (optional; derived from kind when omitted). "person" for a fact about someone other than the trader.' },
                     section: { type: 'string', description: 'The display section on Settings → Memory, e.g. "Trading", "Risk", "Instruments", "Psychology", "Process". Reuse a name from the SECTIONS line in your memory index; a new concise name creates a new section. Omit to use the kind default.' },
@@ -3465,6 +3465,12 @@ ${body}`);
                     const consolidated = await rememberWithConsolidation(
                         {
                             slug, description, kind, body, source: 'model', ifVersion,
+                            // The tool's `name` has always been a short name; it
+                            // now survives as the row's label instead of being
+                            // consumed by slugify, which is how a long slug
+                            // ended up ellipsizing where the reference shows a
+                            // two-word title.
+                            title: asString(call.arguments.name) || undefined,
                             tag: 'stated', author: 'model', sourceTurnId: call.id,
                             sensitive: verdict.sensitive || undefined,
                             aliases: aliasesRaw,

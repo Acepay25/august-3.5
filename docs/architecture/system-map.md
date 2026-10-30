@@ -810,8 +810,12 @@ The settings page reads the assistant-memory store the way the reference's memor
 (auto-learning, sensitive-topic storage), an Export Markdown action, and the entries as named topics
 grouped by category from each entry's own `section` label (the model names it on write; a new name
 creates a new section) with `subject` as the fallback, and a row opening its own page
-(Summary, Details, Delete, Edit). The notebook is a separate store and stays one door away on the
-Learning surface. `memoryExport.ts` owns the export bytes; `ProfileMemoryCard.tsx` owns the page.
+(Summary, Details, Delete, Edit). A row is labelled by its stored `title` (`memoryEntryTitle`,
+written from `remember.name` or the learner's name) and falls back to the humanized slug, so a fact
+whose slug is a whole sentence still shows a two-word name. The page is a full-width column inset from
+the pane edge, one hairline rule per category; the notebook is a separate store and stays one door
+away on the Learning surface. `memoryExport.ts` owns the export bytes; `ProfileMemoryCard.tsx` owns
+the page.
 
 ### G.3 Skills are files with a lifecycle
 

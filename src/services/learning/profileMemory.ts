@@ -33,6 +33,11 @@ export type ProfileMemoryKind = 'user' | 'feedback' | 'project' | 'reference';
 export interface ProfileMemoryEntry {
     /** Short kebab-case slug — the entry's identity (upsert key). */
     slug: string;
+    /** The row's display name, 2–5 words. A slug is chosen for stability and
+     *  can outgrow the label column ("august-signal-first-harness-…"), so the
+     *  writer names the row separately; absent on legacy rows, where the page
+     *  humanizes the slug. */
+    title?: string;
     /** One line, ≤ ~140 chars: how to decide relevance. */
     description: string;
     kind: ProfileMemoryKind;
@@ -105,6 +110,7 @@ export const PROFILE_MEMORY_MAX_BODY_CHARS = 2_000;
 const MAX_ENTRIES = PROFILE_MEMORY_MAX_ENTRIES;
 const MAX_BODY_CHARS = PROFILE_MEMORY_MAX_BODY_CHARS;
 const MAX_DESC_CHARS = 160;
+const MAX_TITLE_CHARS = 60;
 
 const storageKey = (user: string): string => `${KEY_PREFIX}_${user}`;
 
@@ -198,6 +204,9 @@ export type RememberResult =
 
 export const rememberProfileMemory = (input: {
     slug?: string; name?: string; description: string; kind: ProfileMemoryKind; body: string;
+    /** The row's display name (2–5 words). Omitted on an update keeps the
+     *  existing title — an edit to the fact is not a rename. */
+    title?: string;
     source?: ProfileMemoryEntry['source'];
     /** Provenance of the fact — only 'stated' is writable by the chat agent;
      *  'observed'/'inferred' come from separate system paths. */
@@ -242,8 +251,10 @@ export const rememberProfileMemory = (input: {
     const verdict = filterMemoryWrite(`${input.description}
 ${input.body}`);
     const sensitive = input.sensitive === true || verdict.sensitive;
+    const titleField = (input.title ?? '').trim().replace(/\s+/g, ' ');
     const entry: ProfileMemoryEntry = {
         slug: slug || `memory-${Date.now().toString(36)}`,
+        ...(titleField ? { title: titleField.slice(0, MAX_TITLE_CHARS) } : {}),
         description: input.description.trim().slice(0, MAX_DESC_CHARS),
         kind: input.kind,
         body: input.body.trim().slice(0, MAX_BODY_CHARS),

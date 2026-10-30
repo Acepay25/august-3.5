@@ -1533,6 +1533,7 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 (() => {
     const me = loadModule('src/services/learning/memoryExport.ts');
     const sec = loadModule('src/services/learning/memorySections.ts');
+    const mt = loadModule('src/services/learning/memoryTopics.ts');
     const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
     const entry = (slug, description, kind, subject, body, updatedAt) => ({
         slug, description, kind, subject, body,
@@ -1576,6 +1577,20 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         me.memoryExportFilename(Date.UTC(2026, 9, 30, 0, 0)) === 'august-memory-2026-10-30.md');
     ok('memory export: an empty store exports an honest empty document',
         /No memories yet\./.test(me.memoryExportMarkdown([], Date.now())));
+    const titled = [{
+        ...entry('august-signal-first-harness-architecture-notes', 'Building a signal-first harness',
+            'project', 'area', 'Graded against the tape.', '2026-10-29T10:00:00.000Z'),
+        title: 'August signals',
+    }];
+    ok('memory rows: a stored short title names the row, a legacy row keeps the slug label',
+        mt.memoryEntryTitle({ slug: 'august-signal-first-harness-architecture-notes', title: ' August signals ' }) === 'August signals'
+        && mt.memoryEntryTitle({ slug: 'risk-style' }) === 'Risk Style', mt.memoryEntryTitle({ slug: 'risk-style' }));
+    ok('memory export: the entry heading uses that title, not the slug',
+        me.memoryExportMarkdown(titled, Date.now()).includes('### August signals'),
+        me.memoryExportMarkdown(titled, Date.now()).slice(0, 160));
+    ok('memory writes: both model paths store the short title',
+        /title: asString\(call\.arguments\.name\)/.test(read('src/services/analysis/DeskToolsService.ts'))
+        && /title: memoryEntryLabel\(fact\.data\.name\)/.test(read('src/services/learning/traderLearner.ts')));
 
     const card = read('src/components/settings/ProfileMemoryCard.tsx');
     ok('memory page: the two switches are the reference labels',

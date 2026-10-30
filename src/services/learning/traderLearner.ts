@@ -30,6 +30,7 @@ import {
     buildProfileMemoryIndex, type ProfileMemoryKind,
 } from './profileMemory';
 import { rememberWithConsolidation } from './profileMemoryConsolidation';
+import { memoryEntryLabel } from './memoryTopics';
 import { getUserProfile } from '../infrastructure/dbService';
 
 const COUNTER_KEY = 'trader_learner_counter_v1';
@@ -146,6 +147,9 @@ ${fact.data.body}`);
             if (verdict.sensitive && getHarnessSettings().sensitiveMemoryEnabled !== true) continue;
             const saved = await rememberWithConsolidation({
                 slug, name: fact.data.name,
+                // The learner's name is a kebab id; the row label is what a
+                // reader sees, so it is humanized once, here.
+                title: memoryEntryLabel(fact.data.name),
                 description: fact.data.description,
                 kind,
                 body: fact.data.body,

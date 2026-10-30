@@ -2176,7 +2176,8 @@ async function main() {
                         body: 'Trades the London open around a day job.', createdAt: at(18), updatedAt: at(27), tag: 'stated', version: 1 },
                     { slug: 'session-timing', description: 'Most active around the London open', kind: 'reference', subject: 'topic',
                         body: 'Watches the first hour of London.', createdAt: at(16), updatedAt: at(26), tag: 'stated', version: 1 },
-                    { slug: 'august-signals', description: 'Building a signal-first harness', kind: 'project', subject: 'area', section: 'Trading',
+                    { slug: 'august-signal-first-harness-architecture-notes', title: 'August Signals',
+                        description: 'Building a signal-first harness', kind: 'project', subject: 'area', section: 'Trading',
                         body: 'Every call is graded against the tape.', createdAt: at(14), updatedAt: at(29), tag: 'stated', version: 1 },
                     { slug: 'area-work', description: 'Keeps the review notes in the notebook', kind: 'project', subject: 'area',
                         body: 'The notebook is the record.', createdAt: at(12), updatedAt: at(25), tag: 'stated', version: 1 },
@@ -2199,9 +2200,16 @@ async function main() {
                     .filter(g => document.querySelector(`[data-testid="memory-group-${g}"]`)));
                 check('memories are grouped by category, custom categories first',
                     groups.join(',') === 'trading,preferences,profile,topics,areas', groups.join(','));
-                const rows = await page.evaluate(() => ['risk-style', 'trader-profile', 'session-timing', 'august-signals', 'area-work']
+                const rows = await page.evaluate(() => ['risk-style', 'trader-profile', 'session-timing', 'august-signal-first-harness-architecture-notes', 'area-work']
                     .filter(s => document.querySelector(`[data-testid="memory-entry-${s}"]`)));
                 check('every seeded memory draws a row under its category', rows.length === 5, rows.join(','));
+                const longRowLabel = await page.evaluate(() => {
+                    const row = document.querySelector('[data-testid="memory-entry-august-signal-first-harness-architecture-notes"]');
+                    const span = row ? row.querySelector('span') : null;
+                    return span ? (span.textContent || '').trim() : null;
+                });
+                check('a long slug shows its stored short title, not a truncated slug',
+                    longRowLabel === 'August Signals', `${longRowLabel}`);
                 const switches = await page.evaluate(() => [
                     document.querySelector('[data-testid="trader-learning-toggle"] [role="switch"]')?.getAttribute('aria-checked') ?? null,
                     document.querySelector('[data-testid="memory-sensitive-toggle"] [role="switch"]')?.getAttribute('aria-checked') ?? null,
@@ -2211,7 +2219,7 @@ async function main() {
                 check('the export control is present', await page.locator('[data-testid="memory-export"]').count() === 1);
 
                 const opened = await page.evaluate(() => {
-                    const row = document.querySelector('[data-testid="memory-entry-august-signals"] button');
+                    const row = document.querySelector('[data-testid="memory-entry-august-signal-first-harness-architecture-notes"] button');
                     if (!row) return null;
                     row.click();
                     return 'clicked';
@@ -2231,7 +2239,7 @@ async function main() {
                     return 'clicked';
                 });
                 check('and the page returns to the list', back === 'clicked'
-                    && await page.locator('[data-testid="memory-entry-august-signals"]').count() === 1, `${back}`);
+                    && await page.locator('[data-testid="memory-entry-august-signal-first-harness-architecture-notes"]').count() === 1, `${back}`);
             }
 
             await page.evaluate(() => { window.location.hash = ''; });
