@@ -92,7 +92,7 @@ export const signalProtectionVerdict = (
     if (settled.length >= cfg.minSample && windowR <= 0) {
         return {
             ...base, blocked: true, rule: 'low-profit',
-            reason: `this setup is not paying for its costs: the last ${settled.length} settled calls are ${r1(windowR)}R`,
+            reason: `the seat is not paying for its costs: the last ${settled.length} settled calls are ${r1(windowR)}R`,
         };
     }
     return base;
