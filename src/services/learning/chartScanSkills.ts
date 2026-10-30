@@ -39,6 +39,7 @@ import {
     type ScanCandle, type HistoricalSetupStat,
 } from '../trade/setupScan';
 import { buildTapeStudy, formatTapeStudy, type TapeStudy } from './chartTapeStudy';
+import { historyKillGate } from './historyKillGate';
 import { baseOf } from '../../utils/symbol';
 import { phtDayKey } from '../../utils/timezone';
 import { getActiveUsername } from '../../utils/activeUser';
@@ -355,7 +356,18 @@ export async function scanChartForSkills(input: ChartScanInput): Promise<ChartSc
         return empty(candles.length, `scan_chart_skills failed: ${err instanceof Error ? err.message : String(err)}`);
     }
 
-    const candidates = parseCandidates(raw, maxSkills);
+    const parsedCandidates = parseCandidates(raw, maxSkills);
+    // The kill gate runs on the SAME tape the trigger was earned on. A
+    // predicate that fires on most bars, or on bars no different from the
+    // baseline, is refused before it can become a skill — prose-only
+    // candidates cannot be replayed and pass through unlabelled.
+    const candidates = parsedCandidates.filter(c => {
+        if (!c.predicate) return true;
+        const verdict = historyKillGate(c.predicate, candles);
+        if (verdict.verdict !== 'kill') return true;
+        console.warn(`[chartScanSkills] history kill gate refused "${c.name}": ${verdict.reason}`);
+        return false;
+    });
     const outcomes: ChartScanOutcome[] = [];
     let created = 0;
     // Direct candidate write (owner ruling 2026-10-29): a scan creates

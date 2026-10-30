@@ -2737,3 +2737,27 @@ icon tile per row on one page and hairline rules on the next.
 switching tabs: every one reports its title at x=507, y=131, 18px/600, and no page contains
 "Workspace settings". `render-probe` (150 checks) exercises the same Settings navigation and the
 Memory page.
+
+## 56. A kill gate for triggers, and protections for signals (2026-10-30)
+
+**Why.** The research loop's discipline is the kill rate: test before shipping. August's signal loop
+graded calls forward and its skills earned evidence forward, but nothing refused a drafted trigger
+that had never met the tape, and the signal layer had no stop-digging rules at all.
+
+**Kill gate** (`src/services/learning/historyKillGate.ts`). A crafted skill with a machine-checkable
+`predicate` is replayed over the same candles the scan studied: entry is the next bar's open, the
+forward window is `horizonBars`, and the question is whether a fire precedes a 1R (ATR) move more
+often than an arbitrary bar (lift ≥ 1.25), on at least 8 fires, while firing on ≤ 60% of the tape.
+`kill` refuses the candidate before the ingest (`chartScanSkills`), `insufficient` and `invalid` never
+count as a keep, and prose-only candidates pass unlabelled because prose cannot be replayed. It is
+direction-agnostic on purpose: the trigger's job is to precede movement; the plan carries direction.
+
+**Signal protections** (`src/services/signals/signalProtections.ts`). Read settled signals only, in R:
+three straight losses inside six hours cooldown the seat; a 20-call window at or below −6R trips the
+drawdown breaker; a full 8+ window that nets ≤ 0R retires the setup. A blocked emission writes nothing
+— the ledger must not carry a call the app refused to stand behind. `emitSignal` checks them before
+the append.
+
+**Verification.** Contracts 27: the kill gate kills a whole-tape trigger, and reports invalid /
+insufficient rather than pass; the protections block on cooldown, let it expire, trip the drawdown
+breaker and the low-profit rule, and block nothing on an empty history. `check:contracts` **310**.

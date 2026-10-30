@@ -1610,6 +1610,44 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
         /onOpenNotebook/.test(read('src/components/settings/tabs/MemoryTab.tsx')));
 })();
 
+// ─── 27. the kill gate and the signal protections ──────────────────────────
+(() => {
+    const gate = loadModule('src/services/learning/historyKillGate.ts');
+    const prot = loadModule('src/services/signals/signalProtections.ts');
+    const bars = Array.from({ length: 200 }, (_, i) => {
+        const base = 100 + i * 0.4 + Math.sin(i / 5) * 3;
+        return { time: i * 300000, open: base, high: base + 2, low: base - 2, close: base + 0.5, volume: 1000 + (i % 7) * 50 };
+    });
+    const always = gate.historyKillGate('close > 0', bars);
+    ok('kill gate: a trigger that fires on the whole tape is killed',
+        always.verdict === 'kill' && always.fired > 0, JSON.stringify(always));
+    ok('kill gate: an unparseable predicate is invalid, never a keep',
+        gate.historyKillGate('nonsense &&', bars).verdict === 'invalid');
+    ok('kill gate: a tape too short to replay is insufficient, never a keep',
+        gate.historyKillGate('close > ema20', bars.slice(0, 40)).verdict === 'insufficient');
+    ok('kill gate: a predicate that never fires is insufficient, never a keep',
+        gate.historyKillGate('volumeRatio > 5', bars).verdict === 'insufficient');
+
+    const h = (outcomeR, settledAt) => ({ coin: 'BTC', direction: 'long', outcomeR, settledAt });
+    const now = 10 * 60 * 60_000;
+    const losing = [h(-1, now - 3 * 3600_000), h(-1, now - 2 * 3600_000), h(-1, now - 3600_000)];
+    const cool = prot.signalProtectionVerdict(losing, { coin: 'BTC', direction: 'long', now });
+    ok('protections: three straight losses cooldown the seat',
+        cool.blocked && cool.rule === 'cooldown', JSON.stringify(cool));
+    ok('protections: the cooldown expires',
+        !prot.signalProtectionVerdict(losing, { coin: 'BTC', direction: 'long', now: now + 7 * 3600_000 }).blocked);
+    const dd = [-3, -3, 1, -1, -1, 0.5, -1, -1].map((r, i) => h(r, now - (8 - i) * 60_000));
+    const ddv = prot.signalProtectionVerdict(dd, { coin: 'BTC', direction: 'long', now });
+    ok('protections: a −7.5R window trips the drawdown breaker',
+        ddv.blocked && ddv.rule === 'drawdown', JSON.stringify(ddv));
+    const flat = [1, -1, 1, -1, 1, -1, 1, -1].map((r, i) => h(r, now - (8 - i) * 60_000));
+    const flatv = prot.signalProtectionVerdict(flat, { coin: 'BTC', direction: 'long', now });
+    ok('protections: a full window that nets ≤ 0R retires the setup',
+        flatv.blocked && flatv.rule === 'low-profit', JSON.stringify(flatv));
+    ok('protections: no settled history blocks nothing',
+        !prot.signalProtectionVerdict([], { coin: 'BTC', direction: 'long', now }).blocked);
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);

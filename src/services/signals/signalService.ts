@@ -26,6 +26,7 @@ import type {
 import type { SignalCandle } from './signalResolver';
 import { bracketError, resolveSignal, SIGNAL_BAR_MS } from './signalResolver';
 import { appendSignalEvent, readSignals, recordSignalResolution } from './signalLedger';
+import { signalProtectionVerdict } from './signalProtections';
 import {
     crossCheckBars,
     fetchBinanceCandles,
@@ -120,6 +121,20 @@ export const emitSignal = (input: EmitSignalInput, context: EmitSignalContext = 
 
     const now = Date.now();
     const user = context.user ?? getActiveUsername();
+    // Protections read SETTLED signals only: a losing streak, a drawdown or a
+    // window that is not paying for its costs stops the next call from being
+    // written at all. Refusing here keeps the ledger honest — no row for a
+    // call the app would not stand behind.
+    const protection = signalProtectionVerdict(
+        readSignals(user).map(row => ({
+            coin: row.signal.coin,
+            direction: row.signal.direction,
+            outcomeR: row.resolution ? row.resolution.outcomeR : null,
+            settledAt: row.resolution ? row.resolution.at : null,
+        })),
+        { coin, direction: rawDirection, now },
+    );
+    if (protection.blocked) return { ok: false, error: protection.reason ?? 'signal blocked by a protection' };
     const mark = typeof context.markAtEmit === 'number' && Number.isFinite(context.markAtEmit)
         ? context.markAtEmit
         : undefined;
