@@ -1667,6 +1667,24 @@ const fmt = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
     ok('repo sandbox: no configured root is refused', !resolveRepoPath('', 'src/app.ts').ok);
 })();
 
+// ─── 29. the Electron shell's relative requires resolve ────────────────────
+(() => {
+    // `require('./storeFs')` looked fine and threw on every packaged boot:
+    // Node's resolver adds only .js/.json/.node, never .cjs. This scans the
+    // shell's own relative requires so that class cannot ship again.
+    const dir = path.join(ROOT, 'electron');
+    const bad = [];
+    for (const file of fs.readdirSync(dir).filter(n => n.endsWith('.cjs'))) {
+        const src = fs.readFileSync(path.join(dir, file), 'utf8');
+        for (const m of src.matchAll(/require\(['"](\.\/[^'"]+)['"]\)/g)) {
+            const spec = m[1];
+            const hasKnownExt = /\.(cjs|js|json)$/.test(spec);
+            if (!hasKnownExt || !fs.existsSync(path.join(dir, spec))) bad.push(`${file}: ${spec}`);
+        }
+    }
+    ok('electron shell: every relative require names a file that exists', bad.length === 0, bad.join(', '));
+})();
+
 // ─── report ────────────────────────────────────────────────────────────────
 console.log(`contracts: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);

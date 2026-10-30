@@ -46,9 +46,9 @@ const repoDist = () => {
 };
 
 /** Run one command in the checkout, resolving with the tail of its output. */
-const runInRepo = (cmd, args, timeoutMs = 300_000) => new Promise((resolve) => {
+const runInRepo = (cmd, args, timeoutMs = 300_000, cwd = activeRepoRoot) => new Promise((resolve) => {
     const child = spawn(cmd, args, {
-        cwd: activeRepoRoot,
+        cwd,
         shell: process.platform === 'win32' && /\.cmd$/i.test(cmd),
         windowsHide: true,
     });
@@ -162,8 +162,13 @@ function setupRepoBridge() {
         }
         const target = path.join(app.getPath('userData'), 'harness-src');
         if (!fs.existsSync(path.join(target, 'package.json'))) {
+            // The clone runs from the PARENT: its target does not exist yet, and
+            // spawn with a missing cwd fails before git is ever reached.
             activeRepoRoot = target;
-            const clone = await runInRepo('git', ['clone', '--depth', '1', AUGUSTTRADING_CLONE_URL, target], 600_000);
+            const clone = await runInRepo(
+                'git', ['clone', '--depth', '1', AUGUSTTRADING_CLONE_URL, target],
+                600_000, app.getPath('userData'),
+            );
             if (!clone.ok) { activeRepoRoot = null; return { ...clone, step: 'clone' }; }
         }
         activeRepoRoot = target;
@@ -191,7 +196,11 @@ function setupRepoBridge() {
     // the self-hosted build in the background. The bundled app keeps running
     // until the build lands, then the window reloads onto it.
     if (app.isPackaged && !activeRepoRoot && AUGUSTTRADING_CLONE_URL) {
-        setTimeout(() => { void runSetupOnce(); }, 4000);
+        setTimeout(() => {
+            void runSetupOnce().then((r) => {
+                if (!r.ok) console.error(`[selfhost] setup failed at ${r.step || 'start'}: ${r.error || r.output || 'unknown error'}`);
+            });
+        }, 4000);
     }
 }
 // Shared provider wire-request policy — the SAME module the renderer and the
@@ -405,7 +414,7 @@ const trustedHandle = (channel, handler, refuse) => {
  * failed write must reach the renderer as a failure it can report, never as a
  * rejected promise a caller forgets to catch.
  */
-const { createStore } = require('./storeFs');
+const { createStore } = require('./storeFs.cjs');
 let desktopStore = null;
 const getDesktopStore = () => (desktopStore ??= createStore(path.join(app.getPath('userData'), 'store')));
 const untrusted = { ok: false, error: 'untrusted sender' };
