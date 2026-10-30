@@ -280,7 +280,7 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
     return (
         <div data-testid="profile-memory-card">
             <div className="space-y-1">
-                <div className="flex items-center justify-between gap-6 rounded-control px-2 py-3.5 transition-colors hover:bg-white/[0.02]" data-testid="trader-learning-toggle">
+                <div className="flex items-center justify-between gap-6 rounded-control px-2 py-3 transition-colors hover:bg-white/[0.02]" data-testid="trader-learning-toggle">
                     <div className="min-w-0">
                         <div className="text-ui-caption font-semibold text-zinc-200">Generate memory from chats</div>
                         <p className="mt-0.5 text-ui-dense leading-relaxed text-zinc-500">
@@ -295,7 +295,7 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
                     />
                 </div>
 
-                <div className="flex items-center justify-between gap-6 rounded-control px-2 py-3.5 transition-colors hover:bg-white/[0.02]" data-testid="memory-sensitive-toggle">
+                <div className="flex items-center justify-between gap-6 rounded-control px-2 py-3 transition-colors hover:bg-white/[0.02]" data-testid="memory-sensitive-toggle">
                     <div className="min-w-0">
                         <div className="text-ui-caption font-semibold text-zinc-200">Include sensitive topics in memory</div>
                         <p className="mt-0.5 text-ui-dense leading-relaxed text-zinc-500">
@@ -314,7 +314,7 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
                     />
                 </div>
 
-                <div className="flex items-center justify-between gap-6 rounded-control px-2 py-3.5 transition-colors hover:bg-white/[0.02]">
+                <div className="flex items-center justify-between gap-6 rounded-control px-2 py-3 transition-colors hover:bg-white/[0.02]">
                     <div className="min-w-0">
                         <div className="text-ui-caption font-semibold text-zinc-200">Export memory</div>
                         <p className="mt-0.5 text-ui-dense leading-relaxed text-zinc-500">
@@ -334,7 +334,7 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
                 </div>
 
                 {onOpenNotebook && (
-                    <div className="flex items-center justify-between gap-6 rounded-control px-2 py-3.5 transition-colors hover:bg-white/[0.02]">
+                    <div className="flex items-center justify-between gap-6 rounded-control px-2 py-3 transition-colors hover:bg-white/[0.02]">
                         <div className="min-w-0">
                             <div className="text-ui-caption font-semibold text-zinc-200">Notebook files</div>
                             <p className="mt-0.5 text-ui-dense leading-relaxed text-zinc-500">
@@ -354,7 +354,7 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
                 )}
 
                 {memoryModel && (
-                    <div className="flex items-center justify-between gap-6 rounded-control px-2 py-3.5 transition-colors hover:bg-white/[0.02]">
+                    <div className="flex items-center justify-between gap-6 rounded-control px-2 py-3 transition-colors hover:bg-white/[0.02]">
                         <div className="min-w-0">
                             <div className="text-ui-caption font-semibold text-zinc-200">Memory model</div>
                             <p className="mt-0.5 text-ui-dense leading-relaxed text-zinc-500">
@@ -373,9 +373,9 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
             ) : (
                 <div data-testid="profile-memory-list">
                     {sections.map(section => (
-                        <section key={section.id} data-testid={`memory-group-${section.id}`} className="mt-10">
+                        <section key={section.id} data-testid={`memory-group-${section.id}`} className="mt-8">
                             <h4 className="px-2 text-ui-caption font-semibold text-zinc-300">{section.label}</h4>
-                            <ul className="mt-2 space-y-0.5">
+                            <ul className="mt-1 space-y-0.5">
                                 {section.rows.map(e => (
                                     <li key={e.slug} data-testid={`memory-entry-${e.slug}`}
                                         className="group rounded-control px-2 transition-colors hover:bg-white/[0.03]">
@@ -383,10 +383,10 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
                                             <button
                                                 type="button"
                                                 onClick={() => openEntry(e)}
-                                                className="min-w-0 flex-1 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+                                                className="min-w-0 flex-1 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
                                                 aria-label={`Open memory ${memoryEntryLabel(e.slug)}`}
                                             >
-                                                <div className="flex flex-col gap-0.5 sm:grid sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)_160px] sm:items-baseline sm:gap-6">
+                                                <div className="flex flex-col gap-0.5 sm:grid sm:grid-cols-[minmax(0,180px)_minmax(0,1fr)_150px] sm:items-baseline sm:gap-5">
                                                     <span className="truncate text-ui-caption font-semibold text-zinc-100" title={e.description}>
                                                         {memoryEntryLabel(e.slug)}
                                                     </span>
