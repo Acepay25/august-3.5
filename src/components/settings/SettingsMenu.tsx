@@ -432,17 +432,12 @@ const SettingsMenu: React.FC<SettingsMenuProps> = (props) => {
                             managers), a wide measure for data-dense pages, and
                             a reading measure for preference pages. */}
                         <div className={`flex-1 min-h-0 overflow-y-auto bg-zinc-900 custom-scrollbar ${
+                            // One frame for every preference page: a full-width
+                            // column inset from the pane edge, the reference's
+                            // measure. Full-bleed editors own their own padding.
                             FULL_BLEED_TABS.includes(activeTab)
                                 ? ''
-                                : activeTab === 'memory'
-                                    // The reference's memory page is a full-width
-                                    // column inset from the pane edge, not a
-                                    // centered reading measure — rules and rows
-                                    // run the whole column.
-                                    ? 'px-8 py-8 lg:px-10 [&>*]:w-full'
-                                    : activeTab === 'models' || activeTab === 'journal'
-                                        ? 'px-6 py-8 lg:px-10 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-5xl'
-                                        : 'px-6 py-8 lg:px-10 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-3xl'
+                                : 'px-8 py-8 lg:px-10 [&>*]:w-full'
                         }`}>
 
                             {/* TAB 0: Trading Journal — Hub & Quick Launcher */}

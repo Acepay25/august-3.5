@@ -28,6 +28,9 @@ interface StrategiesManagerProps {
     /** Master switch: inject enabled docs into analysis prompts. */
     isStrategiesEnabled?: boolean;
     setIsStrategiesEnabled?: (enabled: boolean) => void;
+    /** Door to the Strategy Studio library — the tab used to draw its own
+     *  header strip for this one button, which doubled the page title. */
+    onOpenStrategyStudio?: () => void;
 }
 
 const uid = (): string => `strategy_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -44,6 +47,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
     visionConfig = null,
     isStrategiesEnabled = false,
     setIsStrategiesEnabled,
+    onOpenStrategyStudio,
 }) => {
     const toast = useToastActions();
     const { confirm, ConfirmDialogComponent } = useConfirmDialog();
@@ -226,11 +230,11 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
     return (
         <div className="h-full flex flex-col min-h-0">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-zinc-800/80 shrink-0 space-y-3">
-                <div className="flex items-center justify-between gap-3">
+            <div className="px-8 pt-[60px] pb-4 shrink-0 space-y-3 lg:px-10">
+                <div className="flex items-start justify-between gap-3">
                     <div>
-                        <h3 className="text-ui-base font-bold text-white tracking-tight">Strategies</h3>
-                        <p className="text-ui-dense text-zinc-500 mt-0.5">
+                        <h3 className="text-ui-lg font-semibold tracking-[-0.01em] text-zinc-100">Strategies</h3>
+                        <p className="text-ui-sm text-zinc-500 mt-2">
                             Upload trading books (PDF) — a model summarizes them into strategies the desk follows.
                         </p>
                     </div>
@@ -245,11 +249,20 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
                     )}
                 </div>
                 <div className="flex items-center gap-2">
+                    {onOpenStrategyStudio && (
+                        <button
+                            type="button"
+                            onClick={onOpenStrategyStudio}
+                            className="inline-flex items-center gap-1.5 rounded-control border border-white/10 bg-zinc-800 px-3 py-1.5 text-ui-sm font-medium text-zinc-100 transition-colors hover:border-white/20 hover:bg-zinc-700"
+                        >
+                            Strategy Studio
+                        </button>
+                    )}
                     <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isProcessing}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-control bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white text-ui-xs font-bold uppercase tracking-widest transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-control bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white text-ui-sm font-medium transition-colors"
                     >
                         <UploadIcon className="w-3.5 h-3.5" aria-hidden="true" />
                         {isProcessing ? 'Working…' : 'Upload PDF book'}
@@ -275,7 +288,7 @@ const StrategiesManager: React.FC<StrategiesManagerProps> = ({
             </div>
 
             {/* Docs list */}
-            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 sm:p-5 space-y-2.5">
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-8 pb-6 lg:px-10 space-y-2.5">
                 {isLoading ? (
                     <div className="flex justify-center py-10"><LoadingIcon className="w-6 h-6 text-zinc-500" aria-hidden="true" /></div>
                 ) : docs.length === 0 ? (

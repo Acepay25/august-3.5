@@ -15,6 +15,7 @@ import { ChevronDownIcon, TrashIcon } from '../shared/Icons';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { useConfirmDialog } from '../shared/ConfirmDialog';
 import StatusPill from '../ui/StatusPill';
+import { SettingsPageHeader } from './tabs/shared';
 
 // The one instruction list the harness reads (Settings -> Instructions).
 export type InstructionTab = 'general';
@@ -154,11 +155,11 @@ const CustomInstructionsEditor: React.FC<CustomInstructionsEditorProps> = ({
     };
 
     return (
-        <div className="flex-1 overflow-y-auto px-5 pb-6 space-y-4 custom-scrollbar">
-            <p className="text-ui-sm text-zinc-500 leading-relaxed">
-                Define multiple custom instruction sets for how the AI should reason, behave, or filter trades.
-                <strong className="text-zinc-400"> Select the mode below to manage its instructions.</strong>
-            </p>
+        <div className="flex-1 overflow-y-auto pb-6 space-y-4 custom-scrollbar">
+            <SettingsPageHeader
+                title="Instructions"
+                description="Define multiple custom instruction sets for how the AI should reason, behave, or filter trades. Select the mode below to manage its instructions."
+            />
 
             {/* Tabs for Mode Selection */}
             <div className="flex space-x-1 bg-zinc-900 p-1 rounded-control border border-white/5">

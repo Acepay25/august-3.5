@@ -2706,3 +2706,34 @@ date for older ones, exactly as the reference's own column behaves; the detail p
 Sections are labels, not a registry: the model can create a near-duplicate ("Trading" vs "Trading
 Style"), and the index's six-name list is guidance, not enforcement. Existing rows keep their subject
 fallback until a write names a section.
+
+## 55. Every settings page shares the memory page's frame (2026-10-30)
+
+**Owner ask.** After the Memory page was matched to the reference, make every Settings entry use that
+same space and UI.
+
+**What it looked like before.** Nine pages, six headers: five tabs drew a 28px title with a
+"Workspace settings" kicker and a rule (and a `max-w-3xl` centered column), Memory had an 18px bare
+title with no kicker, Prompts a 30px title inside its own frame, Playbooks a 16px bold title inside a
+second header strip, and Instructions had no page title at all. Groups were boxed cards with an 8x8
+icon tile per row on one page and hairline rules on the next.
+
+**What landed.**
+- **One pane frame** (`SettingsMenu.tsx`): every non-full-bleed tab renders
+  `px-8 py-8 lg:px-10 [&>*]:w-full` — a full-width column inset from the pane edge, the reference's
+  measure — instead of two competing centered widths.
+- **One page header** (`tabs/shared.tsx`): an 18px/600 title with a 28px top inset (60px from the
+  pane top), an optional 14px muted description, no kicker and no rule. The `bare` variant is gone
+  because there is no longer a second style to opt out of.
+- **One row language** (`SettingsGroup`/`SettingsRow`): a hairline rule above each group, a 14px
+  medium heading, 49px rows separated by hairlines, a bare muted icon (no tile), a 14px near-white
+  title and 14px muted description — the Memory list's own rhythm.
+- **The three editors aligned**: Prompts' 30px title became 18px and its centered 4xl column dropped;
+  Playbooks' duplicate header strip was deleted and its Strategy Studio button moved into the
+  manager's header (whose title is now the page header); Instructions gained the same page header.
+- Settings → Memory lost its one-off `pt-7`; the detail page keeps that inset when the header hides.
+
+**Verification.** Playwright against the dev server at 1600×1000 measured all nine pages after
+switching tabs: every one reports its title at x=507, y=131, 18px/600, and no page contains
+"Workspace settings". `render-probe` (150 checks) exercises the same Settings navigation and the
+Memory page.

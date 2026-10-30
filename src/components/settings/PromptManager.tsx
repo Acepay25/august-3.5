@@ -215,12 +215,12 @@ const PromptManager: React.FC<PromptManagerProps> = ({ username }) => {
     }, [activeUser, selectedEntry, confirm, toast]);
 
     return (
-        <div className="flex flex-col h-full min-h-0 px-8 py-8 lg:px-12 lg:py-10">
-            <div className="w-full max-w-4xl mx-auto flex flex-col flex-1 min-h-0">
-            <div className="flex items-start justify-between gap-4 shrink-0 mb-8">
+        <div className="flex flex-col h-full min-h-0 px-8 pb-8 pt-8 lg:px-10">
+            <div className="w-full flex flex-col flex-1 min-h-0">
+            <div className="flex items-start justify-between gap-4 shrink-0 pt-7 mb-8">
                 <div>
-                    <h3 className="text-3xl font-semibold text-zinc-100 tracking-tight">Prompts</h3>
-                    <p className="text-ui-base text-zinc-500 mt-2 leading-relaxed">
+                    <h3 className="text-ui-lg font-semibold tracking-[-0.01em] text-zinc-100">Prompts</h3>
+                    <p className="text-ui-sm text-zinc-500 mt-2 leading-relaxed">
                         Every prompt sent to your models. Edits apply on the next analysis.
                     </p>
                 </div>

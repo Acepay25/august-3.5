@@ -34,7 +34,7 @@ const PromptsTab: React.FC<{ tab: PromptsTabProps }> = ({ tab: props }) => {
     return (
         <div className="h-full min-h-0 animate-fade-in flex flex-col">
             {activeTab === 'instructions' ? (
-                <div className="flex-1 min-h-[480px] px-4 pb-4">
+                <div className="flex-1 min-h-[480px] px-8 pb-8 pt-8 lg:px-10">
                     <CustomInstructionsEditor
                         customInstructions={customInstructions}
                         setCustomInstructions={setCustomInstructions}

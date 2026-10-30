@@ -28,10 +28,10 @@ const MemoryTab: React.FC<{ tab: MemoryTabProps }> = ({ tab: props }) => {
     const [detailOpen, setDetailOpen] = useState(false);
 
     return (
-        <div className="pt-7 animate-fade-in" data-testid="memory-tab">
-            {!detailOpen && <SettingsPageHeader title="Memory" bare />}
+        <div className="animate-fade-in" data-testid="memory-tab">
+            {!detailOpen && <SettingsPageHeader title="Memory" />}
 
-            <div className={detailOpen ? '' : 'mt-7'}>
+            <div className={detailOpen ? 'pt-7' : 'mt-7'}>
                 <ProfileMemoryCard
                     memoryModel={model}
                     onOpenNotebook={onOpenLearn ? () => onOpenLearn('memory') : undefined}

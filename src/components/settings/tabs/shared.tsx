@@ -1,11 +1,11 @@
 // ─── Shared UI Helpers ────────────────────────────────────────────────────────
-// The reference settings layout is: grouped sidebar → page header → cards of
-// hairline rows, each row an icon tile, a title + description, and the control
-// pushed to the right edge. These helpers are that shape; every tab composes
-// them instead of hand-rolling the same row again. Moved verbatim from
-// SettingsMenu.tsx when the tab bodies became lazily-loaded components under
-// this directory — importing them from SettingsMenu would send every tab chunk
-// back around to its parent module.
+// One settings page language, the one the reference uses (and Settings → Memory
+// established as the measured baseline): an 18px title inset 60px from the pane
+// top, a full-width column, and borderless lists — a hairline rule above each
+// group, 14px headings, 49px rows on hairlines. No kicker, no page rule, no
+// boxed cards. Every tab composes these helpers instead of hand-rolling the
+// same row; a tab that hand-rolls its own header is how one page kept a 28px
+// title with a "Workspace settings" kicker while the next had none.
 import React from 'react';
 
 const SettingsGroup: React.FC<{
@@ -13,14 +13,14 @@ const SettingsGroup: React.FC<{
     description?: string;
     children: React.ReactNode;
 }> = ({ title, description, children }) => (
-    <section className="space-y-1.5">
+    <section className="border-t border-white/[0.06] pt-4">
         {title && (
-            <div className="px-1">
-                <h4 className="text-ui-dense font-medium text-zinc-400">{title}</h4>
-                {description && <p className="mt-0.5 text-ui-dense leading-relaxed text-zinc-600">{description}</p>}
+            <div>
+                <h4 className="text-ui-sm font-medium text-zinc-200">{title}</h4>
+                {description && <p className="mt-1 text-ui-sm leading-relaxed text-zinc-500">{description}</p>}
             </div>
         )}
-        <div className="divide-y divide-white/[0.05] overflow-hidden rounded-bubble border border-white/[0.07] bg-zinc-900/70 shadow-sm">
+        <div className="mt-2.5 divide-y divide-white/[0.05]">
             {children}
         </div>
     </section>
@@ -35,19 +35,15 @@ const SettingsRow: React.FC<{
      *  switch) — it drops below the label instead of squeezing the text. */
     stacked?: boolean;
 }> = ({ icon, title, description, control, stacked = false }) => (
-    <div className={`flex gap-4 p-4 transition-colors hover:bg-white/[0.015] ${
-        stacked ? 'flex-col items-start' : 'items-center justify-between'
+    <div className={`flex gap-4 py-3.5 transition-colors hover:bg-white/[0.02] ${
+        stacked ? 'flex-col items-start' : 'items-start justify-between'
     }`}>
-        <div className="flex min-w-0 flex-1 items-start gap-3.5">
-            {icon && (
-                <span aria-hidden="true" className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-control border border-white/[0.06] bg-white/[0.04] text-zinc-400">
-                    {icon}
-                </span>
-            )}
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+            {icon && <span aria-hidden="true" className="mt-0.5 shrink-0 text-zinc-500">{icon}</span>}
             <div className="min-w-0">
-                <div className="text-ui-caption font-semibold leading-5 text-zinc-200">{title}</div>
+                <div className="text-ui-sm font-medium text-zinc-100">{title}</div>
                 {description && (
-                    <div className="mt-0.5 text-ui-dense leading-relaxed text-zinc-500">{description}</div>
+                    <div className="mt-1 text-ui-sm leading-relaxed text-zinc-500">{description}</div>
                 )}
             </div>
         </div>
@@ -55,13 +51,10 @@ const SettingsRow: React.FC<{
     </div>
 );
 
-const SettingsPageHeader: React.FC<{ title: string; description?: string; bare?: boolean }> = ({ title, description, bare = false }) => (
-    <header className={bare ? '' : 'border-b border-white/[0.06] pb-5'}>
-        {!bare && <p className="mb-1.5 text-ui-2xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Workspace settings</p>}
-        <h3 className={bare
-            ? 'text-ui-lg font-semibold tracking-[-0.01em] text-zinc-100'
-            : 'text-ui-display font-medium tracking-[-0.025em] text-zinc-100'}>{title}</h3>
-        {description && <p className="mt-2 max-w-2xl text-ui-caption leading-relaxed text-zinc-500">{description}</p>}
+const SettingsPageHeader: React.FC<{ title: string; description?: string }> = ({ title, description }) => (
+    <header className="pt-7">
+        <h3 className="text-ui-lg font-semibold tracking-[-0.01em] text-zinc-100">{title}</h3>
+        {description && <p className="mt-2 max-w-2xl text-ui-sm leading-relaxed text-zinc-500">{description}</p>}
     </header>
 );
 
