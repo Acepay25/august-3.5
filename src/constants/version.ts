@@ -4,4 +4,4 @@
 // In Electron, the runtime version is also available via window.electronAPI.getVersion().
 export const APP_VERSION: string =
     (import.meta as { env?: { PACKAGE_VERSION?: string } }).env?.PACKAGE_VERSION || '1.0.28';
-export const APP_NAME = 'August Trading';
+export const APP_NAME = 'August Trading Harness';

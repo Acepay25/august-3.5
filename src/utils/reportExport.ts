@@ -123,7 +123,7 @@ export const exportTradesHTML = (trades: LoggedTrade[]): void => {
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>August Trading — Trade Report</title>
+<title>August Trading Harness — Trade Report</title>
 <style>
   :root { color-scheme: light; }
   body { font-family: 'Segoe UI', system-ui, sans-serif; color: #141416; margin: 2rem auto; max-width: 1100px; padding: 0 1.5rem; }

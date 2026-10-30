@@ -35,7 +35,7 @@ function blockSmokeNetwork() {
 }
 
 // =============================================================================
-// USERDATA PATH PRESERVATION (rename: "August 3.5" → "August Trading")
+// USERDATA PATH PRESERVATION (rename: "August 3.5" → "August Trading" → "August Trading Harness")
 // =============================================================================
 // Electron derives %APPDATA%/<productName> from package.json's build
 // productName. The rename would otherwise strand every existing user's
@@ -44,35 +44,40 @@ function blockSmokeNetwork() {
 // carry the old folder's contents across exactly once, then mark it
 // migrated so later boots never re-copy.
 
-const LEGACY_PRODUCT_NAME = 'August 3.5';
+// Newest first: if both old folders exist, the newer one's files win and the
+// older migration only fills gaps the new install does not already have.
+const LEGACY_PRODUCT_NAMES = ['August Trading', 'August 3.5'];
+const MIGRATION_STAMP = '.migrated-to-august-trading-harness';
 
 const preserveLegacyUserData = () => {
     try {
         if (isInstallerSmoke) return; // never migrate or inspect real user data
         // DEV GUARD (crosscheck §5): dev userData is named after the package
-        // name ('august-trading'), NOT the productName, so the basename check
-        // below never fires while running `npm run electron:dev` — a dev boot
-        // on a machine with legacy production data used to fs.renameSync the
-        // user's real keys/journal INTO the dev folder and stamp it migrated,
-        // stranding it from the packaged app. Only the packaged app may
-        // migrate.
+        // name, NOT the productName, so the basename check below never fires
+        // while running `npm run electron:dev` — a dev boot on a machine with
+        // legacy production data used to fs.renameSync the user's real
+        // keys/journal INTO the dev folder and stamp it migrated, stranding it
+        // from the packaged app. Only the packaged app may migrate.
         if (!app.isPackaged) return;
         const current = app.getPath('userData');
-        if (path.basename(current) === LEGACY_PRODUCT_NAME) return; // still on the legacy name: nothing to carry over
-        const legacy = path.join(path.dirname(current), LEGACY_PRODUCT_NAME);
-        if (!fs.existsSync(legacy)) return; // fresh install, nothing to carry over
-        const stamp = path.join(legacy, '.migrated-to-august-trading');
-        if (fs.existsSync(stamp)) return; // one-time migration already done
-        fs.mkdirSync(current, { recursive: true });
-        for (const entry of fs.readdirSync(legacy)) {
-            const from = path.join(legacy, entry);
-            const to = path.join(current, entry);
-            if (fs.existsSync(to)) continue; // never clobber files the new install already wrote
-            try { fs.renameSync(from, to); } catch {
-                try { fs.cpSync(from, to, { recursive: true }); } catch { /* skip unreadable entry */ }
+        const currentName = path.basename(current);
+        for (const legacyName of LEGACY_PRODUCT_NAMES) {
+            if (legacyName === currentName) continue; // still on a legacy name: nothing to carry over
+            const legacy = path.join(path.dirname(current), legacyName);
+            if (!fs.existsSync(legacy)) continue; // that name never ran on this machine
+            const stamp = path.join(legacy, MIGRATION_STAMP);
+            if (fs.existsSync(stamp)) continue; // one-time migration already done
+            fs.mkdirSync(current, { recursive: true });
+            for (const entry of fs.readdirSync(legacy)) {
+                const from = path.join(legacy, entry);
+                const to = path.join(current, entry);
+                if (fs.existsSync(to)) continue; // never clobber files the new install already wrote
+                try { fs.renameSync(from, to); } catch {
+                    try { fs.cpSync(from, to, { recursive: true }); } catch { /* skip unreadable entry */ }
+                }
             }
+            fs.writeFileSync(stamp, new Date().toISOString());
         }
-        fs.writeFileSync(stamp, new Date().toISOString());
     } catch { /* never let data migration break boot */ }
 };
 

@@ -164,7 +164,7 @@ const UpdateOverlay: React.FC = () => {
                 />
                 {/* key=phase re-mounts the content, so the fade-in plays on every transition */}
                 <div key={status} className="update-phase animate-fade-in">
-                    <span className="splash-wordmark mb-1 block">August Trading</span>
+                    <span className="splash-wordmark mb-1 block">August Trading Harness</span>
 
                     {status === 'downloading' && (
                         <>
@@ -232,7 +232,7 @@ const UpdateOverlay: React.FC = () => {
                             <div className="update-status mt-4">
                                 <span>Installing the update…</span>
                                 <span>Preparing your session…</span>
-                                <span>Relaunching August Trading…</span>
+                                <span>Relaunching August Trading Harness…</span>
                             </div>
                             <p className="mt-4 text-ui-sm text-zinc-600">This takes a moment — see you right after.</p>
                         </>

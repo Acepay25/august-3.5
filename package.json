@@ -106,9 +106,9 @@
     "wait-on": "^9.0.3"
   },
   "build": {
-    "artifactName": "August-Trading-Setup-${version}.${ext}",
-    "appId": "com.august35.tradingapp",
-    "productName": "August Trading",
+    "artifactName": "August-Trading-Harness-Setup-${version}.${ext}",
+    "appId": "com.augusttradingharness.app",
+    "productName": "August Trading Harness",
     "directories": {
       "output": "dist_electron"
     },
