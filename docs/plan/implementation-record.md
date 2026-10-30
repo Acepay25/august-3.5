@@ -2659,12 +2659,15 @@ memory page.
   fallback sections; a new name in `remember.section` becomes a new section with no registry. The
   always-loaded memory index prints up to six existing section names so the model reuses a spelling
   before inventing one. Three columns — label (`memoryEntryLabel`), one-line summary (`description`),
-  updated stamp — with the reference's rhythm: no row dividers, a 40px gap before the first
-  category (24px between later ones), 8px list-row padding, 12px settings-row padding, a 180px
-  label column and a 320px updated column.
-- A row opens the entry's own page: back, title, Delete, "Last updated <day, year>", **Summary**
-  (`description`), **Details** (`body`), provenance chips, Edit. Edit keeps the store's version
-  conflict handling; Delete is the existing soft delete with the 30-day undo drawer on the list.
+  updated stamp — on the reference's rhythm: a hairline rule above each category, 16px from the rule
+  to the heading, a 47px heading-to-first-row gap, 50px rows separated by hairlines, a 200px label
+  column and a 300px updated column. The page title is the reference's modest 18px with no kicker
+  and no rule, so the page opens on the switches. Hover raises the row pill and the bare pencil/trash,
+  as the reference does.
+- A row opens the entry's own page, which REPLACES the page title (the back link leads): title, Delete,
+  then labelled blocks — "Last updated" above the day, **Summary** (`description`), **Details**
+  (`body`) — then provenance chips and Edit. Edit keeps the store's version conflict handling; Delete
+  is the existing soft delete with the 30-day undo drawer on the list.
 - "Notebook files" remains one door to the Learning browser; the memory model row appears when one is
   configured. Hover reveals the row's pencil and trash, like the reference.
 

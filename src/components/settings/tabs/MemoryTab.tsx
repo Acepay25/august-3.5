@@ -4,7 +4,7 @@
 // The page is the reference Settings → Memory shape: a short stack of switches,
 // then the assistant's memories as named topics grouped under You / Topics /
 // Areas, each opening its own page. The notebook stays one row away.
-import React from 'react';
+import React, { useState } from 'react';
 import ProfileMemoryCard from '../ProfileMemoryCard';
 import { SettingsPageHeader } from './shared';
 import type { SettingsTabProps } from './types';
@@ -23,15 +23,21 @@ const MemoryTab: React.FC<{ tab: MemoryTabProps }> = ({ tab: props }) => {
     } = props;
 
     const model = memoryConfig?.selectedModel || memoryConfig?.name || undefined;
+    // An entry's page IS the page — the reference drops the page title there and
+    // leads with the back link, so the Memory heading belongs to the list only.
+    const [detailOpen, setDetailOpen] = useState(false);
 
     return (
-        <div className="space-y-3 animate-fade-in" data-testid="memory-tab">
-            <SettingsPageHeader title="Memory" bare />
+        <div className="pt-7 animate-fade-in" data-testid="memory-tab">
+            {!detailOpen && <SettingsPageHeader title="Memory" bare />}
 
-            <ProfileMemoryCard
-                memoryModel={model}
-                onOpenNotebook={onOpenLearn ? () => onOpenLearn('memory') : undefined}
-            />
+            <div className={detailOpen ? '' : 'mt-7'}>
+                <ProfileMemoryCard
+                    memoryModel={model}
+                    onOpenNotebook={onOpenLearn ? () => onOpenLearn('memory') : undefined}
+                    onDetailOpenChange={setDetailOpen}
+                />
+            </div>
         </div>
     );
 };

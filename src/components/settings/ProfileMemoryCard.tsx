@@ -40,6 +40,10 @@ interface ProfileMemoryCardProps {
     memoryModel?: string;
     /** The notebook is the Learning surface's, so this is a door, not a copy. */
     onOpenNotebook?: () => void;
+    /** The entry page replaces the page header, so the tab has to know when it
+     *  is open. Fired from an effect on the resolved entry, which also covers a
+     *  delete-from-detail: the list comes back and so does the heading. */
+    onDetailOpenChange?: (open: boolean) => void;
 }
 
 const updatedLabelOf = (entry: ProfileMemoryEntry): string => {
@@ -56,10 +60,10 @@ const rowUpdatedIso = (entry: ProfileMemoryEntry): string => {
  *  "Updated 1 day ago" is relative; this page names the day. */
 const detailUpdatedOf = (entry: ProfileMemoryEntry): string => {
     const at = Date.parse(entry.updatedAt);
-    return Number.isFinite(at) ? `Last updated ${phtDayYear(at)}` : 'Last updated unknown';
+    return Number.isFinite(at) ? phtDayYear(at) : 'Unknown';
 };
 
-const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOpenNotebook }) => {
+const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOpenNotebook, onDetailOpenChange }) => {
     const [entries, setEntries] = useState<ProfileMemoryEntry[]>([]);
     const [deleted, setDeleted] = useState<ProfileMemoryEntry[]>([]);
     const [learning, setLearning] = useState(true);
@@ -170,6 +174,10 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
 
     const selectedEntry = selected ? entries.find(e => e.slug === selected) ?? null : null;
 
+    useEffect(() => {
+        onDetailOpenChange?.(selectedEntry !== null);
+    }, [selectedEntry, onDetailOpenChange]);
+
     // ── The entry's own page ────────────────────────────────────────────────
     if (selectedEntry) {
         const provenance = [
@@ -183,19 +191,16 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
                         type="button"
                         onClick={() => { setSelected(null); setEditing(null); setEditError(''); }}
                         data-testid="memory-back"
-                        className="inline-flex items-center gap-1 text-ui-dense font-semibold text-zinc-400 transition-colors hover:text-zinc-100"
+                        className="inline-flex items-center gap-1 text-ui-dense font-medium text-zinc-400 transition-colors hover:text-zinc-100"
                     >
                         <ChevronLeftIcon className="h-3.5 w-3.5" aria-hidden="true" />
                         Memory
                     </button>
 
-                    <div className="mt-4 flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                            <h3 className="text-ui-title font-medium tracking-[-0.02em] text-zinc-100">
-                                {memoryEntryLabel(selectedEntry.slug)}
-                            </h3>
-                            <p className="mt-1 text-ui-dense text-zinc-500">{detailUpdatedOf(selectedEntry)}</p>
-                        </div>
+                    <div className="mt-3 flex items-start justify-between gap-4">
+                        <h3 className="min-w-0 text-ui-xl font-semibold leading-tight tracking-[-0.01em] text-zinc-100">
+                            {memoryEntryLabel(selectedEntry.slug)}
+                        </h3>
                         <button
                             type="button"
                             onClick={() => forgetOne(selectedEntry.slug)}
@@ -206,18 +211,22 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
                         </button>
                     </div>
 
-                    <div className="mt-8 space-y-6">
-                        <section>
-                            <h4 className="text-ui-xs font-semibold uppercase tracking-wider text-zinc-500">Summary</h4>
-                            <p className="mt-1 text-ui-caption leading-relaxed text-zinc-200">{selectedEntry.description}</p>
-                        </section>
-                        <section>
-                            <h4 className="text-ui-xs font-semibold uppercase tracking-wider text-zinc-500">Details</h4>
-                            <p className="mt-1 whitespace-pre-wrap text-ui-caption leading-relaxed text-zinc-300">{selectedEntry.body}</p>
-                        </section>
+                    <div className="mt-3">
+                        <p className="text-ui-dense text-zinc-500">Last updated</p>
+                        <p className="mt-5 text-ui-caption text-zinc-200">{detailUpdatedOf(selectedEntry)}</p>
                     </div>
 
-                    <div className="mt-5 flex flex-wrap items-center gap-1.5">
+                    <div className="mt-5">
+                        <p className="text-ui-dense text-zinc-500">Summary</p>
+                        <p className="mt-5 text-ui-caption leading-relaxed text-zinc-200">{selectedEntry.description}</p>
+                    </div>
+
+                    <div className="mt-5">
+                        <p className="text-ui-dense text-zinc-500">Details</p>
+                        <p className="mt-5 whitespace-pre-wrap text-ui-caption leading-[1.8] text-zinc-300">{selectedEntry.body}</p>
+                    </div>
+
+                    <div className="mt-8 flex flex-wrap items-center gap-1.5">
                         <StatusPill tone="neutral" kicker title="Where this memory belongs">{provenance}</StatusPill>
                         {selectedEntry.source === 'auto' && (
                             <StatusPill tone="info" kicker title="Learned automatically from your sessions">auto</StatusPill>
@@ -282,10 +291,9 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
             <div className="space-y-1">
                 <div className="flex items-center justify-between gap-6 rounded-control px-2 py-3 transition-colors hover:bg-white/[0.02]" data-testid="trader-learning-toggle">
                     <div className="min-w-0">
-                        <div className="text-ui-caption font-semibold text-zinc-200">Generate memory from chats</div>
-                        <p className="mt-0.5 text-ui-dense leading-relaxed text-zinc-500">
-                            Every couple of sessions, August distills durable facts — preferred symbols, risk habits,
-                            recurring mistakes — so the next session starts where the last one ended.
+                        <div className="text-ui-caption font-medium text-zinc-100">Generate memory from chats</div>
+                        <p className="mt-1 text-ui-sm leading-relaxed text-zinc-500">
+                            Allow August to generate memory from your chats and trading sessions.
                         </p>
                     </div>
                     <ToggleSwitch
@@ -297,10 +305,9 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
 
                 <div className="flex items-center justify-between gap-6 rounded-control px-2 py-3 transition-colors hover:bg-white/[0.02]" data-testid="memory-sensitive-toggle">
                     <div className="min-w-0">
-                        <div className="text-ui-caption font-semibold text-zinc-200">Include sensitive topics in memory</div>
-                        <p className="mt-0.5 text-ui-dense leading-relaxed text-zinc-500">
-                            Allow facts about health, finances or identity. They stay out of the always-on index and
-                            unattended contexts; secrets are always refused.
+                        <div className="text-ui-caption font-medium text-zinc-100">Include sensitive topics in memory</div>
+                        <p className="mt-1 text-ui-sm leading-relaxed text-zinc-500">
+                            Allow facts about health, finances or identity; secrets are always refused.
                         </p>
                     </div>
                     <ToggleSwitch
@@ -316,10 +323,9 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
 
                 <div className="flex items-center justify-between gap-6 rounded-control px-2 py-3 transition-colors hover:bg-white/[0.02]">
                     <div className="min-w-0">
-                        <div className="text-ui-caption font-semibold text-zinc-200">Export memory</div>
-                        <p className="mt-0.5 text-ui-dense leading-relaxed text-zinc-500">
-                            Download everything August remembers about you as a Markdown file. The trader notebook
-                            exports separately from Settings → Data.
+                        <div className="text-ui-caption font-medium text-zinc-100">Export memory</div>
+                        <p className="mt-1 text-ui-sm leading-relaxed text-zinc-500">
+                            Download everything August remembers as a Markdown file.
                         </p>
                     </div>
                     <button
@@ -336,9 +342,9 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
                 {onOpenNotebook && (
                     <div className="flex items-center justify-between gap-6 rounded-control px-2 py-3 transition-colors hover:bg-white/[0.02]">
                         <div className="min-w-0">
-                            <div className="text-ui-caption font-semibold text-zinc-200">Notebook files</div>
-                            <p className="mt-0.5 text-ui-dense leading-relaxed text-zinc-500">
-                                The markdown the desk reads on every analysis — browsed on the Learning surface.
+                            <div className="text-ui-caption font-medium text-zinc-100">Notebook files</div>
+                            <p className="mt-1 text-ui-sm leading-relaxed text-zinc-500">
+                                The markdown the desk reads on every analysis.
                             </p>
                         </div>
                         <button
@@ -356,9 +362,9 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
                 {memoryModel && (
                     <div className="flex items-center justify-between gap-6 rounded-control px-2 py-3 transition-colors hover:bg-white/[0.02]">
                         <div className="min-w-0">
-                            <div className="text-ui-caption font-semibold text-zinc-200">Memory model</div>
-                            <p className="mt-0.5 text-ui-dense leading-relaxed text-zinc-500">
-                                The model that reviews the notebook and drafts the amendments you approve.
+                            <div className="text-ui-caption font-medium text-zinc-100">Memory model</div>
+                            <p className="mt-1 text-ui-sm leading-relaxed text-zinc-500">
+                                The model that reviews the notebook and drafts amendments.
                             </p>
                         </div>
                         <span className="shrink-0 text-ui-dense text-zinc-300">{memoryModel}</span>
@@ -373,9 +379,13 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
             ) : (
                 <div data-testid="profile-memory-list">
                     {sections.map((section, index) => (
-                        <section key={section.id} data-testid={`memory-group-${section.id}`} className={index === 0 ? 'mt-10' : 'mt-6'}>
-                            <h4 className="px-2 text-ui-caption font-semibold text-zinc-300">{section.label}</h4>
-                            <ul className="mt-1 space-y-0.5">
+                        <section
+                            key={section.id}
+                            data-testid={`memory-group-${section.id}`}
+                            className={`${index === 0 ? 'mt-4' : 'mt-8'} border-t border-white/[0.06] pt-4`}
+                        >
+                            <h4 className="px-2 text-ui-caption font-medium text-zinc-200">{section.label}</h4>
+                            <ul className="divide-y divide-white/[0.05]">
                                 {section.rows.map(e => (
                                     <li key={e.slug} data-testid={`memory-entry-${e.slug}`}
                                         className="group rounded-control px-2 transition-colors hover:bg-white/[0.03]">
@@ -383,17 +393,17 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
                                             <button
                                                 type="button"
                                                 onClick={() => openEntry(e)}
-                                                className="min-w-0 flex-1 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+                                                className="min-w-0 flex-1 py-3.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
                                                 aria-label={`Open memory ${memoryEntryLabel(e.slug)}`}
                                             >
-                                                <div className="flex flex-col gap-0.5 sm:grid sm:grid-cols-[minmax(0,180px)_minmax(0,1fr)_minmax(0,320px)] sm:items-baseline sm:gap-5">
-                                                    <span className="truncate text-ui-caption font-semibold text-zinc-100" title={e.description}>
+                                                <div className="flex flex-col gap-0.5 sm:grid sm:grid-cols-[minmax(0,200px)_minmax(0,1fr)_minmax(0,300px)] sm:items-baseline sm:gap-5">
+                                                    <span className="truncate text-ui-caption font-medium text-zinc-100" title={e.description}>
                                                         {memoryEntryLabel(e.slug)}
                                                     </span>
-                                                    <span className="truncate text-ui-dense text-zinc-500" title={e.description}>
+                                                    <span className="truncate text-ui-sm text-zinc-500" title={e.description}>
                                                         {e.description}
                                                     </span>
-                                                    <span className="shrink-0 text-ui-dense text-zinc-500" title={rowUpdatedIso(e)}>
+                                                    <span className="shrink-0 text-ui-sm text-zinc-500" title={rowUpdatedIso(e)}>
                                                         {updatedLabelOf(e)}
                                                     </span>
                                                 </div>
@@ -401,13 +411,13 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
                                             <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                                                 <button type="button" onClick={() => startEdit(e)}
                                                     aria-label={`Edit memory ${e.slug}`} title="Edit"
-                                                    className="rounded-control border border-zinc-800 p-1.5 text-zinc-500 transition-colors hover:border-white/25 hover:text-zinc-100">
-                                                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                                                    className="rounded-control p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-100">
+                                                    <Pencil className="h-4 w-4" aria-hidden="true" />
                                                 </button>
                                                 <button type="button" onClick={() => forgetOne(e.slug)}
                                                     aria-label={`Forget memory ${e.slug}`} title="Forget"
-                                                    className="rounded-control border border-zinc-800 p-1.5 text-zinc-500 transition-colors hover:border-rose-500/40 hover:text-rose-300">
-                                                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                                    className="rounded-control p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-rose-300">
+                                                    <Trash2 className="h-4 w-4" aria-hidden="true" />
                                                 </button>
                                             </div>
                                         </div>
