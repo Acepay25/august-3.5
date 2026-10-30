@@ -372,8 +372,8 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
                 </p>
             ) : (
                 <div data-testid="profile-memory-list">
-                    {sections.map(section => (
-                        <section key={section.id} data-testid={`memory-group-${section.id}`} className="mt-8">
+                    {sections.map((section, index) => (
+                        <section key={section.id} data-testid={`memory-group-${section.id}`} className={index === 0 ? 'mt-10' : 'mt-6'}>
                             <h4 className="px-2 text-ui-caption font-semibold text-zinc-300">{section.label}</h4>
                             <ul className="mt-1 space-y-0.5">
                                 {section.rows.map(e => (
@@ -383,10 +383,10 @@ const ProfileMemoryCard: React.FC<ProfileMemoryCardProps> = ({ memoryModel, onOp
                                             <button
                                                 type="button"
                                                 onClick={() => openEntry(e)}
-                                                className="min-w-0 flex-1 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+                                                className="min-w-0 flex-1 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
                                                 aria-label={`Open memory ${memoryEntryLabel(e.slug)}`}
                                             >
-                                                <div className="flex flex-col gap-0.5 sm:grid sm:grid-cols-[minmax(0,180px)_minmax(0,1fr)_150px] sm:items-baseline sm:gap-5">
+                                                <div className="flex flex-col gap-0.5 sm:grid sm:grid-cols-[minmax(0,180px)_minmax(0,1fr)_minmax(0,320px)] sm:items-baseline sm:gap-5">
                                                     <span className="truncate text-ui-caption font-semibold text-zinc-100" title={e.description}>
                                                         {memoryEntryLabel(e.slug)}
                                                     </span>

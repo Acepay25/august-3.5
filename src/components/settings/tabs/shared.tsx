@@ -55,8 +55,8 @@ const SettingsRow: React.FC<{
     </div>
 );
 
-const SettingsPageHeader: React.FC<{ title: string; description?: string }> = ({ title, description }) => (
-    <header className="border-b border-white/[0.06] pb-5">
+const SettingsPageHeader: React.FC<{ title: string; description?: string; bare?: boolean }> = ({ title, description, bare = false }) => (
+    <header className={bare ? '' : 'border-b border-white/[0.06] pb-5'}>
         <p className="mb-1.5 text-ui-2xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Workspace settings</p>
         <h3 className="text-ui-display font-medium tracking-[-0.025em] text-zinc-100">{title}</h3>
         {description && <p className="mt-2 max-w-2xl text-ui-caption leading-relaxed text-zinc-500">{description}</p>}

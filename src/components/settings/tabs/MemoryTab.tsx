@@ -25,8 +25,8 @@ const MemoryTab: React.FC<{ tab: MemoryTabProps }> = ({ tab: props }) => {
     const model = memoryConfig?.selectedModel || memoryConfig?.name || undefined;
 
     return (
-        <div className="space-y-5 animate-fade-in" data-testid="memory-tab">
-            <SettingsPageHeader title="Memory" />
+        <div className="space-y-3 animate-fade-in" data-testid="memory-tab">
+            <SettingsPageHeader title="Memory" bare />
 
             <ProfileMemoryCard
                 memoryModel={model}

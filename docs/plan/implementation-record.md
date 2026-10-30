@@ -2659,8 +2659,9 @@ memory page.
   fallback sections; a new name in `remember.section` becomes a new section with no registry. The
   always-loaded memory index prints up to six existing section names so the model reuses a spelling
   before inventing one. Three columns — label (`memoryEntryLabel`), one-line summary (`description`),
-  updated stamp — with the reference's borderless rhythm: no row dividers, a 32px group gap, 10px
-  list-row padding, 12px settings-row padding and a fixed 150px updated column.
+  updated stamp — with the reference's rhythm: no row dividers, a 40px gap before the first
+  category (24px between later ones), 8px list-row padding, 12px settings-row padding, a 180px
+  label column and a 320px updated column.
 - A row opens the entry's own page: back, title, Delete, "Last updated <day, year>", **Summary**
   (`description`), **Details** (`body`), provenance chips, Edit. Edit keeps the store's version
   conflict handling; Delete is the existing soft delete with the 30-day undo drawer on the list.
