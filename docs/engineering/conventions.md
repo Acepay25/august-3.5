@@ -88,7 +88,7 @@ A second implementation is how numbers drift apart. When you need one of these, 
 
 | Module | Owns | Rule |
 |---|---|---|
-| `utils/riskReward.ts` | the **planned** R:R (nearest target ÷ stop) | the realized ratio in `BacktestingService` is a different question on purpose |
+| `utils/riskReward.ts` | the **planned** R:R (nearest target ÷ stop) | the realized ratio in `outcomeEngine.ts` (`realizedRFromPrices`) is a different question on purpose |
 | `utils/runStatus.ts` | the run-status vocabulary: one colour + word per state, error classification, the error-text sanitizer | never hardcode a status colour in a component |
 | `utils/turnStatus.ts` + `utils/toolKinds.ts` | what a turn is DOING, and the vocabulary the desk's tools are named in | `parseToolLine` is the ONE reader of the digest grammar; `pairToolRows` is the ONE pairing of a call with its result — one paired row is one call. The map is keyed by the tool's human label; a new tool needs its label in the same change, checked against the desk service's tool list. An unknown tool keeps its own label — never guess a verb. |
 | `components/shared/toolKindIcons.tsx` | the one mark per kind | beside the vocabulary it belongs to; a kind with two spellings is two kinds |

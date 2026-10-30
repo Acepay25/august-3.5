@@ -393,9 +393,9 @@ name into the dead list, which is the mistake this page keeps re-recording. Earl
 onward, and unreproducible without the filter, which is how a census becomes a claim nobody can
 check. The rest
 is a name collision with two live things: the outcome-validation engine
-(`PostMortemTPHit` and the `[PostMortemValidation]` log prefixes in
-`services/backtesting/BacktestingService.ts`, `PostMortemDataSummary` /
-`logPostMortemDataVerification` in `services/ui/AutoCaptureService.ts`), which replays
+(`PostMortemDataSummary` / `logPostMortemDataVerification` in
+`services/ui/AutoCaptureService.ts`, fed by the shared scan in
+`services/backtesting/outcomeEngine.ts`), which replays
 candles to decide whether a TP or SL really got hit; and the enum member
 `'autopilot' | 'postMortem'` on `LoggedTrade.rSource` / `excursionSource`
 (`src/types/trade.ts › LoggedTrade`), which names that after-close pass and is still written. A bulk

@@ -3,8 +3,8 @@
  *
  * This app computed R:R four different ways and showed all of them to the
  * user: nearest-TP ÷ stop (analysisUtils), `takeProfits[0]` ÷ stop by ARRAY
- * ORDER (proposedTrade), and highest-TP-hit ÷ stop
- * (BacktestingService). The first two disagree whenever the model emits its
+ * ORDER (proposedTrade), and highest-TP-hit ÷ stop (the old
+ * BacktestingService, retired 2026-10-30). The first two disagree whenever the model emits its
  * targets out of order — which it does — so the same trade could read 1.8R on
  * the card and 3.1R in the journal.
  *
@@ -13,8 +13,9 @@
  * fills" a trader actually quotes, and it is deliberately independent of array
  * order.
  *
- * The realized ratio in `BacktestingService` is a DIFFERENT quantity (which
- * target the market actually reached) and must not be routed through here.
+ * The realized ratio in `outcomeEngine.ts` (`realizedRFromPrices`) is a
+ * DIFFERENT quantity (which target the market actually reached) and must not
+ * be routed through here.
  */
 
 import { sanitizeLevelOrdering } from './levelOrder';
@@ -250,7 +251,7 @@ export const fmtRiskReward = (ratio: number, digits: number): string =>
 
 /**
  * The REALIZED multiple — `avg R 1.80` — which is a different quantity from
- * the planned ratio above (BacktestingService asks which target the market
+ * the planned ratio above (the outcome engine asks which target the market
  * actually reached; this module asks what the ticket promised). It deliberately
  * has no `:1` suffix: a multiple of risk is not a ratio of two prices, and
  * printing it as one is how the two got confused in the first place.
