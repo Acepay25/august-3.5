@@ -2770,10 +2770,9 @@ breaker and the low-profit rule, and block nothing on an empty history. `check:c
 changing it would strand every existing install as a separate app. The userData folder follows the
 product name, so `electron/main.cjs` carries EVERY previous folder (`August Trading Harness`, then
 `August Trading`, then `August 3.5`, newest first) into the new one on the first packaged boot,
-stamped per folder and never clobbering new files. The promote-to-`augustTrading` GitHub rename
-could not run from the authenticated `gh` account (it has no API access to the `Acepay25` owner,
-though git push/fetch does), so the publish target stays `Acepay25/august-3.5` until the owning
-account performs the rename; flip `build.publish.repo` in the same change.
+stamped per folder and never clobbering new files. The GitHub repository is now
+`Acepay25/augustTrading` (the old `august-3.5` path redirects); `build.publish.repo` and the local
+`origin` were moved with it, so the updater feed and pushes follow the new name.
 
 **Repo bridge (dev only).** The model can read and replace files in August's own checkout when the
 desktop app runs from source with `AUGUSTTRADING_REPO` set: `repo_read` (or list the root),
