@@ -2771,8 +2771,9 @@ changing it would strand every existing install as a separate app. The userData 
 product name, so `electron/main.cjs` carries EVERY previous folder (`August Trading Harness`, then
 `August Trading`, then `August 3.5`, newest first) into the new one on the first packaged boot,
 stamped per folder and never clobbering new files. The GitHub repository is now
-`Acepay25/augustTrading` (the old `august-3.5` path redirects); `build.publish.repo` and the local
-`origin` were moved with it, so the updater feed and pushes follow the new name.
+`KILLER3UG/augustTrading` (transferred from `Acepay25/augustTrading`, which still redirects);
+`build.publish.owner`/`repo` and the local `origin` follow it, so the updater feed and pushes point at
+the transferred repository.
 
 **Repo bridge (dev only).** The model can read and replace files in August's own checkout when the
 desktop app runs from source with `AUGUSTTRADING_REPO` set: `repo_read` (or list the root),

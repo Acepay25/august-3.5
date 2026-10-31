@@ -133,7 +133,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "Acepay25",
+      "owner": "KILLER3UG",
       "repo": "augustTrading",
       "releaseType": "release"
     }
