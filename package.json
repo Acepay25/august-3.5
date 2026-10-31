@@ -134,7 +134,7 @@
     "publish": {
       "provider": "github",
       "owner": "Acepay25",
-      "repo": "augustTrading",
+      "repo": "august-3.5",
       "releaseType": "release"
     }
   }
