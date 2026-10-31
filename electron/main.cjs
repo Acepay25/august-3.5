@@ -234,7 +234,8 @@ function blockSmokeNetwork() {
 }
 
 // =============================================================================
-// USERDATA PATH PRESERVATION (rename: "August 3.5" → "August Trading" → "August Trading Harness")
+// USERDATA PATH PRESERVATION (rename chain: "August 3.5" → "August Trading" →
+// "August Trading Harness" → "August Trading")
 // =============================================================================
 // Electron derives %APPDATA%/<productName> from package.json's build
 // productName. The rename would otherwise strand every existing user's
@@ -245,8 +246,8 @@ function blockSmokeNetwork() {
 
 // Newest first: if both old folders exist, the newer one's files win and the
 // older migration only fills gaps the new install does not already have.
-const LEGACY_PRODUCT_NAMES = ['August Trading', 'August 3.5'];
-const MIGRATION_STAMP = '.migrated-to-august-trading-harness';
+const LEGACY_PRODUCT_NAMES = ['August Trading Harness', 'August Trading', 'August 3.5'];
+const MIGRATION_STAMP = '.migrated-to-august-trading';
 
 const preserveLegacyUserData = () => {
     try {

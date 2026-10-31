@@ -1,5 +1,5 @@
 {
-  "name": "august-trading-harness",
+  "name": "august-trading",
   "private": true,
   "version": "1.4.0",
   "engines": {
@@ -106,9 +106,9 @@
     "wait-on": "^9.0.3"
   },
   "build": {
-    "artifactName": "August-Trading-Harness-Setup-${version}.${ext}",
+    "artifactName": "August-Trading-Setup-${version}.${ext}",
     "appId": "com.august35.tradingapp",
-    "productName": "August Trading Harness",
+    "productName": "August Trading",
     "directories": {
       "output": "dist_electron"
     },
@@ -129,12 +129,12 @@
       "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "August Trading Harness"
+      "shortcutName": "August Trading"
     },
     "publish": {
       "provider": "github",
       "owner": "Acepay25",
-      "repo": "august-3.5",
+      "repo": "augustTrading",
       "releaseType": "release"
     }
   }

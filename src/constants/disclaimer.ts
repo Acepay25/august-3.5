@@ -22,7 +22,7 @@ export const DISCLAIMER_SHORT =
 
 /** Shown on first run, where the question is "what is this thing". */
 export const DISCLAIMER_FIRST_RUN =
-    'August Trading Harness is an analysis and journaling tool. It reads public market data and '
+    'August Trading is an analysis and journaling tool. It reads public market data and '
     + 'talks to the AI providers you configure. It has no exchange account access, '
     + 'cannot place or sign a trade, and is not financial advice.';
 

@@ -25,7 +25,7 @@
        - img-src: self + data: (base64 chart images) + blob: -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self' app:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' app: https: wss: ws: blob: data:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'" />
-  <title>August Trading Harness</title>
+  <title>August Trading</title>
 
   <link rel="stylesheet" href="/src/index.css">
 </head>
@@ -34,9 +34,9 @@
   <!-- Inline splash screen — lives OUTSIDE #root so React's mount-clear can't
        yank it; index.tsx fades it out once React has rendered. Kept as plain
        HTML + CSS so it paints before any JS (and CSP needs no inline script). -->
-  <div id="splash" aria-label="August Trading Harness is loading">
+  <div id="splash" aria-label="August Trading is loading">
     <div class="splash-glow" aria-hidden="true"></div>
-    <div class="splash-wordmark">August Trading Harness</div>
+    <div class="splash-wordmark">August Trading</div>
     <div class="splash-candles" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
     <div class="splash-track" aria-hidden="true"><div class="splash-bar"></div></div>
     <div class="splash-status" aria-hidden="true">

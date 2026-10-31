@@ -2764,13 +2764,15 @@ breaker and the low-profit rule, and block nothing on an empty history. `check:c
 
 ## 57. The rename reaches installed apps, and the model can edit the harness (2026-10-30)
 
-**Upgrade path.** `productName` moved to "August Trading Harness", but `appId` stays
-`com.august35.tradingapp` on purpose: NSIS keys the install and its upgrade path on the appId,
-so changing it would strand every existing install as a separate app. The userData folder follows
-the product name, so [electron/main.cjs](file:///C:/Dev/august-3.5/electron/main.cjs) carries BOTH
-previous folders (`August Trading`, then `August 3.5`, newest first) into the new one on the first
-packaged boot, stamped per folder and never clobbering new files. The GitHub publish target is
-unchanged, so `update:check` still finds the release.
+**Upgrade path.** The product is **August Trading**; the project/package are **`augustTrading`**
+(package `august-trading`) after the interim "August Trading Harness" name was retired. `appId` stays
+`com.august35.tradingapp` on purpose: NSIS keys the install and its upgrade path on the appId, so
+changing it would strand every existing install as a separate app. The userData folder follows the
+product name, so `electron/main.cjs` carries EVERY previous folder (`August Trading Harness`, then
+`August Trading`, then `August 3.5`, newest first) into the new one on the first packaged boot,
+stamped per folder and never clobbering new files. The GitHub publish target is
+`Acepay25/augustTrading`; GitHub redirects the old `august-3.5` API path, so installed apps still
+find the release.
 
 **Repo bridge (dev only).** The model can read and replace files in August's own checkout when the
 desktop app runs from source with `AUGUSTTRADING_REPO` set: `repo_read` (or list the root),

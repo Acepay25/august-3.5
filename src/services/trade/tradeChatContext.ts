@@ -187,7 +187,7 @@ export const describeChartSnapshotForModel = (snap: {
 };
 
 export const TRADE_CHAT_SYSTEM_PROMPT = [
-    'You are the live chart copilot docked beside a Binance perpetuals chart in the August Trading Harness terminal.',
+    'You are the live chart copilot docked beside a Binance perpetuals chart in the August Trading terminal.',
     // The promise has to be the one this file keeps. `chatTurnRunner` serves a
     // cached packet up to 8 s old, and a failed fetch substitutes a
     // DATA_UNAVAILABLE line — so "fresh" was never true of every message, and a
